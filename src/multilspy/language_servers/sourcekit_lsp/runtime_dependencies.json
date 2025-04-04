@@ -1,0 +1,27 @@
+{
+  "_description": "Runtime dependencies for SourceKit-LSP, the Swift language server",
+  "runtimeDependencies": [
+    {
+      "id": "sourcekit-lsp",
+      "description": "SourceKit-LSP for Swift",
+      "installCommand": "xcode-select --install",
+      "binaries": ["sourcekit-lsp"],
+      "platforms": {
+        "darwin": {
+          "url": "",
+          "binaries": ["sourcekit-lsp"],
+          "unpack": false,
+          "skipDownload": true,
+          "comment": "On macOS, SourceKit-LSP is installed with Xcode Command Line Tools"
+        },
+        "linux": {
+          "url": "https://download.swift.org/swift-6.1-release/ubuntu2204/swift-6.1-RELEASE/swift-6.1-RELEASE-ubuntu22.04.tar.gz",
+          "binaries": ["sourcekit-lsp"],
+          "unpack": false,
+          "skipDownload": true,
+          "comment": "On Linux, SourceKit-LSP needs to be installed separately through Swift toolchain"
+        }
+      }
+    }
+  ]
+}

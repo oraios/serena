@@ -33,6 +33,7 @@ class Language(str, Enum):
     JAVASCRIPT = "javascript"
     GO = "go"
     RUBY = "ruby"
+    SWIFT = "swift"
 
     def __str__(self) -> str:
         return self.value
@@ -55,6 +56,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.go")
             case self.RUBY:
                 return FilenameMatcher("*.rb")
+            case self.SWIFT:
+                return FilenameMatcher("*.swift")
             case _:
                 raise ValueError
 
