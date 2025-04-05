@@ -4,6 +4,7 @@ Contains various configurations and settings specific to Swift.
 """
 
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -41,259 +42,6 @@ class SourceKitLSP(LanguageServer):
     Provides language server implementation using SourceKit-LSP for Swift code.
     Contains configurations and handling for Swift language features.
     """
-
-    async def request_references(
-        self, relative_file_path: str, line: int, column: int
-    ) -> List[multilspy_types.Location]:
-        """
-        Implementation of request_references that relies on SourceKit-LSP's capabilities.
-        """
-        self.logger.log(f"request_references for {relative_file_path}:{line}:{column}", logging.INFO)
-
-        # Get references from the language server
-        references = await super().request_references(relative_file_path, line, column)
-        self.logger.log(f"Language server returned {len(references)} references", logging.INFO)
-        
-        # If no references were found, log this but don't attempt regex-based analysis
-        if len(references) == 0:
-            self.logger.log("No references found with standard LSP request", logging.INFO)
-            
-            # Create a self-reference for testing purposes if needed
-            # This helps tests pass when no external references exist
-            self_ref = multilspy_types.Location(
-                uri=pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri(),
-                range={
-                    "start": {"line": line, "character": max(0, column - 1)},
-                    "end": {"line": line, "character": column + 1}
-                },
-                absolutePath=os.path.join(self.repository_root_path, relative_file_path),
-                relativePath=relative_file_path
-            )
-            references = [self_ref]
-
-        return references
-
-    async def request_containing_symbol(
-        self,
-        relative_file_path: str,
-        line: int,
-        column: Optional[int] = None,
-        strict: bool = False,
-        include_body: bool = False,
-    ) -> multilspy_types.UnifiedSymbolInformation | None:
-        """
-        Implementation of request_containing_symbol that relies on SourceKit-LSP's capabilities.
-        """
-        self.logger.log(f"request_containing_symbol for {relative_file_path}:{line}:{column}", logging.INFO)
-
-        # Try the base implementation first
-        try:
-            symbol = await super().request_containing_symbol(relative_file_path, line, column, strict, include_body)
-            if symbol is not None:
-                return symbol
-        except (IndexError, ValueError) as e:
-            self.logger.log(f"Error in base request_containing_symbol: {e}", logging.INFO)
-
-        # If the base implementation didn't work, use document symbols to find containing symbol
-        symbols, _ = await self.request_document_symbols(relative_file_path)
-
-        # Symbol kinds that can contain code
-        container_symbol_kinds = {
-            multilspy_types.SymbolKind.Class,
-            multilspy_types.SymbolKind.Struct,
-            multilspy_types.SymbolKind.Enum,
-            multilspy_types.SymbolKind.Function,
-            multilspy_types.SymbolKind.Method,
-            multilspy_types.SymbolKind.Interface,  # Use Interface for Protocols
-            multilspy_types.SymbolKind.Object   # Used for language-specific extensions
-        }
-
-        # Find all symbols that could contain the line
-        containing_symbols = []
-        for symbol in symbols:
-            # Skip symbols that aren't containers
-            if symbol["kind"] not in container_symbol_kinds:
-                continue
-
-            # Check if this symbol contains the given position
-            symbol_range = symbol["location"]["range"]
-            start_line = symbol_range["start"]["line"]
-            end_line = symbol_range["end"]["line"]
-
-            # Use a lenient containment check for better compatibility
-            if start_line <= line <= end_line:
-                # If column is specified, check column bounds as well
-                if column is not None:
-                    start_col = symbol_range["start"]["character"]
-                    end_col = symbol_range["end"]["character"]
-
-                    # For first line, check if column is after start
-                    if line == start_line and column < start_col:
-                        continue
-
-                    # For last line, check if column is before end
-                    if line == end_line and column > end_col:
-                        continue
-
-                containing_symbols.append(symbol)
-
-        if containing_symbols:
-            # Return the innermost containing symbol (the one with the highest start line)
-            innermost = max(containing_symbols, key=lambda s: s["location"]["range"]["start"]["line"])
-
-            if include_body:
-                innermost["body"] = self.retrieve_symbol_body(innermost)
-
-            return innermost
-
-        # If we couldn't find a containing symbol, create a minimal fallback for testing purposes
-        self.logger.log(f"No containing symbols found for {relative_file_path}:{line}:{column}", logging.INFO)
-        
-        # Create a minimal fallback symbol that represents the line
-        location = multilspy_types.Location(
-            uri=pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri(),
-            range={
-                "start": {"line": line, "character": 0},
-                "end": {"line": line, "character": 80}  # Arbitrary width
-            },
-            absolutePath=os.path.join(self.repository_root_path, relative_file_path),
-            relativePath=relative_file_path
-        )
-        
-        symbol = multilspy_types.UnifiedSymbolInformation(
-            kind=multilspy_types.SymbolKind.Object,  # Generic object type
-            range=location["range"],
-            selectionRange=location["range"],
-            location=location,
-            name="UnidentifiedSymbol",  # Generic name for fallback
-            children=[],
-        )
-        
-        # Add body if requested
-        if include_body:
-            try:
-                with self.open_file(relative_file_path) as file_data:
-                    content = file_data.contents.split('\n')
-                    start_line = max(0, line - 2)
-                    end_line = min(len(content), line + 3)
-                    body_lines = content[start_line:end_line]
-                    symbol["body"] = "\n".join(body_lines)
-            except Exception as e:
-                self.logger.log(f"Error creating fallback symbol body: {e}", logging.WARNING)
-        
-        return symbol
-
-    async def request_referencing_symbols(
-        self,
-        relative_file_path: str,
-        line: int,
-        column: int,
-        include_imports: bool = True,
-        include_self: bool = False,
-        include_body: bool = False,
-        include_file_symbols: bool = False,
-    ) -> List[multilspy_types.UnifiedSymbolInformation]:
-        """
-        Implementation of request_referencing_symbols that relies on SourceKit-LSP's capabilities.
-        """
-        self.logger.log(f"request_referencing_symbols: {relative_file_path}:{line}:{column}", logging.DEBUG)
-
-        # Get all references to the symbol
-        references = await self.request_references(relative_file_path, line, column)
-        self.logger.log(f"Found {len(references)} references", logging.DEBUG)
-
-        # For each reference, find the containing symbol
-        result = []
-        target_symbol = None
-
-        # Get the symbol at our search location to detect self-references
-        target_symbol = await self.request_containing_symbol(
-            relative_file_path, line, column, include_body=include_body
-        )
-
-        for ref in references:
-            ref_path = ref["relativePath"]
-            ref_line = ref["range"]["start"]["line"]
-            ref_col = ref["range"]["start"]["character"]
-
-            self.logger.log(f"Processing reference at {ref_path}:{ref_line}:{ref_col}", logging.DEBUG)
-
-            # Get the containing symbol for this reference
-            containing_symbol = await self.request_containing_symbol(
-                ref_path, ref_line, ref_col, include_body=include_body
-            )
-
-            # If no containing symbol was found but we allow file symbols, create a file symbol
-            if containing_symbol is None and include_file_symbols:
-                self.logger.log(
-                    f"No containing symbol found at {ref_path}:{ref_line}:{ref_col}. Creating file symbol.",
-                    logging.INFO
-                )
-
-                with self.open_file(ref_path) as file_data:
-                    fileRange = self._get_range_from_file_content(file_data.contents)
-                    location = multilspy_types.Location(
-                        uri=str(pathlib.Path(os.path.join(self.repository_root_path, ref_path)).as_uri()),
-                        range=fileRange,
-                        absolutePath=str(os.path.join(self.repository_root_path, ref_path)),
-                        relativePath=ref_path,
-                    )
-                    name = os.path.splitext(os.path.basename(ref_path))[0]
-
-                    if include_body:
-                        body = self.retrieve_full_file_content(ref_path)
-                    else:
-                        body = ""
-
-                    containing_symbol = multilspy_types.UnifiedSymbolInformation(
-                        kind=multilspy_types.SymbolKind.File,
-                        range=fileRange,
-                        selectionRange=fileRange,
-                        location=location,
-                        name=name,
-                        children=[],
-                        body=body,
-                    )
-
-            # Skip if no containing symbol was found or we don't want file symbols
-            if containing_symbol is None or (not include_file_symbols and containing_symbol["kind"] == multilspy_types.SymbolKind.File):
-                continue
-
-            # Check for self-reference if we have a target symbol
-            is_self_reference = False
-            if target_symbol:
-                # Basic path match and name match
-                path_match = containing_symbol["location"]["relativePath"] == relative_file_path
-                name_match = containing_symbol.get("name") == target_symbol.get("name")
-                
-                # Consider it a self-reference if both path and name match
-                is_self_reference = path_match and name_match
-
-            # Handle self-references based on the include_self parameter
-            if is_self_reference:
-                if include_self:
-                    result.append(containing_symbol)
-                    self.logger.log(f"Including self-reference for {containing_symbol.get('name')}", logging.DEBUG)
-                else:
-                    self.logger.log(f"Skipping self-reference for {containing_symbol.get('name')}", logging.DEBUG)
-                continue
-
-            # Handle import references based on the include_imports parameter
-            if not include_imports and "body" in containing_symbol and target_symbol:
-                body = containing_symbol["body"].lower()
-                target_name = target_symbol.get('name', '').lower()
-                
-                # Simple import detection - check if the body contains an import statement with the target name
-                if 'import ' in body and target_name in body:
-                    self.logger.log(f"Skipping possible import reference for {target_name}", logging.DEBUG)
-                    continue
-
-            # Add this symbol to our results
-            result.append(containing_symbol)
-            self.logger.log(f"Adding reference from {containing_symbol.get('name')}", logging.DEBUG)
-
-        self.logger.log(f"Found {len(result)} referencing symbols", logging.INFO)
-        return result
 
     @staticmethod
     def _get_sourcekit_lsp_path():
@@ -549,14 +297,14 @@ class SourceKitLSP(LanguageServer):
         sourcekit_lsp_path = self.setup_runtime_dependencies(logger, config)
 
         logger.log(f"Initializing SourceKitLSP with executable: {sourcekit_lsp_path}", logging.INFO)
-        
+
         # Create a copy of the current environment
         env = os.environ.copy()
-        
+
         # Ensure PATH is passed to sourcekit-lsp
         # This is critical as sourcekit-lsp needs access to system tools like 'uname'
         # to properly detect the platform and find libIndexStore.dylib on macOS
-        
+
         if sys.platform == 'darwin':
             # On macOS, help sourcekit-lsp find the IndexStore library by setting environment variables
             xcode_path = "/Applications/Xcode.app"
@@ -567,7 +315,7 @@ class SourceKitLSP(LanguageServer):
                     # Set environment variables that sourcekit-lsp uses to find the right libraries
                     env["SOURCEKIT_TOOLCHAIN_PATH"] = toolchain_path
                     logger.log(f"Set SOURCEKIT_TOOLCHAIN_PATH to {toolchain_path}", logging.INFO)
-                    
+
                     # Both libIndexStore.dylib path and llbuild framework are needed for index store functionality
                     lib_path = os.path.join(toolchain_path, "usr/lib")
                     if "DYLD_LIBRARY_PATH" in env:
@@ -575,19 +323,19 @@ class SourceKitLSP(LanguageServer):
                     else:
                         env["DYLD_LIBRARY_PATH"] = lib_path
                     logger.log(f"Added {lib_path} to DYLD_LIBRARY_PATH", logging.INFO)
-                    
+
                     # Set specific environment variable to help find libIndexStore.dylib
                     lib_index_store = os.path.join(lib_path, "libIndexStore.dylib")
                     if os.path.exists(lib_index_store):
                         env["SOURCEKIT_LIBINDEXSTORE_PATH"] = lib_index_store
                         logger.log(f"Set SOURCEKIT_LIBINDEXSTORE_PATH to {lib_index_store}", logging.INFO)
-                    
+
                     # Set Swift SDK path if not set (needed for compiler flags)
                     sdk_path = os.path.join(xcode_path, "Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk")
                     if os.path.exists(sdk_path):
                         env["SDKROOT"] = sdk_path
                         logger.log(f"Set SDKROOT to {sdk_path}", logging.INFO)
-                
+
         super().__init__(
             config,
             logger,
@@ -603,7 +351,7 @@ class SourceKitLSP(LanguageServer):
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the SourceKit-LSP Language Server.
-        
+
         Includes special handling for test environments to ensure references work properly.
         """
         # Use initialized params from JSON file like other servers
@@ -615,10 +363,10 @@ class SourceKitLSP(LanguageServer):
             del d["_description"]
 
         d["processId"] = os.getpid()
-        
+
         # Check if this is a test environment
         is_test_env = "test_repo" in repository_absolute_path
-        
+
         # For test environments, look for the swift_test directory specifically
         swift_test_root = repository_absolute_path
         if is_test_env:
@@ -627,11 +375,11 @@ class SourceKitLSP(LanguageServer):
                     swift_test_root = os.path.join(root, "swift_test")
                     self.logger.log(f"Using Swift test directory as root: {swift_test_root}", logging.INFO)
                     break
-        
-        # In test environments, make sure SDK paths work for the current platform
+
+        # Set up indexing for both test environments and regular projects
         if "initializationOptions" in d and "sourcekit-lsp" in d["initializationOptions"]:
             sourcekit_options = d["initializationOptions"]["sourcekit-lsp"]
-            
+
             # Set indexStoreOptions to help find the correct index store
             if sys.platform == 'darwin':  # macOS
                 # Find the IndexStore.framework or libIndexStore.dylib
@@ -640,7 +388,7 @@ class SourceKitLSP(LanguageServer):
                     "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx/libIndexStore.dylib",
                     "/Applications/Xcode.app/Contents/SharedFrameworks/SourceKit.framework/Versions/A/Resources/libIndexStore.dylib"
                 ]
-                
+
                 for path in index_store_paths:
                     if os.path.exists(path):
                         if "indexStoreOptions" not in sourcekit_options:
@@ -648,16 +396,63 @@ class SourceKitLSP(LanguageServer):
                         sourcekit_options["indexStoreOptions"]["libraryPath"] = path
                         self.logger.log(f"Using IndexStore library: {path}", logging.INFO)
                         break
-                
-                # For test environment, look for our test Swift package index
+
+                # For Xcode projects, try to find DerivedData index
+                possible_derived_data_paths = [
+                    os.path.expanduser("~/Library/Developer/Xcode/DerivedData")
+                ]
+
+                # Try to locate project-specific index in DerivedData
+                project_name = os.path.basename(repository_absolute_path)
+                possible_index_locations = []
+
+                # First check for test environment
                 if is_test_env and os.path.exists(os.path.join(swift_test_root, ".build/arm64-apple-macosx/debug/index")):
                     index_path = os.path.join(swift_test_root, ".build/arm64-apple-macosx/debug/index/store")
                     if os.path.exists(index_path):
-                        if "indexStoreOptions" not in sourcekit_options:
-                            sourcekit_options["indexStoreOptions"] = {}
-                        sourcekit_options["indexStoreOptions"]["path"] = index_path
-                        self.logger.log(f"Using Swift package index store at: {index_path}", logging.INFO)
-            
+                        possible_index_locations.append(index_path)
+
+                # Then check for non-Package.swift projects
+                for derived_data_base in possible_derived_data_paths:
+                    if os.path.exists(derived_data_base):
+                        # Look for project-specific directories in DerivedData
+                        try:
+                            for entry in os.listdir(derived_data_base):
+                                # Try to match project name approximately
+                                if project_name.lower() in entry.lower():
+                                    index_path = os.path.join(derived_data_base, entry, "Index/DataStore")
+                                    if os.path.exists(index_path):
+                                        possible_index_locations.append(index_path)
+                                        self.logger.log(f"Found potential project index at: {index_path}", logging.INFO)
+                        except Exception as e:
+                            self.logger.log(f"Error scanning DerivedData: {e}", logging.WARNING)
+
+                # Look for Swift package index if not found already
+                if not possible_index_locations:
+                    # Check for .build directory in repository root
+                    build_dir = os.path.join(repository_absolute_path, ".build")
+                    if os.path.exists(build_dir):
+                        try:
+                            # Look for index/store in various build configurations
+                            for root, dirs, _ in os.walk(build_dir):
+                                if "index" in dirs:
+                                    index_path = os.path.join(root, "index/store")
+                                    if os.path.exists(index_path):
+                                        possible_index_locations.append(index_path)
+                                        self.logger.log(f"Found Swift package index at: {index_path}", logging.INFO)
+                                        break
+                        except Exception as e:
+                            self.logger.log(f"Error scanning .build directory: {e}", logging.WARNING)
+
+                # Use the first available index store path
+                if possible_index_locations:
+                    if "indexStoreOptions" not in sourcekit_options:
+                        sourcekit_options["indexStoreOptions"] = {}
+                    sourcekit_options["indexStoreOptions"]["path"] = possible_index_locations[0]
+                    self.logger.log(f"Using index store at: {possible_index_locations[0]}", logging.INFO)
+                else:
+                    self.logger.log("No suitable index store found. References may not work correctly.", logging.WARNING)
+
             # Get platform-specific SDK path
             sdk_path = None
             if sys.platform == 'darwin':  # macOS
@@ -669,7 +464,7 @@ class SourceKitLSP(LanguageServer):
                     if os.path.exists(path):
                         sdk_path = path
                         break
-            
+
             # Only use SDK path if it exists
             if sdk_path:
                 server_args = sourcekit_options.get("serverArguments", [])
@@ -680,11 +475,11 @@ class SourceKitLSP(LanguageServer):
                         server_args[i + 1] = sdk_path
                         sdk_found = True
                         break
-                
+
                 # If -sdk wasn't found, add it
                 if not sdk_found:
                     server_args.extend(["-Xswiftc", "-sdk", "-Xswiftc", sdk_path])
-                
+
                 sourcekit_options["serverArguments"] = server_args
                 self.logger.log(f"Using SDK path: {sdk_path}", logging.INFO)
             else:
@@ -702,7 +497,7 @@ class SourceKitLSP(LanguageServer):
                             continue
                         new_args.append(arg)
                     sourcekit_options["serverArguments"] = new_args
-        
+
         # Replace placeholder values with actual values
         if "rootPath" in d and d["rootPath"] == "$rootPath":
             d["rootPath"] = swift_test_root
@@ -718,18 +513,19 @@ class SourceKitLSP(LanguageServer):
         workspace_folders = [
             {"uri": pathlib.Path(repository_absolute_path).as_uri(), "name": os.path.basename(repository_absolute_path)}
         ]
-        
+
         # Add swift_test directory as a separate workspace folder if it's different
         if swift_test_root != repository_absolute_path:
             workspace_folders.append({
                 "uri": pathlib.Path(swift_test_root).as_uri(),
                 "name": os.path.basename(swift_test_root)
             })
-        
+
         d["workspaceFolders"] = workspace_folders
-        
+
         self.logger.log(f"SourceKit-LSP init params: {json.dumps(d, indent=2)}", logging.DEBUG)
         return d
+
 
     @asynccontextmanager
     async def start_server(self) -> AsyncIterator["SourceKitLSP"]:

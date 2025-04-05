@@ -125,9 +125,12 @@
       "indexOptions": {
         "trackRelatedDocuments": true,
         "latency": "realtime",
+        "priority": "high",
+        "initializer": "onDemand",
         "crossReferencesOptions": {
           "excludeDeclarations": false,
-          "includeRelatedDocuments": true
+          "includeRelatedDocuments": true,
+          "includeSyntaxNodes": true
         }
       },
       "completionOptions": {
@@ -140,7 +143,13 @@
       ],
       "indexStoreOptions": {
         "path": "",
-        "pollIntervalSeconds": 1
+        "libraryPath": "",
+        "pollIntervalSeconds": 1,
+        "initialScanningStrategy": "urgent"
+      },
+      "debug": {
+        "enableLogs": true,
+        "logLevel": "info"
       }
     }
   }
