@@ -10,8 +10,7 @@ import sys
 import traceback
 from abc import ABC
 from collections import defaultdict
-from collections.abc import Callable, Generator, Iterable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable, Generator, Iterable
 from logging import Logger
 from pathlib import Path
 from typing import Any, TypeVar, cast
@@ -93,9 +92,9 @@ class SerenaAgent:
         )
 
         # create and start the language server instance
-        config = MultilspyConfig(code_language=self.language)
-        logger = MultilspyLogger()
-        self.language_server = SyncLanguageServer.create(config, logger, self.project_root)
+        self._config = MultilspyConfig(code_language=self.language)
+        self._ls_logger = MultilspyLogger()
+        self.language_server = SyncLanguageServer.create(self._config, self._ls_logger, self.project_root)
 
         self.prompt_factory = PromptFactory()
         self.symbol_manager = SymbolManager(self.language_server, self)
@@ -123,6 +122,14 @@ class SerenaAgent:
         if self._start_language_server:
             log.info("Starting the language server ...")
             self.language_server.start()
+            if not self.language_server.is_running():
+                raise RuntimeError(f"Failed to start the language server for {self.language} and project {self.project_root}")
+
+    def reset_language_server(self) -> None:
+        self.language_server.stop()
+        self.language_server.start()
+        if not self.language_server.is_running():
+            raise RuntimeError(f"Failed to start (reset) the language server for {self.language} and project {self.project_root}")
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self._all_tools[tool_class]  # type: ignore
@@ -150,16 +157,6 @@ class SerenaAgent:
             log.info("Stopping the GUI log window ...")
             self._gui_log_handler.stop_viewer()
             Logger.root.removeHandler(self._gui_log_handler)
-
-    @contextmanager
-    def language_server_lifecycle_context(self) -> Iterator[None]:
-        """
-        Context manager for the language server's lifecycle
-        """
-        if self._start_language_server:
-            raise Exception("This context manager can only be used if the instance is created with start_language_server=True")
-        with self.language_server.start_server():
-            yield
 
 
 class MemoriesManager:
@@ -195,12 +192,30 @@ class MemoriesManager:
 class Component(ABC):
     def __init__(self, agent: "SerenaAgent"):
         self.agent = agent
-        self.language_server = agent.language_server
-        self.project_root = agent.project_root
-        self.project_config = agent.project_config
-        self.prompt_factory = agent.prompt_factory
-        self.memories_manager = agent.memories_manager
-        self.symbol_manager = agent.symbol_manager
+
+    @property
+    def language_server(self) -> SyncLanguageServer:
+        return self.agent.language_server
+
+    @property
+    def project_root(self) -> str:
+        return self.agent.project_root
+
+    @property
+    def project_config(self) -> dict[str, Any]:
+        return self.agent.project_config
+
+    @property
+    def prompt_factory(self) -> PromptFactory:
+        return self.agent.prompt_factory
+
+    @property
+    def memories_manager(self) -> MemoriesManager:
+        return self.agent.memories_manager
+
+    @property
+    def symbol_manager(self) -> SymbolManager:
+        return self.agent.symbol_manager
 
 
 _DEFAULT_MAX_ANSWER_LENGTH = int(2e5)
@@ -271,6 +286,9 @@ class Tool(Component):
         """
         Applies the tool with the given arguments
         """
+        if not self.language_server.is_running():
+            self.agent.reset_language_server()
+
         apply_fn = self.get_apply_fn()
         if log_call:
             self._log_tool_application(inspect.currentframe())

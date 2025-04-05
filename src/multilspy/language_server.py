@@ -1397,8 +1397,14 @@ class LanguageServer:
         if self._cache_has_changed:
             self.logger.log(f"Saving updated document symbols cache to {self._cache_path}", logging.INFO)
             self._cache_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self._cache_path, "wb") as f:
-                pickle.dump(self._document_symbols_cache, f)
+            try:
+                with open(self._cache_path, "wb") as f:
+                    pickle.dump(self._document_symbols_cache, f)
+            except Exception as e:
+                self.logger.log(
+                        f"Failed to save document symbols cache to {self._cache_path}: {e}. "
+                        "Note: this may have resulted in a corrupted cache file.", logging.ERROR
+                    )
             
     def load_cache(self):
         if not self._cache_path.exists():
@@ -1407,9 +1413,13 @@ class LanguageServer:
         with open(self._cache_path, "rb") as f:
             try:
                 self._document_symbols_cache = pickle.load(f)
-            except:
+            except Exception as e:
                 # cache often becomes corrupt, so just skip loading it
-                pass
+                self.logger.log(
+                        f"Failed to load document symbols cache from {self._cache_path}: {e}. Possible cause: the cache file is corrupted. " 
+                        "Check for any errors related to saving the cache in the logs.", 
+                        logging.ERROR
+                    )
 
 
 @ensure_all_methods_implemented(LanguageServer)
@@ -1827,7 +1837,13 @@ class SyncLanguageServer:
         self._server_context = self.language_server.start_server()
         asyncio.run_coroutine_threadsafe(self._server_context.__aenter__(), loop=self.loop).result()
         return self
-
+    
+    def is_running(self) -> bool:
+        """
+        Check if the language server is running.
+        """
+        return self.loop is not None and self.loop_thread is not None and self.loop_thread.is_alive()
+    
     def stop(self) -> None:
         """
         Shuts down the language server process and cleans up resources.
@@ -1841,6 +1857,7 @@ class SyncLanguageServer:
         self.loop_thread.join()
         self.loop = None
         self.loop_thread = None
+        self.save_cache()
         
     def save_cache(self):
         """

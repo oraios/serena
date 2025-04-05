@@ -13,7 +13,6 @@ from mcp.server.fastmcp.server import FastMCP, Settings
 from mcp.server.fastmcp.tools.base import Tool as MCPTool
 from mcp.server.fastmcp.utilities.func_metadata import func_metadata
 from sensai.util import logging
-from sensai.util.helper import mark_used
 
 from serena.agent import SerenaAgent, Tool
 
@@ -43,8 +42,6 @@ def make_tool(
     tool: Tool,
 ) -> MCPTool:
     """Create a Tool from a function."""
-    from mcp.server.fastmcp import Context
-
     func_name = tool.get_name()
 
     apply_fn = getattr(tool, "apply")
@@ -57,8 +54,7 @@ def make_tool(
     func_arg_metadata = func_metadata(apply_fn)
     parameters = func_arg_metadata.arg_model.model_json_schema()
 
-    def execute_fn(ctx: Context, **kwargs) -> str:  # type: ignore
-        mark_used(ctx)
+    def execute_fn(**kwargs) -> str:  # type: ignore
         return tool.apply_ex(log_call=True, catch_exceptions=True, **kwargs)
 
     return MCPTool(
@@ -68,8 +64,21 @@ def make_tool(
         parameters=parameters,
         fn_metadata=func_arg_metadata,
         is_async=is_async,
-        context_kwarg="ctx",
+        context_kwarg=None,
     )
+
+
+_SERENA_AGENT_REGISTRY: dict[str, SerenaAgent] = {}
+"""Map of project file paths to their corresponding SerenaAgent instances."""
+
+
+def _get_create_serena_agent(project_file_path: str) -> SerenaAgent:
+    if project_file_path not in _SERENA_AGENT_REGISTRY:
+        log.info(f"Creating new SerenaAgent for project file: {project_file_path}")
+        _SERENA_AGENT_REGISTRY[project_file_path] = SerenaAgent(project_file_path, start_language_server=True)
+    else:
+        log.info(f"Reusing existing SerenaAgent for project file: {project_file_path}")
+    return _SERENA_AGENT_REGISTRY[project_file_path]
 
 
 def create_mcp_server() -> FastMCP:
@@ -79,19 +88,22 @@ def create_mcp_server() -> FastMCP:
         sys.exit(1)
 
     project_file_path = argv[0]
-    agent = SerenaAgent(project_file_path)
+
+    agent = _get_create_serena_agent(project_file_path)
 
     @asynccontextmanager
-    async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[SerenaMCPRequestContext]:
+    async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[None]:
         """Manage server startup and shutdown lifecycle."""
-        with agent.language_server_lifecycle_context():
-            yield SerenaMCPRequestContext(agent=agent)
+        try:
+            yield
+        finally:
+            for agent in _SERENA_AGENT_REGISTRY.values():
+                agent.language_server.stop()
 
     mcp_settings = Settings(lifespan=server_lifespan)
     mcp = FastMCP(**mcp_settings.model_dump())
     for tool in agent.tools.values():
         mcp._tool_manager._tools[tool.get_name()] = make_tool(tool)
-
     return mcp
 
 
