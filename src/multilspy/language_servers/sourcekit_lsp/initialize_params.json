@@ -114,6 +114,34 @@
   "initializationOptions": {
     "diagnostics": {
       "disabled": []
+    },
+    "completion": {
+      "maxResults": 200
+    },
+    "clangd": {
+      "serverArguments": ["--cross-file-rename"]
+    },
+    "sourcekit-lsp": {
+      "indexOptions": {
+        "trackRelatedDocuments": true,
+        "latency": "realtime",
+        "crossReferencesOptions": {
+          "excludeDeclarations": false,
+          "includeRelatedDocuments": true
+        }
+      },
+      "completionOptions": {
+        "maxResults": 200
+      },
+      "serverArguments": [
+        "-Xswiftc", "-sdk",
+        "-Xswiftc", "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+        "-Xswiftc", "-enable-library-evolution"
+      ],
+      "indexStoreOptions": {
+        "path": "",
+        "pollIntervalSeconds": 1
+      }
     }
   }
 }

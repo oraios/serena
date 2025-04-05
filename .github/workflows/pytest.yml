@@ -24,6 +24,32 @@ jobs:
         run: uv venv
       - name: Install dependencies
         run: uv pip install -e ".[dev]"
+        
+      # Install Swift for sourcekit-lsp support
+      - name: Install Swift (if Swift files changed)
+        if: |
+          github.event_name == 'push' && 
+          (contains(github.event.head_commit.modified, 'src/multilspy/language_servers/sourcekit_lsp/') ||
+           contains(github.event.head_commit.added, 'src/multilspy/language_servers/sourcekit_lsp/') ||
+           contains(github.event.head_commit.modified, 'test/multilspy/test_swift_symbols.py') ||
+           contains(github.event.head_commit.added, 'test/multilspy/test_swift_symbols.py'))
+        run: |
+          # Download and install Swift
+          wget -q https://download.swift.org/swift-6.1-release/ubuntu2204/swift-6.1-RELEASE/swift-6.1-RELEASE-ubuntu22.04.tar.gz
+          tar xzf swift-6.1-RELEASE-ubuntu22.04.tar.gz
+          sudo mv swift-6.1-RELEASE-ubuntu22.04 /opt/swift
+          echo "PATH=/opt/swift/usr/bin:$PATH" >> $GITHUB_ENV
+          echo "SWIFT_TOOLCHAIN_PATH=/opt/swift" >> $GITHUB_ENV
+      
+      # Verify Swift installation if installed
+      - name: Verify Swift installation
+        if: ${{ env.SWIFT_TOOLCHAIN_PATH != '' }}
+        run: |
+          swift --version
+          which sourcekit-lsp
+          sourcekit-lsp --version
+          
+      # Main test command
       - name: Test with pytest
         run: uv run poe test
       - name: Upload coverage to Codecov
