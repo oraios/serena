@@ -560,6 +560,7 @@ Here the full list of Serena's default tools with a short description (the outpu
  * `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
  * `get_dir_overview`: Gets an overview of the top-level symbols defined in all files within a given directory.
  * `get_document_overview`: Gets an overview of the top-level symbols defined in a given file.
+ * `get_referencing_code_extracts`: Gets the code blocks that reference the symbol at the given location.
  * `insert_after_symbol`: Inserts content after the end of the definition of a given symbol.
  * `insert_at_line`: Inserts content at a given line in a file.
  * `insert_before_symbol`: Inserts content before the beginning of the definition of a given symbol.
@@ -569,6 +570,7 @@ Here the full list of Serena's default tools with a short description (the outpu
  * `prepare_for_new_conversation`: Provides instructions for preparing for a new conversation (in order to continue with the necessary context).
  * `read_file`: Reads a file within the project directory.
  * `read_memory`: Reads the memory with the given name from Serena's project-specific memory store.
+ * `replace_lines`: Replaces a range of lines within a file with new content.
  * `replace_symbol_body`: Replaces the full definition of a symbol.
  * `search_in_all_code`: Performs a search for a pattern in all code files (and only in code files) in the project.
  * `summarize_changes`: Provides instructions for summarizing the changes made to the codebase.
@@ -576,4 +578,3 @@ Here the full list of Serena's default tools with a short description (the outpu
  * `think_about_task_adherence`: Thinking tool for determining whether the agent is still on track with the current task.
  * `think_about_whether_you_are_done`: Thinking tool for determining whether the task is truly completed.
  * `write_memory`: Writes a named memory (for future reference) to Serena's project-specific memory store.
-
