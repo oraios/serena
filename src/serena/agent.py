@@ -207,6 +207,16 @@ _DEFAULT_MAX_ANSWER_LENGTH = int(2e5)
 
 
 class Tool(Component):
+    # NOTE: each tool should implement the apply method, which is then used in
+    # the central method of the Tool class `apply_ex`.
+    # Failure to do so will result in a RuntimeError at tool execution time.
+    # The apply method is not declared as part of the base Tool interface since we cannot
+    # know the signature of the (input parameters of the) method in advance.
+    #
+    # The docstring and types of the apply method are used to generate the tool description
+    # (which is use by the LLM, so a good description is important)
+    # and to validate the tool call arguments.
+
     @classmethod
     def get_name(cls) -> str:
         name = cls.__name__
@@ -219,7 +229,7 @@ class Tool(Component):
     def get_apply_fn(self) -> Callable:
         apply_fn = getattr(self, "apply")
         if apply_fn is None:
-            raise Exception(f"{self} does not define method apply")
+            raise RuntimeError(f"apply not defined in {self}. Did you forget to implement it?")
         return apply_fn
 
     @classmethod
@@ -261,10 +271,7 @@ class Tool(Component):
         """
         Applies the tool with the given arguments
         """
-        apply_fn = getattr(self, "apply")
-        if apply_fn is None:
-            raise ValueError(f"apply not defined in {self}")
-
+        apply_fn = self.get_apply_fn()
         if log_call:
             self._log_tool_application(inspect.currentframe())
         try:
@@ -324,6 +331,10 @@ class CreateTextFileTool(Tool):
         to use symbolic operations like replace_symbol_body or insert_after_symbol/insert_before_symbol, if possible.
         You can also use insert_at_line to insert content at a specific line for existing files if the symbolic operations
         are not the right choice for what you want to do.
+
+        If ever used on an existing file, the content has to be the complete content of that file (so it
+        may never end with something like "The remaining content of the file is left unchanged.").
+        For operations that just replace a part of a file, use the replace_lines or the symbolic editing tools instead.
 
         :param relative_path: the relative path to the file to create
         :param content: the (utf-8-encoded) content to write to the file
@@ -527,6 +538,50 @@ class FindReferencingSymbolsTool(Tool):
         symbol_dicts = [s.to_dict(kind=True, location=True, depth=0, include_body=include_body) for s in symbols]
         result = json.dumps(symbol_dicts)
         return self._limit_length(result, max_answer_chars)
+
+
+class FindReferencingCodeSnippetsTool(Tool):
+    """
+    Finds code snippets in which the symbol at the given location is referenced.
+    """
+
+    def apply(
+        self,
+        relative_path: str,
+        line: int,
+        column: int,
+        context_lines_before: int = 0,
+        context_lines_after: int = 0,
+        max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
+    ) -> str:
+        """
+        Returns short code snippets where the symbol at the given location is referenced.
+
+        Contrary to the `find_referencing_symbols` tool, this tool returns references that are not symbols but instead
+        code snippets that may or may not be contained in a symbol (for example, file-level calls).
+        It may make sense to use this tool to get a quick overview of the code that references
+        the symbol. Usually, just looking at code snippets is not enough to understand the full context,
+        unless the case you are investigating is very simple,
+        or you already have read the relevant symbols using the find_referencing_symbols tool and
+        now want to get an overview of how the referenced symbol (at the given location) is used in them.
+        The size of the snippets is controlled by the context_lines_before and context_lines_after parameters.
+
+        :param relative_path: the relative path to the file containing the symbol
+        :param line: the line number of the symbol to find references for
+        :param column: the column of the symbol to find references for
+        :param context_lines_before: the number of lines to include before the line containing the reference
+        :param context_lines_after: the number of lines to include after the line containing the reference
+        :param max_answer_chars: if the output is longer than this number of characters,
+            no content will be returned. Don't adjust unless there is really no other way to get the content
+            required for the task. Instead, if the output is too long, you should
+            make a stricter query.
+        """
+        matches = self.language_server.request_references_with_content(
+            relative_path, line, column, context_lines_before, context_lines_after
+        )
+        result = [match.to_display_string() for match in matches]
+        result_json_str = json.dumps(result)
+        return self._limit_length(result_json_str, max_answer_chars)
 
 
 class ReplaceSymbolBodyTool(Tool):

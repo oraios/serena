@@ -69,21 +69,25 @@ Coming soon: Kotlin and Dart.
 
 <!-- Created with  markdown-toc -i README.md -->
 <!-- Install it with npm install -g markdown-toc -->
+
 <!-- toc -->
 
 - [Is It Really Free to Use?](#is-it-really-free-to-use)
 - [What Can I Use Serena For?](#what-can-i-use-serena-for)
 - [Quick Start](#quick-start)
   * [MCP Server (Claude Desktop)](#mcp-server-claude-desktop)
-  * [Agno](#agno)
+  * [Other MCP Clients - Cline, Roo-Code, Cursor, Windsurf etc.](#other-mcp-clients---cline-roo-code-cursor-windsurf-etc)
+  * [Agno Agent](#agno-agent)
+  * [Other Agent Frameworks](#other-agent-frameworks)
 - [Serena's Tools and Configuration](#serenas-tools-and-configuration)
 - [Comparison with Other Coding Agents](#comparison-with-other-coding-agents)
   * [Subscription-Based Coding Agents](#subscription-based-coding-agents)
   * [API-Based Coding Agents](#api-based-coding-agents)
   * [Other MCP-Based Coding Agents](#other-mcp-based-coding-agents)
-- [Limitations of MCP Servers](#limitations-of-mcp-servers)
+- [Stability Issues in MCP Client-Server Interactions](#stability-issues-in-mcp-client-server-interactions)
   * [Serena Logging](#serena-logging)
 - [Onboarding and Memories](#onboarding-and-memories)
+- [Combination with Other MCP Servers](#combination-with-other-mcp-servers)
 - [Recommendations on Using Serena](#recommendations-on-using-serena)
   * [Which Model to Choose?](#which-model-to-choose)
   * [Onboarding](#onboarding)
@@ -147,11 +151,21 @@ Serena can read, write and execute code, read logs and the terminal output.
    If you are using paths containing backslashes for paths on Windows 
    (note that you can also just use forward slashes), be sure to escape them correctly (`\\`).
 
-That's it! Save the config and then restart Claude Desktop.  
+That's it! Save the config and then restart Claude Desktop. 
+
+Note: on Windows and macOS there are official Claude Desktop applications by Anthropic, for Linux there is an [open-source
+community version](https://github.com/aaddrick/claude-desktop-debian).
 
 ⚠️ Be sure to fully quit the Claude Desktop application, as closing Claude will just minimize it to the system tray – at least on Windows.  
 
 After restarting, you should see Serena's tools in your chat interface (notice the small hammer icon).
+
+⚠️ Tool Names: Claude Desktop (and most MCP Clients) don't resolve the name of the server. So you shouldn't
+say something like "use Serena's tools". Instead, you can instruct the LLM to use symbolic tools or to
+use a particular tool by referring to its name. Moreover, if you use multiple MCP Servers, you might get
+**tool name collisions** which lead to undefined behavior. For example, Serena is currently incompatible with the
+[Filesystem MCP Server](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem) due to tool name
+collisions.
 
 ℹ️ Note that MCP servers which use stdio as a protocol are somewhat unusual as far as client/server architectures go, as the server
 necessarily has to be started by the client in order for communication to take place via the server's standard input/output stream.
@@ -163,12 +177,34 @@ write a new configuration file, adjust the configuration to point to it and then
 
 For more information on MCP servers with Claude Desktop, see [the official quick start guide](https://modelcontextprotocol.io/quickstart/user).
 
-### Agno
+### Other MCP Clients - Cline, Roo-Code, Cursor, Windsurf etc.
 
-Agno is a model-agnostic agent framework that allows you to use Serena with a large number of underlying LLMs.
+Being an MCP Server, Serena can be included in any MCP Client. The same config as above,
+maybe with small client-specific modifications should work. Most of the popular
+existing coding assistants (IDE extensions or VSCode-like IDEs) accept connecting
+to MCP Servers. Including Serena generally boosts their performance
+by providing them tools for symbolic operations.
+
+In this case, the billing for the usage continues to be controlled by the client of your choice
+(unlike with the Claude Desktop client). But you may still want to use Serena through such an approach,
+e.g., for one of the following reasons:
+
+1. You are already using a coding assistant (say Cline or Cursor) and just want to make it more powerful.
+2. You are on Linux and don't want to use the [community-created Claude Desktop](https://github.com/aaddrick/claude-desktop-debian)
+3. You want tighter integration of Serena into your IDE and don't mind paying for that
+
+The same considerations as in using Serena for Claude Desktop (in particular, tool name collisions) 
+also apply here.
+
+### Agno Agent
+
+Agno is a model-agnostic agent framework that allows you to turn Serena into an agent 
+(independent of the MCP technology) with a large number of underlying LLMs.
 
 While Agno is not yet entirely stable, we chose it, because it comes with its own open-source UI, 
-making it easy to directly use the agent using a chat interface.  
+making it easy to directly use the agent using a chat interface.  With Agno, Serena is turned into an agent
+(so no longer an MCP Server), so it can be used in programmatic ways (for example for benchmarking or within 
+your application).
 
 Here's how it works (see also [Agno's documentation](https://docs.agno.com/introduction/playground)):
 
@@ -220,6 +256,14 @@ While we have never encountered any issues with
 this in our testing with Claude, allowing this may not be entirely safe. 
 You may choose to disable certain tools for your setup in your Serena project's
 configuration file (`.yml`).
+
+### Other Agent Frameworks
+
+The Agno agent is particularly nice because of the Agno UI, but it is easy to incorporate Serena into any
+agent framework (like [pydantic-ai](https://ai.pydantic.dev/), [langgraph](https://langchain-ai.github.io/langgraph/tutorials/introduction/) or others).
+
+You just have to write an adapter of Serena's tools to the tools in the framework of your choice, like
+it was done by us for agno in the [SerenaAgnoToolkit](/src/serena/agno.py).
 
 ## Serena's Tools and Configuration
 
@@ -350,6 +394,14 @@ Every file in the `.serena/memories/` directory is a memory file.
 
 We found the memories to significantly improve the user experience with Serena.
 By itself, Serena is instructed to create new memories whenever appropriate.
+
+## Combination with Other MCP Servers
+
+When using Serena through an MCP Client, you can use it together with other MCP servers.
+However, beware of tool name collisions! See info on that above.
+
+Currently, there is a collision with the popular Filesystem MCP Server. Since Serena also provides
+filesystem operations, there is likely no need to ever enable these two simultaneously.
 
 ## Recommendations on Using Serena
 
@@ -489,7 +541,8 @@ Without these projects, Serena would not have been possible (or would have been 
 
 It is very easy to extend Serena's AI functionality with your own ideas. 
 Just implement a new Tool by subclassing from
-`serena.agent.Tool`. By default, the `SerenaAgent` will immediately have access to it.
+`serena.agent.Tool` and implement the `apply` method (not part of the interface, see
+comment in `Tool`). By default, the `SerenaAgent` will immediately have access to it.
 
 It is also relatively straightforward to add [support for a new language](/CONTRIBUTING.md#adding-a-new-supported-language). We look forward to seeing what the community will come up with! 
 For details on contributing, see [here](/CONTRIBUTING.md).
@@ -507,6 +560,7 @@ Here the full list of Serena's default tools with a short description (the outpu
  * `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
  * `get_dir_overview`: Gets an overview of the top-level symbols defined in all files within a given directory.
  * `get_document_overview`: Gets an overview of the top-level symbols defined in a given file.
+ * `get_referencing_code_extracts`: Gets the code blocks that reference the symbol at the given location.
  * `insert_after_symbol`: Inserts content after the end of the definition of a given symbol.
  * `insert_at_line`: Inserts content at a given line in a file.
  * `insert_before_symbol`: Inserts content before the beginning of the definition of a given symbol.
@@ -516,6 +570,7 @@ Here the full list of Serena's default tools with a short description (the outpu
  * `prepare_for_new_conversation`: Provides instructions for preparing for a new conversation (in order to continue with the necessary context).
  * `read_file`: Reads a file within the project directory.
  * `read_memory`: Reads the memory with the given name from Serena's project-specific memory store.
+ * `replace_lines`: Replaces a range of lines within a file with new content.
  * `replace_symbol_body`: Replaces the full definition of a symbol.
  * `search_in_all_code`: Performs a search for a pattern in all code files (and only in code files) in the project.
  * `summarize_changes`: Provides instructions for summarizing the changes made to the codebase.
@@ -523,4 +578,3 @@ Here the full list of Serena's default tools with a short description (the outpu
  * `think_about_task_adherence`: Thinking tool for determining whether the agent is still on track with the current task.
  * `think_about_whether_you_are_done`: Thinking tool for determining whether the task is truly completed.
  * `write_memory`: Writes a named memory (for future reference) to Serena's project-specific memory store.
-
