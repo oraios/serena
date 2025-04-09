@@ -1,6 +1,11 @@
+import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
+from fnmatch import fnmatch
+
+log = logging.getLogger(__name__)
 
 
 class LineType(StrEnum):
@@ -203,5 +208,50 @@ def search_text(
                     context_lines.append(TextLine(line_number=context_line_num, line_content=lines[j], match_type=match_type))
 
                 matches.append(MatchedConsecutiveLines(lines=context_lines, source_file_path=source_file_path))
+
+    return matches
+
+
+def default_content_reader(file_path: str) -> str:
+    with open(file_path) as f:
+        return f.read()
+
+
+def search_files(
+    file_paths: list[str],
+    pattern: re.Pattern | str,
+    content_reader: Callable[[str], str] = default_content_reader,
+    context_lines_before: int = 0,
+    context_lines_after: int = 0,
+    paths_include_glob: str | None = None,
+    paths_exclude_glob: str | None = None,
+) -> list[MatchedConsecutiveLines]:
+    matches = []
+    for path in file_paths:
+        # TODO: fnmatch is not exactly the same as glob
+        if paths_include_glob and not fnmatch(path, paths_include_glob):
+            log.debug(f"Skipping {path}: does not match include pattern {paths_include_glob}")
+            continue
+
+        if paths_exclude_glob and fnmatch(path, paths_exclude_glob):
+            log.debug(f"Skipping {path}: matches exclude pattern {paths_exclude_glob}")
+            continue
+        try:
+            file_content = content_reader(path)
+        except Exception as e:
+            log.error(f"Error reading file {path}. Skipping.\nError: {e}")
+            continue
+
+        search_results = search_text(
+            pattern,
+            file_content,
+            source_file_path=path,
+            allow_multiline_match=True,
+            context_lines_before=context_lines_before,
+            context_lines_after=context_lines_after,
+        )
+        if len(search_results) > 0:
+            log.debug(f"Found {len(search_results)} matches in {path}")
+            matches.extend(search_results)
 
     return matches

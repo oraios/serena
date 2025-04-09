@@ -26,7 +26,7 @@ from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple, Union, 
 
 import pathspec
 
-from serena.text_utils import LineType, MatchedConsecutiveLines, TextLine, search_text
+from serena.text_utils import LineType, MatchedConsecutiveLines, TextLine, search_files, search_text
 from . import multilspy_types
 from .lsp_protocol_handler import lsp_types as LSPTypes
 from .lsp_protocol_handler.lsp_constants import LSPConstants
@@ -244,10 +244,22 @@ class LanguageServer:
                     processed_patterns.append(line.strip())
 
         # Create a pathspec matcher from the processed patterns
-        self.ignore_spec = pathspec.PathSpec.from_lines(
+        self._ignore_spec = pathspec.PathSpec.from_lines(
             pathspec.patterns.GitWildMatchPattern,
             processed_patterns
         )
+        
+    def get_ignore_spec(self) -> pathspec.PathSpec:
+        """Returns the pathspec matcher for the paths that were configured to be ignored through
+        the multilspy config file and the .gitignore file.
+        
+        This is is a subset of the full language-specific ignore spec that determines
+        which files are relevant for the language server.
+        
+        This matcher is useful for operations outside of the language server,
+        such as when searching for relevant non-language files in the project.
+        """
+        return self._ignore_spec
 
     def should_ignore_path(self, relative_path: str) -> bool:
         """
@@ -288,7 +300,7 @@ class LanguageServer:
             normalized_path = normalized_path + '/'
         
         # Use the pathspec matcher to check if the path matches any ignore pattern
-        if self.ignore_spec.match_file(normalized_path):
+        if self._ignore_spec.match_file(normalized_path):
             return True
         
         return False
@@ -1156,34 +1168,17 @@ class LanguageServer:
         if isinstance(pattern, str):
             pattern = re.compile(pattern)
         
-        matches = []
-        all_files = await self.request_parsed_files()
-        for path in all_files:
-            # Apply glob filters if provided
-            # TODO: fnmatch is not exactly the same as glob
-            if paths_include_glob and not fnmatch(path, paths_include_glob):
-                self.logger.log(f"Skipping {path}: does not match include pattern {paths_include_glob}", logging.DEBUG)
-                continue
-            
-            if paths_exclude_glob and fnmatch(path, paths_exclude_glob):
-                self.logger.log(f"Skipping {path}: matches exclude pattern {paths_exclude_glob}", logging.DEBUG)
-                continue
-                
-            file_content = self.retrieve_full_file_content(path)
-            search_results = search_text(
-                pattern, 
-                file_content, 
-                source_file_path=path, 
-                allow_multiline_match=True, 
-                context_lines_before=context_lines_before, 
-                context_lines_after=context_lines_after
-            )
-            if len(search_results) > 0:
-                self.logger.log(f"Found {len(search_results)} matches in {path}", logging.DEBUG)
-                matches.extend(search_results)
+        relative_file_paths = await self.request_parsed_files()
+        return search_files(
+            relative_file_paths,
+            pattern,
+            content_reader=self.retrieve_full_file_content,
+            context_lines_before=context_lines_before,
+            context_lines_after=context_lines_after,
+            paths_include_glob=paths_include_glob,
+            paths_exclude_glob=paths_exclude_glob
+        )
         
-        return matches
-                
     async def request_referencing_symbols(
         self,
         relative_file_path: str,
@@ -2025,3 +2020,15 @@ class SyncLanguageServer:
         Whether the given path should be ignored.
         """
         return self.language_server.should_ignore_path(relative_path)
+    
+    def get_ignore_spec(self) -> pathspec.PathSpec:
+        """Returns the pathspec matcher for the paths that were configured to be ignored through
+        the multilspy config file and the .gitignore file.
+        
+        This is is a subset of the full language-specific ignore spec that determines
+        which files are relevant for the language server.
+        
+        This matcher is useful for operations outside of the language server,
+        such as when searching for relevant non-language files in the project.
+        """
+        return self.language_server.get_ignore_spec()

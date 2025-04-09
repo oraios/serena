@@ -26,6 +26,7 @@ from serena import serena_root_path, serena_version
 from serena.gui_log_viewer import GuiLogViewer, GuiLogViewerHandler
 from serena.llm.prompt_factory import PromptFactory
 from serena.symbol import SymbolLocation, SymbolManager
+from serena.text_utils import search_files
 from serena.util.class_decorators import singleton
 from serena.util.file_system import scan_directory
 from serena.util.inspection import iter_subclasses
@@ -500,6 +501,20 @@ class Tool(Component):
 
 class ToolMarkerDoesNotRequireActiveProject:
     pass
+
+
+class RestartLanguageServerTool(Tool):
+    """Restarts the language server, may be necessary when edits not through Serena happen."""
+
+    def apply(self) -> str:
+        """Use this tool only on explicit user request or after confirmation.
+        It may be necessary to restart the language server if the user performs edits
+        not through Serena, so the language server state becomes outdated and further editing attempts lead to errors.
+
+        If such editing errors happen, you should suggest using this tool.
+        """
+        self.agent.reset_language_server()
+        return "OK"
 
 
 class ReadFileTool(Tool):
@@ -1131,9 +1146,9 @@ class PrepareForNewConversationTool(Tool):
         return self.prompt_factory.create_prepare_for_new_conversation()
 
 
-class SearchInAllCodeTool(Tool):
+class SearchForPatternTool(Tool):
     """
-    Performs a search for a pattern in all code files (and only in code files) in the project.
+    Performs a search for a pattern in the project.
     """
 
     def apply(
@@ -1143,32 +1158,56 @@ class SearchInAllCodeTool(Tool):
         context_lines_after: int = 0,
         paths_include_glob: str | None = None,
         paths_exclude_glob: str | None = None,
+        only_in_code_files: bool = True,
         max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
     ) -> str:
         """
-        Search for a pattern in all code files (and only in code files) in the project. Generally, symbolic operations like find_symbol or find_referencing_symbols
+        Search for a pattern in the project. You can select whether all files or only code files should be searched.
+        Generally, symbolic operations like find_symbol or find_referencing_symbols
         should be preferred if you know which symbols you are looking for.
-        If you have to look in non-code files (like notebooks, documentation, etc.), you should use the shell_command tool with grep or similar.
-        This tool can be useful if you are looking for a specific pattern in the codebase that is not a symbol name.
 
         :param pattern: Regular expression pattern to search for, either as a compiled Pattern or string
         :param context_lines_before: Number of lines of context to include before each match
         :param context_lines_after: Number of lines of context to include after each match
         :param paths_include_glob: optional glob pattern specifying files to include in the search; if not provided, search globally.
         :param paths_exclude_glob: optional glob pattern specifying files to exclude from the search (takes precedence over paths_include_glob).
+        :param only_in_code_files: whether to search only in code files or in the entire code base.
+            The explicitly ignored files (from serena config and gitignore) are never searched.
         :param max_answer_chars: if the output is longer than this number of characters,
             no content will be returned. Don't adjust unless there is really no other way to get the content
             required for the task. Instead, if the output is too long, you should
             make a stricter query.
         :return: A JSON object mapping file paths to lists of matched consecutive lines (with context, if requested).
         """
-        matches = self.language_server.search_files_for_pattern(
-            pattern=pattern,
-            context_lines_before=context_lines_before,
-            context_lines_after=context_lines_after,
-            paths_include_glob=paths_include_glob,
-            paths_exclude_glob=paths_exclude_glob,
-        )
+        if only_in_code_files:
+            matches = self.language_server.search_files_for_pattern(
+                pattern=pattern,
+                context_lines_before=context_lines_before,
+                context_lines_after=context_lines_after,
+                paths_include_glob=paths_include_glob,
+                paths_exclude_glob=paths_exclude_glob,
+            )
+        else:
+            # we walk through all files in the project starting from the root
+            files_to_search = []
+            ignore_spec = self.language_server.get_ignore_spec()
+            for root, dirs, files in os.walk(self.project_root):
+                # Don't go into directories that are ignored by modifying dirs inplace
+                # Explanation for the  + "/" part:
+                # pathspec can't handle the matching of directories if they don't end with a slash!
+                # see https://github.com/cpburnz/python-pathspec/issues/89
+                dirs[:] = [d for d in dirs if not ignore_spec.match_file(d + "/")]
+                for file in files:
+                    if not ignore_spec.match_file(os.path.join(root, file)):
+                        files_to_search.append(os.path.join(root, file))
+            # TODO (maybe): not super efficient to walk through the files again and filter if glob patterns are provided
+            #   but it probably never matters and this version required no further refactoring
+            matches = search_files(
+                files_to_search,
+                pattern,
+                paths_include_glob=paths_include_glob,
+                paths_exclude_glob=paths_exclude_glob,
+            )
         # group matches by file
         file_to_matches: dict[str, list[str]] = defaultdict(list)
         for match in matches:
