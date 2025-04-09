@@ -23,6 +23,16 @@
             "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.6.500.v20230717-2134.jar",
             "jdtls_readonly_config_path": "extension/server/config_mac_arm"
         },
+        "osx-x64": {
+            "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.23.0/java@darwin-x64-1.23.0.vsix",
+            "archiveType": "zip",
+            "relative_extraction_path": "vscode-java",
+            "jre_home_path": "extension/jre/17.0.8.1-macosx-x86_64",
+            "jre_path": "extension/jre/17.0.8.1-macosx-x86_64/bin/java",
+            "lombok_jar_path": "extension/lombok/lombok-1.18.30.jar",
+            "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.6.500.v20230717-2134.jar",
+            "jdtls_readonly_config_path": "extension/server/config_mac"
+        },
         "linux-arm64": {
             "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.23.0/java@linux-arm64-1.23.0.vsix",
             "archiveType": "zip",
