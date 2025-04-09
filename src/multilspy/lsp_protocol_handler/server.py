@@ -207,6 +207,7 @@ class LanguageServerHandler:
         child_proc_env.update(self.process_launch_info.env)
 
         log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
+        log.debug("environment: %s", child_proc_env)
         self.process = await asyncio.create_subprocess_shell(
             self.process_launch_info.cmd,
             stdout=asyncio.subprocess.PIPE,
