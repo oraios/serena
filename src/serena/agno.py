@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 from sensai.util.logging import LogTime
 
 from serena import serena_root_path
-from serena.agent import SerenaAgent, Tool
+from serena.agent import SerenaAgent, SerenaConfig, Tool
 from serena.gui_log_viewer import show_fatal_exception
 
 log = logging.getLogger(__name__)
@@ -150,7 +150,10 @@ class SerenaAgnoAgentProvider:
                 try:
                     serena_agent = SerenaAgent(project_file)
                 except Exception as e:
-                    show_fatal_exception(e)
+                    if SerenaConfig().gui_log_window_enabled:
+                        show_fatal_exception(e)
+                    else:
+                        log.exception("Failed to start Serena agent.")
                     raise
 
             # Even though we don't want to keep history between sessions,

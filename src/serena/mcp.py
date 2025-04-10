@@ -15,7 +15,7 @@ from mcp.server.fastmcp.utilities.func_metadata import func_metadata
 from sensai.util import logging
 from sensai.util.helper import mark_used
 
-from serena.agent import SerenaAgent, Tool
+from serena.agent import SerenaAgent, SerenaConfig, Tool
 from serena.gui_log_viewer import show_fatal_exception
 
 log = logging.getLogger(__name__)
@@ -100,7 +100,10 @@ def create_mcp_server() -> FastMCP:
             # project_activation_callback=update_tools
         )
     except Exception as e:
-        show_fatal_exception(e)
+        if SerenaConfig().gui_log_window_enabled:
+            show_fatal_exception(e)
+        else:
+            log.exception("Failed to start Serena MCP server.")
         raise
 
     @asynccontextmanager
