@@ -282,22 +282,27 @@ class LanguageServer:
         """
         return self._ignore_spec
 
-    def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool = True) -> bool:
+    def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool = True, check_existence: bool = True) -> bool:
         """
         Determine if a path should be ignored based on file type
         and ignore patterns.
 
         :param relative_path: Relative path to check
         :param ignore_unsupported_files: whether files that are not supported source files should be ignored
+        :param check_existence: whether to check if the file exists before checking if it should be ignored;
+            if False, the path is assumed to refer to a file, even if it doesn't exist
 
         :return: True if the path should be ignored, False otherwise
         """
         abs_path = os.path.join(self.repository_root_path, relative_path)
         if not os.path.exists(abs_path):
-            raise FileNotFoundError(f"File {abs_path} not found, the ignore check cannot be performed")
+            if check_existence:
+                raise FileNotFoundError(f"File {abs_path} not found, the ignore check cannot be performed")
+            is_file = True
+        else:
+            is_file = os.path.isfile(abs_path)
 
         # Check file extension if it's a file
-        is_file = os.path.isfile(abs_path)
         if is_file and ignore_unsupported_files:
             fn_matcher = self.language.get_source_fn_matcher()
             if not fn_matcher.is_relevant_filename(abs_path):
@@ -1600,6 +1605,10 @@ class SyncLanguageServer:
 
         self._server_context = None
 
+        # start project folder watchdog
+        from .watchdog import ProjectFolderWatchdog
+        self.watchdog = ProjectFolderWatchdog(self)
+
     @classmethod
     def create(
         cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str, add_gitignore_content_to_config=True,
@@ -2047,6 +2056,8 @@ class SyncLanguageServer:
 
         If the language server is not running, this method will log a warning and do nothing.
         """
+        del self.watchdog
+
         if not self.is_running():
             self.language_server.logger.log("Language server not running, skipping shutdown.", logging.INFO)
             return
@@ -2078,11 +2089,12 @@ class SyncLanguageServer:
         """
         return self.language_server.is_ignored_dirname(dirname)
 
-    def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool = True) -> bool:
+    def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool = True, check_existence: bool = True) -> bool:
         """
         Whether the given path should be ignored.
         """
-        return self.language_server.is_ignored_path(relative_path, ignore_unsupported_files=ignore_unsupported_files)
+        return self.language_server.is_ignored_path(relative_path, ignore_unsupported_files=ignore_unsupported_files,
+            check_existence=check_existence)
 
     def get_ignore_spec(self) -> pathspec.PathSpec:
         """Returns the pathspec matcher for the paths that were configured to be ignored through

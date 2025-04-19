@@ -33,6 +33,7 @@ dependencies = [
   "pathspec>=0.12.1",
   "psutil>=7.0.0",
   "agno>=1.2.15",
+  "watchdog>=6.0.0",
 ]
 
 [project.scripts]
