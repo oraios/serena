@@ -35,3 +35,20 @@ gui_log_window: False
 
 # minimum log level for the GUI log window (10 = debug, 20 = info, 30 = warning, 40 = error)
 gui_log_level: 20
+
+# Mapping from file extensions (lowercase, including dot) to Serena language names
+# Used by the dynamic LSP switching feature (if enabled per-project).
+# Only extensions listed here will trigger a potential LSP restart.
+# Language names must match the Language enum values in multilspy_config.py
+# (e.g., "python", "typescript", "csharp", "java", "rust", "go", "ruby")
+dynamic_language_mapping:
+  ".py": python
+  ".ts": typescript
+  ".tsx": typescript
+  ".js": typescript  # JS uses the TS server
+  ".jsx": typescript # JS uses the TS server
+  ".cs": csharp
+  ".java": java
+  ".rs": rust
+  ".go": go
+  ".rb": ruby

@@ -41,6 +41,11 @@ LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - 
 TTool = TypeVar("TTool", bound="Tool")
 SUCCESS_RESULT = "OK"
 
+def get_language_from_file_path(file_path: str | Path, mapping: dict[str, Language]) -> Language | None:
+    """Determines the Language enum based on the file extension using the provided mapping.
+    """
+    _, ext = os.path.splitext(str(file_path).lower())
+    return mapping.get(ext, None)
 
 def show_fatal_exception_safe(e: Exception) -> None:
     """
@@ -73,13 +78,23 @@ class ProjectConfig(ToStringMixin):
 
     def __init__(self, config_dict: dict[str, Any], project_name: str, project_root: Path | None = None):
         self.project_name: str = project_name
-        self.language: Language = Language(config_dict["language"])
+        if "language" in config_dict and "default_language" not in config_dict:
+             # Add backward compatibility or warning if needed
+             log.warning(f"Configuration key 'language' is deprecated for project '{project_name}'. Please use 'default_language' instead.")
+             lang_key = "language"
+        elif "default_language" in config_dict:
+             lang_key = "default_language"
+        else:
+             raise SerenaConfigError(f"Missing required configuration key 'default_language' in project '{project_name}'.")
+
+        self.language: Language = Language(config_dict[lang_key])
         if project_root is None:
             project_root = Path(config_dict["project_root"])
         self.project_root: str = str(project_root.resolve())
         self.ignored_paths: list[str] = config_dict.get("ignored_paths", [])
         self.excluded_tools: set[str] = set(config_dict.get("excluded_tools", []))
         self.read_only: bool = config_dict.get("read_only", False)
+        self.enable_dynamic_lsp_switching: bool = config_dict.get("enable_dynamic_lsp_switching", True)
 
         if "ignore_all_files_in_gitignore" not in config_dict:
             raise SerenaConfigError(
@@ -155,6 +170,24 @@ class SerenaConfig:
         self.gui_log_window_enabled = config_yaml.get("gui_log_window", False)
         self.gui_log_window_level = config_yaml.get("gui_log_level", logging.INFO)
         self.enable_project_activation = config_yaml.get("enable_project_activation", True)
+        
+        # --- Load dynamic language mapping ---
+        raw_mapping = config_yaml.get("dynamic_language_mapping", {})
+        self.dynamic_language_mapping: dict[str, Language] = {}
+        for ext, lang_str in raw_mapping.items():
+            try:
+                # Ensure extension starts with a dot and is lowercase
+                ext_lower = ext.lower()
+                if not ext_lower.startswith('.'):
+                    ext_lower = '.' + ext_lower
+                # Convert language string to Language enum
+                self.dynamic_language_mapping[ext_lower] = Language(lang_str)
+            except ValueError:
+                log.warning(f"Invalid language '{lang_str}' specified for extension '{ext}' in dynamic_language_mapping. Skipping.")
+            except Exception as e:
+                 log.warning(f"Error processing dynamic_language_mapping entry '{ext}': '{lang_str}'. Error: {e}")
+        log.info(f"Loaded dynamic language mapping: {self.dynamic_language_mapping}")
+        # --- END Load dynamic language mapping ---
 
     def get_project_configuration(self, project_name: str) -> ProjectConfig:
         if project_name not in self.projects:
@@ -218,6 +251,7 @@ class SerenaAgent:
         self.symbol_manager: SymbolManager | None = None
         self.memories_manager: MemoriesManager | None = None
         self.lines_read: LinesRead | None = None
+        self._current_lsp_language: Language | None = None
 
         # find all tool classes and instantiate them
         self._all_tools: dict[type[Tool], Tool] = {}
@@ -318,6 +352,7 @@ class SerenaAgent:
             assert self.language_server is not None
             self.language_server.stop()
             self.language_server = None
+            self._current_lsp_language = None
 
         # instantiate and start the language server
         assert self.project_config is not None
@@ -331,7 +366,71 @@ class SerenaAgent:
         )
         self.language_server.start()
         if not self.language_server.is_running():
+            self._current_lsp_language = None
             raise RuntimeError(f"Failed to start the language server for {self.project_config}")
+        else:
+            self._current_lsp_language = self.project_config.language
+
+    def restart_lsp_with_language(self, target_language: Language) -> bool:
+        """Restarts the language server for the current project but using the specified target language.
+
+        Args:
+            target_language: The language the new LSP server instance should be configured for.
+
+        Returns:
+            True if the LSP server was successfully restarted for the target language,
+            False otherwise.
+        """
+        log.info(f"Restarting language server for project '{self.project_config.project_name}' with language: {target_language.name}")
+
+        # Ensure we have a project config active
+        if self.project_config is None:
+            log.error("Cannot restart LSP server: No active project configuration.")
+            return False
+
+        # Stop the current language server if it is running
+        if self.is_language_server_running():
+            log.info("Stopping the current language server...")
+            assert self.language_server is not None
+            self.language_server.stop()
+            self.language_server = None
+            self._current_lsp_language = None
+            self.symbol_manager = None # Invalidate symbol manager
+
+        # Instantiate and start the new language server with the target language
+        try:
+            # Use current project's settings but override language
+            multilspy_config = MultilspyConfig(code_language=target_language, ignored_paths=self.project_config.ignored_paths)
+            ls_logger = MultilspyLogger() # Assuming we need a new logger instance?
+            new_language_server = SyncLanguageServer.create(
+                multilspy_config,
+                ls_logger,
+                self.project_config.project_root,
+                add_gitignore_content_to_config=self.project_config.ignore_all_files_in_gitignore,
+            )
+            new_language_server.start()
+
+            if not new_language_server.is_running():
+                log.error(f"Failed to start the language server for project '{self.project_config.project_name}' with language {target_language.name}.")
+                self.language_server = None
+                self._current_lsp_language = None
+                self.symbol_manager = None
+                return False
+            else:
+                # Success!
+                self.language_server = new_language_server
+                self._current_lsp_language = target_language
+                # Re-initialize SymbolManager with the new server
+                self.symbol_manager = SymbolManager(self.language_server, self)
+                log.info(f"Successfully started language server for {target_language.name}.")
+                return True
+
+        except Exception as e:
+            log.error(f"Exception during language server restart for {target_language.name}: {e}", exc_info=e)
+            self.language_server = None
+            self._current_lsp_language = None
+            self.symbol_manager = None
+            return False
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self._all_tools[tool_class]  # type: ignore
@@ -428,6 +527,67 @@ class Component(ABC):
         assert self.agent.lines_read is not None
         return self.agent.lines_read
 
+    def ensure_language_server_for_file(self, relative_path: str | Path) -> bool:
+        """Checks if the active project language matches the file's language.
+        If not, and dynamic switching is enabled, attempts to restart LSP for the target language.
+
+        Returns:
+            bool: True if the correct language server is active and running,
+                  False otherwise.
+        """
+        # If dynamic switching is disabled for this project, just check if the default server is running.
+        if not self.project_config.enable_dynamic_lsp_switching:
+            log.debug("Dynamic LSP switching disabled for this project. Checking if default server is running.")
+            if not self.agent.is_language_server_running():
+                log.error(f"Language server (default: {self.project_config.language.name}) is not running and dynamic switching is disabled.")
+                return False
+            # Check if the running server matches the default language (it should, unless something went wrong)
+            if self.agent._current_lsp_language != self.project_config.language:
+                 log.warning(f"Language server is running but with unexpected language '{self.agent._current_lsp_language}' instead of default '{self.project_config.language.name}'. Proceeding anyway as dynamic switching is off.")
+            return True # Default server is running (or at least *a* server is running)
+
+        if not relative_path:
+            # No path provided, assume current server is ok if running
+            if not self.agent.is_language_server_running():
+                log.error("Language server not running and no file path provided to determine required language.")
+                # Attempt to start default server? For now, return False
+                # self.agent.reset_language_server() # This would use project_config language
+                return False
+            return True
+
+        # --- Pass mapping from config ---
+        target_language = get_language_from_file_path(relative_path, self.agent.serena_config.dynamic_language_mapping)
+        # --- End Pass mapping ---
+
+        if target_language is None:
+            log.debug(f"Could not determine language for path '{relative_path}'. Assuming current language server is acceptable if running.")
+            # Proceed if server is running, otherwise fail
+            if not self.agent.is_language_server_running():
+                 log.error("Language server not running, and could not determine target language.")
+                 return False
+            return True
+
+        # Check if server is running and if the language matches
+        if self.agent.is_language_server_running() and self.agent._current_lsp_language == target_language:
+            log.debug(f"Current language server ({target_language.name}) matches target file. Proceeding.")
+            return True
+        
+        # Server is either not running or has the wrong language
+        if self.agent._current_lsp_language != target_language:
+            log.info(f"Target file language '{target_language.name}' requires LSP restart. Current is '{self.agent._current_lsp_language}'.")
+        else: # Implies server wasn't running
+            log.info(f"Language server not running. Attempting to start for target language '{target_language.name}'.")
+
+        # Attempt to restart the LSP server with the target language
+        restart_successful = self.agent.restart_lsp_with_language(target_language)
+
+        if not restart_successful:
+            log.error(f"Failed to ensure language server is running for {target_language.name}.")
+            return False
+
+        # Server should now be running with the correct language
+        log.debug(f"Language server ready for {target_language.name}.")
+        return True
 
 _DEFAULT_MAX_ANSWER_LENGTH = int(2e5)
 
@@ -689,6 +849,10 @@ class GetSymbolsOverviewTool(Tool):
             (e.g. a subdirectory).
         :return: a JSON object mapping relative paths of all contained files to info about top-level symbols in the file (name, kind, line, column).
         """
+        if not self.ensure_language_server_for_file(relative_path):
+            language_name = get_language_from_file_path(relative_path, self.agent.serena_config.dynamic_language_mapping).name if get_language_from_file_path(relative_path, self.agent.serena_config.dynamic_language_mapping) else "the target file's language"
+            return f"Error: Could not ensure language server for {language_name} (path: '{relative_path}'). No matching project found or activation failed."
+        
         path_to_symbol_infos = self.language_server.request_overview(relative_path)
         result = {}
         for file_path, symbols in path_to_symbol_infos.items():
@@ -750,6 +914,18 @@ class FindSymbolTool(Tool):
             make a stricter query.
         :return: a list of symbols (with symbol locations) that match the given name in JSON format
         """
+        # Determine the relevant path for language check
+        check_path = within_relative_path # Can be None
+        if not self.ensure_language_server_for_file(check_path):
+             # Decide how to handle failure: Proceed with warning, or return error?
+             # Returning error for now, as symbol search likely won't work well.
+             language_name = get_language_from_file_path(check_path, self.agent.serena_config.dynamic_language_mapping).name if check_path and get_language_from_file_path(check_path, self.agent.serena_config.dynamic_language_mapping) else "the target file's language"
+             if check_path and get_language_from_file_path(check_path, self.agent.serena_config.dynamic_language_mapping):
+                return f"Error: Could not ensure language server for {language_name} (path: '{check_path}'). No matching project found or activation failed."
+             else:
+                # Case where language couldn't be determined, but ensure... still returned false (e.g. server not running)
+                return f"Error: Language server not ready for the current project '{self.project_config.project_name}'."
+        
         include_kinds = cast(list[SymbolKind] | None, include_kinds)
         exclude_kinds = cast(list[SymbolKind] | None, exclude_kinds)
         symbols = self.symbol_manager.find_by_name(
@@ -807,6 +983,10 @@ class FindReferencingSymbolsTool(Tool):
             make a stricter query.
         :return: a list of JSON objects with the symbols referencing the requested symbol
         """
+        if not self.ensure_language_server_for_file(relative_path):
+            language_name = get_language_from_file_path(relative_path, self.agent.serena_config.dynamic_language_mapping).name if get_language_from_file_path(relative_path, self.agent.serena_config.dynamic_language_mapping) else "the target file's language"
+            return f"Error: Could not ensure language server for {language_name} (path: '{relative_path}'). No matching project found or activation failed."
+        
         include_kinds = cast(list[SymbolKind] | None, include_kinds)
         exclude_kinds = cast(list[SymbolKind] | None, exclude_kinds)
         symbols = self.symbol_manager.find_referencing_symbols(
@@ -856,6 +1036,10 @@ class FindReferencingCodeSnippetsTool(Tool):
             required for the task. Instead, if the output is too long, you should
             make a stricter query.
         """
+        if not self.ensure_language_server_for_file(relative_path):
+            language_name = get_language_from_file_path(relative_path, self.agent.serena_config.dynamic_language_mapping).name if get_language_from_file_path(relative_path, self.agent.serena_config.dynamic_language_mapping) else "the target file's language"
+            return f"Error: Could not ensure language server for {language_name} (path: '{relative_path}'). No matching project found or activation failed."
+        
         matches = self.language_server.request_references_with_content(
             relative_path, line, column, context_lines_before, context_lines_after
         )
@@ -886,6 +1070,10 @@ class ReplaceSymbolBodyTool(Tool, ToolMarkerCanEdit):
         :param body: the new symbol body. Important: Provide the correct level of indentation
             (as the original body). Note that the first line must not be indented (i.e. no leading spaces).
         """
+        if not self.ensure_language_server_for_file(relative_path):
+            language_name = get_language_from_file_path(relative_path, self.agent.serena_config.dynamic_language_mapping).name if get_language_from_file_path(relative_path, self.agent.serena_config.dynamic_language_mapping) else "the target file's language"
+            return f"Error: Could not ensure language server for {language_name} (path: '{relative_path}'). No matching project found or activation failed."
+        
         self.symbol_manager.replace_body(
             SymbolLocation(relative_path, line, column),
             body=body,
@@ -914,6 +1102,10 @@ class InsertAfterSymbolTool(Tool, ToolMarkerCanEdit):
         :param column: the column
         :param body: the body/content to be inserted
         """
+        if not self.ensure_language_server_for_file(relative_path):
+            language_name = get_language_from_file_path(relative_path, self.agent.serena_config.dynamic_language_mapping).name if get_language_from_file_path(relative_path, self.agent.serena_config.dynamic_language_mapping) else "the target file's language"
+            return f"Error: Could not ensure language server for {language_name} (path: '{relative_path}'). No matching project found or activation failed."
+        
         location = SymbolLocation(relative_path, line, column)
         self.symbol_manager.insert_after(
             location,
@@ -944,8 +1136,14 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerCanEdit):
         :param column: the column
         :param body: the body/content to be inserted
         """
+        if not self.ensure_language_server_for_file(relative_path):
+            language_name = get_language_from_file_path(relative_path, self.agent.serena_config.dynamic_language_mapping).name if get_language_from_file_path(relative_path, self.agent.serena_config.dynamic_language_mapping) else "the target file's language"
+            return f"Error: Could not ensure language server for {language_name} (path: '{relative_path}'). No matching project found or activation failed."
+
+        location = SymbolLocation(relative_path, line, column)
+        
         self.symbol_manager.insert_before(
-            SymbolLocation(relative_path, line, column),
+            location,
             body=body,
         )
         return SUCCESS_RESULT
