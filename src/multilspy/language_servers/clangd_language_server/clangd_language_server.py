@@ -79,6 +79,11 @@ class ClangdLanguageServer(LanguageServer):
             )
         os.chmod(clangd_executable_path, stat.S_IEXEC)
 
+        # Add command-line arguments to clangd from config.clangd_args if present
+        clangd_args = getattr(config, "clangd_args", None)
+        if isinstance(clangd_args, list):
+            clangd_executable_path = clangd_executable_path + " " + " ".join(clangd_args)
+
         return clangd_executable_path
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:

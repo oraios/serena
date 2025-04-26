@@ -7,6 +7,14 @@ project_root: /path/to/project
 #  * csharp: Requires the presence of a .sln file in the project folder.
 language: python
 
+# clangd cli configuratio
+# List of command-line arguments to pass to clangd (e.g. [
+# "--remote-index-address=chromeos.clangd-index.chromium.org:5900",
+# "--background-index=false"
+# "--project-root=xxx"
+# ])
+clangd_args: []
+
 # whether to use the project's gitignore file to ignore files
 # Added on 2025-04-07
 ignore_all_files_in_gitignore: true

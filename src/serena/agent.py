@@ -79,6 +79,7 @@ class ProjectConfig(ToStringMixin):
             raise ValueError(f"Invalid language: {config_dict['language']}.\nValid languages are: {[l.value for l in Language]}") from e
         if project_root is None:
             project_root = Path(config_dict["project_root"])
+        self.clangd_args: list[str] = config_dict.get("clangd_args", [])
         self.project_root: str = str(project_root.resolve())
         self.ignored_paths: list[str] = config_dict.get("ignored_paths", [])
         self.excluded_tools: set[str] = set(config_dict.get("excluded_tools", []))
@@ -324,7 +325,7 @@ class SerenaAgent:
 
         # instantiate and start the language server
         assert self.project_config is not None
-        multilspy_config = MultilspyConfig(code_language=self.project_config.language, ignored_paths=self.project_config.ignored_paths)
+        multilspy_config = MultilspyConfig(code_language=self.project_config.language, ignored_paths=self.project_config.ignored_paths, clangd_args=self.project_config.clangd_args)
         ls_logger = MultilspyLogger()
         self.language_server = SyncLanguageServer.create(
             multilspy_config,
