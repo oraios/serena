@@ -10,31 +10,159 @@ import sys
 import traceback
 from abc import ABC
 from collections import defaultdict
-from collections.abc import Callable, Generator, Iterable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable, Generator, Iterable
 from logging import Logger
 from pathlib import Path
-from typing import Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Self, TypeVar, Union, cast
 
 import yaml
 from sensai.util import logging
-from sensai.util.string import dict_string
+from sensai.util.logging import FallbackHandler
+from sensai.util.string import ToStringMixin, dict_string
 
 from multilspy import SyncLanguageServer
 from multilspy.multilspy_config import Language, MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_types import SymbolKind
-from serena.gui_log_viewer import GuiLogViewer, GuiLogViewerHandler
+from serena import serena_root_path, serena_version
 from serena.llm.prompt_factory import PromptFactory
 from serena.symbol import SymbolLocation, SymbolManager
+from serena.text_utils import search_files
+from serena.util.class_decorators import singleton
 from serena.util.file_system import scan_directory
 from serena.util.inspection import iter_subclasses
 from serena.util.shell import execute_shell_command
+
+if TYPE_CHECKING:
+    from serena.gui_log_viewer import GuiLogViewerHandler
 
 log = logging.getLogger(__name__)
 LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
 TTool = TypeVar("TTool", bound="Tool")
 SUCCESS_RESULT = "OK"
+
+
+def show_fatal_exception_safe(e: Exception) -> None:
+    """
+    Shows the given exception in the GUI log viewer on the main thread and ensures that the exception is logged or at
+    least printed to stderr.
+    """
+    # Make sure the error is logged (adding a fallback handler which writes to stderr in case there is no other handler)
+    fallback_handler = FallbackHandler(logging.StreamHandler(sys.stderr))
+    Logger.root.addHandler(fallback_handler)
+    log.error(f"Fatal exception: {e}", exc_info=e)
+
+    # attempt to show the error in the GUI
+    try:
+        # NOTE: The import can fail on macOS if Tk is not available (depends on Python interpreter installation, which uv
+        #   used as a base); while tkinter as such is always available, its dependencies can be unavailable on macOS.
+        from serena.gui_log_viewer import show_fatal_exception
+
+        show_fatal_exception(e)
+    except:
+        pass
+
+
+class SerenaConfigError(Exception):
+    pass
+
+
+class ProjectConfig(ToStringMixin):
+    SERENA_MANAGED_DIR = ".serena"
+    SERENA_DEFAULT_PROJECT_FILE = "project.yml"
+
+    def __init__(self, config_dict: dict[str, Any], project_name: str, project_root: Path | None = None):
+        self.project_name: str = project_name
+        try:
+            self.language: Language = Language(config_dict["language"].lower())
+        except ValueError as e:
+            raise ValueError(f"Invalid language: {config_dict['language']}.\nValid languages are: {[l.value for l in Language]}") from e
+        if project_root is None:
+            project_root = Path(config_dict["project_root"])
+        self.project_root: str = str(project_root.resolve())
+        self.ignored_paths: list[str] = config_dict.get("ignored_paths", [])
+        self.excluded_tools: set[str] = set(config_dict.get("excluded_tools", []))
+        self.read_only: bool = config_dict.get("read_only", False)
+
+        if "ignore_all_files_in_gitignore" not in config_dict:
+            raise SerenaConfigError(
+                f"`ignore_all_files_in_gitignore` key not found in configuration of project '{project_name}'. "
+                "Please update your `.yml` configuration file for this project. "
+                "It is recommended to set this to `True`."
+            )
+        self.ignore_all_files_in_gitignore = config_dict["ignore_all_files_in_gitignore"]
+
+        # Raise errors for deprecated keys
+        if "ignored_dirs" in config_dict:
+            raise SerenaConfigError(
+                f"Use of `ignored_dirs` key in configuration of project '{project_name}' deprecated. Please use `ignored_paths` instead. "
+                "Note that you can also set `ignore_all_files_in_gitignore` to `True`, which will be enough for most cases."
+            )
+
+    @classmethod
+    def from_yml(cls, yml_path: Path) -> Self:
+        log.info(f"Loading project configuration from {yml_path}")
+        try:
+            with open(yml_path, encoding="utf-8") as f:
+                config_dict = yaml.safe_load(f)
+            if yml_path.parent.name == cls.SERENA_MANAGED_DIR:
+                project_root = yml_path.parent.parent
+                project_name = project_root.name
+            else:
+                project_root = None
+                project_name = yml_path.stem
+            return cls(config_dict, project_name=project_name, project_root=project_root)
+        except Exception as e:
+            raise ValueError(f"Error loading project configuration from {yml_path}: {e}") from e
+
+    def get_serena_managed_dir(self) -> str:
+        return os.path.join(self.project_root, self.SERENA_MANAGED_DIR)
+
+
+@singleton
+class SerenaConfig:
+    """
+    Handles user-defined Serena configuration based on the configuration file
+    """
+
+    CONFIG_FILE = "serena_config.yml"
+
+    def __init__(self) -> None:
+        config_file = os.path.join(serena_root_path(), self.CONFIG_FILE)
+        if not os.path.exists(config_file):
+            raise FileNotFoundError(f"Serena configuration file not found: {config_file}")
+        with open(config_file, encoding="utf-8") as f:
+            try:
+                log.info(f"Loading Serena configuration from {config_file}")
+                config_yaml = yaml.safe_load(f)
+            except Exception as e:
+                raise ValueError(f"Error loading Serena configuration from {config_file}: {e}") from e
+
+        # read projects
+        self.projects: dict[str, ProjectConfig] = {}
+        if "projects" not in config_yaml:
+            raise SerenaConfigError("`projects` key not found in Serena configuration. Please update your `serena_config.yml` file.")
+        for project_config_path in config_yaml["projects"]:
+            project_config_path = Path(project_config_path)
+            if not project_config_path.is_absolute():
+                project_config_path = Path(serena_root_path()) / project_config_path
+            if project_config_path.is_dir():  # assume project file in default location
+                project_config_path = project_config_path / ProjectConfig.SERENA_MANAGED_DIR / ProjectConfig.SERENA_DEFAULT_PROJECT_FILE
+            if not project_config_path.is_file():
+                raise FileNotFoundError(f"Project file not found: {project_config_path}")
+            log.info(f"Loading project configuration from {project_config_path}")
+            project_config = ProjectConfig.from_yml(project_config_path)
+            self.projects[project_config.project_name] = project_config
+        self.project_names = list(self.projects.keys())
+
+        self.gui_log_window_enabled = config_yaml.get("gui_log_window", False)
+        self.gui_log_window_level = config_yaml.get("gui_log_level", logging.INFO)
+        self.enable_project_activation = config_yaml.get("enable_project_activation", True)
+
+    def get_project_configuration(self, project_name: str) -> ProjectConfig:
+        if project_name not in self.projects:
+            raise ValueError(f"Project '{project_name}' not found in Serena configuration; valid project names: {self.project_names}")
+        return self.projects[project_name]
 
 
 class LinesRead:
@@ -54,86 +182,168 @@ class LinesRead:
 
 
 class SerenaAgent:
-    def __init__(self, project_file_path: str, start_language_server: bool = False):
+    def __init__(self, project_file_path: str | None = None, project_activation_callback: Callable[[], None] | None = None):
         """
-        :param project_file_path: the project configuration file path (.yml)
-        :param start_language_server: whether to start the language server immediately and manage its
-            lifecycle internally
+        :param project_file_path: the configuration file (.yml) of the project to load immediately;
+            if None, do not load any project (must use project selection tool to activate a project).
+            If a project is provided, the corresponding language server will be started.
+        :param project_activation_callback: a callback function to be called when a project is activated.
         """
-        self._start_language_server = start_language_server
+        # obtain serena configuration
+        self.serena_config = SerenaConfig()
 
-        if not os.path.exists(project_file_path):
-            print(f"Project file not found: {project_file_path}", file=sys.stderr)
-            sys.exit(1)
-
-        # read project configuration
-        with open(project_file_path, encoding="utf-8") as f:
-            project_config = yaml.safe_load(f)
-        self.project_config = project_config
-        self.language = Language(project_config["language"])
-        self.project_root = str(Path(project_config["project_root"]).resolve())
-
-        # enable GUI log window
-        enable_gui_log = project_config.get("gui_log_window", True)
-        self._gui_log_handler = None
-        if enable_gui_log:
+        # open GUI log window if enabled
+        self._gui_log_handler: Union["GuiLogViewerHandler", None] = None  # noqa
+        if self.serena_config.gui_log_window_enabled:
             if platform.system() == "Darwin":
                 log.warning("GUI log window is not supported on macOS")
             else:
-                log_level = project_config.get("gui_log_level", logging.INFO)
+                # even importing on macOS may fail if tkinter dependencies are unavailable (depends on Python interpreter installation
+                # which uv used as a base, unfortunately)
+                from serena.gui_log_viewer import GuiLogViewer, GuiLogViewerHandler
+
+                log_level = self.serena_config.gui_log_window_level
                 if Logger.root.level > log_level:
                     log.info(f"Root logger level is higher than GUI log level; changing the root logger level to {log_level}")
                     Logger.root.setLevel(log_level)
                 self._gui_log_handler = GuiLogViewerHandler(GuiLogViewer(title="Serena Logs"), level=log_level, format_string=LOG_FORMAT)
                 Logger.root.addHandler(self._gui_log_handler)
 
-        log.info(
-            f"Starting serena server for project {project_file_path} (language={self.language}, root={self.project_root}); "
-            f"process id={os.getpid()}, parent process id={os.getppid()}"
-        )
-
-        # create and start the language server instance
-        config = MultilspyConfig(code_language=self.language)
-        logger = MultilspyLogger()
-        self.language_server = SyncLanguageServer.create(config, logger, self.project_root)
+        log.info(f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()})")
+        log.info("Available projects: {}".format(", ".join(self.serena_config.project_names)))
 
         self.prompt_factory = PromptFactory()
-        self.symbol_manager = SymbolManager(self.language_server, self)
-        self.memories_manager = MemoriesManager(os.path.join(self.get_serena_managed_dir(), "memories"))
-        self.lines_read = LinesRead()
+        self._project_activation_callback = project_activation_callback
+
+        # project-specific instances, which will be initialized upon project activation
+        self.project_config: ProjectConfig | None = None
+        self.language_server: SyncLanguageServer | None = None
+        self.symbol_manager: SymbolManager | None = None
+        self.memories_manager: MemoriesManager | None = None
+        self.lines_read: LinesRead | None = None
 
         # find all tool classes and instantiate them
-        excluded_tools = project_config.get("excluded_tools", [])
         self._all_tools: dict[type[Tool], Tool] = {}
-        self.tools: dict[type[Tool], Tool] = {}
         for tool_class in iter_tool_classes():
             tool_instance = tool_class(self)
+            if not self.serena_config.enable_project_activation:
+                if tool_class in (GetActiveProjectTool, ActivateProjectTool):
+                    log.info(f"Excluding tool '{tool_instance.get_name()}' because project activation is disabled in configuration")
+                    continue
             self._all_tools[tool_class] = tool_instance
-            if (tool_name := tool_class.get_name()) in excluded_tools:
-                log.info(f"Skipping tool {tool_name} because it is in the exclude list")
-                continue
-            self.tools[tool_class] = tool_instance
-        log.info(f"Loaded tools: {', '.join([tool.get_name() for tool in self.tools.values()])}")
+        self._active_tools = dict(self._all_tools)
+        log.info(f"Loaded tools ({len(self._all_tools)}): {', '.join([tool.get_name() for tool in self._all_tools.values()])}")
 
         # If GUI log window is enabled, set the tool names for highlighting
         if self._gui_log_handler is not None:
-            tool_names = [tool.get_name() for tool in self.tools.values()]
+            tool_names = [tool.get_name() for tool in self._active_tools.values()]
             self._gui_log_handler.log_viewer.set_tool_names(tool_names)
-        # start the language server if requested
-        if self._start_language_server:
-            log.info("Starting the language server ...")
-            self.language_server.start()
+
+        # activate a project configuration (if provided or if there is only a single project available)
+        project_config: ProjectConfig | None = None
+        if project_file_path is not None:
+            if not os.path.exists(project_file_path):
+                raise FileNotFoundError(f"Project file not found: {project_file_path}")
+            log.info(f"Loading project configuration from {project_file_path}")
+            project_config = ProjectConfig.from_yml(Path(project_file_path))
+        else:
+            match len(self.serena_config.projects):
+                case 0:
+                    raise RuntimeError(f"No projects found in {SerenaConfig.CONFIG_FILE} and no project file specified.")
+                case 1:
+                    project_config = self.serena_config.get_project_configuration(self.serena_config.project_names[0])
+        if project_config is not None:
+            self.activate_project(project_config)
+        else:
+            if not self.serena_config.enable_project_activation:
+                raise ValueError("Tool-based project activation is disabled in the configuration but no project file was provided.")
+
+    def get_exposed_tools(self) -> list["Tool"]:
+        """
+        :return: the list of tools that are to be exposed/registered in the client
+        """
+        if self.serena_config.enable_project_activation:
+            # With project activation, we must expose all tools and handle tool activation within Serena
+            # (because clients do not react to changed tools)
+            return list(self._all_tools.values())
+        else:
+            # When project activation is not enabled, we only expose the active tools
+            return list(self._active_tools.values())
+
+    def activate_project(self, project_config: ProjectConfig) -> None:
+        log.info(f"Activating {project_config}")
+        self.project_config = project_config
+
+        # handle project-specific tool exclusions (if any)
+        if self.project_config.excluded_tools:
+            self._active_tools = {
+                key: tool for key, tool in self._all_tools.items() if tool.get_name() not in project_config.excluded_tools
+            }
+            log.info(f"Active tools after exclusions ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
+        else:
+            self._active_tools = dict(self._all_tools)
+
+        # if read_only mode is enabled, exclude all editing tools
+        if self.project_config.read_only:
+            self._active_tools = {key: tool for key, tool in self._active_tools.items() if not key.can_edit()}
+            log.info(
+                f"Project is in read-only mode. Editing tools excluded. Active tools ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}"
+            )
+
+        # start the language server
+        self.reset_language_server()
+        assert self.language_server is not None
+
+        # initialize project-specific instances
+        self.symbol_manager = SymbolManager(self.language_server, self)
+        self.memories_manager = MemoriesManager(os.path.join(self.project_config.get_serena_managed_dir(), "memories"))
+        self.lines_read = LinesRead()
+
+        if self._project_activation_callback is not None:
+            self._project_activation_callback()
+
+    def get_active_tool_names(self) -> list[str]:
+        """
+        :return: the list of names of the active tools for the current project
+        """
+        return sorted([tool.get_name() for tool in self._active_tools.values()])
+
+    def is_language_server_running(self) -> bool:
+        return self.language_server is not None and self.language_server.is_running()
+
+    def reset_language_server(self) -> None:
+        """
+        Starts/resets the language server for the current project
+        """
+        # stop the language server if it is running
+        if self.is_language_server_running():
+            log.info("Stopping the language server ...")
+            assert self.language_server is not None
+            self.language_server.stop()
+            self.language_server = None
+
+        # instantiate and start the language server
+        assert self.project_config is not None
+        multilspy_config = MultilspyConfig(code_language=self.project_config.language, ignored_paths=self.project_config.ignored_paths)
+        ls_logger = MultilspyLogger()
+        self.language_server = SyncLanguageServer.create(
+            multilspy_config,
+            ls_logger,
+            self.project_config.project_root,
+            add_gitignore_content_to_config=self.project_config.ignore_all_files_in_gitignore,
+        )
+        self.language_server.start()
+        if not self.language_server.is_running():
+            raise RuntimeError(f"Failed to start the language server for {self.project_config}")
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self._all_tools[tool_class]  # type: ignore
 
     def print_tool_overview(self) -> None:
-        _print_tool_overview(self.tools.values())
-
-    def get_serena_managed_dir(self) -> str:
-        return os.path.join(self.project_root, ".serena")
+        _print_tool_overview(self._active_tools.values())
 
     def mark_file_modified(self, relativ_path: str) -> None:
+        assert self.lines_read is not None
         self.lines_read.invalidate_lines_read(relativ_path)
 
     def __del__(self) -> None:
@@ -143,23 +353,14 @@ class SerenaAgent:
         if not hasattr(self, "_is_initialized"):
             return
         log.info("SerenaAgent is shutting down ...")
-        if self._start_language_server:
+        if self.is_language_server_running():
             log.info("Stopping the language server ...")
+            assert self.language_server is not None
             self.language_server.stop()
         if self._gui_log_handler:
             log.info("Stopping the GUI log window ...")
             self._gui_log_handler.stop_viewer()
             Logger.root.removeHandler(self._gui_log_handler)
-
-    @contextmanager
-    def language_server_lifecycle_context(self) -> Iterator[None]:
-        """
-        Context manager for the language server's lifecycle
-        """
-        if self._start_language_server:
-            raise Exception("This context manager can only be used if the instance is created with start_language_server=True")
-        with self.language_server.start_server():
-            yield
 
 
 class MemoriesManager:
@@ -195,15 +396,53 @@ class MemoriesManager:
 class Component(ABC):
     def __init__(self, agent: "SerenaAgent"):
         self.agent = agent
-        self.language_server = agent.language_server
-        self.project_root = agent.project_root
-        self.project_config = agent.project_config
-        self.prompt_factory = agent.prompt_factory
-        self.memories_manager = agent.memories_manager
-        self.symbol_manager = agent.symbol_manager
+
+    @property
+    def language_server(self) -> SyncLanguageServer:
+        assert self.agent.language_server is not None
+        return self.agent.language_server
+
+    @property
+    def project_root(self) -> str:
+        assert self.project_config is not None
+        return self.project_config.project_root
+
+    @property
+    def project_config(self) -> ProjectConfig:
+        assert self.agent.project_config is not None
+        return self.agent.project_config
+
+    @property
+    def prompt_factory(self) -> PromptFactory:
+        return self.agent.prompt_factory
+
+    @property
+    def memories_manager(self) -> MemoriesManager:
+        assert self.agent.memories_manager is not None
+        return self.agent.memories_manager
+
+    @property
+    def symbol_manager(self) -> SymbolManager:
+        assert self.agent.symbol_manager is not None
+        return self.agent.symbol_manager
+
+    @property
+    def lines_read(self) -> LinesRead:
+        assert self.agent.lines_read is not None
+        return self.agent.lines_read
 
 
 _DEFAULT_MAX_ANSWER_LENGTH = int(2e5)
+
+
+class ToolMarkerCanEdit:
+    """
+    Marker class for all tools that can perform editing operations on files.
+    """
+
+
+class ToolMarkerDoesNotRequireActiveProject:
+    pass
 
 
 class Tool(Component):
@@ -231,6 +470,15 @@ class Tool(Component):
         if apply_fn is None:
             raise RuntimeError(f"apply not defined in {self}. Did you forget to implement it?")
         return apply_fn
+
+    @classmethod
+    def can_edit(cls) -> bool:
+        """
+        Returns whether this tool can perform editing operations on code.
+
+        :return: True if the tool can edit code, False otherwise
+        """
+        return issubclass(cls, ToolMarkerCanEdit)
 
     @classmethod
     def get_tool_description(cls) -> str:
@@ -272,19 +520,64 @@ class Tool(Component):
         Applies the tool with the given arguments
         """
         apply_fn = self.get_apply_fn()
+
         if log_call:
             self._log_tool_application(inspect.currentframe())
+
         try:
+            # check whether the tool requires an active project and language server
+            if not isinstance(self, ToolMarkerDoesNotRequireActiveProject):
+                if self.agent.project_config is None:
+                    return (
+                        "Error: No active project. Ask to user to select a project from this list: "
+                        + f"{self.agent.serena_config.project_names}"
+                    )
+                if not self.agent.is_language_server_running():
+                    log.info("Language server is not running. Starting it ...")
+                    self.agent.reset_language_server()
+
+            # check whether the tool is enabled
+            if self.agent.project_config is not None and self.get_name() in self.agent.project_config.excluded_tools:
+                return (
+                    f"Error: Tool '{self.get_name()}' is disabled for the active project ('{self.project_config.project_name}'); "
+                    f"active tools: {self.agent.get_active_tool_names()}"
+                )
+
+            # check if the project is in read-only mode and this is an editing tool
+            if self.agent.project_config is not None and self.agent.project_config.read_only and self.__class__.can_edit():
+                return (
+                    f"Error: Tool '{self.get_name()}' cannot be used because the project '{self.project_config.project_name}' "
+                    f"is in read-only mode. Editing operations are not allowed."
+                )
+
+            # apply the actual tool
             result = apply_fn(**kwargs)
+
         except Exception as e:
             if not catch_exceptions:
                 raise
             msg = f"Error executing tool: {e}\n{traceback.format_exc()}"
             log.error(f"Error executing tool: {e}", exc_info=e)
             result = msg
+
         if log_call:
             log.info(f"Result: {result}")
+
         return result
+
+
+class RestartLanguageServerTool(Tool):
+    """Restarts the language server, may be necessary when edits not through Serena happen."""
+
+    def apply(self) -> str:
+        """Use this tool only on explicit user request or after confirmation.
+        It may be necessary to restart the language server if the user performs edits
+        not through Serena, so the language server state becomes outdated and further editing attempts lead to errors.
+
+        If such editing errors happen, you should suggest using this tool.
+        """
+        self.agent.reset_language_server()
+        return SUCCESS_RESULT
 
 
 class ReadFileTool(Tool):
@@ -313,14 +606,14 @@ class ReadFileTool(Tool):
         if end_line is None:
             result_lines = result_lines[start_line:]
         else:
-            self.agent.lines_read.add_lines_read(relative_path, (start_line, end_line))
+            self.lines_read.add_lines_read(relative_path, (start_line, end_line))
             result_lines = result_lines[start_line : end_line + 1]
         result = "\n".join(result_lines)
 
         return self._limit_length(result, max_answer_chars)
 
 
-class CreateTextFileTool(Tool):
+class CreateTextFileTool(Tool, ToolMarkerCanEdit):
     """
     Creates/overwrites a file in the project directory.
     """
@@ -354,6 +647,8 @@ class ListDirTool(Tool):
 
     def apply(self, relative_path: str, recursive: bool, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
         """
+        Lists files and directories in the given directory (optionally with recursion).
+
         :param relative_path: the relative path to the directory to list; pass "." to scan the project root
         :param recursive: whether to scan subdirectories recursively
         :param max_answer_chars: if the output is longer than this number of characters,
@@ -361,62 +656,48 @@ class ListDirTool(Tool):
             required for the task.
         :return: a JSON object with the names of directories and files within the given directory
         """
+
+        def is_ignored_path(abs_path: str) -> bool:
+            rel_path = os.path.relpath(abs_path, self.project_root)
+            return self.language_server.is_ignored_path(rel_path, ignore_unsupported_files=False)
+
         dirs, files = scan_directory(
             os.path.join(self.project_root, relative_path),
             relative_to=self.project_root,
             recursive=recursive,
-            ignored_dirs=self.project_config["ignored_dirs"],
+            is_ignored_dir=is_ignored_path,
+            is_ignored_file=is_ignored_path,
         )
+
         result = json.dumps({"dirs": dirs, "files": files})
         return self._limit_length(result, max_answer_chars)
 
 
-class GetDirOverviewTool(Tool):
+class GetSymbolsOverviewTool(Tool):
     """
-    Gets an overview of the top-level symbols defined in all files within a given directory.
+    Gets an overview of the top-level symbols defined in a given file or directory.
     """
 
     def apply(self, relative_path: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
         """
-        Gets an overview of the given directory.
-        For each file in the directory, we list the top-level symbols in the file (name, kind, line).
-        Use this tool to get a high-level understanding of the code symbols inside a directory.
+        Gets an overview of the given file or directory.
+        For each analyzed file, we list the top-level symbols in the file (name, kind, line).
+        Use this tool to get a high-level understanding of the code symbols.
+        Calling this is often a good idea before more targeted reading, searching or editing operations on the code symbols.
 
-        :param relative_path: the relative path to the directory to get the overview of
+        :param relative_path: the relative path to the file or directory to get the overview of
         :param max_answer_chars: if the overview is longer than this number of characters,
             no content will be returned. Don't adjust unless there is really no other way to get the content
             required for the task. If the overview is too long, you should use a smaller directory instead,
             (e.g. a subdirectory).
         :return: a JSON object mapping relative paths of all contained files to info about top-level symbols in the file (name, kind, line, column).
         """
-        path_to_symbol_infos = self.language_server.request_dir_overview(relative_path)
+        path_to_symbol_infos = self.language_server.request_overview(relative_path)
         result = {}
         for file_path, symbols in path_to_symbol_infos.items():
             result[file_path] = [_tuple_to_info(*symbol_info) for symbol_info in symbols]
 
         result_json_str = json.dumps(result)
-        return self._limit_length(result_json_str, max_answer_chars)
-
-
-class GetDocumentOverviewTool(Tool):
-    """
-    Gets an overview of the top-level symbols defined in a given file.
-    """
-
-    def apply(self, relative_path: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
-        """
-        Use this tool to get a high-level understanding of the code symbols in a file. It often makes sense
-        to call this before targeted reading, searching or editing operations on the code symbols in the file,
-        as the output will contain a lot of information about names and lines.
-
-        :param relative_path: the relative path to the file to get the overview of
-        :param max_answer_chars: if the overview is longer than this number of characters,
-            no content will be returned. Don't adjust unless there is really no other way to get the content
-            required for the task.
-        :return: a JSON object with the info (name, kind, line, column) of all top-level symbols in the file.
-        """
-        result = self.language_server.request_document_overview(relative_path)
-        result_json_str = json.dumps([_tuple_to_info(*symbol_info) for symbol_info in result])
         return self._limit_length(result_json_str, max_answer_chars)
 
 
@@ -429,11 +710,11 @@ class FindSymbolTool(Tool):
         self,
         name: str,
         depth: int = 0,
+        within_relative_path: str | None = None,
         include_body: bool = False,
         include_kinds: list[int] | None = None,
         exclude_kinds: list[int] | None = None,
         substring_matching: bool = False,
-        dir_relative_path: str | None = None,
         max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
     ) -> str:
         """
@@ -449,7 +730,9 @@ class FindSymbolTool(Tool):
             (e.g. depth 1 will retrieve methods and attributes for the case where the symbol refers to a class).
             Provide a non-zero depth if you intend to subsequently query symbols that are contained in the
             retrieved symbol.
-        :param dir_relative_path: pass a directory relative path to only consider symbols within this directory.
+        :param within_relative_path: pass a relative path to only consider symbols within this path.
+            If a file is passed, only the symbols within this file will be considered.
+            If a directory is passed, all files within this directory will be considered.
             If None, the entire codebase will be considered.
         :param include_body: whether to include the body of all symbols in the result. You should only use this
             if you actually need the body of the symbol for the task at hand (for example, for a deep analysis
@@ -478,7 +761,7 @@ class FindSymbolTool(Tool):
             include_kinds=include_kinds,
             exclude_kinds=exclude_kinds,
             substring_matching=substring_matching,
-            dir_relative_path=dir_relative_path,
+            within_relative_path=within_relative_path,
         )
         symbol_dicts = [s.to_dict(kind=True, location=True, depth=depth, include_body=include_body) for s in symbols]
         result = json.dumps(symbol_dicts)
@@ -584,7 +867,7 @@ class FindReferencingCodeSnippetsTool(Tool):
         return self._limit_length(result_json_str, max_answer_chars)
 
 
-class ReplaceSymbolBodyTool(Tool):
+class ReplaceSymbolBodyTool(Tool, ToolMarkerCanEdit):
     """
     Replaces the full definition of a symbol.
     """
@@ -613,7 +896,7 @@ class ReplaceSymbolBodyTool(Tool):
         return SUCCESS_RESULT
 
 
-class InsertAfterSymbolTool(Tool):
+class InsertAfterSymbolTool(Tool, ToolMarkerCanEdit):
     """
     Inserts content after the end of the definition of a given symbol.
     """
@@ -642,7 +925,7 @@ class InsertAfterSymbolTool(Tool):
         return SUCCESS_RESULT
 
 
-class InsertBeforeSymbolTool(Tool):
+class InsertBeforeSymbolTool(Tool, ToolMarkerCanEdit):
     """
     Inserts content before the beginning of the definition of a given symbol.
     """
@@ -671,7 +954,7 @@ class InsertBeforeSymbolTool(Tool):
         return SUCCESS_RESULT
 
 
-class DeleteLinesTool(Tool):
+class DeleteLinesTool(Tool, ToolMarkerCanEdit):
     """
     Deletes a range of lines within a file.
     """
@@ -691,14 +974,14 @@ class DeleteLinesTool(Tool):
         :param start_line: the 0-based index of the first line to be deleted
         :param end_line: the 0-based index of the last line to be deleted
         """
-        if not self.agent.lines_read.were_lines_read(relative_path, (start_line, end_line)):
+        if not self.lines_read.were_lines_read(relative_path, (start_line, end_line)):
             read_lines_tool = self.agent.get_tool(ReadFileTool)
             return f"Error: Must call `{read_lines_tool.get_name()}` first to read exactly the affected lines."
         self.symbol_manager.delete_lines(relative_path, start_line, end_line)
         return SUCCESS_RESULT
 
 
-class ReplaceLinesTool(Tool):
+class ReplaceLinesTool(Tool, ToolMarkerCanEdit):
     """
     Replaces a range of lines within a file with new content.
     """
@@ -729,7 +1012,7 @@ class ReplaceLinesTool(Tool):
         return SUCCESS_RESULT
 
 
-class InsertAtLineTool(Tool):
+class InsertAtLineTool(Tool, ToolMarkerCanEdit):
     """
     Inserts content at a given line in a file.
     """
@@ -758,15 +1041,16 @@ class InsertAtLineTool(Tool):
 
 class CheckOnboardingPerformedTool(Tool):
     """
-    Checks whether the onboarding was already performed.
+    Checks whether project onboarding was already performed.
     """
 
     def apply(self) -> str:
         """
-        Check if onboarding was performed yet.
-        You should always call this tool in the beginning of the conversation,
-        before any question about code or the project is asked.
-        You will call this tool only once per conversation.
+        Checks whether project onboarding was already performed.
+        You should always call this tool before beginning to actually work on the project/after activating a project,
+        but after calling the initial instructions tool.
+        If onboarding was already performed, you will receive a list of available memories.
+        Don't read the memories immediately after if not needed, just remember that they exist and that you can read them later.
         """
         list_memories_tool = self.agent.get_tool(ListMemoriesTool)
         memories = json.loads(list_memories_tool.apply())
@@ -776,7 +1060,7 @@ class CheckOnboardingPerformedTool(Tool):
                 + "You should perform onboarding by calling the `onboarding` tool before proceeding with the task."
             )
         else:
-            return "Onboarding already performed, no need to perform it again."
+            return json.dumps({"result": "Onboarding already performed.", "available_memories": memories})
 
 
 class OnboardingTool(Tool):
@@ -813,7 +1097,7 @@ class WriteMemoryTool(Tool):
         """
         if len(content) > max_answer_chars:
             raise ValueError(
-                f"Content for {memory_file_name    } is too long. Max length is {max_answer_chars} characters. "
+                f"Content for {memory_file_name} is too long. Max length is {max_answer_chars} characters. "
                 + "Please make the content shorter."
             )
 
@@ -898,9 +1182,7 @@ class ThinkAboutWhetherYouAreDoneTool(Tool):
 
     def apply(self) -> str:
         """
-        Think about whether you are done with the task.
-
-        This tool should ALWAYS be called after you have completed a task or a subtask.
+        Whenever you feel that you are done with what the user has asked for, it is important to call this tool.
         """
         return self.prompt_factory.create_think_about_whether_you_are_done()
 
@@ -913,8 +1195,8 @@ class SummarizeChangesTool(Tool):
     def apply(self) -> str:
         """
         Summarize the changes you have made to the codebase.
-        This tool should ALWAYS be called after you have fully completed any non-trivial coding task
-        (but after the think_about_whether_you_are_done call).
+        This tool should always be called after you have fully completed any non-trivial coding task,
+        but only after the think_about_whether_you_are_done call.
         """
         return self.prompt_factory.create_summarize_changes()
 
@@ -931,9 +1213,9 @@ class PrepareForNewConversationTool(Tool):
         return self.prompt_factory.create_prepare_for_new_conversation()
 
 
-class SearchInAllCodeTool(Tool):
+class SearchForPatternTool(Tool):
     """
-    Performs a search for a pattern in all code files (and only in code files) in the project.
+    Performs a search for a pattern in the project.
     """
 
     def apply(
@@ -943,32 +1225,56 @@ class SearchInAllCodeTool(Tool):
         context_lines_after: int = 0,
         paths_include_glob: str | None = None,
         paths_exclude_glob: str | None = None,
+        only_in_code_files: bool = True,
         max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
     ) -> str:
         """
-        Search for a pattern in all code files (and only in code files) in the project. Generally, symbolic operations like find_symbol or find_referencing_symbols
+        Search for a pattern in the project. You can select whether all files or only code files should be searched.
+        Generally, symbolic operations like find_symbol or find_referencing_symbols
         should be preferred if you know which symbols you are looking for.
-        If you have to look in non-code files (like notebooks, documentation, etc.), you should use the shell_command tool with grep or similar.
-        This tool can be useful if you are looking for a specific pattern in the codebase that is not a symbol name.
 
         :param pattern: Regular expression pattern to search for, either as a compiled Pattern or string
         :param context_lines_before: Number of lines of context to include before each match
         :param context_lines_after: Number of lines of context to include after each match
         :param paths_include_glob: optional glob pattern specifying files to include in the search; if not provided, search globally.
         :param paths_exclude_glob: optional glob pattern specifying files to exclude from the search (takes precedence over paths_include_glob).
+        :param only_in_code_files: whether to search only in code files or in the entire code base.
+            The explicitly ignored files (from serena config and gitignore) are never searched.
         :param max_answer_chars: if the output is longer than this number of characters,
             no content will be returned. Don't adjust unless there is really no other way to get the content
             required for the task. Instead, if the output is too long, you should
             make a stricter query.
         :return: A JSON object mapping file paths to lists of matched consecutive lines (with context, if requested).
         """
-        matches = self.language_server.search_files_for_pattern(
-            pattern=pattern,
-            context_lines_before=context_lines_before,
-            context_lines_after=context_lines_after,
-            paths_include_glob=paths_include_glob,
-            paths_exclude_glob=paths_exclude_glob,
-        )
+        if only_in_code_files:
+            matches = self.language_server.search_files_for_pattern(
+                pattern=pattern,
+                context_lines_before=context_lines_before,
+                context_lines_after=context_lines_after,
+                paths_include_glob=paths_include_glob,
+                paths_exclude_glob=paths_exclude_glob,
+            )
+        else:
+            # we walk through all files in the project starting from the root
+            files_to_search = []
+            ignore_spec = self.language_server.get_ignore_spec()
+            for root, dirs, files in os.walk(self.project_root):
+                # Don't go into directories that are ignored by modifying dirs inplace
+                # Explanation for the  + "/" part:
+                # pathspec can't handle the matching of directories if they don't end with a slash!
+                # see https://github.com/cpburnz/python-pathspec/issues/89
+                dirs[:] = [d for d in dirs if not ignore_spec.match_file(d + "/")]
+                for file in files:
+                    if not ignore_spec.match_file(os.path.join(root, file)):
+                        files_to_search.append(os.path.join(root, file))
+            # TODO (maybe): not super efficient to walk through the files again and filter if glob patterns are provided
+            #   but it probably never matters and this version required no further refactoring
+            matches = search_files(
+                files_to_search,
+                pattern,
+                paths_include_glob=paths_include_glob,
+                paths_exclude_glob=paths_exclude_glob,
+            )
         # group matches by file
         file_to_matches: dict[str, list[str]] = defaultdict(list)
         for match in matches:
@@ -978,7 +1284,7 @@ class SearchInAllCodeTool(Tool):
         return self._limit_length(result, max_answer_chars)
 
 
-class ExecuteShellCommandTool(Tool):
+class ExecuteShellCommandTool(Tool, ToolMarkerCanEdit):
     """
     Executes a shell command.
     """
@@ -1015,8 +1321,69 @@ class ExecuteShellCommandTool(Tool):
         return self._limit_length(result, max_answer_chars)
 
 
-def iter_tool_classes() -> Generator[type[Tool], None, None]:
-    return iter_subclasses(Tool)
+class GetActiveProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
+    """
+    Gets the name of the currently active project (if any) and lists existing projects
+    """
+
+    def apply(
+        self,
+    ) -> str:
+        """
+        Gets the name of the currently active project (if any) and returns the list of all available projects.
+        To change the current project, use the `activate_project` tool.
+
+        :return: an object containing the name of the currently activated project (if any) and the list of all available projects
+        """
+        active_project = None if self.agent.project_config is None else self.agent.project_config.project_name
+        return json.dumps({"active_project": active_project, "available_projects": self.agent.serena_config.project_names})
+
+
+class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
+    """
+    Activates a project by name.
+    """
+
+    def apply(self, project_name: str) -> str:
+        """
+        Activates the project with the given name
+
+        :param project_name: the name of the project to activate
+        """
+        try:
+            project_config = self.agent.serena_config.get_project_configuration(project_name)
+        except ValueError as e:
+            return str(e)
+        self.agent.activate_project(project_config)
+        return SUCCESS_RESULT
+
+
+class InitialInstructionsTool(Tool):
+    """
+    Gets the initial instructions for the current project.
+    Should only be used in settings where the system prompt cannot be set,
+    e.g. in clients you have no control over, like Claude Desktop.
+    """
+
+    def apply(self) -> str:
+        """
+        Get the initial instructions for the current coding project.
+        You should always call this tool before starting to work (including using any other tool) on any programming task!
+        """
+        return self.agent.prompt_factory.create_system_prompt()
+
+
+def iter_tool_classes(same_module_only: bool = True) -> Generator[type[Tool], None, None]:
+    """
+    Iterate over Tool subclasses.
+
+    :param same_module_only: Whether to only iterate over tools defined in the same module as the Tool class
+        or over all subclasses of Tool.
+    """
+    for tool_class in iter_subclasses(Tool):
+        if same_module_only and tool_class.__module__ != Tool.__module__:
+            continue
+        yield tool_class
 
 
 def print_tool_overview() -> None:

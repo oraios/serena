@@ -1,0 +1,37 @@
+# whether to enable project activation/switching between the projects defined below using the
+# "activate_project" command. If this is enabled, you can instruct the agent to switch to a project
+# by its name (see "projects" below).
+# Note that if this is enabled, then per-project tool activation will be handled within Serena,
+# i.e. Serena will provide all tools but will disallow the execution of tools that are not enabled for
+# the current project. This is because clients typically do not respond to a changed set of tools.
+enable_project_activation: True
+
+# Add your list of projects here (which you can switch between using "activate_project").
+# Every list item must be either
+#   - a path to a .yml file, absolute or relative to the directory this
+#     configuration file is in (e.g. "myproject.yml" or "/path/to/wherever/myproject.yml").
+#     In this case, the name of the project will be the base filename of the .yml file
+#     (e.g. "myproject" for "myproject.yml").
+#   - or a path to the project's root directory (e.g. "/path/to/myproject"), with the
+#     configuration file being located in "/path/to/myproject/.serena/project.yml".
+#     In this case, the name of the project will be the name of the directory ("myproject").
+projects:
+  - myproject.yml
+
+# Whether to open a graphical window with Serena's logs (not supported on macOS).
+# This is useful both for troubleshooting and for monitoring the tool calls,
+# especially when using the agno playground, since the tool calls are not always shown,
+# and the input params are never shown in the agno UI.
+# When used as MCP server for Claude Desktop, the logs are primarily for troubleshooting.
+# Note: unfortunately, the various entities starting the Serena server or agent do so in
+# mysterious ways, often starting multiple instances of the process without shutting down
+# previous instances. This leads to multiple log windows being opened, and only the last
+# window being updated. Since we can't control how agno or Claude Desktop start Serena,
+# we have to live with this limitation for now.
+#
+# Limitations: doesn't seem to work with the community version of Claude Desktop for Linux
+# Might also cause problems with some MCP clients - if you have any issues, try disabling this
+gui_log_window: False
+
+# minimum log level for the GUI log window (10 = debug, 20 = info, 30 = warning, 40 = error)
+gui_log_level: 20

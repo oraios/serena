@@ -1,0 +1,23 @@
+{
+    "_description": "This file contains the initialization parameters for the Dart Language Server.",
+    "processId": "$processId",
+    "rootPath": "$rootPath",
+    "rootUri": "$rootUri",
+    "capabilities": {},
+    "initializationOptions": {
+        "onlyAnalyzeProjectsWithOpenFiles": false,
+        "suggestFromUnimportedLibraries": true,
+        "closingLabels": false,
+        "outline": false,
+        "flutterOutline": false,
+        "allowOpenUri": false
+    },
+    "trace": "verbose",
+    "workspaceFolders": [
+        {
+            "uri": "$uri",
+            "name": "$name"
+        }
+    ]
+    
+}

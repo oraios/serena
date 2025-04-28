@@ -7,6 +7,8 @@ import subprocess
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
+from overrides import override
+
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.language_server import LanguageServer
 from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -18,6 +20,14 @@ class Gopls(LanguageServer):
     """
     Provides Go specific instantiation of the LanguageServer class using gopls.
     """
+    
+    @override
+    def is_ignored_dirname(self, dirname: str) -> bool:
+        # For Go projects, we should ignore:
+        # - vendor: third-party dependencies vendored into the project
+        # - node_modules: if the project has JavaScript components
+        # - dist/build: common output directories
+        return super().is_ignored_dirname(dirname) or dirname in ["vendor", "node_modules", "dist", "build"]
 
     @staticmethod
     def _get_go_version():

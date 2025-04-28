@@ -158,5 +158,7 @@ def main():
     logger.info("Application completed successfully")
 
 
+item_reference = Item(id="1", name="Item 1", price=10.0, category="Electronics")
+
 if __name__ == "__main__":
     main()

@@ -30,6 +30,10 @@ dependencies = [
   "pyyaml>=6.0.2",
   "jinja2>=3.1.6",
   "dotenv>=0.9.9",
+  "pathspec>=0.12.1",
+  "psutil>=7.0.0",
+  "agno>=1.2.15",
+  "docstring_parser>=0.16",
 ]
 
 [project.scripts]
@@ -66,6 +70,9 @@ google = [
 
 [project.urls]
 Homepage = "https://github.com/oraios/serena"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/serena", "src/multilspy"]
 
 [tool.black]
 line-length = 140
@@ -233,6 +240,9 @@ ignore = [
   "W293",
   "B009",
   "SIM103",  # forbids multiple returns
+  "SIM110",  # requires use of any(...) instead of for-loop
+  "G001",  # forbids str.format in log statements
+  "E722",  # forbids unspecific except clause
 ]
 unfixable = [
   "F841",

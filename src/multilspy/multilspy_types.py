@@ -82,7 +82,7 @@ class Location(TypedDict):
     uri: DocumentUri
     range: Range
     absolutePath: str
-    relativePath: str
+    relativePath: Union[str, None]
 
 class CompletionItemKind(IntEnum):
     """The kind of a completion entry."""

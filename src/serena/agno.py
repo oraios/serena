@@ -15,73 +15,15 @@ from dotenv import load_dotenv
 from sensai.util.logging import LogTime
 
 from serena import serena_root_path
-from serena.agent import SerenaAgent, Tool
+from serena.agent import SerenaAgent, Tool, show_fatal_exception_safe
 
 log = logging.getLogger(__name__)
-
-
-def _patch_gemini_schema_conversion() -> None:
-    """
-    This fixes errors in Agno's Gemini schema conversion, which does not correctly handle
-    optional types (union with None)
-    """
-    from agno.models.google import gemini
-    from google.genai.types import Schema
-
-    def _convert_schema(schema_dict: dict) -> Schema | None:
-        schema_type = schema_dict.get("type", "")
-        if isinstance(schema_type, list):
-            schema_type = schema_type[0]
-        schema_type = schema_type.upper()
-        description = schema_dict.get("description", "")
-
-        if schema_type == "OBJECT" and "properties" in schema_dict:
-            properties = {key: _convert_schema(prop_def) for key, prop_def in schema_dict["properties"].items()}
-            required = schema_dict.get("required", [])
-
-            if properties:
-                return Schema(
-                    type=schema_type,
-                    properties=properties,
-                    required=required,
-                    description=description,
-                )
-            else:
-                return None
-
-        elif schema_type == "ARRAY" and "items" in schema_dict:
-            items = _convert_schema(schema_dict["items"])
-            return Schema(type=schema_type, description=description, items=items)
-
-        elif schema_type == "":
-            if "anyOf" in schema_dict:
-                relevant_sub_schemas = []
-                is_optional = False
-                for sub_schema in schema_dict["anyOf"]:
-                    if sub_schema.get("type") == "null":
-                        is_optional = True  # noqa: F841
-                        continue
-                    relevant_sub_schemas.append(sub_schema)
-                # TODO handle is_optional (requires handling at the outer level)
-                if len(relevant_sub_schemas) == 1:
-                    return _convert_schema(relevant_sub_schemas[0])
-                else:
-                    return Schema(any_of=[_convert_schema(item) for item in schema_dict["anyOf"]], description=description)
-            else:
-                raise ValueError(f"Unhandled schema: {schema_dict}")
-        else:
-            return Schema(type=schema_type, description=description)
-
-    gemini._convert_schema = _convert_schema
-
-
-_patch_gemini_schema_conversion()
 
 
 class SerenaAgnoToolkit(Toolkit):
     def __init__(self, serena_agent: SerenaAgent):
         super().__init__("Serena")
-        for tool in serena_agent.tools.values():
+        for tool in serena_agent.get_exposed_tools():
             self.functions[tool.get_name()] = self._create_agno_function(tool)
         log.info("Agno agent functions: %s", list(self.functions.keys()))
 
@@ -128,22 +70,29 @@ class SerenaAgnoAgentProvider:
 
             parser = argparse.ArgumentParser(description="Serena coding assistant")
             parser.add_argument(
-                "--project-file", required=True, help="Path to the project file, either absolute or relative to the root directory"
+                "--project-file", required=False, help="Path to the project file, either absolute or relative to the root directory"
             )
             args = parser.parse_args()
 
-            project_file = Path(args.project_file).resolve()
-            # If project file path is relative, make it absolute by joining with project root
-            if not project_file.is_absolute():
-                # Get the project root directory (parent of scripts directory)
-                project_root = Path(serena_root_path())
-                project_file = project_root / args.project_file
+            if args.project_file:
+                project_file = Path(args.project_file).resolve()
+                # If project file path is relative, make it absolute by joining with project root
+                if not project_file.is_absolute():
+                    # Get the project root directory (parent of scripts directory)
+                    project_root = Path(serena_root_path())
+                    project_file = project_root / args.project_file
 
-            # Ensure the path is normalized and absolute
-            project_file = project_file.resolve()
+                # Ensure the path is normalized and absolute
+                project_file = str(project_file.resolve())
+            else:
+                project_file = None
 
             with LogTime("Loading Serena agent"):
-                serena_agent = SerenaAgent(str(project_file), start_language_server=True)
+                try:
+                    serena_agent = SerenaAgent(project_file)
+                except Exception as e:
+                    show_fatal_exception_safe(e)
+                    raise
 
             # Even though we don't want to keep history between sessions,
             # for agno-ui to work as a conversation, we use a persistent storage on disk.

@@ -1,0 +1,4 @@
+# language of the project (csharp, python, rust, java, typescript, javascript, go, or ruby)
+language: python
+# list of directories to ignore: either names (e.g. "temp") or relative paths (e.g. "build/foo")
+ignore_all_files_in_gitignore: True

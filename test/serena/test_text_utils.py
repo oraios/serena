@@ -2,10 +2,10 @@ import re
 
 import pytest
 
-from serena.text_utils import LineType, search_text
+from serena.text_utils import LineType, search_files, search_text
 
 
-class TestTextUtils:
+class TestSearchText:
     def test_search_text_with_string_pattern(self):
         """Test searching with a simple string pattern."""
         content = """
@@ -203,3 +203,147 @@ class TestTextUtils:
         # Search with an invalid regex pattern (unmatched parenthesis)
         with pytest.raises(ValueError):
             search_text("example(", content=content)
+
+
+# Mock file reader that always returns matching content
+def mock_reader_always_match(file_path: str) -> str:
+    """Mock file reader that returns content guaranteed to match the simple pattern."""
+    return "This line contains a match."
+
+
+class TestSearchFiles:
+    @pytest.mark.parametrize(
+        "file_paths, pattern, paths_include_glob, paths_exclude_glob, expected_matched_files, description",
+        [
+            # Basic cases
+            (["a.py", "b.txt"], "match", None, None, ["a.py", "b.txt"], "No filters"),
+            (["a.py", "b.txt"], "match", "*.py", None, ["a.py"], "Include only .py files"),
+            (["a.py", "b.txt"], "match", None, "*.txt", ["a.py"], "Exclude .txt files"),
+            (["a.py", "b.txt", "c.py"], "match", "*.py", "c.*", ["a.py"], "Include .py, exclude c.*"),
+            # Directory matching - Using pathspec patterns
+            (["main.c", "test/main.c"], "match", "test/*", None, ["test/main.c"], "Include files in test/ subdir"),
+            (["data/a.csv", "data/b.log"], "match", "data/*", "*.log", ["data/a.csv"], "Include data/*, exclude *.log"),
+            (["src/a.py", "tests/b.py"], "match", "src/**", "tests/**", ["src/a.py"], "Include src/**, exclude tests/**"),
+            (["src/mod/a.py", "tests/b.py"], "match", "**/*.py", "tests/**", ["src/mod/a.py"], "Include **/*.py, exclude tests/**"),
+            (["file.py", "dir/file.py"], "match", "dir/*.py", None, ["dir/file.py"], "Include files directly in dir"),
+            (["file.py", "dir/sub/file.py"], "match", "dir/**/*.py", None, ["dir/sub/file.py"], "Include files recursively in dir"),
+            # Overlap and edge cases
+            (["file.py", "dir/file.py"], "match", "*.py", "dir/*", ["file.py"], "Include *.py, exclude files directly in dir"),
+            (["root.py", "adir/a.py", "bdir/b.py"], "match", "a*/*.py", None, ["adir/a.py"], "Include files in dirs starting with 'a'"),
+            (["a.txt", "b.log"], "match", "*.py", None, [], "No files match include pattern"),
+            (["a.py", "b.py"], "match", None, "*.py", [], "All files match exclude pattern"),
+            (["a.py", "b.py"], "match", "a.*", "*.py", [], "Include a.* but exclude *.py -> empty"),
+            (["a.py", "b.py"], "match", "*.py", "b.*", ["a.py"], "Include *.py but exclude b.* -> a.py"),
+        ],
+        ids=lambda x: x if isinstance(x, str) else "",  # Use description as test ID
+    )
+    def test_search_files_include_exclude(
+        self, file_paths, pattern, paths_include_glob, paths_exclude_glob, expected_matched_files, description
+    ):
+        """
+        Test the include/exclude glob filtering logic in search_files using PathSpec patterns.
+        """
+        results = search_files(
+            file_paths=file_paths,
+            pattern=pattern,
+            file_reader=mock_reader_always_match,
+            paths_include_glob=paths_include_glob,
+            paths_exclude_glob=paths_exclude_glob,
+            context_lines_before=0,  # No context needed for this test focus
+            context_lines_after=0,
+        )
+
+        # Extract the source file paths from the results
+        actual_matched_files = sorted([result.source_file_path for result in results if result.source_file_path])
+
+        # Assert that the matched files are exactly the ones expected
+        assert actual_matched_files == sorted(expected_matched_files)
+
+        # Basic check on results structure if files were expected
+        if expected_matched_files:
+            assert len(results) == len(expected_matched_files)
+            for result in results:
+                assert len(result.matched_lines) == 1  # Mock reader returns one matching line
+                assert result.matched_lines[0].line_content == "This line contains a match."
+                assert result.matched_lines[0].match_type == LineType.MATCH
+
+    def test_search_files_no_pattern_match_in_content(self):
+        """Test that no results are returned if the pattern doesn't match the file content, even if files pass filters."""
+        file_paths = ["a.py", "b.txt"]
+        pattern = "non_existent_pattern_in_mock_content"  # This won't match mock_reader_always_match content
+        results = search_files(
+            file_paths=file_paths,
+            pattern=pattern,
+            file_reader=mock_reader_always_match,  # Content is "This line contains a match."
+            paths_include_glob=None,  # Both files would pass filters
+            paths_exclude_glob=None,
+        )
+        assert len(results) == 0, "Should not find matches if pattern doesn't match content"
+
+    def test_search_files_regex_pattern_with_filters(self):
+        """Test using a regex pattern works correctly along with include/exclude filters."""
+
+        def specific_mock_reader(file_path: str) -> str:
+            # Provide different content for different files to test regex matching
+            if file_path == "a.py":  # noqa: SIM116
+                return "File A: value=123\nFile A: value=456"
+            elif file_path == "b.py":
+                return "File B: value=789"
+            elif file_path == "c.txt":
+                return "File C: value=000"
+            return "No values here."
+
+        file_paths = ["a.py", "b.py", "c.txt"]
+        pattern = re.compile(r"value=(\d+)")  # Regex pattern to find numbers after 'value='
+
+        results = search_files(
+            file_paths=file_paths,
+            pattern=pattern,
+            file_reader=specific_mock_reader,
+            paths_include_glob="*.py",  # Only include .py files
+            paths_exclude_glob="b.*",  # Exclude files starting with b
+        )
+
+        # Expected: a.py included, b.py excluded by glob, c.txt excluded by glob
+        # a.py has two matches for the regex pattern
+        assert len(results) == 2, "Expected 2 matches only from a.py"
+        actual_matched_files = sorted([result.source_file_path for result in results if result.source_file_path])
+        assert actual_matched_files == ["a.py", "a.py"], "Both matches should be from a.py"
+        # Check the content of the matched lines
+        assert results[0].matched_lines[0].line_content == "File A: value=123"
+        assert results[1].matched_lines[0].line_content == "File A: value=456"
+
+    def test_search_files_context_lines_with_filters(self):
+        """Test context lines are included correctly when filters are active."""
+
+        def context_mock_reader(file_path: str) -> str:
+            if file_path == "include_me.txt":
+                return "Line before 1\nLine before 2\nMATCH HERE\nLine after 1\nLine after 2"
+            elif file_path == "exclude_me.log":
+                return "Noise\nMATCH HERE\nNoise"
+            return "No match"
+
+        file_paths = ["include_me.txt", "exclude_me.log"]
+        pattern = "MATCH HERE"
+
+        results = search_files(
+            file_paths=file_paths,
+            pattern=pattern,
+            file_reader=context_mock_reader,
+            paths_include_glob="*.txt",  # Only include .txt files
+            paths_exclude_glob=None,
+            context_lines_before=1,
+            context_lines_after=1,
+        )
+
+        # Expected: Only include_me.txt should be processed and matched
+        assert len(results) == 1, "Expected only one result from the included file"
+        result = results[0]
+        assert result.source_file_path == "include_me.txt"
+        assert len(result.lines) == 3, "Expected 3 lines (1 before, 1 match, 1 after)"
+        assert result.lines[0].line_content == "Line before 2", "Incorrect 'before' context line"
+        assert result.lines[0].match_type == LineType.BEFORE_MATCH
+        assert result.lines[1].line_content == "MATCH HERE", "Incorrect 'match' line"
+        assert result.lines[1].match_type == LineType.MATCH
+        assert result.lines[2].line_content == "Line after 1", "Incorrect 'after' context line"
+        assert result.lines[2].match_type == LineType.AFTER_MATCH

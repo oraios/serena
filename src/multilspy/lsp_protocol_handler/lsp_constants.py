@@ -57,3 +57,6 @@ class LSPConstants:
 
     # key used to represent children in document symbols
     CHILDREN = "children"
+
+    # key used to represent the location in symbols
+    LOCATION = "location"

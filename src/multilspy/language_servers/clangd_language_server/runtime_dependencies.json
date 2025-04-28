@@ -1,0 +1,13 @@
+{
+    "_description": "Used to download the runtime dependencies for running Clangd.",
+    "runtimeDependencies": [
+        {
+            "id": "Clangd",
+            "description": "Clangd for Linux (x64)",
+            "url": "https://github.com/clangd/clangd/releases/download/19.1.2/clangd-linux-19.1.2.zip",
+            "platformId": "linux-x64",
+            "archiveType": "zip",
+            "binaryName": "clangd"
+        }
+    ]
+}

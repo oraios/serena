@@ -3,15 +3,9 @@
   <img src="resources/serena-logo-dark-mode.svg#gh-dark-mode-only" style="width:500px">
 </p>
 
-* :rocket: Serena is a powerful, fully-featured **coding agent that works directly on your codebase**.
-* :wrench: Serena **integrates with existing LLMs**, providing them with essential **semantic code retrieval and editing tools!**
-* :free: Serena is **free to use**. No API keys or subscriptions required!
-
-Q: Can I have a state-of-the-art coding agent without paying (enormous) API costs 
-or constantly purchasing tokens?  
-A: Yes, you can!
-By integrating Serena with your favourite (even free) LLM and thereby enabling it
-to perform coding tasks directly on your codebase.
+* :rocket: Serena is a powerful **coding agent toolkit** capable of turning an LLM into a fully-featured agent that works **directly on your codebase**.
+* :wrench: Serena provides essential **semantic code retrieval and editing tools** that are akin to an IDE's capabilities, extracting code entities at the symbol level and exploiting relational structure.
+* :free: Serena is **free & open-source**, enhancing the capabilities of LLMs you already have access to free of charge.
 
 ### Demonstration
 
@@ -27,14 +21,19 @@ orchestrating tool use.
 
 Serena can be integrated with an LLM in several ways:
  * by using the **model context protocol (MCP)**.  
-   Serena provides an MCP server which integrates with Claude (and [soon also ChatGPT](https://x.com/OpenAIDevs/status/1904957755829481737)).
+   Serena provides an MCP server which integrates with 
+     * Claude Desktop, 
+     * IDEs like VSCode, Cursor or IntelliJ,
+     * Extensions like Cline or Roo Code
+     * Goose (for a nice CLI experience)
+     * and many others, including [the ChatGPT app soon](https://x.com/OpenAIDevs/status/1904957755829481737)
  * by using **Agno – the model-agnostic agent framework**.  
-   Serena's Agno-based agent allows you to turn virtually any LLM into a coding agent, whether it's provided by Google, OpenAI or DeepSeek (with a paid API key)
+   Serena's Agno-based agent allows you to turn virtually any LLM into a coding agent, whether it's provided by Google, OpenAI or Anthropic (with a paid API key)
    or a free model provided by Ollama, Together or Anyscale.
  * by incorporating Serena's tools into an agent framework of your choice.  
    Serena's tool implementation is decoupled from the framework-specific code and can thus easily be adapted to any agent framework.
 
-### Programming Language Support & Semantic Analysis
+### Programming Language Support & Semantic Analysis Capabilities
 
 Serena's semantic code analysis capabilities build on **language servers** using the widely implemented
 language server protocol (LSP). The LSP provides a set of versatile code querying
@@ -56,6 +55,9 @@ With Serena, we provide
      * Go (untested)
      * C# (untested)
      * Rust (untested)
+     * Kotlin (untested)
+     * Dart (untested)
+     * C/C++ (untested)
      
    These languages are supported by the language server library [multilspy](https://github.com/microsoft/multilspy), which Serena uses under the hood.
    But we did not explicitly test whether the support for these languages actually works.
@@ -63,7 +65,6 @@ With Serena, we provide
 Further languages can, in principle, easily be supported by providing a shallow adapter for a new language server
 implementation.
 
-Coming soon: Kotlin and Dart.
 
 ## Table of Contents
 
@@ -72,11 +73,13 @@ Coming soon: Kotlin and Dart.
 
 <!-- toc -->
 
-- [Is It Really Free to Use?](#is-it-really-free-to-use)
 - [What Can I Use Serena For?](#what-can-i-use-serena-for)
+- [Free Coding Agents with Serena](#free-coding-agents-with-serena)
 - [Quick Start](#quick-start)
+  * [Setup and Configuration](#setup-and-configuration)
   * [MCP Server (Claude Desktop)](#mcp-server-claude-desktop)
   * [Other MCP Clients - Cline, Roo-Code, Cursor, Windsurf etc.](#other-mcp-clients---cline-roo-code-cursor-windsurf-etc)
+  * [Goose](#goose)
   * [Agno Agent](#agno-agent)
   * [Other Agent Frameworks](#other-agent-frameworks)
 - [Serena's Tools and Configuration](#serenas-tools-and-configuration)
@@ -84,8 +87,6 @@ Coming soon: Kotlin and Dart.
   * [Subscription-Based Coding Agents](#subscription-based-coding-agents)
   * [API-Based Coding Agents](#api-based-coding-agents)
   * [Other MCP-Based Coding Agents](#other-mcp-based-coding-agents)
-- [Stability Issues in MCP Client-Server Interactions](#stability-issues-in-mcp-client-server-interactions)
-  * [Serena Logging](#serena-logging)
 - [Onboarding and Memories](#onboarding-and-memories)
 - [Combination with Other MCP Servers](#combination-with-other-mcp-servers)
 - [Recommendations on Using Serena](#recommendations-on-using-serena)
@@ -98,15 +99,32 @@ Coming soon: Kotlin and Dart.
   * [Structuring Your Codebase](#structuring-your-codebase)
   * [Logging, Linting, and Testing](#logging-linting-and-testing)
   * [General Advice](#general-advice)
+- [Troubleshooting](#troubleshooting)
+  * [Serena Logging](#serena-logging)
 - [Acknowledgements](#acknowledgements)
 - [Customizing Serena](#customizing-serena)
 - [Full List of Tools](#full-list-of-tools)
 
 <!-- tocstop -->
 
-## Is It Really Free to Use?
+## What Can I Use Serena For?
 
-Yes! Even the free tier of Anthropic's Claude has support for MCP Servers, so you can use Serena with Claude for free.
+You can use Serena for any coding tasks – whether it is focussed on analysis, planning, 
+designing new components or refactoring existing ones.
+Since Serena's tools allow an LLM to close the cognitive perception-action loop, 
+agents based on Serena can autonomously carry out coding tasks from start to finish – 
+from the initial analysis to the implementation, testing and, finally, the version
+control system commit.
+
+Serena can read, write and execute code, read logs and the terminal output.
+While we do not necessarily encourage it, "vibe coding" is certainly possible, and if you 
+want to almost feel like "the code no longer exists",
+you may find Serena even more adequate for vibing than an agent inside an IDE
+(since you will have a separate GUI that really lets you forget).
+
+## Free Coding Agents with Serena
+
+Even the free tier of Anthropic's Claude has support for MCP Servers, so you can use Serena with Claude for free.
 Presumably, the same will soon be possible with ChatGPT Desktop once support for MCP servers is added.  
 Through Agno, you furthermore have the option to use Serena with a free/open-weights model.
 
@@ -118,22 +136,46 @@ IDE-based subscriptions (such as Windsurf or Cursor) that forced us to keep purc
 The substantial API costs incurred by tools like Claude Code, Cline, Aider and other API-based tools are similarly unattractive.
 We thus built Serena with the prospect of being able to cancel most other subscriptions.
 
-## What Can I Use Serena For?
-
-You can use Serena for any coding tasks – analyzing, planning, editing and so on.
-Serena can read, write and execute code, read logs and the terminal output. 
-"Vibe coding" is possible, and if you want to almost feel like "the code no longer exists",
- you may find Serena even more adequate for vibing than an agent inside an IDE
-(since you will have a separate GUI that really lets you forget).
-
 ## Quick Start
 
-### MCP Server (Claude Desktop)
+Serena can be used in various ways, below you will find instructions for selected integrations.
+
+- If you just want to turn Claude into a free-to-use coding agent, we recommend using Serena through Claude Desktop.
+- If you want to use Gemini or any other model and you want a GUI experience, you should use [Agno](#agno-agent). On macOS you can also use the GUI of [goose](#goose).
+- If you prefer using Serena through a CLI, you can use [goose](#goose). There again almost any model is possible.
+- If you want to use Serena integrated in your IDE, see the section on [other MCP clients](#other-mcp-clients---cline-roo-code-cursor-windsurf-etc).
+
+### Setup and Configuration
 
 1. Install `uv` (instructions [here](https://docs.astral.sh/uv/getting-started/installation/))
 2. Clone the repository to `/path/to/serena`.
-3. Create a configuration file for your project, say `myproject.yml` based on the template in [myproject.demo.yml](myproject.demo.yml).
-4. Configure the MCP server in your client.  
+3. Copy `serena_config.template.yml` to `serena_config.yml` and adjust settings.
+   ```shell
+   cp serena_config.template.yml serena_config.yml
+   ```
+4. Copy `project.template.yml` to `project.yml` and adjust the settings specific to your project
+   (add one such file for each project you want Serena to work on). We recommend that you copy
+   it to the `.serena` directory of your project, e.g.,
+   ```shell
+   mkdir -p /myproject/.serena
+   cp project.template.yml /myproject/.serena/project.yml
+   ```
+6. If you want Serena to dynamically switch between projects, add the list of all project files
+   created in the previous step to the `projects` list in `serena_config.yml`.
+
+> ⚠️ **Note:** Serena is under active development. We are continuously adding features, improving stability and the UX.
+> As a result, configuration may change in a breaking manner. If you have an invalid configuration,
+> the MCP server or Serena-based Agent may fail to start (investigate the MCP logs in the former case).
+> Check the [changelog](CHANGELOG.md)
+> and the configuration templates when updating Serena, adapting your configurations accordingly.
+
+After the initial setup, continue with one of the sections below, depending on how you
+want to use Serena.
+
+### MCP Server (Claude Desktop)
+
+1. Create a configuration file for your project, say `myproject.yml` based on the template in [myproject.template.yml](myproject.template.yml).
+2. Configure the MCP server in your client.  
    For [Claude Desktop](https://claude.ai/download) (available for Windows and macOS), go to File / Settings / Developer / MCP Servers / Edit Config,
    which will let you open the JSON file `claude_desktop_config.json`. Add the following (with adjusted paths) to enable Serena:
 
@@ -142,16 +184,29 @@ Serena can read, write and execute code, read logs and the terminal output.
        "mcpServers": {
            "serena": {
                "command": "/abs/path/to/uv",
-               "args": ["run", "--directory", "/abs/path/to/serena", "serena-mcp-server", "/abs/path/to/myproject.yml"]
+               "args": ["run", "--directory", "/abs/path/to/serena", "serena-mcp-server", "--project-file", "/abs/path/to/myproject.yml"]
            }
        }
    }
    ```
+   
+   :info: passing the project file is optional if you have set `enable_project_activation` in your configuration,
+   as this setting will allow you to simply instruct Claude to activate the project you want to work on.
 
    If you are using paths containing backslashes for paths on Windows 
    (note that you can also just use forward slashes), be sure to escape them correctly (`\\`).
 
-That's it! Save the config and then restart Claude Desktop. 
+That's it! Save the config and then restart Claude Desktop.
+
+#### Troubleshooting
+
+Some client/OS/setup configurations were reported to cause issues when using Serena with the standard `stdio` protocol, where the MCP server is started by the client application. 
+If you experience such problems, you can start Serena in `sse` mode by running, e.g.,
+
+```shell
+uv run --directory /path/to/serena serena-mcp-server --transport sse --port 9121 --project-file /path/to/project.yml
+```
+(the `--project-file` option is optional). Then configure your client to connect to `http://localhost:9121`.
 
 Note: on Windows and macOS there are official Claude Desktop applications by Anthropic, for Linux there is an [open-source
 community version](https://github.com/aaddrick/claude-desktop-debian).
@@ -172,10 +227,18 @@ necessarily has to be started by the client in order for communication to take p
 In other words, you do not need to start the server yourself. The client application (e.g. Claude Desktop) takes care of this and 
 therefore needs to be configured with a launch command.
 
-ℹ️ Furthermore note that Serena is always configured *for a single project*. To use it for another, you will have to
-write a new configuration file, adjust the configuration to point to it and then restart the client.
-
 For more information on MCP servers with Claude Desktop, see [the official quick start guide](https://modelcontextprotocol.io/quickstart/user).
+
+### Claude Code
+
+Serena is a great way to make Claude Code both cheaper and more powerful! We are collecting
+several examples for that and have heard very positive feedback so far. Claude Code users can
+add serena with
+
+```shell
+claude mcp add serena -- /path/to/uv "run" --directory /path/to/serena serena-mcp-server --project-file /path/to/project.yml
+```
+
 
 ### Other MCP Clients - Cline, Roo-Code, Cursor, Windsurf etc.
 
@@ -196,10 +259,43 @@ e.g., for one of the following reasons:
 The same considerations as in using Serena for Claude Desktop (in particular, tool name collisions) 
 also apply here.
 
+When used in an IDE or extension that has inbuilt AI interactions for coding 
+(which is, really, all of them), Serena's full set of tools may lead to unwanted interactions with
+the clients internal tools that you as the user may have no control over. This holds especially for the editing tools, which you may want to disable for this purpose.
+As we are gaining more experience with Serena used within the various popular clients, we will collect and enhance best practices that enable a smooth experience.
+
+### Goose
+
+[goose](https://github.com/block/goose) is a standalone coding agent which has an integration for MCP servers and offers a CLI (and a GUI on macOS). Using goose is currently the simplest way of running Serena through a CLI with an LLM of your choice.
+
+Follow the instructions [here](https://block.github.io/goose/docs/getting-started/installation/) to install it.
+
+After that, use `goose configure` to add an extension. For adding Serena, choose the option `Command-line Extension`, name it `Serena` and add the following as command:
+
+```
+/abs/path/to/uv run --directory /abs/path/to/serena serena-mcp-server /optional/abs/path/to/project.yml
+```
+
+Since Serena can do all necessary editing and command operations, you should disable the `developer` extension that goose enables by default.
+For that execute
+
+```shell
+goose configure
+```
+again, choose the option `Toggle Extensions`, and make sure Serena is enabled selected while `developer` is not.
+
+That's it. Read through the configuration options of goose to see what you can do with it (which is a lot, like setting different levels of permissions for tool execution).
+
+> Goose does not seem to always properly terminate python processes for MCP servers when a session ends. 
+> You may want to disable the Serena GUI and/or to manually cleanup any running python processes after finishing your work
+> with goose.
+
 ### Agno Agent
 
 Agno is a model-agnostic agent framework that allows you to turn Serena into an agent 
-(independent of the MCP technology) with a large number of underlying LLMs.
+(independent of the MCP technology) with a large number of underlying LLMs. Agno is currently
+the simplest way of running Serena in a chat GUI with an LLM of your choice 
+(unless you are using a Mac, then you might prefer goose, which requires almost no setup).
 
 While Agno is not yet entirely stable, we chose it, because it comes with its own open-source UI, 
 making it easy to directly use the agent using a chat interface.  With Agno, Serena is turned into an agent
@@ -281,14 +377,9 @@ this should not be a problem.
 However, if you have concerns, you can choose to disable certain commands in your project's 
 .yml configuration file.
 If you only want to use Serena purely for analyzing code and suggesting implementations
-without modifying the codebase, you can consider disabling the editing tools in the configuration, i.e.
-
-  * `create_text_file`
-  * `insert_after_symbol`
-  * `insert_at_line`
-  * `insert_before_symbol`
-  * `replace_symbol_body`
-  * `delete_lines`.
+without modifying the codebase, you can enable read-only mode by setting `read_only: true` in your project configuration file. 
+This will automatically disable all editing tools and prevent any modifications to your codebase while still 
+allowing all analysis and exploration capabilities.
 
 In general, be sure to back up your work and use a version control system in order to avoid
 losing any work.
@@ -355,30 +446,6 @@ retrieval and editing tools; they rely purely on text-based analysis.
 It is the integration of language servers and the MCP that makes Serena unique 
 and so powerful for challenging coding tasks, especially in the context of
 larger codebases.
-
-## Stability Issues in MCP Client-Server Interactions
-
-The support for MCP Servers in Claude Desktop and the various MCP Server SDKs are relatively new developments,
-and we found them to be somewhat unstable. Sometimes, Claude Desktop will crash on a tool execution (with an asyncio error or
-something else of this kind). On the one hand, it can display show error messages that are no of consequence, and on the other, it can fail to
-show error messages when things fail irrecoverably. 
-Yet we expect these stability issues to improve over time.
-
-The working configuration of an MCP server may vary from platform to
-platform and from client to client. We recommend always using absolute paths, as relative paths may be sources of
-errors. The language server is running in a separate sub-process and is called with asyncio – sometimes
-Claude Desktop lets it crash. If you have Serena's log window enabled, and it disappears, you'll know what happened.
-
-For now, you may have to restart Claude Desktop multiple times, may have to manually cleanup lingering processes,
-and you may experiences freezes in conversations.
-Just try again in the latter case. 
-Feel free to open issues if you encounter setup problems that you cannot solve.
-
-### Serena Logging
-
-To help with troubleshooting, we have written a small GUI utility for logging. We recommend that you enable it
-through the project configuration (`myproject.yml`) if you encounter problems. For Claude Desktop, there are also the MCP logs that can help
-identify issues.
 
 ## Onboarding and Memories
 
@@ -517,6 +584,29 @@ make a detailed plan in one session, where Serena may read a lot of your code to
 and then continue with the implementation in another (potentially after creating suitable memories).
 
 
+
+## Troubleshooting
+
+The support for MCP Servers in Claude Desktop and the various MCP Server SDKs are relatively new developments and may display instabilities.
+
+The working configuration of an MCP server may vary from platform to
+platform and from client to client. We recommend always using absolute paths, as relative paths may be sources of
+errors. The language server is running in a separate sub-process and is called with asyncio – sometimes
+a client may make it crash. If you have Serena's log window enabled, and it disappears, you'll know what happened.
+
+Some clients (like goose) may not properly terminate MCP servers,
+look out for hanging python processes and terminate them 
+manually, if needed.
+
+
+### Serena Logging
+
+To help with troubleshooting, we have written a small GUI utility for logging. For most clients, we recommend that you enable it
+through the project configuration (`myproject.yml`) if you encounter problems. Many clients also write MCP logs that can help identify issues.
+
+The logging GUI may not work for all clients and on all systems. Currently, it does not work on macOS or within VSCode extensions like Cline.
+
+
 ## Acknowledgements
 
 We built Serena on top of multiple existing open-source technologies, the most important ones being:
@@ -549,32 +639,34 @@ For details on contributing, see [here](/CONTRIBUTING.md).
 
 ## Full List of Tools
 
-Here the full list of Serena's default tools with a short description (the output of `uv run serena-list-tools`)
+Here is the full list of Serena's tools with a short description (output of `uv run serena-list-tools`):
 
- * `check_onboarding_performed`: Checks whether the onboarding was already performed.
- * `create_text_file`: Creates/overwrites a file in the project directory.
- * `delete_lines`: Deletes a range of lines within a file.
- * `delete_memory`: Deletes a memory from Serena's project-specific memory store.
- * `execute_shell_command`: Executes a shell command.
- * `find_referencing_symbols`: Finds symbols that reference the symbol at the given location (optionally filtered by type).
- * `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
- * `get_dir_overview`: Gets an overview of the top-level symbols defined in all files within a given directory.
- * `get_document_overview`: Gets an overview of the top-level symbols defined in a given file.
- * `get_referencing_code_extracts`: Gets the code blocks that reference the symbol at the given location.
- * `insert_after_symbol`: Inserts content after the end of the definition of a given symbol.
- * `insert_at_line`: Inserts content at a given line in a file.
- * `insert_before_symbol`: Inserts content before the beginning of the definition of a given symbol.
- * `list_dir`: Lists files and directories in the given directory (optionally with recursion).
- * `list_memories`: Lists memories in Serena's project-specific memory store.
- * `onboarding`: Performs onboarding (identifying the project structure and essential tasks, e.g. for testing or building).
- * `prepare_for_new_conversation`: Provides instructions for preparing for a new conversation (in order to continue with the necessary context).
- * `read_file`: Reads a file within the project directory.
- * `read_memory`: Reads the memory with the given name from Serena's project-specific memory store.
- * `replace_lines`: Replaces a range of lines within a file with new content.
- * `replace_symbol_body`: Replaces the full definition of a symbol.
- * `search_in_all_code`: Performs a search for a pattern in all code files (and only in code files) in the project.
- * `summarize_changes`: Provides instructions for summarizing the changes made to the codebase.
- * `think_about_collected_information`: Thinking tool for pondering the completeness of collected information.
- * `think_about_task_adherence`: Thinking tool for determining whether the agent is still on track with the current task.
- * `think_about_whether_you_are_done`: Thinking tool for determining whether the task is truly completed.
- * `write_memory`: Writes a named memory (for future reference) to Serena's project-specific memory store.
+* `activate_project`: Activates a project by name.
+* `check_onboarding_performed`: Checks whether the onboarding was already performed.
+* `create_text_file`: Creates/overwrites a file in the project directory.
+* `delete_lines`: Deletes a range of lines within a file.
+* `delete_memory`: Deletes a memory from Serena's project-specific memory store.
+* `execute_shell_command`: Executes a shell command.
+* `find_referencing_code_snippets`: Finds code snippets in which the symbol at the given location is referenced.
+* `find_referencing_symbols`: Finds symbols that reference the symbol at the given location (optionally filtered by type).
+* `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
+* `get_active_project`: Gets the name of the currently active project (if any) and lists existing projects
+* `get_symbols_overview`: Gets an overview of the top-level symbols defined in a given file or directory.
+* `insert_after_symbol`: Inserts content after the end of the definition of a given symbol.
+* `insert_at_line`: Inserts content at a given line in a file.
+* `insert_before_symbol`: Inserts content before the beginning of the definition of a given symbol.
+* `list_dir`: Lists files and directories in the given directory (optionally with recursion).
+* `list_memories`: Lists memories in Serena's project-specific memory store.
+* `onboarding`: Performs onboarding (identifying the project structure and essential tasks, e.g. for testing or building).
+* `prepare_for_new_conversation`: Provides instructions for preparing for a new conversation (in order to continue with the necessary context).
+* `read_file`: Reads a file within the project directory.
+* `read_memory`: Reads the memory with the given name from Serena's project-specific memory store.
+* `replace_lines`: Replaces a range of lines within a file with new content.
+* `replace_symbol_body`: Replaces the full definition of a symbol.
+* `restart_language_server`: Restarts the language server, may be necessary when edits not through Serena happen.
+* `search_for_pattern`: Performs a search for a pattern in the project.
+* `summarize_changes`: Provides instructions for summarizing the changes made to the codebase.
+* `think_about_collected_information`: Thinking tool for pondering the completeness of collected information.
+* `think_about_task_adherence`: Thinking tool for determining whether the agent is still on track with the current task.
+* `think_about_whether_you_are_done`: Thinking tool for determining whether the task is truly completed.
+* `write_memory`: Writes a named memory (for future reference) to Serena's project-specific memory store.

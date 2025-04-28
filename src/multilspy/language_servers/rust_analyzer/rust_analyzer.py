@@ -11,6 +11,8 @@ import pathlib
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
+from overrides import override
+
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.language_server import LanguageServer
 from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -38,6 +40,10 @@ class RustAnalyzer(LanguageServer):
             "rust",
         )
         self.server_ready = asyncio.Event()
+    
+    @override
+    def is_ignored_dirname(self, dirname: str) -> bool:
+        return super().is_ignored_dirname(dirname) or dirname in ["target"]
 
     def setup_runtime_dependencies(self, logger: MultilspyLogger, config: MultilspyConfig) -> str:
         """

@@ -11,7 +11,7 @@ import stat
 import subprocess
 import pathlib
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import AsyncIterator, override
 
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.language_server import LanguageServer
@@ -42,6 +42,10 @@ class Solargraph(LanguageServer):
             "ruby",
         )
         self.server_ready = asyncio.Event()
+        
+    @override
+    def is_ignored_dirname(self, dirname: str) -> bool:
+        return super().is_ignored_dirname(dirname) or dirname in ["vendor"]
 
     def setup_runtime_dependencies(self, logger: MultilspyLogger, config: MultilspyConfig, repository_root_path: str) -> str:
         """

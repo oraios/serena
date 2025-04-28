@@ -7,7 +7,9 @@ import logging
 import os
 import pathlib
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import AsyncIterator, Tuple
+
+from overrides import override
 
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.language_server import LanguageServer
@@ -32,6 +34,10 @@ class JediServer(LanguageServer):
             ProcessLaunchInfo(cmd="jedi-language-server", cwd=repository_root_path),
             "python",
         )
+        
+    @override
+    def is_ignored_dirname(self, dirname: str) -> bool:
+        return super().is_ignored_dirname(dirname) or dirname in ["venv", "__pycache__"]
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """

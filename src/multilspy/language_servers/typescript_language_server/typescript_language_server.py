@@ -10,7 +10,9 @@ import os
 import subprocess
 import pathlib
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import AsyncIterator, Tuple
+
+from overrides import override
 
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.language_server import LanguageServer
@@ -28,6 +30,11 @@ else:
         @staticmethod
         def getpwuid(uid):
             return type('obj', (), {'pw_name': os.environ.get('USERNAME', 'unknown')})()
+
+
+# Conditionally import pwd module (Unix-only)
+if not PlatformUtils.get_platform_id().value.startswith("win"):
+    import pwd
 
 
 class TypeScriptLanguageServer(LanguageServer):
@@ -48,6 +55,15 @@ class TypeScriptLanguageServer(LanguageServer):
             "typescript",
         )
         self.server_ready = asyncio.Event()
+
+    @override
+    def is_ignored_dirname(self, dirname: str) -> bool:
+        return super().is_ignored_dirname(dirname) or dirname in [
+            "node_modules",
+            "dist",
+            "build",
+            "coverage",
+        ]
 
     def setup_runtime_dependencies(self, logger: MultilspyLogger, config: MultilspyConfig) -> str:
         """
@@ -84,22 +100,29 @@ class TypeScriptLanguageServer(LanguageServer):
         if not os.path.exists(tsserver_ls_dir):
             os.makedirs(tsserver_ls_dir, exist_ok=True)
             for dependency in runtime_dependencies:
-                # Handle platform-specific user settings
-                subprocess_kwargs = {
-                    'shell': True,
-                    'check': True,
-                    'cwd': tsserver_ls_dir,
-                    'stdout': subprocess.DEVNULL,
-                    'stderr': subprocess.DEVNULL
-                }
-
-                # Only add user parameter on Unix-like systems
-                if os.name != 'nt':  # Not Windows
+                # Windows doesn't support the 'user' parameter and doesn't have pwd module
+                if PlatformUtils.get_platform_id().value.startswith("win"):
+                    subprocess.run(
+                        dependency["command"],
+                        shell=True,
+                        check=True,
+                        cwd=tsserver_ls_dir,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                else:
+                    # On Unix-like systems, run as non-root user
                     user = pwd.getpwuid(os.getuid()).pw_name
-                    subprocess_kwargs['user'] = user
-
-                subprocess.run(dependency["command"], **subprocess_kwargs)
-
+                    subprocess.run(
+                        dependency["command"],
+                        shell=True,
+                        check=True,
+                        user=user,
+                        cwd=tsserver_ls_dir,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+        
         tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
 
         assert os.path.exists(tsserver_executable_path), "typescript-language-server executable not found. Please install typescript-language-server and try again."

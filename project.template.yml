@@ -1,0 +1,55 @@
+# absolute path to the project you want Serena to work on (where all the source code, etc. is located)
+# This is optional if this file is placed in the project directory under `.serena/project.yml`.
+project_root: /path/to/project
+
+# language of the project (csharp, python, rust, java, typescript, javascript, go, cpp, or ruby)
+# Special requirements:
+#  * csharp: Requires the presence of a .sln file in the project folder.
+language: python
+
+# whether to use the project's gitignore file to ignore files
+# Added on 2025-04-07
+ignore_all_files_in_gitignore: true
+# list of additional paths to ignore
+# same syntax as gitignore, so you can use * and **
+# Was previously called `ignored_dirs`, please update your config if you are using that.
+# Added (renamed)on 2025-04-07
+ignored_paths: []
+
+# whether the project is in read-only mode
+# If set to true, all editing tools will be disabled and attempts to use them will result in an error
+# Added on 2025-04-18
+read_only: false
+
+
+# list of tool names to exclude. We recommend not excluding any tools, see the readme for more details.
+# Below is the complete list of tools for convenience.
+# To make sure you have the latest list of tools, and to view their descriptions, 
+# execute `uv run serena-list-tools`.
+#
+# check_onboarding_performed
+# create_text_file
+# delete_lines
+# delete_memory
+# execute_shell_command
+# find_referencing_symbols
+# find_symbol
+# get_dir_overview
+# get_document_overview
+# insert_after_symbol
+# insert_at_line
+# insert_before_symbol
+# list_dir
+# list_memories
+# onboarding
+# prepare_for_new_conversation
+# read_file
+# read_memory
+# replace_symbol_body
+# search_in_all_code
+# summarize_changes
+# think_about_collected_information
+# think_about_task_adherence
+# think_about_whether_you_are_done
+# write_memory
+excluded_tools: []

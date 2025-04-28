@@ -11,6 +11,8 @@ import stat
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Iterable
 
+from overrides import override
+
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.language_server import LanguageServer
 from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -46,7 +48,7 @@ def breadth_first_file_scan(root) -> Iterable[str]:
         dirs = next_dirs
 
 
-def find_least_depth_sln_file(root_dir) -> str:
+def find_least_depth_sln_file(root_dir) -> str | None:
     for filename in breadth_first_file_scan(root_dir):
         if filename.endswith(".sln"):
             return filename
@@ -107,6 +109,10 @@ class OmniSharp(LanguageServer):
 
         self.definition_available = asyncio.Event()
         self.references_available = asyncio.Event()
+        
+    @override
+    def is_ignored_dirname(self, dirname: str) -> bool:
+        return super().is_ignored_dirname(dirname) or dirname in ["bin", "obj"]
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """

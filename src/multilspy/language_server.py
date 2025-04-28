@@ -14,15 +14,19 @@ import os
 import pathlib
 import pickle
 import re
+from site import abs_paths
 import threading
 from collections import defaultdict
 from contextlib import asynccontextmanager, contextmanager
 from copy import copy
+from typing import Dict, List, Optional, Tuple, Union
 from fnmatch import fnmatch
 from pathlib import Path, PurePath
 from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple, Union, cast
 
-from serena.text_utils import LineType, MatchedConsecutiveLines, TextLine, search_text
+import pathspec
+
+from serena.text_utils import LineType, MatchedConsecutiveLines, TextLine, search_files, search_text
 from . import multilspy_types
 from .lsp_protocol_handler import lsp_types as LSPTypes
 from .lsp_protocol_handler.lsp_constants import LSPConstants
@@ -33,6 +37,9 @@ from .lsp_protocol_handler.server import (
 )
 from .multilspy_config import Language, MultilspyConfig
 from .multilspy_exceptions import MultilspyException
+from .multilspy_utils import PathUtils, FileUtils, TextUtils
+from pathlib import PurePath
+from typing import AsyncIterator, Iterator, List, Dict, Optional, Union, Tuple
 from .multilspy_logger import MultilspyLogger
 from .multilspy_utils import FileUtils, PathUtils, TextUtils
 from .type_helpers import ensure_all_methods_implemented
@@ -68,11 +75,11 @@ class LSPFileBuffer:
 
     # reference count of the file
     ref_count: int
-    
+
     # --------------------------------- MODIFICATIONS BY MISCHA ---------------------------------
-    
+
     content_hash: str = ""
-    
+
     def __post_init__(self):
         self.content_hash = hashlib.md5(self.contents.encode('utf-8')).hexdigest()
 
@@ -82,8 +89,17 @@ class LanguageServer:
     The LanguageServer class provides a language agnostic interface to the Language Server Protocol.
     It is used to communicate with Language Servers of different programming languages.
     """
+
+    # To be overridden and extended by subclasses
+    def is_ignored_dirname(self, dirname: str) -> bool:
+        """
+        A language-specific condition for directories that should always be ignored. For example, venv
+        in Python and node_modules in JS/TS should be ignored always.
+        """
+        return dirname.startswith('.')
+
     @classmethod
-    def create(cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str) -> "LanguageServer":
+    def create(cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str, add_gitignore_content_to_config: bool = True) -> "LanguageServer":
         """
         Creates a language specific LanguageServer instance based on the given configuration, and appropriate settings for the programming language.
 
@@ -93,9 +109,29 @@ class LanguageServer:
         :param repository_root_path: The root path of the repository.
         :param config: The Multilspy configuration.
         :param logger: The logger to use.
+        :param add_gitignore_content_to_config: whether to add the content of the .gitignore file (if any found) to the config, so that
+            the paths ignored there are also ignored by the language server
 
         :return LanguageServer: A language specific LanguageServer instance.
         """
+        config = copy(config)  # prevent mutation
+        if add_gitignore_content_to_config:
+            gitignore_path = os.path.join(repository_root_path, ".gitignore")
+            if not os.path.exists(gitignore_path):
+                logger.log(
+                    f"Should ignore all files in gitignore not not .gitignore found at {gitignore_path}. Skipping.",
+                    logging.WARNING
+                )
+                gitignore_file_content = None
+            else:
+                if config.gitignore_file_content is not None:
+                    raise ValueError(
+                        f"Asked to add gitignore content to the config for {repository_root_path=} but there already is a non-empty entry"
+                    )
+                with open(gitignore_path) as f:
+                    gitignore_file_content = f.read()
+            config.gitignore_file_content = gitignore_file_content
+
         if config.code_language == Language.PYTHON:
             from multilspy.language_servers.pyright_language_server.pyright_server import (
                 PyrightServer,
@@ -115,6 +151,12 @@ class LanguageServer:
             )
 
             return EclipseJDTLS(config, logger, repository_root_path)
+        elif config.code_language == Language.KOTLIN:
+            from multilspy.language_servers.kotlin_language_server.kotlin_language_server import (
+                KotlinLanguageServer,
+            )
+
+            return KotlinLanguageServer(config, logger, repository_root_path)
         elif config.code_language == Language.RUST:
             from multilspy.language_servers.rust_analyzer.rust_analyzer import (
                 RustAnalyzer,
@@ -142,6 +184,14 @@ class LanguageServer:
             from multilspy.language_servers.sourcekit_lsp.sourcekit_lsp import SourceKitLSP
 
             return SourceKitLSP(config, logger, repository_root_path)
+        elif config.code_language == Language.DART:
+            from multilspy.language_servers.dart_language_server.dart_language_server import DartLanguageServer
+
+            return DartLanguageServer(config, logger, repository_root_path)
+        elif config.code_language == Language.CPP:
+            from multilspy.language_servers.clangd_language_server.clangd_language_server import ClangdLanguageServer
+
+            return ClangdLanguageServer(config, logger, repository_root_path)
         else:
             logger.log(f"Language {config.code_language} is not supported", logging.ERROR)
             raise MultilspyException(f"Language {config.code_language} is not supported")
@@ -162,7 +212,7 @@ class LanguageServer:
         :param config: The Multilspy configuration.
         :param logger: The logger to use.
         :param repository_root_path: The root path of the repository.
-        :param cmd: Each language server has a specific command used to start the server.
+        :param process_launch_info: Each language server has a specific command used to start the server.
                     This parameter is the command to launch the language server process.
                     The command must pass appropriate flags to the binary, so that it runs in the stdio mode,
                     as opposed to HTTP, TCP modes supported by some language servers.
@@ -189,17 +239,102 @@ class LanguageServer:
 
         # cmd is obtained from the child classes, which provide the language specific command to start the language server
         # LanguageServerHandler provides the functionality to start the language server and communicate with it
-        self.server: LanguageServerHandler = LanguageServerHandler(process_launch_info, logger=logging_fn)
+        self.server: LanguageServerHandler = LanguageServerHandler(
+            process_launch_info,
+            logger=logging_fn,
+            start_independent_lsp_process=config.start_independent_lsp_process,
+        )
 
         self.language_id = language_id
         self.open_file_buffers: Dict[str, LSPFileBuffer] = {}
-        
+
         # --------------------------------- MODIFICATIONS BY ORAIOS ---------------------------------
         self._document_symbols_cache:  dict[str, Tuple[str, Tuple[List[multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]]] = {}
         """Maps file paths to a tuple of (file_content_hash, result_of_request_document_symbols)"""
         self.load_cache()
         self._cache_has_changed = bool
         self.language = Language(language_id)
+
+        # Set up the pathspec matcher for the ignored paths
+        # for all absolute paths in ignored_paths, convert them to relative paths
+        processed_patterns = []
+        for pattern in set(config.ignored_paths):
+            # Normalize separators (pathspec expects forward slashes)
+            pattern = pattern.replace(os.path.sep, '/')
+            processed_patterns.append(pattern)
+        # Combine explicitly passed patterns with the content of the .gitignore file
+        if config.gitignore_file_content is not None:
+            for line in config.gitignore_file_content.splitlines():
+                if not line.startswith('#') and line.strip() != '':
+                    processed_patterns.append(line.strip())
+
+        # Create a pathspec matcher from the processed patterns
+        self._ignore_spec = pathspec.PathSpec.from_lines(
+            pathspec.patterns.GitWildMatchPattern,
+            processed_patterns
+        )
+
+    def get_ignore_spec(self) -> pathspec.PathSpec:
+        """Returns the pathspec matcher for the paths that were configured to be ignored through
+        the multilspy config file and the .gitignore file.
+
+        This is is a subset of the full language-specific ignore spec that determines
+        which files are relevant for the language server.
+
+        This matcher is useful for operations outside of the language server,
+        such as when searching for relevant non-language files in the project.
+        """
+        return self._ignore_spec
+
+    def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool = True) -> bool:
+        """
+        Determine if a path should be ignored based on file type
+        and ignore patterns.
+
+        :param relative_path: Relative path to check
+        :param ignore_unsupported_files: whether files that are not supported source files should be ignored
+
+        :return: True if the path should be ignored, False otherwise
+        """
+        abs_path = os.path.join(self.repository_root_path, relative_path)
+        if not os.path.exists(abs_path):
+            raise FileNotFoundError(f"File {abs_path} not found, the ignore check cannot be performed")
+
+        # Check file extension if it's a file
+        is_file = os.path.isfile(abs_path)
+        if is_file and ignore_unsupported_files:
+            fn_matcher = self.language.get_source_fn_matcher()
+            if not fn_matcher.is_relevant_filename(abs_path):
+                return True
+
+        # Create normalized path for consistent handling
+        rel_path = Path(relative_path)
+
+        # Check each part of the path against always fulfilled ignore conditions
+        dir_parts = rel_path.parts
+        if is_file:
+            dir_parts = dir_parts[:-1]
+        for part in dir_parts:
+            if not part:  # Skip empty parts (e.g., from leading '/')
+                continue
+            if self.is_ignored_dirname(part):
+                return True
+
+        # Use pathspec for gitignore-style pattern matching
+        # Normalize path separators for pathspec (it expects forward slashes)
+        normalized_path = str(rel_path).replace(os.path.sep, '/')
+
+        # pathspec can't handle the matching of directories if they don't end with a slash!
+        # see https://github.com/cpburnz/python-pathspec/issues/89
+        if os.path.isdir(os.path.join(self.repository_root_path, normalized_path)) and not normalized_path.endswith('/'):
+            normalized_path = normalized_path + '/'
+
+        # Use the pathspec matcher to check if the path matches any ignore pattern
+        if self._ignore_spec.match_file(normalized_path):
+            return True
+
+        return False
+
 
     @asynccontextmanager
     async def start_server(self) -> AsyncIterator["LanguageServer"]:
@@ -411,12 +546,7 @@ class LanguageServer:
                     new_item: multilspy_types.Location = {}
                     new_item.update(item)
                     new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
-                    try:
-                        new_item["relativePath"] = str(
-                            PurePath(os.path.relpath(new_item["absolutePath"], self.repository_root_path))
-                        )
-                    except:
-                        new_item["relativePath"] = str(new_item["absolutePath"])
+                    new_item["relativePath"] = PathUtils.get_relative_path(new_item["absolutePath"], self.repository_root_path)
                     ret.append(multilspy_types.Location(new_item))
                 elif (
                     LSPConstants.ORIGIN_SELECTION_RANGE in item
@@ -427,12 +557,7 @@ class LanguageServer:
                     new_item: multilspy_types.Location = {}
                     new_item["uri"] = item[LSPConstants.TARGET_URI]
                     new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
-                    try:
-                        new_item["relativePath"] = str(
-                            PurePath(os.path.relpath(new_item["absolutePath"], self.repository_root_path))
-                        )
-                    except:
-                        new_item["relativePath"] = str(new_item["absolutePath"])
+                    new_item["relativePath"] = PathUtils.get_relative_path(new_item["absolutePath"], self.repository_root_path)
                     new_item["range"] = item[LSPConstants.TARGET_SELECTION_RANGE]
                     ret.append(multilspy_types.Location(**new_item))
                 else:
@@ -445,9 +570,7 @@ class LanguageServer:
             new_item: multilspy_types.Location = {}
             new_item.update(response)
             new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
-            new_item["relativePath"] = str(
-                PurePath(os.path.relpath(new_item["absolutePath"], self.repository_root_path))
-            )
+            new_item["relativePath"] = PathUtils.get_relative_path(new_item["absolutePath"], self.repository_root_path)
             ret.append(multilspy_types.Location(**new_item))
         elif response is None:
             # Some language servers return None when they cannot find a definition
@@ -467,50 +590,65 @@ class LanguageServer:
         """
         Raise a [textDocument/references](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_references) request to the Language Server
         to find references to the symbol at the given line and column in the given file. Wait for the response and return the result.
+        Filters out references located in ignored directories.
 
         :param relative_file_path: The relative path of the file that has the symbol for which references should be looked up
         :param line: The line number of the symbol
         :param column: The column number of the symbol
 
-        :return List[multilspy_types.Location]: A list of locations where the symbol is referenced
+        :return: A list of locations where the symbol is referenced (excluding ignored directories)
         """
-
+        
         if not self.server_started:
             self.logger.log(
-                "find_all_callers_of_function called before Language Server started",
+                "request_references called before Language Server started",
                 logging.ERROR,
             )
             raise MultilspyException("Language Server not started")
 
+
         with self.open_file(relative_file_path):
-            # sending request to the language server and waiting for response
-            response = await self.server.send.references(
-                {
-                    "context": {"includeDeclaration": False},
-                    "textDocument": {
-                        "uri": pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()
-                    },
-                    "position": {"line": line, "character": column},
-                }
-            )
+            try:
+                response = await self.server.send.references(
+                    {
+                        "textDocument": {"uri": PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))},
+                        "position": {"line": line, "character": column},
+                        "context": {"includeDeclaration": False},
+                    }
+                )
+            except Exception as e:
+                # Catch LSP internal error (-32603) and raise a more informative exception
+                from multilspy.lsp_protocol_handler.server import Error
+                if isinstance(e, Error) and getattr(e, 'code', None) == -32603:
+                    raise RuntimeError(
+                        f"LSP internal error (-32603) when requesting references for {relative_file_path}:{line}:{column}. "
+                        "This often occurs when requesting references for a symbol not referenced in the expected way. "
+                    ) from e
+                raise
+        if response is None:
+            return []
 
         ret: List[multilspy_types.Location] = []
-        assert isinstance(response, list)
+        assert isinstance(response, list), f"Unexpected response from Language Server (expected list, got {type(response)}): {response}"
         for item in response:
-            assert isinstance(item, dict)
+            assert isinstance(item, dict), f"Unexpected response from Language Server (expected dict, got {type(item)}): {item}"
             assert LSPConstants.URI in item
             assert LSPConstants.RANGE in item
 
+            abs_path = PathUtils.uri_to_path(item[LSPConstants.URI])
+            rel_path = Path(abs_path).relative_to(self.repository_root_path)
+            if self.is_ignored_path(str(rel_path)):
+                self.logger.log(f"Ignoring reference in {rel_path} since it should be ignored", logging.DEBUG)
+                continue
+
             new_item: multilspy_types.Location = {}
             new_item.update(item)
-            new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
-            new_item["relativePath"] = str(
-                PurePath(os.path.relpath(new_item["absolutePath"], self.repository_root_path))
-            )
+            new_item["absolutePath"] = str(abs_path)
+            new_item["relativePath"] = str(rel_path)
             ret.append(multilspy_types.Location(**new_item))
 
         return ret
-    
+
     async def request_references_with_content(
         self, relative_file_path: str, line: int, column: int, context_lines_before: int = 0, context_lines_after: int = 0
     ) -> List[MatchedConsecutiveLines]:
@@ -527,18 +665,18 @@ class LanguageServer:
         """
         references = await self.request_references(relative_file_path, line, column)
         return [self.retrieve_content_around_line(ref["relativePath"], ref["range"]["start"]["line"], context_lines_before, context_lines_after) for ref in references]
-    
+
     def retrieve_full_file_content(self, relative_file_path: str) -> str:
         """
         Retrieve the full content of the given file.
         """
         with self.open_file(relative_file_path) as file_data:
             return file_data.contents
-    
+
     def retrieve_content_around_line(self, relative_file_path: str, line: int, context_lines_before: int = 0, context_lines_after: int = 0) -> MatchedConsecutiveLines:
         """
         Retrieve the content of the given file around the given line.
-        
+
         :param relative_file_path: The relative path of the file to retrieve the content from
         :param line: The line number to retrieve the content around
         :param context_lines_before: The number of lines to retrieve before the given line
@@ -548,7 +686,7 @@ class LanguageServer:
         """
         with self.open_file(relative_file_path) as file_data:
             file_contents = file_data.contents
-        
+
         line_contents = file_contents.split("\n")
         start_lineno = max(0, line - context_lines_before)
         end_lineno = min(len(line_contents) - 1, line + context_lines_after)
@@ -562,10 +700,10 @@ class LanguageServer:
         # after the line
         for lineno in range(line + 1, end_lineno + 1):
             text_lines.append(TextLine(line_number=lineno, line_content=line_contents[lineno], match_type=LineType.AFTER_MATCH))
-        
+
         return MatchedConsecutiveLines(lines=text_lines, source_file_path=relative_file_path)
-        
-        
+
+
     async def request_completions(
         self, relative_file_path: str, line: int, column: int, allow_incomplete: bool = False
     ) -> List[multilspy_types.CompletionItem]:
@@ -684,8 +822,8 @@ class LanguageServer:
                     return result
                 else:
                     self.logger.log(f"Content for {relative_file_path} has changed. Overwriting cache", logging.INFO)
-            
-            
+
+
             response = await self.server.send.document_symbol(
                 {
                     "textDocument": {
@@ -693,11 +831,13 @@ class LanguageServer:
                     }
                 }
             )
-            
+
         def turn_item_into_symbol_with_children(item: GenericDocumentSymbol):
             item = cast(multilspy_types.UnifiedSymbolInformation, item)
+            absolute_path = os.path.join(self.repository_root_path, relative_file_path)
+            
+            # handle missing entries in location
             if "location" not in item:
-                absolute_path = os.path.join(self.repository_root_path, relative_file_path)
                 uri = pathlib.Path(absolute_path).as_uri()
                 assert "range" in item
                 tree_location = multilspy_types.Location(
@@ -707,12 +847,23 @@ class LanguageServer:
                     relativePath=relative_file_path,
                 )
                 item['location'] = tree_location
+            location = item["location"]
+            if "absolutePath" not in location:
+                location["absolutePath"] = absolute_path
+            if "relativePath" not in location:
+                location["relativePath"] = relative_file_path
             if include_body:
                 item['body'] = self.retrieve_symbol_body(item)
+            # handle missing selectionRange
+            if "selectionRange" not in item:
+                if "range" in item:
+                    item["selectionRange"] = item["range"]
+                else:
+                    item["selectionRange"] = item["location"]["range"]
             item[LSPConstants.CHILDREN] = item.get(LSPConstants.CHILDREN, [])
-        
+
         flat_all_symbol_list: List[multilspy_types.UnifiedSymbolInformation] = []
-        assert isinstance(response, list)
+        assert isinstance(response, list), f"Unexpected response from Language Server: {response}"
         root_nodes: List[multilspy_types.UnifiedSymbolInformation] = []
         for item in response:
             if "range" not in item and "location" not in item:
@@ -750,42 +901,43 @@ class LanguageServer:
         self._cache_has_changed = True
         return result
     
-    async def request_full_symbol_tree(self, start_dir_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
+    async def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
         """
         Will go through all files in the project and build a tree of symbols. Note: this may be slow the first time it is called.
-        
+
         For each file, a symbol of kind Module (3) will be created. For directories, a symbol of kind Package (4) will be created.
-        All symbols will have a children attribute, thereby representing the tree structure of all symbols in the project 
+        All symbols will have a children attribute, thereby representing the tree structure of all symbols in the project
         that are within the repository.
-        Will ignore all directories that start with a dot (.) and __pycache__ directories.
-        
-        Args:
-            start_dir_relative_path: if passed, only the symbols within this directory will be considered.
-            include_body: whether to include the body of the symbols in the result.
+        Will ignore directories starting with '.', language-specific defaults
+        and user-configured directories (e.g. from .gitignore).
 
-        Returns:
-            A list of root symbols representing the top-level packages/modules in the project.
+        :param within_relative_path: pass a relative path to only consider symbols within this path.
+                If a file is passed, only the symbols within this file will be considered.
+                If a directory is passed, all files within this directory will be considered.
+        :param include_body: whether to include the body of the symbols in the result.
+
+        :return: A list of root symbols representing the top-level packages/modules in the project.
         """
-        if not self.server_started:
-            self.logger.log(
-                "request_full_symbol_tree called before Language Server started",
-                logging.ERROR,
-            )
-            raise MultilspyException("Language Server not started")
 
-        # Helper function to check if a path should be ignored
-        def should_ignore_dir(path: str) -> bool:
-            parts = path.split(os.sep)
-            return any(part.startswith('.') or part == '__pycache__' for part in parts)
-
-        fn_matcher = self.language.get_source_fn_matcher()
+        if within_relative_path is not None:
+            within_abs_path = os.path.join(self.repository_root_path, within_relative_path)
+            if not os.path.exists(within_abs_path):
+                raise FileNotFoundError(f"File or directory not found: {within_abs_path}")
+            if os.path.isfile(within_abs_path):
+                if self.is_ignored_path(within_relative_path):
+                    self.logger.log(f"You passed a file explicitly, but it is ignored. This is probably an error. File: {within_relative_path}", logging.ERROR)
+                    return []
+                else:
+                    _, root_nodes = await self.request_document_symbols(within_relative_path, include_body=include_body)
+                    return root_nodes
 
         # Helper function to recursively process directories
         async def process_directory(dir_path: str) -> List[multilspy_types.UnifiedSymbolInformation]:
             abs_dir_path = self.repository_root_path if dir_path == "." else os.path.join(self.repository_root_path, dir_path)
             abs_dir_path = os.path.realpath(abs_dir_path)
 
-            if should_ignore_dir(abs_dir_path):
+            if self.is_ignored_path(str(Path(abs_dir_path).relative_to(self.repository_root_path))):
+                self.logger.log(f"Skipping directory: {dir_path}\n(because it should be ignored)", logging.DEBUG)
                 return []
 
             result = []
@@ -811,27 +963,31 @@ class LanguageServer:
             for item in items:
                 item_path = os.path.join(abs_dir_path, item)
                 abs_item_path = os.path.join(self.repository_root_path, item_path)
+                rel_item_path = str(Path(abs_item_path).resolve().relative_to(self.repository_root_path))
+                if self.is_ignored_path(rel_item_path):
+                    self.logger.log(f"Skipping item: {rel_item_path}\n(because it should be ignored)", logging.DEBUG)
+                    continue
 
                 if os.path.isdir(abs_item_path):
                     child_symbols = await process_directory(item_path)
                     package_symbol["children"].extend(child_symbols)
 
                 elif os.path.isfile(abs_item_path):
-                    if not fn_matcher.is_relevant_filename(item):
-                        continue
-
                     _, root_nodes = await self.request_document_symbols(item_path, include_body=include_body)
 
+                    # TODO: Not sure if this is actually still needed given recent changes to relative path handling
                     def fix_relative_path(nodes: List[multilspy_types.UnifiedSymbolInformation]):
                         for node in nodes:
-                            path = Path(node["location"]["relativePath"])
-                            if path.is_absolute():
-                                try:
-                                    path = path.relative_to(self.repository_root_path)
-                                    node["location"]["relativePath"] = str(path)
-                                except:
-                                    pass
-                            fix_relative_path(node["children"])
+                            if "location" in node and "relativePath" in node["location"]:
+                                path = Path(node["location"]["relativePath"])
+                                if path.is_absolute():
+                                    try:
+                                        path = path.relative_to(self.repository_root_path)
+                                        node["location"]["relativePath"] = str(path)
+                                    except Exception:
+                                        pass
+                            if "children" in node:
+                                fix_relative_path(node["children"])
 
                     fix_relative_path(root_nodes)
 
@@ -852,13 +1008,13 @@ class LanguageServer:
                         ),
                         children=root_nodes
                     )
-                    
+
                     package_symbol["children"].append(file_symbol)
 
             return result
 
         # Start from the root or the specified directory
-        start_path = start_dir_relative_path or "."
+        start_path = within_relative_path or "."
         return await process_directory(start_path)
 
     @staticmethod
@@ -876,15 +1032,15 @@ class LanguageServer:
 
     async def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
         """
-        An overview of the given directory. 
-        
-        Maps relative paths of all contained files to info about top-level symbols in the file 
+        An overview of the given directory.
+
+        Maps relative paths of all contained files to info about top-level symbols in the file
         (name, kind, line, column).
         """
         symbol_tree = await self.request_full_symbol_tree(relative_dir_path)
         # Initialize result dictionary
         result: dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]] = defaultdict(list)
-        
+
         # Helper function to process a symbol and its children
         def process_symbol(symbol: multilspy_types.UnifiedSymbolInformation):
             if symbol["kind"] == multilspy_types.SymbolKind.File:
@@ -902,28 +1058,50 @@ class LanguageServer:
             # For package/directory symbols, process their children
             for child in symbol["children"]:
                 process_symbol(child)
-        
+
         # Process each root symbol
         for root in symbol_tree:
             process_symbol(root)
         return result
-    
+
     async def request_document_overview(self, relative_file_path: str) -> list[tuple[str, multilspy_types.SymbolKind, int, int]]:
         """
-        An overview of the given file. 
+        An overview of the given file.
         Returns the list of tuples (name, kind, line, column) of all top-level symbols in the file.
         """
         _, document_roots = await self.request_document_symbols(relative_file_path)
-        return [
-            (
-                root["name"],
-                root["kind"],
-                root["selectionRange"]["start"]["line"], # type: ignore
-                root["selectionRange"]["start"]["character"] # type: ignore
-            )
-            for root in document_roots
-        ]
-    
+        result = []
+        for root in document_roots:
+            try:
+                result.append(
+                   ( root["name"],
+                    root["kind"],
+                    root["selectionRange"]["start"]["line"],
+                    root["selectionRange"]["start"]["character"],)
+                )
+            except KeyError as e:
+                raise KeyError(
+                    f"Could not process symbol of name {root.get('name', 'unknown')} in {relative_file_path=}"
+                ) from e
+        return result
+
+    async def request_overview(self, within_relative_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
+        """
+        An overview of all symbols in the given file or directory.
+
+        :param within_relative_path: the relative path to the file or directory to get the overview of.
+        :return: A mapping of all relative paths analyzed to lists of tuples (name, kind, line, column) of all top-level symbols in the corresponding file.
+        """
+        abs_path = (Path(self.repository_root_path) / within_relative_path).resolve()
+        if not abs_path.exists():
+            raise FileNotFoundError(f"File or directory not found: {abs_path}")
+
+        if abs_path.is_file():
+            symbols_overview = await self.request_document_overview(within_relative_path)
+            return {within_relative_path: symbols_overview}
+        else:
+            return await self.request_dir_overview(within_relative_path)
+
     async def request_hover(self, relative_file_path: str, line: int, column: int) -> Union[multilspy_types.Hover, None]:
         """
         Raise a [textDocument/hover](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_hover) request to the Language Server
@@ -954,9 +1132,9 @@ class LanguageServer:
         assert isinstance(response, dict)
 
         return multilspy_types.Hover(**response)
-    
+
     # ----------------------------- FROM HERE ON MODIFICATIONS BY MISCHA --------------------
-    
+
     def retrieve_symbol_body(self, symbol: multilspy_types.UnifiedSymbolInformation | LSPTypes.DocumentSymbol | LSPTypes.SymbolInformation) -> str:
         """
         Load the body of the given symbol. If the body is already contained in the symbol, just return it.
@@ -964,27 +1142,27 @@ class LanguageServer:
         existing_body = symbol.get("body", None)
         if existing_body:
             return existing_body
-        
+
         assert "location" in symbol
         symbol_start_line = symbol["location"]["range"]["start"]["line"]
         symbol_end_line = symbol["location"]["range"]["end"]["line"]
         assert "relativePath" in symbol["location"]
         symbol_file = self.retrieve_full_file_content(symbol["location"]["relativePath"])
         symbol_lines = symbol_file.split("\n")
-        symbol_body = "\n".join(symbol_lines[symbol_start_line:symbol_end_line])
-        
+        symbol_body = "\n".join(symbol_lines[symbol_start_line:symbol_end_line+1])
+
         # remove leading indentation
         symbol_start_column = symbol["location"]["range"]["start"]["character"]
         symbol_body = symbol_body[symbol_start_column:]
         return symbol_body
-        
-    
+
+
     async def request_parsed_files(self) -> list[str]:
         """
         Retrieves relative paths of all files analyzed by the Language Server.
-        
-        This is slow, as it finds all files by finding all symbols. 
-        
+
+        This is slow, as it finds all files by finding all symbols.
+
         This seems to be the only way, the LSP does not provide any endpoints for listing project files."""
         if not self.server_started:
             self.logger.log(
@@ -996,27 +1174,27 @@ class LanguageServer:
         # I don't know why
         # params = LSPTypes.WorkspaceSymbolParams(query="")  # Empty query returns all symbols
         # symbols = await self.server.send.workspace_symbol(params) or []
-        
+
         # Thus, instead of calling all symbols, we hack this and use the symbol tree instead, which
         # seems to work in all these language servers
         # walk through all children recursively, find all symbols of type Module and collect their relative paths
         roots = await self.request_full_symbol_tree()
-        paths = [] 
+        paths = []
         def collect_module_files(symbol):
             if symbol["kind"] == multilspy_types.SymbolKind.File:
                 assert "location" in symbol
                 paths.append(symbol["location"]["relativePath"])
-            
+
             elif symbol["kind"] == multilspy_types.SymbolKind.Package:
                 for child in symbol["children"]:
                     collect_module_files(child)
-        
+
         for root in roots:
             collect_module_files(root)
-        
+
         return paths
-    
-    
+
+
     async def search_files_for_pattern(
         self,
         pattern: re.Pattern | str,
@@ -1027,7 +1205,7 @@ class LanguageServer:
     ) -> list[MatchedConsecutiveLines]:
         """
         Search for a pattern across all files analyzed by the Language Server.
-        
+
         :param pattern: Regular expression pattern to search for, either as a compiled Pattern or string
         :param context_lines_before: Number of lines of context to include before each match
         :param context_lines_after: Number of lines of context to include after each match
@@ -1037,35 +1215,18 @@ class LanguageServer:
         """
         if isinstance(pattern, str):
             pattern = re.compile(pattern)
-        
-        matches = []
-        all_files = await self.request_parsed_files()
-        for path in all_files:
-            # Apply glob filters if provided
-            # TODO: fnmatch is not exactly the same as glob
-            if paths_include_glob and not fnmatch(path, paths_include_glob):
-                self.logger.log(f"Skipping {path}: does not match include pattern {paths_include_glob}", logging.DEBUG)
-                continue
-            
-            if paths_exclude_glob and fnmatch(path, paths_exclude_glob):
-                self.logger.log(f"Skipping {path}: matches exclude pattern {paths_exclude_glob}", logging.DEBUG)
-                continue
-                
-            file_content = self.retrieve_full_file_content(path)
-            search_results = search_text(
-                pattern, 
-                file_content, 
-                source_file_path=path, 
-                allow_multiline_match=True, 
-                context_lines_before=context_lines_before, 
-                context_lines_after=context_lines_after
-            )
-            if len(search_results) > 0:
-                self.logger.log(f"Found {len(search_results)} matches in {path}", logging.DEBUG)
-                matches.extend(search_results)
-        
-        return matches
-                
+
+        relative_file_paths = await self.request_parsed_files()
+        return search_files(
+            relative_file_paths,
+            pattern,
+            file_reader=self.retrieve_full_file_content,
+            context_lines_before=context_lines_before,
+            context_lines_after=context_lines_after,
+            paths_include_glob=paths_include_glob,
+            paths_exclude_glob=paths_exclude_glob
+        )
+
     async def request_referencing_symbols(
         self,
         relative_file_path: str,
@@ -1087,7 +1248,7 @@ class LanguageServer:
         :param include_imports: whether to also include imports as references.
             Unfortunately, the LSP does not have an import type, so the references corresponding to imports
             will not be easily distinguishable from definitions.
-        :param include_self: whether to include the references that is the "input symbol" itself. 
+        :param include_self: whether to include the references that is the "input symbol" itself.
             Only has an effect if the relative_file_path, line and column point to a symbol, for example a definition.
         :param include_body: whether to include the body of the symbols in the result.
         :param include_file_symbols: whether to include references that are file symbols. This
@@ -1123,7 +1284,7 @@ class LanguageServer:
                     # TODO: HORRIBLE HACK! I don't know how to do it better for now...
                     # THIS IS BOUND TO BREAK IN MANY CASES! IT IS ALSO SPECIFIC TO PYTHON!
                     # Background:
-                    # When a variable is used to change something, like 
+                    # When a variable is used to change something, like
                     #
                     # instance = MyClass()
                     # instance.status = "new status"
@@ -1134,7 +1295,7 @@ class LanguageServer:
                     # by using the text of the reference to find the variable name (In a very heuristic way)
                     # and then look for a symbol with that name and kind Variable
                     ref_text = file_data.contents.split("\n")[ref_line]
-                    if "." in ref_text:   
+                    if "." in ref_text:
                         containing_symbol_name = ref_text.split(".")[0]
                         all_symbols, _ = await self.request_document_symbols(ref_path)
                         for symbol in all_symbols:
@@ -1175,7 +1336,7 @@ class LanguageServer:
                     )
                 if containing_symbol is None or not include_file_symbols and containing_symbol["kind"] == multilspy_types.SymbolKind.File:
                     continue
-                
+
                 assert "location" in containing_symbol
                 assert "selectionRange" in containing_symbol
 
@@ -1192,7 +1353,7 @@ class LanguageServer:
                     else:
                         self.logger.log(f"Found self-reference for {incoming_symbol['name']}, skipping it since {include_self=}", logging.DEBUG)
                         continue
-                
+
                 # checking whether reference is an import
                 # This is neither really safe nor elegant, but if we don't do it,
                 # there is no way to distinguish between definitions and imports as import is not a symbol-type
@@ -1208,11 +1369,11 @@ class LanguageServer:
                         logging.DEBUG
                     )
                     continue
-                
+
                 result.append(containing_symbol)
 
         return result
-    
+
     async def request_containing_symbol(
         self,
         relative_file_path: str,
@@ -1261,7 +1422,7 @@ class LanguageServer:
                 return None
 
         symbols, _ = await self.request_document_symbols(relative_file_path)
-        
+
         # make jedi and pyright api compatible
         # the former has no location, the later has no range
         # we will just always add location of the desired format to all symbols
@@ -1284,8 +1445,8 @@ class LanguageServer:
 
         # Allowed container kinds, currently only for Python
         container_symbol_kinds = {
-            multilspy_types.SymbolKind.Method, 
-            multilspy_types.SymbolKind.Function, 
+            multilspy_types.SymbolKind.Method,
+            multilspy_types.SymbolKind.Function,
             multilspy_types.SymbolKind.Class
         }
 
@@ -1312,7 +1473,7 @@ class LanguageServer:
             s for s in symbols if s["kind"] == multilspy_types.SymbolKind.Variable
         ]
         candidate_containers.extend(var_containers)
-        
+
         if not candidate_containers:
             return None
 
@@ -1332,11 +1493,11 @@ class LanguageServer:
             return containing_symbol
         else:
             return None
-    
+
     async def request_container_of_symbol(self, symbol: multilspy_types.UnifiedSymbolInformation, include_body: bool = False) -> multilspy_types.UnifiedSymbolInformation | None:
         """
         Finds the container of the given symbol if there is one.
-        
+
         :param symbol: The symbol to find the container of.
         :param include_body: whether to include the body of the symbol in the result.
         """
@@ -1348,7 +1509,7 @@ class LanguageServer:
             strict=True,
             include_body=include_body,
         )
-    
+
     async def request_defining_symbol(
         self,
         relative_file_path: str,
@@ -1358,10 +1519,10 @@ class LanguageServer:
     ) -> Optional[multilspy_types.UnifiedSymbolInformation]:
         """
         Finds the symbol that defines the symbol at the given location.
-        
+
         This method first finds the definition of the symbol at the given position,
         then retrieves the full symbol information for that definition.
-        
+
         :param relative_file_path: The relative path to the file.
         :param line: The 0-indexed line number.
         :param column: The 0-indexed column number.
@@ -1374,36 +1535,42 @@ class LanguageServer:
                 logging.ERROR,
             )
             raise MultilspyException("Language Server not started")
-            
+
         # Get the definition location(s)
         definitions = await self.request_definition(relative_file_path, line, column)
         if not definitions:
             return None
-        
+
         # Use the first definition location
         definition = definitions[0]
         def_path = definition["relativePath"]
         def_line = definition["range"]["start"]["line"]
         def_col = definition["range"]["start"]["character"]
-        
+
         # Find the symbol at or containing this location
         defining_symbol = await self.request_containing_symbol(
             def_path, def_line, def_col, strict=False, include_body=include_body
         )
-        
+
         return defining_symbol
-    
+
     @property
     def _cache_path(self) -> Path:
         return Path(self.repository_root_path) / ".serena" / "cache" / "document_symbols_cache.pkl"
-    
+
     def save_cache(self):
         if self._cache_has_changed:
             self.logger.log(f"Saving updated document symbols cache to {self._cache_path}", logging.INFO)
             self._cache_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self._cache_path, "wb") as f:
-                pickle.dump(self._document_symbols_cache, f)
-            
+            try:
+                with open(self._cache_path, "wb") as f:
+                    pickle.dump(self._document_symbols_cache, f)
+            except Exception as e:
+                self.logger.log(
+                        f"Failed to save document symbols cache to {self._cache_path}: {e}. "
+                        "Note: this may have resulted in a corrupted cache file.", logging.ERROR
+                    )
+
     def load_cache(self):
         if not self._cache_path.exists():
             return
@@ -1411,10 +1578,41 @@ class LanguageServer:
         with open(self._cache_path, "rb") as f:
             try:
                 self._document_symbols_cache = pickle.load(f)
-            except:
+            except Exception as e:
                 # cache often becomes corrupt, so just skip loading it
-                pass
+                self.logger.log(
+                        f"Failed to load document symbols cache from {self._cache_path}: {e}. Possible cause: the cache file is corrupted. " 
+                        "Check for any errors related to saving the cache in the logs.",
+                        logging.ERROR
+                    )
 
+
+    async def request_workspace_symbol(self, query: str) -> Union[List[multilspy_types.UnifiedSymbolInformation], None]:
+        """
+        Raise a [workspace/symbol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspace_symbol) request to the Language Server
+        to find symbols across the whole workspace. Wait for the response and return the result.
+
+        :param query: The query string to filter symbols by
+
+        :return Union[List[multilspy_types.UnifiedSymbolInformation], None]: A list of matching symbols
+        """
+        response = await self.server.send.workspace_symbol({"query": query})
+        if response is None:
+            return None
+
+        assert isinstance(response, list)
+
+        ret: List[multilspy_types.UnifiedSymbolInformation] = []
+        for item in response:
+            assert isinstance(item, dict)
+
+            assert LSPConstants.NAME in item
+            assert LSPConstants.KIND in item
+            assert LSPConstants.LOCATION in item
+
+            ret.append(multilspy_types.UnifiedSymbolInformation(**item))
+
+        return ret
 
 @ensure_all_methods_implemented(LanguageServer)
 class SyncLanguageServer:
@@ -1423,29 +1621,38 @@ class SyncLanguageServer:
     It is used to communicate with Language Servers of different programming languages.
     """
 
-    def __init__(self, language_server: LanguageServer) -> None:
+    def __init__(self, language_server: LanguageServer, timeout: Optional[int] = None):
+        """
+        :param language_server: the async language server being wrapped
+        :param timeout: the timeout, in seconds, to use for requests to the language server.
+        """
         self.language_server = language_server
         self.loop = None
         self.loop_thread = None
-        
+        self.timeout = timeout
+
         self._server_context = None
 
     @classmethod
     def create(
-        cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str
+        cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str, add_gitignore_content_to_config=True,
+        timeout: Optional[int] = None
     ) -> "SyncLanguageServer":
         """
         Creates a language specific LanguageServer instance based on the given configuration, and appropriate settings for the programming language.
 
         If language is Java, then ensure that jdk-17.0.6 or higher is installed, `java` is in PATH, and JAVA_HOME is set to the installation directory.
 
-        :param repository_root_path: The root path of the repository.
+        :param repository_root_path: The root path of the repository (must be absolute).
         :param config: The Multilspy configuration.
         :param logger: The logger to use.
+        :param add_gitignore_content_to_config: whether to add the content of the .gitignore file (if any found) to the config, so that
+            the paths ignored there are also ignored by the language server
+        :param timeout: the timeout, in seconds, to use for requests; if None, use no timeout
 
         :return SyncLanguageServer: A language specific LanguageServer instance.
         """
-        return SyncLanguageServer(LanguageServer.create(config, logger, repository_root_path))
+        return SyncLanguageServer(LanguageServer.create(config, logger, repository_root_path, add_gitignore_content_to_config=add_gitignore_content_to_config), timeout=timeout)
 
     @contextmanager
     def open_file(self, relative_file_path: str) -> Iterator[LSPFileBuffer]:
@@ -1512,7 +1719,7 @@ class SyncLanguageServer:
         """
         result = asyncio.run_coroutine_threadsafe(
             self.language_server.request_definition(file_path, line, column), self.loop
-        ).result()
+        ).result(timeout=self.timeout)
         return result
 
     def request_references(self, file_path: str, line: int, column: int) -> List[multilspy_types.Location]:
@@ -1526,17 +1733,27 @@ class SyncLanguageServer:
 
         :return List[multilspy_types.Location]: A list of locations where the symbol is referenced
         """
-        result = asyncio.run_coroutine_threadsafe(
-            self.language_server.request_references(file_path, line, column), self.loop
-        ).result()
+        try:
+            result = asyncio.run_coroutine_threadsafe(
+                self.language_server.request_references(file_path, line, column), self.loop
+            ).result(timeout=self.timeout)
+        except Exception as e:
+            from multilspy.lsp_protocol_handler.server import Error
+            if isinstance(e, Error) and getattr(e, 'code', None) == -32603:
+                raise RuntimeError(
+                    f"LSP internal error (-32603) when requesting references for {file_path}:{line}:{column}. "
+                    "This often occurs when requesting references for a symbol not referenced in the expected way. "
+                ) from e
+            raise
         return result
-    
+
+
     def request_references_with_content(
         self, relative_file_path: str, line: int, column: int, context_lines_before: int = 0, context_lines_after: int = 0
     ) -> List[MatchedConsecutiveLines]:
         """
         Like request_references, but returns the content of the lines containing the references, not just the locations.
-        
+
         :param relative_file_path: The relative path of the file that has the symbol for which references should be looked up
         :param line: The line number of the symbol
         :param column: The column number of the symbol
@@ -1549,7 +1766,7 @@ class SyncLanguageServer:
             self.language_server.request_references_with_content(relative_file_path, line, column, context_lines_before, context_lines_after), self.loop
         ).result()
         return result
-    
+
     def request_completions(
         self, relative_file_path: str, line: int, column: int, allow_incomplete: bool = False
     ) -> List[multilspy_types.CompletionItem]:
@@ -1566,7 +1783,7 @@ class SyncLanguageServer:
         result = asyncio.run_coroutine_threadsafe(
             self.language_server.request_completions(relative_file_path, line, column, allow_incomplete),
             self.loop,
-        ).result()
+        ).result(timeout=self.timeout)
         return result
 
     def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> Tuple[List[multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]:
@@ -1582,50 +1799,65 @@ class SyncLanguageServer:
             self.language_server.request_document_symbols(relative_file_path, include_body), self.loop
         ).result()
         return result
-    
-    def request_full_symbol_tree(self, start_package_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
+
+    def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
         """
         Will go through all files in the project and build a tree of symbols. Note: this may be slow the first time it is called.
-        
-        For each file, a symbol of kind Module (3) will be created. For directories, a symbol of kind Package (4) will be created.
-        All symbols will have a children attribute, thereby representing the tree structure of all symbols in the project 
-        that are within the repository.
-        Will ignore all directories that start with a dot (.) and __pycache__ directories.
-        
-        Args:
-            start_package_relative_path: if passed, only the symbols within this directory will be considered.
-            include_body: whether to include the body of the symbols in the result.
 
-        Returns:
-            A list of root symbols representing the top-level packages/modules in the project.
+        For each file, a symbol of kind Module (3) will be created. For directories, a symbol of kind Package (4) will be created.
+        All symbols will have a children attribute, thereby representing the tree structure of all symbols in the project
+        that are within the repository.
+        Will ignore directories starting with '.', language-specific defaults
+        and user-configured directories (e.g. from .gitignore).
+
+        :param within_relative_path: pass a relative path to only consider symbols within this path.
+            If a file is passed, only the symbols within this file will be considered.
+            If a directory is passed, all files within this directory will be considered.
+            If None, the entire codebase will be considered.
+        :param include_body: whether to include the body of the symbols in the result.
+
+        :return: A list of root symbols representing the top-level packages/modules in the project.
         """
         result = asyncio.run_coroutine_threadsafe(
-            self.language_server.request_full_symbol_tree(start_package_relative_path, include_body), self.loop
-        ).result()
+            self.language_server.request_full_symbol_tree(within_relative_path, include_body), self.loop
+        ).result(timeout=self.timeout)
         return result
-    
+
     def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
         """
-        An overview of the given directory. 
-        
-        Maps relative paths of all contained files to info about top-level symbols in the file 
+        An overview of the given directory.
+
+        Maps relative paths of all contained files to info about top-level symbols in the file
         (name, kind, line, column).
         """
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
             self.language_server.request_dir_overview(relative_dir_path), self.loop
-        ).result()
+        ).result(timeout=self.timeout)
         return result
-    
+
     def request_document_overview(self, relative_file_path: str) -> list[tuple[str, multilspy_types.SymbolKind, int, int]]:
         """
-        An overview of the given file. 
-        
+        An overview of the given file.
+
         Returns the list of tuples (name, kind, line, column) of all top-level symbols in the file.
         """
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
             self.language_server.request_document_overview(relative_file_path), self.loop
+        ).result(timeout=self.timeout)
+        return result
+
+    def request_overview(self, within_relative_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
+        """
+        An overview of all symbols in the given file or directory.
+
+        :param within_relative_path: the relative path to the file or directory to get the overview of.
+        :return: A mapping of all relative paths analyzed to lists of tuples (name, kind, line, column) of all top-level symbols in the corresponding file.
+        """
+        assert self.loop
+        result = asyncio.run_coroutine_threadsafe(
+            self.language_server.request_overview(within_relative_path), self.loop
         ).result()
         return result
 
@@ -1642,30 +1874,44 @@ class SyncLanguageServer:
         """
         result = asyncio.run_coroutine_threadsafe(
             self.language_server.request_hover(relative_file_path, line, column), self.loop
-        ).result()
+        ).result(timeout=self.timeout)
         return result
-    
+
+    def request_workspace_symbol(self, query: str) -> Union[List[multilspy_types.UnifiedSymbolInformation], None]:
+        """
+        Raise a [workspace/symbol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspace_symbol) request to the Language Server
+        to find symbols across the whole workspace. Wait for the response and return the result.
+
+        :param query: The query string to filter symbols by
+
+        :return Union[List[multilspy_types.UnifiedSymbolInformation], None]: A list of matching symbols
+        """
+        result = asyncio.run_coroutine_threadsafe(
+            self.language_server.request_workspace_symbol(query), self.loop
+        ).result(timeout=self.timeout)
+        return result
+
     # ----------------------------- FROM HERE ON MODIFICATIONS BY MISCHA --------------------
-    
+
     def retrieve_symbol_body(self, symbol: multilspy_types.UnifiedSymbolInformation) -> str:
         """
         Load the body of the given symbol. If the body is already contained in the symbol, just return it.
-        
+
         :param symbol: The symbol to retrieve the body of.
         :return: The body of the symbol.
         """
         return self.language_server.retrieve_symbol_body(symbol)
-    
+
     def request_parsed_files(self) -> list[str]:
-        """This is slow, as it finds all files by finding all symbols. 
-        
+        """This is slow, as it finds all files by finding all symbols.
+
         This seems to be the only way, the LSP does not provide any endpoints for listing project files."""
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
             self.language_server.request_parsed_files(), self.loop
         ).result()
         return result
-    
+
     def request_referencing_symbols(
         self, relative_file_path: str, line: int, column: int,
         include_imports: bool = True, include_self: bool = False,
@@ -1683,7 +1929,7 @@ class SyncLanguageServer:
         :param include_imports: whether to also include imports as references.
             Unfortunately, the LSP does not have an import type, so the references corresponding to imports
             will not be easily distinguishable from definitions.
-        :param include_self: whether to include the references that is the "input symbol" itself. 
+        :param include_self: whether to include the references that is the "input symbol" itself.
             Only has an effect if the relative_file_path, line and column point to a symbol, for example a definition.
         :param include_body: whether to include the body of the symbols in the result.
         :param include_file_symbols: whether to include references that are file symbols. This
@@ -1693,20 +1939,20 @@ class SyncLanguageServer:
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
             self.language_server.request_referencing_symbols(
-                relative_file_path, 
-                line, 
-                column, 
-                include_imports=include_imports, 
+                relative_file_path,
+                line,
+                column,
+                include_imports=include_imports,
                 include_self=include_self,
                 include_body=include_body,
                 include_file_symbols=include_file_symbols,
-            ), 
+            ),
             self.loop
-        ).result()
+        ).result(timeout=self.timeout)
         return result
-        
+
     def request_containing_symbol(
-        self, relative_file_path: str, line: int, 
+        self, relative_file_path: str, line: int,
         column: Optional[int] = None, strict: bool = False,
         include_body: bool = False,
     ) -> multilspy_types.UnifiedSymbolInformation | None:
@@ -1714,24 +1960,24 @@ class SyncLanguageServer:
         Finds the first symbol containing the position for the given file.
         For Python, container symbols are considered to be those with kinds corresponding to
         functions, methods, or classes (typically: Function (12), Method (6), Class (5)).
-        
+
         The method operates as follows:
           - Request the document symbols for the file.
           - Filter symbols to those that start at or before the given line.
           - From these, first look for symbols whose range contains the (line, column).
           - If one or more symbols contain the position, return the one with the greatest starting position
             (i.e. the innermost container).
-          - If none (strictly) contain the position, return the symbol with the greatest starting position 
+          - If none (strictly) contain the position, return the symbol with the greatest starting position
             among those above the given line.
           - If no container candidates are found, return None.
-        
+
         :param relative_file_path: The relative path to the Python file.
         :param line: The 0-indexed line number.
         :param column: The 0-indexed column (also called character). If not passed, the lookup will be based
             only on the line.
         :param strict: If True, the position must be strictly within the range of the symbol.
             Setting to true is useful for example for finding the parent of a symbol, as with strict=False,
-            and the line pointing to a symbol itself, the containing symbol will be the symbol itself 
+            and the line pointing to a symbol itself, the containing symbol will be the symbol itself
             (and not the parent).
         :param include_body: whether to include the body of the symbol in the result.
         :return: The container symbol (if found) or None.
@@ -1739,32 +1985,32 @@ class SyncLanguageServer:
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
             self.language_server.request_containing_symbol(relative_file_path, line, column=column, strict=strict, include_body=include_body), self.loop
-        ).result()
+        ).result(timeout=self.timeout)
         return result
-    
+
     def request_container_of_symbol(self, symbol: multilspy_types.UnifiedSymbolInformation, include_body: bool = False) -> multilspy_types.UnifiedSymbolInformation | None:
         """
         Finds the container of the given symbol if there is one.
-        
+
         :param symbol: The symbol to find the container of.
         :param include_body: whether to include the body of the symbol in the result.
         """
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
             self.language_server.request_container_of_symbol(symbol, include_body=include_body), self.loop
-        ).result()
+        ).result(timeout=self.timeout)
         return result
-    
+
     def request_defining_symbol(
-        self, relative_file_path: str, line: int, column: int, 
+        self, relative_file_path: str, line: int, column: int,
         include_body: bool = False,
     ) -> Optional[multilspy_types.UnifiedSymbolInformation]:
         """
         Finds the symbol that defines the symbol at the given location.
-        
+
         This method first finds the definition of the symbol at the given position,
         then retrieves the full symbol information for that definition.
-        
+
         :param relative_file_path: The relative path to the file.
         :param line: The 0-indexed line number.
         :param column: The 0-indexed column number.
@@ -1774,19 +2020,19 @@ class SyncLanguageServer:
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
             self.language_server.request_defining_symbol(relative_file_path, line, column, include_body=include_body), self.loop
-        ).result()
+        ).result(timeout=self.timeout)
         return result
-    
+
     def retrieve_full_file_content(self, relative_file_path: str) -> str:
         """
         Retrieve the full content of the given file.
         """
         return self.language_server.retrieve_full_file_content(relative_file_path)
-    
+
     def retrieve_content_around_line(self, relative_file_path: str, line: int, context_lines_before: int = 0, context_lines_after: int = 0) -> MatchedConsecutiveLines:
         """
         Retrieve the content of the given file around the given line.
-        
+
         :param relative_file_path: The relative path of the file to retrieve the content from
         :param line: The line number to retrieve the content around
         :param context_lines_before: The number of lines to retrieve before the given line
@@ -1794,7 +2040,7 @@ class SyncLanguageServer:
         :return MatchedConsecutiveLines: A container with the desired lines.
         """
         return self.language_server.retrieve_content_around_line(relative_file_path, line, context_lines_before, context_lines_after)
-    
+
     def search_files_for_pattern(
         self,
         pattern: re.Pattern | str,
@@ -1805,7 +2051,7 @@ class SyncLanguageServer:
     ) -> list[MatchedConsecutiveLines]:
         """
         Search for a pattern across all files analyzed by the Language Server.
-        
+
         :param pattern: Regular expression pattern to search for, either as a compiled Pattern or string
         :param context_lines_before: Number of lines of context to include before each match
         :param context_lines_after: Number of lines of context to include after each match
@@ -1816,9 +2062,9 @@ class SyncLanguageServer:
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
             self.language_server.search_files_for_pattern(pattern, context_lines_before, context_lines_after, paths_include_glob, paths_exclude_glob), self.loop
-        ).result()
+        ).result(timeout=self.timeout)
         return result
-    
+
     def start(self) -> "SyncLanguageServer":
         """
         Starts the language server process and connects to it. Call shutdown when ready.
@@ -1832,28 +2078,63 @@ class SyncLanguageServer:
         asyncio.run_coroutine_threadsafe(self._server_context.__aenter__(), loop=self.loop).result()
         return self
 
+    def is_running(self) -> bool:
+        """
+        Check if the language server is running.
+        """
+        return self.loop is not None and self.loop_thread is not None and self.loop_thread.is_alive()
+
     def stop(self) -> None:
         """
         Shuts down the language server process and cleans up resources.
-        Must be called after start().
+
+        If the language server is not running, this method will log a warning and do nothing.
         """
-        if not self.loop or not self.loop_thread:
-            raise MultilspyException("Language Server not started")
-            
+        if not self.is_running():
+            self.language_server.logger.log("Language server not running, skipping shutdown.", logging.INFO)
+            return
+
+        assert self.loop
         asyncio.run_coroutine_threadsafe(self._server_context.__aexit__(None, None, None), loop=self.loop).result()
         self.loop.call_soon_threadsafe(self.loop.stop)
         self.loop_thread.join()
         self.loop = None
         self.loop_thread = None
-        
+        self.save_cache()
+
     def save_cache(self):
         """
         Save the cache to a file.
         """
         self.language_server.save_cache()
-    
+
     def load_cache(self):
         """
         Load the cache from a file.
         """
         self.language_server.load_cache()
+
+    def is_ignored_dirname(self, dirname: str) -> bool:
+        """
+        A language-specific condition for directories that should be ignored always. For example, venv
+        in Python and node_modules in JS/TS should be ignored always.
+        """
+        return self.language_server.is_ignored_dirname(dirname)
+
+    def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool = True) -> bool:
+        """
+        Whether the given path should be ignored.
+        """
+        return self.language_server.is_ignored_path(relative_path, ignore_unsupported_files=ignore_unsupported_files)
+
+    def get_ignore_spec(self) -> pathspec.PathSpec:
+        """Returns the pathspec matcher for the paths that were configured to be ignored through
+        the multilspy config file and the .gitignore file.
+
+        This is is a subset of the full language-specific ignore spec that determines
+        which files are relevant for the language server.
+
+        This matcher is useful for operations outside of the language server,
+        such as when searching for relevant non-language files in the project.
+        """
+        return self.language_server.get_ignore_spec()

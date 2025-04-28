@@ -23,9 +23,9 @@ class SymbolLocation:
     Represents the (start) location of a symbol identifier
     """
 
-    relative_path: str
+    relative_path: str | None
     """
-    the relative path of the file containing the symbol
+    the relative path of the file containing the symbol; if None, the symbol is defined outside of the project's scope
     """
     line: int | None
     """
@@ -39,13 +39,14 @@ class SymbolLocation:
     """
 
     def __post_init__(self) -> None:
-        self.relative_path = self.relative_path.replace("/", os.path.sep)
+        if self.relative_path is not None:
+            self.relative_path = self.relative_path.replace("/", os.path.sep)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     def has_position_in_file(self) -> bool:
-        return self.line is not None and self.column is not None
+        return self.relative_path is not None and self.line is not None and self.column is not None
 
 
 class Symbol(ToStringMixin):
@@ -71,7 +72,7 @@ class Symbol(ToStringMixin):
         return self.s["kind"]
 
     @property
-    def relative_path(self) -> str:
+    def relative_path(self) -> str | None:
         return self.s["location"]["relativePath"]
 
     @property
@@ -200,7 +201,7 @@ class SymbolManager:
     def find_by_name(
         self,
         name: str,
-        dir_relative_path: str | None = None,
+        within_relative_path: str | None = None,
         include_body: bool = False,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
@@ -210,7 +211,9 @@ class SymbolManager:
         Find all symbols that match the given name.
 
         :param name: the name of the symbol to find
-        :param dir_relative_path: pass a directory relative path to only consider symbols within this directory.
+        :param within_relative_path: pass a relative path to only consider symbols within this path.
+            If a file is passed, only the symbols within this file will be considered.
+            If a directory is passed, all files within this directory will be considered.
             If None, the entire codebase will be considered.
         :param include_body: whether to include the body of all symbols in the result.
             Note: you can filter out the bodies of the children if you set include_children_body=False
@@ -224,7 +227,7 @@ class SymbolManager:
         :return: a list of symbols that match the given name
         """
         symbols: list[Symbol] = []
-        symbol_roots = self.lang_server.request_full_symbol_tree(start_package_relative_path=dir_relative_path, include_body=include_body)
+        symbol_roots = self.lang_server.request_full_symbol_tree(within_relative_path=within_relative_path, include_body=include_body)
         for root in symbol_roots:
             symbols.extend(
                 Symbol(root).find(name, include_kinds=include_kinds, exclude_kinds=exclude_kinds, substring_matching=substring_matching)
@@ -237,6 +240,8 @@ class SymbolManager:
         return symbols
 
     def find_by_location(self, location: SymbolLocation) -> Symbol | None:
+        if location.relative_path is None:
+            return None
         symbol_dicts, roots = self.lang_server.request_document_symbols(location.relative_path, include_body=False)
         for symbol_dict in symbol_dicts:
             symbol = Symbol(symbol_dict)
@@ -266,6 +271,7 @@ class SymbolManager:
         """
         if not symbol_location.has_position_in_file():
             raise ValueError("Symbol location does not contain a valid position in a file")
+        assert symbol_location.relative_path is not None
         assert symbol_location.line is not None
         assert symbol_location.column is not None
         symbol_dicts = self.lang_server.request_referencing_symbols(
@@ -299,7 +305,8 @@ class SymbolManager:
     def _edited_symbol_location(self, location: SymbolLocation) -> Iterator[Symbol]:
         symbol = self.find_by_location(location)
         if symbol is None:
-            raise ValueError("Symbol not found")
+            raise ValueError("Symbol not found/has no defined location within a file")
+        assert location.relative_path is not None
         with self._edited_file(location.relative_path):
             yield symbol
 
@@ -310,7 +317,11 @@ class SymbolManager:
         :param location: the location of the symbol to replace
         :param body: the new body
         """
+        # make sure body always ends with at least one newline
+        if not body.endswith("\n"):
+            body += "\n"
         with self._edited_symbol_location(location) as symbol:
+            assert location.relative_path is not None
             self.lang_server.delete_text_between_positions(location.relative_path, symbol.body_start_position, symbol.body_end_position)
             self.lang_server.insert_text_at_position(
                 location.relative_path, symbol.body_start_position["line"], symbol.body_start_position["character"], body
@@ -323,8 +334,12 @@ class SymbolManager:
         :param location: the location of the symbol after which to add new lines
         :param body: the body of the entity to append
         """
+        # make sure body always ends with at least one newline
+        if not body.endswith("\n"):
+            body += "\n"
         with self._edited_symbol_location(location) as symbol:
             pos = symbol.body_end_position
+            assert location.relative_path is not None
             self.lang_server.insert_text_at_position(location.relative_path, pos["line"], pos["character"], body)
 
     def insert_before(self, location: SymbolLocation, body: str) -> None:
@@ -334,8 +349,12 @@ class SymbolManager:
         :param location: the location of the symbol before which to add new lines
         :param body: the body of the entity to insert
         """
+        # make sure body always ends with at least one newline
+        if not body.endswith("\n"):
+            body += "\n"
         with self._edited_symbol_location(location) as symbol:
             pos = copy(symbol.body_start_position)
+            assert location.relative_path is not None
             self.lang_server.insert_text_at_position(location.relative_path, pos["line"], pos["character"], body)
 
     def insert_at_line(self, relative_path: str, line: int, content: str) -> None:

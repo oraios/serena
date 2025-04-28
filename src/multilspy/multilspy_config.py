@@ -3,7 +3,8 @@ Configuration parameters for Multilspy.
 """
 import fnmatch
 from enum import Enum
-from dataclasses import dataclass
+from typing import List
+from dataclasses import dataclass, field
 
 
 class FilenameMatcher:
@@ -29,11 +30,15 @@ class Language(str, Enum):
     PYTHON = "python"
     RUST = "rust"
     JAVA = "java"
+    KOTLIN = "kotlin"
     TYPESCRIPT = "typescript"
     JAVASCRIPT = "javascript"
     GO = "go"
     RUBY = "ruby"
     SWIFT = "swift"
+    DART = "dart"
+    CPP = "cpp"
+
 
     def __str__(self) -> str:
         return self.value
@@ -41,13 +46,13 @@ class Language(str, Enum):
     def get_source_fn_matcher(self) -> FilenameMatcher:
         match self:
             case self.PYTHON:
-                return FilenameMatcher("*.py")
+                return FilenameMatcher("*.py", "*.pyi")
             case self.JAVA:
                 return FilenameMatcher("*.java")
             case self.TYPESCRIPT:
-                return FilenameMatcher("*.ts", "*.js")
+                return FilenameMatcher("*.ts", "*.js", "*.jsx", "*.tsx")
             case self.JAVASCRIPT:
-                return FilenameMatcher("*.js")
+                return FilenameMatcher("*.js", "*.jsx")
             case self.CSHARP:
                 return FilenameMatcher("*.cs")
             case self.RUST:
@@ -58,8 +63,14 @@ class Language(str, Enum):
                 return FilenameMatcher("*.rb")
             case self.SWIFT:
                 return FilenameMatcher("*.swift")
+            case self.CPP:
+                return FilenameMatcher("*.cpp", "*.h", "*.hpp", "*.c", "*.hxx", "*.cc", "*.cxx")
+            case self.KOTLIN:
+                return FilenameMatcher("*.kt", "*.kts")
+            case self.DART:
+                return FilenameMatcher("*.dart")
             case _:
-                raise ValueError
+                raise ValueError(f"Unhandled language: {self}")
 
 
 @dataclass
@@ -69,6 +80,11 @@ class MultilspyConfig:
     """
     code_language: Language
     trace_lsp_communication: bool = False
+    start_independent_lsp_process: bool = True
+    ignored_paths: list[str] = field(default_factory=list)
+    """Paths, dirs or glob-like patterns. The matching will follow the same logic as for .gitignore entries"""
+    gitignore_file_content: str | None = None
+    """Optional content of the gitignore file. If passed, will be used in addition to the explicitly passed ignored_paths for deciding which paths to ignore."""
 
     @classmethod
     def from_dict(cls, env: dict):

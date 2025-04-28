@@ -14,6 +14,8 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
+from overrides import override
+
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.language_server import LanguageServer
 from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -138,6 +140,24 @@ class EclipseJDTLS(LanguageServer):
         self.initialize_searcher_command_available = asyncio.Event()
 
         super().__init__(config, logger, repository_root_path, ProcessLaunchInfo(cmd, proc_env, proc_cwd), "java")
+    
+    @override
+    def is_ignored_dirname(self, dirname: str) -> bool:
+        # Ignore common Java build directories from different build tools:
+        # - Maven: target
+        # - Gradle: build, .gradle
+        # - Eclipse: bin, .settings
+        # - IntelliJ IDEA: out, .idea
+        # - General: classes, dist, lib
+        return super().is_ignored_dirname(dirname) or dirname in [
+            "target",      # Maven
+            "build",       # Gradle
+            "bin",         # Eclipse
+            "out",         # IntelliJ IDEA
+            "classes",     # General
+            "dist",        # General
+            "lib"          # General
+        ]
 
     def setupRuntimeDependencies(self, logger: MultilspyLogger, config: MultilspyConfig) -> RuntimeDependencyPaths:
         """

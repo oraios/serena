@@ -45,6 +45,13 @@ for you.
 Note: For the Windows subsystem for Linux (WSL), you may need to adjust the path for the
 volume.
 
+## Running Tools Locally
+
+The Serena tools (and in fact all Serena code) can be executed without an LLM, and also without
+any MCP specifics (though you can use the mcp inspector, if you want).
+
+An example script for running tools is provided in [scripts/demo_run_tools.py](scripts/demo_run_tools.py).
+
 ## Adding a New Supported Language
 
 Serena interacts with code through language servers which are included in

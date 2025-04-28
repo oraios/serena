@@ -1,6 +1,13 @@
+import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
+
+from pathspec import PathSpec
+from pathspec.patterns.gitwildmatch import GitWildMatchPattern
+
+log = logging.getLogger(__name__)
 
 
 class LineType(StrEnum):
@@ -203,5 +210,69 @@ def search_text(
                     context_lines.append(TextLine(line_number=context_line_num, line_content=lines[j], match_type=match_type))
 
                 matches.append(MatchedConsecutiveLines(lines=context_lines, source_file_path=source_file_path))
+
+    return matches
+
+
+def default_file_reader(file_path: str) -> str:
+    """Reads using utf-8 encoding."""
+    with open(file_path, encoding="utf-8") as f:
+        return f.read()
+
+
+def search_files(
+    file_paths: list[str],
+    pattern: re.Pattern | str,
+    file_reader: Callable[[str], str] = default_file_reader,
+    context_lines_before: int = 0,
+    context_lines_after: int = 0,
+    paths_include_glob: str | None = None,
+    paths_exclude_glob: str | None = None,
+) -> list[MatchedConsecutiveLines]:
+    """
+    Search for a pattern in a list of files.
+
+    :param file_paths: List of files in which to search
+    :param pattern: Pattern to search for
+    :param file_reader: Function to read a file, by default will just use os.open.
+        All files that can't be read by it will be skipped.
+    :param context_lines_before: Number of context lines to include before matches
+    :param context_lines_after: Number of context lines to include after matches
+    :param paths_include_glob: Optional glob pattern to include files from the list
+    :param paths_exclude_glob: Optional glob pattern to exclude files from the list
+    :return: List of MatchedConsecutiveLines objects
+    """
+    matches = []
+    include_spec = PathSpec.from_lines(GitWildMatchPattern, [paths_include_glob]) if paths_include_glob else None
+    exclude_spec = PathSpec.from_lines(GitWildMatchPattern, [paths_exclude_glob]) if paths_exclude_glob else None
+    skipped_file_error_tuples: list[tuple[str, str]] = []
+    for path in file_paths:
+        if include_spec and not include_spec.match_file(path):
+            log.debug(f"Skipping {path}: does not match include pattern {paths_include_glob}")
+            continue
+        if exclude_spec and exclude_spec.match_file(path):
+            log.debug(f"Skipping {path}: matches exclude pattern {paths_exclude_glob}")
+            continue
+        try:
+            file_content = file_reader(path)
+        except Exception as e:
+            skipped_file_error_tuples.append((path, str(e)))
+            continue
+
+        search_results = search_text(
+            pattern,
+            file_content,
+            source_file_path=path,
+            allow_multiline_match=True,
+            context_lines_before=context_lines_before,
+            context_lines_after=context_lines_after,
+        )
+        if len(search_results) > 0:
+            log.debug(f"Found {len(search_results)} matches in {path}")
+            matches.extend(search_results)
+    if skipped_file_error_tuples:
+        log.debug(
+            f"Failed to read {len(skipped_file_error_tuples)} files. Here the full list of files and errors:\n{skipped_file_error_tuples}"
+        )
 
     return matches
