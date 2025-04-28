@@ -1,0 +1,6 @@
+name: desktop-app
+description: Desktop application context with all tools included
+system_prompt_addition: |
+  You are running as a desktop application with full capability to explore and modify the codebase.
+  All tools are available to you for reading and writing code.
+excluded_tools: []

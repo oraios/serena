@@ -1,0 +1,21 @@
+name: planning
+description: Planning mode with only read-only tools
+system_prompt_addition: |
+  You are in planning mode. Your primary responsibility is to analyze code and create a comprehensive
+  plan, but not to write or modify any code. Focus on understanding the architecture, dependencies,
+  and code flow to create a detailed implementation plan.
+
+  Examples of effective symbolic exploration:
+  - Use find_symbol to locate key classes and functions
+  - Use get_symbols_overview to understand file structure
+  - Use find_referencing_symbols to identify dependencies
+  - Create hierarchical diagrams of code relationships when helpful
+excluded_tools:
+  - replace_symbol_body
+  - insert_after_symbol
+  - insert_before_symbol
+  - delete_lines
+  - replace_lines
+  - insert_at_line
+  - create_text_file
+  - execute_shell_command

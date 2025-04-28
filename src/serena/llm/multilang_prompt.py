@@ -1,6 +1,8 @@
 import os
 from collections.abc import Callable
+from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Any, Generic, TypeVar
 
 import yaml
@@ -113,6 +115,52 @@ class MultiLangPromptList(MultiLangContainer[PromptList]):
     pass
 
 
+@dataclass
+class ContextConfig:
+    """
+    Configuration for a specific context.
+    """
+
+    name: str
+    description: str
+    system_prompt_addition: str
+    excluded_tools: list[str]
+
+    @classmethod
+    def from_yaml(cls, yaml_path: Path) -> "ContextConfig":
+        with open(yaml_path) as f:
+            data = yaml.safe_load(f)
+        return cls(
+            name=data["name"],
+            description=data.get("description", ""),
+            system_prompt_addition=data.get("system_prompt_addition", ""),
+            excluded_tools=data.get("excluded_tools", []),
+        )
+
+
+@dataclass
+class ModeConfig:
+    """
+    Configuration for a specific mode.
+    """
+
+    name: str
+    description: str
+    system_prompt_addition: str
+    excluded_tools: list[str]
+
+    @classmethod
+    def from_yaml(cls, yaml_path: Path) -> "ModeConfig":
+        with open(yaml_path) as f:
+            data = yaml.safe_load(f)
+        return cls(
+            name=data["name"],
+            description=data.get("description", ""),
+            system_prompt_addition=data.get("system_prompt_addition", ""),
+            excluded_tools=data.get("excluded_tools", []),
+        )
+
+
 class MultiLangPromptTemplateCollection:
     """
     Represents a collection of multi-language prompts, which are read from the prompts/ directory.
@@ -130,8 +178,12 @@ class MultiLangPromptTemplateCollection:
     def __init__(self) -> None:
         self.prompt_templates: dict[str, MultiLangPromptTemplate] = {}
         self.prompt_lists: dict[str, MultiLangPromptList] = {}
+        self.contexts: dict[str, ContextConfig] = {}
+        self.modes: dict[str, ModeConfig] = {}
+
         prompts_dir = self._prompt_template_folder()
         self._read_prompt_templates(prompts_dir)
+        self._read_contexts_and_modes(prompts_dir)
 
     @classmethod
     def _prompt_template_folder(cls) -> str:
@@ -145,6 +197,27 @@ class MultiLangPromptTemplateCollection:
         if prompts_dir is None or not os.path.isdir(prompts_dir):
             raise FileNotFoundError("Could not find the 'prompts' directory")
         return prompts_dir
+
+    def _read_contexts_and_modes(self, prompts_dir: str) -> None:
+        """Read context and mode configurations from their respective directories."""
+        contexts_dir = os.path.join(prompts_dir, "contexts")
+        modes_dir = os.path.join(prompts_dir, "modes")
+
+        # Read contexts
+        if os.path.isdir(contexts_dir):
+            for fn in os.listdir(contexts_dir):
+                if fn.endswith((".yml", ".yaml")):
+                    path = os.path.join(contexts_dir, fn)
+                    context = ContextConfig.from_yaml(Path(path))
+                    self.contexts[context.name] = context
+
+        # Read modes
+        if os.path.isdir(modes_dir):
+            for fn in os.listdir(modes_dir):
+                if fn.endswith((".yml", ".yaml")):
+                    path = os.path.join(modes_dir, fn)
+                    mode = ModeConfig.from_yaml(Path(path))
+                    self.modes[mode.name] = mode
 
     @staticmethod
     def _container_lang(prompt_name: str, collection: dict[str, T], container_factory: Callable[[str], T]) -> tuple[T, str]:
@@ -179,26 +252,58 @@ class MultiLangPromptTemplateCollection:
     def _read_prompt_templates(self, prompts_dir: str) -> None:
         for fn in os.listdir(prompts_dir):
             path = os.path.join(prompts_dir, fn)
-            if fn.endswith(".txt"):
+            if os.path.isdir(path) and not fn.startswith("."):
+                # Skip directories like "contexts" and "modes" that will be handled separately
+                if fn not in ["contexts", "modes"]:
+                    self._read_prompt_templates(path)
+            elif fn.endswith(".txt"):
                 with open(path) as file:
                     prompt_template_string = file.read()
                 self._add_prompt_template(fn[:-4], prompt_template_string)
-            elif fn.endswith(".yml"):
+            elif fn.endswith((".yml", ".yaml")):
                 with open(path, encoding="utf-8") as f:
                     data = yaml.safe_load(f)
-                    assert "prompts" in data, f"YAML file {fn} must contain key 'prompts'"
-                    lang_suffix = ("_" + data["lang"]) if "lang" in data else ""
-                    for prompt_name, prompt in data["prompts"].items():
-                        prompt_name += lang_suffix
-                        if isinstance(prompt, list):
-                            self._add_prompt_list(prompt_name, prompt)
-                        elif isinstance(prompt, str):
-                            self._add_prompt_template(prompt_name, prompt)
-                        else:
-                            raise ValueError(f"Invalid prompt type: {prompt}")
+                    if "prompts" in data:
+                        lang_suffix = ("_" + data["lang"]) if "lang" in data else ""
+                        for prompt_name, prompt in data["prompts"].items():
+                            prompt_name += lang_suffix
+                            if isinstance(prompt, list):
+                                self._add_prompt_list(prompt_name, prompt)
+                            elif isinstance(prompt, str):
+                                self._add_prompt_template(prompt_name, prompt)
+                            else:
+                                raise ValueError(f"Invalid prompt type: {prompt}")
 
     def get_multilang_prompt_template(self, prompt_name: str) -> MultiLangPromptTemplate:
         return self.prompt_templates[prompt_name]
 
     def get_multilang_prompt_list(self, prompt_name: str) -> MultiLangPromptList:
         return self.prompt_lists[prompt_name]
+
+    def get_context(self, context_name_or_path: str) -> ContextConfig:
+        """
+        Get context by name or load from YAML file path.
+
+        :param context_name_or_path: Name of a built-in context or path to a YAML file
+        :return: Context configuration
+        """
+        if context_name_or_path in self.contexts:
+            return self.contexts[context_name_or_path]
+        elif os.path.exists(context_name_or_path):
+            return ContextConfig.from_yaml(Path(context_name_or_path))
+        else:
+            raise ValueError(f"Context '{context_name_or_path}' not found and not a valid path")
+
+    def get_mode(self, mode_name_or_path: str) -> ModeConfig:
+        """
+        Get mode by name or load from YAML file path.
+
+        :param mode_name_or_path: Name of a built-in mode or path to a YAML file
+        :return: Mode configuration
+        """
+        if mode_name_or_path in self.modes:
+            return self.modes[mode_name_or_path]
+        elif os.path.exists(mode_name_or_path):
+            return ModeConfig.from_yaml(Path(mode_name_or_path))
+        else:
+            raise ValueError(f"Mode '{mode_name_or_path}' not found and not a valid path")

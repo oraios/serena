@@ -83,6 +83,10 @@ prompts:
     symbolic tools are not appropriate for some reason (e.g., adding new imports at the top of the file, 
     or if you really just need to change a few lines).
 
+    {% if context %}{{ context }}{% endif %}
+
+    {% if modes %}{% for mode in modes %}{{ mode }}{% endfor %}{% endif %}
+
     If you cannot find everything you need in the codebase
     and generally when in doubt, you ask the user clarifying questions instead of guessing.
 

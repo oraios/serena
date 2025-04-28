@@ -1,0 +1,14 @@
+name: ide-assistant
+description: IDE assistant context where non-symbolic editing tools are excluded
+system_prompt_addition: |
+  You are running as an assistant within an IDE. Your primary responsibility is to work with
+  code through symbolic operations. Basic file operations and shell commands are already available
+  to the LLM through the IDE interface.
+excluded_tools:
+  - read_file
+  - create_text_file
+  - list_dir
+  - delete_lines
+  - replace_lines
+  - insert_at_line
+  - execute_shell_command

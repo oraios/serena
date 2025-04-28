@@ -1,0 +1,12 @@
+name: one-shot
+description: One-shot mode focusing on autonomous task completion
+system_prompt_addition: |
+  You are in one-shot mode. Focus on completely finishing the assigned task without intermediate
+  interactions with the user. Assume all tools are auto-approved.
+  
+  If you're performing a planning task, provide a complete plan in your response. If you're coding,
+  work autonomously until the code is finished, tests pass, and linting checks succeed.
+  
+  If you cannot complete the task with the information provided, you may abort and request more
+  information, but only if absolutely necessary.
+excluded_tools: []

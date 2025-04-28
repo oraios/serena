@@ -1,0 +1,7 @@
+name: agent
+description: Agent context where system prompt is used directly
+system_prompt_addition: |
+  You are running as an agent within another system. Your system prompt will be used directly
+  as the true system prompt in the parent system.
+excluded_tools:
+  - initial_instructions

@@ -182,12 +182,20 @@ class LinesRead:
 
 
 class SerenaAgent:
-    def __init__(self, project_file_path: str | None = None, project_activation_callback: Callable[[], None] | None = None):
+    def __init__(
+        self,
+        project_file_path: str | None = None,
+        project_activation_callback: Callable[[], None] | None = None,
+        context: str | None = None,
+        modes: list[str] | None = None,
+    ):
         """
         :param project_file_path: the configuration file (.yml) of the project to load immediately;
             if None, do not load any project (must use project selection tool to activate a project).
             If a project is provided, the corresponding language server will be started.
         :param project_activation_callback: a callback function to be called when a project is activated.
+        :param context: the name or path to the context configuration to use
+        :param modes: the list of names or paths to the mode configurations to use
         """
         # obtain serena configuration
         self.serena_config = SerenaConfig()
@@ -214,6 +222,9 @@ class SerenaAgent:
 
         self.prompt_factory = PromptFactory()
         self._project_activation_callback = project_activation_callback
+
+        # Set context and modes
+        self._set_context_and_modes(context, modes)
 
         # project-specific instances, which will be initialized upon project activation
         self.project_config: ProjectConfig | None = None
@@ -258,6 +269,52 @@ class SerenaAgent:
             if not self.serena_config.enable_project_activation:
                 raise ValueError("Tool-based project activation is disabled in the configuration but no project file was provided.")
 
+    def _set_context_and_modes(self, context: str | None = None, modes: list[str] | None = None) -> None:
+        """
+        Set the context and modes for this agent.
+
+        :param context: The name or path of the context to use
+        :param modes: A list of mode names or paths to use
+        """
+        # Set context if provided
+        if context:
+            try:
+                self.prompt_factory.set_context(context)
+                context_name = self.prompt_factory.context.name if self.prompt_factory.context else None
+                log.info(f"Set context: {context_name}")
+            except Exception as e:
+                log.error(f"Failed to set context '{context}': {e}")
+                raise
+
+        # Set modes if provided
+        if modes:
+            try:
+                self.prompt_factory.set_modes(modes)
+                mode_names = [mode.name for mode in self.prompt_factory.modes]
+                log.info(f"Set modes: {', '.join(mode_names)}")
+
+                # Check for tool exclusion conflicts between modes
+                mode_excluded_tools: dict[str, list[str]] = {}
+                for mode in self.prompt_factory.modes:
+                    for tool_name in mode.excluded_tools:
+                        if tool_name not in mode_excluded_tools:
+                            mode_excluded_tools[tool_name] = [mode.name]
+                        else:
+                            mode_excluded_tools[tool_name].append(mode.name)
+
+                # All modes should agree on tool exclusions
+                for tool_name, mode_list in mode_excluded_tools.items():
+                    if len(mode_list) < len(self.prompt_factory.modes):
+                        conflicting_modes = ", ".join(mode_list)
+                        non_conflicting_modes = ", ".join([m.name for m in self.prompt_factory.modes if m.name not in mode_list])
+                        raise ValueError(
+                            f"Tool '{tool_name}' has conflicting exclusion settings: "
+                            f"excluded in modes [{conflicting_modes}] but not in [{non_conflicting_modes}]"
+                        )
+            except Exception as e:
+                log.error(f"Failed to set modes {modes}: {e}")
+                raise
+
     def get_exposed_tools(self) -> list["Tool"]:
         """
         :return: the list of tools that are to be exposed/registered in the client
@@ -274,21 +331,8 @@ class SerenaAgent:
         log.info(f"Activating {project_config}")
         self.project_config = project_config
 
-        # handle project-specific tool exclusions (if any)
-        if self.project_config.excluded_tools:
-            self._active_tools = {
-                key: tool for key, tool in self._all_tools.items() if tool.get_name() not in project_config.excluded_tools
-            }
-            log.info(f"Active tools after exclusions ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
-        else:
-            self._active_tools = dict(self._all_tools)
-
-        # if read_only mode is enabled, exclude all editing tools
-        if self.project_config.read_only:
-            self._active_tools = {key: tool for key, tool in self._active_tools.items() if not key.can_edit()}
-            log.info(
-                f"Project is in read-only mode. Editing tools excluded. Active tools ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}"
-            )
+        # Update the active tools based on project, context, and mode configurations
+        self._update_active_tools()
 
         # start the language server
         self.reset_language_server()
@@ -301,6 +345,63 @@ class SerenaAgent:
 
         if self._project_activation_callback is not None:
             self._project_activation_callback()
+
+    def _update_active_tools(self) -> None:
+        """Update active tools based on project, context, and mode configurations."""
+        assert self.project_config is not None
+
+        # Start with all tools
+        self._active_tools = dict(self._all_tools)
+
+        # Get excluded tools from context and modes
+        context_mode_excluded_tools = set(self.prompt_factory.get_context_and_modes_excluded_tools())
+
+        # Exclude tools from context and modes
+        if context_mode_excluded_tools:
+            self._active_tools = {
+                key: tool for key, tool in self._active_tools.items() if tool.get_name() not in context_mode_excluded_tools
+            }
+            log.info(f"Tools excluded by context/modes: {', '.join(sorted(context_mode_excluded_tools))}")
+
+        # Handle project-specific tool exclusions (highest priority)
+        if self.project_config.excluded_tools:
+            self._active_tools = {
+                key: tool for key, tool in self._active_tools.items() if tool.get_name() not in self.project_config.excluded_tools
+            }
+            log.info(f"Tools excluded by project config: {', '.join(sorted(self.project_config.excluded_tools))}")
+
+        # if read_only mode is enabled, exclude all editing tools
+        if self.project_config.read_only:
+            self._active_tools = {key: tool for key, tool in self._active_tools.items() if not key.can_edit()}
+            log.info("Project is in read-only mode. Editing tools excluded.")
+
+        # Log the final set of active tools
+        context_name = self.prompt_factory.context.name if self.prompt_factory.context else "none"
+        mode_names = ", ".join([mode.name for mode in self.prompt_factory.modes]) if self.prompt_factory.modes else "none"
+        log.info(
+            f"Active tools for project '{self.project_config.project_name}' (context: {context_name}, modes: {mode_names}): "
+            f"{', '.join(self.get_active_tool_names())}"
+        )
+
+    def set_modes(self, modes: list[str]) -> str:
+        """
+        Set new modes and update the active tools.
+
+        :param modes: List of mode names or paths
+        :return: Success message or error
+        """
+        try:
+            self.prompt_factory.set_modes(modes)
+            mode_names = [mode.name for mode in self.prompt_factory.modes]
+            log.info(f"Changed modes to: {', '.join(mode_names)}")
+
+            if self.project_config is not None:
+                self._update_active_tools()
+
+            return SUCCESS_RESULT
+        except Exception as e:
+            log.error(f"Failed to set modes {modes}: {e}")
+            return f"Error setting modes: {e}"
 
     def get_active_tool_names(self) -> list[str]:
         """
@@ -1371,6 +1472,21 @@ class InitialInstructionsTool(Tool):
         You should always call this tool before starting to work (including using any other tool) on any programming task!
         """
         return self.agent.prompt_factory.create_system_prompt()
+
+
+class SetModesTool(Tool, ToolMarkerDoesNotRequireActiveProject):
+    """
+    Sets the current modes for the agent.
+    """
+
+    def apply(self, modes: list[str]) -> str:
+        """
+        Sets the current modes for the agent, which affects the system prompt and active tools.
+
+        :param modes: List of mode names or paths to mode YAML files
+        :return: Success message or error
+        """
+        return self.agent.set_modes(modes)
 
 
 def iter_tool_classes(same_module_only: bool = True) -> Generator[type[Tool], None, None]:

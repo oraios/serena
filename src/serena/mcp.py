@@ -93,13 +93,21 @@ def make_tool(
     )
 
 
-def create_mcp_server(project_file_path: str | None, host: str = "0.0.0.0", port: int = 8000) -> FastMCP:
+def create_mcp_server(
+    project_file_path: str | None = None,
+    host: str = "0.0.0.0",
+    port: int = 8000,
+    context: str | None = None,
+    modes: list[str] | None = None,
+) -> FastMCP:
     """
     Create an MCP server.
 
     :param project_file_path: The path to the project file, or None.
     :param host: The host to bind to
     :param port: The port to bind to
+    :param context: The name or path to the context configuration to use
+    :param modes: The list of names or paths to the mode configurations to use
     """
     mcp: FastMCP | None = None
 
@@ -107,7 +115,9 @@ def create_mcp_server(project_file_path: str | None, host: str = "0.0.0.0", port
         agent = SerenaAgent(
             project_file_path,
             # Callback disabled for the time being (see above)
-            # project_activation_callback=update_tools
+            # project_activation_callback=update_tools,
+            context=context,
+            modes=modes,
         )
     except Exception as e:
         show_fatal_exception_safe(e)
@@ -178,8 +188,27 @@ def create_mcp_server(project_file_path: str | None, host: str = "0.0.0.0", port
     show_default=True,
     help="Port to bind to (for SSE transport).",
 )
+@click.option(
+    "--context",
+    type=str,
+    default=None,
+    help="Context configuration name or path to a YAML file.",
+)
+@click.option(
+    "--mode",
+    "modes",  # Using "modes" as the variable name for multiple values
+    type=str,
+    multiple=True,
+    help="Mode configuration name or path to a YAML file. Can be specified multiple times.",
+)
 def start_mcp_server(
-    project_file_opt: str | None, project_file_arg: str | None, transport: Literal["stdio", "sse"], host: str, port: int
+    project_file_opt: str | None,
+    project_file_arg: str | None,
+    transport: Literal["stdio", "sse"],
+    host: str,
+    port: int,
+    context: str | None,
+    modes: list[str],
 ) -> None:
     """Starts the Serena MCP server.
 
@@ -188,7 +217,17 @@ def start_mcp_server(
     # Prioritize the positional argument if provided
     # This is for backward compatibility with the old CLI, should be removed in the future!
     project_file = project_file_arg if project_file_arg is not None else project_file_opt
-    mcp_server = create_mcp_server(project_file_path=project_file, host=host, port=port)
+
+    # Convert empty list to None to simplify logic in SerenaAgent
+    modes_param = modes if modes else None
+
+    # Log context and mode information
+    if context:
+        log.info(f"Using context: {context}")
+    if modes_param:
+        log.info(f"Using modes: {', '.join(modes_param)}")
+
+    mcp_server = create_mcp_server(project_file_path=project_file, host=host, port=port, context=context, modes=modes_param)
 
     # log after server creation such that the log appears in the GUI
     if project_file_arg is not None:

@@ -2,7 +2,15 @@
 # black: skip
 # mypy: ignore-errors
 
-from .multilang_prompt import MultiLangContainer, MultiLangPromptTemplateCollection, PromptList
+from typing import Optional, List
+
+from .multilang_prompt import (
+    MultiLangContainer,
+    MultiLangPromptTemplateCollection,
+    PromptList,
+    ContextConfig,
+    ModeConfig,
+)
 
 
 class PromptFactory:
@@ -12,6 +20,8 @@ class PromptFactory:
         self.lang_shortcode = lang_shortcode
         self.collection = MultiLangPromptTemplateCollection()
         self.fallback_mode = fallback_mode
+        self.context: Optional[ContextConfig] = None
+        self.modes: List[ModeConfig] = []
 
     def _format_prompt(self, prompt_name: str, kwargs) -> str:
         del kwargs["self"]
@@ -21,6 +31,43 @@ class PromptFactory:
     def _get_list(self, prompt_name: str) -> PromptList:
         mpl = self.collection.get_multilang_prompt_list(prompt_name)
         return mpl.get_item(self.lang_shortcode, self.fallback_mode)
+
+    def set_context(self, context_name_or_path: Optional[str]) -> None:
+        """
+        Set the current context.
+
+        :param context_name_or_path: Name of a built-in context, path to a YAML file, or None to clear
+        """
+        if context_name_or_path is None:
+            self.context = None
+        else:
+            self.context = self.collection.get_context(context_name_or_path)
+
+    def set_modes(self, mode_names_or_paths: List[str]) -> None:
+        """
+        Set the current modes.
+
+        :param mode_names_or_paths: List of built-in mode names or paths to YAML files
+        """
+        self.modes = []
+        for mode in mode_names_or_paths:
+            self.modes.append(self.collection.get_mode(mode))
+
+    def get_context_and_modes_excluded_tools(self) -> List[str]:
+        """
+        Get the combined list of excluded tools from the current context and modes.
+
+        :return: List of tool names to exclude
+        """
+        excluded_tools = []
+        if self.context:
+            excluded_tools.extend(self.context.excluded_tools)
+
+        # Collect all excluded tools from modes
+        for mode in self.modes:
+            excluded_tools.extend(mode.excluded_tools)
+
+        return list(set(excluded_tools))  # Deduplicate
 
     def create_onboarding_prompt(self, *, system) -> str:
         return self._format_prompt("onboarding_prompt", locals())
@@ -41,4 +88,16 @@ class PromptFactory:
         return self._format_prompt("prepare_for_new_conversation", locals())
 
     def create_system_prompt(self) -> str:
-        return self._format_prompt("system_prompt", locals())
+        # Prepare context and modes for the template
+        context_str = ""
+        if self.context:
+            context_str = self.context.system_prompt_addition
+
+        mode_strings = []
+        for mode in self.modes:
+            mode_strings.append(mode.system_prompt_addition)
+
+        # Create locals for the template
+        template_locals = {"self": self, "context": context_str, "modes": mode_strings}
+
+        return self._format_prompt("system_prompt", template_locals)
