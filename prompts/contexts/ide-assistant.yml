@@ -1,0 +1,13 @@
+name: ide-assistant
+description: Non-symbolic editing tools and general shell tool are excluded
+system_prompt_extension: |
+  You are running in IDE assistant context where file operations and shell commands are handled by the IDE.
+  You should exclusively use symbolic tools for exploring and modifying the code, as the IDE handles
+  file-level operations.
+excluded_tools:
+  - create_text_file
+  - delete_lines
+  - replace_lines
+  - insert_at_line
+  - execute_shell_command
+tool_description_overrides: {}

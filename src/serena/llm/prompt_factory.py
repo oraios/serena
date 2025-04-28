@@ -2,6 +2,8 @@
 # black: skip
 # mypy: ignore-errors
 
+from typing import List, Optional
+
 from .multilang_prompt import MultiLangContainer, MultiLangPromptTemplateCollection, PromptList
 
 
@@ -12,6 +14,8 @@ class PromptFactory:
         self.lang_shortcode = lang_shortcode
         self.collection = MultiLangPromptTemplateCollection()
         self.fallback_mode = fallback_mode
+        self.context_extension = ""
+        self.mode_extensions = []
 
     def _format_prompt(self, prompt_name: str, kwargs) -> str:
         del kwargs["self"]
@@ -21,24 +25,54 @@ class PromptFactory:
     def _get_list(self, prompt_name: str) -> PromptList:
         mpl = self.collection.get_multilang_prompt_list(prompt_name)
         return mpl.get_item(self.lang_shortcode, self.fallback_mode)
-
-    def create_onboarding_prompt(self, *, system) -> str:
-        return self._format_prompt("onboarding_prompt", locals())
-
-    def create_think_about_collected_information(self) -> str:
-        return self._format_prompt("think_about_collected_information", locals())
-
-    def create_think_about_task_adherence(self) -> str:
-        return self._format_prompt("think_about_task_adherence", locals())
-
-    def create_think_about_whether_you_are_done(self) -> str:
-        return self._format_prompt("think_about_whether_you_are_done", locals())
-
-    def create_summarize_changes(self) -> str:
-        return self._format_prompt("summarize_changes", locals())
-
-    def create_prepare_for_new_conversation(self) -> str:
-        return self._format_prompt("prepare_for_new_conversation", locals())
+        
+    def set_context(self, context_extension: str) -> None:
+        """Set the context extension for the system prompt."""
+        self.context_extension = context_extension
+        
+    def set_modes(self, mode_extensions: List[str]) -> None:
+        """Set the mode extensions for the system prompt."""
+        self.mode_extensions = mode_extensions
 
     def create_system_prompt(self) -> str:
-        return self._format_prompt("system_prompt", locals())
+        """Create the system prompt with context and mode extensions."""
+        base_prompt = self._format_prompt("system_prompt", locals())
+        
+        # Add context and mode extensions
+        extensions = []
+        if self.context_extension:
+            extensions.append(self.context_extension)
+        
+        for mode_extension in self.mode_extensions:
+            extensions.append(mode_extension)
+            
+        # If no extensions, return the base prompt
+        if not extensions:
+            return base_prompt
+            
+        # Combine the base prompt with the extensions
+        combined_prompt = base_prompt + "\n\n" + "\n\n".join(extensions)
+        return combined_prompt
+
+    def create_onboarding_prompt(self, *, system) -> str:
+        return self._format_prompt('onboarding_prompt', locals())
+
+    def create_think_about_collected_information(self) -> str:
+        return self._format_prompt('think_about_collected_information', locals())
+
+    def create_think_about_task_adherence(self) -> str:
+        return self._format_prompt('think_about_task_adherence', locals())
+
+    def create_think_about_whether_you_are_done(self) -> str:
+        return self._format_prompt('think_about_whether_you_are_done', locals())
+
+    def create_summarize_changes(self) -> str:
+        return self._format_prompt('summarize_changes', locals())
+
+    def create_prepare_for_new_conversation(self) -> str:
+        return self._format_prompt('prepare_for_new_conversation', locals())
+
+    def create_system_prompt(self) -> str:
+        return self._format_prompt('system_prompt', locals())
+
+    

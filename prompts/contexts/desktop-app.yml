@@ -1,0 +1,7 @@
+name: desktop-app
+description: All tools included for desktop app context
+system_prompt_extension: |
+  You are running in desktop app context with all tools available. You should use the symbolic tools
+  when possible, but you also have access to file and shell operations for more complex tasks.
+excluded_tools: []
+tool_description_overrides: {}

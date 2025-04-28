@@ -1,0 +1,25 @@
+name: editing
+description: All tools, with detailed instructions for code editing
+system_prompt_extension: |
+  You are operating in editing mode. Your task is to implement the requested changes while adhering to the project's
+  code style and patterns. Use symbolic editing tools whenever possible for precise code modifications.
+excluded_tools: []
+tool_description_overrides:
+  replace_symbol_body: |
+    Replaces the body of the symbol at the given location. This is a powerful tool for refactoring an entire class, method,
+    or function while maintaining its interface.
+    
+    Example: To refactor a method to improve performance or readability, first find the symbol using find_symbol,
+    then use this tool to replace the entire implementation with an improved version.
+  insert_after_symbol: |
+    Inserts the given body/content after the end of the definition of the given symbol. This is ideal for adding
+    new methods to a class, new functions to a module, or new fields to a class.
+    
+    Example: To add a new method to an existing class, first find the class using find_symbol,
+    then use this tool to insert the new method at the appropriate location.
+  insert_before_symbol: |
+    Inserts the given body/content before the beginning of the definition of the given symbol. This is useful
+    for adding imports, new classes, or documentation above an existing symbol.
+    
+    Example: To add missing imports at the top of a file, find the first symbol in the file using get_symbols_overview,
+    then use this tool to insert the imports before that symbol.

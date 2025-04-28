@@ -15,6 +15,10 @@ from logging import Logger
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self, TypeVar, Union, cast
 
+# Import here so we have the type
+if TYPE_CHECKING:
+    from serena.util.config_loader import ConfigData
+
 import yaml
 from sensai.util import logging
 from sensai.util.logging import FallbackHandler
@@ -182,12 +186,20 @@ class LinesRead:
 
 
 class SerenaAgent:
-    def __init__(self, project_file_path: str | None = None, project_activation_callback: Callable[[], None] | None = None):
+    def __init__(
+        self,
+        project_file_path: str | None = None,
+        project_activation_callback: Callable[[], None] | None = None,
+        context: str | None = None,
+        modes: list[str] | None = None,
+    ):
         """
         :param project_file_path: the configuration file (.yml) of the project to load immediately;
             if None, do not load any project (must use project selection tool to activate a project).
             If a project is provided, the corresponding language server will be started.
         :param project_activation_callback: a callback function to be called when a project is activated.
+        :param context: the context name or path to context file to use
+        :param modes: list of mode names or paths to mode files to use
         """
         # obtain serena configuration
         self.serena_config = SerenaConfig()
@@ -212,8 +224,29 @@ class SerenaAgent:
         log.info(f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()})")
         log.info("Available projects: {}".format(", ".join(self.serena_config.project_names)))
 
+        # Initialize the prompt factory
         self.prompt_factory = PromptFactory()
         self._project_activation_callback = project_activation_callback
+
+        # Load context and mode configuration
+        from serena.util.config_loader import ConfigData, ConfigLoader
+
+        self.config_loader = ConfigLoader()
+        self.current_context: ConfigData | None = None
+        self.current_modes: list[ConfigData] = []
+
+        # Set context and modes if provided
+        if context is not None:
+            self.set_context(context)
+        else:
+            # Default to desktop-app context if none provided
+            self.set_context("desktop-app")
+
+        if modes is not None:
+            self.set_modes(modes)
+        else:
+            # Default to interactive mode if none provided
+            self.set_modes(["interactive"])
 
         # project-specific instances, which will be initialized upon project activation
         self.project_config: ProjectConfig | None = None
@@ -231,7 +264,9 @@ class SerenaAgent:
                     log.info(f"Excluding tool '{tool_instance.get_name()}' because project activation is disabled in configuration")
                     continue
             self._all_tools[tool_class] = tool_instance
-        self._active_tools = dict(self._all_tools)
+
+        # Apply context and mode tool configurations
+        self._update_active_tools()
         log.info(f"Loaded tools ({len(self._all_tools)}): {', '.join([tool.get_name() for tool in self._all_tools.values()])}")
 
         # If GUI log window is enabled, set the tool names for highlighting
@@ -270,25 +305,149 @@ class SerenaAgent:
             # When project activation is not enabled, we only expose the active tools
             return list(self._active_tools.values())
 
+    def set_context(self, context: str) -> None:
+        """
+        Set the current context configuration.
+
+        :param context: Name or path of the context to use
+        """
+        try:
+            context_config = self.config_loader.get_context(context)
+            self.current_context = context_config
+
+            # Update the prompt factory with the new context
+            self.prompt_factory.set_context(context_config.system_prompt_extension)
+
+            # Update tool configurations
+            self._update_active_tools()
+
+            log.info(f"Set context to '{context_config.name}': {context_config.description}")
+        except Exception as e:
+            log.error(f"Failed to set context '{context}': {e}")
+            raise
+
+    def set_modes(self, modes: list[str]) -> None:
+        """
+        Set the current mode configurations.
+
+        :param modes: List of mode names or paths to use
+        """
+        try:
+            # Check for tool activation conflicts between modes
+            mode_configs = [self.config_loader.get_mode(mode) for mode in modes]
+
+            # Check for conflicts in tool exclusions between modes
+            self._check_mode_conflicts(mode_configs)
+
+            self.current_modes = mode_configs
+
+            # Update the prompt factory with the new modes
+            mode_extensions = [mode.system_prompt_extension for mode in mode_configs]
+            self.prompt_factory.set_modes(mode_extensions)
+
+            # Update tool configurations
+            self._update_active_tools()
+
+            mode_names = [mode.name for mode in mode_configs]
+            log.info(f"Set modes to {mode_names}")
+        except Exception as e:
+            log.error(f"Failed to set modes {modes}: {e}")
+            raise
+
+    def _check_mode_conflicts(self, mode_configs: list["ConfigData"]) -> None:
+        """
+        Check for conflicts in tool exclusions between modes.
+
+        :param mode_configs: List of mode configurations to check
+        :raises ValueError: If there are conflicts between modes
+        """
+        if not mode_configs:
+            return
+
+        # Check for conflicts in tool exclusions
+        tools_excluded_by_mode: dict[str, str] = {}
+        for mode in mode_configs:
+            for tool in mode.excluded_tools:
+                if tool in tools_excluded_by_mode:
+                    # Another mode already excludes this tool
+                    other_mode = tools_excluded_by_mode[tool]
+                    if other_mode != mode.name:
+                        raise ValueError(
+                            f"Conflict between modes: Tool '{tool}' is excluded in mode '{other_mode}' but also in mode '{mode.name}'"
+                        )
+                else:
+                    tools_excluded_by_mode[tool] = mode.name
+
+    def _update_active_tools(self) -> None:
+        """
+        Update the active tools based on context, modes, and project configuration.
+
+        Priority order:
+        1. Project-specific exclusions (highest priority)
+        2. Context exclusions
+        3. Mode exclusions
+        """
+        # Start with all tools
+        self._active_tools = dict(self._all_tools)
+
+        # Collect all excluded tools
+        excluded_tools = set()
+
+        # Apply mode exclusions
+        for mode in self.current_modes:
+            excluded_tools.update(mode.excluded_tools)
+
+        # Apply context exclusions (overrides mode exclusions)
+        if self.current_context:
+            excluded_tools.update(self.current_context.excluded_tools)
+
+        # Apply the exclusions
+        if excluded_tools:
+            self._active_tools = {key: tool for key, tool in self._active_tools.items() if tool.get_name() not in excluded_tools}
+            log.info(f"Tools excluded by context/mode: {sorted(excluded_tools)}")
+
+        # Apply tool description overrides from context and modes
+        if self.current_context:
+            self._apply_tool_description_overrides(self.current_context.tool_description_overrides)
+
+        for mode in self.current_modes:
+            self._apply_tool_description_overrides(mode.tool_description_overrides)
+
+        log.info(f"Active tools after context/mode ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
+
+    def _apply_tool_description_overrides(self, overrides: dict[str, str]) -> None:
+        """
+        Apply tool description overrides from context or mode configurations.
+
+        :param overrides: Dictionary of tool name to description override
+        """
+        for tool_name, description in overrides.items():
+            for tool_class, tool in self._all_tools.items():
+                if tool.get_name() == tool_name:
+                    # Use monkey patching to override the docstring
+                    # This is hacky but effective for this use case
+                    tool.__class__.__doc__ = description
+                    break
+
     def activate_project(self, project_config: ProjectConfig) -> None:
         log.info(f"Activating {project_config}")
         self.project_config = project_config
 
-        # handle project-specific tool exclusions (if any)
+        # handle project-specific tool exclusions (if any) - highest priority
+        excluded_by_project = set()
         if self.project_config.excluded_tools:
-            self._active_tools = {
-                key: tool for key, tool in self._all_tools.items() if tool.get_name() not in project_config.excluded_tools
-            }
-            log.info(f"Active tools after exclusions ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
-        else:
-            self._active_tools = dict(self._all_tools)
+            excluded_by_project = self.project_config.excluded_tools
+            self._active_tools = {key: tool for key, tool in self._active_tools.items() if tool.get_name() not in excluded_by_project}
+            log.info(f"Tools excluded by project: {sorted(excluded_by_project)}")
+            log.info(f"Active tools after project exclusions ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
 
         # if read_only mode is enabled, exclude all editing tools
         if self.project_config.read_only:
+            editing_tools_before = {key for key, tool in self._active_tools.items() if key.can_edit()}
             self._active_tools = {key: tool for key, tool in self._active_tools.items() if not key.can_edit()}
-            log.info(
-                f"Project is in read-only mode. Editing tools excluded. Active tools ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}"
-            )
+            editing_tools_excluded = {self._all_tools[key].get_name() for key in editing_tools_before}
+            log.info(f"Editing tools excluded due to read-only mode: {sorted(editing_tools_excluded)}")
+            log.info(f"Project is in read-only mode. Active tools ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
 
         # start the language server
         self.reset_language_server()
@@ -1211,6 +1370,26 @@ class PrepareForNewConversationTool(Tool):
         Instructions for preparing for a new conversation. This tool should only be called on explicit user request.
         """
         return self.prompt_factory.create_prepare_for_new_conversation()
+
+
+class SetModesTool(Tool, ToolMarkerDoesNotRequireActiveProject):
+    """
+    Changes the current operating modes of the agent.
+    """
+
+    def apply(self, modes: list[str]) -> str:
+        """
+        Changes the current operating modes of the agent.
+
+        :param modes: List of mode names to switch to (e.g. ["planning"], ["editing"], ["one-shot"], ["interactive"]),
+                     or paths to custom mode configuration files
+        :return: Message indicating success or failure
+        """
+        try:
+            self.agent.set_modes(modes)
+            return f"Successfully set modes to: {modes}"
+        except Exception as e:
+            return f"Failed to set modes: {e}"
 
 
 class SearchForPatternTool(Tool):
