@@ -1,0 +1,7 @@
+name: desktop-app
+description: Serena running as a desktop application with all features enabled
+tool_settings:
+  included_tools: []
+  excluded_tools: []
+prompt_extension: |
+  You are running in a desktop application context with all features enabled.

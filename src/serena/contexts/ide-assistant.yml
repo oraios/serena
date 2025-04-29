@@ -1,0 +1,14 @@
+name: ide-assistant
+description: Serena running as an IDE assistant with symbolic operations only
+tool_settings:
+  included_tools: []
+  excluded_tools:
+    - create_text_file
+    - read_file
+    - delete_lines
+    - replace_lines
+    - insert_at_line
+    - execute_shell_command
+prompt_extension: |
+  You are running as an IDE assistant. Use only symbolic operations as the non-symbolic file operations
+  and shell commands are handled by the IDE itself.

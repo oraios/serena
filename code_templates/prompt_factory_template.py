@@ -2,6 +2,7 @@
 # black: skip
 # mypy: ignore-errors
 
+from typing import Optional, List
 from .multilang_prompt import MultiLangContainer, MultiLangPromptTemplateCollection, PromptList
 
 
@@ -17,7 +18,6 @@ class PromptFactory:
         del kwargs["self"]
         mpt = self.collection.get_multilang_prompt_template(prompt_name)
         return mpt.get_item(self.lang_shortcode, self.fallback_mode).instantiate(**kwargs)
-
     def _get_list(self, prompt_name: str) -> PromptList:
         mpl = self.collection.get_multilang_prompt_list(prompt_name)
         return mpl.get_item(self.lang_shortcode, self.fallback_mode)

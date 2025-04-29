@@ -1,0 +1,11 @@
+name: editing
+description: Editing mode with full access to all tools
+tool_settings:
+  included_tools: []
+  excluded_tools: []
+prompt_extension: |
+  You are in editing mode. You should use all available tools to analyze and modify code as needed.
+  Prefer symbolic editing tools whenever possible to make precise changes.
+  
+  Example: Use replace_symbol_body to update function implementations, insert_after_symbol to add new methods, 
+  and insert_before_symbol to add imports.

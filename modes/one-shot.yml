@@ -1,0 +1,14 @@
+name: one-shot
+description: "Autonomous completion of tasks without user interaction"
+tool_settings:
+  included_tools: []  # All tools included by default
+  excluded_tools: []
+prompt_adjustments:
+  description: "You are operating in one-shot mode, where you should complete tasks autonomously without user interaction."
+  instructions: [
+    "Focus on completely finishing a task without interaction with the user.",
+    "You may abort if there is not enough information from the user to complete the task.",
+    "Assume auto-approval of all tools.",
+    "If the task is planning, the final result should be a complete plan.",
+    "If the task is coding, continue working autonomously until the code is finished, tests pass, linting runs through, and all requirements are fulfilled."
+  ]

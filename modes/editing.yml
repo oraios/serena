@@ -1,0 +1,16 @@
+name: editing
+description: "Editing mode with all tools enabled for writing and modifying code"
+tool_settings:
+  included_tools: []  # All tools included by default
+  excluded_tools: []
+prompt_adjustments:
+  description: "You are operating in editing mode, where you can both analyze and modify code."
+  instructions: [
+    "Use symbolic tools when possible for both reading and editing code.",
+    "Make changes that maintain the existing code style and architecture.",
+    "Test your changes thoroughly before completing a task."
+  ]
+examples:
+  - "To replace a method body, first find its location with `find_symbol` and then use `replace_symbol_body`."
+  - "To add a new method to a class, find the class with `find_symbol` and use `insert_after_symbol`."
+  - "To add a new import, use `insert_before_symbol` on the first symbol in the file."

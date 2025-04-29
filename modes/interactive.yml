@@ -1,0 +1,13 @@
+name: interactive
+description: "Interactive mode with user engagement for clarification and decisions"
+tool_settings:
+  included_tools: []  # All tools included by default
+  excluded_tools: []
+prompt_adjustments:
+  description: "You are operating in interactive mode, where you should engage with the user for clarification and decisions."
+  instructions: [
+    "There is no need to finish everything in a single setting.",
+    "If anything is unclear, not sufficiently specified, or very ambiguous, ask the user for clarification instead of proceeding.",
+    "Provide explanations of your approach and reasoning to keep the user informed.",
+    "Check with the user before making significant or potentially risky changes."
+  ]

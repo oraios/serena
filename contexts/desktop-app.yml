@@ -1,0 +1,8 @@
+name: desktop-app
+description: "Full Serena instance within desktop application with all tools included"
+tool_settings:
+  included_tools: []  # All tools included by default
+  excluded_tools: []
+prompt_adjustments:
+  description: "You are using the full version of Serena with all tools available."
+  instructions: []

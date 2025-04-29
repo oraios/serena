@@ -1,0 +1,8 @@
+name: agent
+description: Serena running as an agent with instructions directly as system prompt
+tool_settings:
+  included_tools: []
+  excluded_tools: 
+    - initial_instructions
+prompt_extension: |
+  You are running as an agent with direct system prompting.

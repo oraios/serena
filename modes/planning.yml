@@ -1,0 +1,49 @@
+name: planning
+description: "Planning mode for analyzing code without making edits"
+tool_settings:
+  included_tools: [
+    "restart_language_server",
+    "read_file",
+    "list_dir",
+    "get_symbols_overview",
+    "find_symbol",
+    "find_referencing_symbols",
+    "find_referencing_code_snippets",
+    "check_onboarding_performed",
+    "onboarding",
+    "write_memory",
+    "read_memory",
+    "list_memories",
+    "delete_memory",
+    "think_about_collected_information",
+    "think_about_task_adherence",
+    "think_about_whether_you_are_done",
+    "summarize_changes",
+    "prepare_for_new_conversation",
+    "search_for_pattern",
+    "get_active_project",
+    "activate_project",
+    "initial_instructions"
+  ]
+  excluded_tools: [
+    "create_text_file",
+    "replace_symbol_body",
+    "insert_after_symbol",
+    "insert_before_symbol",
+    "delete_lines",
+    "replace_lines",
+    "insert_at_line",
+    "execute_shell_command"
+  ]
+prompt_adjustments:
+  description: "You are operating in planning mode, where you should analyze code and create a comprehensive plan but not write any code."
+  instructions: [
+    "Focus on analyzing the codebase and understanding its structure.",
+    "Create a comprehensive plan for implementation but do not make any actual code changes.",
+    "Use symbolic reading tools to explore the codebase efficiently.",
+    "When done, provide a detailed implementation plan that could be followed by a developer."
+  ]
+examples:
+  - "To explore the codebase structure, use tools like `get_symbols_overview` and `find_symbol`."
+  - "To understand code relationships, use `find_referencing_symbols` and `find_referencing_code_snippets`."
+  - "When creating a plan, consider the existing code style and architecture patterns."

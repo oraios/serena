@@ -1,0 +1,11 @@
+name: interactive
+description: Interactive mode with frequent user communication
+tool_settings:
+  included_tools: []
+  excluded_tools: []
+prompt_extension: |
+  You are in interactive mode. No need to finish everything in a single setting.
+  If anything is unclear, not sufficiently specified, or very ambiguous, ask the user
+  for clarification instead of continuing with assumptions.
+  
+  Provide informative results for intermediate steps and explain your reasoning.

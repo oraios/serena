@@ -1,0 +1,8 @@
+name: agent
+description: "Serena used as an agent where system prompt is provided directly"
+tool_settings:
+  included_tools: []  # All tools included by default
+  excluded_tools: ["initial_instructions"]  # Exclude the instructions tool
+prompt_adjustments:
+  description: "You are operating as a Serena agent with the system prompt provided directly."
+  instructions: []

@@ -2,7 +2,10 @@
 # black: skip
 # mypy: ignore-errors
 
+from typing import List, Optional
+
 from .multilang_prompt import MultiLangContainer, MultiLangPromptTemplateCollection, PromptList
+from ..context_mode import ContextConfig, ModeConfig
 
 
 class PromptFactory:
@@ -40,5 +43,5 @@ class PromptFactory:
     def create_prepare_for_new_conversation(self) -> str:
         return self._format_prompt("prepare_for_new_conversation", locals())
 
-    def create_system_prompt(self) -> str:
+    def create_system_prompt(self, context: Optional[ContextConfig] = None, modes: Optional[List[ModeConfig]] = None) -> str:
         return self._format_prompt("system_prompt", locals())

@@ -1,0 +1,301 @@
+    def _apply_project_tool_exclusions(self) -> None:
+        """Apply tool exclusions from the project configuration."""
+        if not self.project_config:
+            return
+        
+        # Apply project-specific exclusions
+        if self.project_config.excluded_tools:
+            self._active_tools = {
+                key: tool for key, tool in self._active_tools.items() 
+                if tool.get_name() not in self.project_config.excluded_tools
+            }
+            log.info(f"Active tools after project exclusions ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
+        
+        # If read_only mode is enabled, exclude all editing tools
+        if self.project_config.read_only:
+            self._active_tools = {key: tool for key, tool in self._active_tools.items() if not key.can_edit()}
+            log.info(
+                f"Project is in read-only mode. Editing tools excluded. Active tools ({len(self._active_tools)}): "
+                f"{', '.join(self.get_active_tool_names())}"
+    def _apply_context_and_mode_tool_settings(self) -> None:
+        """Apply tool settings from context and mode configurations."""
+        # Start with all tools
+        self._active_tools = dict(self._all_tools)
+        
+        # Apply context and mode tool settings
+        if self.context_config or self.mode_configs:
+            included_tools, excluded_tools = resolve_tool_activations(self.context_config, self.mode_configs)
+            
+            # Apply explicit includes if any are specified
+            if included_tools:
+                self._active_tools = {
+                    key: tool for key, tool in self._all_tools.items() 
+                    if tool.get_name() in included_tools
+                }
+            
+            # Apply excludes
+            if excluded_tools:
+                self._active_tools = {
+    def set_modes(self, mode_names_or_paths: list[str]) -> None:
+        """
+        Set new modes for the agent.
+        
+        :param mode_names_or_paths: List of mode names or paths
+        """
+        # Clear current modes
+        self.mode_configs = []
+        
+        # Load new modes
+        for mode_name_or_path in mode_names_or_paths:
+            mode_config = load_mode_config(mode_name_or_path)
+            self.mode_configs.append(mode_config)
+        
+        log.info(f"Updated modes: {', '.join([mode.name for mode in self.mode_configs])}")
+        
+        # Reapply tool settings
+        self._apply_context_and_mode_tool_settings()
+        
+        # If project is active, apply project tool exclusions
+        if self.project_config:
+            self._apply_project_tool_exclusions()
+                    key: tool for key, tool in self._active_tools.items() 
+                    if tool.get_name() not in excluded_tools
+                }
+                
+            log.info(f"Active tools after context/mode configuration ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
+            )
+
+    def is_language_server_running(self) -> bool:
+        return self.language_server is not None and self.language_server.is_running()
+
+    def reset_language_server(self) -> None:
+        """
+        Starts/resets the language server for the current project
+        """
+        # stop the language server if it is running
+
+    def get_system_prompt(self) -> str:
+        """
+        Get the system prompt with context and mode information.
+        
+        :return: The system prompt
+        """
+        return self.prompt_factory.create_system_prompt(
+            context=self.context_config,
+            modes=self.mode_configs
+        )
+        if self.is_language_server_running():
+            log.info("Stopping the language server ...")
+            assert self.language_server is not None
+            self.language_server.stop()
+            self.language_server = None
+
+        # instantiate and start the language server
+        assert self.project_config is not None
+        multilspy_config = MultilspyConfig(code_language=self.project_config.language, ignored_paths=self.project_config.ignored_paths)
+        ls_logger = MultilspyLogger()
+        self.language_server = SyncLanguageServer.create(
+            multilspy_config,
+            ls_logger,
+            self.project_config.project_root,
+            add_gitignore_content_to_config=self.project_config.ignore_all_files_in_gitignore,
+        )
+        self.language_server.start()
+        if not self.language_server.is_running():
+            raise RuntimeError(f"Failed to start the language server for {self.project_config}")
+
+    def get_tool(self, tool_class: type[TTool]) -> TTool:
+        return self._all_tools[tool_class]  # type: ignore
+
+    def print_tool_overview(self) -> None:
+        _print_tool_overview(self._active_tools.values())
+
+    def mark_file_modified(self, relativ_path: str) -> None:
+        assert self.lines_read is not None
+        self.lines_read.invalidate_lines_read(relativ_path)
+
+    def __del__(self) -> None:
+        """
+        Destructor to clean up the language server instance and GUI logger
+        """
+        if not hasattr(self, "_is_initialized"):
+            return
+        log.info("SerenaAgent is shutting down ...")
+        if self.is_language_server_running():
+            log.info("Stopping the language server ...")
+            assert self.language_server is not None
+            self.language_server.stop()
+        if self._gui_log_handler:
+            log.info("Stopping the GUI log window ...")
+            self._gui_log_handler.stop_viewer()
+            Logger.root.removeHandler(self._gui_log_handler)
+
+
+class MemoriesManager:
+    def __init__(self, memory_dir: str):
+        self._memory_dir = Path(memory_dir)
+        self._memory_dir.mkdir(parents=True, exist_ok=True)
+
+    def _get_memory_file_path(self, memory_file_name: str) -> Path:
+        return self._memory_dir / memory_file_name
+
+    def load_memory(self, memory_file_name: str) -> str:
+        memory_file_path = self._get_memory_file_path(memory_file_name)
+        if not memory_file_path.exists():
+            return f"Memory file {memory_file_name} not found, consider creating it with the `write_memory` tool if you need it."
+        with open(memory_file_path, encoding="utf-8") as f:
+            return f.read()
+
+    def save_memory(self, memory_file_name: str, content: str) -> str:
+        memory_file_path = self._get_memory_file_path(memory_file_name)
+        with open(memory_file_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return f"Memory file {memory_file_name} written."
+
+    def list_memories(self) -> list[str]:
+        return [f.name for f in self._memory_dir.iterdir() if f.is_file()]
+
+    def delete_memory(self, memory_file_name: str) -> str:
+        memory_file_path = self._get_memory_file_path(memory_file_name)
+        memory_file_path.unlink()
+        return f"Memory file {memory_file_name} deleted."
+
+
+class Component(ABC):
+    def __init__(self, agent: "SerenaAgent"):
+        self.agent = agent
+
+    @property
+    def language_server(self) -> SyncLanguageServer:
+        assert self.agent.language_server is not None
+        return self.agent.language_server
+
+    @property
+    def project_root(self) -> str:
+        assert self.project_config is not None
+        return self.project_config.project_root
+
+    @property
+    def project_config(self) -> ProjectConfig:
+        assert self.agent.project_config is not None
+        return self.agent.project_config
+
+    @property
+    def prompt_factory(self) -> PromptFactory:
+        return self.agent.prompt_factory
+
+    @property
+    def memories_manager(self) -> MemoriesManager:
+        assert self.agent.memories_manager is not None
+        return self.agent.memories_manager
+
+    @property
+    def symbol_manager(self) -> SymbolManager:
+        assert self.agent.symbol_manager is not None
+        return self.agent.symbol_manager
+
+    @property
+    def lines_read(self) -> LinesRead:
+        assert self.agent.lines_read is not None
+        return self.agent.lines_read
+
+
+_DEFAULT_MAX_ANSWER_LENGTH = int(2e5)
+
+
+class ToolMarkerCanEdit:
+    """
+    Marker class for all tools that can perform editing operations on files.
+    """
+
+
+class ToolMarkerDoesNotRequireActiveProject:
+    pass
+
+
+class Tool(Component):
+    # NOTE: each tool should implement the apply method, which is then used in
+    # the central method of the Tool class `apply_ex`.
+    # Failure to do so will result in a RuntimeError at tool execution time.
+    # The apply method is not declared as part of the base Tool interface since we cannot
+    # know the signature of the (input parameters of the) method in advance.
+    #
+    # The docstring and types of the apply method are used to generate the tool description
+    # (which is use by the LLM, so a good description is important)
+    # and to validate the tool call arguments.
+
+    @classmethod
+    def get_name(cls) -> str:
+        name = cls.__name__
+        if name.endswith("Tool"):
+            name = name[:-4]
+        # convert to snake_case
+        name = "".join(["_" + c.lower() if c.isupper() else c for c in name]).lstrip("_")
+        return name
+
+    def get_apply_fn(self) -> Callable:
+        apply_fn = getattr(self, "apply")
+        if apply_fn is None:
+            raise RuntimeError(f"apply not defined in {self}. Did you forget to implement it?")
+        return apply_fn
+
+    @classmethod
+    def can_edit(cls) -> bool:
+        """
+        Returns whether this tool can perform editing operations on code.
+
+        :return: True if the tool can edit code, False otherwise
+        """
+        return issubclass(cls, ToolMarkerCanEdit)
+
+    @classmethod
+    def get_tool_description(cls) -> str:
+        docstring = cls.__doc__
+        if docstring is None:
+            return ""
+        return docstring.strip()
+
+    def get_function_description(self) -> str:
+        apply_fn = self.get_apply_fn()
+        docstring = apply_fn.__doc__
+        if docstring is None:
+            raise Exception(f"Missing docstring for {self}")
+        return docstring
+
+    def _log_tool_application(self, frame: Any) -> None:
+        params = {}
+        ignored_params = {"self", "log_call", "catch_exceptions", "args", "apply_fn"}
+        for param, value in frame.f_locals.items():
+            if param in ignored_params:
+                continue
+            if param == "kwargs":
+                params.update(value)
+            else:
+                params[param] = value
+        log.info(f"{self.get_name()}: {dict_string(params)}")
+
+    @staticmethod
+    def _limit_length(result: str, max_answer_chars: int) -> str:
+        if (n_chars := len(result)) > max_answer_chars:
+            result = (
+                f"The answer is too long ({n_chars} characters). "
+                + "Please try a more specific tool query or raise the max_answer_chars parameter."
+            )
+        return result
+
+    def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, **kwargs) -> str:  # type: ignore
+        """
+        Applies the tool with the given arguments
+        """
+        apply_fn = self.get_apply_fn()
+
+        if log_call:
+            self._log_tool_application(inspect.currentframe())
+
+        try:
+            # check whether the tool requires an active project and language server
+            if not isinstance(self, ToolMarkerDoesNotRequireActiveProject):
+                if self.agent.project_config is None:
+                    return (
+                        "Error: No active project. Ask to user to select a project from this list: "
+                        + f"{self.agent.serena_config.project_names}"

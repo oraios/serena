@@ -1,0 +1,18 @@
+name: planning
+description: Planning mode with read-only operations
+tool_settings:
+  included_tools: []
+  excluded_tools:
+    - create_text_file
+    - insert_after_symbol
+    - insert_before_symbol
+    - replace_symbol_body
+    - delete_lines
+    - replace_lines
+    - insert_at_line
+prompt_extension: |
+  You are in planning mode. You should only analyze code and create a comprehensive plan but not write any code.
+  Use the symbolic reading tools to explore the codebase thoroughly. Focus on understanding the existing code structure
+  and creating a detailed plan for implementation.
+  
+  Example: Use find_symbol and find_referencing_symbols to discover how components are connected before planning changes.

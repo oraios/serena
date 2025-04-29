@@ -91,13 +91,25 @@ prompts:
 
     {% if context %}
     ## Context: {{ context.name }}
-    {{ context.prompt_extension }}
+    {{ context.description }}
+    {% for instruction in context.instructions %}
+    - {{ instruction }}
+    {% endfor %}
     {% endif %}
 
     {% if modes %}
     ## Modes: {% for mode in modes %}{{ mode.name }}{% if not loop.last %}, {% endif %}{% endfor %}
     {% for mode in modes %}
     ### {{ mode.name }}
-    {{ mode.prompt_extension }}
+    {{ mode.description }}
+    {% for instruction in mode.instructions %}
+    - {{ instruction }}
+    {% endfor %}
+    {% if mode.examples %}
+    Examples:
+    {% for example in mode.examples %}
+    - {{ example }}
+    {% endfor %}
+    {% endif %}
     {% endfor %}
     {% endif %}
