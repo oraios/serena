@@ -183,6 +183,10 @@ class LanguageServer:
             from multilspy.language_servers.clangd_language_server.clangd_language_server import ClangdLanguageServer
 
             return ClangdLanguageServer(config, logger, repository_root_path)
+        elif config.code_language == Language.PHP:
+            from multilspy.language_servers.intelephense.intelephense import Intelephense
+
+            return Intelephense(config, logger, repository_root_path)
         else:
             logger.log(f"Language {config.code_language} is not supported", logging.ERROR)
             raise MultilspyException(f"Language {config.code_language} is not supported")

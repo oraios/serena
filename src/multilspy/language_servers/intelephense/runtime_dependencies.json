@@ -1,0 +1,10 @@
+{
+  "_description": "Used to download the runtime dependencies for running intelephense. Obtained from https://www.npmjs.com/package/intelephense",
+  "runtimeDependencies": [
+    {
+      "id": "intelephense",
+      "description": "Intelephense package for Linux, OSX, and Windows. Both x64 and arm64 are supported.",
+      "command": "npm install --prefix ./ intelephense@1.14.4"
+    }
+  ]
+}
