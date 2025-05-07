@@ -175,6 +175,10 @@ class LanguageServer:
             from multilspy.language_servers.solargraph.solargraph import Solargraph
 
             return Solargraph(config, logger, repository_root_path)
+        elif config.code_language == Language.SWIFT:
+            from multilspy.language_servers.sourcekit_lsp.sourcekit_lsp import SourceKitLSP
+
+            return SourceKitLSP(config, logger, repository_root_path)
         elif config.code_language == Language.DART:
             from multilspy.language_servers.dart_language_server.dart_language_server import DartLanguageServer
 
