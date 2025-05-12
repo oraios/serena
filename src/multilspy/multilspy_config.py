@@ -37,6 +37,7 @@ class Language(str, Enum):
     RUBY = "ruby"
     DART = "dart"
     CPP = "cpp"
+    PHP = "php"
 
     def __str__(self) -> str:
         return self.value
@@ -65,6 +66,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.kt", "*.kts")
             case self.DART:
                 return FilenameMatcher("*.dart")
+            case self.PHP:
+                return FilenameMatcher("*.php")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
