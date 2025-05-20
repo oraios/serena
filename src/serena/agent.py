@@ -821,7 +821,9 @@ class FindSymbolTool(Tool):
             no content will be returned. Don't adjust unless there is really no other way to get the content
             required for the task. Instead, if the output is too long, you should
             make a stricter query.
-        :return: a list of symbols (with symbol locations) that match the given name in JSON format
+        :return: a list of symbols (with symbol locations) that match the given name in JSON format.
+            Each symbol includes both start location (in "location") and end location (in "end_location") 
+            to facilitate accurate code range identification.
         """
         include_kinds = cast(list[SymbolKind] | None, include_kinds)
         exclude_kinds = cast(list[SymbolKind] | None, exclude_kinds)

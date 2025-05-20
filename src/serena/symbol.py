@@ -87,8 +87,14 @@ class Symbol(ToStringMixin):
         return self.s["location"]["range"]["start"]
 
     @property
-    def body_end_position(self) -> Position:
-        return self.s["location"]["range"]["end"]
+    def body_end_position(self) -> Position | None:
+        """
+        :return: the end position of the symbol body or None if not available
+        """
+        try:
+            return self.s["location"]["range"]["end"]
+        except (KeyError, TypeError):
+            return None
 
     @property
     def line(self) -> int | None:
@@ -148,14 +154,14 @@ class Symbol(ToStringMixin):
         Convert the symbol to a dictionary.
 
         :param kind: whether to include the kind of the symbol
-        :param location: whether to include the location of the symbol
+        :param location: whether to include the location of the symbol (will also include end_location if available)
         :param depth: the depth of the symbol
         :param include_body: whether to include the body of the top-level symbol.
         :param include_children_body: whether to also include the body of the children.
             Note that the body of the children is part of the body of the parent symbol,
             so there is usually no need to set this to True unless you want process the output
             and pass the children without passing the parent body to the LM.
-        :return: a dictionary representation of the symbol
+        :return: a dictionary representation of the symbol with fields like 'name', 'kind', 'location', 'end_location'
         """
         result: dict[str, Any] = {"name": self.name}
 
@@ -164,6 +170,10 @@ class Symbol(ToStringMixin):
 
         if location:
             result["location"] = self.location.to_dict()
+            # Add end position information
+            end_pos = self.body_end_position
+            if end_pos is not None:
+                result["end_location"] = {"relative_path": self.relative_path, "line": end_pos["line"], "column": end_pos["character"]}
 
         if include_body:
             if self.body is None:
