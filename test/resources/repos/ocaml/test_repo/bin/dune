@@ -1,0 +1,4 @@
+(executable
+ (public_name test_repo)
+ (name main)
+ (libraries test_repo))
