@@ -25,7 +25,7 @@ def execute_shell_command(command: str, cwd: str | None = None, capture_stderr: 
 
     process = subprocess.Popen(
         command,
-        shell=True,
+#        shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE if capture_stderr else None,
         text=True,
@@ -34,5 +34,5 @@ def execute_shell_command(command: str, cwd: str | None = None, capture_stderr: 
         cwd=cwd,
     )
 
-    stdout, stderr = process.communicate()
+    stdout, stderr = process.communicate(timeout=30)
     return ShellCommandResult(stdout=stdout, stderr=stderr, return_code=process.returncode, cwd=cwd)
