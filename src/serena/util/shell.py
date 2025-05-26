@@ -11,13 +11,14 @@ class ShellCommandResult(BaseModel):
     stderr: str | None = None
 
 
-def execute_shell_command(command: str, cwd: str | None = None, capture_stderr: bool = False) -> ShellCommandResult:
+def execute_shell_command(command: str, cwd: str | None = None, capture_stderr: bool = False, timeout: int = 60) -> ShellCommandResult:
     """
     Execute a shell command and return the output.
 
     :param command: The command to execute.
     :param cwd: The working directory to execute the command in. If None, the current working directory will be used.
     :param capture_stderr: Whether to capture the stderr output.
+    :param timeout: The timeout in seconds for the command execution. Default is 60 seconds.
     :return: The output of the command.
     """
     if cwd is None:
@@ -34,5 +35,5 @@ def execute_shell_command(command: str, cwd: str | None = None, capture_stderr: 
         cwd=cwd,
     )
 
-    stdout, stderr = process.communicate(timeout=30)
+    stdout, stderr = process.communicate(timeout=timeout)
     return ShellCommandResult(stdout=stdout, stderr=stderr, return_code=process.returncode, cwd=cwd)
