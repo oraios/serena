@@ -1438,6 +1438,349 @@ class ReplaceLinesTool(Tool, ToolMarkerCanEdit):
         self.agent.get_tool(InsertAtLineTool).apply(relative_path, start_line, content)
         return SUCCESS_RESULT
 
+class PatchSymbolTool(Tool, ToolMarkerCanEdit):
+    """
+    Apply targeted patches to a symbol without requiring the entire symbol body.
+    This tool enables token-efficient code editing by accepting only the changed portions of a symbol.
+    """
+
+    def apply(
+        self,
+        relative_path: str,
+        line: int,
+        column: int,
+        chunks: list[dict],
+    ) -> str:
+        """
+        Apply changes to a symbol using diff chunks.
+        
+        :param relative_path: Path to the file containing the symbol
+        :param line: Symbol start line number
+        :param column: Symbol start column
+        :param chunks: List of diff chunks, each containing:
+                      {
+                        "context_before": str | list[str],  # Line(s) before change
+                        "old_lines": list[str], # Lines to be replaced/deleted
+                        "new_lines": list[str], # Lines to insert/replace with
+                        "context_after": str | list[str],   # Line(s) after change
+                      }
+        :return: Success message or error description
+        """
+        try:
+            # Input validation
+            if not chunks or not isinstance(chunks, list):
+                return "Error: chunks must be a non-empty list"
+            
+            for i, chunk in enumerate(chunks):
+                required_keys = ["context_before", "old_lines", "new_lines", "context_after"]
+                if not all(key in chunk for key in required_keys):
+                    return f"Error: chunk {i+1} missing required keys: {required_keys}"
+                
+                if isinstance(chunk["context_before"], str):
+                    chunk["context_before"] = [chunk["context_before"]]
+                if isinstance(chunk["context_after"], str):
+                    chunk["context_after"] = [chunk["context_after"]]
+            
+            symbols = self.symbol_manager.get_document_symbols(relative_path)
+            
+            target_symbol = None
+            for symbol in symbols:
+                if (symbol.relative_path == relative_path and 
+                    symbol.line == line and 
+                    symbol.column == column):
+                    symbols_with_body = self.symbol_manager.find_by_name(
+                        symbol.name,
+                        include_body=True,
+                        within_relative_path=relative_path
+                    )
+                    for s in symbols_with_body:
+                        if (s.relative_path == relative_path and 
+                            s.line == line and 
+                            s.column == column):
+                            target_symbol = s
+                            break
+                    break
+            
+            if target_symbol is None or target_symbol.body is None:
+                return "Error: Symbol not found or has no body"
+            
+            # Apply the chunks atomically
+            result = self.apply_chunks_to_symbol(target_symbol.body, chunks)
+            
+            # Check if it's an error message
+            if result.startswith("Error:") or "failed" in result:
+                return result
+            
+            # Replace the symbol body
+            symbol_location = SymbolLocation(relative_path, line, column)
+            self.symbol_manager.replace_body(symbol_location, result)
+            return SUCCESS_RESULT
+            
+        except Exception as e:
+            log.error(f"Error in PatchSymbolTool: {str(e)}", exc_info=e)
+            return f"Error applying chunks: {str(e)}"
+
+
+
+
+    def _detect_line_ending(self, text: str) -> str:
+        """
+        Detect the dominant line ending in text.
+        Prioritizes CRLF > LF > CR, with LF as fallback.
+
+        :param text: The text to analyze
+        :return: The detected line ending ('\r\n', '\n', or '\r')
+        """
+        crlf_count = text.count('\r\n')
+        lf_count = text.count('\n') - crlf_count
+        cr_only_count = text.count('\r') - crlf_count
+
+        if crlf_count > 0 and crlf_count >= lf_count and crlf_count >= cr_only_count:
+            return '\r\n'
+        elif lf_count > 0 and lf_count >= cr_only_count:
+            return '\n'
+        elif cr_only_count > 0:
+            return '\r'
+        else:
+            return '\n'
+
+    def _lines_match(self, actual_lines: list[str], expected_lines: list[str]) -> bool:
+        """
+        Check if lines match, allowing for some flexibility in trailing whitespace.
+
+        :param actual_lines: The actual lines from the file
+        :param expected_lines: The expected lines from the chunk
+        :return: True if lines match (after rstrip()), False otherwise
+        """
+        if len(actual_lines) != len(expected_lines):
+            return False
+
+        for actual, expected in zip(actual_lines, expected_lines):
+            if actual.rstrip() != expected.rstrip():
+                return False
+        return True
+
+    def _run_comprehensive_validation(self, original_lines: list[str], chunk: dict, position: int, symbol_body: str) -> str | None:
+        """
+        Run comprehensive validation checks on a chunk.
+
+        :param original_lines: Lines from the original symbol body
+        :param chunk: Chunk dictionary with all fields
+        :param position: Position of the last line of context_before
+        :param symbol_body: Original symbol body string for line ending detection
+        :return: None if all checks pass, error message string if any check fails
+        """
+        context_before_lines = chunk["context_before"] if isinstance(chunk["context_before"], list) else [chunk["context_before"]]
+        context_after_lines = chunk["context_after"] if isinstance(chunk["context_after"], list) else [chunk["context_after"]]
+        old_lines = chunk["old_lines"] # Assumed to be list by `apply`
+        new_lines = chunk["new_lines"] # Assumed to be list by `apply`
+
+        # Check 1: Context After Validation
+        # Position is the 0-based index of the last line of context_before.
+        # old_lines start at original_lines[position + 1].
+        # context_after lines start after old_lines.
+        expected_after_start_index = position + 1 + len(old_lines)
+
+        if expected_after_start_index + len(context_after_lines) > len(original_lines):
+            # This check means context_after extends beyond the current symbol body.
+            # It's only an error if context_after is non-empty. If it's empty, it's fine.
+            if len(context_after_lines) > 0 :
+                 return f"Check 1 failed: context_after sequence (length {len(context_after_lines)}) starting at line {expected_after_start_index} extends beyond symbol end (total lines {len(original_lines)})"
+
+        # Only validate non-empty context_after
+        if len(context_after_lines) > 0:
+            actual_context_after_lines = original_lines[expected_after_start_index : expected_after_start_index + len(context_after_lines)]
+            if not self._lines_match(actual_context_after_lines, context_after_lines):
+                 return f"Check 1 failed: context_after mismatch. Expected {context_after_lines}, got {actual_context_after_lines} at line index {expected_after_start_index}"
+
+        # Check 2: Old Lines Matching
+        actual_old_lines_start_index = position + 1
+        # Ensure old_lines don't go past end of original_lines
+        if actual_old_lines_start_index + len(old_lines) > len(original_lines):
+            return f"Check 2 failed: old_lines (length {len(old_lines)}) starting at line index {actual_old_lines_start_index} extend beyond symbol end (total lines {len(original_lines)})"
+
+        if len(old_lines) > 0: # Only match if old_lines is not empty
+            actual_old_lines_content = original_lines[actual_old_lines_start_index : actual_old_lines_start_index + len(old_lines)]
+            if not self._lines_match(actual_old_lines_content, old_lines):
+                return f"Check 2 failed: old_lines don't match actual content. Expected {old_lines}, got {actual_old_lines_content} at line index {actual_old_lines_start_index}"
+
+        # Check 3: Insertion Logic (empty old_lines)
+        # If old_lines is empty, it's an insertion. context_before and context_after must be contiguous.
+        # expected_after_start_index is position + 1 + len(old_lines). If old_lines is empty, it's position + 1.
+        # This means the first line of context_after should be original_lines[position + 1].
+        # This check is implicitly covered by Check 1 if context_after is validated correctly relative to position.
+        # No specific additional check needed here if Check 1 and 2 are sound.
+
+        # Check 4: Deletion Logic (empty new_lines)
+        # If new_lines is empty, it's a deletion. old_lines must exactly match. (Covered by Check 2)
+        # No specific additional check needed here.
+
+        # Check 5: Symbol Boundary Validation (overall chunk placement)
+        # Chunk is defined by context_before, old_lines, context_after.
+        # The critical part is that `old_lines` must be within `original_lines`.
+        # `position` is index of last line of `context_before`.
+        # `context_before` lines are `original_lines[position - len(context_before_lines) + 1 : position + 1]`
+        # `old_lines` are `original_lines[position + 1 : position + 1 + len(old_lines)]`
+        # `context_after` are `original_lines[position + 1 + len(old_lines) : position + 1 + len(old_lines) + len(context_after_lines)]`
+        # These boundaries are implicitly checked by the matching process and previous checks.
+        # Explicit check for `position` itself:
+        if position < -1 : # position can be -1 if context_before is empty (insert at beginning)
+             return f"Check 5 failed: Invalid position {position} for context_before."
+        if position >= len(original_lines):
+             return f"Check 5 failed: Position {position} for context_before is outside symbol boundaries (total lines {len(original_lines)})."
+
+
+        # Check 6: End-of-Symbol Context Validation
+        # If context_after is empty, are we truly at the end of what's being replaced by old_lines?
+        # Or is there more content in original_lines that context_after *should* have matched?
+        # This is effectively asking: if context_after is empty, does original_lines end after old_lines?
+        if len(context_after_lines) == 0:
+            end_of_old_lines_index = position + 1 + len(old_lines)
+            if end_of_old_lines_index < len(original_lines):
+                # There's content after old_lines, but context_after was empty.
+                # This implies the chunk expects nothing after, but there is something.
+                # This might be valid if the LLM intends to delete trailing content by not specifying it.
+                # However, for strict diff application, this is a mismatch.
+                # Let's consider this a warning or a point of careful consideration.
+                # For now, let's flag it if strictness is desired.
+                # log.debug(f"Check 6: Empty context_after, but content exists in original from line index {end_of_old_lines_index}")
+                pass # This scenario can be valid.
+
+        # Check 7: Line Ending Consistency (Optional, but good for hygiene)
+        # This is a more advanced check, ensuring line endings in chunk strings
+        # don't introduce mixed line endings if the original file has a consistent one.
+        # For simplicity, we might skip this if _detect_line_ending is robustly used during reconstruction.
+        # The _detect_line_ending on the whole symbol_body is used for reconstruction.
+        # Individual lines in chunks are just strings, their internal newlines are usually not intended.
+        # If a chunk line *contains* a newline character, that's unusual for diffs.
+        original_body_line_ending = self._detect_line_ending(symbol_body)
+        all_chunk_content_lines = []
+        if isinstance(chunk["context_before"], list): all_chunk_content_lines.extend(chunk["context_before"])
+        else: all_chunk_content_lines.append(chunk["context_before"])
+        all_chunk_content_lines.extend(chunk["old_lines"])
+        all_chunk_content_lines.extend(chunk["new_lines"])
+        if isinstance(chunk["context_after"], list): all_chunk_content_lines.extend(chunk["context_after"])
+        else: all_chunk_content_lines.append(chunk["context_after"])
+
+        for line_content in all_chunk_content_lines:
+            if isinstance(line_content, str): # Ensure it's a string
+                if '\n' in line_content and original_body_line_ending != '\n':
+                    if not ('\r\n' in line_content and original_body_line_ending == '\r\n'): # LF in chunk, but original is not LF (and not CRLF if chunk has CRLF)
+                        return f"Check 7 failed: Line content '{line_content[:20]}...' contains LF, but symbol body uses {repr(original_body_line_ending)}"
+                if '\r' in line_content and not '\n' in line_content and original_body_line_ending != '\r': # CR only in chunk, but original is not CR
+                     return f"Check 7 failed: Line content '{line_content[:20]}...' contains CR, but symbol body uses {repr(original_body_line_ending)}"
+
+        return None  # All checks passed
+
+    def _validate_and_position_chunk(self, original_lines: list[str], symbol_body: str, chunk: dict) -> tuple[int | None, str | None]:
+        """
+        Validate a single chunk and find its position.
+        Tests ALL candidate positions with comprehensive validation.
+
+        :param original_lines: Lines from the original symbol body
+        :param symbol_body: Original symbol body string for line ending detection
+        :param chunk: Chunk dictionary with all fields
+        :return: (position, None) if valid, or (None, error_message) if invalid.
+                 Position is the 0-based index of the last line of context_before.
+                 Returns -1 for position if context_before is empty and it's an insert at the beginning.
+        """
+        context_before_lines = chunk["context_before"]
+        # Ensure context_before_lines is a list
+        if isinstance(context_before_lines, str):
+            context_before_lines = [context_before_lines]
+
+        candidate_positions = []
+        if not context_before_lines: # Empty context_before means insert at the beginning
+            candidate_positions.append(-1) # Special position for beginning
+        else:
+            context_len = len(context_before_lines)
+            for i in range(len(original_lines) - context_len + 1):
+                # Check if original_lines[i : i + context_len] matches context_before_lines
+                segment_to_match = original_lines[i : i + context_len]
+                if self._lines_match(segment_to_match, context_before_lines):
+                    candidate_positions.append(i + context_len - 1)  # Index of the last line of context_before
+
+        if not candidate_positions:
+            return None, f"Context_before ({context_before_lines}) not found in symbol body."
+
+        # Test each candidate position with comprehensive validation
+        for position in candidate_positions:
+            validation_error = self._run_comprehensive_validation(original_lines, chunk, position, symbol_body)
+            if validation_error is None:
+                return position, None  # Found a valid position
+
+        return None, f"All {len(candidate_positions)} candidate positions for context_before failed validation. Last error for position {candidate_positions[-1]}: {validation_error if 'validation_error' in locals() else 'unknown'}"
+
+
+    def apply_chunks_to_symbol(self, symbol_body: str, chunks: list[dict]) -> str:
+        """
+        Apply multiple chunks to a symbol body atomically with comprehensive validation.
+        All chunks are validated before any modifications are applied (atomic operation).
+
+        :param symbol_body: The original symbol body as a string
+        :param chunks: List of chunks to apply
+        :return: New symbol body string or error message
+        """
+        original_line_ending = self._detect_line_ending(symbol_body)
+        original_lines = symbol_body.splitlines() # Works even if symbol_body is empty
+
+        validated_applications = [] # Store (position, chunk_index, chunk_data)
+
+        # Phase 1: Validate ALL chunks and determine their application points
+        for i, chunk in enumerate(chunks):
+            # Normalize context and old/new lines within the chunk if not already done
+            # (though `apply` method should handle this)
+            if isinstance(chunk["context_before"], str): chunk["context_before"] = [chunk["context_before"]]
+            if isinstance(chunk["context_after"], str): chunk["context_after"] = [chunk["context_after"]]
+            if not isinstance(chunk["old_lines"], list): chunk["old_lines"] = [chunk["old_lines"]] if chunk["old_lines"] else []
+            if not isinstance(chunk["new_lines"], list): chunk["new_lines"] = [chunk["new_lines"]] if chunk["new_lines"] else []
+
+
+            position, error = self._validate_and_position_chunk(original_lines, symbol_body, chunk)
+            if error:
+                log.error(f"Chunk {i+1} validation failed: {error}")
+                return f"Error: Chunk {i+1} (content: {str(chunk)[:100]}...) validation failed: {error}"
+            validated_applications.append({'position': position, 'chunk_index': i, 'chunk': chunk})
+            log.debug(f"Chunk {i+1} validated successfully, applies after line index {position}.")
+
+        # Phase 2: Apply all validated chunks. Must be done in reverse order of position
+        # to ensure line indices remain correct for subsequent patches on the original lines.
+        # If multiple chunks affect the same starting position, their original order (chunk_index) should be preserved.
+        validated_applications.sort(key=lambda app: (app['position'], app['chunk_index']), reverse=True)
+
+        working_lines = list(original_lines)
+        for app_info in validated_applications:
+            position = app_info['position']
+            chunk = app_info['chunk']
+            old_lines = chunk["old_lines"]
+            new_lines = chunk["new_lines"]
+
+            # `position` is the index of the last line of context_before.
+            # `old_lines` start at `position + 1`.
+            start_index_for_old = position + 1
+            end_index_for_old = start_index_for_old + len(old_lines)
+
+            # Replace `old_lines` with `new_lines`
+            working_lines[start_index_for_old:end_index_for_old] = new_lines
+
+        # Reconstruct body with original line ending
+        new_body = original_line_ending.join(working_lines)
+
+        # Preserve trailing newline if original body had one and new_body doesn't (and vice-versa if needed)
+        original_had_trailing_newline = symbol_body.endswith(original_line_ending) if symbol_body else False # Handle empty symbol_body
+        new_has_trailing_newline = new_body.endswith(original_line_ending) if new_body else False
+
+        if original_had_trailing_newline and not new_has_trailing_newline and new_body: # Add if missing and new_body not empty
+            new_body += original_line_ending
+        elif not original_had_trailing_newline and new_has_trailing_newline: # Remove if added and original didn't have it
+             if new_body == original_line_ending: # If new_body is ONLY a line ending
+                 new_body = ""
+             else:
+                 new_body = new_body[:-len(original_line_ending)]
+
+
+        return new_body
+
 
 class InsertAtLineTool(Tool, ToolMarkerCanEdit):
     """
