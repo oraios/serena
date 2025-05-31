@@ -6,6 +6,7 @@ import inspect
 import json
 import os
 import platform
+import re
 import shutil
 import sys
 import traceback
@@ -19,6 +20,7 @@ from fnmatch import fnmatch
 from functools import cached_property
 from logging import Logger
 from pathlib import Path
+from types import TracebackType
 from typing import TYPE_CHECKING, Any, Self, TypeVar, Union
 
 import yaml
@@ -91,6 +93,7 @@ class ProjectConfig(ToStringMixin):
     read_only: bool = False
     ignore_all_files_in_gitignore: bool = True
     initial_prompt: str = ""
+    encoding: str = "utf-8"
 
     SERENA_DEFAULT_PROJECT_FILE = "project.yml"
 
@@ -548,6 +551,15 @@ class SerenaAgent:
                     "You should now pass either --project <project_name> or --project <project_root>."
                 )
 
+    def get_project_root(self) -> str:
+        """
+        :return: the root directory of the active project (if any); raises a ValueError if there is no active project
+        """
+        project = self.get_active_project()
+        if project is None:
+            raise ValueError("Cannot get project root if no project is active.")
+        return project.project_root
+
     def get_exposed_tool_instances(self) -> list["Tool"]:
         """
         :return: all tool instances, including the non-active ones. For MCP clients, we need to expose them all since typical
@@ -794,10 +806,7 @@ class Component(ABC):
         """
         :return: the root directory of the active project, raises a ValueError if no active project configuration is set
         """
-        project_config = self.agent.get_active_project()
-        if project_config is None:
-            raise ValueError("Cannot get project root if no active project configuration is set.")
-        return project_config.project_root
+        return self.agent.get_project_root()
 
     @property
     def prompt_factory(self) -> PromptFactory:
@@ -1379,6 +1388,127 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerCanEdit):
             body=body,
         )
         return SUCCESS_RESULT
+
+
+class EditedFileContext:
+    """
+    Context manager for file editing.
+
+    Create the context, then use `set_updated_content` to set the new content, the original content
+    being provided in `original_content`.
+    When exiting the context without an exception, the updated content will be written back to the file.
+    """
+
+    def __init__(self, relative_path: str, agent: SerenaAgent):
+        self._project = agent.get_active_project()
+        assert self._project is not None
+        self._abs_path = os.path.join(self._project.project_root, relative_path)
+        if not os.path.isfile(self._abs_path):
+            raise FileNotFoundError(f"File {self._abs_path} does not exist.")
+        with open(self._abs_path, encoding=self._project.project_config.encoding) as f:
+            self._original_content = f.read()
+        self._updated_content: str | None = None
+
+    def __enter__(self) -> Self:
+        return self
+
+    def get_original_content(self) -> str:
+        """
+        :return: the original content of the file before any modifications.
+        """
+        return self._original_content
+
+    def set_updated_content(self, content: str) -> None:
+        """
+        Sets the updated content of the file, which will be written back to the file
+        when the context is exited without an exception.
+
+        :param content: the updated content of the file
+        """
+        self._updated_content = content
+
+    def __exit__(self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None) -> None:
+        if self._updated_content is not None and exc_type is None:
+            with open(self._abs_path, "w", encoding=self._project.project_config.encoding) as f:
+                f.write(self._updated_content)
+            log.info(f"Updated content written to {self._abs_path}")
+            # Language servers should automatically detect the change and update its state accordingly.
+            # If they do not, we may have to add a call to notify it.
+
+
+class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
+    """
+    Replaces content in a file by using regular expressions.
+    """
+
+    def apply(
+        self,
+        relative_path: str,
+        regex: str,
+        repl: str,
+        allow_multiple_occurrences: bool = False,
+    ) -> str:
+        r"""
+        Replaces one or more occurrences of the given regular expression.
+        This is the preferred way to replace content in a file whenever the symbol-level
+        tools are not appropriate.
+        Even large sections of code can be replaced by providing a concise regular expression of
+        the form "beginning.*?end-of-text-to-be-replaced".
+        Always try to use wildcards to avoid specifying the exact content of the code to be replaced,
+        especially if it spans several lines.
+
+        :param relative_path: the relative path to the file
+        :param regex: a Python-style regular expression, matches of which will be replaced.
+            Dot matches all characters, multi-line matching is enabled.
+        :param repl: the string to replace the matched content with, which may contain
+            backreferences like \1, \2, etc.
+        :param allow_multiple_occurrences: if True, the regex may match multiple occurrences in the file
+            and all of them will be replaced.
+            If this is set to False and the regex matches multiple occurrences, an error will be returned
+            (and you may retry with a revised, more specific regex).
+        """
+        with EditedFileContext(relative_path, self.agent) as context:
+            original_content = context.get_original_content()
+            updated_content, n = re.subn(regex, repl, original_content, flags=re.DOTALL | re.MULTILINE)
+            if n == 0:
+                return f"Error: No matches found for regex '{regex}' in file '{relative_path}'."
+            if not allow_multiple_occurrences and n > 1:
+                return (
+                    f"Error: Regex '{regex}' matches {n} occurrences in file '{relative_path}'. "
+                    "Please revise the regex to be more specific or enable allow_multiple_occurrences if this is expected."
+                )
+            context.set_updated_content(updated_content)
+        return SUCCESS_RESULT
+
+
+class ReplaceTextSpan(Tool, ToolMarkerCanEdit):
+    """
+    Replaces text in a file, with the replaced section being demarcated by text snippets.
+    """
+
+    def apply(
+        self,
+        relative_path: str,
+        start_snippet: str,
+        end_snippet: str,
+        repl: str,
+    ) -> str:
+        r"""
+        Replaces the text starting with the given start snippet and ending with the end snippet.
+        The start and end snippets should serve only to delimit the text to be replaced.
+        They must not overlap and must uniquely identify the section to be replaced.
+        They should not be longer than necessary to demarcate the section to be replaced.
+
+        :param relative_path: the relative path to the file
+        :param start_snippet: the text snippet marking the beginning of the section to be replaced.
+        :param end_snippet: the text snippet marking the end of the section to be replaced.
+        """
+        return self.agent.get_tool(ReplaceRegexTool).apply(
+            relative_path,
+            re.escape(start_snippet) + r".*?" + re.escape(end_snippet),
+            repl,
+            allow_multiple_occurrences=False,
+        )
 
 
 class DeleteLinesTool(Tool, ToolMarkerCanEdit):
