@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/oraios-serena-badge.png)](https://mseep.ai/app/oraios-serena)
+
 <p align="center" style="text-align:center">
   <img src="resources/serena-logo.svg#gh-light-mode-only" style="width:500px">
   <img src="resources/serena-logo-dark-mode.svg#gh-dark-mode-only" style="width:500px">
