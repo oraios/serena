@@ -290,19 +290,24 @@ class SerenaConfig(SerenaConfigBase):
     """
 
     loaded_commented_yaml: CommentedMap
+    config_file_path: str | None = None
 
     CONFIG_FILE = "serena_config.yml"
 
     @classmethod
-    def get_config_file_path(cls) -> str:
+    def get_config_file_path(cls, custom_path: str | None = None) -> str:
+        if custom_path:
+            return str(Path(custom_path).resolve())
         return os.path.join(serena_root_path(), cls.CONFIG_FILE)
 
     @classmethod
-    def from_config_file(cls) -> "SerenaConfig":
+    def from_config_file(cls, config_file_path: str | None = None) -> "SerenaConfig":
         """
         Static constructor to create SerenaConfig from the configuration file
+        
+        :param config_file_path: Optional custom path to configuration file. If None, uses default path.
         """
-        config_file = cls.get_config_file_path()
+        config_file = cls.get_config_file_path(config_file_path)
         if not os.path.exists(config_file):
             raise FileNotFoundError(f"Serena configuration file not found: {config_file}")
 
@@ -313,7 +318,7 @@ class SerenaConfig(SerenaConfigBase):
             raise ValueError(f"Error loading Serena configuration from {config_file}: {e}") from e
 
         # Create instance
-        instance = cls(loaded_commented_yaml=loaded_commented_yaml)
+        instance = cls(loaded_commented_yaml=loaded_commented_yaml, config_file_path=config_file)
 
         # read projects
         if "projects" not in loaded_commented_yaml:
@@ -377,7 +382,7 @@ class SerenaConfig(SerenaConfigBase):
         # projects are unique absolute paths
         # we also canonicalize them before saving
         loaded_original_yaml["projects"] = sorted({str(Path(project.project_root).resolve()) for project in self.projects})
-        save_yaml(self.get_config_file_path(), loaded_original_yaml, preserve_comments=True)
+        save_yaml(self.get_config_file_path(self.config_file_path), loaded_original_yaml, preserve_comments=True)
 
     @override
     def _add_new_project(self, project: Project) -> None:

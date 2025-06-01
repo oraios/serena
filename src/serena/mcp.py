@@ -102,29 +102,47 @@ def create_mcp_server_and_agent(
     port: int = 8000,
     context: str = DEFAULT_CONTEXT,
     modes: Sequence[str] = DEFAULT_MODES,
+    config_file_path: str | None = None,
+    gui_log_window_override: bool | None = None,
+    web_dashboard_override: bool | None = None,
 ) -> tuple[FastMCP, SerenaAgent]:
     """
     Create an MCP server.
 
     :param project: "Either an absolute path to the project directory or a name of an already registered project. "
         "If the project passed here hasn't been registered yet, it will be registered automatically and can be activated by its name "
-        "afterwards.
-    :param host: The host to bind to
+        "afterwards.    :param host: The host to bind to
     :param port: The port to bind to
     :param context: The context name or path to context file
     :param modes: List of mode names or paths to mode files
+    :param config_file_path: Optional path to custom configuration file
     """
     mcp: FastMCP | None = None
     context_instance = SerenaAgentContext.load(context)
     modes_instances = [SerenaAgentMode.load(mode) for mode in modes]
 
     try:
+        # Create custom config if config file path is provided
+        if config_file_path:
+            from serena.agent import SerenaConfig
+            serena_config = SerenaConfig.from_config_file(config_file_path)
+        else:
+            serena_config = None
+            
+        # Apply CLI parameter overrides to the configuration
+        if serena_config is not None:
+            if gui_log_window_override is not None:
+                serena_config.gui_log_window_enabled = gui_log_window_override
+            if web_dashboard_override is not None:
+                serena_config.web_dashboard = web_dashboard_override
+            
         agent = SerenaAgent(
             project=project,
             # Callback disabled for the time being (see above)
             # project_activation_callback=update_tools
             context=context_instance,
             modes=modes_instances,
+            serena_config=serena_config,
         )
     except Exception as e:
         show_fatal_exception_safe(e)
@@ -199,6 +217,12 @@ PROJECT_TYPE = ProjectType()
     metavar="",  # don't display anything since it's deprecated
 )
 @click.option(
+    "--config",
+    type=click.Path(exists=True, dir_okay=False, path_type=str),
+    default=None,
+    help="Path to custom Serena configuration file. If not specified, uses the default serena_config.yml.",
+)
+@click.option(
     "--context",
     type=str,
     show_default=True,
@@ -215,6 +239,16 @@ PROJECT_TYPE = ProjectType()
     show_default=True,
     help="Mode(s) to use. This can be names of built-in modes ('planning', 'editing', 'one-shot', 'interactive') "
     "or paths to custom mode YAML files. Can be specified multiple times to combine modes.",
+)
+@click.option(
+    "--gui-log-window/--no-gui-log-window",
+    default=None,
+    help="Enable or disable GUI log window (overrides config file).",
+)
+@click.option(
+    "--web-dashboard/--no-web-dashboard", 
+    default=None,
+    help="Enable or disable web dashboard (overrides config file).",
 )
 @click.option(
     "--transport",
@@ -240,6 +274,9 @@ PROJECT_TYPE = ProjectType()
 def start_mcp_server(
     project_file_opt: str | None,
     project_file_arg: str | None,
+    config: str | None = None,
+    gui_log_window: bool | None = None,
+    web_dashboard: bool | None = None,
     context: str = DEFAULT_CONTEXT,
     modes: tuple[str, ...] = DEFAULT_MODES,
     transport: Literal["stdio", "sse"] = "stdio",
@@ -256,7 +293,16 @@ def start_mcp_server(
     # This is for backward compatibility with the old CLI, should be removed in the future!
     project_file = project_file_arg if project_file_arg is not None else project_file_opt
 
-    mcp_server, agent = create_mcp_server_and_agent(project=project_file, host=host, port=port, context=context, modes=modes)
+    mcp_server, agent = create_mcp_server_and_agent(
+        project=project_file, 
+        host=host, 
+        port=port, 
+        context=context, 
+        modes=modes,
+        config_file_path=config,
+        gui_log_window_override=gui_log_window,
+        web_dashboard_override=web_dashboard
+    )
 
     # log after server creation such that the log appears in the GUI
     if project_file_arg is not None:
