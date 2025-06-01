@@ -1447,6 +1447,7 @@ class PatchSymbolTool(Tool, ToolMarkerCanEdit):
     def apply(
         self,
         relative_path: str,
+        symbol_name: str,
         line: int,
         column: int,
         chunks: list[dict],
@@ -1455,8 +1456,9 @@ class PatchSymbolTool(Tool, ToolMarkerCanEdit):
         Apply changes to a symbol using diff chunks.
         
         :param relative_path: Path to the file containing the symbol
-        :param line: Symbol start line number
-        :param column: Symbol start column
+        :param symbol_name: Name of the symbol to patch
+        :param line: Symbol start line number (for verification)
+        :param column: Symbol start column (for verification)
         :param chunks: List of diff chunks, each containing:
                       {
                         "context_before": str | list[str],  # Line(s) before change
@@ -1475,40 +1477,31 @@ class PatchSymbolTool(Tool, ToolMarkerCanEdit):
                 required_keys = ["context_before", "old_lines", "new_lines", "context_after"]
                 if not all(key in chunk for key in required_keys):
                     return f"Error: chunk {i+1} missing required keys: {required_keys}"
-                
-                if isinstance(chunk["context_before"], str):
-                    chunk["context_before"] = [chunk["context_before"]]
-                if isinstance(chunk["context_after"], str):
-                    chunk["context_after"] = [chunk["context_after"]]
             
-            symbols = self.symbol_manager.get_document_symbols(relative_path)
+            # Direct symbol lookup using provided name
+            symbols_with_body = self.symbol_manager.find_by_name(
+                symbol_name,
+                include_body=True,
+                within_relative_path=relative_path
+            )
             
+            # Verify the symbol exists at the expected location
             target_symbol = None
-            for symbol in symbols:
+            for symbol in symbols_with_body:
                 if (symbol.relative_path == relative_path and 
                     symbol.line == line and 
                     symbol.column == column):
-                    symbols_with_body = self.symbol_manager.find_by_name(
-                        symbol.name,
-                        include_body=True,
-                        within_relative_path=relative_path
-                    )
-                    for s in symbols_with_body:
-                        if (s.relative_path == relative_path and 
-                            s.line == line and 
-                            s.column == column):
-                            target_symbol = s
-                            break
+                    target_symbol = symbol
                     break
             
             if target_symbol is None or target_symbol.body is None:
-                return "Error: Symbol not found or has no body"
+                return f"Error: Symbol '{symbol_name}' not found at line {line}, column {column} or has no body"
             
             # Apply the chunks atomically
             result = self.apply_chunks_to_symbol(target_symbol.body, chunks)
             
             # Check if it's an error message
-            if result.startswith("Error:") or "failed" in result:
+            if result.startswith("Error:"):
                 return result
             
             # Replace the symbol body
@@ -1657,7 +1650,6 @@ class PatchSymbolTool(Tool, ToolMarkerCanEdit):
 
         return None, f"All {len(candidate_positions)} candidate positions failed validation. Last error: {validation_error if 'validation_error' in locals() else 'unknown'}"
 
-
     def apply_chunks_to_symbol(self, symbol_body: str, chunks: list[dict]) -> str:
         """
         Apply multiple chunks to a symbol body with atomic validation.
@@ -1718,9 +1710,7 @@ class PatchSymbolTool(Tool, ToolMarkerCanEdit):
              else:
                  new_body = new_body[:-len(original_line_ending)]
 
-
         return new_body
-
 
 class InsertAtLineTool(Tool, ToolMarkerCanEdit):
     """
