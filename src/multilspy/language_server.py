@@ -413,6 +413,35 @@ class LanguageServer:
                 }
             )
             del self.open_file_buffers[uri]
+            
+    def _invalidate_document_symbols_cache(self, relative_file_path: str) -> None:
+        symbol_cache_keys = [self._get_cache_key(relative_file_path, include_body=True), self._get_cache_key(relative_file_path, include_body=False)]
+        for cache_key in symbol_cache_keys:
+            cached_document_symbols = self._document_symbols_cache.pop(cache_key, None)
+            if cached_document_symbols is not None:
+                self.logger.log(f"Invalidating in-memory cache of document symbols for {relative_file_path} due to content change notification", logging.DEBUG)
+                self._cache_has_changed = True
+            
+            
+    def notify_change_text_document(self, relative_file_path: str, content_changes: List[lsp_types.TextDocumentContentChangeEvent]) -> None:
+        """
+        Notify the Language Server that the content of the given file has changed.
+        Also, invalidate the in-memory cache of document symbols for the given file.
+        """
+        self._invalidate_document_symbols_cache(relative_file_path)
+        
+        with self.open_file(relative_file_path) as file_buffer:
+            file_buffer.version += 1
+            
+            self.server.notify.did_change_text_document(
+                {
+                    LSPConstants.TEXT_DOCUMENT: {
+                        LSPConstants.VERSION: file_buffer.version,
+                        LSPConstants.URI: file_buffer.uri,
+                    },
+                    LSPConstants.CONTENT_CHANGES: content_changes,
+                }
+            )
 
     def insert_text_at_position(
         self, relative_file_path: str, line: int, column: int, text_to_be_inserted: str
@@ -440,27 +469,18 @@ class LanguageServer:
         assert uri in self.open_file_buffers
 
         file_buffer = self.open_file_buffers[uri]
-        file_buffer.version += 1
 
         new_contents, new_l, new_c = TextUtils.insert_text_at_position(file_buffer.contents, line, column, text_to_be_inserted)
         file_buffer.contents = new_contents
-        self.server.notify.did_change_text_document(
+        self.notify_change_text_document(relative_file_path, [
             {
-                LSPConstants.TEXT_DOCUMENT: {
-                    LSPConstants.VERSION: file_buffer.version,
-                    LSPConstants.URI: file_buffer.uri,
+                LSPConstants.RANGE: {
+                    "start": {"line": line, "character": column},
+                    "end": {"line": line, "character": column},
                 },
-                LSPConstants.CONTENT_CHANGES: [
-                    {
-                        LSPConstants.RANGE: {
-                            "start": {"line": line, "character": column},
-                            "end": {"line": line, "character": column},
-                        },
-                        "text": text_to_be_inserted,
-                    }
-                ],
+                "text": text_to_be_inserted,
             }
-        )
+        ])
         return multilspy_types.Position(line=new_l, character=new_c)
 
     def delete_text_between_positions(
@@ -486,18 +506,9 @@ class LanguageServer:
         assert uri in self.open_file_buffers
 
         file_buffer = self.open_file_buffers[uri]
-        file_buffer.version += 1
         new_contents, deleted_text = TextUtils.delete_text_between_positions(file_buffer.contents, start_line=start["line"], start_col=start["character"], end_line=end["line"], end_col=end["character"])
         file_buffer.contents = new_contents
-        self.server.notify.did_change_text_document(
-            {
-                LSPConstants.TEXT_DOCUMENT: {
-                    LSPConstants.VERSION: file_buffer.version,
-                    LSPConstants.URI: file_buffer.uri,
-                },
-                LSPConstants.CONTENT_CHANGES: [{LSPConstants.RANGE: {"start": start, "end": end}, "text": ""}],
-            }
-        )
+        self.notify_change_text_document(relative_file_path, [{LSPConstants.RANGE: {"start": start, "end": end}, "text": ""}])
         return deleted_text
 
     async def _send_definition_request(self, definition_params: DefinitionParams) -> Union[Definition, List[LocationLink], None]:
@@ -787,6 +798,9 @@ class LanguageServer:
                 json.loads(json_repr)
                 for json_repr in set([json.dumps(item, sort_keys=True) for item in completions_list])
             ]
+            
+    def _get_cache_key(self, relative_file_path: str, include_body: bool) -> str:
+        return f"{relative_file_path}-{include_body}"
 
     async def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> Tuple[List[multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]:
         """
@@ -805,7 +819,7 @@ class LanguageServer:
         self.logger.log(f"Requesting document symbols for {relative_file_path} for the first time", logging.DEBUG)
         # TODO: it's kinda dumb to not use the cache if include_body is False after include_body was True once
         #   Should be fixed in the future, it's a small performance optimization
-        cache_key = f"{relative_file_path}-{include_body}"
+        cache_key = self._get_cache_key(relative_file_path, include_body)
         with self.open_file(relative_file_path) as file_data:
             file_hash_and_result = self._document_symbols_cache.get(cache_key)
             if file_hash_and_result is not None:
@@ -2135,3 +2149,9 @@ class SyncLanguageServer:
         such as when searching for relevant non-language files in the project.
         """
         return self.language_server.get_ignore_spec()
+    
+    def notify_change_text_document(self, relative_file_path: str, content_changes: List[lsp_types.TextDocumentContentChangeEvent]) -> None:
+        """
+        Notify the Language Server that the content of the given file has changed.
+        """
+        self.language_server.notify_change_text_document(relative_file_path, content_changes)

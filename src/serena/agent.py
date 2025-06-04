@@ -31,6 +31,7 @@ from sensai.util.logging import FallbackHandler
 from sensai.util.string import ToStringMixin, dict_string
 
 from multilspy import SyncLanguageServer
+from multilspy.lsp_protocol_handler import lsp_types
 from multilspy.multilspy_config import Language, MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_types import SymbolKind
@@ -39,7 +40,7 @@ from serena.config import SerenaAgentContext, SerenaAgentMode
 from serena.constants import PROJECT_TEMPLATE_FILE, REPO_ROOT, SELENA_CONFIG_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
 from serena.prompt_factory import PromptFactory, SerenaPromptFactory
-from serena.symbol import SymbolManager
+from serena.symbol import CodeDiff, SymbolManager
 from serena.text_utils import search_files
 from serena.util.file_system import scan_directory
 from serena.util.general import load_yaml, save_yaml
@@ -1435,15 +1436,26 @@ class EditedFileContext:
     def __init__(self, relative_path: str, agent: SerenaAgent):
         self._project = agent.get_active_project()
         assert self._project is not None
+        self._relative_path = relative_path
         self._abs_path = os.path.join(self._project.project_root, relative_path)
         if not os.path.isfile(self._abs_path):
             raise FileNotFoundError(f"File {self._abs_path} does not exist.")
         with open(self._abs_path, encoding=self._project.project_config.encoding) as f:
             self._original_content = f.read()
         self._updated_content: str | None = None
+        self._agent = agent
 
     def __enter__(self) -> Self:
         return self
+
+    def get_content_changes(self) -> list[lsp_types.TextDocumentContentChangeEvent] | None:
+        """
+        :return: the content changes that have been made to the file.
+        """
+        if self._updated_content is None:
+            return None
+        diff = CodeDiff(relative_path=self._relative_path, original_content=self._original_content, modified_content=self._updated_content)
+        return diff.get_content_changes()
 
     def get_original_content(self) -> str:
         """
@@ -1461,6 +1473,7 @@ class EditedFileContext:
         self._updated_content = content
 
     def __exit__(self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None) -> None:
+
         if self._updated_content is not None and exc_type is None:
             assert self._project is not None
             with open(self._abs_path, "w", encoding=self._project.project_config.encoding) as f:
@@ -1468,6 +1481,9 @@ class EditedFileContext:
             log.info(f"Updated content written to {self._abs_path}")
             # Language servers should automatically detect the change and update its state accordingly.
             # If they do not, we may have to add a call to notify it.
+            content_changes = self.get_content_changes()
+            if content_changes is not None:
+                self._agent.language_server.notify_change_text_document(self._relative_path, content_changes)
 
 
 class ReplaceRegexTool(Tool, ToolMarkerCanEdit):

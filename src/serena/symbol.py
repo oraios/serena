@@ -11,6 +11,7 @@ from sensai.util.string import ToStringMixin
 
 from multilspy import SyncLanguageServer
 from multilspy.language_server import ReferenceInSymbol as LSPReferenceInSymbol
+from multilspy.lsp_protocol_handler import lsp_types
 from multilspy.multilspy_types import Position, SymbolKind, UnifiedSymbolInformation
 
 if TYPE_CHECKING:
@@ -162,6 +163,20 @@ class CodeDiff:
             original_lines, modified_lines, fromfile=f"a/{self.relative_path}", tofile=f"b/{self.relative_path}", n=context_lines
         )
         return "".join(diff)
+
+    def get_content_changes(self) -> list[lsp_types.TextDocumentContentChangeEvent]:
+        """
+        :return: the content changes that have been made to the file.
+        """
+        # for now, just return the simple change event that replaces the entire file, which corresponds to
+        # __TextDocumentContentChangeEvent_Type_2.
+        # If there are performance issues due to this, we can implement a more sophisticated approach using
+        # __TextDocumentContentChangeEvent_Type_1 and the actual line changes.
+        return [
+            {
+                "text": self.modified_content,
+            }
+        ]
 
 
 @dataclass
