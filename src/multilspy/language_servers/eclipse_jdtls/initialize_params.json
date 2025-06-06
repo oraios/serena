@@ -510,8 +510,8 @@
                     "workspaceCacheLimit": 90,
                     "runtimes": [
                         {
-                            "name": "JavaSE-17",
-                            "path": "static/vscode-java/extension/jre/17.0.8.1-linux-x86_64",
+                            "name": "JavaSE-21",
+                            "path": "static/vscode-java/extension/jre/21.0.7-linux-x86_64",
                             "default": true
                         }
                     ]
@@ -535,7 +535,7 @@
                         "version": null,
                         "home": "abs(static/gradle-7.3.3)",
                         "java": {
-                            "home": "abs(static/launch_jres/17.0.6-linux-x86_64)"
+                            "home": "abs(static/launch_jres/21.0.7-linux-x86_64)"
                         },
                         "offline": {
                             "enabled": false
