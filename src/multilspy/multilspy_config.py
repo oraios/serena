@@ -35,9 +35,11 @@ class Language(str, Enum):
     JAVASCRIPT = "javascript"
     GO = "go"
     RUBY = "ruby"
+    SWIFT = "swift"
     DART = "dart"
     CPP = "cpp"
     PHP = "php"
+
 
     def __str__(self) -> str:
         return self.value
@@ -60,6 +62,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.go")
             case self.RUBY:
                 return FilenameMatcher("*.rb")
+            case self.SWIFT:
+                return FilenameMatcher("*.swift")
             case self.CPP:
                 return FilenameMatcher("*.cpp", "*.h", "*.hpp", "*.c", "*.hxx", "*.cc", "*.cxx")
             case self.KOTLIN:
