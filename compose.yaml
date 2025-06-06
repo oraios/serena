@@ -1,0 +1,25 @@
+services:
+  serena:
+    image: serena:latest
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "9121:9121"
+      - "24282:24282"
+    command:
+      - "uv run --directory . serena-mcp-server --transport sse --port 9121 --host 0.0.0.0"
+
+  serena-dev:
+    image: serena:dev
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      target: development
+    tty: true
+    stdin_open: true
+    volumes:
+      - .:/workspaces/serena
+    command:
+      - "uv run --directory . serena-mcp-server"

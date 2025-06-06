@@ -243,6 +243,8 @@ Configure the MCP server in your client.
 For [Claude Desktop](https://claude.ai/download) (available for Windows and macOS), go to File / Settings / Developer / MCP Servers / Edit Config,
 which will let you open the JSON file `claude_desktop_config.json`. Add the following (with adjusted paths) to enable Serena:
 
+#### Local Installation
+
 ```json
 {
     "mcpServers": {
@@ -253,6 +255,23 @@ which will let you open the JSON file `claude_desktop_config.json`. Add the foll
     }
 }
 ```
+
+#### Docker Installation
+
+Alternatively, you can run Serena using Docker:
+
+```json
+{
+    "mcpServers": {
+        "serena": {
+            "command": "docker",
+            "args": ["run", "--rm", "-i", "--network", "host", "-v", "/path/to/your/projects:/workspaces/projects", "ghcr.io/oraios/serena:latest", "serena-mcp-server", "--transport", "stdio"]
+        }
+    }
+}
+```
+
+Replace `/path/to/your/projects` with the absolute path to your projects directory. The Docker approach has the advantage of not requiring local installation of dependencies.
 
 If you are using paths containing backslashes for paths on Windows
 (note that you can also just use forward slashes), be sure to escape them correctly (`\\`).
@@ -265,16 +284,18 @@ That's it! Save the config and then restart Claude Desktop. You are ready for ac
 uv run serena-mcp-server --help
 ```
 
-ℹ️ You can use Serena without cloning or configuring it explicitly by 
+ℹ️ You can use Serena without cloning or configuring it explicitly by using the Docker image above or:
 
+```json
 {
     "mcpServers": {
         "serena": {
-            "command": "/abs/path/to/uv",
-            "args": ["run", "--directory", "/abs/path/to/serena", "serena-mcp-server"]
+            "command": "uvx",
+            "args": ["--from", "git+https://github.com/oraios/serena", "serena-mcp-server"]
         }
     }
 }
+```
 
 #### Troubleshooting
 
@@ -399,7 +420,7 @@ Here's how it works (see also [Agno's documentation](https://docs.agno.com/intro
 3. Copy `.env.example` to `.env` and fill in the API keys for the provider(s) you
    intend to use.
 
-5. Start the agno agent app with
+4. Start the agno agent app with
    ```shell
    uv run python scripts/agno_agent.py
    ```

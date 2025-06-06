@@ -109,7 +109,7 @@ class SerenaDashboardAPI:
 
         raise RuntimeError(f"No free ports found starting from {start_port}")
 
-    def run(self, host: str = "127.0.0.1", port: int = 0x5EDA) -> int:
+    def run(self, host: str = "0.0.0.0", port: int = 0x5EDA) -> int:
         """
         Runs the dashboard on the given host and port and returns the port number.
         """
