@@ -20,7 +20,7 @@ from sensai.util import logging
 from sensai.util.helper import mark_used
 
 from serena.agent import SerenaAgent, Tool, show_fatal_exception_safe
-from serena.config import SerenaAgentContext, SerenaAgentMode
+from serena.config import SerenaAgentContext, SerenaAgentMode, init_user_config
 from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES
 
 log = logging.getLogger(__name__)
@@ -124,6 +124,9 @@ def create_mcp_server_and_agent(
     :param trace_lsp_communication: Whether to trace the communication between Serena and the language servers.
         This is useful for debugging language server issues.
     """
+    # Initialize user configuration before anything else
+    init_user_config()
+
     mcp: FastMCP | None = None
     context_instance = SerenaAgentContext.load(context)
     modes_instances = [SerenaAgentMode.load(mode) for mode in modes]
