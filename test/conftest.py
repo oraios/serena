@@ -7,6 +7,7 @@ from sensai.util.logging import LOG_DEFAULT_FORMAT, configure
 from multilspy.language_server import SyncLanguageServer
 from multilspy.multilspy_config import Language, MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
+from serena.util.file_system import GitignoreParser
 
 configure(level=logging.DEBUG)
 
@@ -26,8 +27,14 @@ def get_repo_path(language: Language) -> Path:
     return Path(__file__).parent / "resources" / "repos" / language / "test_repo"
 
 
-def create_ls(language: Language, repo_path: str):
-    config = MultilspyConfig(code_language=language)
+def create_ls(language: Language, repo_path: str | None = None, ignored_paths: list[str] | None = None) -> SyncLanguageServer:
+    ignored_paths = ignored_paths or []
+    if repo_path is None:
+        repo_path = str(get_repo_path(language))
+    gitignore_parser = GitignoreParser(str(repo_path))
+    for spec in gitignore_parser.get_ignore_specs():
+        ignored_paths.extend(spec.patterns)
+    config = MultilspyConfig(code_language=language, ignored_paths=ignored_paths)
     logger = MultilspyLogger(log_level=logging.DEBUG)
 
     # Simple way: Use basicConfig to set format for all handlers
