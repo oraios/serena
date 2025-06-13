@@ -36,6 +36,7 @@ dependencies = [
   "psutil>=7.0.0",
   "docstring_parser>=0.16",
   "joblib>=1.5.1",
+  "platformdirs>=4.3.7",
 ]
 
 [project.scripts]

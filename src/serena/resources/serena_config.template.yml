@@ -1,3 +1,8 @@
+# Serena Configuration File
+# This file is automatically managed by Serena. It's copied from the template
+# and can be customized according to your preferences.
+config_version: "1.0"
+
 gui_log_window: False
 # whether to open a graphical window with Serena's logs.
 # This is mainly supported on Windows and (partly) on Linux; not available on macOS.
