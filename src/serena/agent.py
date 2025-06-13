@@ -39,6 +39,7 @@ from serena import serena_version
 from serena.config import SerenaAgentContext, SerenaAgentMode
 from serena.constants import PROJECT_TEMPLATE_FILE, REPO_ROOT, SELENA_CONFIG_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
+from serena.multi_language_server import MultiLanguageServer
 from serena.prompt_factory import PromptFactory, SerenaPromptFactory
 from serena.symbol import SymbolManager
 from serena.text_utils import search_files
@@ -106,7 +107,7 @@ def get_serena_managed_dir(project_root: str | Path) -> str:
 @dataclass
 class ProjectConfig(ToStringMixin):
     project_name: str
-    language: Language
+    languages: list[Language]
     ignored_paths: list[str] = field(default_factory=list)
     excluded_tools: set[str] = field(default_factory=set)
     read_only: bool = False
@@ -115,6 +116,11 @@ class ProjectConfig(ToStringMixin):
     encoding: str = "utf-8"
 
     SERENA_DEFAULT_PROJECT_FILE = "project.yml"
+
+    @property
+    def language(self) -> Language:
+        """Primary language of the project for backwards compatibility."""
+        return self.languages[0]
 
     @classmethod
     def autogenerate(cls, project_root: str | Path, project_name: str | None = None, save_to_disk: bool = True) -> Self:
@@ -138,11 +144,11 @@ class ProjectConfig(ToStringMixin):
                 f"You can either add some files that correspond to one of the supported programming languages, "
                 f"or create the file {os.path.join(project_root, cls.rel_path_to_project_yml())} manually and specify the language there."
             )
-        # find the language with the highest percentage
-        dominant_language = max(language_composition.keys(), key=lambda lang: language_composition[lang])
+        sorted_languages = sorted(language_composition.keys(), key=lambda lang: language_composition[lang], reverse=True)
+        log.info(f"Detected languages for {project_root}: {sorted_languages}")
         config_with_comments = load_yaml(PROJECT_TEMPLATE_FILE, preserve_comments=True)
         config_with_comments["project_name"] = project_name
-        config_with_comments["language"] = dominant_language
+        config_with_comments["languages"] = sorted_languages
         if save_to_disk:
             save_yaml(str(project_root / cls.rel_path_to_project_yml()), config_with_comments, preserve_comments=True)
         return cls._from_yml_data(config_with_comments)
@@ -156,13 +162,25 @@ class ProjectConfig(ToStringMixin):
         """
         Create a ProjectConfig instance from a configuration dictionary
         """
-        try:
-            yaml_data["language"] = Language(yaml_data["language"].lower())
-        except ValueError as e:
-            raise ValueError(f"Invalid language: {yaml_data['language']}.\nValid languages are: {[l.value for l in Language]}") from e
+        languages_raw: list[str]
+        if "languages" in yaml_data:
+            languages_raw = yaml_data["languages"]
+        elif "language" in yaml_data:
+            log.warning("Project configuration uses deprecated 'language' field. Please migrate to 'languages'.")
+            languages_raw = [yaml_data["language"]]
+        else:
+            raise ValueError("No languages specified in project configuration")
+
+        languages: list[Language] = []
+        for lang_str in languages_raw:
+            try:
+                languages.append(Language(lang_str.lower()))
+            except ValueError as e:
+                raise ValueError(f"Invalid language: {lang_str}.\nValid languages are: {[l.value for l in Language]}") from e
+
         return cls(
             project_name=yaml_data["project_name"],
-            language=yaml_data["language"],
+            languages=languages,
             ignored_paths=yaml_data.get("ignored_paths", []),
             excluded_tools=set(yaml_data.get("excluded_tools", [])),
             read_only=yaml_data.get("read_only", False),
@@ -201,6 +219,10 @@ class Project:
     @property
     def language(self) -> Language:
         return self.project_config.language
+
+    @property
+    def languages(self) -> list[Language]:
+        return self.project_config.languages
 
     @classmethod
     def load(cls, project_root: str | Path) -> Self:
@@ -584,7 +606,7 @@ class SerenaAgent:
         # project-specific instances, which will be initialized upon project activation
         self._active_project: Project | None = None
         self._active_project_root: str | None = None
-        self.language_server: SyncLanguageServer | None = None
+        self.language_server: MultiLanguageServer | None = None
         self.symbol_manager: SymbolManager | None = None
         self.memories_manager: MemoriesManager | None = None
         self.lines_read: LinesRead | None = None
@@ -865,23 +887,22 @@ class SerenaAgent:
                 log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
                 ignored_paths.extend(spec.patterns)
         log.debug(f"Using {len(ignored_paths)} ignored paths in total.")
-        multilspy_config = MultilspyConfig(
-            code_language=self._active_project.project_config.language,
-            ignored_paths=ignored_paths,
-            trace_lsp_communication=self.serena_config.trace_lsp_communication,
-        )
+        servers: dict[Language, SyncLanguageServer] = {}
         ls_logger = MultilspyLogger(log_level=self.serena_config.log_level)
-        log.info(f"Starting language server for {self._active_project.project_root}.")
-        self.language_server = SyncLanguageServer.create(
-            multilspy_config,
-            ls_logger,
-            self._active_project.project_root,
-        )
-        self.language_server.start()
-        if not self.language_server.is_running():
-            raise RuntimeError(
-                f"Failed to start the language server for {self._active_project.project_name} at {self._active_project.project_root}"
+        for lang in self._active_project.project_config.languages:
+            multilspy_config = MultilspyConfig(
+                code_language=lang,
+                ignored_paths=list(ignored_paths),
+                trace_lsp_communication=self.serena_config.trace_lsp_communication,
             )
+            log.info(f"Starting language server for {lang.value} at {self._active_project.project_root}.")
+            server = SyncLanguageServer.create(multilspy_config, ls_logger, self._active_project.project_root)
+            server.start()
+            if not server.is_running():
+                raise RuntimeError(f"Failed to start the language server for {lang.value} at {self._active_project.project_root}")
+            servers[lang] = server
+
+        self.language_server = MultiLanguageServer(servers)
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self._all_tools[tool_class]  # type: ignore
@@ -916,7 +937,7 @@ class Component(ABC):
         self.agent = agent
 
     @property
-    def language_server(self) -> SyncLanguageServer:
+    def language_server(self) -> MultiLanguageServer:
         assert self.agent.language_server is not None
         return self.agent.language_server
 
@@ -1281,6 +1302,7 @@ class FindSymbolTool(Tool):
         exclude_kinds: list[int] | None = None,
         substring_matching: bool = False,
         max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
+        language: str | None = None,
     ) -> str:
         """
         Retrieves information on all symbols/code entities (classes, methods, etc.) based on the given `name_path`,
@@ -1332,6 +1354,7 @@ class FindSymbolTool(Tool):
         """
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
+        lang_enum = Language(language.lower()) if language is not None else None
         symbols = self.symbol_manager.find_by_name(
             name_path,
             include_body=include_body,
@@ -1339,6 +1362,7 @@ class FindSymbolTool(Tool):
             exclude_kinds=parsed_exclude_kinds,
             substring_matching=substring_matching,
             within_relative_path=relative_path,
+            language=lang_enum,
         )
         symbol_dicts = [_sanitize_symbol_dict(s.to_dict(kind=True, location=True, depth=depth, include_body=include_body)) for s in symbols]
         result = json.dumps(symbol_dicts)

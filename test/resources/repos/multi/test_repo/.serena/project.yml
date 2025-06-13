@@ -1,0 +1,9 @@
+excluded_tools: []
+ignore_all_files_in_gitignore: true
+ignored_paths: []
+initial_prompt: ''
+languages:
+  - python
+  - typescript
+project_name: test_repo
+read_only: false

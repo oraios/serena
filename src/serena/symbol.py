@@ -9,12 +9,13 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, Union
 
 from sensai.util.string import ToStringMixin
 
-from multilspy import SyncLanguageServer
 from multilspy.language_server import ReferenceInSymbol as LSPReferenceInSymbol
+from multilspy.multilspy_config import Language
 from multilspy.multilspy_types import Position, SymbolKind, UnifiedSymbolInformation
 
 if TYPE_CHECKING:
     from .agent import SerenaAgent
+    from .multi_language_server import MultiLanguageServer
 
 log = logging.getLogger(__name__)
 
@@ -487,8 +488,11 @@ class ReferenceInSymbol(ToStringMixin):
         return cls(symbol=Symbol(reference.symbol), line=reference.line, character=reference.character)
 
 
+from serena.multi_language_server import MultiLanguageServer
+
+
 class SymbolManager:
-    def __init__(self, lang_server: SyncLanguageServer, agent: Union["SerenaAgent", None] = None) -> None:
+    def __init__(self, lang_server: MultiLanguageServer, agent: Union["SerenaAgent", None] = None) -> None:
         """
         :param lang_server: the language server to use for symbol retrieval as well as editing operations.
         :param agent: the agent to use (only needed for marking files as modified). You can pass None if you don't
@@ -505,6 +509,8 @@ class SymbolManager:
         exclude_kinds: Sequence[SymbolKind] | None = None,
         substring_matching: bool = False,
         within_relative_path: str | None = None,
+        *,
+        language: Language | None = None,
     ) -> list[Symbol]:
         """
         Find all symbols that match the given name. See docstring of `Symbol.find` for more details.
@@ -512,7 +518,9 @@ class SymbolManager:
         to symbols within a specific file or directory.
         """
         symbols: list[Symbol] = []
-        symbol_roots = self.lang_server.request_full_symbol_tree(within_relative_path=within_relative_path, include_body=include_body)
+        symbol_roots = self.lang_server.request_full_symbol_tree(
+            within_relative_path=within_relative_path, include_body=include_body, language=language
+        )
         for root in symbol_roots:
             symbols.extend(
                 Symbol(root).find(
@@ -620,7 +628,7 @@ class SymbolManager:
     def _edited_file(self, relative_path: str) -> Iterator[None]:
         with self.lang_server.open_file(relative_path) as file_buffer:
             yield
-            root_path = self.lang_server.language_server.repository_root_path
+            root_path = self.lang_server.repository_root_path
             abs_path = os.path.join(root_path, relative_path)
             with open(abs_path, "w", encoding="utf-8") as f:
                 f.write(file_buffer.contents)
@@ -641,7 +649,7 @@ class SymbolManager:
 
     def _get_code_file_content(self, relative_path: str) -> str:
         """Get the content of a file using the language server."""
-        return self.lang_server.language_server.retrieve_full_file_content(relative_path)
+        return self.lang_server.retrieve_full_file_content(relative_path)
 
     def replace_body(self, name_path: str, relative_file_path: str, body: str, *, use_same_indentation: bool = True) -> None:
         """
