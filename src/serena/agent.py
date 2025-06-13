@@ -40,7 +40,7 @@ from serena.config import SerenaAgentContext, SerenaAgentMode
 from serena.constants import PROJECT_TEMPLATE_FILE, REPO_ROOT, SELENA_CONFIG_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
 from serena.prompt_factory import PromptFactory, SerenaPromptFactory
-from serena.symbol import SymbolManager
+from serena.symbol import Symbol, SymbolManager
 from serena.text_utils import search_files
 from serena.util.file_system import GitignoreParser, match_path, scan_directory
 from serena.util.general import load_yaml, save_yaml
@@ -1398,6 +1398,18 @@ class FindReferencingSymbolsTool(Tool):
             reference_dicts.append(ref_dict)
         result = json.dumps(reference_dicts)
         return self._limit_length(result, max_answer_chars)
+
+
+class TypeHierarchyTool(Tool):
+    """Retrieve the supertypes and subtypes of the symbol at the given location."""
+
+    def apply(self, relative_path: str, line: int, column: int, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
+        supertypes, subtypes = self.language_server.request_type_hierarchy_symbols(relative_path, line, column)
+        result = {
+            "supertypes": [_sanitize_symbol_dict(Symbol(s).to_dict(kind=True, location=True)) for s in supertypes],
+            "subtypes": [_sanitize_symbol_dict(Symbol(s).to_dict(kind=True, location=True)) for s in subtypes],
+        }
+        return self._limit_length(json.dumps(result), max_answer_chars)
 
 
 class ReplaceSymbolBodyTool(Tool, ToolMarkerCanEdit):

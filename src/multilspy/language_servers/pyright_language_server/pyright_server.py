@@ -132,6 +132,7 @@ class PyrightServer(LanguageServer):
                     "rangeFormatting": {"dynamicRegistration": True},
                     "onTypeFormatting": {"dynamicRegistration": True},
                     "rename": {"dynamicRegistration": True},
+                    "typeHierarchy": {"dynamicRegistration": True},
                     "publishDiagnostics": {"relatedInformation": True},
                 },
             },

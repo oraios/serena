@@ -4,6 +4,9 @@
     "rootPath": "$rootPath",
     "rootUri": "$rootUri",
     "capabilities": {
+        "textDocument": {
+            "typeHierarchy": {"dynamicRegistration": true}
+        }
     },
     "trace": "verbose",
     "workspaceFolders": [

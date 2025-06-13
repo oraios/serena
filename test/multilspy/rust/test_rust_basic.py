@@ -2,6 +2,9 @@ import os
 
 import pytest
 
+if os.getenv("RUN_ALL_LS_TESTS") != "1":
+    pytest.skip("Skipping non-Python language server tests", allow_module_level=True)
+
 from multilspy import SyncLanguageServer
 from multilspy.multilspy_config import Language
 from multilspy.multilspy_utils import SymbolUtils

@@ -6,7 +6,13 @@ from dataclasses import dataclass
 import pytest
 
 from multilspy.multilspy_config import Language
-from serena.agent import FindReferencingSymbolsTool, FindSymbolTool, SerenaAgent, SerenaConfigBase
+from serena.agent import (
+    FindReferencingSymbolsTool,
+    FindSymbolTool,
+    SerenaAgent,
+    SerenaConfigBase,
+    TypeHierarchyTool,
+)
 from test.conftest import LanguageParamRequest, get_repo_path
 
 
@@ -95,6 +101,21 @@ class TestSerenaAgent:
         assert any(
             ref["relative_path"] == ref_file for ref in refs
         ), f"Expected to find reference to {symbol_name} in {ref_file} for {agent._active_project.language.name}. refs={refs}"
+
+    @pytest.mark.parametrize("serena_agent", [Language.PYTHON], indirect=True)
+    def test_type_hierarchy_tool(self, serena_agent: SerenaAgent) -> None:
+        agent = serena_agent
+        find_symbol_tool = agent.get_tool(FindSymbolTool)
+        result = find_symbol_tool.apply("BaseModel", relative_path=os.path.join("test_repo", "models.py"))
+        symbols = json.loads(result)
+        base_symbol = symbols[0]
+        hierarchy_tool = agent.get_tool(TypeHierarchyTool)
+        start_line = base_symbol["body_location"]["start_line"]
+        output = hierarchy_tool.apply(base_symbol["relative_path"], start_line, 0)
+        hierarchy = json.loads(output)
+        assert "supertypes" in hierarchy and "subtypes" in hierarchy
+        if hierarchy["subtypes"]:
+            assert all("name_path" in s for s in hierarchy["subtypes"])
 
     @pytest.mark.parametrize(
         "serena_agent,name_path,substring_matching,expected_symbol_name,expected_kind,expected_file",

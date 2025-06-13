@@ -1594,6 +1594,73 @@ class LanguageServer:
 
         return defining_symbol
 
+    async def request_type_hierarchy_items(
+        self, relative_file_path: str, line: int, column: int
+    ) -> tuple[list[LSPTypes.TypeHierarchyItem], list[LSPTypes.TypeHierarchyItem]]:
+        """Retrieve the supertypes and subtypes for the symbol at the given position."""
+
+        if not self.server_started:
+            self.logger.log(
+                "request_type_hierarchy_items called before Language Server started",
+                logging.ERROR,
+            )
+            raise MultilspyException("Language Server not started")
+
+        with self.open_file(relative_file_path):
+            try:
+                prepare_items = await self.server.send.prepare_type_hierarchy(
+                    {
+                        "textDocument": {
+                            "uri": PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))
+                        },
+                        "position": {"line": line, "character": column},
+                    }
+                )
+            except Exception:
+                return [], []
+        if not prepare_items:
+            return [], []
+
+        item = prepare_items[0]
+        try:
+            supertypes = await self.server.send.type_hierarchy_supertypes({"item": item}) or []
+            subtypes = await self.server.send.type_hierarchy_subtypes({"item": item}) or []
+        except Exception:
+            return [], []
+        return supertypes, subtypes
+
+    async def request_type_hierarchy_symbols(
+        self, relative_file_path: str, line: int, column: int
+    ) -> tuple[list[multilspy_types.UnifiedSymbolInformation], list[multilspy_types.UnifiedSymbolInformation]]:
+        """Same as :func:`request_type_hierarchy_items` but convert the result to unified symbols."""
+
+        supertypes, subtypes = await self.request_type_hierarchy_items(relative_file_path, line, column)
+
+        def convert(item: LSPTypes.TypeHierarchyItem) -> multilspy_types.UnifiedSymbolInformation:
+            abs_path = PathUtils.uri_to_path(item["uri"])
+            rel_path = os.path.relpath(abs_path, self.repository_root_path)
+            location = multilspy_types.Location(
+                uri=item["uri"],
+                range=item["selectionRange"],
+                absolutePath=abs_path,
+                relativePath=rel_path,
+            )
+            unified: multilspy_types.UnifiedSymbolInformation = {
+                "name": item["name"],
+                "kind": item["kind"],
+                "range": item["range"],
+                "selectionRange": item["selectionRange"],
+                "location": location,
+                "children": [],
+            }
+            if "detail" in item:
+                unified["detail"] = item["detail"]
+            if "tags" in item:
+                unified["tags"] = item["tags"]
+            return unified
+
+        return [convert(i) for i in supertypes], [convert(i) for i in subtypes]
+
     @property
     def _cache_path(self) -> Path:
         return Path(self.repository_root_path) / ".serena" / "cache" / "document_symbols_cache_v20-05-25.pkl"
@@ -2070,6 +2137,29 @@ class SyncLanguageServer:
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
             self.language_server.request_defining_symbol(relative_file_path, line, column, include_body=include_body), self.loop
+        ).result(timeout=self.timeout)
+        return result
+
+    def request_type_hierarchy_items(
+        self, relative_file_path: str, line: int, column: int
+    ) -> tuple[list[LSPTypes.TypeHierarchyItem], list[LSPTypes.TypeHierarchyItem]]:
+        """Sync wrapper for :func:`LanguageServer.request_type_hierarchy_items`."""
+
+        assert self.loop
+        result = asyncio.run_coroutine_threadsafe(
+            self.language_server.request_type_hierarchy_items(relative_file_path, line, column), self.loop
+        ).result(timeout=self.timeout)
+        return result
+
+    def request_type_hierarchy_symbols(
+        self, relative_file_path: str, line: int, column: int
+    ) -> tuple[list[multilspy_types.UnifiedSymbolInformation], list[multilspy_types.UnifiedSymbolInformation]]:
+        """Sync wrapper for :func:`LanguageServer.request_type_hierarchy_symbols`."""
+
+        assert self.loop
+        result = asyncio.run_coroutine_threadsafe(
+            self.language_server.request_type_hierarchy_symbols(relative_file_path, line, column),
+            self.loop,
         ).result(timeout=self.timeout)
         return result
 
