@@ -859,15 +859,26 @@ class LanguageServer:
                 else:
                     self.logger.log(f"No cache hit for symbols with {include_body=} in {relative_file_path}", logging.DEBUG)
 
-            self.logger.log(f"Requesting document symbols for {relative_file_path} from the Language Server", logging.DEBUG)
-            response = await self.server.send.document_symbol(
-                {
-                    "textDocument": {
-                        "uri": pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()
+            import time
+            task_id = f"doc_symbols_{relative_file_path}_{time.time()}"
+            
+            self.logger.log(f"DOC_SYMBOLS: Starting request for {relative_file_path}, include_body={include_body}, task_id={task_id}", logging.DEBUG)
+            self.logger.log(f"DOC_SYMBOLS: Making LSP request for {relative_file_path}, task_id={task_id}", logging.DEBUG)
+            
+            try:
+                response = await self.server.send.document_symbol(
+                    {
+                        "textDocument": {
+                            "uri": pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()
+                        }
                     }
-                }
-            )
-            self.logger.log(f"Received {len(response) if response is not None else None} document symbols for {relative_file_path} from the Language Server", logging.DEBUG)
+                )
+                
+                self.logger.log(f"DOC_SYMBOLS: LSP response received for {relative_file_path}, task_id={task_id}, symbol_count={len(response) if response else 0}", logging.DEBUG)
+                
+            except Exception as e:
+                self.logger.log(f"DOC_SYMBOLS: LSP request failed for {relative_file_path}, task_id={task_id}: {e}", logging.ERROR, exc_info=True)
+                raise
 
         def turn_item_into_symbol_with_children(item: GenericDocumentSymbol):
             item = cast(multilspy_types.UnifiedSymbolInformation, item)
@@ -947,6 +958,40 @@ class LanguageServer:
             self._cache_has_changed = True
         return result
     
+    async def _logged_request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False, task_id: str = "") -> List[multilspy_types.UnifiedSymbolInformation]:
+        """Logged wrapper for request_full_symbol_tree with cancellation support"""
+        from serena.util.async_task_manager import get_global_task_manager
+        
+        self.logger.log(f"LS_ASYNC: Starting async request_full_symbol_tree, task_id={task_id}", logging.DEBUG)
+        self.logger.log(f"LS_ASYNC: Event loop: {asyncio.get_event_loop()}", logging.DEBUG)
+        
+        # Register this task for potential cancellation
+        current_task = asyncio.current_task()
+        if current_task and task_id:
+            task_manager = get_global_task_manager()
+            task_manager.register_task(task_id, current_task, "request_full_symbol_tree")
+        
+        try:
+            # Call the original async method
+            result = await self.request_full_symbol_tree(within_relative_path, include_body)
+            self.logger.log(f"LS_ASYNC: Completed successfully, task_id={task_id}", logging.DEBUG)
+            return result
+            
+        except asyncio.CancelledError:
+            self.logger.log(f"LS_ASYNC: Operation was cancelled, task_id={task_id}", logging.WARNING)
+            raise
+        except Exception as e:
+            self.logger.log(f"LS_ASYNC: Operation failed, task_id={task_id}: {e}", logging.ERROR, exc_info=True)
+            raise
+        finally:
+            # Cleanup task registration
+            if current_task and task_id:
+                try:
+                    task_manager = get_global_task_manager()
+                    task_manager.cleanup_completed_tasks()
+                except:
+                    pass  # Don't let cleanup errors mask the real result/error
+
     async def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
         """
         Will go through all files in the project or within a relative path and build a tree of symbols. 
@@ -1870,10 +1915,41 @@ class SyncLanguageServer:
 
         :return: A list of root symbols representing the top-level packages/modules in the project.
         """
-        result = asyncio.run_coroutine_threadsafe(
-            self.language_server.request_full_symbol_tree(within_relative_path, include_body), self.loop
-        ).result(timeout=self.timeout)
-        return result
+        import threading
+        import time
+        from serena.util.async_task_manager import get_global_task_manager
+        
+        task_id = f"symbol_tree_{time.time()}_{threading.current_thread().name}"
+        
+        self.language_server.logger.log(f"LS_SYNC: Starting request_full_symbol_tree, task_id={task_id}, within_path={within_relative_path}, include_body={include_body}", logging.DEBUG)
+        self.language_server.logger.log(f"LS_SYNC: Current thread: {threading.current_thread().name}", logging.DEBUG)
+        self.language_server.logger.log(f"LS_SYNC: Event loop thread: {self.loop}", logging.DEBUG)
+        
+        try:
+            self.language_server.logger.log(f"LS_SYNC: Submitting async operation to event loop, task_id={task_id}", logging.DEBUG)
+            
+            # Submit the async operation
+            future = asyncio.run_coroutine_threadsafe(
+                self.language_server._logged_request_full_symbol_tree(within_relative_path, include_body, task_id), 
+                self.loop
+            )
+            
+            # Register with task manager for potential cancellation
+            task_manager = get_global_task_manager()
+            # Note: We can't directly register the future, but we'll track it through the coroutine
+            
+            self.language_server.logger.log(f"LS_SYNC: Waiting for result with timeout={self.timeout}, task_id={task_id}", logging.DEBUG)
+            result = future.result(timeout=self.timeout)
+            
+            self.language_server.logger.log(f"LS_SYNC: Operation completed successfully, task_id={task_id}, result_count={len(result) if result else 0}", logging.DEBUG)
+            return result
+            
+        except asyncio.TimeoutError:
+            self.language_server.logger.log(f"LS_SYNC: AsyncIO timeout for task_id={task_id}", logging.ERROR)
+            raise
+        except Exception as e:
+            self.language_server.logger.log(f"LS_SYNC: Operation failed for task_id={task_id}: {e}", logging.ERROR)
+            raise
 
     def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
         """

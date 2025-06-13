@@ -1038,40 +1038,60 @@ class Tool(Component):
         """
         Applies the tool with the given arguments
         """
+        import threading
+        import time
+
+        call_id = f"{self.get_name()}_{time.time()}_{id(threading.current_thread())}"
+
+        log.debug(f"TOOL_EXEC: Starting {self.get_name()}, call_id={call_id}")
+        log.debug(f"TOOL_EXEC: Thread: {threading.current_thread().name}")
+        log.debug(f"TOOL_EXEC: Timeout setting: {self.agent.serena_config.tool_timeout}")
+        log.debug(f"TOOL_EXEC: Catch exceptions: {catch_exceptions}")
+
         apply_fn = self.get_apply_fn()
 
         try:
             if not self.is_active():
+                log.warning(f"TOOL_EXEC: Tool {self.get_name()} is not active, call_id={call_id}")
                 return f"Error: Tool '{self.get_name()}' is not active. Active tools: {self.agent.get_active_tool_names()}"
         except Exception as e:
+            log.error(f"TOOL_EXEC: Error checking tool activation, call_id={call_id}: {e}")
             return f"RuntimeError while checking if tool {self.get_name()} is active: {e}"
 
         if log_call:
             self._log_tool_application(inspect.currentframe())
+
         try:
             # check whether the tool requires an active project and language server
             if not isinstance(self, ToolMarkerDoesNotRequireActiveProject):
                 if self.agent._active_project is None:
+                    log.warning(f"TOOL_EXEC: No active project for {self.get_name()}, call_id={call_id}")
                     return (
                         "Error: No active project. Ask to user to select a project from this list: "
                         + f"{self.agent.serena_config.project_names}"
                     )
                 if not self.agent.is_language_server_running():
-                    log.info("Language server is not running. Starting it ...")
+                    log.info(f"TOOL_EXEC: Language server not running, starting it for call_id={call_id}")
                     self.agent.reset_language_server()
 
-            # apply the actual tool with a timeout
+            # apply the actual tool with a timeout and enhanced logging
+            log.debug(f"TOOL_EXEC: Calling execute_with_timeout for {self.get_name()}, call_id={call_id}")
             execution_fn = lambda: apply_fn(**kwargs)
             execution_result = execute_with_timeout(execution_fn, self.agent.serena_config.tool_timeout, self.get_name())
+
             if execution_result.status == ExecutionResult.Status.SUCCESS:
+                log.debug(f"TOOL_EXEC: Success for {self.get_name()}, call_id={call_id}")
                 result = cast(str, execution_result.result_value)
             else:
+                log.error(f"TOOL_EXEC: Execution failed for {self.get_name()}, call_id={call_id}, status={execution_result.status}")
                 assert execution_result.exception is not None
                 raise execution_result.exception
 
         except Exception as e:
             if not catch_exceptions:
+                log.debug(f"TOOL_EXEC: Re-raising exception for {self.get_name()}, call_id={call_id}")
                 raise
+            log.exception(f"TOOL_EXEC: Exception in {self.get_name()}, call_id={call_id}: {e}")
             msg = f"Error executing tool: {e}\n{traceback.format_exc()}"
             log.error(
                 f"Error executing tool: {e}. "
@@ -1081,12 +1101,13 @@ class Tool(Component):
             result = msg
 
         if log_call:
-            log.info(f"Result: {result}")
+            log.info(f"TOOL_EXEC: Completed {self.get_name()}, call_id={call_id}, result_length={len(result) if result else 0}")
 
         try:
+            log.debug(f"TOOL_EXEC: Saving language server cache for call_id={call_id}")
             self.language_server.save_cache()
         except Exception as e:
-            log.error(f"Error saving language server cache: {e}")
+            log.error(f"TOOL_EXEC: Error saving LS cache for call_id={call_id}: {e}")
 
         return result
 
