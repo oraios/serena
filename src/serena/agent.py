@@ -28,7 +28,7 @@ from overrides import override
 from pathspec import PathSpec
 from ruamel.yaml.comments import CommentedMap
 from sensai.util import logging
-from sensai.util.logging import FallbackHandler
+from sensai.util.logging import LOG_DEFAULT_FORMAT, FallbackHandler
 from sensai.util.string import ToStringMixin, dict_string
 
 from multilspy import SyncLanguageServer
@@ -543,6 +543,8 @@ class SerenaAgent:
         if Logger.root.level > serena_log_level:
             log.info(f"Changing the root logger level to {serena_log_level}")
             Logger.root.setLevel(serena_log_level)
+            # Override existing configuration (needed to configure multilspy logger as desired)
+            logging.basicConfig(format=LOG_DEFAULT_FORMAT, level=serena_log_level, force=True)
 
         # open GUI log window if enabled
         self._gui_log_handler: Union["GuiLogViewerHandler", None] = None  # noqa
