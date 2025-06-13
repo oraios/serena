@@ -41,7 +41,7 @@ def create_ls_with_ignored_dirs(
 @pytest.fixture(scope="module")
 def ls_with_ignored_dirs() -> Generator[SyncLanguageServer, None, None]:
     """Fixture to set up an LS for the python test repo with the 'scripts' directory ignored."""
-    ignored_paths = ["scripts", "custom_test_repo"]
+    ignored_paths = ["scripts", "custom_test"]
     ls = create_ls_with_ignored_dirs(ignored_paths=ignored_paths, language=Language.PYTHON)
     ls.start()
     try:
