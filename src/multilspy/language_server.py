@@ -214,6 +214,7 @@ class LanguageServer:
         # load cache first to prevent any racing conditions due to asyncio stuff
         self._document_symbols_cache:  dict[str, Tuple[str, Tuple[List[multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]]] = {}
         """Maps file paths to a tuple of (file_content_hash, result_of_request_document_symbols)"""
+        self._diagnostics_cache: dict[str, tuple[str, list[lsp_types.Diagnostic]]] = {}
         self._cache_lock = threading.Lock()
         self._cache_has_changed: bool = False
         self.load_cache()
@@ -1263,6 +1264,48 @@ class LanguageServer:
             paths_exclude_glob=paths_exclude_glob
         )
 
+    async def request_diagnostics(
+        self, relative_file_path: str, *, new_only: bool = False
+    ) -> list[lsp_types.Diagnostic]:
+        """Retrieve diagnostics for the given file."""
+        if not self.server_started:
+            self.logger.log(
+                "request_diagnostics called before Language Server started",
+                logging.ERROR,
+            )
+            raise MultilspyException("Language Server not started")
+
+        with self.open_file(relative_file_path):
+            uri = pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()
+            prev = self._diagnostics_cache.get(relative_file_path)
+            params: lsp_types.DocumentDiagnosticParams = {
+                "textDocument": {"uri": uri}
+            }
+            if prev:
+                params["previousResultId"] = prev[0]
+
+            response = await self.server.send.text_document_diagnostic(params)
+
+        diagnostics: list[lsp_types.Diagnostic]
+        if response["kind"] == lsp_types.DocumentDiagnosticReportKind.Full:
+            diagnostics = response.get("items", [])
+            result_id = response.get("resultId", "")
+            old_diags = prev[1] if prev else []
+            self._diagnostics_cache[relative_file_path] = (result_id, diagnostics)
+            if new_only:
+                return [d for d in diagnostics if d not in old_diags]
+            return diagnostics
+        elif response["kind"] == lsp_types.DocumentDiagnosticReportKind.Unchanged:
+            result_id = response.get("resultId", "")
+            if prev:
+                self._diagnostics_cache[relative_file_path] = (result_id, prev[1])
+                return [] if new_only else prev[1]
+            else:
+                self._diagnostics_cache[relative_file_path] = (result_id, [])
+                return []
+        else:
+            raise MultilspyException(f"Unexpected diagnostics response: {response}")
+
     async def request_referencing_symbols(
         self,
         relative_file_path: str,
@@ -2112,6 +2155,13 @@ class SyncLanguageServer:
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
             self.language_server.search_files_for_pattern(pattern, context_lines_before, context_lines_after, paths_include_glob, paths_exclude_glob), self.loop
+        ).result(timeout=self.timeout)
+        return result
+
+    def request_diagnostics(self, relative_file_path: str, new_only: bool = False) -> list[lsp_types.Diagnostic]:
+        assert self.loop
+        result = asyncio.run_coroutine_threadsafe(
+            self.language_server.request_diagnostics(relative_file_path, new_only=new_only), self.loop
         ).result(timeout=self.timeout)
         return result
 

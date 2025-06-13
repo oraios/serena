@@ -1398,6 +1398,22 @@ class FindReferencingSymbolsTool(Tool):
         return self._limit_length(result, max_answer_chars)
 
 
+class DiagnosticsTool(Tool):
+    """Retrieve diagnostics for a file from the language server."""
+
+    def apply(self, relative_path: str, new_only: bool = False) -> str:
+        """Get diagnostics for the given file.
+
+        :param relative_path: path to the file within the project
+        :param new_only: if True, return only diagnostics that changed since the last call
+        :return: JSON list of diagnostics
+        """
+        self.agent.validate_relative_path(relative_path)
+        diags = self.language_server.request_diagnostics(relative_path, new_only=new_only)
+        result = json.dumps(diags)
+        return result
+
+
 class ReplaceSymbolBodyTool(Tool, ToolMarkerCanEdit):
     """
     Replaces the full definition of a symbol.

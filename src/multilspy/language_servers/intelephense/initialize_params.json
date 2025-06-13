@@ -10,6 +10,10 @@
                 "didSave": true,
                 "dynamicRegistration": true
             },
+            "diagnostic": {
+                "dynamicRegistration": true,
+                "relatedDocumentSupport": false
+            },
             "completion": {
                 "dynamicRegistration": true,
                 "completionItem": {
@@ -24,7 +28,8 @@
             "workspaceFolders": true,
             "didChangeConfiguration": {
                 "dynamicRegistration": true
-            }
+            },
+            "diagnostics": {"refreshSupport": true}
         }
     },
     "workspaceFolders": [

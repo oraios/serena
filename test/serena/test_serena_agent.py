@@ -6,7 +6,13 @@ from dataclasses import dataclass
 import pytest
 
 from multilspy.multilspy_config import Language
-from serena.agent import FindReferencingSymbolsTool, FindSymbolTool, SerenaAgent, SerenaConfigBase
+from serena.agent import (
+    DiagnosticsTool,
+    FindReferencingSymbolsTool,
+    FindSymbolTool,
+    SerenaAgent,
+    SerenaConfigBase,
+)
 from test.conftest import LanguageParamRequest, get_repo_path
 
 
@@ -224,3 +230,21 @@ class TestSerenaAgent:
         assert (
             not symbols
         ), f"Expected to find no symbols for {name_path} for {agent._active_project.language.name}. Symbols found: {symbols}"
+
+    @pytest.mark.parametrize(
+        "serena_agent,file_path",
+        [
+            pytest.param(Language.PYTHON, os.path.join("test_repo", "name_collisions.py"), marks=pytest.mark.python),
+            pytest.param(Language.GO, "main.go", marks=pytest.mark.go),
+            pytest.param(Language.JAVA, os.path.join("src", "main", "java", "test_repo", "Main.java"), marks=pytest.mark.java),
+            pytest.param(Language.RUST, os.path.join("src", "main.rs"), marks=pytest.mark.rust),
+            pytest.param(Language.TYPESCRIPT, "index.ts", marks=pytest.mark.typescript),
+            pytest.param(Language.PHP, "index.php", marks=pytest.mark.php),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_diagnostics_tool(self, serena_agent: SerenaAgent, file_path: str) -> None:
+        tool = serena_agent.get_tool(DiagnosticsTool)
+        result = tool.apply(file_path)
+        diags = json.loads(result)
+        assert isinstance(diags, list)

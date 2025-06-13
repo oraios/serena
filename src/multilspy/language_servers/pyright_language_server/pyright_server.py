@@ -68,6 +68,7 @@ class PyrightServer(LanguageServer):
                     "workspaceEdit": {"documentChanges": True},
                     "didChangeConfiguration": {"dynamicRegistration": True},
                     "didChangeWatchedFiles": {"dynamicRegistration": True},
+                    "diagnostics": {"refreshSupport": True},
                     "symbol": {
                         "dynamicRegistration": True,
                         "symbolKind": {
@@ -133,6 +134,7 @@ class PyrightServer(LanguageServer):
                     "onTypeFormatting": {"dynamicRegistration": True},
                     "rename": {"dynamicRegistration": True},
                     "publishDiagnostics": {"relatedInformation": True},
+                    "diagnostic": {"dynamicRegistration": True, "relatedDocumentSupport": False},
                 },
             },
             "workspaceFolders": [

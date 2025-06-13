@@ -10,3 +10,4 @@ excluded_tools:
   - replace_lines
   - insert_at_line
   - execute_shell_command
+  - diagnostics
