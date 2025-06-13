@@ -287,7 +287,7 @@ PROJECT_TYPE = ProjectType()
     "--tool-timeout",
     type=float,
     default=None,
-    help="Timeout in seconds for tool execution. If not specified, will take the value from the serena configuration.",
+    help="Timeout in seconds for tool execution. Use -1 for no timeout (direct execution). If not specified, will take the value from the serena configuration.",
 )
 def start_mcp_server(
     project_file_opt: str | None,
