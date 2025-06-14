@@ -1,0 +1,32 @@
+services:
+  serena:
+    image: serena:latest
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "${SERENA_PORT:-9121}:9121"  # MCP server port
+      - "${SERENA_DASHBOARD_PORT:-24282}:24282"  # Dashboard port (default 0x5EDA = 24282)
+    environment:
+      - SERENA_DOCKER=1
+    command:
+      - "uv run --directory . serena-mcp-server --transport sse --port 9121 --host 0.0.0.0"
+
+  serena-dev:
+    image: serena:dev
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      target: development
+    tty: true
+    stdin_open: true
+    environment:
+      - SERENA_DOCKER=1
+    volumes:
+      - .:/workspaces/serena
+    ports:
+      - "${SERENA_PORT:-9121}:9121"  # MCP server port
+      - "${SERENA_DASHBOARD_PORT:-24282}:24282"  # Dashboard port
+    command:
+      - "uv run --directory . serena-mcp-server"

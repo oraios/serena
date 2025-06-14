@@ -103,6 +103,19 @@ def get_serena_managed_dir(project_root: str | Path) -> str:
     return os.path.join(project_root, SERENA_MANAGED_DIR_NAME)
 
 
+def is_running_in_docker() -> bool:
+    """Check if we're running inside a Docker container."""
+    # Check for Docker-specific files
+    if os.path.exists('/.dockerenv'):
+        return True
+    # Check cgroup for docker references
+    try:
+        with open('/proc/self/cgroup', 'r') as f:
+            return 'docker' in f.read()
+    except FileNotFoundError:
+        return False
+
+
 @dataclass
 class ProjectConfig(ToStringMixin):
     project_name: str
@@ -316,6 +329,7 @@ class SerenaConfig(SerenaConfigBase):
     loaded_commented_yaml: CommentedMap
 
     CONFIG_FILE = "serena_config.yml"
+    CONFIG_FILE_DOCKER = "serena_config.docker.yml"  # Docker-specific config file; auto-generated if missing, mounted via docker-compose for user customization
 
     @classmethod
     def autogenerate(cls) -> None:
@@ -329,7 +343,8 @@ class SerenaConfig(SerenaConfigBase):
 
     @classmethod
     def get_config_file_path(cls) -> str:
-        return os.path.join(REPO_ROOT, cls.CONFIG_FILE)
+        config_file = cls.CONFIG_FILE_DOCKER if is_running_in_docker() else cls.CONFIG_FILE
+        return os.path.join(REPO_ROOT, config_file)
 
     @classmethod
     def from_config_file(cls, generate_if_missing: bool = True) -> "SerenaConfig":
@@ -371,7 +386,11 @@ class SerenaConfig(SerenaConfigBase):
             project = Project.load(path)
             instance.projects.append(project)
 
-        instance.gui_log_window_enabled = loaded_commented_yaml.get("gui_log_window", False)
+        # Force disable GUI in Docker environment
+        if is_running_in_docker():
+            instance.gui_log_window_enabled = False
+        else:
+            instance.gui_log_window_enabled = loaded_commented_yaml.get("gui_log_window", False)
         instance.log_level = loaded_commented_yaml.get("log_level", loaded_commented_yaml.get("gui_log_level", logging.INFO))
         instance.web_dashboard = loaded_commented_yaml.get("web_dashboard", True)
         instance.tool_timeout = loaded_commented_yaml.get("tool_timeout", DEFAULT_TOOL_TIMEOUT)
