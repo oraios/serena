@@ -18,6 +18,9 @@
             },
             "definition": {
                 "dynamicRegistration": true
+            },
+            "typeHierarchy": {
+                "dynamicRegistration": true
             }
         },
         "workspace": {

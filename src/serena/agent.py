@@ -1056,11 +1056,15 @@ class SerenaAgent:
             ls_timeout=ls_timeout,
             trace_lsp_communication=self.serena_config.trace_lsp_communication,
         )
+        log.info(f"Starting the language server for {self._active_project.project_name}")
         self.language_server.start()
         if not self.language_server.is_running():
             raise RuntimeError(
                 f"Failed to start the language server for {self._active_project.project_name} at {self._active_project.project_root}"
             )
+        if self.symbol_manager is not None:
+            log.debug("Setting the language server in the agent's symbol manager")
+            self.symbol_manager.set_language_server(self.language_server)
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self._all_tools[tool_class]  # type: ignore
@@ -1638,6 +1642,53 @@ class FindReferencingSymbolsTool(Tool):
             reference_dicts.append(ref_dict)
         result = json.dumps(reference_dicts)
         return self._limit_length(result, max_answer_chars)
+
+
+class TypeHierarchyTool(Tool):
+    """Retrieve the supertypes and subtypes of the symbol at the given name_path."""
+
+    def apply(
+        self,
+        name_path: str,
+        relative_path: str,
+        depth_parents: int = 1,
+        depth_children: int = 1,
+        max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
+    ) -> str:
+        """
+        Retrieves the type hierarchy (supertypes and subtypes) for a symbol identified by name_path.
+        Only works on classes and interfaces - raises an error for other symbol types.
+
+        :param name_path: The name path of the symbol to get type hierarchy for
+        :param relative_path: The relative path to the file containing the symbol
+        :param depth_parents: Maximum depth to traverse for parent types (default: 1)
+        :param depth_children: Maximum depth to traverse for child types (default: 1)
+        :param max_answer_chars: Max characters for the JSON result
+        :return: JSON string with supertypes and subtypes information
+        """
+        # Find the target symbol
+        symbols = self.symbol_manager.find_by_name(name_path, within_relative_path=relative_path)
+        if not symbols:
+            raise ValueError(f"Symbol '{name_path}' not found in file '{relative_path}'")
+
+        target_symbol = symbols[0]  # Take the first match
+
+        # Validate that the symbol is a class or interface
+        if target_symbol.symbol_kind not in (SymbolKind.Class, SymbolKind.Interface):
+            kind_name = SymbolKind(target_symbol.symbol_kind).name
+            raise ValueError(
+                f"Type hierarchy is only supported for classes and interfaces, but symbol '{name_path}' is of kind {kind_name}"
+            )
+
+        # Get type hierarchy using the symbol's method
+        supertypes, subtypes = target_symbol.get_type_hierarchy(self.language_server, depth_parents, depth_children)
+
+        # Convert to symbolic information format
+        result = {
+            "supertypes": [_sanitize_symbol_dict(s.to_dict(kind=True, location=True)) for s in supertypes],
+            "subtypes": [_sanitize_symbol_dict(s.to_dict(kind=True, location=True)) for s in subtypes],
+        }
+        return self._limit_length(json.dumps(result), max_answer_chars)
 
 
 class ReplaceSymbolBodyTool(Tool, ToolMarkerCanEdit):

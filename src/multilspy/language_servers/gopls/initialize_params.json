@@ -19,6 +19,9 @@
             "definition": {
                 "dynamicRegistration": true
             },
+            "typeHierarchy": {
+                "dynamicRegistration": true
+            },
             "documentSymbol": {
                 "dynamicRegistration": true,
                 "hierarchicalDocumentSymbolSupport": true,

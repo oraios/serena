@@ -470,3 +470,15 @@ class TestLanguageServerSymbols:
         ]
         assert {ref["kind"] for ref in references_to_typing} == {SymbolKind.File}
         assert references_to_typing[0]["body"]
+
+    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    def test_request_type_hierarchy(self, language_server: SyncLanguageServer) -> None:
+        file_path = os.path.join("test_repo", "models.py")
+        symbols = language_server.request_document_symbols(file_path)
+        base_symbol = next(s for s in symbols[0] if s.get("name") == "BaseModel")
+        sel_start = base_symbol["selectionRange"]["start"]
+        supers, subs = language_server.request_type_hierarchy_symbols(file_path, sel_start["line"], sel_start["character"])
+        assert isinstance(supers, list)
+        assert isinstance(subs, list)
+        if subs:
+            assert all("name" in s for s in subs)

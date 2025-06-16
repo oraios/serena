@@ -3,7 +3,11 @@
     "processId": "$processId",
     "rootPath": "$rootPath",
     "rootUri": "$rootUri",
-    "capabilities": {},
+    "capabilities": {
+        "textDocument": {
+            "typeHierarchy": {"dynamicRegistration": true}
+        }
+    },
     "initializationOptions": {
         "onlyAnalyzeProjectsWithOpenFiles": false,
         "suggestFromUnimportedLibraries": true,

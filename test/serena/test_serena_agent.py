@@ -6,7 +6,15 @@ from dataclasses import dataclass
 import pytest
 
 from multilspy.multilspy_config import Language
-from serena.agent import FindReferencingSymbolsTool, FindSymbolTool, Project, ProjectConfig, SerenaAgent, SerenaConfigBase
+from serena.agent import (
+    FindReferencingSymbolsTool,
+    FindSymbolTool,
+    Project,
+    ProjectConfig,
+    SerenaAgent,
+    SerenaConfigBase,
+    TypeHierarchyTool,
+)
 from serena.process_isolated_agent import ProcessIsolatedSerenaAgent
 from test.conftest import get_repo_path
 
@@ -155,6 +163,42 @@ class TestSerenaAgent:
         assert any(
             ref["relative_path"] == ref_file for ref in refs
         ), f"Expected to find reference to {symbol_name} in {ref_file}. refs={refs}"
+
+    @pytest.mark.parametrize("serena_agent", [Language.PYTHON], indirect=True)
+    def test_type_hierarchy_tool(self, serena_agent: SerenaAgent) -> None:
+        agent = serena_agent
+        hierarchy_tool = agent.get_tool(TypeHierarchyTool)
+
+        # Test with BaseModel class - it should have User and Item as subtypes
+        output = hierarchy_tool.apply("BaseModel", relative_path=os.path.join("test_repo", "models.py"))
+        hierarchy = json.loads(output)
+
+        # Verify structure
+        assert "supertypes" in hierarchy and "subtypes" in hierarchy
+
+        # BaseModel should have ABC as supertype (if detected by language server)
+        # and User, Item as subtypes
+        if hierarchy["subtypes"]:
+            assert all("name_path" in s for s in hierarchy["subtypes"])
+            subtype_names = [s["name"] for s in hierarchy["subtypes"]]
+            assert "User" in subtype_names or "Item" in subtype_names
+
+        # Test with User class - it should have BaseModel as supertype
+        user_output = hierarchy_tool.apply("User", relative_path=os.path.join("test_repo", "models.py"))
+        user_hierarchy = json.loads(user_output)
+
+        assert "supertypes" in user_hierarchy and "subtypes" in user_hierarchy
+        if user_hierarchy["supertypes"]:
+            assert all("name_path" in s for s in user_hierarchy["supertypes"])
+            supertype_names = [s["name"] for s in user_hierarchy["supertypes"]]
+            assert "BaseModel" in supertype_names
+
+        # Test error handling - try with a non-class symbol
+        try:
+            hierarchy_tool.apply("create_user_object", relative_path=os.path.join("test_repo", "models.py"))
+            assert False, "Should have raised ValueError for non-class symbol"
+        except ValueError as e:
+            assert "Type hierarchy is only supported for classes and interfaces" in str(e)
 
     @pytest.mark.parametrize(
         "isolated_process", [pytest.param(False, id="direct"), pytest.param(True, id="isolated", marks=pytest.mark.isolated_process)]
