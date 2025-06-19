@@ -31,7 +31,7 @@ class LSPConstants:
     # key used to represent the language a document is in - "java", "csharp", etc.
     LANGUAGE_ID = "languageId"
 
-    # key used to represent the version of a document (a shared value betwen the client and server)
+    # key used to represent the version of a document (a shared value between the client and server)
     VERSION = "version"
 
     # key used to represent the text of a document being sent from the client to the server on open

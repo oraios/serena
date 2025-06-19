@@ -32,7 +32,7 @@ class MultilspyLogger:
 
     def log(self, debug_message: str, level: int, sanitized_error_message: str = "", stacklevel: int = 2) -> None:
         """
-        Log the debug and santized messages using the logger
+        Log the debug and sanitized messages using the logger
         """
 
         debug_message = debug_message.replace("'", '"').replace("\n", " ")

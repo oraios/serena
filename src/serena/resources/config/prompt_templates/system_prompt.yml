@@ -39,7 +39,7 @@ prompts:
     use `find_symbol` with the name path `Foo/__init__` and `include_body=True`. If you don't know yet which methods in `Foo` you need to read or edit,
     you can use `find_symbol` with the name path `Foo`, `include_body=False` and `depth=1` to get all (top-level) methods of `Foo` before proceeding
     to read the desired methods with `include_body=True`
-    You can unterstand relationships between symbols by using the `find_referencing_symbols` tool.
+    You can understand relationships between symbols by using the `find_referencing_symbols` tool.
 
     You generally have access to memories and it may be useful for you to read them, but also only if they help you
     to answer the question or complete the task. You can infer which memories are relevant to the current task by reading

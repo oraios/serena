@@ -27,7 +27,7 @@ prompt: |
   you are replacing or inserting above or below. In particular, keep in mind the description of the `replace_symbol_body` tool. If you want to add some new code at the end of the file, you should
   use the `insert_after_symbol` tool with the last top-level symbol in the file. If you want to add an import, often a good strategy is to use
   `insert_before_symbol` with the first top-level symbol in the file.
-  You can unterstand relationships between symbols by using the `find_referencing_symbols` tool. If not explicitly requested otherwise by a user,
+  You can understand relationships between symbols by using the `find_referencing_symbols` tool. If not explicitly requested otherwise by a user,
   you make sure that when you edit a symbol, it is either done in a backward-compatible way, or you find and adjust the references as needed.
   The `find_referencing_symbols` tool will give you code snippets around the references, as well as symbolic information.
   You will generally be able to use the info from the snippets and the regex-based approach to adjust the references as well.
@@ -52,7 +52,7 @@ prompt: |
     1. If the snippet to be replaced is likely to be unique within the file, you perform the replacement by directly using the escaped version of the 
        original.
     2. If the snippet is probably not unique, and you want to replace all occurrences, you use the `allow_multiple_occurrences` flag.
-    3. If the snippet is not unique, and you want to replace a specific occurence, you make use of the code surrounding the snippet
+    3. If the snippet is not unique, and you want to replace a specific occurrence, you make use of the code surrounding the snippet
        to extend the regex with content before/after such that the regex will have exactly one match.
     4. You generally assume that a snippet is unique, knowing that the tool will return an error on multiple matches. You only read more file content
        (for crafvarting a more specific regex) if such a failure unexpectedly occurs. 
@@ -102,7 +102,7 @@ prompt: |
 
   Generally, I remind you that you rely on the regex tool with providing you the correct feedback, no need for more verification!
 
-  IMPORTANT: REMEMBER TO USE WILDCARDS WEHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE LONG REGEXES WITHOUT USING WILDCARDS INSTEAD!
+  IMPORTANT: REMEMBER TO USE WILDCARDS WHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE LONG REGEXES WITHOUT USING WILDCARDS INSTEAD!
 excluded_tools: 
  - replace_lines
  - insert_at_line

@@ -1717,7 +1717,7 @@ class ReplaceSymbolBodyTool(Tool, ToolMarkerCanEdit):
         as the tool will automatically add the indentation of the original symbol to each line. For example,
         for replacing a method in python, you can just write (using the standard python indentation):
         body="def my_method_replacement(self, ...):\n    first_line\n    second_line...". So each line after the first line only has
-        an indentation of 4 (the indentation relative to the first characted),
+        an indentation of 4 (the indentation relative to the first character),
         since the additional indentation will be added by the tool. Same for more deeply nested
         cases. You always only need to write the relative indentation to the first character of the first line, and that
         in turn should not have any indentation.
@@ -1754,7 +1754,7 @@ class InsertAfterSymbolTool(Tool, ToolMarkerCanEdit):
 
         :param name_path: for finding the symbol to insert after, same logic as in the `find_symbol` tool.
         :param relative_path: the relative path to the file containing the symbol
-        :param body: the body/content to be inserted. Important: the insterted code will automatically have the
+        :param body: the body/content to be inserted. Important: the inserted code will automatically have the
             same indentation as the symbol's body, so you do not need to provide any additional indentation.
         """
         self.symbol_manager.insert_after_symbol(
@@ -1784,7 +1784,7 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerCanEdit):
 
         :param name_path: for finding the symbol to insert before, same logic as in the `find_symbol` tool.
         :param relative_path: the relative path to the file containing the symbol
-        :param body: the body/content to be inserted. Important: the insterted code will automatically have the
+        :param body: the body/content to be inserted. Important: the inserted code will automatically have the
             same indentation as the symbol's body, so you do not need to provide any additional indentation.
         """
         self.symbol_manager.insert_before_symbol(
@@ -1864,7 +1864,7 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
         Always try to use wildcards to avoid specifying the exact content of the code to be replaced,
         especially if it spans several lines.
 
-        IMPORTANT: REMEMBER TO USE WILDCARDS WEHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE LONG REGEXES WITHOUT USING WILDCARDS INSTEAD!
+        IMPORTANT: REMEMBER TO USE WILDCARDS WHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE LONG REGEXES WITHOUT USING WILDCARDS INSTEAD!
 
         :param relative_path: the relative path to the file
         :param regex: a Python-style regular expression, matches of which will be replaced.

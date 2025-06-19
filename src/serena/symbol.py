@@ -492,7 +492,7 @@ class SymbolManager:
         """
         :param lang_server: the language server to use for symbol retrieval as well as editing operations.
         :param agent: the agent to use (only needed for marking files as modified). You can pass None if you don't
-            need an agent to be avare of file modifications performed by the symbol manager.
+            need an agent to be aware of file modifications performed by the symbol manager.
         """
         self._lang_server = lang_server
         self.agent = agent
