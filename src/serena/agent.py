@@ -101,7 +101,9 @@ class SerenaConfigError(Exception):
     pass
 
 
-def get_serena_managed_dir(project_root: str | Path) -> str:
+def get_serena_managed_dir(project_root: str | Path, custom_serena_dir: str | None = None) -> str:
+    if custom_serena_dir is not None:
+        return str(Path(custom_serena_dir).resolve())
     return os.path.join(project_root, SERENA_MANAGED_DIR_NAME)
 
 
@@ -132,7 +134,9 @@ class ProjectConfig(ToStringMixin):
     SERENA_DEFAULT_PROJECT_FILE = "project.yml"
 
     @classmethod
-    def autogenerate(cls, project_root: str | Path, project_name: str | None = None, save_to_disk: bool = True) -> Self:
+    def autogenerate(
+        cls, project_root: str | Path, project_name: str | None = None, save_to_disk: bool = True, serena_config_dir: str | None = None
+    ) -> Self:
         """
         Autogenerate a project configuration for a given project root.
 
@@ -140,6 +144,7 @@ class ProjectConfig(ToStringMixin):
         :param project_name: the name of the project; if None, the name of the project will be the name of the directory
             containing the project
         :param save_to_disk: whether to save the project configuration to disk
+        :param serena_config_dir: custom path for the .serena directory
         :return: the project configuration
         """
         project_root = Path(project_root).resolve()
@@ -148,10 +153,11 @@ class ProjectConfig(ToStringMixin):
         project_name = project_name or project_root.name
         language_composition = determine_programming_language_composition(str(project_root))
         if len(language_composition) == 0:
+            config_path = serena_config_dir if serena_config_dir else str(project_root / cls.rel_path_to_project_yml())
             raise ValueError(
                 f"Failed to autogenerate project.yaml: no programming language detected in project {project_root}. "
                 f"You can either add some files that correspond to one of the supported programming languages, "
-                f"or create the file {os.path.join(project_root, cls.rel_path_to_project_yml())} manually and specify the language there."
+                f"or create the file {config_path} manually and specify the language there."
             )
         # find the language with the highest percentage
         dominant_language = max(language_composition.keys(), key=lambda lang: language_composition[lang])
@@ -159,11 +165,23 @@ class ProjectConfig(ToStringMixin):
         config_with_comments["project_name"] = project_name
         config_with_comments["language"] = dominant_language
         if save_to_disk:
-            save_yaml(str(project_root / cls.rel_path_to_project_yml()), config_with_comments, preserve_comments=True)
+            if serena_config_dir is not None:
+                config_path_obj = Path(serena_config_dir) / cls.SERENA_DEFAULT_PROJECT_FILE
+                # Ensure the custom directory exists
+                config_path_obj.parent.mkdir(parents=True, exist_ok=True)
+                config_path = str(config_path_obj)
+            else:
+                config_path_obj = project_root / cls.rel_path_to_project_yml()
+                # Ensure the .serena directory exists
+                config_path_obj.parent.mkdir(parents=True, exist_ok=True)
+                config_path = str(config_path_obj)
+            save_yaml(str(config_path), config_with_comments, preserve_comments=True)
         return cls.from_json_dict(config_with_comments)
 
     @classmethod
-    def rel_path_to_project_yml(cls) -> str:
+    def rel_path_to_project_yml(cls, custom_serena_dir: str | None = None) -> str:
+        if custom_serena_dir is not None:
+            return os.path.join(custom_serena_dir, cls.SERENA_DEFAULT_PROJECT_FILE)
         return os.path.join(SERENA_MANAGED_DIR_NAME, cls.SERENA_DEFAULT_PROJECT_FILE)
 
     @classmethod
@@ -185,15 +203,19 @@ class ProjectConfig(ToStringMixin):
         return result
 
     @classmethod
-    def load(cls, project_root: Path | str, autogenerate: bool = True) -> Self:
+    def load(cls, project_root: Path | str, autogenerate: bool = True, serena_config_dir: str | None = None) -> Self:
         """
         Load a ProjectConfig instance from the path to the project root.
         """
         project_root = Path(project_root)
-        yaml_path = project_root / cls.rel_path_to_project_yml()
+        if serena_config_dir is not None:
+            yaml_path = Path(serena_config_dir) / cls.SERENA_DEFAULT_PROJECT_FILE
+        else:
+            yaml_path = project_root / cls.rel_path_to_project_yml()
+
         if not yaml_path.exists():
             if autogenerate:
-                return cls.autogenerate(project_root)
+                return cls.autogenerate(project_root, serena_config_dir=serena_config_dir)
             else:
                 raise FileNotFoundError(f"Project configuration file not found: {yaml_path}")
         with open(yaml_path, encoding="utf-8") as f:
@@ -220,11 +242,11 @@ class Project:
         return self.project_config.language
 
     @classmethod
-    def load(cls, project_root: str | Path, autogenerate: bool = True) -> Self:
+    def load(cls, project_root: str | Path, autogenerate: bool = True, serena_config_dir: str | None = None) -> Self:
         project_root = Path(project_root).resolve()
         if not project_root.exists():
             raise FileNotFoundError(f"Project root not found: {project_root}")
-        project_config = ProjectConfig.load(project_root, autogenerate=autogenerate)
+        project_config = ProjectConfig.load(project_root, autogenerate=autogenerate, serena_config_dir=serena_config_dir)
         return cls(project_root=str(project_root), project_config=project_config)
 
     @classmethod
@@ -234,7 +256,9 @@ class Project:
     def to_json_dict(self) -> dict:
         return {"project_root": self.project_root, "project_config": self.project_config.to_json_dict()}
 
-    def path_to_project_yml(self) -> str:
+    def path_to_project_yml(self, custom_serena_dir: str | None = None) -> str:
+        if custom_serena_dir is not None:
+            return str(Path(custom_serena_dir) / ProjectConfig.SERENA_DEFAULT_PROJECT_FILE)
         return os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
 
 
@@ -519,8 +543,8 @@ class MemoriesManager(ABC):
 
 
 class MemoriesManagerMDFilesInProject(MemoriesManager):
-    def __init__(self, project_root: str):
-        self._memory_dir = Path(get_serena_managed_dir(project_root)) / "memories"
+    def __init__(self, project_root: str, custom_serena_dir: str | None = None):
+        self._memory_dir = Path(get_serena_managed_dir(project_root, custom_serena_dir)) / "memories"
         self._memory_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_memory_file_path(self, name: str) -> Path:
@@ -621,6 +645,7 @@ def create_ls_for_project(
     log_level: int = logging.INFO,
     ls_timeout: float | None = DEFAULT_TOOL_TIMEOUT - 5,
     trace_lsp_communication: bool = False,
+    serena_config_dir: str | None = None,
 ) -> SyncLanguageServer:
     """
     Create a language server for a project. Note that you will have to start it
@@ -631,10 +656,11 @@ def create_ls_for_project(
     :param log_level: the log level for the language server
     :param ls_timeout: the timeout for the language server
     :param trace_lsp_communication: whether to trace LSP communication
+    :param serena_config_dir: custom path for the .serena directory
     :return: the language server
     """
     if isinstance(project, str):
-        project_instance = Project.load(project, autogenerate=True)
+        project_instance = Project.load(project, autogenerate=True, serena_config_dir=serena_config_dir)
     else:
         project_instance = project
 
@@ -697,6 +723,7 @@ class SerenaAgent:
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
         trace_lsp_communication: bool | None = None,
         tool_timeout: float | None = None,
+        serena_config_dir: str | None = None,
     ):
         """
         :param project: the project to load immediately or None to not load any project; may be a path to the project or a name of
@@ -712,7 +739,11 @@ class SerenaAgent:
             If not specified, will take the value from the serena configuration.
         :param log_level: Log level for the GUI log window. If not specified, will take the value from the serena configuration.
         :param tool_timeout: Timeout in seconds for tool execution. If not specified, will take the value from the serena configuration.
+        :param serena_config_dir: Custom path for the .serena directory. If not specified, will use the default .serena directory within the project root.
         """
+        # Store the custom serena config directory for later use
+        self._serena_config_dir = serena_config_dir
+
         # obtain serena configuration using the decoupled factory function
         self.serena_config = create_serena_config(
             serena_config=serena_config,
@@ -939,7 +970,7 @@ class SerenaAgent:
         # initialize project-specific instances
         log.debug(f"Initializing symbol and memories manager for {project.project_name} at {project.project_root}")
         self.symbol_manager = SymbolManager(self.language_server, self)
-        self.memories_manager = MemoriesManagerMDFilesInProject(project.project_root)
+        self.memories_manager = MemoriesManagerMDFilesInProject(project.project_root, self._serena_config_dir)
         self.lines_read = LinesRead()
 
         if self._project_activation_callback is not None:
@@ -1071,6 +1102,7 @@ class SerenaAgent:
             log_level=self.serena_config.log_level,
             ls_timeout=ls_timeout,
             trace_lsp_communication=self.serena_config.trace_lsp_communication,
+            serena_config_dir=self._serena_config_dir,
         )
         log.info(f"Starting the language server for {self._active_project.project_name}")
         self.language_server.start()

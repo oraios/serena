@@ -279,6 +279,7 @@ class SerenaAgentWorker:
             log_level = params.get("log_level")
             trace_lsp_communication = params.get("trace_lsp_communication")
             tool_timeout = params.get("tool_timeout")
+            serena_config_dir = params.get("serena_config_dir")
 
             self.agent = SerenaAgent(
                 project=project,
@@ -290,6 +291,7 @@ class SerenaAgentWorker:
                 log_level=log_level,
                 trace_lsp_communication=trace_lsp_communication,
                 tool_timeout=tool_timeout,
+                serena_config_dir=serena_config_dir,
             )
             return {"result": "SerenaAgent initialized successfully"}
         except Exception as e:
@@ -402,6 +404,7 @@ class ProcessIsolatedSerenaAgent:
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
         trace_lsp_communication: bool | None = None,
         tool_timeout: float | None = None,
+        serena_config_dir: str | None = None,
     ):
         self.project = project
         self.serena_config = serena_config or SerenaConfig.from_config_file()
@@ -410,6 +413,7 @@ class ProcessIsolatedSerenaAgent:
         self.log_level = log_level
         self.trace_lsp_communication = trace_lsp_communication
         self.tool_timeout = tool_timeout
+        self.serena_config_dir = serena_config_dir
 
         self.process: multiprocessing.Process | None = None
         self.conn: Connection | None = None
@@ -439,6 +443,7 @@ class ProcessIsolatedSerenaAgent:
             "log_level": self.log_level,
             "trace_lsp_communication": self.trace_lsp_communication,
             "tool_timeout": self.tool_timeout,
+            "serena_config_dir": self.serena_config_dir,
         }
         # Initialize the agent in the worker process
         try:

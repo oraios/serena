@@ -122,6 +122,7 @@ def create_mcp_server_and_agent(
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
     trace_lsp_communication: bool | None = None,
     tool_timeout: float | None = None,
+    serena_config_dir: str | None = None,
 ) -> tuple[FastMCP, ProcessIsolatedSerenaAgent]:
     """
     Create an MCP server with process-isolated SerenaAgent to prevent asyncio contamination.
@@ -140,6 +141,7 @@ def create_mcp_server_and_agent(
     :param trace_lsp_communication: Whether to trace the communication between Serena and the language servers.
         This is useful for debugging language server issues.
     :param tool_timeout: Timeout in seconds for tool execution. If not specified, will take the value from the serena configuration.
+    :param serena_config_dir: Custom path for the .serena directory. If not specified, will use the default .serena directory within the project root.
     """
     mcp: FastMCP | None = None
     context_instance = SerenaAgentContext.load(context)
@@ -152,7 +154,7 @@ def create_mcp_server_and_agent(
         # Fail early if the project cannot be loaded
         log.info(f"Will activate project {project} at mcp server startup")
         try:
-            project_instance = Project.load(project)
+            project_instance = Project.load(project, serena_config_dir=serena_config_dir)
         except Exception as e:
             log.error(f"Failed to load or generate project config for {project}: {e}")
             raise
@@ -184,7 +186,11 @@ def create_mcp_server_and_agent(
         if serena_config.web_dashboard:
             serena_dashboard_process = ProcessIsolatedDashboard(tool_names=sorted(tool_names_included_in_this_session))
         serena_agent_process = ProcessIsolatedSerenaAgent(
-            project=project, serena_config=serena_config, modes=modes_instances, context=context_instance
+            project=project,
+            serena_config=serena_config,
+            modes=modes_instances,
+            context=context_instance,
+            serena_config_dir=serena_config_dir,
         )
 
     except Exception as e:
@@ -387,6 +393,12 @@ PROJECT_TYPE = ProjectType()
     default=None,
     help="Timeout in seconds for tool execution. If not specified, will take the value from the serena configuration.",
 )
+@click.option(
+    "--serena-config-dir",
+    type=str,
+    default=None,
+    help="Custom path for the .serena directory. If not specified, will use the default .serena directory within the project root.",
+)
 def start_mcp_server(
     project: str | None,
     project_file_arg: str | None,
@@ -400,6 +412,7 @@ def start_mcp_server(
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
     trace_lsp_communication: bool | None = None,
     tool_timeout: float | None = None,
+    serena_config_dir: str | None = None,
 ) -> None:
     """Starts the Serena MCP server. By default, will not activate any project at startup.
     If you want to start with an already active project, use --project to pass the project name or path.
@@ -423,6 +436,7 @@ def start_mcp_server(
         log_level=log_level,
         trace_lsp_communication=trace_lsp_communication,
         tool_timeout=tool_timeout,
+        serena_config_dir=serena_config_dir,
     )
 
     # log after server creation such that the log appears in the GUI
