@@ -109,7 +109,7 @@ class PathUtils:
             from urllib.parse import urlparse, unquote
             from urllib.request import url2pathname
         except ImportError:
-            # backwards compatability
+            # backwards compatibility
             from urlparse import urlparse
             from urllib import unquote, url2pathname
         parsed = urlparse(uri)
@@ -168,12 +168,12 @@ class FileUtils:
             response = requests.get(url, stream=True, timeout=60)
             if response.status_code != 200:
                 logger.log(f"Error downloading file '{url}': {response.status_code} {response.text}", logging.ERROR)
-                raise MultilspyException("Error downoading file.")
+                raise MultilspyException("Error downloading file.")
             with open(target_path, "wb") as f:
                 shutil.copyfileobj(response.raw, f)
         except Exception as exc:
             logger.log(f"Error downloading file '{url}': {exc}", logging.ERROR)
-            raise MultilspyException("Error downoading file.") from None
+            raise MultilspyException("Error downloading file.") from None
 
     @staticmethod
     def download_and_extract_archive(logger: MultilspyLogger, url: str, target_path: str, archive_type: str) -> None:

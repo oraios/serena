@@ -56,7 +56,7 @@ When developing the `ReplaceRegexTool` we were initially not able to make Claude
 examples nor explicit instructions helped. It was only after adding 
 
 ```
-IMPORTANT: REMEMBER TO USE WILDCARDS WEHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE LONG REGEXES WITHOUT USING WILDCARDS INSTEAD!
+IMPORTANT: REMEMBER TO USE WILDCARDS WHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE LONG REGEXES WITHOUT USING WILDCARDS INSTEAD!
 ```
 
 to the initial instructions and to the tool description that Claude finally started following the instructions.

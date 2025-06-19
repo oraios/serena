@@ -20,7 +20,7 @@ The following tasks should generally be executed using `uv run poe <task_name>`.
         "isolated_process: test runs with process isolated agent",
     ]
    ```
-  By default, `uv run poe test` uses the markes set in the env var `PYTEST_MARKERS`, or, if it unset, uses `-m "not java and not rust and not isolated process"`.
+  By default, `uv run poe test` uses the markers set in the env var `PYTEST_MARKERS`, or, if it unset, uses `-m "not java and not rust and not isolated process"`.
   You can override this behavior by simply passing the `-m` option to `uv run poe test`, e.g. `uv run poe test -m "python or go"`.
 
 For finishing a task, make sure format, type-check and test pass! Run them at the end of the task

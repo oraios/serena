@@ -33,7 +33,7 @@ Also some improvements to prompts.
 
 # 2025-05-21
 
-**Signficant improvement in symbol finding!**
+**Significant improvement in symbol finding!**
 
 * Serena core:
     * `FindSymbolTool` now can look for symbols by specifying paths to them, not just the symbol name
