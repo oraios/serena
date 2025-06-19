@@ -242,6 +242,8 @@ Serena's behavior (like available projects, active tools and prompts) is configu
    that project is activated.
 4. Through the currently active set of [modes](#modes).
 
+By default, Serena creates a `.serena` directory within your project root to store project-specific configuration, memories, and other data. You can customize this location using the `--serena-config-dir` argument when starting the MCP server to specify an alternative path for the `.serena` directory.
+
 
 > ⚠️ **Note:** Serena is under active development. We are continuously adding features, improving stability and the UX.
 > As a result, configuration may change in a breaking manner. If you have an invalid configuration,
@@ -286,6 +288,19 @@ which will let you open the JSON file `claude_desktop_config.json`. Add the foll
 }
 ```
 
+To use a custom directory for Serena's configuration and data instead of the default `.serena` directory within your project:
+
+```json
+{
+    "mcpServers": {
+        "serena": {
+            "command": "/abs/path/to/uv",
+            "args": ["run", "--directory", "/abs/path/to/serena", "serena-mcp-server", "--serena-config-dir", "/custom/path/to/serena-data"]
+        }
+    }
+}
+```
+
 #### Docker Installation (Experimental)
 
 ⚠️ **EXPERIMENTAL**: Docker support is currently experimental with several limitations. Please read the [Docker documentation](DOCKER.md) for important caveats before using.
@@ -320,6 +335,8 @@ That's it! Save the config and then restart Claude Desktop. You are ready for ac
 ```shell
 uv run serena-mcp-server --help
 ```
+
+Notable options include `--serena-config-dir` to specify a custom location for Serena's configuration and data directory (instead of the default `.serena` within your project).
 
 ℹ️ You can use Serena without cloning or configuring it explicitly by using the Docker image above or:
 

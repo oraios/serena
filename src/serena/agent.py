@@ -294,7 +294,9 @@ class SerenaConfigBase(ABC):
                     return project
         return None
 
-    def add_project_from_path(self, project_root: Path | str, project_name: str | None = None) -> tuple[Project, bool]:
+    def add_project_from_path(
+        self, project_root: Path | str, project_name: str | None = None, serena_config_dir: str | None = None
+    ) -> tuple[Project, bool]:
         """
         Add a project to the Serena configuration from a given path. Will raise a FileExistsError if the
         name or path is already registered.
@@ -325,10 +327,10 @@ class SerenaConfigBase(ABC):
                 )
 
         try:
-            project_config = ProjectConfig.load(project_root)
+            project_config = ProjectConfig.load(project_root, autogenerate=False, serena_config_dir=serena_config_dir)
             new_project_config_generated = False
         except FileNotFoundError:
-            project_config = ProjectConfig.autogenerate(project_root, save_to_disk=True)
+            project_config = ProjectConfig.autogenerate(project_root, save_to_disk=True, serena_config_dir=serena_config_dir)
             new_project_config_generated = True
 
         new_project = Project(project_root=str(project_root), project_config=project_config)
@@ -996,7 +998,9 @@ class SerenaAgent:
                     f"Project '{project_root_or_name}' not found: Not a valid project name or directory. "
                     f"Existing project names: {self.serena_config.project_names}"
                 )
-            project_instance, new_project_config_generated = self.serena_config.add_project_from_path(project_root_or_name)
+            project_instance, new_project_config_generated = self.serena_config.add_project_from_path(
+                project_root_or_name, serena_config_dir=self._serena_config_dir
+            )
             new_project_generated = True
             log.info(f"Added new project {project_instance.project_name} for path {project_instance.project_root}.")
             if new_project_config_generated:
