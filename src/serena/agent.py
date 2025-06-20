@@ -693,6 +693,10 @@ def index_project(project: str, log_level: str = "INFO") -> None:
 
 
 class SerenaAgent:
+    """
+    The main Serena agent class that manages the agent's configuration, tools, and project context.
+    """
+
     def __init__(
         self,
         project: str | None = None,
@@ -1513,7 +1517,13 @@ class GetSymbolsOverviewTool(Tool):
     Gets an overview of the top-level symbols defined in a given file or directory.
     """
 
-    def apply(self, relative_path: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
+    def apply(
+        self,
+        relative_path: str,
+        max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
+        include_signature: bool = False,
+        include_docstring: bool = False,
+    ) -> str:
         """
         Gets an overview of the given file or directory.
         For each analyzed file, we list the top-level symbols in the file (name_path, kind).
@@ -1525,14 +1535,39 @@ class GetSymbolsOverviewTool(Tool):
             no content will be returned. Don't adjust unless there is really no other way to get the content
             required for the task. If the overview is too long, you should use a smaller directory instead,
             (e.g. a subdirectory).
+        :param include_signature: whether to include signature information for symbols
+        :param include_docstring: whether to include docstring information for symbols
         :return: a JSON object mapping relative paths of all contained files to info about top-level symbols in the file (name_path, kind).
         """
         path_to_symbol_infos = self.language_server.request_overview(relative_path)
         result = {}
+
         for file_path, symbols in path_to_symbol_infos.items():
-            # TODO: maybe include not just top-level symbols? We could filter by kind to exclude variables
-            #  The language server methods would need to be adjusted for this.
-            result[file_path] = [{"name_path": symbol[0], "kind": int(symbol[1])} for symbol in symbols]
+            file_symbols = []
+            for symbol_info in symbols:
+                symbol_dict = {"name_path": symbol_info[0], "kind": int(symbol_info[1])}
+
+                # If signature or docstring is requested, we need to get the actual symbol and enrich it
+                if include_signature or include_docstring:
+                    try:
+                        # Find the symbol by name in the file
+                        found_symbols = self.symbol_manager.find_by_name(symbol_info[0], within_relative_path=file_path, include_body=False)
+                        if found_symbols:
+                            # Take the first match (should be unique for top-level symbols)
+                            symbol = found_symbols[0]
+                            self.symbol_manager.enrich_symbol_with_signature_and_docstring(symbol)
+
+                            if include_signature and symbol.signature:
+                                symbol_dict["signature"] = symbol.signature
+                            if include_docstring and symbol.docstring:
+                                symbol_dict["docstring"] = symbol.docstring
+                    except Exception as e:
+                        # If enrichment fails, just include the basic info
+                        log.warning(f"Failed to enrich symbol {symbol_info[0]} in {file_path}: {e}")
+
+                file_symbols.append(symbol_dict)
+
+            result[file_path] = file_symbols
 
         result_json_str = json.dumps(result)
         return self._limit_length(result_json_str, max_answer_chars)
@@ -1549,6 +1584,8 @@ class FindSymbolTool(Tool):
         depth: int = 0,
         relative_path: str | None = None,
         include_body: bool = False,
+        include_signature: bool = False,
+        include_docstring: bool = False,
         include_kinds: list[int] | None = None,
         exclude_kinds: list[int] | None = None,
         substring_matching: bool = False,
@@ -1593,6 +1630,8 @@ class FindSymbolTool(Tool):
             If you have some knowledge about the codebase, you should use this parameter, as it will significantly
             speed up the search as well as reduce the number of results.
         :param include_body: If True, include the symbol's source code. Use judiciously.
+        :param include_signature: If True, include the symbol's signature (function/method signature, class declaration, etc.).
+        :param include_docstring: If True, include the symbol's documentation string.
         :param include_kinds: Optional. List of LSP symbol kind integers to include. (e.g., 5 for Class, 12 for Function).
             Valid kinds: 1=file, 2=module, 3=namespace, 4=package, 5=class, 6=method, 7=property, 8=field, 9=constructor, 10=enum,
             11=interface, 12=function, 13=variable, 14=constant, 15=string, 16=number, 17=boolean, 18=array, 19=object,
@@ -1612,7 +1651,25 @@ class FindSymbolTool(Tool):
             substring_matching=substring_matching,
             within_relative_path=relative_path,
         )
-        symbol_dicts = [_sanitize_symbol_dict(s.to_dict(kind=True, location=True, depth=depth, include_body=include_body)) for s in symbols]
+
+        # Enrich symbols with signature and docstring if requested
+        if include_signature or include_docstring:
+            for symbol in symbols:
+                self.symbol_manager.enrich_symbol_with_signature_and_docstring(symbol)
+
+        symbol_dicts = [
+            _sanitize_symbol_dict(
+                s.to_dict(
+                    kind=True,
+                    location=True,
+                    depth=depth,
+                    include_body=include_body,
+                    include_signature=include_signature,
+                    include_docstring=include_docstring,
+                )
+            )
+            for s in symbols
+        ]
         result = json.dumps(symbol_dicts)
         return self._limit_length(result, max_answer_chars)
 

@@ -48,8 +48,10 @@ class TextUtils:
         Returns the index of the given zero-indexed line and column number in the given text
         """
         idx = 0
+        requested_line = line
+        max_idx = len(text)
         while line > 0:
-            assert idx < len(text), (idx, len(text), text)
+            assert idx < max_idx, f"Reached end of text while trying to get index for line {requested_line} and column {col}."
             if text[idx] == "\n":
                 line -= 1
             idx += 1

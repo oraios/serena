@@ -15,7 +15,7 @@ from typing import Any, Literal, Self
 import uvicorn
 from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata
 
-from serena.agent import SerenaAgent, SerenaConfig, SerenaConfigBase, Tool, ToolInterface, ToolRegistry
+from serena.agent import Project, SerenaAgent, SerenaConfig, SerenaConfigBase, Tool, ToolInterface, ToolRegistry
 from serena.config import SerenaAgentContext, SerenaAgentMode
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
 
@@ -178,6 +178,7 @@ class SerenaAgentWorker:
         INITIALIZE = "initialize"
         TOOL_CALL = "tool_call"
         GET_ACTIVE_TOOL_NAMES = "get_active_tool_names"
+        GET_ACTIVE_PROJECT = "get_active_project"
         IS_LANGUAGE_SERVER_RUNNING = "is_language_server_running"
         RESET_LANGUAGE_SERVER = "reset_language_server"
         GET_EXPOSED_TOOL_NAMES = "get_exposed_tool_names"
@@ -252,6 +253,8 @@ class SerenaAgentWorker:
                     return self._tool_call(params)
                 case self.RequestMethod.GET_ACTIVE_TOOL_NAMES:
                     return self._get_active_tool_names()
+                case self.RequestMethod.GET_ACTIVE_PROJECT:
+                    return self._get_active_project()
                 case self.RequestMethod.IS_LANGUAGE_SERVER_RUNNING:
                     return self._is_language_server_running()
                 case self.RequestMethod.RESET_LANGUAGE_SERVER:
@@ -330,6 +333,26 @@ class SerenaAgentWorker:
         try:
             tool_names = self.agent.get_active_tool_names()
             return {"result": tool_names}
+        except Exception as e:
+            return {"error": str(e), "traceback": traceback.format_exc()}
+
+    def _get_active_project(self) -> dict[str, Any]:
+        """Get the active project."""
+        if self.agent is None:
+            return {"error": "SerenaAgent not initialized"}
+
+        try:
+            active_project = self.agent.get_active_project()
+            if active_project is None:
+                return {"result": None}
+
+            # Convert Project to dict for serialization across process boundary
+            return {
+                "result": {
+                    "project_root": active_project.project_root,
+                    "project_config": active_project.project_config.to_json_dict(),
+                }
+            }
         except Exception as e:
             return {"error": str(e), "traceback": traceback.format_exc()}
 
@@ -520,6 +543,21 @@ class ProcessIsolatedSerenaAgent:
     def get_active_tool_names(self) -> list[str]:
         """Get list of active tool names."""
         return self._make_request_with_result(SerenaAgentWorker.RequestMethod.GET_ACTIVE_TOOL_NAMES)
+
+    def get_active_project(self) -> "Project | None":
+        """Get the active project."""
+        result = self._make_request_with_result(SerenaAgentWorker.RequestMethod.GET_ACTIVE_PROJECT)
+        if result is None:
+            return None
+
+        # Reconstruct Project from dict
+        from serena.agent import Project, ProjectConfig
+
+        project_config = ProjectConfig.from_json_dict(result["project_config"])
+        return Project(
+            project_root=result["project_root"],
+            project_config=project_config,
+        )
 
     def is_language_server_running(self) -> bool:
         """Check if language server is running."""

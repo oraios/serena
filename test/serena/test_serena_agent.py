@@ -294,3 +294,131 @@ class TestSerenaAgent:
 
         symbols = json.loads(result)
         assert not symbols, f"Expected to find no symbols for {name_path}. Symbols found: {symbols}"
+
+    @pytest.mark.parametrize(
+        "isolated_process", [pytest.param(False, id="direct"), pytest.param(True, id="isolated", marks=pytest.mark.isolated_process)]
+    )
+    @pytest.mark.parametrize(
+        "serena_agent,symbol_name,expected_signature_contains,expected_docstring_contains",
+        [
+            pytest.param(
+                Language.PYTHON,
+                "setup_logging",
+                'def setup_logging(level: str = "INFO") -> Logger',
+                "Set up and return a configured logger",
+                marks=pytest.mark.python,
+            ),
+            pytest.param(
+                Language.TYPESCRIPT,
+                "DemoClass",
+                "class DemoClass",
+                "demonstration class that holds a numeric value",
+                marks=pytest.mark.typescript,
+            ),
+            pytest.param(
+                Language.JAVA,
+                "factorial",
+                "public static long factorial(int n)",
+                "Calculates the factorial of a given number",
+                marks=pytest.mark.java,
+            ),
+            pytest.param(
+                Language.RUST,
+                "factorial",
+                "pub fn factorial(n: u32) -> Option<u64>",
+                "Calculates the factorial of a given number",
+                marks=pytest.mark.rust,
+            ),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_find_symbol_with_signature_and_docstring(
+        self, serena_agent, symbol_name: str, expected_signature_contains: str, expected_docstring_contains: str, isolated_process: bool
+    ):
+        """Test that FindSymbolTool can retrieve signature and docstring information."""
+        agent = serena_agent
+        find_symbol_tool = agent.get_tool(FindSymbolTool)
+
+        # For Java and Rust, we need substring matching since method names include parameter types
+        # e.g., Java: "factorial(int)" instead of just "factorial"
+        active_project = agent.get_active_project()
+        assert active_project is not None, "Expected an active project"
+        language = active_project.project_config.language
+
+        use_substring_matching = language in [Language.JAVA, Language.RUST]
+
+        # Test with signature and docstring enabled
+        result = find_symbol_tool.apply_ex(
+            name_path=symbol_name, include_signature=True, include_docstring=True, substring_matching=use_substring_matching
+        )
+
+        symbols = json.loads(result)
+        assert len(symbols) > 0, f"Expected to find symbol {symbol_name}"
+
+        # Find the specific symbol we're looking for
+        target_symbol = None
+        for symbol in symbols:
+            if symbol_name in symbol["name_path"]:
+                target_symbol = symbol
+                break
+
+        assert target_symbol is not None, f"Expected to find symbol {symbol_name} in results"
+
+        # Check signature if language server supports it
+        if target_symbol.get("signature"):
+            assert (
+                expected_signature_contains.lower() in target_symbol["signature"].lower()
+            ), f"Expected signature to contain '{expected_signature_contains}', got '{target_symbol.get('signature')}'"
+
+        # Check docstring if language server supports it
+        if target_symbol.get("docstring"):
+            assert (
+                expected_docstring_contains.lower() in target_symbol["docstring"].lower()
+            ), f"Expected docstring to contain '{expected_docstring_contains}', got '{target_symbol.get('docstring')}'"
+
+    @pytest.mark.parametrize(
+        "isolated_process", [pytest.param(False, id="direct"), pytest.param(True, id="isolated", marks=pytest.mark.isolated_process)]
+    )
+    @pytest.mark.parametrize(
+        "serena_agent,symbol_name",
+        [
+            pytest.param(Language.PYTHON, "setup_logging", marks=pytest.mark.python),
+            pytest.param(Language.TYPESCRIPT, "DemoClass", marks=pytest.mark.typescript),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_find_symbol_signature_docstring_optional(self, serena_agent, symbol_name: str, isolated_process: bool):
+        """Test that signature and docstring are optional in FindSymbolTool."""
+        agent = serena_agent
+        find_symbol_tool = agent.get_tool(FindSymbolTool)
+
+        # Test without signature/docstring (default behavior)
+        result = find_symbol_tool.apply_ex(name_path=symbol_name)
+        symbols = json.loads(result)
+
+        assert len(symbols) > 0, f"Expected to find symbol {symbol_name}"
+        symbol = symbols[0]
+
+        # Should not include signature/docstring by default
+        assert "signature" not in symbol or symbol["signature"] is None
+        assert "docstring" not in symbol or symbol["docstring"] is None
+
+        # Test with only signature
+        result = find_symbol_tool.apply_ex(name_path=symbol_name, include_signature=True)
+        symbols = json.loads(result)
+
+        assert len(symbols) > 0
+        symbol = symbols[0]
+        # May or may not have signature depending on language server support
+        # But should not have docstring
+        assert "docstring" not in symbol or symbol["docstring"] is None
+
+        # Test with only docstring
+        result = find_symbol_tool.apply_ex(name_path=symbol_name, include_docstring=True)
+        symbols = json.loads(result)
+
+        assert len(symbols) > 0
+        symbol = symbols[0]
+        # May or may not have docstring depending on language server support
+        # But should not have signature
+        assert "signature" not in symbol or symbol["signature"] is None

@@ -322,6 +322,26 @@ class Symbol(ToStringMixin):
     def body(self) -> str | None:
         return self.symbol_root.get("body")
 
+    @property
+    def signature(self) -> str | None:
+        """The signature of the symbol if available."""
+        return getattr(self, "_signature", None)
+
+    @signature.setter
+    def signature(self, value: str | None) -> None:
+        """Set the signature of the symbol."""
+        self._signature = value
+
+    @property
+    def docstring(self) -> str | None:
+        """The docstring of the symbol if available."""
+        return getattr(self, "_docstring", None)
+
+    @docstring.setter
+    def docstring(self, value: str | None) -> None:
+        """Set the docstring of the symbol."""
+        self._docstring = value
+
     def get_name_path(self) -> str:
         """
         Get the name path of the symbol (e.g. "class/method/inner_function").
@@ -419,7 +439,14 @@ class Symbol(ToStringMixin):
         return result
 
     def to_dict(
-        self, kind: bool = False, location: bool = False, depth: int = 0, include_body: bool = False, include_children_body: bool = False
+        self,
+        kind: bool = False,
+        location: bool = False,
+        depth: int = 0,
+        include_body: bool = False,
+        include_children_body: bool = False,
+        include_signature: bool = False,
+        include_docstring: bool = False,
     ) -> dict[str, Any]:
         """
         Converts the symbol to a dictionary.
@@ -432,6 +459,8 @@ class Symbol(ToStringMixin):
             Note that the body of the children is part of the body of the parent symbol,
             so there is usually no need to set this to True unless you want process the output
             and pass the children without passing the parent body to the LM.
+        :param include_signature: whether to include the signature of the symbol
+        :param include_docstring: whether to include the docstring of the symbol
         :return: a dictionary representation of the symbol
         """
         result: dict[str, Any] = {"name": self.name, "name_path": self.get_name_path()}
@@ -449,6 +478,12 @@ class Symbol(ToStringMixin):
                 log.warning("Requested body for symbol, but it is not present. The symbol might have been loaded with include_body=False.")
             result["body"] = self.body
 
+        if include_signature:
+            result["signature"] = getattr(self, "_signature", None)
+
+        if include_docstring:
+            result["docstring"] = getattr(self, "_docstring", None)
+
         def add_children(s: Self) -> list[dict[str, Any]]:
             children = []
             for c in s.iter_children():
@@ -459,6 +494,8 @@ class Symbol(ToStringMixin):
                         depth=depth - 1,
                         include_body=include_children_body,
                         include_children_body=include_children_body,
+                        include_signature=include_signature,
+                        include_docstring=include_docstring,
                     )
                 )
             return children
@@ -542,6 +579,156 @@ class SymbolManager:
             if symbol.location == location:
                 return symbol
         return None
+
+    def get_signature_and_docstring(self, symbol: Symbol) -> tuple[str | None, str | None]:
+        """
+        Retrieve signature and docstring information for a symbol using LSP signatureHelp and hover.
+
+        :param symbol: The symbol to get signature and docstring for
+        :return: Tuple of (signature, docstring) where either can be None
+        """
+        if not self._lang_server:
+            return None, None
+
+        try:
+            # Get the symbol's position
+            line = symbol.line
+            column = symbol.column
+            relative_path = symbol.relative_path
+
+            # Validate required parameters - we need at least relative_path
+            if relative_path is None:
+                return None, None
+
+            # Use default position if line/column are None (some symbol types don't have precise location)
+            if line is None:
+                line = 0
+            if column is None:
+                column = 0
+
+            signature = None
+            docstring = None
+
+            # Try to get signature help first
+            signature_help = self._lang_server.request_signature_help(relative_path, line, column)
+            if signature_help and signature_help.get("signatures"):
+                active_sig_idx = signature_help.get("activeSignature", 0)
+                if 0 <= active_sig_idx < len(signature_help["signatures"]):
+                    sig_info = signature_help["signatures"][active_sig_idx]
+                    signature = sig_info.get("label")
+                    sig_doc = sig_info.get("documentation")
+
+                    # Extract docstring from signature documentation if it's detailed enough
+                    if sig_doc:
+                        if isinstance(sig_doc, dict) and "value" in sig_doc:
+                            docstring = sig_doc["value"]
+                        elif isinstance(sig_doc, str) and len(sig_doc.strip()) > 10:
+                            docstring = sig_doc
+
+            # If we didn't get sufficient docstring from signature help, try hover
+            if not docstring or len(docstring.strip()) < 10:
+                hover_info = self._lang_server.request_hover(relative_path, line, column)
+                if hover_info and hover_info.get("contents"):
+                    contents = hover_info["contents"]
+                    hover_text = None
+
+                    # Extract meaningful documentation from hover contents
+                    if isinstance(contents, dict) and "value" in contents:
+                        hover_text = contents["value"]
+                    elif isinstance(contents, str):
+                        hover_text = contents
+                    elif isinstance(contents, list) and len(contents) > 0:
+                        # Concatenate all meaningful content from the list
+                        text_parts = []
+                        for content in contents:
+                            if isinstance(content, dict) and "value" in content:
+                                text_parts.append(content["value"])
+                            elif isinstance(content, str):
+                                text_parts.append(content)
+                        if text_parts:
+                            hover_text = "\n".join(text_parts)
+
+                    if hover_text:
+                        # Extract both signature and docstring from hover text
+                        lines = hover_text.split("\n")
+                        doc_lines = []
+                        in_code_block = False
+                        signature_lines: list[str] = []
+                        collecting_signature = False
+
+                        for text_line in lines:
+                            text_line = text_line.strip()
+
+                            if text_line.startswith("```"):
+                                in_code_block = not in_code_block
+                                # When exiting code block and we were collecting, finalize signature
+                                if not in_code_block and collecting_signature and signature_lines:
+                                    if not signature:
+                                        # Join all lines with proper spacing for multiline signatures
+                                        signature = "\n".join(signature_lines)
+                                collecting_signature = False
+                                continue
+
+                            if in_code_block:
+                                # Check if this line starts a signature we're interested in
+                                if not collecting_signature:
+                                    # Clean up prefixes to check for signature start
+                                    clean_line = text_line
+                                    if clean_line.startswith("(method) "):
+                                        clean_line = clean_line[9:]
+                                    elif clean_line.startswith("(function) "):
+                                        clean_line = clean_line[11:]
+                                    elif clean_line.startswith("(class) "):
+                                        clean_line = clean_line[8:]
+
+                                    # Check if this is a signature line we want
+                                    if (
+                                        clean_line.startswith("def ")
+                                        and ("__init__" in clean_line or symbol.name.lower() in clean_line.lower())
+                                    ) or (clean_line.startswith("class ") and symbol.name in clean_line):
+                                        collecting_signature = True
+                                        # Start collecting signature with cleaned line
+                                        signature_lines = [clean_line]
+
+                                # If we're collecting a signature, continue until we find the end
+                                elif collecting_signature:
+                                    # Add line to signature (preserve indentation for multiline)
+                                    if text_line:  # Only add non-empty lines
+                                        signature_lines.append(text_line)
+
+                                    # Check if signature is complete
+                                    if text_line.endswith((") -> None", "):")) or (
+                                        text_line.endswith(")") and "def " in signature_lines[0]
+                                    ):
+                                        collecting_signature = False
+                                        # Finalize signature
+                                        if not signature:
+                                            signature = "\n".join(signature_lines)
+                            else:
+                                # Collect non-code lines for docstring
+                                if text_line and not text_line.startswith("def ") and not text_line.startswith("class "):
+                                    doc_lines.append(text_line)
+
+                        # Extract docstring
+                        potential_docstring = "\n".join(doc_lines).strip()
+                        if len(potential_docstring) > len(docstring or ""):
+                            docstring = potential_docstring
+
+            return signature, docstring
+
+        except Exception as e:
+            log.warning(f"Failed to get signature/docstring for symbol {symbol.get_name_path()}: {e}")
+            return None, None
+
+    def enrich_symbol_with_signature_and_docstring(self, symbol: Symbol) -> None:
+        """
+        Enrich a symbol with signature and docstring information.
+
+        :param symbol: The symbol to enrich
+        """
+        signature, docstring = self.get_signature_and_docstring(symbol)
+        symbol.signature = signature
+        symbol.docstring = docstring
 
     def find_referencing_symbols(
         self,
