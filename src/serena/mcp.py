@@ -40,6 +40,7 @@ from serena.process_isolated_agent import (
     ProcessIsolatedDashboard,
     ProcessIsolatedSerenaAgent,
     ProcessIsolatedTool,
+    SerenaAgentWorker,
     global_shutdown_event,
     request_global_shutdown,
 )
@@ -166,6 +167,8 @@ def create_mcp_server_and_agent(
         # if a project has been loaded, it will be activated at startup and in ide-assistant context,
         # we assume that no other project will be activated in this session.
         # Therefore, we exclude the activate project tool
+        # NOTE: Even though project activation is now asynchronous, we still exclude the tool
+        # because the project will be activated automatically
         tools_excluded_in_this_session.append(ActivateProjectTool)
     tool_names_excluded_in_this_session = {tool.get_name_from_cls() for tool in tools_excluded_in_this_session}
 
@@ -184,8 +187,9 @@ def create_mcp_server_and_agent(
         )
         if serena_config.web_dashboard:
             serena_dashboard_process = ProcessIsolatedDashboard(tool_names=sorted(tool_names_included_in_this_session))
+        # Don't pass project to ProcessIsolatedSerenaAgent to avoid synchronous activation during startup
         serena_agent_process = ProcessIsolatedSerenaAgent(
-            project=project, serena_config=serena_config, modes=modes_instances, context=context_instance
+            project=None, serena_config=serena_config, modes=modes_instances, context=context_instance
         )
 
     except Exception as e:
@@ -234,6 +238,25 @@ def create_mcp_server_and_agent(
         log.info("Starting serena agent process")
         serena_agent_process.start()
         update_tools()
+
+        # If a project was specified, activate it asynchronously after MCP server is ready
+        async def activate_initial_project() -> None:
+            if project is not None:
+                try:
+                    log.info(f"Activating initial project {project} asynchronously")
+                    # Use asyncio.to_thread to run the blocking project activation in a thread
+                    await asyncio.to_thread(
+                        serena_agent_process._make_request_with_result,
+                        SerenaAgentWorker.RequestMethod.TOOL_CALL,
+                        {"tool_name": "activate_project", "arguments": {"project": project}},
+                    )
+                    log.info(f"Successfully activated initial project {project}")
+                except Exception as e:
+                    log.error(f"Failed to activate initial project {project}: {e}")
+
+        # Start project activation task (non-blocking)
+        if project is not None:
+            asyncio.create_task(activate_initial_project())
 
         async def monitor_global_shutdown() -> None:
             """Monitor the global shutdown event and trigger local shutdown."""
