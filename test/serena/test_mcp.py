@@ -4,7 +4,9 @@ import pytest
 from mcp.server.fastmcp.tools.base import Tool as MCPTool
 
 from serena.agent import Tool, ToolRegistry
-from serena.mcp import make_tool
+from serena.mcp import SerenaMCPFactory
+
+make_tool = SerenaMCPFactory.make_mcp_tool
 
 
 class BaseMockTool(Tool):

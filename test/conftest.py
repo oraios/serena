@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+from typing import cast
 
 import pytest
 from sensai.util.logging import configure
@@ -7,7 +8,9 @@ from sensai.util.logging import configure
 from multilspy.language_server import SyncLanguageServer
 from multilspy.multilspy_config import Language, MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
+from serena.constants import USE_SOLID_LSP
 from serena.util.file_system import GitignoreParser
+from solidlsp.ls import SolidLanguageServer
 
 configure(level=logging.DEBUG)
 
@@ -43,7 +46,11 @@ def create_ls(
     config = MultilspyConfig(code_language=language, ignored_paths=ignored_paths, trace_lsp_communication=trace_lsp_communication)
     logger = MultilspyLogger(log_level=log_level)
 
-    return SyncLanguageServer.create(config, logger, repo_path)
+    if USE_SOLID_LSP:
+        ls = SolidLanguageServer.create(config, logger, repo_path)
+        return cast(SyncLanguageServer, ls)  # TODO: Fix type
+    else:
+        return SyncLanguageServer.create(config, logger, repo_path)
 
 
 def create_default_ls(language: Language) -> SyncLanguageServer:

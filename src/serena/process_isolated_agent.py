@@ -3,6 +3,7 @@ import contextlib
 import logging
 import multiprocessing
 import os
+import threading
 import traceback
 import webbrowser
 from enum import StrEnum
@@ -12,7 +13,6 @@ from multiprocessing.sharedctypes import Synchronized
 from multiprocessing.synchronize import Event as EventClass
 from typing import Any, Literal, Self
 
-import uvicorn
 from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata
 
 from serena.agent import SerenaAgent, SerenaConfig, SerenaConfigBase, Tool, ToolInterface, ToolRegistry
@@ -79,30 +79,21 @@ def _dashboard_worker(
         port = api._find_first_free_port(0x5EDA)
         port_value.value = port
 
-        # Start server first, then log processing
-        config = uvicorn.Config(
-            app=api._app,
-            host="0.0.0.0",
-            port=port,
-            workers=1,
-            log_config=None,
-            log_level="critical",
-        )
-        server = uvicorn.Server(config)
+        # Start Flask server in a thread
+        def run_flask_server():
+            api._app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False, threaded=True)
 
-        # Serve and await shutdown signal
-        server_task = asyncio.create_task(server.serve())
+        server_thread = threading.Thread(target=run_flask_server, daemon=True)
+        server_thread.start()
+
         shutdown_task = asyncio.create_task(_monitor_shutdown())
         logging_loop_task = asyncio.create_task(_process_logs(api))
         dashboard_ready_event.set()
 
         done, pending = await asyncio.wait(
-            [server_task, shutdown_task, logging_loop_task],
+            [shutdown_task, logging_loop_task],
             return_when=asyncio.FIRST_COMPLETED,
         )
-        if shutdown_task in done:
-            server.should_exit = True
-            await server_task
 
         # Cancel remaining tasks
         for task in pending:

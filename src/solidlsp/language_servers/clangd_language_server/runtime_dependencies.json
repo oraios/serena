@@ -1,0 +1,29 @@
+{
+    "_description": "Used to download the runtime dependencies for running Clangd.",
+    "runtimeDependencies": [
+        {
+            "id": "Clangd",
+            "description": "Clangd for Linux (x64)",
+            "url": "https://github.com/clangd/clangd/releases/download/19.1.2/clangd-linux-19.1.2.zip",
+            "platformId": "linux-x64",
+            "archiveType": "zip",
+            "binaryName": "clangd"
+        },
+        {
+            "id": "Clangd",
+            "description": "Clangd for Windows (x64)",
+            "url": "https://github.com/clangd/clangd/releases/download/19.1.2/clangd-windows-19.1.2.zip",
+            "platformId": "windows-x64",
+            "archiveType": "zip",
+            "binaryName": "clangd.exe"
+        },
+        {
+            "id": "Clangd",
+            "description": "Clangd for macOS (Arm64)",
+            "url": "https://github.com/clangd/clangd/releases/download/19.1.2/clangd-mac-19.1.2.zip",
+            "platformId": "osx-arm64",
+            "archiveType": "zip",
+            "binaryName": "clangd"
+        }
+    ]
+}

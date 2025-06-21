@@ -1,0 +1,111 @@
+{
+    "RoslynExtensionsOptions": {
+        "EnableDecompilationSupport": false,
+        "EnableAnalyzersSupport": true,
+        "EnableImportCompletion": true,
+        "EnableAsyncCompletion": false,
+        "DocumentAnalysisTimeoutMs": 30000,
+        "DiagnosticWorkersThreadCount": 18,
+        "AnalyzeOpenDocumentsOnly": true,
+        "InlayHintsOptions": {
+            "EnableForParameters": false,
+            "ForLiteralParameters": false,
+            "ForIndexerParameters": false,
+            "ForObjectCreationParameters": false,
+            "ForOtherParameters": false,
+            "SuppressForParametersThatDifferOnlyBySuffix": false,
+            "SuppressForParametersThatMatchMethodIntent": false,
+            "SuppressForParametersThatMatchArgumentName": false,
+            "EnableForTypes": false,
+            "ForImplicitVariableTypes": false,
+            "ForLambdaParameterTypes": false,
+            "ForImplicitObjectCreation": false
+        },
+        "LocationPaths": null
+    },
+    "FormattingOptions": {
+        "OrganizeImports": false,
+        "EnableEditorConfigSupport": true,
+        "NewLine": "\n",
+        "UseTabs": false,
+        "TabSize": 4,
+        "IndentationSize": 4,
+        "SpacingAfterMethodDeclarationName": false,
+        "SeparateImportDirectiveGroups": false,
+        "SpaceWithinMethodDeclarationParenthesis": false,
+        "SpaceBetweenEmptyMethodDeclarationParentheses": false,
+        "SpaceAfterMethodCallName": false,
+        "SpaceWithinMethodCallParentheses": false,
+        "SpaceBetweenEmptyMethodCallParentheses": false,
+        "SpaceAfterControlFlowStatementKeyword": true,
+        "SpaceWithinExpressionParentheses": false,
+        "SpaceWithinCastParentheses": false,
+        "SpaceWithinOtherParentheses": false,
+        "SpaceAfterCast": false,
+        "SpaceBeforeOpenSquareBracket": false,
+        "SpaceBetweenEmptySquareBrackets": false,
+        "SpaceWithinSquareBrackets": false,
+        "SpaceAfterColonInBaseTypeDeclaration": true,
+        "SpaceAfterComma": true,
+        "SpaceAfterDot": false,
+        "SpaceAfterSemicolonsInForStatement": true,
+        "SpaceBeforeColonInBaseTypeDeclaration": true,
+        "SpaceBeforeComma": false,
+        "SpaceBeforeDot": false,
+        "SpaceBeforeSemicolonsInForStatement": false,
+        "SpacingAroundBinaryOperator": "single",
+        "IndentBraces": false,
+        "IndentBlock": true,
+        "IndentSwitchSection": true,
+        "IndentSwitchCaseSection": true,
+        "IndentSwitchCaseSectionWhenBlock": true,
+        "LabelPositioning": "oneLess",
+        "WrappingPreserveSingleLine": true,
+        "WrappingKeepStatementsOnSingleLine": true,
+        "NewLinesForBracesInTypes": true,
+        "NewLinesForBracesInMethods": true,
+        "NewLinesForBracesInProperties": true,
+        "NewLinesForBracesInAccessors": true,
+        "NewLinesForBracesInAnonymousMethods": true,
+        "NewLinesForBracesInControlBlocks": true,
+        "NewLinesForBracesInAnonymousTypes": true,
+        "NewLinesForBracesInObjectCollectionArrayInitializers": true,
+        "NewLinesForBracesInLambdaExpressionBody": true,
+        "NewLineForElse": true,
+        "NewLineForCatch": true,
+        "NewLineForFinally": true,
+        "NewLineForMembersInObjectInit": true,
+        "NewLineForMembersInAnonymousTypes": true,
+        "NewLineForClausesInQuery": true
+    },
+    "FileOptions": {
+        "SystemExcludeSearchPatterns": [
+            "**/node_modules/**/*",
+            "**/bin/**/*",
+            "**/obj/**/*",
+            "**/.git/**/*",
+            "**/.git",
+            "**/.svn",
+            "**/.hg",
+            "**/CVS",
+            "**/.DS_Store",
+            "**/Thumbs.db"
+        ],
+        "ExcludeSearchPatterns": []
+    },
+    "RenameOptions": {
+        "RenameOverloads": false,
+        "RenameInStrings": false,
+        "RenameInComments": false
+    },
+    "ImplementTypeOptions": {
+        "InsertionBehavior": 0,
+        "PropertyGenerationBehavior": 0
+    },
+    "DotNetCliOptions": {
+        "LocationPaths": null
+    },
+    "Plugins": {
+        "LocationPaths": null
+    }
+}

@@ -202,6 +202,7 @@ pylint.html
 /agent-ui
 # dynamic LS installations
 /src/multilspy/language_servers/*/static
+/src/solidlsp/language_servers/*/static
 
 # Cache is in .multilspy 
 **/.multilspy/**

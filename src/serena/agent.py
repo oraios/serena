@@ -39,7 +39,14 @@ from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_types import SymbolKind
 from serena import serena_version
 from serena.config import SerenaAgentContext, SerenaAgentMode
-from serena.constants import DEFAULT_ENCODING, PROJECT_TEMPLATE_FILE, REPO_ROOT, SELENA_CONFIG_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
+from serena.constants import (
+    DEFAULT_ENCODING,
+    PROJECT_TEMPLATE_FILE,
+    REPO_ROOT,
+    SELENA_CONFIG_TEMPLATE_FILE,
+    SERENA_MANAGED_DIR_NAME,
+    USE_SOLID_LSP,
+)
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
 from serena.prompt_factory import PromptFactory, SerenaPromptFactory
 from serena.symbol import SymbolManager
@@ -49,6 +56,7 @@ from serena.util.general import load_yaml, save_yaml
 from serena.util.inspection import determine_programming_language_composition, iter_subclasses
 from serena.util.shell import execute_shell_command
 from serena.util.thread import ExecutionResult, execute_with_timeout
+from solidlsp.ls import SolidLanguageServer
 
 if TYPE_CHECKING:
     from serena.gui_log_viewer import GuiLogViewerHandler
@@ -212,6 +220,10 @@ class ProjectConfig(ToStringMixin):
 
     def get_excluded_tool_classes(self) -> set[type["Tool"]]:
         return set(ToolRegistry.get_tool_class_by_name(tool_name) for tool_name in self.excluded_tools)
+
+
+class ProjectNotFoundError(Exception):
+    pass
 
 
 @dataclass
@@ -666,12 +678,21 @@ def create_ls_for_project(
     )
     ls_logger = MultilspyLogger(log_level=log_level)
     log.info(f"Creating language server instance for {project_instance.project_root}.")
-    return SyncLanguageServer.create(
-        multilspy_config,
-        ls_logger,
-        project_instance.project_root,
-        timeout=ls_timeout,
-    )
+    if USE_SOLID_LSP:
+        ls = SolidLanguageServer.create(
+            multilspy_config,
+            ls_logger,
+            project_instance.project_root,
+            timeout=ls_timeout,
+        )
+        return cast(SyncLanguageServer, ls)  # TODO: Fix type
+    else:
+        return SyncLanguageServer.create(
+            multilspy_config,
+            ls_logger,
+            project_instance.project_root,
+            timeout=ls_timeout,
+        )
 
 
 @click.command()
@@ -715,11 +736,10 @@ class SerenaAgent:
         :param modes: list of modes in which the agent is operating (they will be combined), None for default modes.
             The modes may adjust prompts, tool availability, and tool descriptions.
         :param serena_config: the Serena configuration or None to read the configuration from the default location.
-        :param enable_web_dashboard: Whether to enable the web dashboard. If not specified, will take the value from the serena configuration.
-        :param enable_gui_log_window: Whether to enable the GUI log window. It currently does not work on macOS, and setting this to True will be ignored then.
-            If not specified, will take the value from the serena configuration.
-        :param log_level: Log level for the GUI log window. If not specified, will take the value from the serena configuration.
-        :param tool_timeout: Timeout in seconds for tool execution. If not specified, will take the value from the serena configuration.
+        :param enable_web_dashboard: whether to enable the web dashboard; If None, will take the value from the Serena configuration.
+        :param enable_gui_log_window: whether to enable the GUI log window; If None, will take the value from the Serena configuration.
+        :param log_level: the log level for the GUI log window; If None, will take the value from the serena configuration.
+        :param tool_timeout: the timeout in seconds for tool execution. If None, will take the value from the serena configuration.
         """
         # obtain serena configuration using the decoupled factory function
         self.serena_config = create_serena_config(
@@ -802,7 +822,7 @@ class SerenaAgent:
         if project is not None:
             try:
                 self.activate_project_from_path_or_name(project)
-            except Exception as e:
+            except ProjectNotFoundError as e:
                 log.error(
                     f"Error activating project '{project}': {e}; Note that out-of-project configurations were migrated. "
                     "You should now pass either --project <project_name> or --project <project_root>."
@@ -969,7 +989,7 @@ class SerenaAgent:
             log.info(f"Found registered project {project_instance.project_name} at path {project_instance.project_root}.")
         else:
             if not os.path.isdir(project_root_or_name):
-                raise ValueError(
+                raise ProjectNotFoundError(
                     f"Project '{project_root_or_name}' not found: Not a valid project name or directory. "
                     f"Existing project names: {self.serena_config.project_names}"
                 )

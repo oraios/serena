@@ -1,0 +1,36 @@
+{
+    "_description": "The parameters sent by the client when initializing the language server with the \"initialize\" request. More details at https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#initialize",
+    "processId": "os.getpid()",
+    "locale": "en",
+    "rootPath": "$rootPath",
+    "rootUri": "$rootUri",
+    "capabilities": {
+        "textDocument": {
+            "synchronization": {
+                "didSave": true,
+                "dynamicRegistration": true
+            },
+            "completion": {
+                "dynamicRegistration": true,
+                "completionItem": {
+                    "snippetSupport": true
+                }
+            },
+            "definition": {
+                "dynamicRegistration": true
+            }
+        },
+        "workspace": {
+            "workspaceFolders": true,
+            "didChangeConfiguration": {
+                "dynamicRegistration": true
+            }
+        }
+    },
+    "workspaceFolders": [
+        {
+            "uri": "$uri",
+            "name": "$name"
+        }
+    ]
+}

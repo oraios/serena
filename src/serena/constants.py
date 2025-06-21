@@ -18,3 +18,5 @@ DEFAULT_MODES = ("interactive", "editing")
 
 PROJECT_TEMPLATE_FILE = str(_serena_pkg_path / "resources" / "project.template.yml")
 SELENA_CONFIG_TEMPLATE_FILE = str(_serena_pkg_path / "resources" / "serena_config.template.yml")
+
+USE_SOLID_LSP = True

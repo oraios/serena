@@ -23,7 +23,7 @@ dependencies = [
   "overrides>=7.7.0,<8",
   "python-dotenv>=1.0.0, <2",
   "mcp>=1.5.0",
-  "fastapi>=0.115.12",
+  "flask>=3.0.0",
   "sensai-utils>=1.4.0",
   "pydantic>=2.10.6",
   "types-pyyaml>=6.0.12.20241230",
@@ -112,10 +112,10 @@ PYDEVD_DISABLE_FILE_VALIDATION = "1"
 # For custom markers, one can either adjust the env var or just use -m option in the command line,
 # as the second -m option will override the first one.
 test = "pytest test -vv -m \"${PYTEST_MARKERS:-not java and not rust and not isolated_process}\""
-_black_check = "black --check --exclude src/multilspy/ src scripts test"
-_ruff_check = "ruff check --exclude .venv/ --exclude src/multilspy/ src scripts test"
-_black_format = "black --exclude .venv/|src/multilspy/ src scripts test"
-_ruff_format = "ruff check --exclude src/multilspy/ --fix src scripts test"
+_black_check = "black --check --exclude src/multilspy/ --exclude src/solidlsp/ src scripts test"
+_ruff_check = "ruff check --exclude .venv/ --exclude src/multilspy/ --exclude src/solidlsp/ src scripts test"
+_black_format = "black --exclude .venv/|src/multilspy/|src/solidlsp/ src scripts test"
+_ruff_format = "ruff check --exclude src/multilspy/ --exclude src/solidlsp/ --fix src scripts test"
 lint = [
   "_black_check",
   "_ruff_check",

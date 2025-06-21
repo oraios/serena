@@ -4,9 +4,11 @@ import pytest
 from mcp.server.fastmcp.tools.base import Tool as MCPTool
 
 from serena.agent import SerenaAgent, ToolRegistry
-from serena.mcp import make_tool
+from serena.mcp import SerenaMCPFactory
 from serena.process_isolated_agent import ProcessIsolatedSerenaAgent, ProcessIsolatedTool
 from test.serena.test_serena_agent import SerenaConfigForTests
+
+make_tool = SerenaMCPFactory.make_mcp_tool
 
 
 @pytest.fixture

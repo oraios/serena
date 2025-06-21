@@ -24,11 +24,14 @@ def execute_shell_command(command: str, cwd: str | None = None, capture_stderr: 
     if cwd is None:
         cwd = os.getcwd()
 
+    is_windows = platform.system() == "Windows"
     process = subprocess.Popen(
         command,
-        shell=platform.system() != "Windows",
+        shell=not is_windows,
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE if capture_stderr else None,
+        creationflags=subprocess.CREATE_NO_WINDOW if is_windows else 0,
         text=True,
         encoding="utf-8",
         errors="replace",
@@ -37,3 +40,18 @@ def execute_shell_command(command: str, cwd: str | None = None, capture_stderr: 
 
     stdout, stderr = process.communicate()
     return ShellCommandResult(stdout=stdout, stderr=stderr, return_code=process.returncode, cwd=cwd)
+
+
+def subprocess_check_output(args: list[str], encoding: str = "utf-8", strip: bool = True, timeout: float | None = None) -> str:
+    kwargs = {
+        "stdin": subprocess.DEVNULL,
+        "stderr": subprocess.PIPE,
+        "timeout": timeout,
+        "env": os.environ.copy(),
+    }
+    if platform.system() == "Windows":
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+    output = subprocess.check_output(args, **kwargs).decode(encoding)
+    if strip:
+        output = output.strip()
+    return output
