@@ -30,7 +30,7 @@ dependencies = [
   "pyyaml>=6.0.2",
   "ruamel.yaml>=0.18.0",
   "jinja2>=3.1.6",
-  "dotenv>=0.9.9",
+  "python-dotenv>=1.1.0",
   "pathspec>=0.12.1",
   "psutil>=7.0.0",
   "docstring_parser>=0.16",
@@ -59,14 +59,18 @@ dev = [
   "syrupy>=4.9.1",
 ]
 agno = [
-    "agno>=1.2.6",
+    "agno>=1.6.4",
     "sqlalchemy>=2.0.40",
+    "fastapi>=0.115.12",
 ]
 anthropic = [
     "anthropic>=0.49.0",
 ]
 google = [
     "google-genai>=1.8.0",
+]
+openrouter = [
+    "openai>=1.82.1",
 ]
 
 [project.urls]
@@ -269,6 +273,10 @@ max-complexity = 20
 "scripts/**" = [
   "D103"
 ]
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
 
 [tool.pytest.ini_options]
 markers = [

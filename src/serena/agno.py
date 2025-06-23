@@ -5,8 +5,9 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from agno.agent import Agent
-from agno.memory import AgentMemory
+from agno.agent.agent import Agent
+from agno.memory.v2.db.sqlite import SqliteMemoryDb
+from agno.memory.v2.memory import Memory
 from agno.models.base import Model
 from agno.storage.sqlite import SqliteStorage
 from agno.tools.function import Function
@@ -50,7 +51,7 @@ class SerenaAgnoAgentProvider:
     _lock = threading.Lock()
 
     @classmethod
-    def get_agent(cls, model: Model) -> Agent:
+    def get_agent(cls, model: Model, memory_model: Model | None = None) -> Agent:
         """
         Returns the singleton instance of the Serena agent or creates it with the given parameters if it doesn't exist.
 
@@ -58,6 +59,8 @@ class SerenaAgnoAgentProvider:
             module that defines the `app` variable) essentially forces us to do something like this.
 
         :param model: the large language model to use for the agent
+        :param memory_model: the LLM to use for agno Memory (MUST be OpenAILike 20250604)
+          Defaults to None.
         :return: the agent instance
         """
         with cls._lock:
@@ -114,12 +117,25 @@ class SerenaAgnoAgentProvider:
             # This storage should be deleted between sessions.
             # Note that this might collide with custom options for the agent, like adding vector-search based tools.
             # See here for an explanation: https://www.reddit.com/r/agno/comments/1jk6qea/regarding_the_built_in_memory/
-            sql_db_path = (Path("temp") / "agno_agent_storage.db").absolute()
+            sql_db_path = (Path("temp") / "agno_agent_chat_storage.db").absolute()
             sql_db_path.parent.mkdir(exist_ok=True)
             # delete the db file if it exists
             log.info(f"Deleting DB from PID {os.getpid()}")
             if sql_db_path.exists():
                 sql_db_path.unlink()
+
+            # Unlike the conversation db, which should NOT persist across sessions, our memories should.
+            sql_db_specs_path = (Path("temp") / "user_storage.db").absolute()
+            sql_db_specs_path.parent.mkdir(exist_ok=True)
+            memory_with_model = Memory(
+                # This can be None, which will cause Agno to happily use the env OPENAI_API_KEY
+                model=memory_model,
+                db=SqliteMemoryDb(
+                    db_file=str(sql_db_specs_path),
+                    table_name="specs_memory",
+                ),
+                debug_mode=False,
+            )
 
             agno_agent = Agent(
                 name="Serena",
@@ -134,7 +150,8 @@ class SerenaAgnoAgentProvider:
                 markdown=True,
                 system_message=serena_agent.create_system_prompt(),
                 telemetry=False,
-                memory=AgentMemory(),
+                memory=memory_with_model,
+                enable_user_memories=True,
                 add_history_to_messages=True,
                 num_history_responses=100,  # you might want to adjust this (expense vs. history awareness)
             )

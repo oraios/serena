@@ -458,14 +458,19 @@ Here's how it works (see also [Agno's documentation](https://docs.agno.com/intro
 3. Copy `.env.example` to `.env` and fill in the API keys for the provider(s) you
    intend to use.
 
-4. Start the agno agent app with
+4. In `scripts/agno_agent.py` configure an OpenAI model for `get_agent`: `memory_model` (non-OpenAI models will not work with Agno Memory), and the same or another model for `model`.
+
+> [!Note]
+> If no model is set for `memory_model`, then Agno Memory will look in the environment for `OPENAI_API_KEY`.
+
+5. Start the agno agent app with
    ```shell
    uv run python scripts/agno_agent.py
    ```
    By default, the script uses Claude as the model, but you can choose any model
    supported by Agno (which is essentially any existing model).
 
-5. In a new terminal, start the agno UI with
+6. In a new terminal, start the agno UI with
    ```shell
    cd agent-ui 
    pnpm dev
