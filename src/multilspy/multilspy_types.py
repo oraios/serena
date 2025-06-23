@@ -297,3 +297,70 @@ class Hover(TypedDict):
     range: NotRequired["Range"]
     """ An optional range inside the text document that is used to
     visualize the hover, e.g. by changing the background color. """
+
+
+class ParameterInformation(TypedDict):
+    """Represents a parameter of a callable-signature. A parameter can
+    have a label and a doc-comment."""
+
+    label: Union[str, List[Uint]]
+    """ The label of this parameter. Will be shown in
+    the UI.
+
+    Either a string or an inclusive start and exclusive end offsets within its containing
+    signature label. (see SignatureInformation.label). The offsets are based on a UTF-16
+    string representation as `Position` and `Range` does.
+
+    *Note*: a label of type string should be a substring of its containing signature label.
+    Its intended use case is to highlight the parameter label part in the `SignatureInformation.label`. """
+    documentation: NotRequired[Union[str, "MarkupContent"]]
+    """ The human-readable doc-comment of this parameter. Will be shown
+    in the UI but can be omitted. """
+
+
+class SignatureInformation(TypedDict):
+    """Represents the signature of something callable. A signature
+    can have a label, like a function-name, a doc-comment, and
+    a set of parameters."""
+
+    label: str
+    """ The label of this signature. Will be shown in
+    the UI. """
+    documentation: NotRequired[Union[str, "MarkupContent"]]
+    """ The human-readable doc-comment of this signature. Will be shown
+    in the UI but can be omitted. """
+    parameters: NotRequired[List["ParameterInformation"]]
+    """ The parameters of this signature. """
+    activeParameter: NotRequired[Uint]
+    """ The index of the active parameter.
+
+    If provided, this is used in place of `SignatureHelp.activeParameter`.
+
+    @since 3.16.0 """
+
+
+class SignatureHelp(TypedDict):
+    """Signature help represents the signature of something
+    callable. There can be multiple signature but only one
+    active and only one active parameter."""
+
+    signatures: List["SignatureInformation"]
+    """ One or more signatures. """
+    activeSignature: NotRequired[Uint]
+    """ The active signature. If omitted or the value lies outside the
+    range of `signatures` the value defaults to zero or is ignored if
+    the `SignatureHelp` has no signatures.
+
+    Whenever possible implementors should make an active decision about
+    the active signature and shouldn't rely on a default value.
+
+    In future version of the protocol this property might become
+    mandatory to better express this. """
+    activeParameter: NotRequired[Uint]
+    """ The active parameter of the active signature. If omitted or the value
+    lies outside the range of `signatures[activeSignature].parameters`
+    defaults to 0 if the active signature has parameters. If
+    the active signature has no parameters it is ignored.
+    In future version of the protocol this property might become
+    mandatory to better express the active parameter if the
+    active signature does have any. """
