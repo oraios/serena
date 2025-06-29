@@ -349,7 +349,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
                     logger.log(f"Running dotnet restore with command: {' '.join(restore_args)}", logging.DEBUG)
 
-                    # Use dotnet restore with no dependencies, streaming output
+                    # Use dotnet restore, streaming output
                     logger.log("Starting dotnet restore (output will be streamed)...", logging.INFO)
                     process = subprocess.Popen(
                         restore_args,
