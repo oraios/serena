@@ -139,14 +139,6 @@ RUNTIME_DEPENDENCIES = [
     ),
 ]
 
-# NuGet sources for package downloads
-NUGET_SOURCES = [
-    "https://api.nuget.org/v3/index.json",
-    "https://pkgs.dev.azure.com/azure-public/vside/_packaging/vs-impl/nuget/v3/index.json",
-    "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-tools/nuget/v3/index.json",
-    "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-public/nuget/v3/index.json",
-]
-
 
 def breadth_first_file_scan(root_dir):
     """
@@ -348,28 +340,32 @@ class CSharpLanguageServer(SolidLanguageServer):
   <ItemGroup>
     <PackageReference Include="{package_name}" Version="{package_version}" />
   </ItemGroup>
-  <PropertyGroup>
-    <RestoreAdditionalProjectSources>
-      {';'.join(NUGET_SOURCES)}
-    </RestoreAdditionalProjectSources>
-  </PropertyGroup>
 </Project>"""
 
                 project_file = temp_path / "temp.csproj"
                 project_file.write_text(project_content)
 
                 try:
+                    # Get the nuget.config path from the same directory as this script
+                    nuget_config_path = Path(__file__).parent / "nuget.config"
+
+                    restore_args = [
+                        dotnet_cmd,
+                        "restore",
+                        str(project_file),
+                        "--packages",
+                        str(temp_path),
+                        "--no-dependencies",
+                        "--ignore-failed-sources",
+                    ]
+
+                    # Add ConfigFile argument if nuget.config exists
+                    if nuget_config_path.exists():
+                        restore_args.extend(["--configfile", str(nuget_config_path)])
+
                     # Use dotnet restore with no dependencies
                     subprocess.run(
-                        [
-                            dotnet_cmd,
-                            "restore",
-                            str(project_file),
-                            "--packages",
-                            str(temp_path),
-                            "--no-dependencies",
-                            "--ignore-failed-sources",
-                        ],
+                        restore_args,
                         check=True,
                         capture_output=True,
                         text=True,
@@ -383,18 +379,27 @@ class CSharpLanguageServer(SolidLanguageServer):
 
             elif package_path is None and nuget_cmd:
                 # Use nuget to download the package
+                # Get the nuget.config path from the same directory as this script
+                nuget_config_path = Path(__file__).parent / "nuget.config"
+
+                nuget_args = [
+                    nuget_cmd,
+                    "install",
+                    package_name,
+                    "-Version",
+                    package_version,
+                    "-OutputDirectory",
+                    str(temp_path),
+                    "-NonInteractive",
+                ]
+
+                # Add ConfigFile argument if nuget.config exists
+                if nuget_config_path.exists():
+                    nuget_args.extend(["-ConfigFile", str(nuget_config_path)])
+
                 try:
                     subprocess.run(
-                        [
-                            nuget_cmd,
-                            "install",
-                            package_name,
-                            "-Version",
-                            package_version,
-                            "-OutputDirectory",
-                            str(temp_path),
-                            "-NonInteractive",
-                        ],
+                        nuget_args,
                         check=True,
                         capture_output=True,
                         text=True,
