@@ -338,8 +338,6 @@ class CSharpLanguageServer(SolidLanguageServer):
                         str(project_file),
                         "--packages",
                         str(temp_path),
-                        "--no-dependencies",
-                        "--ignore-failed-sources",
                         "-v",
                         "detailed",  # Add verbose logging
                     ]

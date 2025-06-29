@@ -10,6 +10,7 @@ import pathlib
 import stat
 import subprocess
 import threading
+
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
