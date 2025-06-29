@@ -307,6 +307,8 @@ class CSharpLanguageServer(SolidLanguageServer):
                 "Neither nuget nor dotnet CLI is available. Please install .NET SDK from https://dotnet.microsoft.com/download"
             )
 
+        logger.log(f"Found package managers - dotnet: {dotnet_cmd}, nuget: {nuget_cmd}", logging.INFO)
+
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             package_path = None
@@ -337,11 +339,16 @@ class CSharpLanguageServer(SolidLanguageServer):
                         str(temp_path),
                         "--no-dependencies",
                         "--ignore-failed-sources",
+                        "-v",
+                        "detailed",  # Add verbose logging
                     ]
 
                     # Add ConfigFile argument if nuget.config exists
                     if nuget_config_path.exists():
                         restore_args.extend(["--configfile", str(nuget_config_path)])
+                        logger.log(f"Using nuget.config from {nuget_config_path}", logging.INFO)
+
+                    logger.log(f"Running dotnet restore with command: {' '.join(restore_args)}", logging.DEBUG)
 
                     # Use dotnet restore with no dependencies
                     subprocess.run(
@@ -349,10 +356,16 @@ class CSharpLanguageServer(SolidLanguageServer):
                         check=True,
                         capture_output=True,
                         text=True,
+                        timeout=300,  # 5 minute timeout
                     )
                     package_path = temp_path / package_name.lower() / package_version
                     logger.log(f"Successfully restored {package_name} version {package_version} using dotnet", logging.INFO)
 
+                except subprocess.TimeoutExpired:
+                    raise LanguageServerException(
+                        "Dotnet restore timed out after 5 minutes. This might be due to network issues or authentication problems. "
+                        "Please check your internet connection and ensure you have access to the configured NuGet feeds."
+                    )
                 except subprocess.CalledProcessError as e:
                     logger.log(f"Dotnet restore stdout: {e.stdout}", logging.ERROR)
                     logger.log(f"Dotnet restore stderr: {e.stderr}", logging.ERROR)
@@ -377,6 +390,11 @@ class CSharpLanguageServer(SolidLanguageServer):
                 # Add ConfigFile argument if nuget.config exists
                 if nuget_config_path.exists():
                     nuget_args.extend(["-ConfigFile", str(nuget_config_path)])
+                    logger.log(f"Using nuget.config from {nuget_config_path}", logging.INFO)
+
+                nuget_args.extend(["-Verbosity", "detailed"])  # Add verbose logging
+
+                logger.log(f"Running nuget install with command: {' '.join(nuget_args)}", logging.DEBUG)
 
                 try:
                     subprocess.run(
@@ -384,12 +402,18 @@ class CSharpLanguageServer(SolidLanguageServer):
                         check=True,
                         capture_output=True,
                         text=True,
+                        timeout=300,  # 5 minute timeout
                     )
 
                     # Find the downloaded package
                     package_path = temp_path / f"{package_name}.{package_version}"
                     logger.log(f"Successfully downloaded {package_name} version {package_version} using nuget", logging.INFO)
 
+                except subprocess.TimeoutExpired:
+                    raise LanguageServerException(
+                        "Nuget install timed out after 5 minutes. This might be due to network issues or authentication problems. "
+                        "Please check your internet connection and ensure you have access to the configured NuGet feeds."
+                    )
                 except subprocess.CalledProcessError as e:
                     raise LanguageServerException(f"Failed to download package: {e.stderr}")
 
