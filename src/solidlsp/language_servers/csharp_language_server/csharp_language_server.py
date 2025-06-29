@@ -11,6 +11,7 @@ import subprocess
 import tarfile
 import tempfile
 import threading
+import time
 import urllib.request
 import zipfile
 from dataclasses import dataclass
@@ -350,14 +351,39 @@ class CSharpLanguageServer(SolidLanguageServer):
 
                     logger.log(f"Running dotnet restore with command: {' '.join(restore_args)}", logging.DEBUG)
 
-                    # Use dotnet restore with no dependencies
-                    subprocess.run(
+                    # Use dotnet restore with no dependencies, streaming output
+                    logger.log("Starting dotnet restore (output will be streamed)...", logging.INFO)
+                    process = subprocess.Popen(
                         restore_args,
-                        check=True,
-                        capture_output=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
                         text=True,
-                        timeout=300,  # 5 minute timeout
+                        bufsize=1,  # Line buffered
                     )
+
+                    # Stream output line by line with timeout
+                    start_time = time.time()
+                    timeout = 300  # 5 minutes
+
+                    try:
+                        for line in process.stdout:
+                            if time.time() - start_time > timeout:
+                                process.terminate()
+                                raise subprocess.TimeoutExpired(restore_args, timeout)
+                            line = line.rstrip()
+                            if line:
+                                logger.log(f"dotnet: {line}", logging.INFO)
+
+                        # Wait for process to complete
+                        return_code = process.wait()
+
+                        if return_code != 0:
+                            raise subprocess.CalledProcessError(return_code, restore_args)
+                    finally:
+                        if process.poll() is None:
+                            process.terminate()
+                            process.wait()
+
                     package_path = temp_path / package_name.lower() / package_version
                     logger.log(f"Successfully restored {package_name} version {package_version} using dotnet", logging.INFO)
 
@@ -397,13 +423,38 @@ class CSharpLanguageServer(SolidLanguageServer):
                 logger.log(f"Running nuget install with command: {' '.join(nuget_args)}", logging.DEBUG)
 
                 try:
-                    subprocess.run(
+                    # Use nuget install, streaming output
+                    logger.log("Starting nuget install (output will be streamed)...", logging.INFO)
+                    process = subprocess.Popen(
                         nuget_args,
-                        check=True,
-                        capture_output=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
                         text=True,
-                        timeout=300,  # 5 minute timeout
+                        bufsize=1,  # Line buffered
                     )
+
+                    # Stream output line by line with timeout
+                    start_time = time.time()
+                    timeout = 300  # 5 minutes
+
+                    try:
+                        for line in process.stdout:
+                            if time.time() - start_time > timeout:
+                                process.terminate()
+                                raise subprocess.TimeoutExpired(nuget_args, timeout)
+                            line = line.rstrip()
+                            if line:
+                                logger.log(f"nuget: {line}", logging.INFO)
+
+                        # Wait for process to complete
+                        return_code = process.wait()
+
+                        if return_code != 0:
+                            raise subprocess.CalledProcessError(return_code, nuget_args)
+                    finally:
+                        if process.poll() is None:
+                            process.terminate()
+                            process.wait()
 
                     # Find the downloaded package
                     package_path = temp_path / f"{package_name}.{package_version}"
