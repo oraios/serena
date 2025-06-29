@@ -309,29 +309,9 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-
-            # Try to download directly from the NuGet API first
-            direct_download_url = f"https://api.nuget.org/v3-flatcontainer/{package_name.lower()}/{package_version}/{package_name.lower()}.{package_version}.nupkg"
-
             package_path = None
-            try:
-                nupkg_path = temp_path / f"{package_name}.{package_version}.nupkg"
-                logger.log(f"Attempting direct download from {direct_download_url}", logging.INFO)
 
-                urllib.request.urlretrieve(direct_download_url, nupkg_path)
-
-                # Extract the nupkg (it's a zip file)
-                package_path = temp_path / f"{package_name}.{package_version}"
-                with zipfile.ZipFile(nupkg_path, "r") as zip_ref:
-                    zip_ref.extractall(package_path)
-
-                logger.log("Successfully downloaded and extracted package", logging.INFO)
-
-            except Exception as e:
-                logger.log(f"Direct download failed: {e}, falling back to package manager", logging.WARNING)
-                package_path = None
-
-            if package_path is None and dotnet_cmd:
+            if dotnet_cmd:
                 # Use dotnet restore to download the package
                 project_content = f"""<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -371,13 +351,14 @@ class CSharpLanguageServer(SolidLanguageServer):
                         text=True,
                     )
                     package_path = temp_path / package_name.lower() / package_version
+                    logger.log(f"Successfully restored {package_name} version {package_version} using dotnet", logging.INFO)
 
                 except subprocess.CalledProcessError as e:
                     logger.log(f"Dotnet restore stdout: {e.stdout}", logging.ERROR)
                     logger.log(f"Dotnet restore stderr: {e.stderr}", logging.ERROR)
                     raise LanguageServerException(f"Failed to download package: stdout={e.stdout}, stderr={e.stderr}")
 
-            elif package_path is None and nuget_cmd:
+            elif nuget_cmd:
                 # Use nuget to download the package
                 # Get the nuget.config path from the same directory as this script
                 nuget_config_path = Path(__file__).parent / "nuget.config"
@@ -407,6 +388,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
                     # Find the downloaded package
                     package_path = temp_path / f"{package_name}.{package_version}"
+                    logger.log(f"Successfully downloaded {package_name} version {package_version} using nuget", logging.INFO)
 
                 except subprocess.CalledProcessError as e:
                     raise LanguageServerException(f"Failed to download package: {e.stderr}")
