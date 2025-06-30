@@ -710,8 +710,8 @@ class CSharpLanguageServer(SolidLanguageServer):
         except Exception as e:
             raise LanguageServerException(f"Failed to initialize C# language server for {self.repository_root_path}: {e}") from e
 
-        # Apply diagnostic capabilities hack
-        self._force_pull_diagnostics_hack(init_response)
+        # Apply diagnostic capabilities
+        self._force_pull_diagnostics(init_response)
 
         # Verify required capabilities
         capabilities = init_response.get("capabilities", {})
@@ -744,7 +744,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             logging.INFO,
         )
 
-    def _force_pull_diagnostics_hack(self, init_response: dict) -> None:
+    def _force_pull_diagnostics(self, init_response: dict) -> None:
         """
         Apply the diagnostic capabilities hack.
         Forces the server to support pull diagnostics.
