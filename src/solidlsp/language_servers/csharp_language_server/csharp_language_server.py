@@ -777,7 +777,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         # Send solution/open notification if solution file found
         if solution_file:
             solution_uri = PathUtils.path_to_uri(solution_file)
-            self.server.notify.send_notification("solution/open", {"uri": solution_uri})
+            self.server.notify.send_notification("solution/open", {"solution": solution_uri})
             self.logger.log(f"Opened solution file: {solution_file}", logging.INFO)
 
         # Find and open project files
@@ -787,7 +787,7 @@ class CSharpLanguageServer(SolidLanguageServer):
                 project_files.append(filename)
 
         # Send project/open notifications for each project file
-        for project_file in project_files:
-            project_uri = PathUtils.path_to_uri(project_file)
-            self.server.notify.send_notification("project/open", {"uri": project_uri})
-            self.logger.log(f"Opened project file: {project_file}", logging.DEBUG)
+        if project_files:
+            project_uris = [PathUtils.path_to_uri(project_file) for project_file in project_files]
+            self.server.notify.send_notification("project/open", {"projects": project_uris})
+            self.logger.log(f"Opened project files: {project_files}", logging.DEBUG)
