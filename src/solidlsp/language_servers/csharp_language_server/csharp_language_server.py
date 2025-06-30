@@ -2,16 +2,14 @@
 CSharp Language Server using Microsoft.CodeAnalysis.LanguageServer (Official Roslyn-based LSP server)
 """
 
+import json
 import logging
 import os
 import platform
 import shutil
 import stat
-import subprocess
 import tarfile
-import tempfile
 import threading
-import time
 import urllib.request
 import zipfile
 from dataclasses import dataclass
@@ -296,210 +294,102 @@ class CSharpLanguageServer(SolidLanguageServer):
             logger.log(f"Using cached Microsoft.CodeAnalysis.LanguageServer from {server_dll}", logging.INFO)
             return dotnet_path, str(server_dll), cache_dir
 
-        # Download the language server package
-        logger.log(f"Downloading {package_name} version {package_version}...", logging.INFO)
+        # Download the language server package directly from Azure NuGet feed
+        logger.log(f"Downloading {package_name} version {package_version} directly from Azure NuGet feed...", logging.INFO)
 
-        # Check if nuget or dotnet is available
-        nuget_cmd = shutil.which("nuget")
-        dotnet_cmd = shutil.which("dotnet")
+        # Download package directly from Azure NuGet feed
+        package_path = self._download_nuget_package_direct(logger, package_name, package_version, cache_dir)
 
-        if not nuget_cmd and not dotnet_cmd:
+        # Extract the language server files
+        extract_path = lang_server_dep.extract_path or "lib/net9.0"
+        source_dir = package_path / extract_path
+
+        if not source_dir.exists():
+            # Try alternative locations
+            for possible_dir in [
+                package_path / "tools" / "net9.0" / "any",
+                package_path / "lib" / "net9.0",
+                package_path / "contentFiles" / "any" / "net9.0",
+            ]:
+                if possible_dir.exists():
+                    source_dir = possible_dir
+                    break
+            else:
+                raise LanguageServerException(f"Could not find language server files in package. Searched in {package_path}")
+
+        # Copy files to cache directory
+        server_dir.mkdir(parents=True, exist_ok=True)
+
+        shutil.copytree(source_dir, server_dir, dirs_exist_ok=True)
+
+        if not server_dll.exists():
+            raise LanguageServerException("Microsoft.CodeAnalysis.LanguageServer.dll not found after extraction")
+
+        # Make the DLL executable on Unix-like systems
+        system = platform.system().lower()
+        if system != "windows":
+            server_dll.chmod(server_dll.stat().st_mode | stat.S_IEXEC)
+
+        logger.log(f"Successfully installed Microsoft.CodeAnalysis.LanguageServer to {server_dll}", logging.INFO)
+        return dotnet_path, str(server_dll), cache_dir
+
+    def _download_nuget_package_direct(
+        self, logger: LanguageServerLogger, package_name: str, package_version: str, cache_dir: Path
+    ) -> Path:
+        """
+        Download a NuGet package directly from the Azure NuGet feed.
+        Returns the path to the extracted package directory.
+        """
+        azure_feed_url = "https://pkgs.dev.azure.com/azure-public/vside/_packaging/vs-impl/nuget/v3/index.json"
+
+        # Create temporary directory for package download
+        temp_dir = cache_dir / "temp_downloads"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            # First, get the service index from the Azure feed
+            logger.log("Fetching NuGet service index from Azure feed...", logging.DEBUG)
+            with urllib.request.urlopen(azure_feed_url) as response:
+                service_index = json.loads(response.read().decode())
+
+            # Find the package base address (for downloading packages)
+            package_base_address = None
+            for resource in service_index.get("resources", []):
+                if resource.get("@type") == "PackageBaseAddress/3.0.0":
+                    package_base_address = resource.get("@id")
+                    break
+
+            if not package_base_address:
+                raise LanguageServerException("Could not find package base address in Azure NuGet feed")
+
+            # Construct the download URL for the specific package
+            package_id_lower = package_name.lower()
+            package_version_lower = package_version.lower()
+            package_url = f"{package_base_address.rstrip('/')}/{package_id_lower}/{package_version_lower}/{package_id_lower}.{package_version_lower}.nupkg"
+
+            logger.log(f"Downloading package from: {package_url}", logging.DEBUG)
+
+            # Download the .nupkg file
+            nupkg_file = temp_dir / f"{package_name}.{package_version}.nupkg"
+            urllib.request.urlretrieve(package_url, nupkg_file)
+
+            # Extract the .nupkg file (it's just a zip file)
+            package_extract_dir = temp_dir / f"{package_name}.{package_version}"
+            package_extract_dir.mkdir(exist_ok=True)
+
+            with zipfile.ZipFile(nupkg_file, "r") as zip_ref:
+                zip_ref.extractall(package_extract_dir)
+
+            # Clean up the nupkg file
+            nupkg_file.unlink()
+
+            logger.log(f"Successfully downloaded and extracted {package_name} version {package_version}", logging.INFO)
+            return package_extract_dir
+
+        except Exception as e:
             raise LanguageServerException(
-                "Neither nuget nor dotnet CLI is available. Please install .NET SDK from https://dotnet.microsoft.com/download"
-            )
-
-        logger.log(f"Found package managers - dotnet: {dotnet_cmd}, nuget: {nuget_cmd}", logging.INFO)
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            package_path = None
-
-            if dotnet_cmd:
-                # Use dotnet restore to download the package
-                project_content = f"""<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="{package_name}" Version="{package_version}" />
-  </ItemGroup>
-</Project>"""
-
-                project_file = temp_path / "temp.csproj"
-                project_file.write_text(project_content)
-
-                try:
-                    # Get the nuget.config path from the same directory as this script
-                    nuget_config_path = Path(__file__).parent / "nuget.config"
-
-                    restore_args = [
-                        dotnet_cmd,
-                        "restore",
-                        str(project_file),
-                        "--packages",
-                        str(temp_path),
-                        "-v",
-                        "detailed",  # Add verbose logging
-                    ]
-
-                    # Add ConfigFile argument if nuget.config exists
-                    if nuget_config_path.exists():
-                        restore_args.extend(["--configfile", str(nuget_config_path)])
-                        logger.log(f"Using nuget.config from {nuget_config_path}", logging.INFO)
-
-                    logger.log(f"Running dotnet restore with command: {' '.join(restore_args)}", logging.DEBUG)
-
-                    # Use dotnet restore, streaming output
-                    logger.log("Starting dotnet restore (output will be streamed)...", logging.INFO)
-                    process = subprocess.Popen(
-                        restore_args,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,
-                        text=True,
-                        bufsize=1,  # Line buffered
-                    )
-
-                    # Stream output line by line with timeout
-                    start_time = time.time()
-                    timeout = 300  # 5 minutes
-
-                    try:
-                        for line in process.stdout:
-                            if time.time() - start_time > timeout:
-                                process.terminate()
-                                raise subprocess.TimeoutExpired(restore_args, timeout)
-                            line = line.rstrip()
-                            if line:
-                                logger.log(f"dotnet: {line}", logging.INFO)
-
-                        # Wait for process to complete
-                        return_code = process.wait()
-
-                        if return_code != 0:
-                            raise subprocess.CalledProcessError(return_code, restore_args)
-                    finally:
-                        if process.poll() is None:
-                            process.terminate()
-                            process.wait()
-
-                    package_path = temp_path / package_name.lower() / package_version
-                    logger.log(f"Successfully restored {package_name} version {package_version} using dotnet", logging.INFO)
-
-                except subprocess.TimeoutExpired:
-                    raise LanguageServerException(
-                        "Dotnet restore timed out after 5 minutes. This might be due to network issues or authentication problems. "
-                        "Please check your internet connection and ensure you have access to the configured NuGet feeds."
-                    )
-                except subprocess.CalledProcessError as e:
-                    logger.log(f"Dotnet restore stdout: {e.stdout}", logging.ERROR)
-                    logger.log(f"Dotnet restore stderr: {e.stderr}", logging.ERROR)
-                    raise LanguageServerException(f"Failed to download package: stdout={e.stdout}, stderr={e.stderr}")
-
-            elif nuget_cmd:
-                # Use nuget to download the package
-                # Get the nuget.config path from the same directory as this script
-                nuget_config_path = Path(__file__).parent / "nuget.config"
-
-                nuget_args = [
-                    nuget_cmd,
-                    "install",
-                    package_name,
-                    "-Version",
-                    package_version,
-                    "-OutputDirectory",
-                    str(temp_path),
-                    "-NonInteractive",
-                ]
-
-                # Add ConfigFile argument if nuget.config exists
-                if nuget_config_path.exists():
-                    nuget_args.extend(["-ConfigFile", str(nuget_config_path)])
-                    logger.log(f"Using nuget.config from {nuget_config_path}", logging.INFO)
-
-                nuget_args.extend(["-Verbosity", "detailed"])  # Add verbose logging
-
-                logger.log(f"Running nuget install with command: {' '.join(nuget_args)}", logging.DEBUG)
-
-                try:
-                    # Use nuget install, streaming output
-                    logger.log("Starting nuget install (output will be streamed)...", logging.INFO)
-                    process = subprocess.Popen(
-                        nuget_args,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,
-                        text=True,
-                        bufsize=1,  # Line buffered
-                    )
-
-                    # Stream output line by line with timeout
-                    start_time = time.time()
-                    timeout = 300  # 5 minutes
-
-                    try:
-                        for line in process.stdout:
-                            if time.time() - start_time > timeout:
-                                process.terminate()
-                                raise subprocess.TimeoutExpired(nuget_args, timeout)
-                            line = line.rstrip()
-                            if line:
-                                logger.log(f"nuget: {line}", logging.INFO)
-
-                        # Wait for process to complete
-                        return_code = process.wait()
-
-                        if return_code != 0:
-                            raise subprocess.CalledProcessError(return_code, nuget_args)
-                    finally:
-                        if process.poll() is None:
-                            process.terminate()
-                            process.wait()
-
-                    # Find the downloaded package
-                    package_path = temp_path / f"{package_name}.{package_version}"
-                    logger.log(f"Successfully downloaded {package_name} version {package_version} using nuget", logging.INFO)
-
-                except subprocess.TimeoutExpired:
-                    raise LanguageServerException(
-                        "Nuget install timed out after 5 minutes. This might be due to network issues or authentication problems. "
-                        "Please check your internet connection and ensure you have access to the configured NuGet feeds."
-                    )
-                except subprocess.CalledProcessError as e:
-                    raise LanguageServerException(f"Failed to download package: {e.stderr}")
-
-            if package_path is None or not package_path.exists():
-                raise LanguageServerException("Failed to download Microsoft.CodeAnalysis.LanguageServer package")
-
-            # Extract the language server files
-            extract_path = lang_server_dep.extract_path or "lib/net9.0"
-            source_dir = package_path / extract_path
-
-            if not source_dir.exists():
-                # Try alternative locations
-                for possible_dir in [
-                    package_path / "tools" / "net9.0" / "any",
-                    package_path / "lib" / "net9.0",
-                    package_path / "contentFiles" / "any" / "net9.0",
-                ]:
-                    if possible_dir.exists():
-                        source_dir = possible_dir
-                        break
-                else:
-                    raise LanguageServerException(f"Could not find language server files in package. Searched in {package_path}")
-
-            # Copy files to cache directory
-            server_dir.mkdir(parents=True, exist_ok=True)
-
-            shutil.copytree(source_dir, server_dir, dirs_exist_ok=True)
-
-            if not server_dll.exists():
-                raise LanguageServerException("Microsoft.CodeAnalysis.LanguageServer.dll not found after extraction")
-
-            # Make the DLL executable on Unix-like systems
-            if system != "windows":
-                server_dll.chmod(server_dll.stat().st_mode | stat.S_IEXEC)
-
-            logger.log(f"Successfully installed Microsoft.CodeAnalysis.LanguageServer to {server_dll}", logging.INFO)
-            return dotnet_path, str(server_dll), cache_dir
+                f"Failed to download package {package_name} version {package_version} from Azure NuGet feed: {e}"
+            ) from e
 
     def _ensure_dotnet_runtime_from_config(self, logger: LanguageServerLogger, cache_dir: Path, runtime_dep: RuntimeDependency) -> str:
         """
@@ -511,6 +401,8 @@ class CSharpLanguageServer(SolidLanguageServer):
         if system_dotnet:
             # Check if it's .NET 9
             try:
+                import subprocess
+
                 result = subprocess.run([system_dotnet, "--list-runtimes"], capture_output=True, text=True, check=True)
                 if "Microsoft.NETCore.App 9." in result.stdout:
                     logger.log("Found system .NET 9 runtime", logging.INFO)
@@ -523,14 +415,8 @@ class CSharpLanguageServer(SolidLanguageServer):
         dotnet_exe = dotnet_dir / runtime_dep.binary_name
 
         if dotnet_exe.exists():
-            # Verify it still works
-            try:
-                subprocess.run([str(dotnet_exe), "--info"], capture_output=True, check=True)
-                logger.log(f"Using cached .NET runtime from {dotnet_exe}", logging.INFO)
-                return str(dotnet_exe)
-            except subprocess.CalledProcessError:
-                logger.log("Cached .NET runtime is corrupted, re-downloading", logging.WARNING)
-                shutil.rmtree(dotnet_dir, ignore_errors=True)
+            logger.log(f"Using cached .NET runtime from {dotnet_exe}", logging.INFO)
+            return str(dotnet_exe)
 
         # Download .NET runtime
         logger.log("Downloading .NET 9 runtime...", logging.INFO)
