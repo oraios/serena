@@ -194,27 +194,17 @@ class CSharpLanguageServer(SolidLanguageServer):
         Creates a CSharpLanguageServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        dotnet_path, language_server_path, cache_dir = self.setup_runtime_dependencies(logger, config)
+        dotnet_path, language_server_path, cache_dir = self._ensure_server_installed(logger, config)
 
         # Find solution or project file
         solution_or_project = find_solution_or_project_file(repository_root_path)
 
-        # Build command - Microsoft.CodeAnalysis.LanguageServer requires specific parameters
-        cmd_parts = [dotnet_path, language_server_path]
-
-        # Required parameters
-        cmd_parts.extend(["--stdio"])  # Use stdio for communication
-
-        # Set log level based on logger settings
-        if logger.logger.level <= logging.DEBUG:
-            cmd_parts.extend(["--logLevel", "Information"])
-        else:
-            cmd_parts.extend(["--logLevel", "Warning"])
-
         # Create log directory
         log_dir = cache_dir / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
-        cmd_parts.extend(["--extensionLogDirectory", str(log_dir)])
+
+        # Build command using dotnet directly
+        cmd = [dotnet_path, language_server_path, "--logLevel=Information", f"--extensionLogDirectory={log_dir}", "--stdio"]
 
         # The language server will discover the solution/project from the workspace root
         if solution_or_project:
@@ -222,11 +212,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         else:
             logger.log("No .sln or .csproj file found, language server will attempt auto-discovery", logging.WARNING)
 
-        # Join command parts with spaces
-        # ProcessLaunchInfo expects a simple string command, not shell-quoted
-        cmd = cmd_parts
-
-        logger.log(f"Language server command: {cmd}", logging.DEBUG)
+        logger.log(f"Language server command: {' '.join(cmd)}", logging.DEBUG)
 
         super().__init__(
             config,
@@ -242,30 +228,45 @@ class CSharpLanguageServer(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["bin", "obj", "packages", ".vs"]
 
-    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> tuple[str, str, Path]:
+    def _ensure_server_installed(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> tuple[str, str, Path]:
         """
-        Set up .NET 9 runtime and Microsoft.CodeAnalysis.LanguageServer using runtime dependencies.
+        Ensure .NET runtime and Microsoft.CodeAnalysis.LanguageServer are available.
         Returns a tuple of (dotnet_path, language_server_dll_path, cache_dir).
         """
-        # Determine the runtime ID based on the platform
-        system = platform.system().lower()
-        machine = platform.machine().lower()
-
-        # Map platform info to runtime ID
-        if system == "windows":
-            runtime_id = "win-x64" if machine in ["amd64", "x86_64"] else "win-arm64"
-        elif system == "darwin":
-            runtime_id = "osx-x64" if machine in ["x86_64"] else "osx-arm64"
-        elif system == "linux":
-            runtime_id = "linux-x64" if machine in ["x86_64", "amd64"] else "linux-arm64"
-        else:
-            raise LanguageServerException(f"Unsupported platform: {system} {machine}")
+        # Determine platform runtime ID
+        runtime_id = self._get_runtime_id()
 
         # Set up cache directory
         cache_dir = Path.home() / ".cache" / "serena" / "language-servers" / "csharp"
         cache_dir.mkdir(parents=True, exist_ok=True)
 
-        # Find the appropriate language server dependency
+        # Get runtime dependencies for this platform
+        lang_server_dep, dotnet_runtime_dep = self._get_runtime_dependencies(runtime_id)
+
+        # Ensure .NET runtime is available
+        dotnet_path = self._ensure_dotnet_runtime(logger, cache_dir, dotnet_runtime_dep)
+
+        # Ensure language server is available
+        server_dll_path = self._ensure_language_server(logger, cache_dir, lang_server_dep)
+
+        return dotnet_path, server_dll_path, cache_dir
+
+    def _get_runtime_id(self) -> str:
+        """Determine the runtime ID based on the platform."""
+        system = platform.system().lower()
+        machine = platform.machine().lower()
+
+        if system == "windows":
+            return "win-x64" if machine in ["amd64", "x86_64"] else "win-arm64"
+        elif system == "darwin":
+            return "osx-x64" if machine in ["x86_64"] else "osx-arm64"
+        elif system == "linux":
+            return "linux-x64" if machine in ["x86_64", "amd64"] else "linux-arm64"
+        else:
+            raise LanguageServerException(f"Unsupported platform: {system} {machine}")
+
+    def _get_runtime_dependencies(self, runtime_id: str) -> tuple[RuntimeDependency, RuntimeDependency]:
+        """Get the language server and .NET runtime dependencies for the platform."""
         lang_server_dep = None
         dotnet_runtime_dep = None
 
@@ -280,10 +281,29 @@ class CSharpLanguageServer(SolidLanguageServer):
         if not dotnet_runtime_dep:
             raise LanguageServerException(f"No .NET runtime dependency found for platform {runtime_id}")
 
-        # First, ensure we have .NET 9 runtime
-        dotnet_path = self._ensure_dotnet_runtime_from_config(logger, cache_dir, dotnet_runtime_dep)
+        return lang_server_dep, dotnet_runtime_dep
 
-        # Then set up the language server
+    def _ensure_dotnet_runtime(self, logger: LanguageServerLogger, cache_dir: Path, runtime_dep: RuntimeDependency) -> str:
+        """Ensure .NET runtime is available and return the dotnet executable path."""
+        # Check if dotnet is already available in system
+        system_dotnet = shutil.which("dotnet")
+        if system_dotnet:
+            # Check if it's .NET 9
+            try:
+                import subprocess
+
+                result = subprocess.run([system_dotnet, "--list-runtimes"], capture_output=True, text=True, check=True)
+                if "Microsoft.NETCore.App 9." in result.stdout:
+                    logger.log("Found system .NET 9 runtime", logging.INFO)
+                    return system_dotnet
+            except subprocess.CalledProcessError:
+                pass
+
+        # Download .NET 9 runtime using config
+        return self._ensure_dotnet_runtime_from_config(logger, cache_dir, runtime_dep)
+
+    def _ensure_language_server(self, logger: LanguageServerLogger, cache_dir: Path, lang_server_dep: RuntimeDependency) -> str:
+        """Ensure language server is available and return the DLL path."""
         package_name = lang_server_dep.package_name
         package_version = lang_server_dep.package_version
 
@@ -292,15 +312,27 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         if server_dll.exists():
             logger.log(f"Using cached Microsoft.CodeAnalysis.LanguageServer from {server_dll}", logging.INFO)
-            return dotnet_path, str(server_dll), cache_dir
+            return str(server_dll)
 
-        # Download the language server package directly from Azure NuGet feed
-        logger.log(f"Downloading {package_name} version {package_version} directly from Azure NuGet feed...", logging.INFO)
-
-        # Download package directly from Azure NuGet feed
+        # Download and install the language server
+        logger.log(f"Downloading {package_name} version {package_version}...", logging.INFO)
         package_path = self._download_nuget_package_direct(logger, package_name, package_version, cache_dir)
 
-        # Extract the language server files
+        # Extract and install
+        self._extract_language_server(lang_server_dep, package_path, server_dir)
+
+        if not server_dll.exists():
+            raise LanguageServerException("Microsoft.CodeAnalysis.LanguageServer.dll not found after extraction")
+
+        # Make executable on Unix systems
+        if platform.system().lower() != "windows":
+            server_dll.chmod(server_dll.stat().st_mode | stat.S_IEXEC)
+
+        logger.log(f"Successfully installed Microsoft.CodeAnalysis.LanguageServer to {server_dll}", logging.INFO)
+        return str(server_dll)
+
+    def _extract_language_server(self, lang_server_dep: RuntimeDependency, package_path: Path, server_dir: Path) -> None:
+        """Extract language server files from downloaded package."""
         extract_path = lang_server_dep.extract_path or "lib/net9.0"
         source_dir = package_path / extract_path
 
@@ -319,19 +351,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         # Copy files to cache directory
         server_dir.mkdir(parents=True, exist_ok=True)
-
         shutil.copytree(source_dir, server_dir, dirs_exist_ok=True)
-
-        if not server_dll.exists():
-            raise LanguageServerException("Microsoft.CodeAnalysis.LanguageServer.dll not found after extraction")
-
-        # Make the DLL executable on Unix-like systems
-        system = platform.system().lower()
-        if system != "windows":
-            server_dll.chmod(server_dll.stat().st_mode | stat.S_IEXEC)
-
-        logger.log(f"Successfully installed Microsoft.CodeAnalysis.LanguageServer to {server_dll}", logging.INFO)
-        return dotnet_path, str(server_dll), cache_dir
 
     def _download_nuget_package_direct(
         self, logger: LanguageServerLogger, package_name: str, package_version: str, cache_dir: Path
@@ -690,6 +710,9 @@ class CSharpLanguageServer(SolidLanguageServer):
         except Exception as e:
             raise LanguageServerException(f"Failed to initialize C# language server for {self.repository_root_path}: {e}") from e
 
+        # Apply diagnostic capabilities hack
+        self._force_pull_diagnostics_hack(init_response)
+
         # Verify required capabilities
         capabilities = init_response.get("capabilities", {})
         required_capabilities = [
@@ -707,6 +730,10 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         # Complete initialization
         self.server.notify.initialized({})
+
+        # Open solution and project files
+        self._open_solution_and_projects()
+
         self.initialization_complete.set()
         self.completions_available.set()
 
@@ -716,3 +743,51 @@ class CSharpLanguageServer(SolidLanguageServer):
             "This may take a while for large projects",
             logging.INFO,
         )
+
+    def _force_pull_diagnostics_hack(self, init_response: dict) -> None:
+        """
+        Apply the diagnostic capabilities hack.
+        Forces the server to support pull diagnostics.
+        """
+        capabilities = init_response.get("capabilities", {})
+        diagnostic_provider = capabilities.get("diagnosticProvider", {})
+
+        # Add the diagnostic capabilities hack
+        if isinstance(diagnostic_provider, dict):
+            diagnostic_provider.update(
+                {
+                    "interFileDependencies": True,
+                    "workDoneProgress": True,
+                    "workspaceDiagnostics": True,
+                }
+            )
+            self.logger.log("Applied diagnostic capabilities hack for better C# diagnostics", logging.DEBUG)
+
+    def _open_solution_and_projects(self) -> None:
+        """
+        Open solution and project files using notifications.
+        """
+        # Find solution file
+        solution_file = None
+        for filename in breadth_first_file_scan(self.repository_root_path):
+            if filename.endswith(".sln"):
+                solution_file = filename
+                break
+
+        # Send solution/open notification if solution file found
+        if solution_file:
+            solution_uri = PathUtils.path_to_uri(solution_file)
+            self.server.notify.send_notification("solution/open", {"uri": solution_uri})
+            self.logger.log(f"Opened solution file: {solution_file}", logging.INFO)
+
+        # Find and open project files
+        project_files = []
+        for filename in breadth_first_file_scan(self.repository_root_path):
+            if filename.endswith(".csproj"):
+                project_files.append(filename)
+
+        # Send project/open notifications for each project file
+        for project_file in project_files:
+            project_uri = PathUtils.path_to_uri(project_file)
+            self.server.notify.send_notification("project/open", {"uri": project_uri})
+            self.logger.log(f"Opened project file: {project_file}", logging.DEBUG)
