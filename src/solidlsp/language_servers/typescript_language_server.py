@@ -82,7 +82,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy javascript/typescript at the moment"
 
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json")) as f:
+        with open(os.path.join(os.path.dirname(__file__), "typescript_language_server", "runtime_dependencies.json")) as f:
             d = json.load(f)
             del d["_description"]
 
@@ -134,7 +134,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         """
         Returns the initialize params for the TypeScript Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json")) as f:
+        with open(os.path.join(os.path.dirname(__file__), "typescript_language_server", "initialize_params.json")) as f:
             d = json.load(f)
 
         del d["_description"]

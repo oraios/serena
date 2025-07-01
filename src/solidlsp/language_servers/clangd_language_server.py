@@ -47,7 +47,7 @@ class ClangdLanguageServer(SolidLanguageServer):
         """
         platform_id = PlatformUtils.get_platform_id()
 
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json")) as f:
+        with open(os.path.join(os.path.dirname(__file__), "clangd_language_server", "runtime_dependencies.json")) as f:
             d = json.load(f)
             del d["_description"]
 
@@ -90,7 +90,7 @@ class ClangdLanguageServer(SolidLanguageServer):
         """
         Returns the initialize params for the clangd Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json")) as f:
+        with open(os.path.join(os.path.dirname(__file__), "clangd_language_server", "initialize_params.json")) as f:
             d = json.load(f)
 
         del d["_description"]

@@ -204,6 +204,7 @@ pylint.html
 # dynamic LS installations
 /src/multilspy/language_servers/*/static
 /src/solidlsp/language_servers/*/static
+/src/solidlsp/language_servers/static
 
 # clojure-lsp temporary files
 .calva/

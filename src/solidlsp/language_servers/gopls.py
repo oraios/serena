@@ -88,7 +88,7 @@ class Gopls(SolidLanguageServer):
         """
         Returns the initialize params for the TypeScript Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "gopls", "initialize_params.json"), encoding="utf-8") as f:
             d = json.load(f)
 
         del d["_description"]

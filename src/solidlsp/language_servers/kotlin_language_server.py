@@ -66,7 +66,7 @@ class KotlinLanguageServer(SolidLanguageServer):
         ), "Only Windows, Linux and macOS platforms are supported for Kotlin in multilspy at the moment"
 
         # Load dependency information
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "kotlin_language_server", "runtime_dependencies.json"), encoding="utf-8") as f:
             d = json.load(f)
             del d["_description"]
 
@@ -74,7 +74,7 @@ class KotlinLanguageServer(SolidLanguageServer):
         java_dependency = d["java"][platform_id.value]
 
         # Setup paths for dependencies
-        static_dir = os.path.join(os.path.dirname(__file__), "static")
+        static_dir = os.path.join(os.path.dirname(__file__), "static", "kotlin_language_server")
         os.makedirs(static_dir, exist_ok=True)
 
         # Setup Java paths
@@ -129,7 +129,9 @@ class KotlinLanguageServer(SolidLanguageServer):
         """
         Returns the initialize params for the Kotlin Language Server.
         """
-        with open(str(pathlib.PurePath(os.path.dirname(__file__), "initialize_params.json")), encoding="utf-8") as f:
+        with open(
+            str(pathlib.PurePath(os.path.dirname(__file__), "kotlin_language_server", "initialize_params.json")), encoding="utf-8"
+        ) as f:
             d: InitializeParams = json.load(f)
 
         del d["_description"]

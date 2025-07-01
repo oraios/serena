@@ -159,7 +159,7 @@ class EclipseJDTLS(SolidLanguageServer):
         """
         platformId = PlatformUtils.get_platform_id()
 
-        with open(str(PurePath(os.path.dirname(__file__), "runtime_dependencies.json")), encoding="utf-8") as f:
+        with open(str(PurePath(os.path.dirname(__file__), "eclipse_jdtls", "runtime_dependencies.json")), encoding="utf-8") as f:
             runtimeDependencies = json.load(f)
             del runtimeDependencies["_description"]
 
@@ -252,7 +252,7 @@ class EclipseJDTLS(SolidLanguageServer):
         Returns the initialize parameters for the EclipseJDTLS server.
         """
         # Look into https://github.com/eclipse/eclipse.jdt.ls/blob/master/org.eclipse.jdt.ls.core/src/org/eclipse/jdt/ls/core/internal/preferences/Preferences.java to understand all the options available
-        with open(str(PurePath(os.path.dirname(__file__), "initialize_params.json")), encoding="utf-8") as f:
+        with open(str(PurePath(os.path.dirname(__file__), "eclipse_jdtls", "initialize_params.json")), encoding="utf-8") as f:
             d: InitializeParams = json.load(f)
 
         del d["_description"]

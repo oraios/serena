@@ -51,7 +51,7 @@ class RustAnalyzer(SolidLanguageServer):
         """
         platform_id = PlatformUtils.get_platform_id()
 
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "rust_analyzer", "runtime_dependencies.json"), encoding="utf-8") as f:
             d = json.load(f)
             del d["_description"]
 
@@ -82,7 +82,7 @@ class RustAnalyzer(SolidLanguageServer):
         """
         Returns the initialize params for the Rust Analyzer Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "rust_analyzer", "initialize_params.json"), encoding="utf-8") as f:
             d = json.load(f)
 
         del d["_description"]

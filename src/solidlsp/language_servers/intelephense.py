@@ -50,7 +50,7 @@ class Intelephense(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy PHP at the moment"
 
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "intelephense", "runtime_dependencies.json"), encoding="utf-8") as f:
             d = json.load(f)
             del d["_description"]
 
@@ -108,7 +108,7 @@ class Intelephense(SolidLanguageServer):
         """
         Returns the initialize params for the TypeScript Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "intelephense", "initialize_params.json"), encoding="utf-8") as f:
             d = json.load(f)
 
         del d["_description"]

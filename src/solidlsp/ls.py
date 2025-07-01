@@ -108,28 +108,28 @@ class SolidLanguageServer(ABC):
         ls: SolidLanguageServer
 
         if config.code_language == Language.PYTHON:
-            from solidlsp.language_servers.pyright_language_server.pyright_server import (
+            from solidlsp.language_servers.pyright_server import (
                 PyrightServer,
             )
 
             ls = PyrightServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.JAVA:
-            from solidlsp.language_servers.eclipse_jdtls.eclipse_jdtls import (
+            from solidlsp.language_servers.eclipse_jdtls import (
                 EclipseJDTLS,
             )
 
             ls = EclipseJDTLS(config, logger, repository_root_path)
 
         elif config.code_language == Language.KOTLIN:
-            from solidlsp.language_servers.kotlin_language_server.kotlin_language_server import (
+            from solidlsp.language_servers.kotlin_language_server import (
                 KotlinLanguageServer,
             )
 
             ls = KotlinLanguageServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.RUST:
-            from solidlsp.language_servers.rust_analyzer.rust_analyzer import (
+            from solidlsp.language_servers.rust_analyzer import (
                 RustAnalyzer,
             )
 
@@ -141,44 +141,44 @@ class SolidLanguageServer(ABC):
             # from solidlsp.language_servers.omnisharp.omnisharp import OmniSharp
             # ls = OmniSharp(config, logger, repository_root_path)
 
-            from solidlsp.language_servers.csharp_language_server.csharp_language_server import CSharpLanguageServer
+            from solidlsp.language_servers.csharp_language_server import CSharpLanguageServer
 
             ls = CSharpLanguageServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.TYPESCRIPT:
-            from solidlsp.language_servers.typescript_language_server.typescript_language_server import (
+            from solidlsp.language_servers.typescript_language_server import (
                 TypeScriptLanguageServer,
             )
 
             ls = TypeScriptLanguageServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.GO:
-            from solidlsp.language_servers.gopls.gopls import Gopls
+            from solidlsp.language_servers.gopls import Gopls
 
             ls = Gopls(config, logger, repository_root_path)
 
         elif config.code_language == Language.RUBY:
-            from solidlsp.language_servers.solargraph.solargraph import Solargraph
+            from solidlsp.language_servers.solargraph import Solargraph
 
             ls = Solargraph(config, logger, repository_root_path)
 
         elif config.code_language == Language.DART:
-            from solidlsp.language_servers.dart_language_server.dart_language_server import DartLanguageServer
+            from solidlsp.language_servers.dart_language_server import DartLanguageServer
 
             ls = DartLanguageServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.CPP:
-            from solidlsp.language_servers.clangd_language_server.clangd_language_server import ClangdLanguageServer
+            from solidlsp.language_servers.clangd_language_server import ClangdLanguageServer
 
             ls = ClangdLanguageServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.PHP:
-            from solidlsp.language_servers.intelephense.intelephense import Intelephense
+            from solidlsp.language_servers.intelephense import Intelephense
 
             ls = Intelephense(config, logger, repository_root_path)
 
         elif config.code_language == Language.CLOJURE:
-            from solidlsp.language_servers.clojure_lsp.clojure_lsp import ClojureLSP
+            from solidlsp.language_servers.clojure_lsp import ClojureLSP
 
             ls = ClojureLSP(config, logger, repository_root_path)
 

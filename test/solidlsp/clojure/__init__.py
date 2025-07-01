@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from solidlsp.language_servers.clojure_lsp.clojure_lsp import verify_clojure_cli
+from solidlsp.language_servers.clojure_lsp import verify_clojure_cli
 
 
 def _test_clojure_cli() -> bool:
