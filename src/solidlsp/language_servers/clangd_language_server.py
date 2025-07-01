@@ -2,7 +2,6 @@
 Provides C/C++ specific instantiation of the LanguageServer class. Contains various configurations and settings specific to C/C++.
 """
 
-import json
 import logging
 import os
 import pathlib
@@ -47,9 +46,32 @@ class ClangdLanguageServer(SolidLanguageServer):
         """
         platform_id = PlatformUtils.get_platform_id()
 
-        with open(os.path.join(os.path.dirname(__file__), "clangd_language_server", "runtime_dependencies.json")) as f:
-            d = json.load(f)
-            del d["_description"]
+        runtime_dependencies = [
+            {
+                "id": "Clangd",
+                "description": "Clangd for Linux (x64)",
+                "url": "https://github.com/clangd/clangd/releases/download/19.1.2/clangd-linux-19.1.2.zip",
+                "platformId": "linux-x64",
+                "archiveType": "zip",
+                "binaryName": "clangd",
+            },
+            {
+                "id": "Clangd",
+                "description": "Clangd for Windows (x64)",
+                "url": "https://github.com/clangd/clangd/releases/download/19.1.2/clangd-windows-19.1.2.zip",
+                "platformId": "win-x64",
+                "archiveType": "zip",
+                "binaryName": "clangd.exe",
+            },
+            {
+                "id": "Clangd",
+                "description": "Clangd for macOS (Arm64)",
+                "url": "https://github.com/clangd/clangd/releases/download/19.1.2/clangd-mac-19.1.2.zip",
+                "platformId": "osx-arm64",
+                "archiveType": "zip",
+                "binaryName": "clangd",
+            },
+        ]
 
         assert platform_id.value in [
             "linux-x64",
@@ -59,7 +81,6 @@ class ClangdLanguageServer(SolidLanguageServer):
             "Unsupported platform: " + platform_id.value
         )
 
-        runtime_dependencies = d["runtimeDependencies"]
         runtime_dependencies = [dependency for dependency in runtime_dependencies if dependency["platformId"] == platform_id.value]
         assert len(runtime_dependencies) == 1
         # Select dependency matching the current platform
@@ -90,25 +111,29 @@ class ClangdLanguageServer(SolidLanguageServer):
         """
         Returns the initialize params for the clangd Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "clangd_language_server", "initialize_params.json")) as f:
-            d = json.load(f)
+        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+        initialize_params = {
+            "locale": "en",
+            "capabilities": {
+                "textDocument": {
+                    "synchronization": {"didSave": True, "dynamicRegistration": True},
+                    "completion": {"dynamicRegistration": True, "completionItem": {"snippetSupport": True}},
+                    "definition": {"dynamicRegistration": True},
+                },
+                "workspace": {"workspaceFolders": True, "didChangeConfiguration": {"dynamicRegistration": True}},
+            },
+            "processId": os.getpid(),
+            "rootPath": repository_absolute_path,
+            "rootUri": root_uri,
+            "workspaceFolders": [
+                {
+                    "uri": root_uri,
+                    "name": "$name",
+                }
+            ],
+        }
 
-        del d["_description"]
-
-        d["processId"] = os.getpid()
-        assert d["rootPath"] == "$rootPath"
-        d["rootPath"] = repository_absolute_path
-
-        assert d["rootUri"] == "$rootUri"
-        d["rootUri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["uri"] == "$uri"
-        d["workspaceFolders"][0]["uri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["name"] == "$name"
-        d["workspaceFolders"][0]["name"] = os.path.basename(repository_absolute_path)
-
-        return d
+        return initialize_params
 
     def _start_server(self):
         """

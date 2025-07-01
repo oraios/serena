@@ -2,7 +2,6 @@
 Provides PHP specific instantiation of the LanguageServer class using Intelephense.
 """
 
-import json
 import logging
 import os
 import pathlib
@@ -50,13 +49,12 @@ class Intelephense(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy PHP at the moment"
 
-        with open(os.path.join(os.path.dirname(__file__), "intelephense", "runtime_dependencies.json"), encoding="utf-8") as f:
-            d = json.load(f)
-            del d["_description"]
-
-        runtime_dependencies = d.get("runtimeDependencies", [])
+        runtime_dependencies = {
+            "id": "intelephense",
+            "description": "Intelephense package for Linux, OSX, and Windows. Both x64 and arm64 are supported.",
+            "command": "npm install --prefix ./ intelephense@1.14.4",
+        }
         intelephense_ls_dir = os.path.join(os.path.dirname(__file__), "static", "php-lsp")
-
         # Verify both node and npm are installed
         is_node_installed = shutil.which("node") is not None
         assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
@@ -108,25 +106,29 @@ class Intelephense(SolidLanguageServer):
         """
         Returns the initialize params for the TypeScript Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "intelephense", "initialize_params.json"), encoding="utf-8") as f:
-            d = json.load(f)
+        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+        initialize_params = {
+            "locale": "en",
+            "capabilities": {
+                "textDocument": {
+                    "synchronization": {"didSave": True, "dynamicRegistration": True},
+                    "completion": {"dynamicRegistration": True, "completionItem": {"snippetSupport": True}},
+                    "definition": {"dynamicRegistration": True},
+                },
+                "workspace": {"workspaceFolders": True, "didChangeConfiguration": {"dynamicRegistration": True}},
+            },
+            "processId": os.getpid(),
+            "rootPath": repository_absolute_path,
+            "rootUri": root_uri,
+            "workspaceFolders": [
+                {
+                    "uri": root_uri,
+                    "name": os.path.basename(repository_absolute_path),
+                }
+            ],
+        }
 
-        del d["_description"]
-
-        d["processId"] = os.getpid()
-        assert d["rootPath"] == "$rootPath"
-        d["rootPath"] = repository_absolute_path
-
-        assert d["rootUri"] == "$rootUri"
-        d["rootUri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["uri"] == "$uri"
-        d["workspaceFolders"][0]["uri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["name"] == "$name"
-        d["workspaceFolders"][0]["name"] = os.path.basename(repository_absolute_path)
-
-        return d
+        return initialize_params
 
     def _start_server(self):
         """Start Intelephense server process"""

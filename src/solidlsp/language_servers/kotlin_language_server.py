@@ -3,7 +3,6 @@ Provides Kotlin specific instantiation of the LanguageServer class. Contains var
 """
 
 import dataclasses
-import json
 import logging
 import os
 import pathlib
@@ -65,13 +64,50 @@ class KotlinLanguageServer(SolidLanguageServer):
             platform_id.value.startswith("win-") or platform_id.value.startswith("linux-") or platform_id.value.startswith("osx-")
         ), "Only Windows, Linux and macOS platforms are supported for Kotlin in multilspy at the moment"
 
-        # Load dependency information
-        with open(os.path.join(os.path.dirname(__file__), "kotlin_language_server", "runtime_dependencies.json"), encoding="utf-8") as f:
-            d = json.load(f)
-            del d["_description"]
+        # Runtime dependency information
+        runtime_dependencies = {
+            "runtimeDependency": {
+                "id": "KotlinLsp",
+                "description": "Kotlin Language Server",
+                "url": "https://github.com/fwcd/kotlin-language-server/releases/download/1.3.13/server.zip",
+                "archiveType": "zip",
+            },
+            "java": {
+                "win-x64": {
+                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-win32-x64-1.42.0-561.vsix",
+                    "archiveType": "zip",
+                    "java_home_path": "extension/jre/21.0.7-win32-x86_64",
+                    "java_path": "extension/jre/21.0.7-win32-x86_64/bin/java.exe",
+                },
+                "linux-x64": {
+                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-x64-1.42.0-561.vsix",
+                    "archiveType": "zip",
+                    "java_home_path": "extension/jre/21.0.7-linux-x86_64",
+                    "java_path": "extension/jre/21.0.7-linux-x86_64/bin/java",
+                },
+                "linux-arm64": {
+                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-arm64-1.42.0-561.vsix",
+                    "archiveType": "zip",
+                    "java_home_path": "extension/jre/21.0.7-linux-aarch64",
+                    "java_path": "extension/jre/21.0.7-linux-aarch64/bin/java",
+                },
+                "osx-x64": {
+                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-x64-1.42.0-561.vsix",
+                    "archiveType": "zip",
+                    "java_home_path": "extension/jre/21.0.7-macosx-x86_64",
+                    "java_path": "extension/jre/21.0.7-macosx-x86_64/bin/java",
+                },
+                "osx-arm64": {
+                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-arm64-1.42.0-561.vsix",
+                    "archiveType": "zip",
+                    "java_home_path": "extension/jre/21.0.7-macosx-aarch64",
+                    "java_path": "extension/jre/21.0.7-macosx-aarch64/bin/java",
+                },
+            },
+        }
 
-        kotlin_dependency = d["runtimeDependency"]
-        java_dependency = d["java"][platform_id.value]
+        kotlin_dependency = runtime_dependencies["runtimeDependency"]
+        java_dependency = runtime_dependencies["java"][platform_id.value]
 
         # Setup paths for dependencies
         static_dir = os.path.join(os.path.dirname(__file__), "static", "kotlin_language_server")
@@ -129,40 +165,258 @@ class KotlinLanguageServer(SolidLanguageServer):
         """
         Returns the initialize params for the Kotlin Language Server.
         """
-        with open(
-            str(pathlib.PurePath(os.path.dirname(__file__), "kotlin_language_server", "initialize_params.json")), encoding="utf-8"
-        ) as f:
-            d: InitializeParams = json.load(f)
-
-        del d["_description"]
-
         if not os.path.isabs(repository_absolute_path):
             repository_absolute_path = os.path.abspath(repository_absolute_path)
 
-        assert d["processId"] == "os.getpid()"
-        d["processId"] = os.getpid()
-
-        assert d["rootPath"] == "repository_absolute_path"
-        d["rootPath"] = repository_absolute_path
-
-        assert d["rootUri"] == "pathlib.Path(repository_absolute_path).as_uri()"
-        d["rootUri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["initializationOptions"]["workspaceFolders"] == "[pathlib.Path(repository_absolute_path).as_uri()]"
-        d["initializationOptions"]["workspaceFolders"] = [pathlib.Path(repository_absolute_path).as_uri()]
-
-        assert (
-            d["workspaceFolders"]
-            == '[\n            {\n                "uri": pathlib.Path(repository_absolute_path).as_uri(),\n                "name": os.path.basename(repository_absolute_path),\n            }\n        ]'
-        )
-        d["workspaceFolders"] = [
-            {
-                "uri": pathlib.Path(repository_absolute_path).as_uri(),
-                "name": os.path.basename(repository_absolute_path),
-            }
-        ]
-
-        return d
+        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+        initialize_params = {
+            "clientInfo": {"name": "Multilspy Kotlin Client", "version": "1.0.0"},
+            "locale": "en",
+            "rootPath": repository_absolute_path,
+            "rootUri": root_uri,
+            "capabilities": {
+                "workspace": {
+                    "applyEdit": True,
+                    "workspaceEdit": {
+                        "documentChanges": True,
+                        "resourceOperations": ["create", "rename", "delete"],
+                        "failureHandling": "textOnlyTransactional",
+                        "normalizesLineEndings": True,
+                        "changeAnnotationSupport": {"groupsOnLabel": True},
+                    },
+                    "didChangeConfiguration": {"dynamicRegistration": True},
+                    "didChangeWatchedFiles": {"dynamicRegistration": True, "relativePatternSupport": True},
+                    "symbol": {
+                        "dynamicRegistration": True,
+                        "symbolKind": {
+                            "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
+                        },
+                        "tagSupport": {"valueSet": [1]},
+                        "resolveSupport": {"properties": ["location.range"]},
+                    },
+                    "codeLens": {"refreshSupport": True},
+                    "executeCommand": {"dynamicRegistration": True},
+                    "configuration": True,
+                    "workspaceFolders": True,
+                    "semanticTokens": {"refreshSupport": True},
+                    "fileOperations": {
+                        "dynamicRegistration": True,
+                        "didCreate": True,
+                        "didRename": True,
+                        "didDelete": True,
+                        "willCreate": True,
+                        "willRename": True,
+                        "willDelete": True,
+                    },
+                    "inlineValue": {"refreshSupport": True},
+                    "inlayHint": {"refreshSupport": True},
+                    "diagnostics": {"refreshSupport": True},
+                },
+                "textDocument": {
+                    "publishDiagnostics": {
+                        "relatedInformation": True,
+                        "versionSupport": False,
+                        "tagSupport": {"valueSet": [1, 2]},
+                        "codeDescriptionSupport": True,
+                        "dataSupport": True,
+                    },
+                    "synchronization": {"dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True, "didSave": True},
+                    "completion": {
+                        "dynamicRegistration": True,
+                        "contextSupport": True,
+                        "completionItem": {
+                            "snippetSupport": False,
+                            "commitCharactersSupport": True,
+                            "documentationFormat": ["markdown", "plaintext"],
+                            "deprecatedSupport": True,
+                            "preselectSupport": True,
+                            "tagSupport": {"valueSet": [1]},
+                            "insertReplaceSupport": False,
+                            "resolveSupport": {"properties": ["documentation", "detail", "additionalTextEdits"]},
+                            "insertTextModeSupport": {"valueSet": [1, 2]},
+                            "labelDetailsSupport": True,
+                        },
+                        "insertTextMode": 2,
+                        "completionItemKind": {
+                            "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
+                        },
+                        "completionList": {"itemDefaults": ["commitCharacters", "editRange", "insertTextFormat", "insertTextMode"]},
+                    },
+                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                    "signatureHelp": {
+                        "dynamicRegistration": True,
+                        "signatureInformation": {
+                            "documentationFormat": ["markdown", "plaintext"],
+                            "parameterInformation": {"labelOffsetSupport": True},
+                            "activeParameterSupport": True,
+                        },
+                        "contextSupport": True,
+                    },
+                    "definition": {"dynamicRegistration": True, "linkSupport": True},
+                    "references": {"dynamicRegistration": True},
+                    "documentHighlight": {"dynamicRegistration": True},
+                    "documentSymbol": {
+                        "dynamicRegistration": True,
+                        "symbolKind": {
+                            "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
+                        },
+                        "hierarchicalDocumentSymbolSupport": True,
+                        "tagSupport": {"valueSet": [1]},
+                        "labelSupport": True,
+                    },
+                    "codeAction": {
+                        "dynamicRegistration": True,
+                        "isPreferredSupport": True,
+                        "disabledSupport": True,
+                        "dataSupport": True,
+                        "resolveSupport": {"properties": ["edit"]},
+                        "codeActionLiteralSupport": {
+                            "codeActionKind": {
+                                "valueSet": [
+                                    "",
+                                    "quickfix",
+                                    "refactor",
+                                    "refactor.extract",
+                                    "refactor.inline",
+                                    "refactor.rewrite",
+                                    "source",
+                                    "source.organizeImports",
+                                ]
+                            }
+                        },
+                        "honorsChangeAnnotations": False,
+                    },
+                    "codeLens": {"dynamicRegistration": True},
+                    "formatting": {"dynamicRegistration": True},
+                    "rangeFormatting": {"dynamicRegistration": True},
+                    "onTypeFormatting": {"dynamicRegistration": True},
+                    "rename": {
+                        "dynamicRegistration": True,
+                        "prepareSupport": True,
+                        "prepareSupportDefaultBehavior": 1,
+                        "honorsChangeAnnotations": True,
+                    },
+                    "documentLink": {"dynamicRegistration": True, "tooltipSupport": True},
+                    "typeDefinition": {"dynamicRegistration": True, "linkSupport": True},
+                    "implementation": {"dynamicRegistration": True, "linkSupport": True},
+                    "colorProvider": {"dynamicRegistration": True},
+                    "foldingRange": {
+                        "dynamicRegistration": True,
+                        "rangeLimit": 5000,
+                        "lineFoldingOnly": True,
+                        "foldingRangeKind": {"valueSet": ["comment", "imports", "region"]},
+                        "foldingRange": {"collapsedText": False},
+                    },
+                    "declaration": {"dynamicRegistration": True, "linkSupport": True},
+                    "selectionRange": {"dynamicRegistration": True},
+                    "callHierarchy": {"dynamicRegistration": True},
+                    "semanticTokens": {
+                        "dynamicRegistration": True,
+                        "tokenTypes": [
+                            "namespace",
+                            "type",
+                            "class",
+                            "enum",
+                            "interface",
+                            "struct",
+                            "typeParameter",
+                            "parameter",
+                            "variable",
+                            "property",
+                            "enumMember",
+                            "event",
+                            "function",
+                            "method",
+                            "macro",
+                            "keyword",
+                            "modifier",
+                            "comment",
+                            "string",
+                            "number",
+                            "regexp",
+                            "operator",
+                            "decorator",
+                        ],
+                        "tokenModifiers": [
+                            "declaration",
+                            "definition",
+                            "readonly",
+                            "static",
+                            "deprecated",
+                            "abstract",
+                            "async",
+                            "modification",
+                            "documentation",
+                            "defaultLibrary",
+                        ],
+                        "formats": ["relative"],
+                        "requests": {"range": True, "full": {"delta": True}},
+                        "multilineTokenSupport": False,
+                        "overlappingTokenSupport": False,
+                        "serverCancelSupport": True,
+                        "augmentsSyntaxTokens": True,
+                    },
+                    "linkedEditingRange": {"dynamicRegistration": True},
+                    "typeHierarchy": {"dynamicRegistration": True},
+                    "inlineValue": {"dynamicRegistration": True},
+                    "inlayHint": {
+                        "dynamicRegistration": True,
+                        "resolveSupport": {"properties": ["tooltip", "textEdits", "label.tooltip", "label.location", "label.command"]},
+                    },
+                    "diagnostic": {"dynamicRegistration": True, "relatedDocumentSupport": False},
+                },
+                "window": {
+                    "showMessage": {"messageActionItem": {"additionalPropertiesSupport": True}},
+                    "showDocument": {"support": True},
+                    "workDoneProgress": True,
+                },
+                "general": {
+                    "staleRequestSupport": {
+                        "cancel": True,
+                        "retryOnContentModified": [
+                            "textDocument/semanticTokens/full",
+                            "textDocument/semanticTokens/range",
+                            "textDocument/semanticTokens/full/delta",
+                        ],
+                    },
+                    "regularExpressions": {"engine": "ECMAScript", "version": "ES2020"},
+                    "markdown": {"parser": "marked", "version": "1.1.0"},
+                    "positionEncodings": ["utf-16"],
+                },
+                "notebookDocument": {"synchronization": {"dynamicRegistration": True, "executionSummarySupport": True}},
+            },
+            "initializationOptions": {
+                "workspaceFolders": [root_uri],
+                "storagePath": None,
+                "codegen": {"enabled": False},
+                "compiler": {"jvm": {"target": "default"}},
+                "completion": {"snippets": {"enabled": True}},
+                "diagnostics": {"enabled": True, "level": 4, "debounceTime": 250},
+                "scripts": {"enabled": True, "buildScriptsEnabled": True},
+                "indexing": {"enabled": True},
+                "externalSources": {"useKlsScheme": False, "autoConvertToKotlin": False},
+                "inlayHints": {"typeHints": False, "parameterHints": False, "chainedHints": False},
+                "formatting": {
+                    "formatter": "ktfmt",
+                    "ktfmt": {
+                        "style": "google",
+                        "indent": 4,
+                        "maxWidth": 100,
+                        "continuationIndent": 8,
+                        "removeUnusedImports": True,
+                    },
+                },
+            },
+            "trace": "verbose",
+            "processId": os.getpid(),
+            "workspaceFolders": [
+                {
+                    "uri": root_uri,
+                    "name": os.path.basename(repository_absolute_path),
+                }
+            ],
+        }
+        return initialize_params
 
     def _start_server(self):
         """

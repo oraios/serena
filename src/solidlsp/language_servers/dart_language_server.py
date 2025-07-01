@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import pathlib
@@ -31,11 +30,49 @@ class DartLanguageServer(SolidLanguageServer):
     def setup_runtime_dependencies(self, logger: "LanguageServerLogger") -> str:
         platform_id = PlatformUtils.get_platform_id()
 
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json")) as f:
-            d = json.load(f)
-            del d["_description"]
+        runtime_dependencies = [
+            {
+                "id": "DartLanguageServer",
+                "description": "Dart Language Server for Linux (x64)",
+                "url": "https://storage.googleapis.com/dart-archive/channels/stable/release/3.7.1/sdk/dartsdk-linux-x64-release.zip",
+                "platformId": "linux-x64",
+                "archiveType": "zip",
+                "binaryName": "dart-sdk/bin/dart",
+            },
+            {
+                "id": "DartLanguageServer",
+                "description": "Dart Language Server for Windows (x64)",
+                "url": "https://storage.googleapis.com/dart-archive/channels/stable/release/3.7.1/sdk/dartsdk-windows-x64-release.zip",
+                "platformId": "win-x64",
+                "archiveType": "zip",
+                "binaryName": "dart-sdk/bin/dart.exe",
+            },
+            {
+                "id": "DartLanguageServer",
+                "description": "Dart Language Server for Windows (arm64)",
+                "url": "https://storage.googleapis.com/dart-archive/channels/stable/release/3.7.1/sdk/dartsdk-windows-arm64-release.zip",
+                "platformId": "win-arm64",
+                "archiveType": "zip",
+                "binaryName": "dart-sdk/bin/dart.exe",
+            },
+            {
+                "id": "DartLanguageServer",
+                "description": "Dart Language Server for macOS (x64)",
+                "url": "https://storage.googleapis.com/dart-archive/channels/stable/release/3.7.1/sdk/dartsdk-macos-x64-release.zip",
+                "platformId": "osx-x64",
+                "archiveType": "zip",
+                "binaryName": "dart-sdk/bin/dart",
+            },
+            {
+                "id": "DartLanguageServer",
+                "description": "Dart Language Server for macOS (arm64)",
+                "url": "https://storage.googleapis.com/dart-archive/channels/stable/release/3.7.1/sdk/dartsdk-macos-arm64-release.zip",
+                "platformId": "osx-arm64",
+                "archiveType": "zip",
+                "binaryName": "dart-sdk/bin/dart",
+            },
+        ]
 
-        runtime_dependencies = d["runtimeDependencies"]
         runtime_dependencies = [dependency for dependency in runtime_dependencies if dependency["platformId"] == platform_id.value]
 
         assert len(runtime_dependencies) == 1
@@ -57,25 +94,30 @@ class DartLanguageServer(SolidLanguageServer):
         """
         Returns the initialize params for the Dart Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json")) as f:
-            d = json.load(f)
+        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+        initialize_params = {
+            "capabilities": {},
+            "initializationOptions": {
+                "onlyAnalyzeProjectsWithOpenFiles": False,
+                "suggestFromUnimportedLibraries": True,
+                "closingLabels": False,
+                "outline": False,
+                "flutterOutline": False,
+                "allowOpenUri": False,
+            },
+            "trace": "verbose",
+            "processId": os.getpid(),
+            "rootPath": repository_absolute_path,
+            "rootUri": pathlib.Path(repository_absolute_path).as_uri(),
+            "workspaceFolders": [
+                {
+                    "uri": root_uri,
+                    "name": os.path.basename(repository_absolute_path),
+                }
+            ],
+        }
 
-        del d["_description"]
-
-        d["processId"] = os.getpid()
-        assert d["rootPath"] == "$rootPath"
-        d["rootPath"] = repository_absolute_path
-
-        assert d["rootUri"] == "$rootUri"
-        d["rootUri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["uri"] == "$uri"
-        d["workspaceFolders"][0]["uri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["name"] == "$name"
-        d["workspaceFolders"][0]["name"] = os.path.basename(repository_absolute_path)
-
-        return d
+        return initialize_params
 
     def _start_server(self):
         """

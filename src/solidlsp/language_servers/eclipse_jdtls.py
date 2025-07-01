@@ -3,7 +3,6 @@ Provides Java specific instantiation of the LanguageServer class. Contains vario
 """
 
 import dataclasses
-import json
 import logging
 import os
 import pathlib
@@ -159,9 +158,77 @@ class EclipseJDTLS(SolidLanguageServer):
         """
         platformId = PlatformUtils.get_platform_id()
 
-        with open(str(PurePath(os.path.dirname(__file__), "eclipse_jdtls", "runtime_dependencies.json")), encoding="utf-8") as f:
-            runtimeDependencies = json.load(f)
-            del runtimeDependencies["_description"]
+        runtime_dependencies = {
+            "gradle": {
+                "platform-agnostic": {
+                    "url": "https://services.gradle.org/distributions/gradle-7.3.3-bin.zip",
+                    "archiveType": "zip",
+                    "relative_extraction_path": ".",
+                }
+            },
+            "vscode-java": {
+                "darwin-arm64": {
+                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-arm64-1.42.0-561.vsix",
+                    "archiveType": "zip",
+                    "relative_extraction_path": "vscode-java",
+                },
+                "osx-arm64": {
+                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-arm64-1.42.0-561.vsix",
+                    "archiveType": "zip",
+                    "relative_extraction_path": "vscode-java",
+                    "jre_home_path": "extension/jre/21.0.7-macosx-aarch64",
+                    "jre_path": "extension/jre/21.0.7-macosx-aarch64/bin/java",
+                    "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
+                    "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                    "jdtls_readonly_config_path": "extension/server/config_mac_arm",
+                },
+                "osx-x64": {
+                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-x64-1.42.0-561.vsix",
+                    "archiveType": "zip",
+                    "relative_extraction_path": "vscode-java",
+                    "jre_home_path": "extension/jre/21.0.7-macosx-x86_64",
+                    "jre_path": "extension/jre/21.0.7-macosx-x86_64/bin/java",
+                    "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
+                    "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                    "jdtls_readonly_config_path": "extension/server/config_mac",
+                },
+                "linux-arm64": {
+                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-arm64-1.42.0-561.vsix",
+                    "archiveType": "zip",
+                    "relative_extraction_path": "vscode-java",
+                },
+                "linux-x64": {
+                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-x64-1.42.0-561.vsix",
+                    "archiveType": "zip",
+                    "relative_extraction_path": "vscode-java",
+                    "jre_home_path": "extension/jre/21.0.7-linux-x86_64",
+                    "jre_path": "extension/jre/21.0.7-linux-x86_64/bin/java",
+                    "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
+                    "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                    "jdtls_readonly_config_path": "extension/server/config_linux",
+                },
+                "win-x64": {
+                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-win32-x64-1.42.0-561.vsix",
+                    "archiveType": "zip",
+                    "relative_extraction_path": "vscode-java",
+                    "jre_home_path": "extension/jre/21.0.7-win32-x86_64",
+                    "jre_path": "extension/jre/21.0.7-win32-x86_64/bin/java.exe",
+                    "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
+                    "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                    "jdtls_readonly_config_path": "extension/server/config_win",
+                },
+            },
+            "intellicode": {
+                "platform-agnostic": {
+                    "url": "https://VisualStudioExptTeam.gallery.vsassets.io/_apis/public/gallery/publisher/VisualStudioExptTeam/extension/vscodeintellicode/1.2.30/assetbyname/Microsoft.VisualStudio.Services.VSIXPackage",
+                    "alternate_url": "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/VisualStudioExptTeam/vsextensions/vscodeintellicode/1.2.30/vspackage",
+                    "archiveType": "zip",
+                    "relative_extraction_path": "intellicode",
+                    "intellicode_jar_path": "extension/dist/com.microsoft.jdtls.intellicode.core-0.7.0.jar",
+                    "intellisense_members_path": "extension/dist/bundledModels/java_intellisense-members",
+                }
+            },
+        }
 
         os.makedirs(str(PurePath(os.path.abspath(os.path.dirname(__file__)), "static")), exist_ok=True)
 
@@ -180,14 +247,14 @@ class EclipseJDTLS(SolidLanguageServer):
         if not os.path.exists(gradle_path):
             FileUtils.download_and_extract_archive(
                 logger,
-                runtimeDependencies["gradle"]["platform-agnostic"]["url"],
+                runtime_dependencies["gradle"]["platform-agnostic"]["url"],
                 str(PurePath(gradle_path).parent),
-                runtimeDependencies["gradle"]["platform-agnostic"]["archiveType"],
+                runtime_dependencies["gradle"]["platform-agnostic"]["archiveType"],
             )
 
         assert os.path.exists(gradle_path)
 
-        dependency = runtimeDependencies["vscode-java"][platformId.value]
+        dependency = runtime_dependencies["vscode-java"][platformId.value]
         vscode_java_path = str(PurePath(os.path.abspath(os.path.dirname(__file__)), "static", dependency["relative_extraction_path"]))
         os.makedirs(vscode_java_path, exist_ok=True)
         jre_home_path = str(PurePath(vscode_java_path, dependency["jre_home_path"]))
@@ -216,7 +283,7 @@ class EclipseJDTLS(SolidLanguageServer):
         assert os.path.exists(jdtls_launcher_jar_path)
         assert os.path.exists(jdtls_readonly_config_path)
 
-        dependency = runtimeDependencies["intellicode"]["platform-agnostic"]
+        dependency = runtime_dependencies["intellicode"]["platform-agnostic"]
         intellicode_directory_path = str(
             PurePath(os.path.abspath(os.path.dirname(__file__)), "static", dependency["relative_extraction_path"])
         )
@@ -252,59 +319,477 @@ class EclipseJDTLS(SolidLanguageServer):
         Returns the initialize parameters for the EclipseJDTLS server.
         """
         # Look into https://github.com/eclipse/eclipse.jdt.ls/blob/master/org.eclipse.jdt.ls.core/src/org/eclipse/jdt/ls/core/internal/preferences/Preferences.java to understand all the options available
-        with open(str(PurePath(os.path.dirname(__file__), "eclipse_jdtls", "initialize_params.json")), encoding="utf-8") as f:
-            d: InitializeParams = json.load(f)
-
-        del d["_description"]
+        initialize_params = {
+            "locale": "en",
+            "rootPath": "repository_absolute_path",
+            "rootUri": "pathlib.Path(repository_absolute_path).as_uri()",
+            "capabilities": {
+                "workspace": {
+                    "applyEdit": True,
+                    "workspaceEdit": {
+                        "documentChanges": True,
+                        "resourceOperations": ["create", "rename", "delete"],
+                        "failureHandling": "textOnlyTransactional",
+                        "normalizesLineEndings": True,
+                        "changeAnnotationSupport": {"groupsOnLabel": True},
+                    },
+                    "didChangeConfiguration": {"dynamicRegistration": True},
+                    "didChangeWatchedFiles": {"dynamicRegistration": True, "relativePatternSupport": True},
+                    "symbol": {
+                        "dynamicRegistration": True,
+                        "symbolKind": {
+                            "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
+                        },
+                        "tagSupport": {"valueSet": [1]},
+                        "resolveSupport": {"properties": ["location.range"]},
+                    },
+                    "codeLens": {"refreshSupport": True},
+                    "executeCommand": {"dynamicRegistration": True},
+                    "configuration": True,
+                    "workspaceFolders": True,
+                    "semanticTokens": {"refreshSupport": True},
+                    "fileOperations": {
+                        "dynamicRegistration": True,
+                        "didCreate": True,
+                        "didRename": True,
+                        "didDelete": True,
+                        "willCreate": True,
+                        "willRename": True,
+                        "willDelete": True,
+                    },
+                    "inlineValue": {"refreshSupport": True},
+                    "inlayHint": {"refreshSupport": True},
+                    "diagnostics": {"refreshSupport": True},
+                },
+                "textDocument": {
+                    "publishDiagnostics": {
+                        "relatedInformation": True,
+                        "versionSupport": False,
+                        "tagSupport": {"valueSet": [1, 2]},
+                        "codeDescriptionSupport": True,
+                        "dataSupport": True,
+                    },
+                    "synchronization": {"dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True, "didSave": True},
+                    "completion": {
+                        "dynamicRegistration": True,
+                        "contextSupport": True,
+                        "completionItem": {
+                            "snippetSupport": False,
+                            "commitCharactersSupport": True,
+                            "documentationFormat": ["markdown", "plaintext"],
+                            "deprecatedSupport": True,
+                            "preselectSupport": True,
+                            "tagSupport": {"valueSet": [1]},
+                            "insertReplaceSupport": False,
+                            "resolveSupport": {"properties": ["documentation", "detail", "additionalTextEdits"]},
+                            "insertTextModeSupport": {"valueSet": [1, 2]},
+                            "labelDetailsSupport": True,
+                        },
+                        "insertTextMode": 2,
+                        "completionItemKind": {
+                            "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
+                        },
+                        "completionList": {"itemDefaults": ["commitCharacters", "editRange", "insertTextFormat", "insertTextMode"]},
+                    },
+                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                    "signatureHelp": {
+                        "dynamicRegistration": True,
+                        "signatureInformation": {
+                            "documentationFormat": ["markdown", "plaintext"],
+                            "parameterInformation": {"labelOffsetSupport": True},
+                            "activeParameterSupport": True,
+                        },
+                        "contextSupport": True,
+                    },
+                    "definition": {"dynamicRegistration": True, "linkSupport": True},
+                    "references": {"dynamicRegistration": True},
+                    "documentHighlight": {"dynamicRegistration": True},
+                    "documentSymbol": {
+                        "dynamicRegistration": True,
+                        "symbolKind": {
+                            "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
+                        },
+                        "hierarchicalDocumentSymbolSupport": True,
+                        "tagSupport": {"valueSet": [1]},
+                        "labelSupport": True,
+                    },
+                    "codeAction": {
+                        "dynamicRegistration": True,
+                        "isPreferredSupport": True,
+                        "disabledSupport": True,
+                        "dataSupport": True,
+                        "resolveSupport": {"properties": ["edit"]},
+                        "codeActionLiteralSupport": {
+                            "codeActionKind": {
+                                "valueSet": [
+                                    "",
+                                    "quickfix",
+                                    "refactor",
+                                    "refactor.extract",
+                                    "refactor.inline",
+                                    "refactor.rewrite",
+                                    "source",
+                                    "source.organizeImports",
+                                ]
+                            }
+                        },
+                        "honorsChangeAnnotations": False,
+                    },
+                    "codeLens": {"dynamicRegistration": True},
+                    "formatting": {"dynamicRegistration": True},
+                    "rangeFormatting": {"dynamicRegistration": True},
+                    "onTypeFormatting": {"dynamicRegistration": True},
+                    "rename": {
+                        "dynamicRegistration": True,
+                        "prepareSupport": True,
+                        "prepareSupportDefaultBehavior": 1,
+                        "honorsChangeAnnotations": True,
+                    },
+                    "documentLink": {"dynamicRegistration": True, "tooltipSupport": True},
+                    "typeDefinition": {"dynamicRegistration": True, "linkSupport": True},
+                    "implementation": {"dynamicRegistration": True, "linkSupport": True},
+                    "colorProvider": {"dynamicRegistration": True},
+                    "foldingRange": {
+                        "dynamicRegistration": True,
+                        "rangeLimit": 5000,
+                        "lineFoldingOnly": True,
+                        "foldingRangeKind": {"valueSet": ["comment", "imports", "region"]},
+                        "foldingRange": {"collapsedText": False},
+                    },
+                    "declaration": {"dynamicRegistration": True, "linkSupport": True},
+                    "selectionRange": {"dynamicRegistration": True},
+                    "callHierarchy": {"dynamicRegistration": True},
+                    "semanticTokens": {
+                        "dynamicRegistration": True,
+                        "tokenTypes": [
+                            "namespace",
+                            "type",
+                            "class",
+                            "enum",
+                            "interface",
+                            "struct",
+                            "typeParameter",
+                            "parameter",
+                            "variable",
+                            "property",
+                            "enumMember",
+                            "event",
+                            "function",
+                            "method",
+                            "macro",
+                            "keyword",
+                            "modifier",
+                            "comment",
+                            "string",
+                            "number",
+                            "regexp",
+                            "operator",
+                            "decorator",
+                        ],
+                        "tokenModifiers": [
+                            "declaration",
+                            "definition",
+                            "readonly",
+                            "static",
+                            "deprecated",
+                            "abstract",
+                            "async",
+                            "modification",
+                            "documentation",
+                            "defaultLibrary",
+                        ],
+                        "formats": ["relative"],
+                        "requests": {"range": True, "full": {"delta": True}},
+                        "multilineTokenSupport": False,
+                        "overlappingTokenSupport": False,
+                        "serverCancelSupport": True,
+                        "augmentsSyntaxTokens": True,
+                    },
+                    "linkedEditingRange": {"dynamicRegistration": True},
+                    "typeHierarchy": {"dynamicRegistration": True},
+                    "inlineValue": {"dynamicRegistration": True},
+                    "inlayHint": {
+                        "dynamicRegistration": True,
+                        "resolveSupport": {"properties": ["tooltip", "textEdits", "label.tooltip", "label.location", "label.command"]},
+                    },
+                    "diagnostic": {"dynamicRegistration": True, "relatedDocumentSupport": False},
+                },
+                "window": {
+                    "showMessage": {"messageActionItem": {"additionalPropertiesSupport": True}},
+                    "showDocument": {"support": True},
+                    "workDoneProgress": True,
+                },
+                "general": {
+                    "staleRequestSupport": {
+                        "cancel": True,
+                        "retryOnContentModified": [
+                            "textDocument/semanticTokens/full",
+                            "textDocument/semanticTokens/range",
+                            "textDocument/semanticTokens/full/delta",
+                        ],
+                    },
+                    "regularExpressions": {"engine": "ECMAScript", "version": "ES2020"},
+                    "markdown": {"parser": "marked", "version": "1.1.0"},
+                    "positionEncodings": ["utf-16"],
+                },
+                "notebookDocument": {"synchronization": {"dynamicRegistration": True, "executionSummarySupport": True}},
+            },
+            "initializationOptions": {
+                "bundles": ["intellicode-core.jar"],
+                "settings": {
+                    "java": {
+                        "home": None,
+                        "jdt": {
+                            "ls": {
+                                "java": {"home": None},
+                                "vmargs": "-XX:+UseParallelGC -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Dsun.zip.disableMemoryMapping=true -Xmx1G -Xms100m -Xlog:disable",
+                                "lombokSupport": {"enabled": True},
+                                "protobufSupport": {"enabled": True},
+                                "androidSupport": {"enabled": True},
+                            }
+                        },
+                        "errors": {"incompleteClasspath": {"severity": "error"}},
+                        "configuration": {
+                            "checkProjectSettingsExclusions": False,
+                            "updateBuildConfiguration": "interactive",
+                            "maven": {
+                                "userSettings": None,
+                                "globalSettings": None,
+                                "notCoveredPluginExecutionSeverity": "warning",
+                                "defaultMojoExecutionAction": "ignore",
+                            },
+                            "workspaceCacheLimit": 90,
+                            "runtimes": [
+                                {"name": "JavaSE-21", "path": "static/vscode-java/extension/jre/21.0.7-linux-x86_64", "default": True}
+                            ],
+                        },
+                        "trace": {"server": "verbose"},
+                        "import": {
+                            "maven": {
+                                "enabled": True,
+                                "offline": {"enabled": False},
+                                "disableTestClasspathFlag": False,
+                            },
+                            "gradle": {
+                                "enabled": True,
+                                "wrapper": {"enabled": True},
+                                "version": None,
+                                "home": "abs(static/gradle-7.3.3)",
+                                "java": {"home": "abs(static/launch_jres/21.0.7-linux-x86_64)"},
+                                "offline": {"enabled": False},
+                                "arguments": None,
+                                "jvmArguments": None,
+                                "user": {"home": None},
+                                "annotationProcessing": {"enabled": True},
+                            },
+                            "exclusions": [
+                                "**/node_modules/**",
+                                "**/.metadata/**",
+                                "**/archetype-resources/**",
+                                "**/META-INF/maven/**",
+                            ],
+                            "generatesMetadataFilesAtProjectRoot": False,
+                        },
+                        "maven": {"downloadSources": True, "updateSnapshots": True},
+                        "eclipse": {"downloadSources": True},
+                        "referencesCodeLens": {"enabled": True},
+                        "signatureHelp": {"enabled": True, "description": {"enabled": True}},
+                        "implementationsCodeLens": {"enabled": True},
+                        "format": {
+                            "enabled": True,
+                            "settings": {"url": None, "profile": None},
+                            "comments": {"enabled": True},
+                            "onType": {"enabled": True},
+                            "insertSpaces": True,
+                            "tabSize": 4,
+                        },
+                        "saveActions": {"organizeImports": False},
+                        "project": {
+                            "referencedLibraries": ["lib/**/*.jar"],
+                            "importOnFirstTimeStartup": "automatic",
+                            "importHint": True,
+                            "resourceFilters": ["node_modules", "\\.git"],
+                            "encoding": "ignore",
+                            "exportJar": {"targetPath": "${workspaceFolder}/${workspaceFolderBasename}.jar"},
+                        },
+                        "contentProvider": {"preferred": None},
+                        "autobuild": {"enabled": True},
+                        "maxConcurrentBuilds": 1,
+                        "recommendations": {"dependency": {"analytics": {"show": True}}},
+                        "completion": {
+                            "maxResults": 0,
+                            "enabled": True,
+                            "guessMethodArguments": True,
+                            "favoriteStaticMembers": [
+                                "org.junit.Assert.*",
+                                "org.junit.Assume.*",
+                                "org.junit.jupiter.api.Assertions.*",
+                                "org.junit.jupiter.api.Assumptions.*",
+                                "org.junit.jupiter.api.DynamicContainer.*",
+                                "org.junit.jupiter.api.DynamicTest.*",
+                                "org.mockito.Mockito.*",
+                                "org.mockito.ArgumentMatchers.*",
+                                "org.mockito.Answers.*",
+                            ],
+                            "filteredTypes": [
+                                "java.awt.*",
+                                "com.sun.*",
+                                "sun.*",
+                                "jdk.*",
+                                "org.graalvm.*",
+                                "io.micrometer.shaded.*",
+                            ],
+                            "importOrder": ["#", "java", "javax", "org", "com", ""],
+                            "postfix": {"enabled": False},
+                            "matchCase": "off",
+                        },
+                        "foldingRange": {"enabled": True},
+                        "progressReports": {"enabled": False},
+                        "codeGeneration": {
+                            "hashCodeEquals": {"useJava7Objects": False, "useInstanceof": False},
+                            "useBlocks": False,
+                            "generateComments": False,
+                            "toString": {
+                                "template": "${object.className} [${member.name()}=${member.value}, ${otherMembers}]",
+                                "codeStyle": "STRING_CONCATENATION",
+                                "skipNullValues": False,
+                                "listArrayContents": True,
+                                "limitElements": 0,
+                            },
+                            "insertionLocation": "afterCursor",
+                        },
+                        "selectionRange": {"enabled": True},
+                        "showBuildStatusOnStart": {"enabled": "notification"},
+                        "server": {"launchMode": "Standard"},
+                        "sources": {"organizeImports": {"starThreshold": 99, "staticStarThreshold": 99}},
+                        "imports": {"gradle": {"wrapper": {"checksums": []}}},
+                        "templates": {"fileHeader": [], "typeComment": []},
+                        "references": {"includeAccessors": True, "includeDecompiledSources": True},
+                        "typeHierarchy": {"lazyLoad": False},
+                        "settings": {"url": None},
+                        "symbols": {"includeSourceMethodDeclarations": False},
+                        "quickfix": {"showAt": "line"},
+                        "inlayHints": {"parameterNames": {"enabled": "literals", "exclusions": []}},
+                        "codeAction": {"sortMembers": {"avoidVolatileChanges": True}},
+                        "compile": {
+                            "nullAnalysis": {
+                                "nonnull": [
+                                    "javax.annotation.Nonnull",
+                                    "org.eclipse.jdt.annotation.NonNull",
+                                    "org.springframework.lang.NonNull",
+                                ],
+                                "nullable": [
+                                    "javax.annotation.Nullable",
+                                    "org.eclipse.jdt.annotation.Nullable",
+                                    "org.springframework.lang.Nullable",
+                                ],
+                                "mode": "automatic",
+                            }
+                        },
+                        "cleanup": {"actionsOnSave": []},
+                        "sharedIndexes": {"enabled": "auto", "location": ""},
+                        "refactoring": {"extract": {"interface": {"replace": True}}},
+                        "debug": {
+                            "logLevel": "verbose",
+                            "settings": {
+                                "showHex": False,
+                                "showStaticVariables": False,
+                                "showQualifiedNames": False,
+                                "showLogicalStructure": True,
+                                "showToString": True,
+                                "maxStringLength": 0,
+                                "numericPrecision": 0,
+                                "hotCodeReplace": "manual",
+                                "enableRunDebugCodeLens": True,
+                                "forceBuildBeforeLaunch": True,
+                                "onBuildFailureProceed": False,
+                                "console": "integratedTerminal",
+                                "exceptionBreakpoint": {"skipClasses": []},
+                                "stepping": {
+                                    "skipClasses": [],
+                                    "skipSynthetics": False,
+                                    "skipStaticInitializers": False,
+                                    "skipConstructors": False,
+                                },
+                                "jdwp": {"limitOfVariablesPerJdwpRequest": 100, "requestTimeout": 3000, "async": "auto"},
+                                "vmArgs": "",
+                            },
+                        },
+                        "silentNotification": False,
+                        "dependency": {
+                            "showMembers": False,
+                            "syncWithFolderExplorer": True,
+                            "autoRefresh": True,
+                            "refreshDelay": 2000,
+                            "packagePresentation": "flat",
+                        },
+                        "help": {"firstView": "auto", "showReleaseNotes": True, "collectErrorLog": False},
+                        "test": {"defaultConfig": "", "config": {}},
+                    }
+                },
+                "extendedClientCapabilities": {
+                    "progressReportProvider": False,
+                    "classFileContentsSupport": True,
+                    "overrideMethodsPromptSupport": True,
+                    "hashCodeEqualsPromptSupport": True,
+                    "advancedOrganizeImportsSupport": True,
+                    "generateToStringPromptSupport": True,
+                    "advancedGenerateAccessorsSupport": True,
+                    "generateConstructorsPromptSupport": True,
+                    "generateDelegateMethodsPromptSupport": True,
+                    "advancedExtractRefactoringSupport": True,
+                    "inferSelectionSupport": ["extractMethod", "extractVariable", "extractField"],
+                    "moveRefactoringSupport": True,
+                    "clientHoverProvider": True,
+                    "clientDocumentSymbolProvider": True,
+                    "gradleChecksumWrapperPromptSupport": True,
+                    "resolveAdditionalTextEditsSupport": True,
+                    "advancedIntroduceParameterRefactoringSupport": True,
+                    "actionableRuntimeNotificationSupport": True,
+                    "shouldLanguageServerExitOnShutdown": True,
+                    "onCompletionItemSelectedCommand": "editor.action.triggerParameterHints",
+                    "extractInterfaceSupport": True,
+                    "advancedUpgradeGradleSupport": True,
+                },
+                "triggerFiles": [],
+            },
+            "trace": "verbose",
+        }
 
         if not os.path.isabs(repository_absolute_path):
             repository_absolute_path = os.path.abspath(repository_absolute_path)
 
-        assert d["processId"] == "os.getpid()"
-        d["processId"] = os.getpid()
+        initialize_params["processId"] = os.getpid()
 
-        assert d["rootPath"] == "repository_absolute_path"
-        d["rootPath"] = repository_absolute_path
+        initialize_params["rootPath"] = repository_absolute_path
 
-        assert d["rootUri"] == "pathlib.Path(repository_absolute_path).as_uri()"
-        d["rootUri"] = pathlib.Path(repository_absolute_path).as_uri()
+        initialize_params["rootUri"] = pathlib.Path(repository_absolute_path).as_uri()
 
-        assert d["initializationOptions"]["workspaceFolders"] == "[pathlib.Path(repository_absolute_path).as_uri()]"
-        d["initializationOptions"]["workspaceFolders"] = [pathlib.Path(repository_absolute_path).as_uri()]
+        repo_uri = pathlib.Path(repository_absolute_path).as_uri()
+        initialize_params["initializationOptions"]["workspaceFolders"] = [repo_uri]
 
-        assert (
-            d["workspaceFolders"]
-            == '[\n            {\n                "uri": pathlib.Path(repository_absolute_path).as_uri(),\n                "name": os.path.basename(repository_absolute_path),\n            }\n        ]'
-        )
-        d["workspaceFolders"] = [
+        initialize_params["workspaceFolders"] = [
             {
-                "uri": pathlib.Path(repository_absolute_path).as_uri(),
+                "uri": repo_uri,
                 "name": os.path.basename(repository_absolute_path),
             }
         ]
 
-        assert d["initializationOptions"]["bundles"] == ["intellicode-core.jar"]
         bundles = [self.runtime_dependency_paths.intellicode_jar_path]
-        d["initializationOptions"]["bundles"] = bundles
-
-        assert d["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"] == [
-            {"name": "JavaSE-21", "path": "static/vscode-java/extension/jre/21.0.7-linux-x86_64", "default": True}
-        ]
-        d["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"] = [
+        initialize_params["initializationOptions"]["bundles"] = bundles
+        initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"] = [
             {"name": "JavaSE-21", "path": self.runtime_dependency_paths.jre_home_path, "default": True}
         ]
 
-        for runtime in d["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"]:
+        for runtime in initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"]:
             assert "name" in runtime
             assert "path" in runtime
             assert os.path.exists(runtime["path"]), f"Runtime required for eclipse_jdtls at path {runtime['path']} does not exist"
 
-        assert d["initializationOptions"]["settings"]["java"]["import"]["gradle"]["home"] == "abs(static/gradle-7.3.3)"
-        d["initializationOptions"]["settings"]["java"]["import"]["gradle"]["home"] = self.runtime_dependency_paths.gradle_path
-
-        d["initializationOptions"]["settings"]["java"]["import"]["gradle"]["java"]["home"] = self.runtime_dependency_paths.jre_path
-
-        return d
+        gradle_settings = initialize_params["initializationOptions"]["settings"]["java"]["import"]["gradle"]
+        gradle_settings["home"] = self.runtime_dependency_paths.gradle_path
+        gradle_settings["java"]["home"] = self.runtime_dependency_paths.jre_path
+        return initialize_params
 
     def _start_server(self):
         """

@@ -52,11 +52,16 @@ class Solargraph(SolidLanguageServer):
         """
         Setup runtime dependencies for Solargraph.
         """
-        with open(os.path.join(os.path.dirname(__file__), "solargraph", "runtime_dependencies.json"), encoding="utf-8") as f:
-            d = json.load(f)
-            del d["_description"]
+        runtime_dependencies = [
+            {
+                "url": "https://rubygems.org/downloads/solargraph-0.51.1.gem",
+                "installCommand": "gem install solargraph -v 0.51.1",
+                "binaryName": "solargraph",
+                "archiveType": "gem",
+            }
+        ]
 
-        dependency = d["runtimeDependencies"][0]
+        dependency = runtime_dependencies[0]
 
         # Check if Ruby is installed
         try:
@@ -97,25 +102,22 @@ class Solargraph(SolidLanguageServer):
         """
         Returns the initialize params for the Solargraph Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "solargraph", "initialize_params.json"), encoding="utf-8") as f:
-            d = json.load(f)
+        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+        initialize_params = {
+            "capabilities": {},
+            "trace": "verbose",
+            "processId": os.getpid(),
+            "rootPath": repository_absolute_path,
+            "rootUri": pathlib.Path(repository_absolute_path).as_uri(),
+            "workspaceFolders": [
+                {
+                    "uri": root_uri,
+                    "name": os.path.basename(repository_absolute_path),
+                }
+            ],
+        }
 
-        del d["_description"]
-
-        d["processId"] = os.getpid()
-        assert d["rootPath"] == "$rootPath"
-        d["rootPath"] = repository_absolute_path
-
-        assert d["rootUri"] == "$rootUri"
-        d["rootUri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["uri"] == "$uri"
-        d["workspaceFolders"][0]["uri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["name"] == "$name"
-        d["workspaceFolders"][0]["name"] = os.path.basename(repository_absolute_path)
-
-        return d
+        return initialize_params
 
     def _start_server(self):
         """
