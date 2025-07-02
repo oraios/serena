@@ -343,7 +343,7 @@ class EclipseJDTLS(SolidLanguageServer):
                     "symbol": {
                         "dynamicRegistration": True,
                         "symbolKind": {
-                            "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
+                            "valueSet": list(range(1, 27))
                         },
                         "tagSupport": {"valueSet": [1]},
                         "resolveSupport": {"properties": ["location.range"]},
@@ -375,6 +375,8 @@ class EclipseJDTLS(SolidLanguageServer):
                         "dataSupport": True,
                     },
                     "synchronization": {"dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True, "didSave": True},
+                    # TODO: we have an assert that completion provider is not included in the capabilities at server startup
+                    #   Removing this will cause the assert to fail. Investigate why this is the case, simplify config
                     "completion": {
                         "dynamicRegistration": True,
                         "contextSupport": True,
@@ -404,46 +406,18 @@ class EclipseJDTLS(SolidLanguageServer):
                             "parameterInformation": {"labelOffsetSupport": True},
                             "activeParameterSupport": True,
                         },
-                        "contextSupport": True,
                     },
                     "definition": {"dynamicRegistration": True, "linkSupport": True},
                     "references": {"dynamicRegistration": True},
-                    "documentHighlight": {"dynamicRegistration": True},
                     "documentSymbol": {
                         "dynamicRegistration": True,
                         "symbolKind": {
-                            "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
+                            "valueSet": list(range(1, 27))  #
                         },
                         "hierarchicalDocumentSymbolSupport": True,
                         "tagSupport": {"valueSet": [1]},
                         "labelSupport": True,
                     },
-                    "codeAction": {
-                        "dynamicRegistration": True,
-                        "isPreferredSupport": True,
-                        "disabledSupport": True,
-                        "dataSupport": True,
-                        "resolveSupport": {"properties": ["edit"]},
-                        "codeActionLiteralSupport": {
-                            "codeActionKind": {
-                                "valueSet": [
-                                    "",
-                                    "quickfix",
-                                    "refactor",
-                                    "refactor.extract",
-                                    "refactor.inline",
-                                    "refactor.rewrite",
-                                    "source",
-                                    "source.organizeImports",
-                                ]
-                            }
-                        },
-                        "honorsChangeAnnotations": False,
-                    },
-                    "codeLens": {"dynamicRegistration": True},
-                    "formatting": {"dynamicRegistration": True},
-                    "rangeFormatting": {"dynamicRegistration": True},
-                    "onTypeFormatting": {"dynamicRegistration": True},
                     "rename": {
                         "dynamicRegistration": True,
                         "prepareSupport": True,
@@ -454,13 +428,6 @@ class EclipseJDTLS(SolidLanguageServer):
                     "typeDefinition": {"dynamicRegistration": True, "linkSupport": True},
                     "implementation": {"dynamicRegistration": True, "linkSupport": True},
                     "colorProvider": {"dynamicRegistration": True},
-                    "foldingRange": {
-                        "dynamicRegistration": True,
-                        "rangeLimit": 5000,
-                        "lineFoldingOnly": True,
-                        "foldingRangeKind": {"valueSet": ["comment", "imports", "region"]},
-                        "foldingRange": {"collapsedText": False},
-                    },
                     "declaration": {"dynamicRegistration": True, "linkSupport": True},
                     "selectionRange": {"dynamicRegistration": True},
                     "callHierarchy": {"dynamicRegistration": True},
@@ -510,19 +477,9 @@ class EclipseJDTLS(SolidLanguageServer):
                         "serverCancelSupport": True,
                         "augmentsSyntaxTokens": True,
                     },
-                    "linkedEditingRange": {"dynamicRegistration": True},
                     "typeHierarchy": {"dynamicRegistration": True},
                     "inlineValue": {"dynamicRegistration": True},
-                    "inlayHint": {
-                        "dynamicRegistration": True,
-                        "resolveSupport": {"properties": ["tooltip", "textEdits", "label.tooltip", "label.location", "label.command"]},
-                    },
                     "diagnostic": {"dynamicRegistration": True, "relatedDocumentSupport": False},
-                },
-                "window": {
-                    "showMessage": {"messageActionItem": {"additionalPropertiesSupport": True}},
-                    "showDocument": {"support": True},
-                    "workDoneProgress": True,
                 },
                 "general": {
                     "staleRequestSupport": {
@@ -534,7 +491,6 @@ class EclipseJDTLS(SolidLanguageServer):
                         ],
                     },
                     "regularExpressions": {"engine": "ECMAScript", "version": "ES2020"},
-                    "markdown": {"parser": "marked", "version": "1.1.0"},
                     "positionEncodings": ["utf-16"],
                 },
                 "notebookDocument": {"synchronization": {"dynamicRegistration": True, "executionSummarySupport": True}},
@@ -597,7 +553,6 @@ class EclipseJDTLS(SolidLanguageServer):
                         },
                         "maven": {"downloadSources": True, "updateSnapshots": True},
                         "eclipse": {"downloadSources": True},
-                        "referencesCodeLens": {"enabled": True},
                         "signatureHelp": {"enabled": True, "description": {"enabled": True}},
                         "implementationsCodeLens": {"enabled": True},
                         "format": {
@@ -620,49 +575,6 @@ class EclipseJDTLS(SolidLanguageServer):
                         "contentProvider": {"preferred": None},
                         "autobuild": {"enabled": True},
                         "maxConcurrentBuilds": 1,
-                        "recommendations": {"dependency": {"analytics": {"show": True}}},
-                        "completion": {
-                            "maxResults": 0,
-                            "enabled": True,
-                            "guessMethodArguments": True,
-                            "favoriteStaticMembers": [
-                                "org.junit.Assert.*",
-                                "org.junit.Assume.*",
-                                "org.junit.jupiter.api.Assertions.*",
-                                "org.junit.jupiter.api.Assumptions.*",
-                                "org.junit.jupiter.api.DynamicContainer.*",
-                                "org.junit.jupiter.api.DynamicTest.*",
-                                "org.mockito.Mockito.*",
-                                "org.mockito.ArgumentMatchers.*",
-                                "org.mockito.Answers.*",
-                            ],
-                            "filteredTypes": [
-                                "java.awt.*",
-                                "com.sun.*",
-                                "sun.*",
-                                "jdk.*",
-                                "org.graalvm.*",
-                                "io.micrometer.shaded.*",
-                            ],
-                            "importOrder": ["#", "java", "javax", "org", "com", ""],
-                            "postfix": {"enabled": False},
-                            "matchCase": "off",
-                        },
-                        "foldingRange": {"enabled": True},
-                        "progressReports": {"enabled": False},
-                        "codeGeneration": {
-                            "hashCodeEquals": {"useJava7Objects": False, "useInstanceof": False},
-                            "useBlocks": False,
-                            "generateComments": False,
-                            "toString": {
-                                "template": "${object.className} [${member.name()}=${member.value}, ${otherMembers}]",
-                                "codeStyle": "STRING_CONCATENATION",
-                                "skipNullValues": False,
-                                "listArrayContents": True,
-                                "limitElements": 0,
-                            },
-                            "insertionLocation": "afterCursor",
-                        },
                         "selectionRange": {"enabled": True},
                         "showBuildStatusOnStart": {"enabled": "notification"},
                         "server": {"launchMode": "Standard"},
@@ -673,7 +585,6 @@ class EclipseJDTLS(SolidLanguageServer):
                         "typeHierarchy": {"lazyLoad": False},
                         "settings": {"url": None},
                         "symbols": {"includeSourceMethodDeclarations": False},
-                        "quickfix": {"showAt": "line"},
                         "inlayHints": {"parameterNames": {"enabled": "literals", "exclusions": []}},
                         "codeAction": {"sortMembers": {"avoidVolatileChanges": True}},
                         "compile": {
@@ -691,35 +602,7 @@ class EclipseJDTLS(SolidLanguageServer):
                                 "mode": "automatic",
                             }
                         },
-                        "cleanup": {"actionsOnSave": []},
                         "sharedIndexes": {"enabled": "auto", "location": ""},
-                        "refactoring": {"extract": {"interface": {"replace": True}}},
-                        "debug": {
-                            "logLevel": "verbose",
-                            "settings": {
-                                "showHex": False,
-                                "showStaticVariables": False,
-                                "showQualifiedNames": False,
-                                "showLogicalStructure": True,
-                                "showToString": True,
-                                "maxStringLength": 0,
-                                "numericPrecision": 0,
-                                "hotCodeReplace": "manual",
-                                "enableRunDebugCodeLens": True,
-                                "forceBuildBeforeLaunch": True,
-                                "onBuildFailureProceed": False,
-                                "console": "integratedTerminal",
-                                "exceptionBreakpoint": {"skipClasses": []},
-                                "stepping": {
-                                    "skipClasses": [],
-                                    "skipSynthetics": False,
-                                    "skipStaticInitializers": False,
-                                    "skipConstructors": False,
-                                },
-                                "jdwp": {"limitOfVariablesPerJdwpRequest": 100, "requestTimeout": 3000, "async": "auto"},
-                                "vmArgs": "",
-                            },
-                        },
                         "silentNotification": False,
                         "dependency": {
                             "showMembers": False,
@@ -732,31 +615,6 @@ class EclipseJDTLS(SolidLanguageServer):
                         "test": {"defaultConfig": "", "config": {}},
                     }
                 },
-                "extendedClientCapabilities": {
-                    "progressReportProvider": False,
-                    "classFileContentsSupport": True,
-                    "overrideMethodsPromptSupport": True,
-                    "hashCodeEqualsPromptSupport": True,
-                    "advancedOrganizeImportsSupport": True,
-                    "generateToStringPromptSupport": True,
-                    "advancedGenerateAccessorsSupport": True,
-                    "generateConstructorsPromptSupport": True,
-                    "generateDelegateMethodsPromptSupport": True,
-                    "advancedExtractRefactoringSupport": True,
-                    "inferSelectionSupport": ["extractMethod", "extractVariable", "extractField"],
-                    "moveRefactoringSupport": True,
-                    "clientHoverProvider": True,
-                    "clientDocumentSymbolProvider": True,
-                    "gradleChecksumWrapperPromptSupport": True,
-                    "resolveAdditionalTextEditsSupport": True,
-                    "advancedIntroduceParameterRefactoringSupport": True,
-                    "actionableRuntimeNotificationSupport": True,
-                    "shouldLanguageServerExitOnShutdown": True,
-                    "onCompletionItemSelectedCommand": "editor.action.triggerParameterHints",
-                    "extractInterfaceSupport": True,
-                    "advancedUpgradeGradleSupport": True,
-                },
-                "triggerFiles": [],
             },
             "trace": "verbose",
             "processId": os.getpid(),
