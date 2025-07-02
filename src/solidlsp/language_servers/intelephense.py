@@ -49,11 +49,6 @@ class Intelephense(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy PHP at the moment"
 
-        runtime_dependencies = {
-            "id": "intelephense",
-            "description": "Intelephense package for Linux, OSX, and Windows. Both x64 and arm64 are supported.",
-            "command": "npm install --prefix ./ intelephense@1.14.4",
-        }
         intelephense_ls_dir = os.path.join(os.path.dirname(__file__), "static", "php-lsp")
         # Verify both node and npm are installed
         is_node_installed = shutil.which("node") is not None
@@ -62,36 +57,38 @@ class Intelephense(SolidLanguageServer):
         assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
         # Install intelephense if not already installed
-        if not os.path.exists(intelephense_ls_dir):
-            os.makedirs(intelephense_ls_dir, exist_ok=True)
-            for dependency in runtime_dependencies:
-                # Windows doesn't support the 'user' parameter and doesn't have pwd module
-                if PlatformUtils.get_platform_id().value.startswith("win"):
-                    subprocess.run(
-                        dependency["command"],
-                        shell=True,
-                        check=True,
-                        cwd=intelephense_ls_dir,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-                else:
-                    # On Unix-like systems, run as non-root user
-                    import pwd
-
-                    user = pwd.getpwuid(os.getuid()).pw_name
-                    subprocess.run(
-                        dependency["command"],
-                        shell=True,
-                        check=True,
-                        user=user,
-                        cwd=intelephense_ls_dir,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-
         intelephense_executable_path = os.path.join(intelephense_ls_dir, "node_modules", ".bin", "intelephense")
-        assert os.path.exists(intelephense_executable_path), "intelephense executable not found. Please install intelephense and try again."
+        if not os.path.exists(intelephense_executable_path):
+            install_command = "npm install --prefix ./ intelephense@1.14.4"
+            is_windows = PlatformUtils.get_platform_id().value.startswith("win")
+            # Windows doesn't support the 'user' parameter and doesn't have pwd module
+            if is_windows:
+                subprocess.run(
+                    install_command,
+                    shell=True,
+                    check=True,
+                    cwd=intelephense_ls_dir,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            else:
+                # On Unix-like systems, run as non-root user
+                import pwd
+
+                user = pwd.getpwuid(os.getuid()).pw_name
+                subprocess.run(
+                    install_command,
+                    shell=True,
+                    check=True,
+                    user=user,
+                    cwd=intelephense_ls_dir,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+
+        assert os.path.exists(
+            intelephense_executable_path
+        ), f"intelephense executable not found at {intelephense_executable_path}, something went wrong."
 
         return f"{intelephense_executable_path} --stdio"
 

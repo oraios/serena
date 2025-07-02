@@ -342,9 +342,7 @@ class EclipseJDTLS(SolidLanguageServer):
                     "didChangeWatchedFiles": {"dynamicRegistration": True, "relativePatternSupport": True},
                     "symbol": {
                         "dynamicRegistration": True,
-                        "symbolKind": {
-                            "valueSet": list(range(1, 27))
-                        },
+                        "symbolKind": {"valueSet": list(range(1, 27))},
                         "tagSupport": {"valueSet": [1]},
                         "resolveSupport": {"properties": ["location.range"]},
                     },
@@ -411,9 +409,7 @@ class EclipseJDTLS(SolidLanguageServer):
                     "references": {"dynamicRegistration": True},
                     "documentSymbol": {
                         "dynamicRegistration": True,
-                        "symbolKind": {
-                            "valueSet": list(range(1, 27))  #
-                        },
+                        "symbolKind": {"valueSet": list(range(1, 27))},
                         "hierarchicalDocumentSymbolSupport": True,
                         "tagSupport": {"valueSet": [1]},
                         "labelSupport": True,
