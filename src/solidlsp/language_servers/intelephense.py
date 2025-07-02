@@ -49,7 +49,6 @@ class Intelephense(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy PHP at the moment"
 
-        intelephense_ls_dir = os.path.join(os.path.dirname(__file__), "static", "php-lsp")
         # Verify both node and npm are installed
         is_node_installed = shutil.which("node") is not None
         assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
@@ -57,6 +56,8 @@ class Intelephense(SolidLanguageServer):
         assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
         # Install intelephense if not already installed
+        intelephense_ls_dir = os.path.join(os.path.dirname(__file__), "static", "php-lsp")
+        os.makedirs(intelephense_ls_dir, exist_ok=True)
         intelephense_executable_path = os.path.join(intelephense_ls_dir, "node_modules", ".bin", "intelephense")
         if not os.path.exists(intelephense_executable_path):
             install_command = "npm install --prefix ./ intelephense@1.14.4"
