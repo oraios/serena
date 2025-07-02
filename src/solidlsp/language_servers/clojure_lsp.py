@@ -75,7 +75,7 @@ class ClojureLSP(SolidLanguageServer):
         """
         Creates a ClojureLSP instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        clojure_lsp_executable_path = self.setup_runtime_dependencies(logger, config)
+        clojure_lsp_executable_path = self._setup_runtime_dependencies(logger, config)
         super().__init__(
             config,
             logger,
@@ -88,12 +88,15 @@ class ClojureLSP(SolidLanguageServer):
         self.resolve_main_method_available = threading.Event()
         self.service_ready_event = threading.Event()
 
-    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
-        """Setup runtime dependencies for clojure-lsp."""
+    @staticmethod
+    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+        """Setup runtime dependencies for clojure-lsp and return the command to start the server."""
         verify_clojure_cli()
         platform_id = PlatformUtils.get_platform_id()
 
-        runtime_dependencies = [dependency for dependency in self.runtime_dependencies if dependency["platformId"] == platform_id.value]
+        runtime_dependencies = [
+            dependency for dependency in ClojureLSP.runtime_dependencies if dependency["platformId"] == platform_id.value
+        ]
         if len(runtime_dependencies) != 1:
             raise RuntimeError(f"Could not find a suitable clojure-lsp runtime dependency for platform {platform_id.value}.")
         dependency = runtime_dependencies[0]
@@ -109,7 +112,8 @@ class ClojureLSP(SolidLanguageServer):
         os.chmod(clojurelsp_executable_path, stat.S_IEXEC)
         return clojurelsp_executable_path
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    @staticmethod
+    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """Returns the init params for clojure-lsp."""
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
         return {  # type: ignore

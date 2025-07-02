@@ -44,7 +44,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         """
         Creates a TypeScriptLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        ts_lsp_executable_path = self.setup_runtime_dependencies(logger, config)
+        ts_lsp_executable_path = self._setup_runtime_dependencies(logger, config)
         super().__init__(
             config,
             logger,
@@ -64,9 +64,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             "coverage",
         ]
 
-    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    @staticmethod
+    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
         """
-        Setup runtime dependencies for TypeScript Language Server.
+        Setup runtime dependencies for TypeScript Language Server and return the command to start the server.
         """
         platform_id = PlatformUtils.get_platform_id()
 
@@ -136,7 +137,8 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         ), "typescript-language-server executable not found. Please install typescript-language-server and try again."
         return f"{tsserver_executable_path} --stdio"
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    @staticmethod
+    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the TypeScript Language Server.
         """

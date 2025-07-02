@@ -27,7 +27,7 @@ class ClangdLanguageServer(SolidLanguageServer):
         """
         Creates a ClangdLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        clangd_executable_path = self.setup_runtime_dependencies(logger, config)
+        clangd_executable_path = self._setup_runtime_dependencies(logger, config)
         super().__init__(
             config,
             logger,
@@ -40,9 +40,10 @@ class ClangdLanguageServer(SolidLanguageServer):
         self.initialize_searcher_command_available = threading.Event()
         self.resolve_main_method_available = threading.Event()
 
-    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    @staticmethod
+    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
         """
-        Setup runtime dependencies for ClangdLanguageServer.
+        Setup runtime dependencies for ClangdLanguageServer and return the command to start the server.
         """
         platform_id = PlatformUtils.get_platform_id()
 
@@ -107,7 +108,8 @@ class ClangdLanguageServer(SolidLanguageServer):
 
         return clangd_executable_path
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    @staticmethod
+    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the clangd Language Server.
         """

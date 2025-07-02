@@ -228,30 +228,32 @@ class CSharpLanguageServer(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["bin", "obj", "packages", ".vs"]
 
-    def _ensure_server_installed(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> tuple[str, str, Path]:
+    @staticmethod
+    def _ensure_server_installed(logger: LanguageServerLogger, config: LanguageServerConfig) -> tuple[str, str, Path]:
         """
         Ensure .NET runtime and Microsoft.CodeAnalysis.LanguageServer are available.
         Returns a tuple of (dotnet_path, language_server_dll_path, cache_dir).
         """
         # Determine platform runtime ID
-        runtime_id = self._get_runtime_id()
+        runtime_id = CSharpLanguageServer._get_runtime_id()
 
         # Set up cache directory
         cache_dir = Path.home() / ".cache" / "serena" / "language-servers" / "csharp"
         cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Get runtime dependencies for this platform
-        lang_server_dep, dotnet_runtime_dep = self._get_runtime_dependencies(runtime_id)
+        lang_server_dep, dotnet_runtime_dep = CSharpLanguageServer._get_runtime_dependencies(runtime_id)
 
         # Ensure .NET runtime is available
-        dotnet_path = self._ensure_dotnet_runtime(logger, cache_dir, dotnet_runtime_dep)
+        dotnet_path = CSharpLanguageServer._ensure_dotnet_runtime(logger, cache_dir, dotnet_runtime_dep)
 
         # Ensure language server is available
-        server_dll_path = self._ensure_language_server(logger, cache_dir, lang_server_dep)
+        server_dll_path = CSharpLanguageServer._ensure_language_server(logger, cache_dir, lang_server_dep)
 
         return dotnet_path, server_dll_path, cache_dir
 
-    def _get_runtime_id(self) -> str:
+    @staticmethod
+    def _get_runtime_id() -> str:
         """Determine the runtime ID based on the platform."""
         system = platform.system().lower()
         machine = platform.machine().lower()
@@ -265,7 +267,8 @@ class CSharpLanguageServer(SolidLanguageServer):
         else:
             raise LanguageServerException(f"Unsupported platform: {system} {machine}")
 
-    def _get_runtime_dependencies(self, runtime_id: str) -> tuple[RuntimeDependency, RuntimeDependency]:
+    @staticmethod
+    def _get_runtime_dependencies(runtime_id: str) -> tuple[RuntimeDependency, RuntimeDependency]:
         """Get the language server and .NET runtime dependencies for the platform."""
         lang_server_dep = None
         dotnet_runtime_dep = None
@@ -283,7 +286,8 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         return lang_server_dep, dotnet_runtime_dep
 
-    def _ensure_dotnet_runtime(self, logger: LanguageServerLogger, cache_dir: Path, runtime_dep: RuntimeDependency) -> str:
+    @staticmethod
+    def _ensure_dotnet_runtime(logger: LanguageServerLogger, cache_dir: Path, runtime_dep: RuntimeDependency) -> str:
         """Ensure .NET runtime is available and return the dotnet executable path."""
         # Check if dotnet is already available in system
         system_dotnet = shutil.which("dotnet")
@@ -300,9 +304,10 @@ class CSharpLanguageServer(SolidLanguageServer):
                 pass
 
         # Download .NET 9 runtime using config
-        return self._ensure_dotnet_runtime_from_config(logger, cache_dir, runtime_dep)
+        return CSharpLanguageServer._ensure_dotnet_runtime_from_config(logger, cache_dir, runtime_dep)
 
-    def _ensure_language_server(self, logger: LanguageServerLogger, cache_dir: Path, lang_server_dep: RuntimeDependency) -> str:
+    @staticmethod
+    def _ensure_language_server(logger: LanguageServerLogger, cache_dir: Path, lang_server_dep: RuntimeDependency) -> str:
         """Ensure language server is available and return the DLL path."""
         package_name = lang_server_dep.package_name
         package_version = lang_server_dep.package_version
@@ -316,10 +321,10 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         # Download and install the language server
         logger.log(f"Downloading {package_name} version {package_version}...", logging.INFO)
-        package_path = self._download_nuget_package_direct(logger, package_name, package_version, cache_dir)
+        package_path = CSharpLanguageServer._download_nuget_package_direct(logger, package_name, package_version, cache_dir)
 
         # Extract and install
-        self._extract_language_server(lang_server_dep, package_path, server_dir)
+        CSharpLanguageServer._extract_language_server(lang_server_dep, package_path, server_dir)
 
         if not server_dll.exists():
             raise LanguageServerException("Microsoft.CodeAnalysis.LanguageServer.dll not found after extraction")
@@ -331,7 +336,8 @@ class CSharpLanguageServer(SolidLanguageServer):
         logger.log(f"Successfully installed Microsoft.CodeAnalysis.LanguageServer to {server_dll}", logging.INFO)
         return str(server_dll)
 
-    def _extract_language_server(self, lang_server_dep: RuntimeDependency, package_path: Path, server_dir: Path) -> None:
+    @staticmethod
+    def _extract_language_server(lang_server_dep: RuntimeDependency, package_path: Path, server_dir: Path) -> None:
         """Extract language server files from downloaded package."""
         extract_path = lang_server_dep.extract_path or "lib/net9.0"
         source_dir = package_path / extract_path
@@ -353,9 +359,8 @@ class CSharpLanguageServer(SolidLanguageServer):
         server_dir.mkdir(parents=True, exist_ok=True)
         shutil.copytree(source_dir, server_dir, dirs_exist_ok=True)
 
-    def _download_nuget_package_direct(
-        self, logger: LanguageServerLogger, package_name: str, package_version: str, cache_dir: Path
-    ) -> Path:
+    @staticmethod
+    def _download_nuget_package_direct(logger: LanguageServerLogger, package_name: str, package_version: str, cache_dir: Path) -> Path:
         """
         Download a NuGet package directly from the Azure NuGet feed.
         Returns the path to the extracted package directory.
@@ -411,7 +416,8 @@ class CSharpLanguageServer(SolidLanguageServer):
                 f"Failed to download package {package_name} version {package_version} from Azure NuGet feed: {e}"
             ) from e
 
-    def _ensure_dotnet_runtime_from_config(self, logger: LanguageServerLogger, cache_dir: Path, runtime_dep: RuntimeDependency) -> str:
+    @staticmethod
+    def _ensure_dotnet_runtime_from_config(logger: LanguageServerLogger, cache_dir: Path, runtime_dep: RuntimeDependency) -> str:
         """
         Ensure .NET 9 runtime is available using runtime dependency configuration.
         Returns the path to the dotnet executable.

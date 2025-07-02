@@ -31,7 +31,7 @@ class Solargraph(SolidLanguageServer):
         Creates a Solargraph instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        solargraph_executable_path = self.setup_runtime_dependencies(logger, config, repository_root_path)
+        solargraph_executable_path = self._setup_runtime_dependencies(logger, config, repository_root_path)
         super().__init__(
             config,
             logger,
@@ -48,9 +48,10 @@ class Solargraph(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["vendor"]
 
-    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig, repository_root_path: str) -> str:
+    @staticmethod
+    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig, repository_root_path: str) -> str:
         """
-        Setup runtime dependencies for Solargraph.
+        Setup runtime dependencies for Solargraph and return the command to start the server.
         """
         runtime_dependencies = [
             {
@@ -98,7 +99,8 @@ class Solargraph(SolidLanguageServer):
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to check or install Solargraph. {e.stderr}") from e
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    @staticmethod
+    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the Solargraph Language Server.
         """

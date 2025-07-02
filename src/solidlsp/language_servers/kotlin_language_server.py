@@ -36,7 +36,7 @@ class KotlinLanguageServer(SolidLanguageServer):
         """
         Creates a Kotlin Language Server instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        runtime_dependency_paths = self.setup_runtime_dependencies(logger, config)
+        runtime_dependency_paths = self._setup_runtime_dependencies(logger, config)
         self.runtime_dependency_paths = runtime_dependency_paths
 
         # Create command to execute the Kotlin Language Server script
@@ -53,9 +53,10 @@ class KotlinLanguageServer(SolidLanguageServer):
             "kotlin",
         )
 
-    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> KotlinRuntimeDependencyPaths:
+    @staticmethod
+    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig) -> KotlinRuntimeDependencyPaths:
         """
-        Setup runtime dependencies for Kotlin Language Server.
+        Setup runtime dependencies for Kotlin Language Server and return the paths.
         """
         platform_id = PlatformUtils.get_platform_id()
 
@@ -161,7 +162,8 @@ class KotlinLanguageServer(SolidLanguageServer):
             java_path=java_path, java_home_path=java_home_path, kotlin_executable_path=kotlin_executable_path
         )
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    @staticmethod
+    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the Kotlin Language Server.
         """

@@ -18,7 +18,7 @@ class DartLanguageServer(SolidLanguageServer):
         """
         Creates a DartServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        executable_path = self.setup_runtime_dependencies(logger)
+        executable_path = self._setup_runtime_dependencies(logger)
         super().__init__(
             config,
             logger,
@@ -27,7 +27,8 @@ class DartLanguageServer(SolidLanguageServer):
             "dart",
         )
 
-    def setup_runtime_dependencies(self, logger: "LanguageServerLogger") -> str:
+    @staticmethod
+    def _setup_runtime_dependencies(logger: "LanguageServerLogger") -> str:
         platform_id = PlatformUtils.get_platform_id()
 
         runtime_dependencies = [
@@ -90,7 +91,8 @@ class DartLanguageServer(SolidLanguageServer):
 
         return f"{dart_executable_path} language-server --client-id multilspy.dart --client-version 1.2"
 
-    def _get_initialize_params(self, repository_absolute_path: str):
+    @staticmethod
+    def _get_initialize_params(repository_absolute_path: str):
         """
         Returns the initialize params for the Dart Language Server.
         """

@@ -32,9 +32,10 @@ class Intelephense(SolidLanguageServer):
         # - cache: commonly used for caching
         return super().is_ignored_dirname(dirname) or dirname in ["node_modules", "vendor", "cache"]
 
-    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    @staticmethod
+    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
         """
-        Setup runtime dependencies for Intelephense.
+        Setup runtime dependencies for Intelephense and return the command to start the server.
         """
         platform_id = PlatformUtils.get_platform_id()
 
@@ -95,12 +96,13 @@ class Intelephense(SolidLanguageServer):
 
     def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
         # Setup runtime dependencies before initializing
-        intelephense_cmd = self.setup_runtime_dependencies(logger, config)
+        intelephense_cmd = self._setup_runtime_dependencies(logger, config)
 
         super().__init__(config, logger, repository_root_path, ProcessLaunchInfo(cmd=intelephense_cmd, cwd=repository_root_path), "php")
         self.request_id = 0
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    @staticmethod
+    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the TypeScript Language Server.
         """

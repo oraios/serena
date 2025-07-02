@@ -27,7 +27,7 @@ class RustAnalyzer(SolidLanguageServer):
         """
         Creates a RustAnalyzer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        rustanalyzer_executable_path = self.setup_runtime_dependencies(logger, config)
+        rustanalyzer_executable_path = self._setup_runtime_dependencies(logger, config)
         super().__init__(
             config,
             logger,
@@ -44,9 +44,10 @@ class RustAnalyzer(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["target"]
 
-    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    @staticmethod
+    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
         """
-        Setup runtime dependencies for rust_analyzer.
+        Setup runtime dependencies for rust_analyzer and return the command to start the server.
         """
         platform_id = PlatformUtils.get_platform_id()
 
@@ -99,7 +100,8 @@ class RustAnalyzer(SolidLanguageServer):
 
         return rustanalyzer_executable_path
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    @staticmethod
+    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the Rust Analyzer Language Server.
         """
