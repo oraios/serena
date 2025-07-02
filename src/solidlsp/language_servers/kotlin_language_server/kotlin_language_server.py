@@ -206,4 +206,5 @@ class KotlinLanguageServer(SolidLanguageServer):
         assert "semanticTokensProvider" in capabilities, "Server must support semantic tokens"
 
         self.server.notify.initialized({})
+        self.server.notify.workspace_did_change_configuration({"settings": initialize_params.get("initializationOptions", {})})
         self.completions_available.set()
