@@ -37,6 +37,7 @@ from sensai.util.logging import FallbackHandler, LogTime
 from sensai.util.string import ToStringMixin, dict_string
 
 from serena import serena_version
+from serena.analytics import record_tool_usage
 from serena.config import SerenaAgentContext, SerenaAgentMode
 from serena.constants import (
     DEFAULT_ENCODING,
@@ -1417,6 +1418,9 @@ class Tool(Component, ToolInterface):
 
                 # apply the actual tool
                 result = apply_fn(**kwargs)
+                input_chars = sum(len(str(v)) for v in kwargs.values())
+                output_chars = len(result) if isinstance(result, str) else len(str(result))
+                record_tool_usage(self.get_name_from_cls(), input_chars, output_chars)
 
             except Exception as e:
                 if not catch_exceptions:

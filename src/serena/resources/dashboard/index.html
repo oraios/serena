@@ -8,6 +8,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="serena-icon-32.png">
     <link rel="icon" type="image/png" sizes="48x48" href="serena-icon-48.png">
     <script src="jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="dashboard.js"></script>
     <style>
         body {
@@ -107,10 +108,20 @@
     <div class="controls">
         <button id="load-logs" class="btn">Reload Log</button>
         <button id="shutdown" class="btn">Shutdown Server</button>
+        <button id="toggle-stats" class="btn">Show Stats</button>
     </div>
-    
+
     <div id="error-container"></div>
     <div id="log-container" class="log-container"></div>
+
+    <div id="stats-section" style="display:none; margin-top:20px; text-align:center;">
+        <button id="clear-stats" class="btn" style="margin-bottom:10px;">Clear Stats</button>
+        <div style="max-width:600px;margin:0 auto;">
+            <canvas id="count-chart" height="200"></canvas>
+            <canvas id="input-chart" height="200"></canvas>
+            <canvas id="output-chart" height="200"></canvas>
+        </div>
+    </div>
 
     <script>
         $(document).ready(function() {

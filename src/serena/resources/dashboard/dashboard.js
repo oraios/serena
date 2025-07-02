@@ -40,10 +40,19 @@ class Dashboard {
         this.$errorContainer = $('#error-container');
         this.$loadButton = $('#load-logs');
         this.$shutdownButton = $('#shutdown');
+        this.$toggleStats = $('#toggle-stats');
+        this.$statsSection = $('#stats-section');
+        this.$clearStats = $('#clear-stats');
+
+        this.countChart = null;
+        this.inputChart = null;
+        this.outputChart = null;
 
         // register event handlers
         this.$loadButton.click(this.loadLogs.bind(this));
         this.$shutdownButton.click(this.shutdown.bind(this));
+        this.$toggleStats.click(this.toggleStats.bind(this));
+        this.$clearStats.click(this.clearStats.bind(this));
 
         // initialize the application
         this.loadToolNames().then(function() {
@@ -174,6 +183,87 @@ class Dashboard {
 
         // Start polling every second (1000ms)
         this.pollInterval = setInterval(this.pollForNewLogs.bind(this), 1000);
+    }
+
+    toggleStats() {
+        if (this.$statsSection.is(':visible')) {
+            this.$statsSection.hide();
+            this.$toggleStats.text('Show Stats');
+        } else {
+            this.$statsSection.show();
+            this.$toggleStats.text('Hide Stats');
+            this.loadStats();
+        }
+    }
+
+    loadStats() {
+        let self = this;
+        $.ajax({
+            url: '/get_tool_stats',
+            type: 'GET',
+            success: function(response) {
+                self.displayStats(response.stats || {});
+            },
+            error: function(xhr, status, error) {
+                console.error('Error loading stats:', error);
+            }
+        });
+    }
+
+    clearStats() {
+        let self = this;
+        $.ajax({
+            url: '/clear_tool_stats',
+            type: 'POST',
+            success: function() {
+                self.loadStats();
+            },
+            error: function(xhr, status, error) {
+                console.error('Error clearing stats:', error);
+            }
+        });
+    }
+
+    displayStats(stats) {
+        const names = Object.keys(stats);
+        const counts = names.map(n => stats[n].count);
+        const inputChars = names.map(n => stats[n].input_chars);
+        const outputChars = names.map(n => stats[n].output_chars);
+
+        const countCtx = document.getElementById('count-chart');
+        const inputCtx = document.getElementById('input-chart');
+        const outputCtx = document.getElementById('output-chart');
+
+        if (this.countChart) this.countChart.destroy();
+        if (this.inputChart) this.inputChart.destroy();
+        if (this.outputChart) this.outputChart.destroy();
+
+        if (names.length === 0) {
+            this.countChart = null;
+            this.inputChart = null;
+            this.outputChart = null;
+            countCtx.getContext('2d').clearRect(0,0,countCtx.width,countCtx.height);
+            inputCtx.getContext('2d').clearRect(0,0,inputCtx.width,inputCtx.height);
+            outputCtx.getContext('2d').clearRect(0,0,outputCtx.width,outputCtx.height);
+            return;
+        }
+
+        this.countChart = new Chart(countCtx, {
+            type: 'pie',
+            data: { labels: names, datasets: [{ data: counts }] },
+        });
+
+        this.inputChart = new Chart(inputCtx, {
+            type: 'bar',
+            data: { labels: names, datasets: [{ label: 'Input Chars', data: inputChars }] },
+            options: { scales: { y: { beginAtZero: true } } }
+        });
+
+        this.outputChart = new Chart(outputCtx, {
+            type: 'bar',
+            data: { labels: names, datasets: [{ label: 'Output Chars', data: outputChars }] },
+            options: { scales: { y: { beginAtZero: true } } }
+        });
     }
 
     shutdown() {
