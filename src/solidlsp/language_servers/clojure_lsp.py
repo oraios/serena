@@ -116,16 +116,11 @@ class ClojureLSP(SolidLanguageServer):
             "processId": os.getpid(),
             "rootPath": repository_absolute_path,
             "rootUri": root_uri,
-            "clientInfo": {"name": "solidlsp", "version": "0.1.0"},
             "capabilities": {
                 "workspace": {
                     "applyEdit": True,
                     "workspaceEdit": {"documentChanges": True},
-                    "symbol": {
-                        "symbolKind": {
-                            "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
-                        }
-                    },
+                    "symbol": {"symbolKind": {"valueSet": list(range(1, 27))}},
                     "workspaceFolders": True,
                 },
                 "textDocument": {
@@ -133,13 +128,10 @@ class ClojureLSP(SolidLanguageServer):
                     "publishDiagnostics": {"relatedInformation": True, "tagSupport": {"valueSet": [1, 2]}},
                     "definition": {"linkSupport": True},
                     "references": {},
-                    "completion": {"completionItem": {"snippetSupport": True, "documentationFormat": ["markdown", "plaintext"]}},
                     "hover": {"contentFormat": ["markdown", "plaintext"]},
                     "documentSymbol": {
                         "hierarchicalDocumentSymbolSupport": True,
-                        "symbolKind": {
-                            "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
-                        },
+                        "symbolKind": {"valueSet": list(range(1, 27))},  #
                     },
                 },
                 "general": {"positionEncodings": ["utf-16"]},

@@ -499,9 +499,7 @@ class CSharpLanguageServer(SolidLanguageServer):
                         "didChangeWatchedFiles": {"dynamicRegistration": True},
                         "symbol": {
                             "dynamicRegistration": True,
-                            "symbolKind": {
-                                "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
-                            },
+                            "symbolKind": {"valueSet": list(range(1, 27))},
                         },
                         "executeCommand": {"dynamicRegistration": True},
                         "configuration": True,
@@ -510,20 +508,6 @@ class CSharpLanguageServer(SolidLanguageServer):
                     },
                     "textDocument": {
                         "synchronization": {"dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True, "didSave": True},
-                        "completion": {
-                            "dynamicRegistration": True,
-                            "contextSupport": True,
-                            "completionItem": {
-                                "snippetSupport": True,
-                                "commitCharactersSupport": True,
-                                "documentationFormat": ["markdown", "plaintext"],
-                                "deprecatedSupport": True,
-                                "preselectSupport": True,
-                            },
-                            "completionItemKind": {
-                                "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
-                            },
-                        },
                         "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
                         "signatureHelp": {
                             "dynamicRegistration": True,
@@ -534,38 +518,11 @@ class CSharpLanguageServer(SolidLanguageServer):
                         },
                         "definition": {"dynamicRegistration": True},
                         "references": {"dynamicRegistration": True},
-                        "documentHighlight": {"dynamicRegistration": True},
                         "documentSymbol": {
                             "dynamicRegistration": True,
-                            "symbolKind": {
-                                "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
-                            },
+                            "symbolKind": {"valueSet": list(range(1, 27))},
                             "hierarchicalDocumentSymbolSupport": True,
                         },
-                        "codeAction": {
-                            "dynamicRegistration": True,
-                            "codeActionLiteralSupport": {
-                                "codeActionKind": {
-                                    "valueSet": [
-                                        "",
-                                        "quickfix",
-                                        "refactor",
-                                        "refactor.extract",
-                                        "refactor.inline",
-                                        "refactor.rewrite",
-                                        "source",
-                                        "source.organizeImports",
-                                    ]
-                                }
-                            },
-                        },
-                        "codeLens": {"dynamicRegistration": True},
-                        "formatting": {"dynamicRegistration": True},
-                        "rangeFormatting": {"dynamicRegistration": True},
-                        "onTypeFormatting": {"dynamicRegistration": True},
-                        "rename": {"dynamicRegistration": True},
-                        "publishDiagnostics": {"relatedInformation": True},
-                        "foldingRange": {"dynamicRegistration": True, "rangeLimit": 5000, "lineFoldingOnly": True},
                     },
                 },
             },

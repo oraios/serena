@@ -116,7 +116,6 @@ class Solargraph(SolidLanguageServer):
                 }
             ],
         }
-
         return initialize_params
 
     def _start_server(self):

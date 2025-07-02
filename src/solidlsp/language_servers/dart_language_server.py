@@ -99,7 +99,6 @@ class DartLanguageServer(SolidLanguageServer):
             "capabilities": {},
             "initializationOptions": {
                 "onlyAnalyzeProjectsWithOpenFiles": False,
-                "suggestFromUnimportedLibraries": True,
                 "closingLabels": False,
                 "outline": False,
                 "flutterOutline": False,

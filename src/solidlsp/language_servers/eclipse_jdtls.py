@@ -319,10 +319,15 @@ class EclipseJDTLS(SolidLanguageServer):
         Returns the initialize parameters for the EclipseJDTLS server.
         """
         # Look into https://github.com/eclipse/eclipse.jdt.ls/blob/master/org.eclipse.jdt.ls.core/src/org/eclipse/jdt/ls/core/internal/preferences/Preferences.java to understand all the options available
+
+        if not os.path.isabs(repository_absolute_path):
+            repository_absolute_path = os.path.abspath(repository_absolute_path)
+        repo_uri = pathlib.Path(repository_absolute_path).as_uri()
+
         initialize_params = {
             "locale": "en",
-            "rootPath": "repository_absolute_path",
-            "rootUri": "pathlib.Path(repository_absolute_path).as_uri()",
+            "rootPath": repository_absolute_path,
+            "rootUri": pathlib.Path(repository_absolute_path).as_uri(),
             "capabilities": {
                 "workspace": {
                     "applyEdit": True,
@@ -754,27 +759,16 @@ class EclipseJDTLS(SolidLanguageServer):
                 "triggerFiles": [],
             },
             "trace": "verbose",
+            "processId": os.getpid(),
+            "workspaceFolders": [
+                {
+                    "uri": repo_uri,
+                    "name": os.path.basename(repository_absolute_path),
+                }
+            ],
         }
 
-        if not os.path.isabs(repository_absolute_path):
-            repository_absolute_path = os.path.abspath(repository_absolute_path)
-
-        initialize_params["processId"] = os.getpid()
-
-        initialize_params["rootPath"] = repository_absolute_path
-
-        initialize_params["rootUri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        repo_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params["initializationOptions"]["workspaceFolders"] = [repo_uri]
-
-        initialize_params["workspaceFolders"] = [
-            {
-                "uri": repo_uri,
-                "name": os.path.basename(repository_absolute_path),
-            }
-        ]
-
         bundles = [self.runtime_dependency_paths.intellicode_jar_path]
         initialize_params["initializationOptions"]["bundles"] = bundles
         initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"] = [
