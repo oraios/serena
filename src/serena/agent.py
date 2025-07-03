@@ -279,7 +279,7 @@ class SerenaAgent:
         self.symbol_manager: SymbolManager | None = None
         self.memories_manager: MemoriesManager | None = None
         self.lines_read: LinesRead | None = None
-        self.ignore_spec: PathSpec = PathSpec.from_lines([])  # Initialize with empty spec, gets overwritten by LS
+        self.ignore_spec: PathSpec  # not set to None to avoid assert statements
         """Ignore spec, extracted from the project's gitignore files and the explicitly configured ignored paths."""
 
         # set the active modes
