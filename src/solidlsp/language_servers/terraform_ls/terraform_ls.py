@@ -31,23 +31,27 @@ class TerraformLS(SolidLanguageServer):
     @staticmethod
     def _get_terraform_version():
         """Get the installed Terraform version or None if not found."""
-        try:
-            result = subprocess.run(["terraform", "version"], capture_output=True, text=True, check=False)
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except FileNotFoundError:
-            return None
+        # Try both 'terraform' and 'terraform.exe' for Windows compatibility
+        for cmd in ["terraform", "terraform.exe"]:
+            try:
+                result = subprocess.run([cmd, "version"], capture_output=True, text=True, check=False)
+                if result.returncode == 0:
+                    return result.stdout.strip()
+            except FileNotFoundError:
+                continue
         return None
 
     @staticmethod
     def _get_terraform_ls_version():
         """Get the installed terraform-ls version or None if not found."""
-        try:
-            result = subprocess.run(["terraform-ls", "version"], capture_output=True, text=True, check=False)
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except FileNotFoundError:
-            return None
+        # Try both 'terraform-ls' and 'terraform-ls.exe' for Windows compatibility
+        for cmd in ["terraform-ls", "terraform-ls.exe"]:
+            try:
+                result = subprocess.run([cmd, "version"], capture_output=True, text=True, check=False)
+                if result.returncode == 0:
+                    return result.stdout.strip()
+            except FileNotFoundError:
+                continue
         return None
 
     @classmethod
@@ -75,11 +79,14 @@ class TerraformLS(SolidLanguageServer):
     def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
         self.setup_runtime_dependency()
 
+        # Use the correct executable name for the platform
+        terraform_ls_cmd = "terraform-ls.exe" if os.name == "nt" else "terraform-ls"
+
         super().__init__(
             config,
             logger,
             repository_root_path,
-            ProcessLaunchInfo(cmd="terraform-ls", cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=terraform_ls_cmd, cwd=repository_root_path),
             "terraform",
         )
         self.server_ready = threading.Event()
