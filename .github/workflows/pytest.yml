@@ -73,6 +73,18 @@ jobs:
             mv terraform-ls.exe /tmp/terraform-ls/
             echo "/tmp/terraform-ls" >> $GITHUB_PATH
           fi
+      - name: Debug PATH and installation (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "PATH: $PATH"
+          echo "Checking for terraform..."
+          which terraform || echo "terraform not found in PATH"
+          echo "Checking for terraform.exe..."
+          which terraform.exe || echo "terraform.exe not found in PATH"
+          echo "Looking for terraform in common locations..."
+          find /c -name "terraform.exe" 2>/dev/null || echo "terraform.exe not found anywhere"
+          ls -la /c/hostedtoolcache/ || echo "hostedtoolcache not found"
       - name: Verify Terraform and terraform-ls installation
         shell: bash
         run: |
