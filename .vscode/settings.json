@@ -11,4 +11,7 @@
         "sensai",
         "vibing"
     ],
+    "python.analysis.extraPaths": [
+        "src"
+    ],
 }

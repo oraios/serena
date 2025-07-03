@@ -30,11 +30,12 @@ def is_headless_environment() -> bool:
     if os.environ.get("CI") or os.environ.get("CONTAINER") or os.path.exists("/.dockerenv"):
         return True
 
-    # Check for WSL
-    if "microsoft" in os.uname().release.lower():
-        # In WSL, even with DISPLAY set, X server might not be running
-        # This is a simplified check - could be improved
-        return True
+    # Check for WSL (only on Unix-like systems where os.uname exists)
+    if hasattr(os, "uname"):
+        if "microsoft" in os.uname().release.lower():
+            # In WSL, even with DISPLAY set, X server might not be running
+            # This is a simplified check - could be improved
+            return True
 
     return False
 

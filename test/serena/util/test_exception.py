@@ -25,6 +25,7 @@ class TestHeadlessEnvironmentDetection:
     def test_is_headless_wsl(self):
         """Test that WSL environment is detected as headless."""
         with patch("sys.platform", "linux"):
+            # Need to ensure hasattr(os, "uname") returns True for the test
             with patch("os.uname") as mock_uname:
                 mock_uname.return_value = Mock(release="5.15.153.1-microsoft-standard-WSL2")
                 with patch.dict(os.environ, {"DISPLAY": ":0"}):
@@ -57,6 +58,7 @@ class TestHeadlessEnvironmentDetection:
     def test_is_not_headless_with_display(self):
         """Test that Linux with DISPLAY and no other indicators is not headless."""
         with patch("sys.platform", "linux"):
+            # Mock hasattr to return True for os.uname check
             with patch("os.uname") as mock_uname:
                 mock_uname.return_value = Mock(release="5.15.0-generic")  # Not WSL
                 with patch("os.path.exists") as mock_exists:
