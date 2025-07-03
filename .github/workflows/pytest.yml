@@ -55,6 +55,26 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.5.0"
+      - name: Add Terraform to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          # Find terraform.exe and add its directory to PATH
+          terraform_path=$(find /c -name "terraform.exe" 2>/dev/null | head -1)
+          if [ -n "$terraform_path" ]; then
+            terraform_dir=$(dirname "$terraform_path")
+            echo "Found terraform at: $terraform_path"
+            echo "Adding directory to PATH: $terraform_dir"
+            echo "$terraform_dir" >> $GITHUB_PATH
+          else
+            echo "Terraform not found, trying alternative installation..."
+            # Alternative: Download and install manually
+            curl -LO "https://releases.hashicorp.com/terraform/1.5.0/terraform_1.5.0_windows_amd64.zip"
+            unzip terraform_1.5.0_windows_amd64.zip
+            mkdir -p /tmp/terraform
+            mv terraform.exe /tmp/terraform/
+            echo "/tmp/terraform" >> $GITHUB_PATH
+          fi
       - name: Install terraform-ls
         shell: bash
         run: |
