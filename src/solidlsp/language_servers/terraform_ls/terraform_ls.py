@@ -34,11 +34,30 @@ class TerraformLS(SolidLanguageServer):
         # Try both 'terraform' and 'terraform.exe' for Windows compatibility
         for cmd in ["terraform", "terraform.exe"]:
             try:
-                result = subprocess.run([cmd, "version"], capture_output=True, text=True, check=False)
+                # On Windows, use shell=True to properly inherit PATH
+                result = subprocess.run([cmd, "version"], capture_output=True, text=True, check=False, shell=True)
                 if result.returncode == 0:
                     return result.stdout.strip()
             except FileNotFoundError:
                 continue
+        
+        # Debug: Print environment info if both fail
+        import os
+        print(f"DEBUG: PATH = {os.environ.get('PATH', 'NOT_SET')}")
+        print(f"DEBUG: TERRAFORM_CLI_PATH = {os.environ.get('TERRAFORM_CLI_PATH', 'NOT_SET')}")
+        
+        # Try using TERRAFORM_CLI_PATH if available
+        terraform_cli_path = os.environ.get('TERRAFORM_CLI_PATH')
+        if terraform_cli_path:
+            terraform_exe = os.path.join(terraform_cli_path, 'terraform.exe')
+            if os.path.exists(terraform_exe):
+                try:
+                    result = subprocess.run([terraform_exe, "version"], capture_output=True, text=True, check=False)
+                    if result.returncode == 0:
+                        return result.stdout.strip()
+                except Exception as e:
+                    print(f"DEBUG: Failed to run {terraform_exe}: {e}")
+        
         return None
 
     @staticmethod
@@ -47,7 +66,8 @@ class TerraformLS(SolidLanguageServer):
         # Try both 'terraform-ls' and 'terraform-ls.exe' for Windows compatibility
         for cmd in ["terraform-ls", "terraform-ls.exe"]:
             try:
-                result = subprocess.run([cmd, "version"], capture_output=True, text=True, check=False)
+                # On Windows, use shell=True to properly inherit PATH
+                result = subprocess.run([cmd, "version"], capture_output=True, text=True, check=False, shell=True)
                 if result.returncode == 0:
                     return result.stdout.strip()
             except FileNotFoundError:
