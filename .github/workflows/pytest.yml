@@ -14,7 +14,7 @@ jobs:
   cpu:
     name: Tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    if: "!contains(github.event.head_commit.message, 'ci skip')"
+    if: '!contains(github.event.head_commit.message, "ci skip")'
     strategy:
       fail-fast: false
       matrix:
@@ -59,15 +59,15 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ runner.os }}" == "Linux" ]]; then
-            curl -LO https://github.com/hashicorp/terraform-ls/releases/download/v0.32.7/terraform-ls_0.32.7_linux_amd64.zip
+            curl -LO "https://releases.hashicorp.com/terraform-ls/0.32.7/terraform-ls_0.32.7_linux_amd64.zip"
             unzip terraform-ls_0.32.7_linux_amd64.zip
             sudo mv terraform-ls /usr/local/bin/
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            curl -LO https://github.com/hashicorp/terraform-ls/releases/download/v0.32.7/terraform-ls_0.32.7_darwin_amd64.zip
+            curl -LO "https://releases.hashicorp.com/terraform-ls/0.32.7/terraform-ls_0.32.7_darwin_amd64.zip"
             unzip terraform-ls_0.32.7_darwin_amd64.zip
             sudo mv terraform-ls /usr/local/bin/
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
-            curl -LO https://github.com/hashicorp/terraform-ls/releases/download/v0.32.7/terraform-ls_0.32.7_windows_amd64.zip
+            curl -LO "https://releases.hashicorp.com/terraform-ls/0.32.7/terraform-ls_0.32.7_windows_amd64.zip"
             unzip terraform-ls_0.32.7_windows_amd64.zip
             mkdir -p /tmp/terraform-ls
             mv terraform-ls.exe /tmp/terraform-ls/
