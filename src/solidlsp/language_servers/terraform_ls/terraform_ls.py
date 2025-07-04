@@ -181,7 +181,8 @@ class TerraformLS(SolidLanguageServer):
                 )
                 if result.returncode == 0:
                     print(f"DEBUG: terraform-ls verification succeeded, using: {terraform_ls_cmd}")
-                    return terraform_ls_cmd
+                    # CRITICAL FIX: terraform-ls needs the 'serve' subcommand to start the language server
+                    return f"{terraform_ls_cmd} serve"
                 else:
                     print(f"DEBUG: terraform-ls verification failed with return code {result.returncode}")
             except subprocess.TimeoutExpired:
@@ -193,7 +194,7 @@ class TerraformLS(SolidLanguageServer):
         
         # Fallback to default if nothing works (will likely fail later, but better than crashing here)
         print("DEBUG: Using fallback terraform-ls command")
-        return "terraform-ls"
+        return "terraform-ls serve"
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """

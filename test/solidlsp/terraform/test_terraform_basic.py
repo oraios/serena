@@ -22,7 +22,7 @@ class TestLanguageServerBasics:
     def test_basic_definition(self, language_server: SolidLanguageServer) -> None:
         """Test basic definition lookup functionality."""
         # Simple test to verify the language server is working
-        file_path = os.path.join("test_repo", "main.tf")
+        file_path = "main.tf"
         # Just try to get document symbols - this should work without hanging
         symbols = language_server.request_document_symbols(file_path)
         assert len(symbols) > 0, "Should find at least some symbols in main.tf"
@@ -31,10 +31,10 @@ class TestLanguageServerBasics:
     def test_request_references_aws_instance(self, language_server: SolidLanguageServer) -> None:
         """Test request_references on an aws_instance resource."""
         # Get references to an aws_instance resource in main.tf
-        file_path = os.path.join("test_repo", "main.tf")
+        file_path = "main.tf"
         # Find aws_instance resources
         symbols = language_server.request_document_symbols(file_path)
-        aws_instance_symbol = next((s for s in symbols[0] if s.get("name") == "web_server"), None)
+        aws_instance_symbol = next((s for s in symbols[0] if s.get("name") == 'resource "aws_instance" "web_server"'), None)
         if not aws_instance_symbol or "selectionRange" not in aws_instance_symbol:
             raise AssertionError("aws_instance symbol or its selectionRange not found")
         sel_start = aws_instance_symbol["selectionRange"]["start"]
@@ -45,10 +45,10 @@ class TestLanguageServerBasics:
     def test_request_references_variable(self, language_server: SolidLanguageServer) -> None:
         """Test request_references on a variable."""
         # Get references to a variable in variables.tf
-        file_path = os.path.join("test_repo", "variables.tf")
+        file_path = "variables.tf"
         # Find variable definitions
         symbols = language_server.request_document_symbols(file_path)
-        var_symbol = next((s for s in symbols[0] if s.get("name") == "instance_type"), None)
+        var_symbol = next((s for s in symbols[0] if s.get("name") == 'variable "instance_type"'), None)
         if not var_symbol or "selectionRange" not in var_symbol:
             raise AssertionError("variable symbol or its selectionRange not found")
         sel_start = var_symbol["selectionRange"]["start"]
@@ -58,7 +58,7 @@ class TestLanguageServerBasics:
     @pytest.mark.parametrize("language_server", [Language.TERRAFORM], indirect=True)
     def test_retrieve_content_around_line(self, language_server: SolidLanguageServer) -> None:
         """Test retrieve_content_around_line functionality with Terraform files."""
-        file_path = os.path.join("test_repo", "main.tf")
+        file_path = "main.tf"
 
         # Test retrieving content around a resource definition
         line_5 = language_server.retrieve_content_around_line(file_path, 5)

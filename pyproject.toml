@@ -248,6 +248,7 @@ markers = [
   "php: language server running for PHP",
   "csharp: language server running for C#",
   "elixir: language server running for Elixir",
+  "terraform: language server running for Terraform",
   "snapshot: snapshot tests for symbolic editing operations",
 ]
 
