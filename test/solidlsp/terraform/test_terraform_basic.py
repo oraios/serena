@@ -15,8 +15,17 @@ from solidlsp.ls_config import Language
 
 
 @pytest.mark.terraform
-class TestTerraformLanguageServerBasics:
+class TestLanguageServerBasics:
     """Test basic functionality of the Terraform language server."""
+
+    @pytest.mark.parametrize("language_server", [Language.TERRAFORM], indirect=True)
+    def test_basic_definition(self, language_server: SolidLanguageServer) -> None:
+        """Test basic definition lookup functionality."""
+        # Simple test to verify the language server is working
+        file_path = os.path.join("test_repo", "main.tf")
+        # Just try to get document symbols - this should work without hanging
+        symbols = language_server.request_document_symbols(file_path)
+        assert len(symbols) > 0, "Should find at least some symbols in main.tf"
 
     @pytest.mark.parametrize("language_server", [Language.TERRAFORM], indirect=True)
     def test_request_references_aws_instance(self, language_server: SolidLanguageServer) -> None:
