@@ -60,8 +60,21 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Write-Host "Installing terraform-ls via Chocolatey (most reliable method for Windows)"
-          choco install terraform-ls --version 0.32.7 -y
+          Write-Host "Installing terraform-ls manually for Windows (Chocolatey package not available)"
+          $ver = '0.32.7'
+          $zip = "terraform-ls_${ver}_windows_amd64.zip"
+          Invoke-WebRequest -Uri "https://releases.hashicorp.com/terraform-ls/$ver/$zip" -OutFile $zip
+          
+          # Use native Windows path (CRITICAL FIX)
+          $dest = "$env:USERPROFILE\terraform-ls"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Expand-Archive $zip -DestinationPath $dest -Force
+          
+          Write-Host "terraform-ls installed to: $dest"
+          Write-Host "Adding to GITHUB_PATH: $dest"
+          
+          # Add the Windows-native directory to PATH for future steps
+          echo "$dest" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Install terraform-ls (Linux/macOS)
         if: runner.os != 'Windows'
         shell: bash
