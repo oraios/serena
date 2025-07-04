@@ -31,47 +31,65 @@ class TerraformLS(SolidLanguageServer):
     @staticmethod
     def _get_terraform_version():
         """Get the installed Terraform version or None if not found."""
-        # Try both 'terraform' and 'terraform.exe' for Windows compatibility
-        for cmd in ["terraform", "terraform.exe"]:
-            try:
-                # On Windows, use shell=True to properly inherit PATH
-                result = subprocess.run([cmd, "version"], capture_output=True, text=True, check=False, shell=True)
-                if result.returncode == 0:
-                    return result.stdout.strip()
-            except FileNotFoundError:
-                continue
-        
-        # Debug: Print environment info if both fail
         import os
-        print(f"DEBUG: PATH = {os.environ.get('PATH', 'NOT_SET')}")
-        print(f"DEBUG: TERRAFORM_CLI_PATH = {os.environ.get('TERRAFORM_CLI_PATH', 'NOT_SET')}")
         
-        # Try using TERRAFORM_CLI_PATH if available
+        # Build list of terraform executables to try in order of preference
+        terraform_candidates = []
+        
+        # 1. Try TERRAFORM_CLI_PATH first (set by hashicorp/setup-terraform action)
         terraform_cli_path = os.environ.get('TERRAFORM_CLI_PATH')
         if terraform_cli_path:
-            terraform_exe = os.path.join(terraform_cli_path, 'terraform.exe')
-            if os.path.exists(terraform_exe):
-                try:
-                    result = subprocess.run([terraform_exe, "version"], capture_output=True, text=True, check=False)
-                    if result.returncode == 0:
-                        return result.stdout.strip()
-                except Exception as e:
-                    print(f"DEBUG: Failed to run {terraform_exe}: {e}")
+            terraform_candidates.extend([
+                os.path.join(terraform_cli_path, 'terraform.exe'),
+                os.path.join(terraform_cli_path, 'terraform')
+            ])
+        
+        # 2. Try standard PATH executables
+        terraform_candidates.extend(['terraform', 'terraform.exe'])
+        
+        # 3. Try common manual installation paths
+        terraform_candidates.extend([
+            '/tmp/terraform/terraform.exe',
+            '/tmp/terraform/terraform',
+            '/usr/local/bin/terraform'
+        ])
+        
+        for terraform_cmd in terraform_candidates:
+            try:
+                result = subprocess.run([terraform_cmd, "version"], capture_output=True, text=True, check=False)
+                if result.returncode == 0:
+                    return result.stdout.strip()
+            except (FileNotFoundError, OSError):
+                continue
         
         return None
 
     @staticmethod
     def _get_terraform_ls_version():
         """Get the installed terraform-ls version or None if not found."""
-        # Try both 'terraform-ls' and 'terraform-ls.exe' for Windows compatibility
-        for cmd in ["terraform-ls", "terraform-ls.exe"]:
+        import os
+        
+        # Build list of terraform-ls executables to try in order of preference
+        terraform_ls_candidates = []
+        
+        # 1. Try standard PATH executables
+        terraform_ls_candidates.extend(['terraform-ls', 'terraform-ls.exe'])
+        
+        # 2. Try common manual installation paths
+        terraform_ls_candidates.extend([
+            '/tmp/terraform-ls/terraform-ls.exe',
+            '/tmp/terraform-ls/terraform-ls',
+            '/usr/local/bin/terraform-ls'
+        ])
+        
+        for terraform_ls_cmd in terraform_ls_candidates:
             try:
-                # On Windows, use shell=True to properly inherit PATH
-                result = subprocess.run([cmd, "version"], capture_output=True, text=True, check=False, shell=True)
+                result = subprocess.run([terraform_ls_cmd, "version"], capture_output=True, text=True, check=False)
                 if result.returncode == 0:
                     return result.stdout.strip()
-            except FileNotFoundError:
+            except (FileNotFoundError, OSError):
                 continue
+        
         return None
 
     @classmethod
@@ -99,8 +117,8 @@ class TerraformLS(SolidLanguageServer):
     def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
         self.setup_runtime_dependency()
 
-        # Use the correct executable name for the platform
-        terraform_ls_cmd = "terraform-ls.exe" if os.name == "nt" else "terraform-ls"
+        # Find the correct terraform-ls executable using the same logic as version check
+        terraform_ls_cmd = self._find_terraform_ls_executable()
 
         super().__init__(
             config,
@@ -111,6 +129,35 @@ class TerraformLS(SolidLanguageServer):
         )
         self.server_ready = threading.Event()
         self.request_id = 0
+
+    @staticmethod
+    def _find_terraform_ls_executable():
+        """Find the terraform-ls executable that actually works."""
+        import os
+        
+        # Build list of terraform-ls executables to try in order of preference
+        terraform_ls_candidates = []
+        
+        # 1. Try standard PATH executables
+        terraform_ls_candidates.extend(['terraform-ls', 'terraform-ls.exe'])
+        
+        # 2. Try common manual installation paths
+        terraform_ls_candidates.extend([
+            '/tmp/terraform-ls/terraform-ls.exe',
+            '/tmp/terraform-ls/terraform-ls',
+            '/usr/local/bin/terraform-ls'
+        ])
+        
+        for terraform_ls_cmd in terraform_ls_candidates:
+            try:
+                result = subprocess.run([terraform_ls_cmd, "version"], capture_output=True, text=True, check=False)
+                if result.returncode == 0:
+                    return terraform_ls_cmd
+            except (FileNotFoundError, OSError):
+                continue
+        
+        # Fallback to default if nothing works (will likely fail later, but better than crashing here)
+        return "terraform-ls.exe" if os.name == "nt" else "terraform-ls"
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
