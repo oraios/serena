@@ -32,63 +32,46 @@ class TerraformLS(SolidLanguageServer):
     def _get_terraform_version():
         """Get the installed Terraform version or None if not found."""
         import os
+        import shutil
         
-        # Build list of terraform executables to try in order of preference
-        terraform_candidates = []
+        # 1. Try to find terraform using shutil.which (standard Python way)
+        terraform_cmd = shutil.which("terraform")
         
-        # 1. Try TERRAFORM_CLI_PATH first (set by hashicorp/setup-terraform action)
-        terraform_cli_path = os.environ.get('TERRAFORM_CLI_PATH')
-        if terraform_cli_path:
-            terraform_candidates.extend([
-                os.path.join(terraform_cli_path, 'terraform.exe'),
-                os.path.join(terraform_cli_path, 'terraform')
-            ])
+        # 2. Fallback to TERRAFORM_CLI_PATH (set by hashicorp/setup-terraform action)
+        if not terraform_cmd:
+            terraform_cli_path = os.environ.get('TERRAFORM_CLI_PATH')
+            if terraform_cli_path:
+                terraform_exe = os.path.join(terraform_cli_path, "terraform.exe")
+                if os.path.exists(terraform_exe):
+                    terraform_cmd = terraform_exe
         
-        # 2. Try standard PATH executables
-        terraform_candidates.extend(['terraform', 'terraform.exe'])
-        
-        # 3. Try common manual installation paths
-        terraform_candidates.extend([
-            '/tmp/terraform/terraform.exe',
-            '/tmp/terraform/terraform',
-            '/usr/local/bin/terraform'
-        ])
-        
-        for terraform_cmd in terraform_candidates:
+        # 3. Try to run the terraform command if found
+        if terraform_cmd:
             try:
                 result = subprocess.run([terraform_cmd, "version"], capture_output=True, text=True, check=False)
                 if result.returncode == 0:
                     return result.stdout.strip()
             except (FileNotFoundError, OSError):
-                continue
+                pass
         
         return None
 
     @staticmethod
     def _get_terraform_ls_version():
         """Get the installed terraform-ls version or None if not found."""
-        import os
+        import shutil
         
-        # Build list of terraform-ls executables to try in order of preference
-        terraform_ls_candidates = []
+        # Try to find terraform-ls using shutil.which (standard Python way)
+        terraform_ls_cmd = shutil.which("terraform-ls")
         
-        # 1. Try standard PATH executables
-        terraform_ls_candidates.extend(['terraform-ls', 'terraform-ls.exe'])
-        
-        # 2. Try common manual installation paths
-        terraform_ls_candidates.extend([
-            '/tmp/terraform-ls/terraform-ls.exe',
-            '/tmp/terraform-ls/terraform-ls',
-            '/usr/local/bin/terraform-ls'
-        ])
-        
-        for terraform_ls_cmd in terraform_ls_candidates:
+        # Try to run the terraform-ls command if found
+        if terraform_ls_cmd:
             try:
                 result = subprocess.run([terraform_ls_cmd, "version"], capture_output=True, text=True, check=False)
                 if result.returncode == 0:
                     return result.stdout.strip()
             except (FileNotFoundError, OSError):
-                continue
+                pass
         
         return None
 
@@ -133,31 +116,22 @@ class TerraformLS(SolidLanguageServer):
     @staticmethod
     def _find_terraform_ls_executable():
         """Find the terraform-ls executable that actually works."""
-        import os
+        import shutil
         
-        # Build list of terraform-ls executables to try in order of preference
-        terraform_ls_candidates = []
+        # Try to find terraform-ls using shutil.which (standard Python way)
+        terraform_ls_cmd = shutil.which("terraform-ls")
         
-        # 1. Try standard PATH executables
-        terraform_ls_candidates.extend(['terraform-ls', 'terraform-ls.exe'])
-        
-        # 2. Try common manual installation paths
-        terraform_ls_candidates.extend([
-            '/tmp/terraform-ls/terraform-ls.exe',
-            '/tmp/terraform-ls/terraform-ls',
-            '/usr/local/bin/terraform-ls'
-        ])
-        
-        for terraform_ls_cmd in terraform_ls_candidates:
+        # If found, verify it works by running version command
+        if terraform_ls_cmd:
             try:
                 result = subprocess.run([terraform_ls_cmd, "version"], capture_output=True, text=True, check=False)
                 if result.returncode == 0:
                     return terraform_ls_cmd
             except (FileNotFoundError, OSError):
-                continue
+                pass
         
         # Fallback to default if nothing works (will likely fail later, but better than crashing here)
-        return "terraform-ls.exe" if os.name == "nt" else "terraform-ls"
+        return "terraform-ls"
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """

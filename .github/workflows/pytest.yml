@@ -55,26 +55,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.5.0"
-      - name: Add Terraform to PATH (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          # Find terraform.exe and add its directory to PATH
-          terraform_path=$(find /c -name "terraform.exe" 2>/dev/null | head -1)
-          if [ -n "$terraform_path" ]; then
-            terraform_dir=$(dirname "$terraform_path")
-            echo "Found terraform at: $terraform_path"
-            echo "Adding directory to PATH: $terraform_dir"
-            echo "$terraform_dir" >> $GITHUB_PATH
-          else
-            echo "Terraform not found, trying alternative installation..."
-            # Alternative: Download and install manually
-            curl -LO "https://releases.hashicorp.com/terraform/1.5.0/terraform_1.5.0_windows_amd64.zip"
-            unzip terraform_1.5.0_windows_amd64.zip
-            mkdir -p /tmp/terraform
-            mv terraform.exe /tmp/terraform/
-            echo "/tmp/terraform" >> $GITHUB_PATH
-          fi
+          terraform_wrapper: false
       - name: Install terraform-ls
         shell: bash
         run: |
@@ -93,18 +74,6 @@ jobs:
             mv terraform-ls.exe /tmp/terraform-ls/
             echo "/tmp/terraform-ls" >> $GITHUB_PATH
           fi
-      - name: Debug PATH and installation (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          echo "PATH: $PATH"
-          echo "Checking for terraform..."
-          which terraform || echo "terraform not found in PATH"
-          echo "Checking for terraform.exe..."
-          which terraform.exe || echo "terraform.exe not found in PATH"
-          echo "Looking for terraform in common locations..."
-          find /c -name "terraform.exe" 2>/dev/null || echo "terraform.exe not found anywhere"
-          ls -la /c/hostedtoolcache/ || echo "hostedtoolcache not found"
       - name: Verify Terraform and terraform-ls installation
         shell: bash
         run: |
