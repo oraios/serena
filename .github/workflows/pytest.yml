@@ -60,20 +60,16 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Write-Host "Installing terraform-ls manually for Windows (Chocolatey package not available)"
+          Write-Host "Installing terraform-ls manually for Windows"
           $ver = '0.32.7'
           $zip = "terraform-ls_${ver}_windows_amd64.zip"
           Invoke-WebRequest -Uri "https://releases.hashicorp.com/terraform-ls/$ver/$zip" -OutFile $zip
           
-          # Use native Windows path (CRITICAL FIX)
           $dest = "$env:USERPROFILE\terraform-ls"
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
           Expand-Archive $zip -DestinationPath $dest -Force
           
           Write-Host "terraform-ls installed to: $dest"
-          Write-Host "Adding to GITHUB_PATH: $dest"
-          
-          # Add the Windows-native directory to PATH for future steps
           echo "$dest" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Install terraform-ls (Linux/macOS)
         if: runner.os != 'Windows'
@@ -89,37 +85,6 @@ jobs:
           chmod +x "$HOME/bin/terraform-ls"
           echo "$HOME/bin" >> "$GITHUB_PATH"
           echo "terraform-ls installed to $HOME/bin"
-      - name: Enhanced Environment Verification (for debugging)
-        shell: bash
-        run: |
-          echo "=== Environment Debugging Information ==="
-          echo "Operating System: ${{ runner.os }}"
-          echo "Python Version: ${{ matrix.python-version }}"
-          echo ""
-          echo "=== PATH Environment Variable ==="
-          echo "$PATH"
-          echo ""
-          echo "=== Terraform Executable Location ==="
-          if command -v terraform &> /dev/null; then
-            echo "terraform found at: $(which terraform)"
-            echo "terraform version output:"
-            terraform version
-          else
-            echo "ERROR: terraform not found in PATH"
-          fi
-          echo ""
-          echo "=== terraform-ls Executable Location ==="
-          if command -v terraform-ls &> /dev/null; then
-            echo "terraform-ls found at: $(which terraform-ls)"
-            echo "terraform-ls version output:"
-            terraform-ls version
-          else
-            echo "ERROR: terraform-ls not found in PATH"
-          fi
-          echo ""
-          echo "=== Environment Variables ==="
-          echo "TERRAFORM_CLI_PATH: ${TERRAFORM_CLI_PATH:-'not set'}"
-          echo "CHECKPOINT_DISABLE: ${CHECKPOINT_DISABLE:-'not set'}"
       - name: Install uv
         shell: bash
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -140,6 +105,4 @@ jobs:
         run: uv pip install -e ".[dev]"
       - name: Test with pytest
         shell: bash
-        env:
-          CHECKPOINT_DISABLE: 1  # Disable Terraform network calls to prevent hangs
         run: uv run poe test
