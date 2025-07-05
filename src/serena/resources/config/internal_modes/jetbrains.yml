@@ -1,0 +1,11 @@
+description: JetBrains tools replace language server-based tools
+prompt: |
+  You have access to the very powerful JetBrains tools for symbolic operations:
+    * `jet_brains_find_symbol` replaces `find_symbol`
+    * `jet_brains_find_symbol_references` replaces `find_referencing_symbols`
+excluded_tools:
+ - find_symbol
+ - find_referencing_symbols
+included_optional_tools:
+  - jet_brains_find_symbol
+  - jet_brains_find_symbol_references

@@ -237,11 +237,6 @@ class SerenaAgent:
         self._all_tools: dict[type[Tool], Tool] = {tool_class: tool_class(self) for tool_class in ToolRegistry().get_all_tool_classes()}
         tool_names = [tool.get_name_from_cls() for tool in self._all_tools.values()]
 
-        # determine the set exposed tools (which e.g. the MCP shall see), limited by the Serena config
-        # as well as the context (which is fixed for the session)
-        tool_set = ToolSet().apply(self.serena_config, self._context)
-        self._exposed_tools = {tc: t for tc, t in self._all_tools.items() if tool_set.includes_name(t.get_name())}
-
         # If GUI log window is enabled, set the tool names for highlighting
         if self._gui_log_handler is not None:
             self._gui_log_handler.log_viewer.set_tool_names(tool_names)
@@ -261,6 +256,16 @@ class SerenaAgent:
         log.info(f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()})")
         log.info("Configuration file: %s", self.serena_config.config_file_path)
         log.info("Available projects: {}".format(", ".join(self.serena_config.project_names)))
+        log.info(f"Loaded tools ({len(self._all_tools)}): {', '.join([tool.get_name_from_cls() for tool in self._all_tools.values()])}")
+
+        # determine the base toolset defining the set of exposed tools (which e.g. the MCP shall see),
+        # limited by the Serena config, the context (which is fixed for the session) and JetBrains mode
+        tool_inclusion_definitions = [self.serena_config, self._context]
+        if self.serena_config.jetbrains:
+            tool_inclusion_definitions.append(SerenaAgentMode.from_name_internal("jetbrains"))
+        self._base_tool_set = ToolSet.default().apply(*tool_inclusion_definitions)
+        self._exposed_tools = {tc: t for tc, t in self._all_tools.items() if self._base_tool_set.includes_name(t.get_name())}
+        log.info(f"Number of exposed tools: {len(self._exposed_tools)}")
 
         # create executor for starting the language server and running tools in another thread
         # This executor is used to achieve linear task execution, so it is important to use a single-threaded executor.
@@ -286,10 +291,6 @@ class SerenaAgent:
         if modes is None:
             modes = SerenaAgentMode.load_default_modes()
         self._modes = modes
-
-        # log tool information
-        log.info(f"Loaded tools ({len(self._all_tools)}): {', '.join([tool.get_name_from_cls() for tool in self._all_tools.values()])}")
-        log.info(f"Number of exposed tools given {self._context}: {len(self._exposed_tools)}")
 
         self._active_tools: dict[type[Tool], Tool] = {}
         self._update_active_tools()
@@ -407,13 +408,15 @@ class SerenaAgent:
 
     def _update_active_tools(self) -> None:
         """
-        Update the active tools based on context, modes, and project configuration.
+        Update the active tools based on enabled modes and the active project.
+        The base tool set already takes the Serena configuration and the context into account
+        (as well as any internal modes that are not handled dynamically, such as JetBrains mode).
         """
-        tool_set = ToolSet().apply(self.serena_config, self._context, *self._modes)
+        tool_set = self._base_tool_set.apply(*self._modes)
         if self._active_project is not None:
-            tool_set.apply(self._active_project.project_config)
+            tool_set = tool_set.apply(self._active_project.project_config)
             if self._active_project.project_config.read_only:
-                tool_set.exclude_editing_tools()
+                tool_set = tool_set.without_editing_tools()
 
         self._active_tools = {
             tool_class: tool_instance

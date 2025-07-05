@@ -42,6 +42,12 @@ excluded_tools: []
 included_optional_tools: []
 # list of optional tools (which are disabled by default) to be included
 
+jetbrains: False
+# whether to enable JetBrains mode and use tools based on the Serena JetBrains IDE plugin
+# instead of language server-based tools
+# NOTE: The plugin is yet unreleased. This is for Serena developers only.
+
+
 # MANAGED BY SERENA, KEEP AT THE BOTTOM OF THE YAML AND DON'T EDIT WITHOUT NEED
 # The list of registered projects.
 # To add a project, within a chat, simply ask Serena to "activate the project /path/to/project" or,

@@ -36,35 +36,60 @@ DEFAULT_TOOL_TIMEOUT: float = 240
 
 
 class ToolSet:
-    def __init__(self) -> None:
+    def __init__(self, tool_names: set[str]) -> None:
+        self._tool_names = tool_names
+
+    @classmethod
+    def default(cls) -> "ToolSet":
+        """
+        :return: the default tool set, which contains all tools that are enabled by default
+        """
         from serena.tools import ToolRegistry
 
-        self._tool_names = set(ToolRegistry().get_tool_names_default_enabled())
+        return cls(set(ToolRegistry().get_tool_names_default_enabled()))
 
-    def apply(self, *tool_inclusion_definitions: "ToolInclusionDefinition") -> Self:
+    def apply(self, *tool_inclusion_definitions: "ToolInclusionDefinition") -> "ToolSet":
+        """
+        :param tool_inclusion_definitions: the definitions to apply
+        :return: a new tool set with the definitions applied
+        """
         from serena.tools import ToolRegistry
 
         registry = ToolRegistry()
+        tool_names = set(self._tool_names)
         for definition in tool_inclusion_definitions:
+            included_tools = []
+            excluded_tools = []
             for included_tool in definition.included_optional_tools:
                 if not registry.is_valid_tool_name(included_tool):
                     raise ValueError(f"Invalid tool name '{included_tool}' provided for inclusion")
-                self._tool_names.add(included_tool)
+                if included_tool not in tool_names:
+                    tool_names.add(included_tool)
+                    included_tools.append(included_tool)
             for excluded_tool in definition.excluded_tools:
                 if not registry.is_valid_tool_name(excluded_tool):
                     raise ValueError(f"Invalid tool name '{excluded_tool}' provided for exclusion")
                 if excluded_tool in self._tool_names:
-                    self._tool_names.remove(excluded_tool)
-        return self
+                    tool_names.remove(excluded_tool)
+                    excluded_tools.append(excluded_tool)
+            if included_tools:
+                log.info(f"{definition} included {len(included_tools)} tools: {', '.join(included_tools)}")
+            if excluded_tools:
+                log.info(f"{definition} excluded {len(excluded_tools)} tools: {', '.join(excluded_tools)}")
+        return ToolSet(tool_names)
 
-    def exclude_editing_tools(self) -> Self:
+    def without_editing_tools(self) -> "ToolSet":
+        """
+        :return: a new tool set that excludes all tools that can edit
+        """
         from serena.tools import ToolRegistry
 
         registry = ToolRegistry()
-        for tool_name in list(self._tool_names):
+        tool_names = set(self._tool_names)
+        for tool_name in self._tool_names:
             if registry.get_tool_class_by_name(tool_name).can_edit():
-                self._tool_names.remove(tool_name)
-        return self
+                tool_names.remove(tool_name)
+        return ToolSet(tool_names)
 
     def get_tool_names(self) -> set[str]:
         """
@@ -114,6 +139,9 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
     encoding: str = DEFAULT_ENCODING
 
     SERENA_DEFAULT_PROJECT_FILE = "project.yml"
+
+    def _tostring_includes(self) -> list[str]:
+        return ["project_name"]
 
     @classmethod
     def autogenerate(cls, project_root: str | Path, project_name: str | None = None, save_to_disk: bool = True) -> Self:
@@ -222,7 +250,7 @@ class Project:
 
 
 @dataclass(kw_only=True)
-class SerenaConfig(ToolInclusionDefinition):
+class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     """
     Holds the Serena agent configuration, which is typically loaded from a YAML configuration file
     (when instantiated via :method:`from_config_file`), which is updated when projects are added or removed.
@@ -242,9 +270,16 @@ class SerenaConfig(ToolInclusionDefinition):
     the path to the configuration file to which updates of the configuration shall be saved;
     if None, the configuration is not saved to disk
     """
+    jetbrains: bool = False
+    """
+    whether to apply JetBrains mode
+    """
 
     CONFIG_FILE = "serena_config.yml"
     CONFIG_FILE_DOCKER = "serena_config.docker.yml"  # Docker-specific config file; auto-generated if missing, mounted via docker-compose for user customization
+
+    def _tostring_includes(self) -> list[str]:
+        return ["config_file_path"]
 
     @classmethod
     def _generate_config_file(cls, config_file_path: str) -> None:
@@ -333,6 +368,7 @@ class SerenaConfig(ToolInclusionDefinition):
         instance.trace_lsp_communication = loaded_commented_yaml.get("trace_lsp_communication", False)
         instance.excluded_tools = loaded_commented_yaml.get("excluded_tools", [])
         instance.included_optional_tools = loaded_commented_yaml.get("included_optional_tools", [])
+        instance.jetbrains = loaded_commented_yaml.get("jetbrains", False)
 
         # re-save the configuration file if any migrations were performed
         if num_project_migrations > 0:

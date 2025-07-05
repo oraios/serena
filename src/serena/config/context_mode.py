@@ -14,7 +14,7 @@ from sensai.util import logging
 from sensai.util.string import ToStringMixin
 
 from serena.config.serena_config import ToolInclusionDefinition
-from serena.constants import CONTEXT_YAMLS_DIR, DEFAULT_CONTEXT, DEFAULT_MODES, MODE_YAMLS_DIR
+from serena.constants import CONTEXT_YAMLS_DIR, DEFAULT_CONTEXT, DEFAULT_MODES, INTERNAL_MODE_YAMLS_DIR, MODE_YAMLS_DIR
 
 if TYPE_CHECKING:
     pass
@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 
 
 @dataclass(kw_only=True)
-class SerenaAgentMode(ToolInclusionDefinition):
+class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
     """Represents a mode of operation for the agent, typically read off a YAML file.
     An agent can be in multiple modes simultaneously as long as they are not mutually exclusive.
     The modes can be adjusted after the agent is running, for example for switching from planning to editing.
@@ -32,6 +32,9 @@ class SerenaAgentMode(ToolInclusionDefinition):
     name: str
     prompt: str
     description: str = ""
+
+    def _tostring_includes(self) -> list[str]:
+        return ["name"]
 
     def to_json_dict(self) -> dict[str, str | list[str]]:
         result = asdict(self)
@@ -67,6 +70,14 @@ class SerenaAgentMode(ToolInclusionDefinition):
                 f"Mode {name} not found in {MODE_YAMLS_DIR}. You can load custom modes by using from_yaml() instead. "
                 f"Available modes: {cls.list_registered_mode_names()}"
             )
+        return cls.from_yaml(yaml_path)
+
+    @classmethod
+    def from_name_internal(cls, name: str) -> Self:
+        """Loads an internal Serena mode"""
+        yaml_path = os.path.join(INTERNAL_MODE_YAMLS_DIR, f"{name}.yml")
+        if not os.path.exists(yaml_path):
+            raise FileNotFoundError(f"Internal mode '{name}' not found in {INTERNAL_MODE_YAMLS_DIR}")
         return cls.from_yaml(yaml_path)
 
     @classmethod
