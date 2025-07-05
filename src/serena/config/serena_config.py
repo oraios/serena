@@ -87,9 +87,14 @@ class ProjectConfig(ToStringMixin):
         language_composition = determine_programming_language_composition(str(project_root))
         if len(language_composition) == 0:
             raise ValueError(
-                f"Failed to autogenerate project.yaml: no programming language detected in project {project_root}. "
-                f"You can either add some files that correspond to one of the supported programming languages, "
-                f"or create the file {os.path.join(project_root, cls.rel_path_to_project_yml())} manually and specify the language there."
+                f"No source files found in {project_root}\n\n"
+                f"To use Serena with this project, you need to either:\n"
+                f"1. Add source files in one of the supported languages (Python, JavaScript/TypeScript, Java, C#, Rust, Go, Ruby, C++, PHP)\n"
+                f"2. Create a project configuration file manually at:\n"
+                f"   {os.path.join(project_root, cls.rel_path_to_project_yml())}\n\n"
+                f"Example project.yml:\n"
+                f"  project_name: {project_name}\n"
+                f"  language: python  # or typescript, java, csharp, rust, go, ruby, cpp, php\n"
             )
         # find the language with the highest percentage
         dominant_language = max(language_composition.keys(), key=lambda lang: language_composition[lang])
