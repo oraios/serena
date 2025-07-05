@@ -112,11 +112,12 @@ class OmniSharp(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["bin", "obj"]
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    @staticmethod
+    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the Omnisharp Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "omnisharp", "initialize_params.json"), encoding="utf-8") as f:
             d = json.load(f)
 
         del d["_description"]
@@ -136,30 +137,32 @@ class OmniSharp(SolidLanguageServer):
 
         return d
 
-    def setupRuntimeDependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> tuple[str, str]:
+    @staticmethod
+    def setupRuntimeDependencies(logger: LanguageServerLogger, config: LanguageServerConfig) -> tuple[str, str]:
         """
         Setup runtime dependencies for OmniSharp.
         """
         platform_id = PlatformUtils.get_platform_id()
         dotnet_version = PlatformUtils.get_dotnet_version()
 
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "omnisharp", "runtime_dependencies.json"), encoding="utf-8") as f:
             d = json.load(f)
             del d["_description"]
 
         assert platform_id in [
             PlatformId.LINUX_x64,
             PlatformId.WIN_x64,
-        ], "Only linux-x64 and win-x64 platform is supported for in multilspy at the moment"
+        ], f"Only linux-x64 and win-x64 platform is supported at the moment but got {platform_id=}"
         assert dotnet_version in [
             DotnetVersion.V6,
             DotnetVersion.V7,
             DotnetVersion.V8,
-        ], "Only dotnet version 6 and 7 are supported in multilspy at the moment"
+            DotnetVersion.V9,
+        ], f"Only dotnet version 6-9 are supported at the moment but got {dotnet_version=}"
 
         # TODO: Do away with this assumption
         # Currently, runtime binaries are not available for .Net 7 and .Net 8. Hence, we assume .Net 6 runtime binaries to be compatible with .Net 7, .Net 8
-        if dotnet_version in [DotnetVersion.V7, DotnetVersion.V8]:
+        if dotnet_version in [DotnetVersion.V7, DotnetVersion.V8, DotnetVersion.V9]:
             dotnet_version = DotnetVersion.V6
 
         runtime_dependencies = d["runtimeDependencies"]
@@ -363,7 +366,7 @@ class OmniSharp(SolidLanguageServer):
         )
         init_response = self.server.send.initialize(initialize_params)
         self.server.notify.initialized({})
-        with open(os.path.join(os.path.dirname(__file__), "workspace_did_change_configuration.json"), encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "omnisharp", "workspace_did_change_configuration.json"), encoding="utf-8") as f:
             self.server.notify.workspace_did_change_configuration({"settings": json.load(f)})
         assert "capabilities" in init_response
         if "definitionProvider" in init_response["capabilities"] and init_response["capabilities"]["definitionProvider"]:

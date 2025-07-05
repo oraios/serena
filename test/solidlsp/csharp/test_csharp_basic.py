@@ -57,7 +57,7 @@ class TestCSharpLanguageServer:
                 break
         assert add_symbol is not None, "Could not find 'Add' method symbol in Program.cs"
         sel_start = add_symbol["selectionRange"]["start"]
-        refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
+        refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
         assert any(
             "Program.cs" in ref.get("relativePath", "") for ref in refs
         ), "Program.cs should reference Add method (tried all positions in selectionRange)"

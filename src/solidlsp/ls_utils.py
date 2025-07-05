@@ -257,6 +257,7 @@ class DotnetVersion(str, Enum):
     V6 = "6"
     V7 = "7"
     V8 = "8"
+    V9 = "9"
     VMONO = "mono"
 
 
@@ -345,15 +346,14 @@ class PlatformUtils:
 
             # Check for supported versions in order of preference (latest first)
             for version_cmd_output in available_version_cmd_output:
+                if version_cmd_output.startswith("9"):
+                    return DotnetVersion.V9
                 if version_cmd_output.startswith("8"):
                     return DotnetVersion.V8
-            for version_cmd_output in available_version_cmd_output:
                 if version_cmd_output.startswith("7"):
                     return DotnetVersion.V7
-            for version_cmd_output in available_version_cmd_output:
                 if version_cmd_output.startswith("6"):
                     return DotnetVersion.V6
-            for version_cmd_output in available_version_cmd_output:
                 if version_cmd_output.startswith("4"):
                     return DotnetVersion.V4
 
