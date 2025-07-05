@@ -108,6 +108,10 @@ class SolidLanguageServer(ABC):
         ls: SolidLanguageServer
 
         if config.code_language == Language.PYTHON:
+            # We can also use jedi
+            # from solidlsp.language_servers.jedi_server import JediServer
+            #
+            # ls = JediServer(config, logger, repository_root_path)
             from solidlsp.language_servers.pyright_server import (
                 PyrightServer,
             )
@@ -674,6 +678,14 @@ class SolidLanguageServer(ABC):
             assert LSPConstants.RANGE in item
 
             abs_path = PathUtils.uri_to_path(item[LSPConstants.URI])
+            if not Path(abs_path).is_relative_to(self.repository_root_path):
+                self.logger.log(
+                    "Found a reference in a path outside the repository, probably the LS is parsing things in installed packages or in the standardlib! "
+                    f"Path: {abs_path}. This is a bug but we currently simply skip these references.",
+                    logging.WARNING,
+                )
+                continue
+
             rel_path = Path(abs_path).relative_to(self.repository_root_path)
             if self.is_ignored_path(str(rel_path)):
                 self.logger.log(f"Ignoring reference in {rel_path} since it should be ignored", logging.DEBUG)
