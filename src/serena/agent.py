@@ -23,7 +23,7 @@ from sensai.util.logging import LogTime
 
 from serena import serena_version
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
-from serena.config.serena_config import Project, SerenaConfig, get_serena_managed_dir
+from serena.config.serena_config import Project, SerenaConfig, ToolSet, get_serena_managed_dir
 from serena.constants import (
     SERENA_LOG_FORMAT,
 )
@@ -234,13 +234,8 @@ class SerenaAgent:
         self._context = context
 
         # instantiate all tool classes
-        self._all_tools: dict[type[Tool], Tool] = {tool_class: tool_class(self) for tool_class in ToolRegistry.get_all_tool_classes()}
+        self._all_tools: dict[type[Tool], Tool] = {tool_class: tool_class(self) for tool_class in ToolRegistry().get_all_tool_classes()}
         tool_names = [tool.get_name_from_cls() for tool in self._all_tools.values()]
-
-        # determine the set exposed tools (which e.g. the MCP shall see), limited by the context
-        # (which is fixed for the session)
-        excluded_tool_classes = set(self._context.get_excluded_tool_classes())
-        self._exposed_tools = {tc: t for tc, t in self._all_tools.items() if tc not in excluded_tool_classes}
 
         # If GUI log window is enabled, set the tool names for highlighting
         if self._gui_log_handler is not None:
@@ -261,6 +256,16 @@ class SerenaAgent:
         log.info(f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()})")
         log.info("Configuration file: %s", self.serena_config.config_file_path)
         log.info("Available projects: {}".format(", ".join(self.serena_config.project_names)))
+        log.info(f"Loaded tools ({len(self._all_tools)}): {', '.join([tool.get_name_from_cls() for tool in self._all_tools.values()])}")
+
+        # determine the base toolset defining the set of exposed tools (which e.g. the MCP shall see),
+        # limited by the Serena config, the context (which is fixed for the session) and JetBrains mode
+        tool_inclusion_definitions = [self.serena_config, self._context]
+        if self.serena_config.jetbrains:
+            tool_inclusion_definitions.append(SerenaAgentMode.from_name_internal("jetbrains"))
+        self._base_tool_set = ToolSet.default().apply(*tool_inclusion_definitions)
+        self._exposed_tools = {tc: t for tc, t in self._all_tools.items() if self._base_tool_set.includes_name(t.get_name())}
+        log.info(f"Number of exposed tools: {len(self._exposed_tools)}")
 
         # create executor for starting the language server and running tools in another thread
         # This executor is used to achieve linear task execution, so it is important to use a single-threaded executor.
@@ -286,10 +291,6 @@ class SerenaAgent:
         if modes is None:
             modes = SerenaAgentMode.load_default_modes()
         self._modes = modes
-
-        # log tool information
-        log.info(f"Loaded tools ({len(self._all_tools)}): {', '.join([tool.get_name_from_cls() for tool in self._all_tools.values()])}")
-        log.info(f"Number of exposed tools given {self._context}: {len(self._exposed_tools)}")
 
         self._active_tools: dict[type[Tool], Tool] = {}
         self._update_active_tools()
@@ -407,43 +408,23 @@ class SerenaAgent:
 
     def _update_active_tools(self) -> None:
         """
-        Update the active tools based on context, modes, and project configuration.
-        All tool exclusions are merged together.
+        Update the active tools based on enabled modes and the active project.
+        The base tool set already takes the Serena configuration and the context into account
+        (as well as any internal modes that are not handled dynamically, such as JetBrains mode).
         """
-        excluded_tool_classes: set[type[Tool]] = set()
-        # modes
-        for mode in self._modes:
-            mode_excluded_tool_classes = mode.get_excluded_tool_classes()
-            if len(mode_excluded_tool_classes) > 0:
-                log.info(
-                    f"Mode {mode.name} excluded {len(mode_excluded_tool_classes)} tools: {', '.join([tool.get_name_from_cls() for tool in mode_excluded_tool_classes])}"
-                )
-                excluded_tool_classes.update(mode_excluded_tool_classes)
-        # context
-        context_excluded_tool_classes = self._context.get_excluded_tool_classes()
-        if len(context_excluded_tool_classes) > 0:
-            log.info(
-                f"Context {self._context.name} excluded {len(context_excluded_tool_classes)} tools: {', '.join([tool.get_name_from_cls() for tool in context_excluded_tool_classes])}"
-            )
-            excluded_tool_classes.update(context_excluded_tool_classes)
-        # project config
+        tool_set = self._base_tool_set.apply(*self._modes)
         if self._active_project is not None:
-            project_excluded_tool_classes = self._active_project.project_config.get_excluded_tool_classes()
-            if len(project_excluded_tool_classes) > 0:
-                log.info(
-                    f"Project {self._active_project.project_name} excluded {len(project_excluded_tool_classes)} tools: {', '.join([tool.get_name_from_cls() for tool in project_excluded_tool_classes])}"
-                )
-                excluded_tool_classes.update(project_excluded_tool_classes)
+            tool_set = tool_set.apply(self._active_project.project_config)
             if self._active_project.project_config.read_only:
-                for tool_class in self._all_tools:
-                    if tool_class.can_edit():
-                        excluded_tool_classes.add(tool_class)
+                tool_set = tool_set.without_editing_tools()
 
         self._active_tools = {
-            tool_class: tool_instance for tool_class, tool_instance in self._all_tools.items() if tool_class not in excluded_tool_classes
+            tool_class: tool_instance
+            for tool_class, tool_instance in self._all_tools.items()
+            if tool_set.includes_name(tool_instance.get_name())
         }
 
-        log.info(f"Active tools after all exclusions ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
+        log.info(f"Active tools ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
 
     def issue_task(self, task: Callable[[], Any], name: str | None = None) -> Future:
         """
@@ -648,7 +629,7 @@ class SerenaAgent:
         return self._all_tools[tool_class]  # type: ignore
 
     def print_tool_overview(self) -> None:
-        ToolRegistry.print_tool_overview(self._active_tools.values())
+        ToolRegistry().print_tool_overview(self._active_tools.values())
 
     def mark_file_modified(self, relativ_path: str) -> None:
         assert self.lines_read is not None

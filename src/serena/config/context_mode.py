@@ -4,7 +4,7 @@ Context and Mode configuration loader
 
 import os
 from copy import copy
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
@@ -13,16 +13,17 @@ import yaml
 from sensai.util import logging
 from sensai.util.string import ToStringMixin
 
-from serena.constants import CONTEXT_YAMLS_DIR, DEFAULT_CONTEXT, DEFAULT_MODES, MODE_YAMLS_DIR
+from serena.config.serena_config import ToolInclusionDefinition
+from serena.constants import CONTEXT_YAMLS_DIR, DEFAULT_CONTEXT, DEFAULT_MODES, INTERNAL_MODE_YAMLS_DIR, MODE_YAMLS_DIR
 
 if TYPE_CHECKING:
-    from serena.agent import Tool
+    pass
 
 log = logging.getLogger(__name__)
 
 
-@dataclass
-class SerenaAgentMode:
+@dataclass(kw_only=True)
+class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
     """Represents a mode of operation for the agent, typically read off a YAML file.
     An agent can be in multiple modes simultaneously as long as they are not mutually exclusive.
     The modes can be adjusted after the agent is running, for example for switching from planning to editing.
@@ -31,7 +32,9 @@ class SerenaAgentMode:
     name: str
     prompt: str
     description: str = ""
-    excluded_tools: set[str] = field(default_factory=set)
+
+    def _tostring_includes(self) -> list[str]:
+        return ["name"]
 
     def to_json_dict(self) -> dict[str, str | list[str]]:
         result = asdict(self)
@@ -49,12 +52,6 @@ class SerenaAgentMode:
         print(f"{self.name}:\n {self.description}")
         if self.excluded_tools:
             print(" excluded tools:\n  " + ", ".join(sorted(self.excluded_tools)))
-
-    def get_excluded_tool_classes(self) -> list[type["Tool"]]:
-        """Get the list of tool classes that are excluded from the mode."""
-        from serena.agent import ToolRegistry
-
-        return [ToolRegistry.get_tool_class_by_name(tool_name) for tool_name in self.excluded_tools]
 
     @classmethod
     def from_yaml(cls, yaml_path: str | Path) -> Self:
@@ -76,6 +73,14 @@ class SerenaAgentMode:
         return cls.from_yaml(yaml_path)
 
     @classmethod
+    def from_name_internal(cls, name: str) -> Self:
+        """Loads an internal Serena mode"""
+        yaml_path = os.path.join(INTERNAL_MODE_YAMLS_DIR, f"{name}.yml")
+        if not os.path.exists(yaml_path):
+            raise FileNotFoundError(f"Internal mode '{name}' not found in {INTERNAL_MODE_YAMLS_DIR}")
+        return cls.from_yaml(yaml_path)
+
+    @classmethod
     def list_registered_mode_names(cls) -> list[str]:
         """Names of all registered modes (from the corresponding YAML files in the serena repo)."""
         return sorted([f.stem for f in Path(MODE_YAMLS_DIR).glob("*.yml")])
@@ -93,8 +98,8 @@ class SerenaAgentMode:
             return cls.from_yaml(name_or_path)
 
 
-@dataclass
-class SerenaAgentContext(ToStringMixin):
+@dataclass(kw_only=True)
+class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
     """Represents a context where the agent is operating (an IDE, a chat, etc.), typically read off a YAML file.
     An agent can only be in a single context at a time.
     The contexts cannot be changed after the agent is running.
@@ -103,7 +108,6 @@ class SerenaAgentContext(ToStringMixin):
     name: str
     prompt: str
     description: str = ""
-    excluded_tools: set[str] = field(default_factory=set)
 
     def _tostring_includes(self) -> list[str]:
         return ["name"]
@@ -118,12 +122,6 @@ class SerenaAgentContext(ToStringMixin):
         data = copy(data)
         data["excluded_tools"] = set(data["excluded_tools"])
         return cls(**data)
-
-    def get_excluded_tool_classes(self) -> list[type["Tool"]]:
-        """Get the list of tool classes that are excluded from the context."""
-        from serena.agent import ToolRegistry
-
-        return [ToolRegistry.get_tool_class_by_name(tool_name) for tool_name in self.excluded_tools]
 
     @classmethod
     def from_yaml(cls, yaml_path: str | Path) -> Self:

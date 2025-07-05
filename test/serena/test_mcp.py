@@ -271,7 +271,7 @@ def is_test_mock_class(tool_class: type) -> bool:
     )
 
 
-@pytest.mark.parametrize("tool_class", ToolRegistry.get_all_tool_classes())
+@pytest.mark.parametrize("tool_class", ToolRegistry().get_all_tool_classes())
 def test_make_tool_all_tools(tool_class) -> None:
     """Test that make_tool works for all tools in the codebase."""
 

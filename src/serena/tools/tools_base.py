@@ -2,8 +2,8 @@ import inspect
 import os
 import traceback
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator, Iterable
-from copy import copy
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Self, TypeVar
 
@@ -13,6 +13,7 @@ from sensai.util.string import dict_string
 
 from serena.prompt_factory import PromptFactory
 from serena.symbol import SymbolManager
+from serena.util.class_decorators import singleton
 from serena.util.inspection import iter_subclasses
 from solidlsp import SolidLanguageServer
 
@@ -70,6 +71,12 @@ class ToolMarkerCanEdit:
 
 class ToolMarkerDoesNotRequireActiveProject:
     pass
+
+
+class ToolMarkerOptional:
+    """
+    Marker class for optional tools that are disabled by default.
+    """
 
 
 class ToolInterface(ABC):
@@ -311,58 +318,44 @@ class EditedFileContext:
             # If they do not, we may have to add a call to notify it.
 
 
+@dataclass(kw_only=True)
+class RegisteredTool:
+    tool_class: type[Tool]
+    is_optional: bool
+    tool_name: str
+
+
+@singleton
 class ToolRegistry:
-    _tool_dict: dict[str, type[Tool]] | None = None
-    """maps tool name to the corresponding tool class"""
-
-    @staticmethod
-    def _iter_tool_classes() -> Generator[type[Tool], None, None]:
-        """
-        Iterate over Tool subclasses.
-        """
+    def __init__(self) -> None:
+        self._tool_dict: dict[str, RegisteredTool] = {}
         for cls in iter_subclasses(Tool):
-            if cls.__module__.startswith("serena.tools"):
-                yield cls
+            if not cls.__module__.startswith("serena.tools"):
+                continue
+            is_optional = issubclass(cls, ToolMarkerOptional)
+            name = cls.get_name_from_cls()
+            if name in self._tool_dict:
+                raise ValueError(f"Duplicate tool name found: {name}. Tool classes must have unique names.")
+            self._tool_dict[name] = RegisteredTool(tool_class=cls, is_optional=is_optional, tool_name=name)
 
-    @classmethod
-    def _get_tool_dict(cls) -> dict[str, type[Tool]]:
-        if cls._tool_dict is None:
-            cls._tool_dict = {}
-            for tool_class in cls._iter_tool_classes():
-                name = tool_class.get_name_from_cls()
-                if name in cls._tool_dict:
-                    raise ValueError(f"Duplicate tool name found: {name}. Tool classes must have unique names.")
-                cls._tool_dict[name] = tool_class
-        return cls._tool_dict
+    def get_tool_class_by_name(self, tool_name: str) -> type[Tool]:
+        return self._tool_dict[tool_name].tool_class
 
-    @classmethod
-    def get_tool_class_by_name(cls, tool_name: str) -> type[Tool]:
-        try:
-            return cls._get_tool_dict()[tool_name]
-        except KeyError as e:
-            available_tools = "\n".join(ToolRegistry.get_tool_names())
-            raise ValueError(f"Tool with name {tool_name} not found. Available tools:\n{available_tools}") from e
+    def get_all_tool_classes(self) -> list[type[Tool]]:
+        return list(t.tool_class for t in self._tool_dict.values())
 
-    @classmethod
-    def get_all_tool_classes(cls) -> list[type[Tool]]:
-        return list(cls._get_tool_dict().values())
+    def get_tool_names_default_enabled(self) -> list[str]:
+        """
+        :return: the list of tool names that are enabled by default (i.e. non-optional tools).
+        """
+        return [t.tool_name for t in self._tool_dict.values() if not t.is_optional]
 
-    @classmethod
-    def get_tool_names(cls) -> list[str]:
-        return list(cls._get_tool_dict().keys())
-
-    @classmethod
-    def tool_dict(cls) -> dict[str, type[Tool]]:
-        """Maps tool name to the corresponding tool class"""
-        return copy(cls._get_tool_dict())
-
-    @classmethod
-    def print_tool_overview(cls, tools: Iterable[type[Tool] | Tool] | None = None) -> None:
+    def print_tool_overview(self, tools: Iterable[type[Tool] | Tool] | None = None) -> None:
         """
         Print a summary of the tools. If no tools are passed, a summary of all tools is printed.
         """
         if tools is None:
-            tools = cls._get_tool_dict().values()
+            tools = [tool.tool_class for tool in self._tool_dict.values() if not tool.is_optional]
 
         tool_dict: dict[str, type[Tool] | Tool] = {}
         for tool_class in tools:
@@ -370,3 +363,6 @@ class ToolRegistry:
         for tool_name in sorted(tool_dict.keys()):
             tool_class = tool_dict[tool_name]
             print(f" * `{tool_name}`: {tool_class.get_tool_description().strip()}")
+
+    def is_valid_tool_name(self, tool_name: str) -> bool:
+        return tool_name in self._tool_dict
