@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.language_servers.csharp_language_server.csharp_language_server import (
+from solidlsp.language_servers.csharp_language_server import (
     CSharpLanguageServer,
     breadth_first_file_scan,
     find_solution_or_project_file,
@@ -196,8 +196,8 @@ class TestCSharpSolutionProjectOpening:
             # Should still prefer .sln file even though it's deeper
             assert result == str(solution_file)
 
-    @patch("solidlsp.language_servers.csharp_language_server.csharp_language_server.CSharpLanguageServer._ensure_server_installed")
-    @patch("solidlsp.language_servers.csharp_language_server.csharp_language_server.CSharpLanguageServer._start_server")
+    @patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed")
+    @patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._start_server")
     def test_csharp_language_server_logs_solution_discovery(self, mock_start_server, mock_ensure_server_installed):
         """Test that CSharpLanguageServer logs solution/project discovery during initialization."""
         with tempfile.TemporaryDirectory() as cache_dir:
@@ -221,8 +221,8 @@ class TestCSharpSolutionProjectOpening:
                 # Verify that logger was called with solution file discovery
                 mock_logger.log.assert_any_call(f"Found solution/project file: {solution_file}", 20)  # logging.INFO
 
-    @patch("solidlsp.language_servers.csharp_language_server.csharp_language_server.CSharpLanguageServer._ensure_server_installed")
-    @patch("solidlsp.language_servers.csharp_language_server.csharp_language_server.CSharpLanguageServer._start_server")
+    @patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed")
+    @patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._start_server")
     def test_csharp_language_server_logs_no_solution_warning(self, mock_start_server, mock_ensure_server_installed):
         """Test that CSharpLanguageServer logs warning when no solution/project files are found."""
         with tempfile.TemporaryDirectory() as cache_dir:

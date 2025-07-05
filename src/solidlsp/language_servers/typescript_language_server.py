@@ -2,7 +2,6 @@
 Provides TypeScript specific instantiation of the LanguageServer class. Contains various configurations and settings specific to TypeScript.
 """
 
-import json
 import logging
 import os
 import pathlib
@@ -45,7 +44,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         """
         Creates a TypeScriptLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        ts_lsp_executable_path = self.setup_runtime_dependencies(logger, config)
+        ts_lsp_executable_path = self._setup_runtime_dependencies(logger, config)
         super().__init__(
             config,
             logger,
@@ -65,9 +64,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             "coverage",
         ]
 
-    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    @staticmethod
+    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
         """
-        Setup runtime dependencies for TypeScript Language Server.
+        Setup runtime dependencies for TypeScript Language Server and return the command to start the server.
         """
         platform_id = PlatformUtils.get_platform_id()
 
@@ -82,11 +82,18 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy javascript/typescript at the moment"
 
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json")) as f:
-            d = json.load(f)
-            del d["_description"]
-
-        runtime_dependencies = d.get("runtimeDependencies", [])
+        runtime_dependencies = [
+            {
+                "id": "typescript",
+                "description": "typescript package for Linux, OSX, and Windows. Both x64 and arm64 are supported.",
+                "command": "npm install --prefix ./ typescript@5.5.4",
+            },
+            {
+                "id": "typescript-language-server",
+                "description": "typescript-language-server package for Linux, OSX, and Windows. Both x64 and arm64 are supported.",
+                "command": "npm install --prefix ./ typescript-language-server@4.3.3",
+            },
+        ]
         tsserver_ls_dir = os.path.join(os.path.dirname(__file__), "static", "ts-lsp")
         tsserver_executable_path = os.path.join(tsserver_ls_dir, "typescript-language-server")
 
@@ -130,29 +137,46 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         ), "typescript-language-server executable not found. Please install typescript-language-server and try again."
         return f"{tsserver_executable_path} --stdio"
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    @staticmethod
+    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the TypeScript Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json")) as f:
-            d = json.load(f)
-
-        del d["_description"]
-
-        d["processId"] = os.getpid()
-        assert d["rootPath"] == "$rootPath"
-        d["rootPath"] = repository_absolute_path
-
-        assert d["rootUri"] == "$rootUri"
-        d["rootUri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["uri"] == "$uri"
-        d["workspaceFolders"][0]["uri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["name"] == "$name"
-        d["workspaceFolders"][0]["name"] = os.path.basename(repository_absolute_path)
-
-        return d
+        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+        initialize_params = {
+            "locale": "en",
+            "capabilities": {
+                "textDocument": {
+                    "synchronization": {"didSave": True, "dynamicRegistration": True},
+                    "completion": {"dynamicRegistration": True, "completionItem": {"snippetSupport": True}},
+                    "definition": {"dynamicRegistration": True},
+                    "references": {"dynamicRegistration": True},
+                    "documentSymbol": {
+                        "dynamicRegistration": True,
+                        "hierarchicalDocumentSymbolSupport": True,
+                        "symbolKind": {"valueSet": list(range(1, 27))},
+                    },
+                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                    "signatureHelp": {"dynamicRegistration": True},
+                    "codeAction": {"dynamicRegistration": True},
+                },
+                "workspace": {
+                    "workspaceFolders": True,
+                    "didChangeConfiguration": {"dynamicRegistration": True},
+                    "symbol": {"dynamicRegistration": True},
+                },
+            },
+            "processId": os.getpid(),
+            "rootPath": repository_absolute_path,
+            "rootUri": root_uri,
+            "workspaceFolders": [
+                {
+                    "uri": root_uri,
+                    "name": os.path.basename(repository_absolute_path),
+                }
+            ],
+        }
+        return initialize_params
 
     def _start_server(self):
         """

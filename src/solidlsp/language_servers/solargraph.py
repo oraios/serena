@@ -31,7 +31,7 @@ class Solargraph(SolidLanguageServer):
         Creates a Solargraph instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        solargraph_executable_path = self.setup_runtime_dependencies(logger, config, repository_root_path)
+        solargraph_executable_path = self._setup_runtime_dependencies(logger, config, repository_root_path)
         super().__init__(
             config,
             logger,
@@ -48,15 +48,21 @@ class Solargraph(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["vendor"]
 
-    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig, repository_root_path: str) -> str:
+    @staticmethod
+    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig, repository_root_path: str) -> str:
         """
-        Setup runtime dependencies for Solargraph.
+        Setup runtime dependencies for Solargraph and return the command to start the server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), encoding="utf-8") as f:
-            d = json.load(f)
-            del d["_description"]
+        runtime_dependencies = [
+            {
+                "url": "https://rubygems.org/downloads/solargraph-0.51.1.gem",
+                "installCommand": "gem install solargraph -v 0.51.1",
+                "binaryName": "solargraph",
+                "archiveType": "gem",
+            }
+        ]
 
-        dependency = d["runtimeDependencies"][0]
+        dependency = runtime_dependencies[0]
 
         # Check if Ruby is installed
         try:
@@ -93,29 +99,26 @@ class Solargraph(SolidLanguageServer):
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to check or install Solargraph. {e.stderr}") from e
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    @staticmethod
+    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the Solargraph Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), encoding="utf-8") as f:
-            d = json.load(f)
-
-        del d["_description"]
-
-        d["processId"] = os.getpid()
-        assert d["rootPath"] == "$rootPath"
-        d["rootPath"] = repository_absolute_path
-
-        assert d["rootUri"] == "$rootUri"
-        d["rootUri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["uri"] == "$uri"
-        d["workspaceFolders"][0]["uri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["name"] == "$name"
-        d["workspaceFolders"][0]["name"] = os.path.basename(repository_absolute_path)
-
-        return d
+        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+        initialize_params = {
+            "capabilities": {},
+            "trace": "verbose",
+            "processId": os.getpid(),
+            "rootPath": repository_absolute_path,
+            "rootUri": pathlib.Path(repository_absolute_path).as_uri(),
+            "workspaceFolders": [
+                {
+                    "uri": root_uri,
+                    "name": os.path.basename(repository_absolute_path),
+                }
+            ],
+        }
+        return initialize_params
 
     def _start_server(self):
         """

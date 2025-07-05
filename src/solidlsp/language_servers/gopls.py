@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import pathlib
@@ -49,19 +48,19 @@ class Gopls(SolidLanguageServer):
             return None
         return None
 
-    @classmethod
-    def setup_runtime_dependency(cls):
+    @staticmethod
+    def _setup_runtime_dependency():
         """
         Check if required Go runtime dependencies are available.
         Raises RuntimeError with helpful message if dependencies are missing.
         """
-        go_version = cls._get_go_version()
+        go_version = Gopls._get_go_version()
         if not go_version:
             raise RuntimeError(
                 "Go is not installed. Please install Go from https://golang.org/doc/install and make sure it is added to your PATH."
             )
 
-        gopls_version = cls._get_gopls_version()
+        gopls_version = Gopls._get_gopls_version()
         if not gopls_version:
             raise RuntimeError(
                 "Found a Go version but gopls is not installed.\n"
@@ -72,7 +71,7 @@ class Gopls(SolidLanguageServer):
         return True
 
     def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
-        self.setup_runtime_dependency()
+        self._setup_runtime_dependency()
 
         super().__init__(
             config,
@@ -84,29 +83,37 @@ class Gopls(SolidLanguageServer):
         self.server_ready = threading.Event()
         self.request_id = 0
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    @staticmethod
+    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """
-        Returns the initialize params for the TypeScript Language Server.
+        Returns the initialize params for the Go Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), encoding="utf-8") as f:
-            d = json.load(f)
-
-        del d["_description"]
-
-        d["processId"] = os.getpid()
-        assert d["rootPath"] == "$rootPath"
-        d["rootPath"] = repository_absolute_path
-
-        assert d["rootUri"] == "$rootUri"
-        d["rootUri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["uri"] == "$uri"
-        d["workspaceFolders"][0]["uri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["name"] == "$name"
-        d["workspaceFolders"][0]["name"] = os.path.basename(repository_absolute_path)
-
-        return d
+        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+        initialize_params = {
+            "locale": "en",
+            "capabilities": {
+                "textDocument": {
+                    "synchronization": {"didSave": True, "dynamicRegistration": True},
+                    "definition": {"dynamicRegistration": True},
+                    "documentSymbol": {
+                        "dynamicRegistration": True,
+                        "hierarchicalDocumentSymbolSupport": True,
+                        "symbolKind": {"valueSet": list(range(1, 27))},
+                    },
+                },
+                "workspace": {"workspaceFolders": True, "didChangeConfiguration": {"dynamicRegistration": True}},
+            },
+            "processId": os.getpid(),
+            "rootPath": repository_absolute_path,
+            "rootUri": root_uri,
+            "workspaceFolders": [
+                {
+                    "uri": root_uri,
+                    "name": os.path.basename(repository_absolute_path),
+                }
+            ],
+        }
+        return initialize_params
 
     def _start_server(self):
         """Start gopls server process"""

@@ -2,7 +2,6 @@
 Provides PHP specific instantiation of the LanguageServer class using Intelephense.
 """
 
-import json
 import logging
 import os
 import pathlib
@@ -33,9 +32,10 @@ class Intelephense(SolidLanguageServer):
         # - cache: commonly used for caching
         return super().is_ignored_dirname(dirname) or dirname in ["node_modules", "vendor", "cache"]
 
-    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    @staticmethod
+    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
         """
-        Setup runtime dependencies for Intelephense.
+        Setup runtime dependencies for Intelephense and return the command to start the server.
         """
         platform_id = PlatformUtils.get_platform_id()
 
@@ -50,13 +50,6 @@ class Intelephense(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy PHP at the moment"
 
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), encoding="utf-8") as f:
-            d = json.load(f)
-            del d["_description"]
-
-        runtime_dependencies = d.get("runtimeDependencies", [])
-        intelephense_ls_dir = os.path.join(os.path.dirname(__file__), "static", "php-lsp")
-
         # Verify both node and npm are installed
         is_node_installed = shutil.which("node") is not None
         assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
@@ -64,69 +57,77 @@ class Intelephense(SolidLanguageServer):
         assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
         # Install intelephense if not already installed
-        if not os.path.exists(intelephense_ls_dir):
-            os.makedirs(intelephense_ls_dir, exist_ok=True)
-            for dependency in runtime_dependencies:
-                # Windows doesn't support the 'user' parameter and doesn't have pwd module
-                if PlatformUtils.get_platform_id().value.startswith("win"):
-                    subprocess.run(
-                        dependency["command"],
-                        shell=True,
-                        check=True,
-                        cwd=intelephense_ls_dir,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-                else:
-                    # On Unix-like systems, run as non-root user
-                    import pwd
-
-                    user = pwd.getpwuid(os.getuid()).pw_name
-                    subprocess.run(
-                        dependency["command"],
-                        shell=True,
-                        check=True,
-                        user=user,
-                        cwd=intelephense_ls_dir,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-
+        intelephense_ls_dir = os.path.join(os.path.dirname(__file__), "static", "php-lsp")
+        os.makedirs(intelephense_ls_dir, exist_ok=True)
         intelephense_executable_path = os.path.join(intelephense_ls_dir, "node_modules", ".bin", "intelephense")
-        assert os.path.exists(intelephense_executable_path), "intelephense executable not found. Please install intelephense and try again."
+        if not os.path.exists(intelephense_executable_path):
+            install_command = "npm install --prefix ./ intelephense@1.14.4"
+            is_windows = PlatformUtils.get_platform_id().value.startswith("win")
+            # Windows doesn't support the 'user' parameter and doesn't have pwd module
+            if is_windows:
+                subprocess.run(
+                    install_command,
+                    shell=True,
+                    check=True,
+                    cwd=intelephense_ls_dir,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            else:
+                # On Unix-like systems, run as non-root user
+                import pwd
+
+                user = pwd.getpwuid(os.getuid()).pw_name
+                subprocess.run(
+                    install_command,
+                    shell=True,
+                    check=True,
+                    user=user,
+                    cwd=intelephense_ls_dir,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+
+        assert os.path.exists(
+            intelephense_executable_path
+        ), f"intelephense executable not found at {intelephense_executable_path}, something went wrong."
 
         return f"{intelephense_executable_path} --stdio"
 
     def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
         # Setup runtime dependencies before initializing
-        intelephense_cmd = self.setup_runtime_dependencies(logger, config)
+        intelephense_cmd = self._setup_runtime_dependencies(logger, config)
 
         super().__init__(config, logger, repository_root_path, ProcessLaunchInfo(cmd=intelephense_cmd, cwd=repository_root_path), "php")
         self.request_id = 0
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    @staticmethod
+    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the TypeScript Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), encoding="utf-8") as f:
-            d = json.load(f)
+        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+        initialize_params = {
+            "locale": "en",
+            "capabilities": {
+                "textDocument": {
+                    "synchronization": {"didSave": True, "dynamicRegistration": True},
+                    "definition": {"dynamicRegistration": True},
+                },
+                "workspace": {"workspaceFolders": True, "didChangeConfiguration": {"dynamicRegistration": True}},
+            },
+            "processId": os.getpid(),
+            "rootPath": repository_absolute_path,
+            "rootUri": root_uri,
+            "workspaceFolders": [
+                {
+                    "uri": root_uri,
+                    "name": os.path.basename(repository_absolute_path),
+                }
+            ],
+        }
 
-        del d["_description"]
-
-        d["processId"] = os.getpid()
-        assert d["rootPath"] == "$rootPath"
-        d["rootPath"] = repository_absolute_path
-
-        assert d["rootUri"] == "$rootUri"
-        d["rootUri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["uri"] == "$uri"
-        d["workspaceFolders"][0]["uri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["name"] == "$name"
-        d["workspaceFolders"][0]["name"] = os.path.basename(repository_absolute_path)
-
-        return d
+        return initialize_params
 
     def _start_server(self):
         """Start Intelephense server process"""
