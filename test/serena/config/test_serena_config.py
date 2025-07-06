@@ -30,7 +30,7 @@ class TestProjectConfigAutogenerate:
         error_message = str(exc_info.value)
         # Check that the error message contains all the key information
         assert "No source files found" in error_message
-        assert str(self.project_path) in error_message
+        assert str(self.project_path.resolve()) in error_message
         assert "To use Serena with this project" in error_message
         assert "Add source files in one of the supported languages" in error_message
         assert "Create a project configuration file manually" in error_message
