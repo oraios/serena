@@ -193,15 +193,19 @@ class TerraformLS(SolidLanguageServer):
         terraform_version = cls._get_terraform_version(logger)
         if not terraform_version:
             raise RuntimeError(
-                "Terraform is not installed. Please install Terraform from https://www.terraform.io/downloads and make sure it is added to your PATH."
+                "Terraform executable not found or failed to execute. "
+                "Please ensure Terraform is installed and accessible in your system's PATH.\n"
+                "If it's installed, check for permission issues or corrupted installation.\n"
+                "Download from https://www.terraform.io/downloads"
             )
 
         terraform_ls_version = cls._get_terraform_ls_version(logger)
         if not terraform_ls_version:
             raise RuntimeError(
-                "Found a Terraform version but terraform-ls is not installed.\n"
-                "Please install terraform-ls from https://github.com/hashicorp/terraform-ls/releases\n\n"
-                "After installation, make sure it is added to your PATH."
+                "terraform-ls executable not found or failed to execute.\n"
+                "Please ensure terraform-ls is installed and accessible in your system's PATH.\n"
+                "If it's installed, check for permission issues or corrupted installation.\n"
+                "Download from https://github.com/hashicorp/terraform-ls/releases"
             )
 
         return True
@@ -271,10 +275,11 @@ class TerraformLS(SolidLanguageServer):
                 else:
                     logging.error("terraform-ls verification timed out after 15 seconds")
             except (FileNotFoundError, OSError) as e:
-                if logger:
-                    logger.log(f"Failed to verify terraform-ls: {e}", logging.DEBUG)
-                else:
-                    logging.debug(f"Failed to verify terraform-ls: {e}")
+                raise RuntimeError(
+                    f"Found terraform-ls at '{{terraform_ls_cmd}}' but it failed to execute: {{e}}\\n"
+                    "Please ensure that the terraform-ls executable has the correct permissions and that your system's security settings are not blocking it.\\n"
+                    "You can download a fresh copy from https://github.com/hashicorp/terraform-ls/releases"
+                ) from e
         else:
             if logger:
                 logger.log("terraform-ls not found via shutil.which", logging.DEBUG)
