@@ -2,6 +2,8 @@ import json
 import logging
 import os
 import pathlib
+import shutil
+import stat
 import subprocess
 import threading
 
@@ -10,6 +12,7 @@ from overrides import override
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_utils import FileUtils, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 
@@ -31,9 +34,6 @@ class TerraformLS(SolidLanguageServer):
     @staticmethod
     def _get_terraform_version(logger=None):
         """Get the installed Terraform version or None if not found."""
-        import os
-        import shutil
-        
         if logger:
             logger.log("Starting terraform version detection...", logging.DEBUG)
         else:
@@ -123,74 +123,14 @@ class TerraformLS(SolidLanguageServer):
         
         return None
 
-    @staticmethod
-    def _get_terraform_ls_version(logger=None):
-        """Get the installed terraform-ls version or None if not found."""
-        import shutil
-        
-        if logger:
-            logger.log("Starting terraform-ls version detection...", logging.DEBUG)
-        else:
-            logging.debug("Starting terraform-ls version detection...")
-        
-        # Try to find terraform-ls using shutil.which (standard Python way)
-        terraform_ls_cmd = shutil.which("terraform-ls")
-        
-        if terraform_ls_cmd:
-            if logger:
-                logger.log(f"Found terraform-ls via shutil.which: {terraform_ls_cmd}", logging.DEBUG)
-            else:
-                logging.debug(f"Found terraform-ls via shutil.which: {terraform_ls_cmd}")
-            try:
-                if logger:
-                    logger.log(f"Attempting to run: {terraform_ls_cmd} version (with 15s timeout)", logging.DEBUG)
-                else:
-                    logging.debug(f"Attempting to run: {terraform_ls_cmd} version (with 15s timeout)")
-                result = subprocess.run(
-                    [terraform_ls_cmd, "version"], 
-                    capture_output=True, 
-                    text=True, 
-                    check=False, 
-                    timeout=15  # CRITICAL: 15 second timeout to prevent hangs
-                )
-                if result.returncode == 0:
-                    if logger:
-                        logger.log("terraform-ls version command succeeded", logging.DEBUG)
-                    else:
-                        logging.debug("terraform-ls version command succeeded")
-                    return result.stdout.strip()
-                else:
-                    if logger:
-                        logger.log(f"terraform-ls version command failed with return code {result.returncode}", logging.DEBUG)
-                        logger.log(f"stderr: {result.stderr}", logging.DEBUG)
-                    else:
-                        logging.debug(f"terraform-ls version command failed with return code {result.returncode}")
-                        logging.debug(f"stderr: {result.stderr}")
-            except subprocess.TimeoutExpired:
-                if logger:
-                    logger.log("terraform-ls version command timed out after 15 seconds", logging.ERROR)
-                else:
-                    logging.error("terraform-ls version command timed out after 15 seconds")
-            except (FileNotFoundError, OSError) as e:
-                if logger:
-                    logger.log(f"Failed to run terraform-ls command: {e}", logging.DEBUG)
-                else:
-                    logging.debug(f"Failed to run terraform-ls command: {e}")
-        else:
-            if logger:
-                logger.log("terraform-ls not found via shutil.which", logging.DEBUG)
-            else:
-                logging.debug("terraform-ls not found via shutil.which")
-        
-        return None
 
-    @classmethod
-    def setup_runtime_dependency(cls, logger=None):
+    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
         """
-        Check if required Terraform runtime dependencies are available.
-        Raises RuntimeError with helpful message if dependencies are missing.
+        Setup runtime dependencies for terraform-ls.
+        Downloads and installs terraform-ls if not already present.
         """
-        terraform_version = cls._get_terraform_version(logger)
+        # First check if Terraform is available
+        terraform_version = self._get_terraform_version(logger)
         if not terraform_version:
             raise RuntimeError(
                 "Terraform executable not found or failed to execute. "
@@ -199,99 +139,51 @@ class TerraformLS(SolidLanguageServer):
                 "Download from https://www.terraform.io/downloads"
             )
 
-        terraform_ls_version = cls._get_terraform_ls_version(logger)
-        if not terraform_ls_version:
-            raise RuntimeError(
-                "terraform-ls executable not found or failed to execute.\n"
-                "Please ensure terraform-ls is installed and accessible in your system's PATH.\n"
-                "If it's installed, check for permission issues or corrupted installation.\n"
-                "Download from https://github.com/hashicorp/terraform-ls/releases"
-            )
+        platform_id = PlatformUtils.get_platform_id()
 
-        return True
+        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), encoding="utf-8") as f:
+            d = json.load(f)
+            del d["_description"]
+
+        runtime_dependencies = d["runtimeDependencies"]
+        runtime_dependencies = [dependency for dependency in runtime_dependencies if dependency["platformId"] == platform_id.value]
+        assert len(runtime_dependencies) == 1, f"Expected exactly one runtime dependency for platform {platform_id.value}, found {len(runtime_dependencies)}"
+        dependency = runtime_dependencies[0]
+
+        terraform_ls_dir = os.path.join(os.path.dirname(__file__), "static", "TerraformLS")
+        terraform_ls_executable_path = os.path.join(terraform_ls_dir, dependency["binaryName"])
+        
+        if not os.path.exists(terraform_ls_dir):
+            os.makedirs(terraform_ls_dir)
+            
+        if not os.path.exists(terraform_ls_executable_path):
+            logger.log(f"Downloading terraform-ls from {dependency['url']}", logging.INFO)
+            FileUtils.download_and_extract_archive(logger, dependency["url"], terraform_ls_dir, dependency["archiveType"])
+            
+        assert os.path.exists(terraform_ls_executable_path), f"terraform-ls executable not found at {terraform_ls_executable_path}"
+        
+        # Make the executable file executable on Unix-like systems
+        if platform_id.value != "win-x64":
+            os.chmod(terraform_ls_executable_path, stat.S_IEXEC | stat.S_IREAD)
+
+        return terraform_ls_executable_path
 
     def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
-        self.setup_runtime_dependency(logger)
-
-        # Find the correct terraform-ls executable using the same logic as version check
-        terraform_ls_cmd = self._find_terraform_ls_executable(logger)
-
+        """
+        Creates a TerraformLS instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
+        """
+        terraform_ls_executable_path = self.setup_runtime_dependencies(logger, config)
+        
         super().__init__(
             config,
             logger,
             repository_root_path,
-            ProcessLaunchInfo(cmd=terraform_ls_cmd, cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=f"{terraform_ls_executable_path} serve", cwd=repository_root_path),
             "terraform",
         )
         self.server_ready = threading.Event()
         self.request_id = 0
 
-    @staticmethod
-    def _find_terraform_ls_executable(logger=None):
-        """Find the terraform-ls executable that actually works."""
-        import shutil
-        
-        if logger:
-            logger.log("Finding terraform-ls executable for ProcessLaunchInfo...", logging.DEBUG)
-        else:
-            logging.debug("Finding terraform-ls executable for ProcessLaunchInfo...")
-        
-        # Try to find terraform-ls using shutil.which (standard Python way)
-        terraform_ls_cmd = shutil.which("terraform-ls")
-        
-        # If found, verify it works by running version command
-        if terraform_ls_cmd:
-            if logger:
-                logger.log(f"Found terraform-ls candidate: {terraform_ls_cmd}", logging.DEBUG)
-            else:
-                logging.debug(f"Found terraform-ls candidate: {terraform_ls_cmd}")
-            try:
-                if logger:
-                    logger.log("Verifying terraform-ls works (with 15s timeout)", logging.DEBUG)
-                else:
-                    logging.debug("Verifying terraform-ls works (with 15s timeout)")
-                result = subprocess.run(
-                    [terraform_ls_cmd, "version"], 
-                    capture_output=True, 
-                    text=True, 
-                    check=False, 
-                    timeout=15  # CRITICAL: 15 second timeout to prevent hangs
-                )
-                if result.returncode == 0:
-                    if logger:
-                        logger.log(f"terraform-ls verification succeeded, using: {terraform_ls_cmd}", logging.DEBUG)
-                    else:
-                        logging.debug(f"terraform-ls verification succeeded, using: {terraform_ls_cmd}")
-                    # CRITICAL FIX: terraform-ls needs the 'serve' subcommand to start the language server
-                    return f"{terraform_ls_cmd} serve"
-                else:
-                    if logger:
-                        logger.log(f"terraform-ls verification failed with return code {result.returncode}", logging.DEBUG)
-                    else:
-                        logging.debug(f"terraform-ls verification failed with return code {result.returncode}")
-            except subprocess.TimeoutExpired:
-                if logger:
-                    logger.log("terraform-ls verification timed out after 15 seconds", logging.ERROR)
-                else:
-                    logging.error("terraform-ls verification timed out after 15 seconds")
-            except (FileNotFoundError, OSError) as e:
-                raise RuntimeError(
-                    f"Found terraform-ls at '{{terraform_ls_cmd}}' but it failed to execute: {{e}}\\n"
-                    "Please ensure that the terraform-ls executable has the correct permissions and that your system's security settings are not blocking it.\\n"
-                    "You can download a fresh copy from https://github.com/hashicorp/terraform-ls/releases"
-                ) from e
-        else:
-            if logger:
-                logger.log("terraform-ls not found via shutil.which", logging.DEBUG)
-            else:
-                logging.debug("terraform-ls not found via shutil.which")
-        
-        # Fallback to default if nothing works (will likely fail later, but better than crashing here)
-        if logger:
-            logger.log("Using fallback terraform-ls command", logging.DEBUG)
-        else:
-            logging.debug("Using fallback terraform-ls command")
-        return "terraform-ls serve"
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
