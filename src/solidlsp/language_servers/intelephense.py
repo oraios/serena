@@ -32,8 +32,8 @@ class Intelephense(SolidLanguageServer):
         # - cache: commonly used for caching
         return super().is_ignored_dirname(dirname) or dirname in ["node_modules", "vendor", "cache"]
 
-    @staticmethod
-    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    @classmethod
+    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
         """
         Setup runtime dependencies for Intelephense and return the command to start the server.
         """
@@ -57,7 +57,7 @@ class Intelephense(SolidLanguageServer):
         assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
         # Install intelephense if not already installed
-        intelephense_ls_dir = os.path.join(os.path.dirname(__file__), "static", "php-lsp")
+        intelephense_ls_dir = os.path.join(cls.ls_resources_dir(), "php-lsp")
         os.makedirs(intelephense_ls_dir, exist_ok=True)
         intelephense_executable_path = os.path.join(intelephense_ls_dir, "node_modules", ".bin", "intelephense")
         if not os.path.exists(intelephense_executable_path):

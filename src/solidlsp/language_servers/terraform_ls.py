@@ -63,9 +63,8 @@ class TerraformLS(SolidLanguageServer):
         else:
             raise RuntimeError(f"terraform version command failed with return code {result.returncode}: {result.stderr}")
 
-    # Note: needs to remain static because it's called before init is complete
-    @staticmethod
-    def _setup_runtime_dependencies(logger: LanguageServerLogger) -> str:
+    @classmethod
+    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger) -> str:
         """
         Setup runtime dependencies for terraform-ls.
         Downloads and installs terraform-ls if not already present.
@@ -121,12 +120,8 @@ class TerraformLS(SolidLanguageServer):
         ), f"Expected exactly one runtime dependency for platform {platform_id.value}, found {len(runtime_dependencies)}"
         dependency = runtime_dependencies[0]
 
-        terraform_ls_dir = os.path.join(os.path.dirname(__file__), "static", "terraform-ls")
+        terraform_ls_dir = os.path.join(cls.ls_resources_dir(), "terraform-ls")
         terraform_ls_executable_path = os.path.join(terraform_ls_dir, dependency["binaryName"])
-
-        if not os.path.exists(terraform_ls_dir):
-            os.makedirs(terraform_ls_dir)
-
         if not os.path.exists(terraform_ls_executable_path):
             logger.log(f"Downloading terraform-ls from {dependency['url']}", logging.INFO)
             FileUtils.download_and_extract_archive(logger, dependency["url"], terraform_ls_dir, dependency["archiveType"])

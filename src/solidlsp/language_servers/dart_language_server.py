@@ -27,8 +27,8 @@ class DartLanguageServer(SolidLanguageServer):
             "dart",
         )
 
-    @staticmethod
-    def _setup_runtime_dependencies(logger: "LanguageServerLogger") -> str:
+    @classmethod
+    def _setup_runtime_dependencies(cls, logger: "LanguageServerLogger") -> str:
         platform_id = PlatformUtils.get_platform_id()
 
         runtime_dependencies = [
@@ -79,7 +79,7 @@ class DartLanguageServer(SolidLanguageServer):
         assert len(runtime_dependencies) == 1
         dependency = runtime_dependencies[0]
 
-        dart_ls_dir = os.path.join(os.path.dirname(__file__), "static", "dart-language-server")
+        dart_ls_dir = cls.ls_resources_dir()
         dart_executable_path = os.path.join(dart_ls_dir, dependency["binaryName"])
 
         if not os.path.exists(dart_ls_dir):

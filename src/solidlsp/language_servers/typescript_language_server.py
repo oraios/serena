@@ -64,8 +64,8 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             "coverage",
         ]
 
-    @staticmethod
-    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    @classmethod
+    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
         """
         Setup runtime dependencies for TypeScript Language Server and return the command to start the server.
         """
@@ -94,7 +94,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                 "command": "npm install --prefix ./ typescript-language-server@4.3.3",
             },
         ]
-        tsserver_ls_dir = os.path.join(os.path.dirname(__file__), "static", "ts-lsp")
+        tsserver_ls_dir = os.path.join(cls.ls_resources_dir(), "ts-lsp")
         tsserver_executable_path = os.path.join(tsserver_ls_dir, "typescript-language-server")
 
         # Verify both node and npm are installed

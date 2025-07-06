@@ -44,8 +44,8 @@ class RustAnalyzer(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["target"]
 
-    @staticmethod
-    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    @classmethod
+    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
         """
         Setup runtime dependencies for rust_analyzer and return the command to start the server.
         """
@@ -87,7 +87,7 @@ class RustAnalyzer(SolidLanguageServer):
         assert len(runtime_dependencies) == 1
         dependency = runtime_dependencies[0]
 
-        rustanalyzer_ls_dir = os.path.join(os.path.dirname(__file__), "static", "RustAnalyzer")
+        rustanalyzer_ls_dir = os.path.join(cls.ls_resources_dir(), "RustAnalyzer")
         rustanalyzer_executable_path = os.path.join(rustanalyzer_ls_dir, dependency["binaryName"])
         if not os.path.exists(rustanalyzer_ls_dir):
             os.makedirs(rustanalyzer_ls_dir)

@@ -152,8 +152,8 @@ class EclipseJDTLS(SolidLanguageServer):
             "lib",  # General
         ]
 
-    @staticmethod
-    def _setupRuntimeDependencies(logger: LanguageServerLogger, config: LanguageServerConfig) -> RuntimeDependencyPaths:
+    @classmethod
+    def _setupRuntimeDependencies(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> RuntimeDependencyPaths:
         """
         Setup runtime dependencies for EclipseJDTLS and return the paths.
         """
@@ -231,8 +231,6 @@ class EclipseJDTLS(SolidLanguageServer):
             },
         }
 
-        os.makedirs(str(PurePath(os.path.abspath(os.path.dirname(__file__)), "static")), exist_ok=True)
-
         # assert platformId.value in [
         #     "linux-x64",
         #     "win-x64",
@@ -240,8 +238,8 @@ class EclipseJDTLS(SolidLanguageServer):
 
         gradle_path = str(
             PurePath(
-                os.path.abspath(os.path.dirname(__file__)),
-                "static/gradle-7.3.3",
+                cls.ls_resources_dir(),
+                "gradle-7.3.3",
             )
         )
 
@@ -256,7 +254,7 @@ class EclipseJDTLS(SolidLanguageServer):
         assert os.path.exists(gradle_path)
 
         dependency = runtime_dependencies["vscode-java"][platformId.value]
-        vscode_java_path = str(PurePath(os.path.abspath(os.path.dirname(__file__)), "static", dependency["relative_extraction_path"]))
+        vscode_java_path = str(PurePath(cls.ls_resources_dir(), dependency["relative_extraction_path"]))
         os.makedirs(vscode_java_path, exist_ok=True)
         jre_home_path = str(PurePath(vscode_java_path, dependency["jre_home_path"]))
         jre_path = str(PurePath(vscode_java_path, dependency["jre_path"]))
@@ -285,9 +283,7 @@ class EclipseJDTLS(SolidLanguageServer):
         assert os.path.exists(jdtls_readonly_config_path)
 
         dependency = runtime_dependencies["intellicode"]["platform-agnostic"]
-        intellicode_directory_path = str(
-            PurePath(os.path.abspath(os.path.dirname(__file__)), "static", dependency["relative_extraction_path"])
-        )
+        intellicode_directory_path = str(PurePath(cls.ls_resources_dir(), dependency["relative_extraction_path"]))
         os.makedirs(intellicode_directory_path, exist_ok=True)
         intellicode_jar_path = str(PurePath(intellicode_directory_path, dependency["intellicode_jar_path"]))
         intellisense_members_path = str(PurePath(intellicode_directory_path, dependency["intellisense_members_path"]))

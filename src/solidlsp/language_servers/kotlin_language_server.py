@@ -53,8 +53,8 @@ class KotlinLanguageServer(SolidLanguageServer):
             "kotlin",
         )
 
-    @staticmethod
-    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig) -> KotlinRuntimeDependencyPaths:
+    @classmethod
+    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> KotlinRuntimeDependencyPaths:
         """
         Setup runtime dependencies for Kotlin Language Server and return the paths.
         """
@@ -111,7 +111,7 @@ class KotlinLanguageServer(SolidLanguageServer):
         java_dependency = runtime_dependencies["java"][platform_id.value]
 
         # Setup paths for dependencies
-        static_dir = os.path.join(os.path.dirname(__file__), "static", "kotlin_language_server")
+        static_dir = os.path.join(cls.ls_resources_dir(), "kotlin_language_server")
         os.makedirs(static_dir, exist_ok=True)
 
         # Setup Java paths
