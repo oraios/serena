@@ -14,6 +14,7 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
+from .common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 
@@ -51,50 +52,47 @@ class RustAnalyzer(SolidLanguageServer):
         """
         platform_id = PlatformUtils.get_platform_id()
 
-        runtime_dependencies = [
-            {
-                "id": "RustAnalyzer",
-                "description": "RustAnalyzer for Linux (x64)",
-                "url": "https://github.com/rust-lang/rust-analyzer/releases/download/2023-10-09/rust-analyzer-aarch64-apple-darwin.gz",
-                "platformId": "osx-arm64",
-                "archiveType": "gz",
-                "binaryName": "rust_analyzer",
-            },
-            {
-                "id": "RustAnalyzer",
-                "description": "RustAnalyzer for Linux (x64)",
-                "url": "https://github.com/rust-lang/rust-analyzer/releases/download/2023-10-09/rust-analyzer-x86_64-unknown-linux-gnu.gz",
-                "platformId": "linux-x64",
-                "archiveType": "gz",
-                "binaryName": "rust_analyzer",
-            },
-            {
-                "id": "RustAnalyzer",
-                "description": "RustAnalyzer for Windows (x64)",
-                "url": "https://github.com/rust-lang/rust-analyzer/releases/download/2023-10-09/rust-analyzer-x86_64-pc-windows-msvc.zip",
-                "platformId": "win-x64",
-                "archiveType": "zip",
-                "binaryName": "rust-analyzer.exe",
-            },
-        ]
+        deps = RuntimeDependencyCollection(
+            [
+                RuntimeDependency(
+                    id="RustAnalyzer",
+                    description="RustAnalyzer for macOS (arm64)",
+                    url="https://github.com/rust-lang/rust-analyzer/releases/download/2023-10-09/rust-analyzer-aarch64-apple-darwin.gz",
+                    platform_id="osx-arm64",
+                    archive_type="gz",
+                    binary_name="rust_analyzer",
+                ),
+                RuntimeDependency(
+                    id="RustAnalyzer",
+                    description="RustAnalyzer for Linux (x64)",
+                    url="https://github.com/rust-lang/rust-analyzer/releases/download/2023-10-09/rust-analyzer-x86_64-unknown-linux-gnu.gz",
+                    platform_id="linux-x64",
+                    archive_type="gz",
+                    binary_name="rust_analyzer",
+                ),
+                RuntimeDependency(
+                    id="RustAnalyzer",
+                    description="RustAnalyzer for Windows (x64)",
+                    url="https://github.com/rust-lang/rust-analyzer/releases/download/2023-10-09/rust-analyzer-x86_64-pc-windows-msvc.zip",
+                    platform_id="win-x64",
+                    archive_type="zip",
+                    binary_name="rust-analyzer.exe",
+                ),
+            ]
+        )
 
         # assert platform_id.value in [
         #     "linux-x64",
         #     "win-x64",
         # ], "Only linux-x64 and win-x64 platform is supported for in multilspy at the moment"
 
-        runtime_dependencies = [dependency for dependency in runtime_dependencies if dependency["platformId"] == platform_id.value]
-        assert len(runtime_dependencies) == 1
-        dependency = runtime_dependencies[0]
+        dependency = deps.single_for_current_platform()
 
         rustanalyzer_ls_dir = os.path.join(cls.ls_resources_dir(), "RustAnalyzer")
-        rustanalyzer_executable_path = os.path.join(rustanalyzer_ls_dir, dependency["binaryName"])
+        rustanalyzer_executable_path = deps.binary_path(rustanalyzer_ls_dir)
         if not os.path.exists(rustanalyzer_ls_dir):
             os.makedirs(rustanalyzer_ls_dir)
-            if dependency["archiveType"] == "gz":
-                FileUtils.download_and_extract_archive(logger, dependency["url"], rustanalyzer_executable_path, dependency["archiveType"])
-            else:
-                FileUtils.download_and_extract_archive(logger, dependency["url"], rustanalyzer_ls_dir, dependency["archiveType"])
+            deps.install(logger, rustanalyzer_ls_dir)
         assert os.path.exists(rustanalyzer_executable_path)
         os.chmod(rustanalyzer_executable_path, stat.S_IEXEC)
 

@@ -13,9 +13,10 @@ import tarfile
 import threading
 import urllib.request
 import zipfile
-from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
+
+from .common import RuntimeDependency
 
 from overrides import override
 
@@ -26,21 +27,6 @@ from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
-
-
-@dataclass(kw_only=True)
-class RuntimeDependency:
-    """Represents a runtime dependency for the C# language server."""
-
-    id: str
-    description: str | None
-    platform_id: str
-    archive_type: str
-    binary_name: str
-    package_name: str | None = None
-    package_version: str | None = None
-    extract_path: str | None = None
-    url: str | None = None
 
 
 # Runtime dependencies configuration

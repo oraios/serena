@@ -12,6 +12,7 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
+from .common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 
@@ -47,58 +48,44 @@ class ClangdLanguageServer(SolidLanguageServer):
         """
         platform_id = PlatformUtils.get_platform_id()
 
-        runtime_dependencies = [
-            {
-                "id": "Clangd",
-                "description": "Clangd for Linux (x64)",
-                "url": "https://github.com/clangd/clangd/releases/download/19.1.2/clangd-linux-19.1.2.zip",
-                "platformId": "linux-x64",
-                "archiveType": "zip",
-                "binaryName": "clangd",
-            },
-            {
-                "id": "Clangd",
-                "description": "Clangd for Windows (x64)",
-                "url": "https://github.com/clangd/clangd/releases/download/19.1.2/clangd-windows-19.1.2.zip",
-                "platformId": "win-x64",
-                "archiveType": "zip",
-                "binaryName": "clangd.exe",
-            },
-            {
-                "id": "Clangd",
-                "description": "Clangd for macOS (Arm64)",
-                "url": "https://github.com/clangd/clangd/releases/download/19.1.2/clangd-mac-19.1.2.zip",
-                "platformId": "osx-arm64",
-                "archiveType": "zip",
-                "binaryName": "clangd",
-            },
-        ]
-
-        assert platform_id.value in [
-            "linux-x64",
-            "win-x64",
-            "osx-arm64",
-        ], (
-            "Unsupported platform: " + platform_id.value
+        deps = RuntimeDependencyCollection(
+            [
+                RuntimeDependency(
+                    id="Clangd",
+                    description="Clangd for Linux (x64)",
+                    url="https://github.com/clangd/clangd/releases/download/19.1.2/clangd-linux-19.1.2.zip",
+                    platform_id="linux-x64",
+                    archive_type="zip",
+                    binary_name="clangd_19.1.2/bin/clangd",
+                ),
+                RuntimeDependency(
+                    id="Clangd",
+                    description="Clangd for Windows (x64)",
+                    url="https://github.com/clangd/clangd/releases/download/19.1.2/clangd-windows-19.1.2.zip",
+                    platform_id="win-x64",
+                    archive_type="zip",
+                    binary_name="clangd_19.1.2/bin/clangd.exe",
+                ),
+                RuntimeDependency(
+                    id="Clangd",
+                    description="Clangd for macOS (Arm64)",
+                    url="https://github.com/clangd/clangd/releases/download/19.1.2/clangd-mac-19.1.2.zip",
+                    platform_id="osx-arm64",
+                    archive_type="zip",
+                    binary_name="clangd_19.1.2/bin/clangd",
+                ),
+            ]
         )
 
-        runtime_dependencies = [dependency for dependency in runtime_dependencies if dependency["platformId"] == platform_id.value]
-        assert len(runtime_dependencies) == 1
-        # Select dependency matching the current platform
-        dependency = next((dep for dep in runtime_dependencies if dep["platformId"] == platform_id.value), None)
-        if dependency is None:
-            raise RuntimeError(f"No runtime dependency found for platform {platform_id.value}")
-
         clangd_ls_dir = os.path.join(os.path.dirname(__file__), "static", "clangd")
-        clangd_executable_path = os.path.join(clangd_ls_dir, "clangd_19.1.2", "bin", dependency["binaryName"])
+        dep = deps.single_for_current_platform()
+        clangd_executable_path = deps.binary_path(clangd_ls_dir)
         if not os.path.exists(clangd_executable_path):
-            clangd_url = dependency["url"]
-            logger.log(f"Clangd executable not found at {clangd_executable_path}. Downloading from {clangd_url}", logging.INFO)
-            os.makedirs(clangd_ls_dir, exist_ok=True)
-            if dependency["archiveType"] == "zip":
-                FileUtils.download_and_extract_archive(logger, clangd_url, clangd_ls_dir, dependency["archiveType"])
-            else:
-                raise RuntimeError(f"Unsupported archive type: {dependency['archiveType']}")
+            logger.log(
+                f"Clangd executable not found at {clangd_executable_path}. Downloading from {dep.url}",
+                logging.INFO,
+            )
+            deps.install(logger, clangd_ls_dir)
         if not os.path.exists(clangd_executable_path):
             raise FileNotFoundError(
                 f"Clangd executable not found at {clangd_executable_path}.\n"

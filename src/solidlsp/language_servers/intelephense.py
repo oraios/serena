@@ -15,6 +15,7 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import PlatformId, PlatformUtils
+from .common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.lsp_protocol_handler.lsp_types import DefinitionParams, InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 
@@ -61,32 +62,16 @@ class Intelephense(SolidLanguageServer):
         os.makedirs(intelephense_ls_dir, exist_ok=True)
         intelephense_executable_path = os.path.join(intelephense_ls_dir, "node_modules", ".bin", "intelephense")
         if not os.path.exists(intelephense_executable_path):
-            install_command = "npm install --prefix ./ intelephense@1.14.4"
-            is_windows = PlatformUtils.get_platform_id().value.startswith("win")
-            # Windows doesn't support the 'user' parameter and doesn't have pwd module
-            if is_windows:
-                subprocess.run(
-                    install_command,
-                    shell=True,
-                    check=True,
-                    cwd=intelephense_ls_dir,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-            else:
-                # On Unix-like systems, run as non-root user
-                import pwd
-
-                user = pwd.getpwuid(os.getuid()).pw_name
-                subprocess.run(
-                    install_command,
-                    shell=True,
-                    check=True,
-                    user=user,
-                    cwd=intelephense_ls_dir,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
+            deps = RuntimeDependencyCollection(
+                [
+                    RuntimeDependency(
+                        id="intelephense",
+                        command="npm install --prefix ./ intelephense@1.14.4",
+                        platform_id="any",
+                    )
+                ]
+            )
+            deps.install(logger, intelephense_ls_dir)
 
         assert os.path.exists(
             intelephense_executable_path

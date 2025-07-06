@@ -16,6 +16,7 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import PlatformId, PlatformUtils
+from .common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 
@@ -82,18 +83,22 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy javascript/typescript at the moment"
 
-        runtime_dependencies = [
-            {
-                "id": "typescript",
-                "description": "typescript package for Linux, OSX, and Windows. Both x64 and arm64 are supported.",
-                "command": "npm install --prefix ./ typescript@5.5.4",
-            },
-            {
-                "id": "typescript-language-server",
-                "description": "typescript-language-server package for Linux, OSX, and Windows. Both x64 and arm64 are supported.",
-                "command": "npm install --prefix ./ typescript-language-server@4.3.3",
-            },
-        ]
+        deps = RuntimeDependencyCollection(
+            [
+                RuntimeDependency(
+                    id="typescript",
+                    description="typescript package",
+                    command="npm install --prefix ./ typescript@5.5.4",
+                    platform_id="any",
+                ),
+                RuntimeDependency(
+                    id="typescript-language-server",
+                    description="typescript-language-server package",
+                    command="npm install --prefix ./ typescript-language-server@4.3.3",
+                    platform_id="any",
+                ),
+            ]
+        )
         tsserver_ls_dir = os.path.join(cls.ls_resources_dir(), "ts-lsp")
         tsserver_executable_path = os.path.join(tsserver_ls_dir, "typescript-language-server")
 
@@ -106,29 +111,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         # Install typescript and typescript-language-server if not already installed
         if not os.path.exists(tsserver_ls_dir):
             os.makedirs(tsserver_ls_dir, exist_ok=True)
-            for dependency in runtime_dependencies:
-                # Windows doesn't support the 'user' parameter and doesn't have pwd module
-                if PlatformUtils.get_platform_id().value.startswith("win"):
-                    subprocess.run(
-                        dependency["command"],
-                        shell=True,
-                        check=True,
-                        cwd=tsserver_ls_dir,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-                else:
-                    # On Unix-like systems, run as non-root user
-                    user = pwd.getpwuid(os.getuid()).pw_name
-                    subprocess.run(
-                        dependency["command"],
-                        shell=True,
-                        check=True,
-                        user=user,
-                        cwd=tsserver_ls_dir,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
+            deps.install(logger, tsserver_ls_dir)
 
         tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
 
