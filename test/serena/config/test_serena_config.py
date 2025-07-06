@@ -34,7 +34,7 @@ class TestProjectConfigAutogenerate:
         assert "To use Serena with this project" in error_message
         assert "Add source files in one of the supported languages" in error_message
         assert "Create a project configuration file manually" in error_message
-        assert ".serena/project.yml" in error_message
+        assert str(Path(".serena") / "project.yml") in error_message
         assert "Example project.yml:" in error_message
         assert f"project_name: {self.project_path.name}" in error_message
         assert "language: python" in error_message
