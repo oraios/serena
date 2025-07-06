@@ -206,10 +206,10 @@ class FileUtils:
             os.makedirs(os.path.dirname(tmp_file_name), exist_ok=True)
             FileUtils.download_file(logger, url, tmp_file_name)
             if archive_type in ["zip", "tar", "gztar", "bztar", "xztar"]:
-                assert os.path.isdir(target_path)
+                os.makedirs(target_path, exist_ok=True)
                 shutil.unpack_archive(tmp_file_name, target_path, archive_type)
             elif archive_type == "zip.gz":
-                assert os.path.isdir(target_path)
+                os.makedirs(target_path, exist_ok=True)
                 tmp_file_name_ungzipped = tmp_file_name + ".zip"
                 tmp_files.append(tmp_file_name_ungzipped)
                 with gzip.open(tmp_file_name, "rb") as f_in, open(tmp_file_name_ungzipped, "wb") as f_out:
