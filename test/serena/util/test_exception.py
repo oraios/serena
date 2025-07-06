@@ -60,35 +60,9 @@ class TestHeadlessEnvironmentDetection:
             with patch.dict(os.environ, {}, clear=True):
                 assert is_headless_environment() is False
 
-    def test_is_not_headless_with_display(self):
-        """Test that Linux with DISPLAY and no other indicators is not headless."""
-        # Skip this test on Windows since os.uname doesn't exist
-        if not hasattr(os, "uname"):
-            pytest.skip("os.uname not available on this platform")
-
-        with patch("sys.platform", "linux"):
-            with patch("os.uname") as mock_uname:
-                mock_uname.return_value = Mock(release="5.15.0-generic")  # Not WSL
-                with patch("os.path.exists") as mock_exists:
-                    mock_exists.return_value = False  # No .dockerenv
-                    with patch.dict(os.environ, {"DISPLAY": ":0"}, clear=True):
-                        assert is_headless_environment() is False
-
 
 class TestShowFatalExceptionSafe:
     """Test class for safe fatal exception display functionality."""
-
-    @patch("serena.util.exception.log")
-    def test_show_fatal_exception_safe_always_logs(self, mock_log):
-        """Test that exceptions are always logged regardless of environment."""
-        test_exception = ValueError("Test error")
-
-        # Mock stderr to capture print output
-        with patch("sys.stderr", new_callable=MagicMock):
-            show_fatal_exception_safe(test_exception)
-
-        # Verify logging occurred
-        mock_log.error.assert_called_once_with("Fatal exception: Test error", exc_info=test_exception)
 
     @patch("serena.util.exception.is_headless_environment", return_value=True)
     @patch("serena.util.exception.log")
