@@ -1,7 +1,5 @@
-import json
 import logging
 import os
-import pathlib
 import shutil
 import stat
 import subprocess
@@ -12,7 +10,7 @@ from overrides import override
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
-from solidlsp.ls_utils import FileUtils, PlatformUtils
+from solidlsp.ls_utils import FileUtils, PathUtils, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 
@@ -80,19 +78,47 @@ class TerraformLS(SolidLanguageServer):
             )
 
         platform_id = PlatformUtils.get_platform_id()
-
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), encoding="utf-8") as f:
-            d = json.load(f)
-            del d["_description"]
-
-        runtime_dependencies = d["runtimeDependencies"]
+        runtime_dependencies = [
+            {
+                "id": "TerraformLS",
+                "description": "terraform-ls for macOS (ARM64)",
+                "url": "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_darwin_arm64.zip",
+                "platformId": "osx-arm64",
+                "archiveType": "zip",
+                "binaryName": "terraform-ls",
+            },
+            {
+                "id": "TerraformLS",
+                "description": "terraform-ls for macOS (x64)",
+                "url": "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_darwin_amd64.zip",
+                "platformId": "osx-x64",
+                "archiveType": "zip",
+                "binaryName": "terraform-ls",
+            },
+            {
+                "id": "TerraformLS",
+                "description": "terraform-ls for Linux (x64)",
+                "url": "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_linux_amd64.zip",
+                "platformId": "linux-x64",
+                "archiveType": "zip",
+                "binaryName": "terraform-ls",
+            },
+            {
+                "id": "TerraformLS",
+                "description": "terraform-ls for Windows (x64)",
+                "url": "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_windows_amd64.zip",
+                "platformId": "win-x64",
+                "archiveType": "zip",
+                "binaryName": "terraform-ls.exe",
+            },
+        ]
         runtime_dependencies = [dependency for dependency in runtime_dependencies if dependency["platformId"] == platform_id.value]
         assert (
             len(runtime_dependencies) == 1
         ), f"Expected exactly one runtime dependency for platform {platform_id.value}, found {len(runtime_dependencies)}"
         dependency = runtime_dependencies[0]
 
-        terraform_ls_dir = os.path.join(os.path.dirname(__file__), "static", "TerraformLS")
+        terraform_ls_dir = os.path.join(os.path.dirname(__file__), "static", "terraform-ls")
         terraform_ls_executable_path = os.path.join(terraform_ls_dir, dependency["binaryName"])
 
         if not os.path.exists(terraform_ls_dir):
@@ -130,25 +156,32 @@ class TerraformLS(SolidLanguageServer):
         """
         Returns the initialize params for the Terraform Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), encoding="utf-8") as f:
-            d = json.load(f)
-
-        del d["_description"]
-
-        d["processId"] = os.getpid()
-        assert d["rootPath"] == "$rootPath"
-        d["rootPath"] = repository_absolute_path
-
-        assert d["rootUri"] == "$rootUri"
-        d["rootUri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["uri"] == "$uri"
-        d["workspaceFolders"][0]["uri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["name"] == "$name"
-        d["workspaceFolders"][0]["name"] = os.path.basename(repository_absolute_path)
-
-        return d
+        root_uri = PathUtils.path_to_uri(repository_absolute_path)
+        return {
+            "processId": os.getpid(),
+            "locale": "en",
+            "rootPath": repository_absolute_path,
+            "rootUri": root_uri,
+            "capabilities": {
+                "textDocument": {
+                    "synchronization": {"didSave": True, "dynamicRegistration": True},
+                    "completion": {"dynamicRegistration": True, "completionItem": {"snippetSupport": True}},
+                    "definition": {"dynamicRegistration": True},
+                    "documentSymbol": {
+                        "dynamicRegistration": True,
+                        "hierarchicalDocumentSymbolSupport": True,
+                        "symbolKind": {"valueSet": list(range(1, 27))},
+                    },
+                },
+                "workspace": {"workspaceFolders": True, "didChangeConfiguration": {"dynamicRegistration": True}},
+            },
+            "workspaceFolders": [
+                {
+                    "name": os.path.basename(repository_absolute_path),
+                    "uri": root_uri,
+                }
+            ],
+        }
 
     def _start_server(self):
         """Start terraform-ls server process"""
