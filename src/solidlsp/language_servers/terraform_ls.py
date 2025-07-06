@@ -128,7 +128,7 @@ class TerraformLS(SolidLanguageServer):
             os.makedirs(terraform_ls_dir)
 
         if not os.path.exists(terraform_ls_executable_path):
-            logger.info(f"Downloading terraform-ls from {dependency['url']}", logging.INFO)
+            logger.log(f"Downloading terraform-ls from {dependency['url']}", logging.INFO)
             FileUtils.download_and_extract_archive(logger, dependency["url"], terraform_ls_dir, dependency["archiveType"])
 
         assert os.path.exists(terraform_ls_executable_path), f"terraform-ls executable not found at {terraform_ls_executable_path}"
