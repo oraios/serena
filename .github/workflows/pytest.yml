@@ -14,7 +14,6 @@ jobs:
   cpu:
     name: Tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
     if: "!contains(github.event.head_commit.message, 'ci skip')"
     strategy:
       fail-fast: false
@@ -52,6 +51,40 @@ jobs:
         uses: DeLaGuardo/setup-clojure@13.4
         with:
           cli: latest
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.0"
+          terraform_wrapper: false
+      - name: Install terraform-ls (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "Installing terraform-ls manually for Windows"
+          $ver = '0.32.7'
+          $zip = "terraform-ls_${ver}_windows_amd64.zip"
+          Invoke-WebRequest -Uri "https://releases.hashicorp.com/terraform-ls/$ver/$zip" -OutFile $zip
+          
+          $dest = "$env:USERPROFILE\terraform-ls"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Expand-Archive $zip -DestinationPath $dest -Force
+          
+          Write-Host "terraform-ls installed to: $dest"
+          echo "$dest" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Install terraform-ls (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          ver=0.32.7
+          os=$(uname | tr '[:upper:]' '[:lower:]')
+          echo "Installing terraform-ls ${ver} for ${os}"
+          curl -sSL -o tfls.zip \
+            "https://releases.hashicorp.com/terraform-ls/${ver}/terraform-ls_${ver}_${os}_amd64.zip"
+          mkdir -p "$HOME/bin"
+          unzip -q tfls.zip -d "$HOME/bin"
+          chmod +x "$HOME/bin/terraform-ls"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+          echo "terraform-ls installed to $HOME/bin"
       - name: Install uv
         shell: bash
         run: curl -LsSf https://astral.sh/uv/install.sh | sh

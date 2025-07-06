@@ -1,0 +1,37 @@
+{
+    "_description": "Used to download the runtime dependencies for running terraform-ls. Obtained from https://releases.hashicorp.com/terraform-ls/",
+    "runtimeDependencies": [
+        {
+            "id": "TerraformLS",
+            "description": "terraform-ls for macOS (ARM64)",
+            "url": "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_darwin_arm64.zip",
+            "platformId": "osx-arm64",
+            "archiveType": "zip",
+            "binaryName": "terraform-ls"
+        },
+        {
+            "id": "TerraformLS",
+            "description": "terraform-ls for macOS (x64)",
+            "url": "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_darwin_amd64.zip",
+            "platformId": "osx-x64",
+            "archiveType": "zip",
+            "binaryName": "terraform-ls"
+        },
+        {
+            "id": "TerraformLS",
+            "description": "terraform-ls for Linux (x64)",
+            "url": "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_linux_amd64.zip",
+            "platformId": "linux-x64",
+            "archiveType": "zip",
+            "binaryName": "terraform-ls"
+        },
+        {
+            "id": "TerraformLS",
+            "description": "terraform-ls for Windows (x64)",
+            "url": "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_windows_amd64.zip",
+            "platformId": "win-x64",
+            "archiveType": "zip",
+            "binaryName": "terraform-ls.exe"
+        }
+    ]
+}
