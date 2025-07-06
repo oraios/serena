@@ -5,8 +5,6 @@ These tests validate the functionality of the language server APIs
 like request_references using the test repository.
 """
 
-import os
-
 import pytest
 
 from solidlsp import SolidLanguageServer
