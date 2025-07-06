@@ -187,6 +187,11 @@ class SolidLanguageServer(ABC):
 
             ls = ElixirTools(config, logger, repository_root_path)
 
+        elif config.code_language == Language.TERRAFORM:
+            from solidlsp.language_servers.terraform_ls.terraform_ls import TerraformLS
+
+            ls = TerraformLS(config, logger, repository_root_path)
+
         else:
             logger.log(f"Language {config.code_language} is not supported", logging.ERROR)
             raise LanguageServerException(f"Language {config.code_language} is not supported")

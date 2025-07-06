@@ -39,6 +39,7 @@ class Language(str, Enum):
     PHP = "php"
     CLOJURE = "clojure"
     ELIXIR = "elixir"
+    TERRAFORM = "terraform"
 
     def __str__(self) -> str:
         return self.value
@@ -77,6 +78,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.clj", "*.cljs", "*.cljc", "*.edn")  # codespell:ignore edn
             case self.ELIXIR:
                 return FilenameMatcher("*.ex", "*.exs")
+            case self.TERRAFORM:
+                return FilenameMatcher("*.tf", "*.tfvars", "*.tfstate")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
