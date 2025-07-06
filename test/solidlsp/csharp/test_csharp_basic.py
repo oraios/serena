@@ -200,51 +200,48 @@ class TestCSharpSolutionProjectOpening:
     @patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._start_server")
     def test_csharp_language_server_logs_solution_discovery(self, mock_start_server, mock_ensure_server_installed):
         """Test that CSharpLanguageServer logs solution/project discovery during initialization."""
-        with tempfile.TemporaryDirectory() as cache_dir:
-            # Mock the server installation
-            mock_ensure_server_installed.return_value = ("/usr/bin/dotnet", "/path/to/server.dll", Path(cache_dir))
+        mock_ensure_server_installed.return_value = ("/usr/bin/dotnet", "/path/to/server.dll")
 
-            # Create test directory with solution file
-            with tempfile.TemporaryDirectory() as temp_dir:
-                temp_path = Path(temp_dir)
-                solution_file = temp_path / "TestSolution.sln"
-                solution_file.touch()
+        # Create test directory with solution file
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            solution_file = temp_path / "TestSolution.sln"
+            solution_file.touch()
 
-                # Mock logger to capture log messages
-                mock_logger = Mock()
-                mock_config = Mock(spec=LanguageServerConfig)
-                mock_config.ignored_paths = []
+            # Mock logger to capture log messages
+            mock_logger = Mock()
+            mock_config = Mock(spec=LanguageServerConfig)
+            mock_config.ignored_paths = []
 
-                # Create CSharpLanguageServer instance
-                CSharpLanguageServer(mock_config, mock_logger, str(temp_path))
+            # Create CSharpLanguageServer instance
+            CSharpLanguageServer(mock_config, mock_logger, str(temp_path))
 
-                # Verify that logger was called with solution file discovery
-                mock_logger.log.assert_any_call(f"Found solution/project file: {solution_file}", 20)  # logging.INFO
+            # Verify that logger was called with solution file discovery
+            mock_logger.log.assert_any_call(f"Found solution/project file: {solution_file}", 20)  # logging.INFO
 
     @patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed")
     @patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._start_server")
     def test_csharp_language_server_logs_no_solution_warning(self, mock_start_server, mock_ensure_server_installed):
         """Test that CSharpLanguageServer logs warning when no solution/project files are found."""
-        with tempfile.TemporaryDirectory() as cache_dir:
-            # Mock the server installation
-            mock_ensure_server_installed.return_value = ("/usr/bin/dotnet", "/path/to/server.dll", Path(cache_dir))
+        # Mock the server installation
+        mock_ensure_server_installed.return_value = ("/usr/bin/dotnet", "/path/to/server.dll")
 
-            # Create empty test directory
-            with tempfile.TemporaryDirectory() as temp_dir:
-                temp_path = Path(temp_dir)
+        # Create empty test directory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
 
-                # Mock logger to capture log messages
-                mock_logger = Mock()
-                mock_config = Mock(spec=LanguageServerConfig)
-                mock_config.ignored_paths = []
+            # Mock logger to capture log messages
+            mock_logger = Mock()
+            mock_config = Mock(spec=LanguageServerConfig)
+            mock_config.ignored_paths = []
 
-                # Create CSharpLanguageServer instance
-                CSharpLanguageServer(mock_config, mock_logger, str(temp_path))
+            # Create CSharpLanguageServer instance
+            CSharpLanguageServer(mock_config, mock_logger, str(temp_path))
 
-                # Verify that logger was called with warning about no solution/project files
-                mock_logger.log.assert_any_call(
-                    "No .sln or .csproj file found, language server will attempt auto-discovery", 30  # logging.WARNING
-                )
+            # Verify that logger was called with warning about no solution/project files
+            mock_logger.log.assert_any_call(
+                "No .sln or .csproj file found, language server will attempt auto-discovery", 30  # logging.WARNING
+            )
 
     def test_solution_and_project_opening_with_real_test_repo(self):
         """Test solution and project opening with the actual C# test repository."""

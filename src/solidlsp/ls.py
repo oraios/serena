@@ -90,6 +90,17 @@ class SolidLanguageServer(ABC):
         return dirname.startswith(".")
 
     @classmethod
+    def ls_resources_dir(cls, mkdir: bool = True) -> str:
+        """
+        Returns the directory where the language server resources are downloaded.
+        This is used to store language server binaries, configuration files, etc.
+        """
+        result = os.path.join(os.path.dirname(__file__), "language_servers", "static", cls.__name__)
+        if mkdir:
+            os.makedirs(result, exist_ok=True)
+        return result
+
+    @classmethod
     def create(
         cls, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, timeout: float | None = None
     ) -> "SolidLanguageServer":
