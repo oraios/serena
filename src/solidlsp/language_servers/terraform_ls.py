@@ -10,6 +10,7 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PathUtils, PlatformUtils
+from .common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 
@@ -62,50 +63,48 @@ class TerraformLS(SolidLanguageServer):
         """
         cls._ensure_tf_command_available(logger)
         platform_id = PlatformUtils.get_platform_id()
-        runtime_dependencies = [
-            {
-                "id": "TerraformLS",
-                "description": "terraform-ls for macOS (ARM64)",
-                "url": "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_darwin_arm64.zip",
-                "platformId": "osx-arm64",
-                "archiveType": "zip",
-                "binaryName": "terraform-ls",
-            },
-            {
-                "id": "TerraformLS",
-                "description": "terraform-ls for macOS (x64)",
-                "url": "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_darwin_amd64.zip",
-                "platformId": "osx-x64",
-                "archiveType": "zip",
-                "binaryName": "terraform-ls",
-            },
-            {
-                "id": "TerraformLS",
-                "description": "terraform-ls for Linux (x64)",
-                "url": "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_linux_amd64.zip",
-                "platformId": "linux-x64",
-                "archiveType": "zip",
-                "binaryName": "terraform-ls",
-            },
-            {
-                "id": "TerraformLS",
-                "description": "terraform-ls for Windows (x64)",
-                "url": "https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_windows_amd64.zip",
-                "platformId": "win-x64",
-                "archiveType": "zip",
-                "binaryName": "terraform-ls.exe",
-            },
-        ]
-        runtime_dependencies = [dependency for dependency in runtime_dependencies if dependency["platformId"] == platform_id.value]
-        assert (
-            len(runtime_dependencies) == 1
-        ), f"Expected exactly one runtime dependency for platform {platform_id.value}, found {len(runtime_dependencies)}"
-        dependency = runtime_dependencies[0]
+        deps = RuntimeDependencyCollection(
+            [
+                RuntimeDependency(
+                    id="TerraformLS",
+                    description="terraform-ls for macOS (ARM64)",
+                    url="https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_darwin_arm64.zip",
+                    platform_id="osx-arm64",
+                    archive_type="zip",
+                    binary_name="terraform-ls",
+                ),
+                RuntimeDependency(
+                    id="TerraformLS",
+                    description="terraform-ls for macOS (x64)",
+                    url="https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_darwin_amd64.zip",
+                    platform_id="osx-x64",
+                    archive_type="zip",
+                    binary_name="terraform-ls",
+                ),
+                RuntimeDependency(
+                    id="TerraformLS",
+                    description="terraform-ls for Linux (x64)",
+                    url="https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_linux_amd64.zip",
+                    platform_id="linux-x64",
+                    archive_type="zip",
+                    binary_name="terraform-ls",
+                ),
+                RuntimeDependency(
+                    id="TerraformLS",
+                    description="terraform-ls for Windows (x64)",
+                    url="https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_windows_amd64.zip",
+                    platform_id="win-x64",
+                    archive_type="zip",
+                    binary_name="terraform-ls.exe",
+                ),
+            ]
+        )
+        dependency = deps.single_for_current_platform()
 
-        terraform_ls_executable_path = os.path.join(cls.ls_resources_dir(), dependency["binaryName"])
+        terraform_ls_executable_path = deps.binary_path(cls.ls_resources_dir())
         if not os.path.exists(terraform_ls_executable_path):
-            logger.log(f"Downloading terraform-ls from {dependency['url']}", logging.INFO)
-            FileUtils.download_and_extract_archive(logger, dependency["url"], cls.ls_resources_dir(), dependency["archiveType"])
+            logger.log(f"Downloading terraform-ls from {dependency.url}", logging.INFO)
+            deps.install(logger, cls.ls_resources_dir())
 
         assert os.path.exists(terraform_ls_executable_path), f"terraform-ls executable not found at {terraform_ls_executable_path}"
 

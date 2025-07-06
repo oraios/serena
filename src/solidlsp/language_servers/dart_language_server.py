@@ -6,6 +6,7 @@ import stat
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
+from .common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 
 
@@ -31,60 +32,57 @@ class DartLanguageServer(SolidLanguageServer):
     def _setup_runtime_dependencies(cls, logger: "LanguageServerLogger") -> str:
         platform_id = PlatformUtils.get_platform_id()
 
-        runtime_dependencies = [
-            {
-                "id": "DartLanguageServer",
-                "description": "Dart Language Server for Linux (x64)",
-                "url": "https://storage.googleapis.com/dart-archive/channels/stable/release/3.7.1/sdk/dartsdk-linux-x64-release.zip",
-                "platformId": "linux-x64",
-                "archiveType": "zip",
-                "binaryName": "dart-sdk/bin/dart",
-            },
-            {
-                "id": "DartLanguageServer",
-                "description": "Dart Language Server for Windows (x64)",
-                "url": "https://storage.googleapis.com/dart-archive/channels/stable/release/3.7.1/sdk/dartsdk-windows-x64-release.zip",
-                "platformId": "win-x64",
-                "archiveType": "zip",
-                "binaryName": "dart-sdk/bin/dart.exe",
-            },
-            {
-                "id": "DartLanguageServer",
-                "description": "Dart Language Server for Windows (arm64)",
-                "url": "https://storage.googleapis.com/dart-archive/channels/stable/release/3.7.1/sdk/dartsdk-windows-arm64-release.zip",
-                "platformId": "win-arm64",
-                "archiveType": "zip",
-                "binaryName": "dart-sdk/bin/dart.exe",
-            },
-            {
-                "id": "DartLanguageServer",
-                "description": "Dart Language Server for macOS (x64)",
-                "url": "https://storage.googleapis.com/dart-archive/channels/stable/release/3.7.1/sdk/dartsdk-macos-x64-release.zip",
-                "platformId": "osx-x64",
-                "archiveType": "zip",
-                "binaryName": "dart-sdk/bin/dart",
-            },
-            {
-                "id": "DartLanguageServer",
-                "description": "Dart Language Server for macOS (arm64)",
-                "url": "https://storage.googleapis.com/dart-archive/channels/stable/release/3.7.1/sdk/dartsdk-macos-arm64-release.zip",
-                "platformId": "osx-arm64",
-                "archiveType": "zip",
-                "binaryName": "dart-sdk/bin/dart",
-            },
-        ]
-
-        runtime_dependencies = [dependency for dependency in runtime_dependencies if dependency["platformId"] == platform_id.value]
-
-        assert len(runtime_dependencies) == 1
-        dependency = runtime_dependencies[0]
+        deps = RuntimeDependencyCollection(
+            [
+                RuntimeDependency(
+                    id="DartLanguageServer",
+                    description="Dart Language Server for Linux (x64)",
+                    url="https://storage.googleapis.com/dart-archive/channels/stable/release/3.7.1/sdk/dartsdk-linux-x64-release.zip",
+                    platform_id="linux-x64",
+                    archive_type="zip",
+                    binary_name="dart-sdk/bin/dart",
+                ),
+                RuntimeDependency(
+                    id="DartLanguageServer",
+                    description="Dart Language Server for Windows (x64)",
+                    url="https://storage.googleapis.com/dart-archive/channels/stable/release/3.7.1/sdk/dartsdk-windows-x64-release.zip",
+                    platform_id="win-x64",
+                    archive_type="zip",
+                    binary_name="dart-sdk/bin/dart.exe",
+                ),
+                RuntimeDependency(
+                    id="DartLanguageServer",
+                    description="Dart Language Server for Windows (arm64)",
+                    url="https://storage.googleapis.com/dart-archive/channels/stable/release/3.7.1/sdk/dartsdk-windows-arm64-release.zip",
+                    platform_id="win-arm64",
+                    archive_type="zip",
+                    binary_name="dart-sdk/bin/dart.exe",
+                ),
+                RuntimeDependency(
+                    id="DartLanguageServer",
+                    description="Dart Language Server for macOS (x64)",
+                    url="https://storage.googleapis.com/dart-archive/channels/stable/release/3.7.1/sdk/dartsdk-macos-x64-release.zip",
+                    platform_id="osx-x64",
+                    archive_type="zip",
+                    binary_name="dart-sdk/bin/dart",
+                ),
+                RuntimeDependency(
+                    id="DartLanguageServer",
+                    description="Dart Language Server for macOS (arm64)",
+                    url="https://storage.googleapis.com/dart-archive/channels/stable/release/3.7.1/sdk/dartsdk-macos-arm64-release.zip",
+                    platform_id="osx-arm64",
+                    archive_type="zip",
+                    binary_name="dart-sdk/bin/dart",
+                ),
+            ]
+        )
 
         dart_ls_dir = cls.ls_resources_dir()
-        dart_executable_path = os.path.join(dart_ls_dir, dependency["binaryName"])
+        dart_executable_path = deps.binary_path(dart_ls_dir)
 
         if not os.path.exists(dart_ls_dir):
             os.makedirs(dart_ls_dir)
-            FileUtils.download_and_extract_archive(logger, dependency["url"], dart_ls_dir, dependency["archiveType"])
+            deps.install(logger, dart_ls_dir)
 
         assert os.path.exists(dart_executable_path)
         os.chmod(dart_executable_path, stat.S_IEXEC)

@@ -14,6 +14,7 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
+from .common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 
@@ -44,32 +45,38 @@ class ClojureLSP(SolidLanguageServer):
     """
 
     clojure_lsp_releases = "https://github.com/clojure-lsp/clojure-lsp/releases/latest/download"
-    runtime_dependencies = [
-        {
-            "url": f"{clojure_lsp_releases}/clojure-lsp-native-macos-aarch64.zip",
-            "platformId": "osx-arm64",
-            "archiveType": "zip",
-            "binaryName": "clojure-lsp",
-        },
-        {
-            "url": f"{clojure_lsp_releases}/clojure-lsp-native-linux-aarch64.zip",
-            "platformId": "linux-arm64",
-            "archiveType": "zip",
-            "binaryName": "clojure-lsp",
-        },
-        {
-            "url": f"{clojure_lsp_releases}/clojure-lsp-native-linux-amd64.zip",
-            "platformId": "linux-x64",
-            "archiveType": "zip",
-            "binaryName": "clojure-lsp",
-        },
-        {
-            "url": f"{clojure_lsp_releases}/clojure-lsp-native-windows-amd64.zip",
-            "platformId": "win-x64",
-            "archiveType": "zip",
-            "binaryName": "clojure-lsp.exe",
-        },
-    ]
+    runtime_dependencies = RuntimeDependencyCollection(
+        [
+            RuntimeDependency(
+                id="clojure-lsp",
+                url=f"{clojure_lsp_releases}/clojure-lsp-native-macos-aarch64.zip",
+                platform_id="osx-arm64",
+                archive_type="zip",
+                binary_name="clojure-lsp",
+            ),
+            RuntimeDependency(
+                id="clojure-lsp",
+                url=f"{clojure_lsp_releases}/clojure-lsp-native-linux-aarch64.zip",
+                platform_id="linux-arm64",
+                archive_type="zip",
+                binary_name="clojure-lsp",
+            ),
+            RuntimeDependency(
+                id="clojure-lsp",
+                url=f"{clojure_lsp_releases}/clojure-lsp-native-linux-amd64.zip",
+                platform_id="linux-x64",
+                archive_type="zip",
+                binary_name="clojure-lsp",
+            ),
+            RuntimeDependency(
+                id="clojure-lsp",
+                url=f"{clojure_lsp_releases}/clojure-lsp-native-windows-amd64.zip",
+                platform_id="win-x64",
+                archive_type="zip",
+                binary_name="clojure-lsp.exe",
+            ),
+        ]
+    )
 
     def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
         """
@@ -92,21 +99,18 @@ class ClojureLSP(SolidLanguageServer):
     def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
         """Setup runtime dependencies for clojure-lsp and return the command to start the server."""
         verify_clojure_cli()
-        platform_id = PlatformUtils.get_platform_id()
-
-        runtime_dependencies = [
-            dependency for dependency in ClojureLSP.runtime_dependencies if dependency["platformId"] == platform_id.value
-        ]
-        if len(runtime_dependencies) != 1:
-            raise RuntimeError(f"Could not find a suitable clojure-lsp runtime dependency for platform {platform_id.value}.")
-        dependency = runtime_dependencies[0]
+        deps = ClojureLSP.runtime_dependencies
+        dependency = deps.single_for_current_platform()
 
         clojurelsp_ls_dir = os.path.join(os.path.dirname(__file__), "static", "clojure-lsp")
-        clojurelsp_executable_path = os.path.join(clojurelsp_ls_dir, dependency["binaryName"])
+        clojurelsp_executable_path = deps.binary_path(clojurelsp_ls_dir)
         if not os.path.exists(clojurelsp_executable_path):
             os.makedirs(clojurelsp_ls_dir, exist_ok=True)
-            logger.log(f"Downloading and extracting clojure-lsp from {dependency['url']} to {clojurelsp_ls_dir}", logging.INFO)
-            FileUtils.download_and_extract_archive(logger, dependency["url"], clojurelsp_ls_dir, dependency["archiveType"])
+            logger.log(
+                f"Downloading and extracting clojure-lsp from {dependency.url} to {clojurelsp_ls_dir}",
+                logging.INFO,
+            )
+            deps.install(logger, clojurelsp_ls_dir)
         if not os.path.exists(clojurelsp_executable_path):
             raise FileNotFoundError(f"Download failed? Could not find clojure-lsp executable at {clojurelsp_executable_path}")
         os.chmod(clojurelsp_executable_path, stat.S_IEXEC)
