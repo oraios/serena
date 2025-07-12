@@ -21,6 +21,7 @@ from sensai.util.logging import LogTime
 from tqdm import tqdm
 
 from serena import serena_version
+from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import SerenaConfig, ToolSet, get_serena_managed_dir
 from serena.constants import (
@@ -179,11 +180,19 @@ class SerenaAgent:
         if self._gui_log_handler is not None:
             self._gui_log_handler.log_viewer.set_tool_names(tool_names)
 
+        self._tool_usage_stats: ToolUsageStats | None = None
+        if self.serena_config.record_tool_usage_stats:
+            token_count_estimator = RegisteredTokenCountEstimator[self.serena_config.token_count_estimator]
+            log.info(f"Tool usage statistics recording is enabled with token count estimator: {token_count_estimator.name}.")
+            self._tool_usage_stats = ToolUsageStats(token_count_estimator)
+
         # start the dashboard (web frontend), registering its log handler
         if self.serena_config.web_dashboard:
             dashboard_log_handler = MemoryLogHandler(level=serena_log_level)
             Logger.root.addHandler(dashboard_log_handler)
-            self._dashboard_thread, port = SerenaDashboardAPI(dashboard_log_handler, tool_names).run_in_thread()
+            self._dashboard_thread, port = SerenaDashboardAPI(
+                dashboard_log_handler, tool_names, tool_usage_stats=self._tool_usage_stats
+            ).run_in_thread()
             if self.serena_config.web_dashboard_open_on_launch:
                 # open the dashboard URL in the default web browser (using a separate process to control
                 # output redirection)
@@ -239,6 +248,19 @@ class SerenaAgent:
                     f"Error activating project '{project}': {e}; Note that out-of-project configurations were migrated. "
                     "You should now pass either --project <project_name> or --project <project_root>."
                 )
+
+    def record_tool_usage_if_enabled(self, input_kwargs: dict, tool_result: str | dict, tool: Tool) -> None:
+        """
+        Record the usage of a tool with the given input and output strings if tool usage statistics recording is enabled.
+        """
+        tool_name = tool.get_name()
+        if self._tool_usage_stats is not None:
+            input_str = str(input_kwargs)
+            output_str = str(tool_result)
+            log.debug(f"Recording tool usage for tool '{tool_name}'")
+            self._tool_usage_stats.record_tool_usage(tool_name, input_str, output_str)
+        else:
+            log.debug(f"Tool usage statistics recording is disabled, not recording usage of '{tool_name}'.")
 
     @staticmethod
     def _open_dashboard(port: int) -> None:

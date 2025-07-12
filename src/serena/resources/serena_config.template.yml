@@ -48,6 +48,18 @@ jetbrains: False
 # NOTE: The plugin is yet unreleased. This is for Serena developers only.
 
 
+record_tool_usage_stats:  False
+# whether to record tool usage statistics, they will be shown in the web dashboard if recording is active.
+
+token_count_estimator: TIKTOKEN_GPT4O
+# Only relevant if `record_tool_usage` is True; the name of the token count estimator to use for tool usage statistics.
+# See the `RegisteredTokenCountEstimator` enum for available options.
+#
+# Note: some token estimators (like tiktoken) may require downloading data files
+# on the first run, which can take some time and require internet access. Others, like the Anthropic ones, may require an API key
+# and rate limits may apply.
+
+
 # MANAGED BY SERENA, KEEP AT THE BOTTOM OF THE YAML AND DON'T EDIT WITHOUT NEED
 # The list of registered projects.
 # To add a project, within a chat, simply ask Serena to "activate the project /path/to/project" or,

@@ -27,6 +27,8 @@ from serena.util.general import load_yaml, save_yaml
 from serena.util.inspection import determine_programming_language_composition
 from solidlsp.ls_config import Language
 
+from ..analytics import RegisteredTokenCountEstimator
+
 if TYPE_CHECKING:
     from ..project import Project
 
@@ -254,6 +256,17 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     """
     whether to apply JetBrains mode
     """
+    record_tool_usage_stats: bool = False
+    """Whether to record tool usage statistics, they will be shown in the web dashboard if recording is active. 
+    """
+    token_count_estimator: str = RegisteredTokenCountEstimator.TIKTOKEN_GPT4O.name
+    """Only relevant if `record_tool_usage` is True; the name of the token count estimator to use for tool usage statistics.
+    See the `RegisteredTokenCountEstimator` enum for available options.
+    
+    Note: some token estimators (like tiktoken) may require downloading data files
+    on the first run, which can take some time and require internet access. Others, like the Anthropic ones, may require an API key
+    and rate limits may apply.
+    """
 
     CONFIG_FILE = "serena_config.yml"
     CONFIG_FILE_DOCKER = "serena_config.docker.yml"  # Docker-specific config file; auto-generated if missing, mounted via docker-compose for user customization
@@ -351,6 +364,10 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         instance.excluded_tools = loaded_commented_yaml.get("excluded_tools", [])
         instance.included_optional_tools = loaded_commented_yaml.get("included_optional_tools", [])
         instance.jetbrains = loaded_commented_yaml.get("jetbrains", False)
+        instance.record_tool_usage_stats = loaded_commented_yaml.get("record_tool_usage_stats", False)
+        instance.token_count_estimator = loaded_commented_yaml.get(
+            "token_count_estimator", RegisteredTokenCountEstimator.TIKTOKEN_GPT4O.name
+        )
 
         # re-save the configuration file if any migrations were performed
         if num_project_migrations > 0:

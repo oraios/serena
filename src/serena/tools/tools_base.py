@@ -2,10 +2,10 @@ import inspect
 import os
 import traceback
 from abc import ABC
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from dataclasses import dataclass
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Self, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, Self, TypeVar
 
 from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metadata
 from sensai.util import logging
@@ -89,6 +89,13 @@ class ToolMarkerOptional:
     """
 
 
+class ApplyMethodProtocol(Protocol):
+    """Callable protocol for the apply method of a tool."""
+
+    def __call__(self, *args: Any, **kwargs: Any) -> str:
+        pass
+
+
 class Tool(Component):
     # NOTE: each tool should implement the apply method, which is then used in
     # the central method of the Tool class `apply_ex`.
@@ -112,7 +119,7 @@ class Tool(Component):
     def get_name(self) -> str:
         return self.get_name_from_cls()
 
-    def get_apply_fn(self) -> Callable:
+    def get_apply_fn(self) -> ApplyMethodProtocol:
         apply_fn = getattr(self, "apply")
         if apply_fn is None:
             raise RuntimeError(f"apply not defined in {self}. Did you forget to implement it?")
@@ -231,6 +238,7 @@ class Tool(Component):
 
                 # apply the actual tool
                 result = apply_fn(**kwargs)
+                self.agent.record_tool_usage_if_enabled(kwargs, result, self)
 
             except Exception as e:
                 if not catch_exceptions:

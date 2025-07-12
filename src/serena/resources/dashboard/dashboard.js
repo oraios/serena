@@ -40,10 +40,22 @@ class Dashboard {
         this.$errorContainer = $('#error-container');
         this.$loadButton = $('#load-logs');
         this.$shutdownButton = $('#shutdown');
+        this.$toggleStats = $('#toggle-stats');
+        this.$statsSection = $('#stats-section');
+        this.$refreshStats = $('#refresh-stats');
+        this.$clearStats = $('#clear-stats');
+
+        this.countChart = null;
+        this.tokensChart = null;
+        this.inputChart = null;
+        this.outputChart = null;
 
         // register event handlers
         this.$loadButton.click(this.loadLogs.bind(this));
         this.$shutdownButton.click(this.shutdown.bind(this));
+        this.$toggleStats.click(this.toggleStats.bind(this));
+        this.$refreshStats.click(this.loadStats.bind(this));
+        this.$clearStats.click(this.clearStats.bind(this));
 
         // initialize the application
         this.loadToolNames().then(function() {
@@ -174,6 +186,224 @@ class Dashboard {
 
         // Start polling every second (1000ms)
         this.pollInterval = setInterval(this.pollForNewLogs.bind(this), 1000);
+    }
+
+    toggleStats() {
+        if (this.$statsSection.is(':visible')) {
+            this.$statsSection.hide();
+            this.$toggleStats.text('Show Stats');
+        } else {
+            this.$statsSection.show();
+            this.$toggleStats.text('Hide Stats');
+            this.loadStats();
+        }
+    }
+
+    loadStats() {
+        let self = this;
+        $.ajax({
+            url: '/get_tool_stats',
+            type: 'GET',
+            success: function(response) {
+                self.displayStats(response.stats || {});
+            },
+            error: function(xhr, status, error) {
+                console.error('Error loading stats:', error);
+            }
+        });
+    }
+
+    clearStats() {
+        let self = this;
+        $.ajax({
+            url: '/clear_tool_stats',
+            type: 'POST',
+            success: function() {
+                self.loadStats();
+            },
+            error: function(xhr, status, error) {
+                console.error('Error clearing stats:', error);
+            }
+        });
+    }
+
+    displayStats(stats) {
+        const names = Object.keys(stats);
+        const counts = names.map(n => stats[n].num_times_called);
+        const inputTokens = names.map(n => stats[n].input_tokens);
+        const outputTokens = names.map(n => stats[n].output_tokens);
+        const totalTokens = names.map(n => stats[n].input_tokens + stats[n].output_tokens);
+        
+        // Calculate totals for summary table
+        const totalCalls = counts.reduce((sum, count) => sum + count, 0);
+        const totalInputTokens = inputTokens.reduce((sum, tokens) => sum + tokens, 0);
+        const totalOutputTokens = outputTokens.reduce((sum, tokens) => sum + tokens, 0);
+        
+        // Generate consistent colors for tools
+        const colors = this.generateColors(names.length);
+
+        const countCtx = document.getElementById('count-chart');
+        const tokensCtx = document.getElementById('tokens-chart');
+        const inputCtx = document.getElementById('input-chart');
+        const outputCtx = document.getElementById('output-chart');
+
+        if (this.countChart) this.countChart.destroy();
+        if (this.tokensChart) this.tokensChart.destroy();
+        if (this.inputChart) this.inputChart.destroy();
+        if (this.outputChart) this.outputChart.destroy();
+
+        if (names.length === 0) {
+            this.countChart = null;
+            this.tokensChart = null;
+            this.inputChart = null;
+            this.outputChart = null;
+            countCtx.getContext('2d').clearRect(0,0,countCtx.width,countCtx.height);
+            tokensCtx.getContext('2d').clearRect(0,0,tokensCtx.width,tokensCtx.height);
+            inputCtx.getContext('2d').clearRect(0,0,inputCtx.width,inputCtx.height);
+            outputCtx.getContext('2d').clearRect(0,0,outputCtx.width,outputCtx.height);
+            return;
+        }
+
+        // Update summary table
+        this.updateSummaryTable(totalCalls, totalInputTokens, totalOutputTokens);
+
+        // Register datalabels plugin
+        Chart.register(ChartDataLabels);
+
+        // Tool calls pie chart
+        this.countChart = new Chart(countCtx, {
+            type: 'pie',
+            data: { 
+                labels: names, 
+                datasets: [{ 
+                    data: counts,
+                    backgroundColor: colors
+                }] 
+            },
+            options: {
+                plugins: {
+                    legend: { display: true },
+                    datalabels: {
+                        display: true,
+                        color: 'white',
+                        font: { weight: 'bold' },
+                        formatter: (value) => value
+                    }
+                }
+            }
+        });
+
+        // Input tokens pie chart
+        this.inputChart = new Chart(inputCtx, {
+            type: 'pie',
+            data: { 
+                labels: names, 
+                datasets: [{ 
+                    data: inputTokens,
+                    backgroundColor: colors
+                }] 
+            },
+            options: {
+                plugins: {
+                    legend: { display: true },
+                    datalabels: {
+                        display: true,
+                        color: 'white',
+                        font: { weight: 'bold' },
+                        formatter: (value) => value
+                    }
+                }
+            }
+        });
+
+        // Output tokens pie chart
+        this.outputChart = new Chart(outputCtx, {
+            type: 'pie',
+            data: { 
+                labels: names, 
+                datasets: [{ 
+                    data: outputTokens,
+                    backgroundColor: colors
+                }] 
+            },
+            options: {
+                plugins: {
+                    legend: { display: true },
+                    datalabels: {
+                        display: true,
+                        color: 'white',
+                        font: { weight: 'bold' },
+                        formatter: (value) => value
+                    }
+                }
+            }
+        });
+
+        // Combined input/output tokens bar chart
+        this.tokensChart = new Chart(tokensCtx, {
+            type: 'bar',
+            data: { 
+                labels: names, 
+                datasets: [
+                    { 
+                        label: 'Input Tokens', 
+                        data: inputTokens,
+                        backgroundColor: colors.map(color => color + '80'), // Semi-transparent
+                        borderColor: colors,
+                        borderWidth: 2,
+                        borderSkipped: false,
+                        yAxisID: 'y'
+                    },
+                    { 
+                        label: 'Output Tokens', 
+                        data: outputTokens,
+                        backgroundColor: colors,
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        beginAtZero: true,
+                        title: { display: true, text: 'Input Tokens' }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        beginAtZero: true,
+                        title: { display: true, text: 'Output Tokens' },
+                        grid: { drawOnChartArea: false }
+                    }
+                }
+            }
+        });
+    }
+
+    generateColors(count) {
+        const colors = [
+            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+            '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
+        ];
+        return Array.from({length: count}, (_, i) => colors[i % colors.length]);
+    }
+
+    updateSummaryTable(totalCalls, totalInputTokens, totalOutputTokens) {
+        const tableHtml = `
+            <table class="stats-summary">
+                <tr><th>Metric</th><th>Total</th></tr>
+                <tr><td>Tool Calls</td><td>${totalCalls}</td></tr>
+                <tr><td>Input Tokens</td><td>${totalInputTokens}</td></tr>
+                <tr><td>Output Tokens</td><td>${totalOutputTokens}</td></tr>
+                <tr><td>Total Tokens</td><td>${totalInputTokens + totalOutputTokens}</td></tr>
+            </table>
+        `;
+        $('#stats-summary').html(tableHtml);
     }
 
     shutdown() {

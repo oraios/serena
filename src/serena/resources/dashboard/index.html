@@ -8,6 +8,8 @@
     <link rel="icon" type="image/png" sizes="32x32" href="serena-icon-32.png">
     <link rel="icon" type="image/png" sizes="48x48" href="serena-icon-48.png">
     <script src="jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <script src="dashboard.js"></script>
     <style>
         body {
@@ -97,6 +99,70 @@
             text-align: center;
             margin: 10px 0;
         }
+        
+        .charts-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: space-between;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .chart-group {
+            flex: 1;
+            min-width: 280px;
+            max-width: 320px;
+            text-align: center;
+        }
+        
+        .chart-wide {
+            flex: 0 0 100%;
+            min-width: 100%;
+            margin-top: 10px;
+        }
+        
+        .chart-group h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        
+        .stats-summary {
+            margin: 0 auto;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 5px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .stats-summary th,
+        .stats-summary td {
+            padding: 10px 20px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .stats-summary th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        
+        .stats-summary tr:last-child td {
+            border-bottom: none;
+        }
+        
+        @media (max-width: 768px) {
+            .charts-container {
+                flex-direction: column;
+            }
+            
+            .chart-group,
+            .chart-wide {
+                min-width: auto;
+                max-width: none;
+            }
+        }
     </style>
 </head>
 <body>
@@ -107,10 +173,39 @@
     <div class="controls">
         <button id="load-logs" class="btn">Reload Log</button>
         <button id="shutdown" class="btn">Shutdown Server</button>
+        <button id="toggle-stats" class="btn">Show Stats</button>
     </div>
-    
+
     <div id="error-container"></div>
     <div id="log-container" class="log-container"></div>
+
+    <div id="stats-section" style="display:none; margin-top:20px;">
+        <div style="text-align:center; margin-bottom:20px;">
+            <button id="refresh-stats" class="btn">Refresh Stats</button>
+            <button id="clear-stats" class="btn">Clear Stats</button>
+        </div>
+        
+        <div id="stats-summary" style="margin-bottom:20px; text-align:center;"></div>
+        
+        <div class="charts-container">
+            <div class="chart-group">
+                <h3>Tool Calls</h3>
+                <canvas id="count-chart" height="200"></canvas>
+            </div>
+            <div class="chart-group">
+                <h3>Input Tokens</h3>
+                <canvas id="input-chart" height="200"></canvas>
+            </div>
+            <div class="chart-group">
+                <h3>Output Tokens</h3>
+                <canvas id="output-chart" height="200"></canvas>
+            </div>
+            <div class="chart-group chart-wide">
+                <h3>Input vs Output Tokens</h3>
+                <canvas id="tokens-chart" height="120"></canvas>
+            </div>
+        </div>
+    </div>
 
     <script>
         $(document).ready(function() {
