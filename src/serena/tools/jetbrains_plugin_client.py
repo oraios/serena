@@ -3,11 +3,17 @@ Client for the Serena JetBrains Plugin
 """
 
 import json
+import logging
+from pathlib import Path
 from typing import Any, Optional, Self, TypeVar
 
 import requests
+from sensai.util.string import ToStringMixin
+
+from serena.project import Project
 
 T = TypeVar("T")
+log = logging.getLogger(__name__)
 
 
 class SerenaClientError(Exception):
@@ -22,18 +28,52 @@ class APIError(SerenaClientError):
     """Raised when the API returns an error response."""
 
 
-class JetBrainsPluginClient:
+class ServerNotFoundError(Exception):
+    """Raised when the plugin's service is not found."""
+
+
+class JetBrainsPluginClient(ToStringMixin):
     """
     Python client for the Serena Backend Service.
 
     Provides simple methods to interact with all available endpoints.
     """
 
-    def __init__(self, base_url: str = "http://localhost:8080", timeout: int = 30):
-        self.base_url = base_url.rstrip("/")
+    BASE_PORT = 0x5EA2
+    last_port: int | None = None
+
+    def __init__(self, port: int, timeout: int = 30):
+        self.base_url = f"http://127.0.0.1:{port}"
         self.timeout = timeout
         self.session = requests.Session()
         self.session.headers.update({"Content-Type": "application/json", "Accept": "application/json"})
+
+    def _tostring_includes(self) -> list[str]:
+        return ["base_url", "timeout"]
+
+    @classmethod
+    def from_project(cls, project: Project) -> Self:
+        resolved_path = Path(project.project_root).resolve()
+
+        if cls.last_port is not None:
+            client = JetBrainsPluginClient(cls.last_port)
+            if client.matches(resolved_path):
+                return client
+
+        for port in range(cls.BASE_PORT, cls.BASE_PORT + 20):
+            client = JetBrainsPluginClient(port)
+            if client.matches(resolved_path):
+                log.info("Found JetBrains IDE service at port %d for project %s", port, resolved_path)
+                cls.last_port = port
+                return client
+
+        raise ServerNotFoundError("Found no Serena service in a JetBrains IDE instance for the project at " + str(resolved_path))
+
+    def matches(self, resolved_path: Path) -> bool:
+        try:
+            return Path(self.project_root()).resolve() == resolved_path
+        except ConnectionError:
+            return False
 
     def _make_request(self, method: str, endpoint: str, data: Optional[dict] = None) -> dict[str, Any]:
         url = f"{self.base_url}{endpoint}"
@@ -84,8 +124,9 @@ class JetBrainsPluginClient:
 
         return convert(response)
 
-    def heartbeat(self) -> dict[str, Any]:
-        return self._make_request("GET", "/heartbeat")
+    def project_root(self) -> str:
+        response = self._make_request("GET", "/status")
+        return response["project_root"]
 
     def find_symbol(
         self, name_path: str, relative_path: str | None = None, include_body: bool = False, depth: int = 0, include_location: bool = False
@@ -142,24 +183,3 @@ class JetBrainsPluginClient:
 
     def __exit__(self, exc_type, exc_val, exc_tb):  # type: ignore
         self.close()
-
-
-if __name__ == "__main__":
-    with JetBrainsPluginClient() as client:
-        # check heartbeat
-        heartbeat_response = client.heartbeat()
-        print(f"Heartbeat: {heartbeat_response}")
-
-        # find symbol
-        symbols_response = client.find_symbol("DQN", include_body=False, depth=1)
-        symbols = symbols_response.get("symbols", [])
-        print(f"Found {len(symbols)} symbols")
-        from pprint import pprint
-
-        pprint(symbols_response)
-
-        # find references
-        if symbols:
-            first_symbol = symbols[0]
-            refs_response = client.find_references(name_path=first_symbol["name_path"], relative_path=first_symbol["relative_path"])
-            pprint(refs_response)

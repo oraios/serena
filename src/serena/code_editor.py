@@ -284,7 +284,7 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
         yield self.EditedFile(relative_path, self._project)
 
     def _find_unique_symbol(self, name_path: str, relative_file_path: str) -> JetBrainsSymbol:
-        with JetBrainsPluginClient() as client:
+        with JetBrainsPluginClient.from_project(self._project) as client:
             result = client.find_symbol(name_path, relative_path=relative_file_path, include_body=False, depth=0, include_location=True)
             symbols = result["symbols"]
             if not symbols:

@@ -59,7 +59,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerOptional):
         :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
         :return: JSON string: a list of symbols (with locations) matching the name.
         """
-        with JetBrainsPluginClient() as client:
+        with JetBrainsPluginClient.from_project(self.project) as client:
             response_dict = client.find_symbol(
                 name_path=name_path,
                 relative_path=relative_path,
@@ -91,7 +91,7 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerOptional):
         :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
         :return: a list of JSON objects with the symbols referencing the requested symbol
         """
-        with JetBrainsPluginClient() as client:
+        with JetBrainsPluginClient.from_project(self.project) as client:
             response_dict = client.find_references(
                 name_path=name_path,
                 relative_path=relative_path,
@@ -121,7 +121,7 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerOptional):
         :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
         :return: a JSON object containing the symbols
         """
-        with JetBrainsPluginClient() as client:
+        with JetBrainsPluginClient.from_project(self.project) as client:
             response_dict = client.get_symbols_overview(
                 relative_path=relative_path,
             )
