@@ -68,6 +68,7 @@ With Serena, we provide
  * direct, out-of-the-box support for:
      * Python
      * TypeScript/Javascript (currently has some instability issues, we are working on it)
+     * Svelte (Full Svelte 5 support with TypeScript integration - requires Node.js and npm)
      * PHP
      * Go (need to install go and gopls first)
      * Rust

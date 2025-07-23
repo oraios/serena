@@ -2,6 +2,15 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+## New Features
+
+* **Add comprehensive Svelte language server support**
+  * Full integration with Svelte 5 and TypeScript
+  * Auto-installation of `svelte-language-server` via npm
+  * Complete symbol discovery, finding, and editing capabilities
+  * Support for modern Svelte syntax (`$props()`, `onclick` vs `on:click`)
+  * Proper handling of TypeScript in Svelte components
+
 # 0.1.3
 
 ## Summary
