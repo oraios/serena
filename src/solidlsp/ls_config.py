@@ -42,6 +42,7 @@ class Language(str, Enum):
     CLOJURE = "clojure"
     ELIXIR = "elixir"
     TERRAFORM = "terraform"
+    SVELTE = "svelte"
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -103,6 +104,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.ex", "*.exs")
             case self.TERRAFORM:
                 return FilenameMatcher("*.tf", "*.tfvars", "*.tfstate")
+            case self.SVELTE:
+                return FilenameMatcher("*.svelte")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

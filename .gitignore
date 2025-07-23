@@ -223,6 +223,13 @@ tmp/
 # Claude settings
 .claude/settings.local.json
 
+# Node.js dependencies
+node_modules/
+package-lock.json
+*.tgz
+.npm
+.node_repl_history
+
 # Elixir
 /test/resources/repos/elixir/test_repo/deps
 # Exception: Don't ignore Elixir test repository lib directory (contains source code)

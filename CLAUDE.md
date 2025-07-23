@@ -18,7 +18,8 @@ Available pytest markers for selective testing:
 
 **Project Management:**
 - `uv run serena-mcp-server` - Start MCP server from project root
-- `uv run index-project` - Index project for faster tool performance
+- `uv run index-project` - Index project for faster tool performance (deprecated, use `uv run serena index-project`)
+- `uv run serena-list-tools` - List all available tools with descriptions
 
 **Always run format, type-check, and test before completing any task.**
 
@@ -111,3 +112,5 @@ Configuration is loaded from (in order of precedence):
 - Language servers run as separate processes with LSP communication
 - Memory system enables persistent project knowledge
 - Context/mode system allows workflow customization
+- All development tasks managed through `poe` (poethepoet) - run `poe` to see available commands
+- Use `--all-extras` when installing dependencies: `uv pip install --all-extras -r pyproject.toml -e .`
