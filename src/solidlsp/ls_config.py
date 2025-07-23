@@ -105,7 +105,8 @@ class Language(str, Enum):
             case self.TERRAFORM:
                 return FilenameMatcher("*.tf", "*.tfvars", "*.tfstate")
             case self.SVELTE:
-                return FilenameMatcher("*.svelte")
+                # Enhanced Svelte projects support .svelte, .ts, and .js files
+                return FilenameMatcher("*.svelte", "*.ts", "*.js")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

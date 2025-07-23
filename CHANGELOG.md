@@ -5,11 +5,13 @@ Status of the `main` branch. Changes prior to the next official version change w
 ## New Features
 
 * **Add comprehensive Svelte language server support**
-  * Full integration with Svelte 5 and TypeScript
+  * Full integration with both Svelte Language Server and TypeScript Language Server
   * Auto-installation of `svelte-language-server` via npm
-  * Complete symbol discovery, finding, and editing capabilities
-  * Support for modern Svelte syntax (`$props()`, `onclick` vs `on:click`)
-  * Proper handling of TypeScript in Svelte components
+  * Complete symbol discovery, finding, and editing capabilities for both .svelte and .ts files
+  * Support for modern Svelte 5 syntax (`$props()`, `onclick` vs `on:click`, `$state` runes)
+  * Dual language server architecture: Svelte LS for .svelte files, TypeScript LS for .ts/.js files
+  * Intelligent routing and symbol tree merging for mixed Svelte/TypeScript projects
+  * Full support for SvelteKit projects with server-side TypeScript and client-side Svelte components
 
 # 0.1.3
 

@@ -1,5 +1,12 @@
 """
-Provides Svelte specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Svelte.
+Svelte Language Server with comprehensive TypeScript support.
+
+This implementation provides full support for mixed Svelte/TypeScript projects using:
+- Svelte Language Server for .svelte files and embedded TypeScript
+- TypeScript Language Server for standalone .ts/.js files
+- Intelligent routing between language servers based on file type
+- Symbol tree merging for unified project analysis
+- Proper lifecycle management of both language servers
 """
 
 import logging
@@ -11,8 +18,9 @@ from time import sleep
 
 from overrides import override
 
+from solidlsp import ls_types
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
@@ -23,13 +31,18 @@ from .common import RuntimeDependency, RuntimeDependencyCollection
 
 class SvelteLanguageServer(SolidLanguageServer):
     """
-    Provides Svelte specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Svelte.
+    Svelte Language Server with dual-language server architecture.
+
+    Provides comprehensive support for Svelte projects by managing:
+    - Svelte Language Server for .svelte files with embedded TypeScript
+    - TypeScript Language Server for standalone .ts/.js/.tsx/.jsx files
+    - Intelligent file routing based on extensions
+    - Symbol tree merging for unified project analysis
+    - Proper initialization and cleanup of both language servers
     """
 
     def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
-        """
-        Creates a SvelteLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
-        """
+        """Initialize Svelte language server with dual-language server support."""
         svelte_lsp_executable_path = self._setup_runtime_dependencies(logger, config)
         super().__init__(
             config,
@@ -38,8 +51,138 @@ class SvelteLanguageServer(SolidLanguageServer):
             ProcessLaunchInfo(cmd=svelte_lsp_executable_path, cwd=repository_root_path),
             "svelte",
         )
+
+        # Initialize TypeScript language server for standalone .ts/.js file support
+        self._ts_server: SolidLanguageServer | None = None
+        self._ts_server_started = False
         self.server_ready = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
+
+    def _get_ts_server(self) -> SolidLanguageServer | None:
+        """Lazy initialization of TypeScript language server for .ts files."""
+        if self._ts_server is None:
+            try:
+                ts_config = LanguageServerConfig(Language.TYPESCRIPT)
+                self._ts_server = SolidLanguageServer.create(ts_config, self.logger, self.repository_root_path)
+                self.logger.log("Created TypeScript LS for Svelte project support", logging.INFO)
+            except Exception as e:
+                self.logger.log(f"TypeScript LS creation failed, using Svelte LS only: {e}", logging.INFO)
+                self._ts_server = None
+
+        # Start the TypeScript server if not already started
+        if self._ts_server is not None and not self._ts_server_started:
+            try:
+                self._ts_server.start()
+                self._ts_server_started = True
+                self.logger.log("Started TypeScript LS for Svelte project support", logging.INFO)
+            except Exception as e:
+                self.logger.log(f"TypeScript LS startup failed: {e}", logging.WARNING)
+                self._ts_server = None
+                self._ts_server_started = False
+
+        return self._ts_server
+
+    def _should_use_typescript_ls(self, file_path: str) -> bool:
+        """Determine if TypeScript LS should handle this file."""
+        return (
+            file_path.endswith((".ts", ".tsx", ".js", ".jsx"))
+            and not file_path.endswith(".svelte.ts")
+            and self._get_ts_server() is not None
+            and self._ts_server_started
+        )
+
+    @override
+    def request_document_symbols(
+        self, relative_file_path: str, include_body: bool = False
+    ) -> tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]:
+        """Document symbol requests with intelligent language server routing."""
+        if self._should_use_typescript_ls(relative_file_path):
+            try:
+                return self._get_ts_server().request_document_symbols(relative_file_path, include_body)
+            except Exception as e:
+                self.logger.log(f"TypeScript LS failed for {relative_file_path}: {e}", logging.WARNING)
+
+        # Use Svelte LS for .svelte files and fallback
+        return super().request_document_symbols(relative_file_path, include_body)
+
+    @override
+    def request_full_symbol_tree(
+        self, within_relative_path: str | None = None, include_body: bool = False
+    ) -> list[ls_types.UnifiedSymbolInformation]:
+        """Symbol tree with merged results from both Svelte and TypeScript language servers."""
+        # Get symbols from Svelte LS
+        svelte_symbols = super().request_full_symbol_tree(within_relative_path, include_body)
+
+        # Merge with TypeScript symbols if available
+        if self._get_ts_server():
+            try:
+                # Get TypeScript symbols for .ts files
+                ts_symbols = self._get_ts_server().request_full_symbol_tree(within_relative_path, include_body)
+                # Merge symbols from both sources, avoiding duplicates
+                merged_symbols = self._merge_symbol_sources(svelte_symbols, ts_symbols)
+                return merged_symbols
+            except Exception as e:
+                self.logger.log(f"Failed to merge TypeScript symbols: {e}", logging.WARNING)
+
+        return svelte_symbols
+
+    def _merge_symbol_sources(
+        self, svelte_symbols: list[ls_types.UnifiedSymbolInformation], ts_symbols: list[ls_types.UnifiedSymbolInformation]
+    ) -> list[ls_types.UnifiedSymbolInformation]:
+        """Merge symbols from different sources, avoiding duplicates."""
+        merged = list(svelte_symbols)
+
+        for ts_symbol in ts_symbols:
+            # Only add TypeScript symbols that aren't already covered by Svelte LS
+            if self._is_unique_typescript_symbol(ts_symbol, merged):
+                merged.append(ts_symbol)
+
+        return merged
+
+    def _is_unique_typescript_symbol(
+        self, ts_symbol: ls_types.UnifiedSymbolInformation, existing_symbols: list[ls_types.UnifiedSymbolInformation]
+    ) -> bool:
+        """Check if TypeScript symbol adds unique value."""
+        ts_path = ts_symbol.get("location", {}).get("relativePath", "")
+        ts_name = ts_symbol.get("name", "")
+
+        # Skip if it's not a .ts/.js file (Svelte LS should handle .svelte)
+        if not ts_path.endswith((".ts", ".tsx", ".js", ".jsx")):
+            return False
+
+        # Check for duplicates
+        for existing in existing_symbols:
+            existing_path = existing.get("location", {}).get("relativePath", "")
+            existing_name = existing.get("name", "")
+
+            if ts_name == existing_name and ts_path == existing_path:
+                return False
+
+        return True
+
+    @override
+    def request_references(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:
+        """Reference finding with intelligent language server routing."""
+        if self._should_use_typescript_ls(relative_file_path):
+            try:
+                return self._get_ts_server().request_references(relative_file_path, line, column)
+            except Exception as e:
+                self.logger.log(f"TypeScript LS references failed: {e}", logging.WARNING)
+
+        # Use Svelte LS
+        return super().request_references(relative_file_path, line, column)
+
+    @override
+    def request_definition(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:
+        """Definition finding with intelligent language server routing."""
+        if self._should_use_typescript_ls(relative_file_path):
+            try:
+                return self._get_ts_server().request_definition(relative_file_path, line, column)
+            except Exception as e:
+                self.logger.log(f"TypeScript LS definition failed: {e}", logging.WARNING)
+
+        # Use Svelte LS
+        return super().request_definition(relative_file_path, line, column)
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -128,6 +271,18 @@ class SvelteLanguageServer(SolidLanguageServer):
             return f"node {svelte_executable_path} --stdio"
         else:
             return f"{svelte_executable_path} --stdio"
+
+    def stop(self) -> None:
+        """Stop both Svelte and TypeScript language servers."""
+        try:
+            if self._ts_server is not None and self._ts_server_started:
+                self._ts_server.stop()
+                self._ts_server_started = False
+                self.logger.log("Stopped TypeScript LS", logging.INFO)
+        except Exception as e:
+            self.logger.log(f"Error stopping TypeScript LS: {e}", logging.WARNING)
+
+        super().stop()
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
@@ -271,7 +426,7 @@ class SvelteLanguageServer(SolidLanguageServer):
         self.completions_available.set()
 
     @override
-    def _send_references_request(self, relative_file_path: str, line: int, column: int):
+    def _send_references_request(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:
         # Similar to TypeScript, may need a small delay for cross-file references
         sleep(0.5)
         return super()._send_references_request(relative_file_path, line, column)
