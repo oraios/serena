@@ -1,26 +1,64 @@
 <script lang="ts">
   import Button from './lib/Button.svelte';
-  import { count } from './lib/store.js';
+  import { count, currentUser, incrementCount, resetCount, setCurrentUser } from './lib/store.svelte.ts';
+  import { UserManager, type User } from './lib/store';
+  import { formatName, validateEmail, ApiClient, defaultConfig } from './lib/utils';
   
   interface Props {
-    name?: string;
+    name?: string;    
   }
-  
+
   let { name = 'World' }: Props = $props();
   
+  const userManager = new UserManager();
+  const apiClient = new ApiClient(defaultConfig);
+
   function handleClick() {
     console.log('Hello from App!');
   }
-  
-  function incrementCount() {
-    count.update(n => n + 1);
+
+  function handleIncrement() {
+    incrementCount();
+  }
+
+  function handleReset() {
+    resetCount();
+  }
+
+  function createTestUser() {
+    const testUser: User = {
+      id: 1,
+      name: 'John Doe',
+      email: 'john@example.com'
+    };
+    
+    if (validateEmail(testUser.email)) {
+      userManager.addUser(testUser);
+      setCurrentUser(testUser);
+    }
+  }
+
+  async function fetchData() {
+    try {
+      const data = await apiClient.get('/users');
+      console.log('Fetched data:', data);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    }
   }
 </script>
 
 <main>
   <h1>Hello {name}!</h1>
   <Button onclick={handleClick} text="Click me" />
-  <Button onclick={incrementCount} text="Count: {$count}" />
+  <Button onclick={handleIncrement} text="Count: {count}" />
+  <Button onclick={handleReset} text="Reset" />
+  <Button onclick={createTestUser} text="Create User" />
+  <Button onclick={fetchData} text="Fetch Data" />
+  
+  {#if currentUser}
+    <p>Current user: {formatName(currentUser.name.split(' ')[0], currentUser.name.split(' ')[1] || '')}</p>
+  {/if}
 </main>
 
 <style>
