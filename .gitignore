@@ -234,3 +234,6 @@ package-lock.json
 /test/resources/repos/elixir/test_repo/deps
 # Exception: Don't ignore Elixir test repository lib directory (contains source code)
 !/test/resources/repos/elixir/test_repo/lib
+
+# Exception: Don't ignore Svelte test repository lib directory (contains components)
+!/test/resources/repos/svelte/test_repo/lib
