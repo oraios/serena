@@ -319,9 +319,10 @@ class Hover(TypedDict):
     visualize the hover, e.g. by changing the background color. """
 
 class DiagnosticsSeverity(IntEnum):
-   severe = 1
-   moderate = 2
-   light = 3
+    ERROR = 1
+    WARNING = 2
+    INFORMATION = 3
+    HINT = 4
 
 
 class Diagnostic(TypedDict):
