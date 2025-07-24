@@ -153,7 +153,7 @@ class SolidLanguageServer(ABC):
 
             ls = CSharpLanguageServer(config, logger, repository_root_path)
         elif config.code_language == Language.CSHARP_OMNISHARP:
-            from solidlsp.language_servers.omnisharp.omnisharp import OmniSharp
+            from solidlsp.language_servers.omnisharp import OmniSharp
 
             ls = OmniSharp(config, logger, repository_root_path)
         elif config.code_language == Language.TYPESCRIPT:
@@ -707,6 +707,54 @@ class SolidLanguageServer(ABC):
             new_item["absolutePath"] = str(abs_path)
             new_item["relativePath"] = str(rel_path)
             ret.append(ls_types.Location(**new_item))
+
+        return ret
+    
+    def request_text_document_diagnostics(
+        self, relative_file_path: str
+    ) -> list[ls_types.Diagnostic]:
+        """
+        Raise a [textDocument/diagnostic](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_diagnostic) request to the Language Server
+        to find diagnostics for the given file. Wait for the response and return the result.
+
+        :param relative_file_path: The relative path of the file to retrieve diagnostics for
+
+        :return: A list of diagnostics for the file
+        """
+        if not self.server_started:
+            self.logger.log(
+                "request_text_document_diagnostics called before Language Server started",
+                logging.ERROR,
+            )
+            raise LanguageServerException("Language Server not started")
+
+        with self.open_file(relative_file_path):
+            response = self.server.send.text_document_diagnostic(
+                {
+                    LSPConstants.TEXT_DOCUMENT: {
+                        LSPConstants.URI: pathlib.Path(str(PurePath(self.repository_root_path, relative_file_path))).as_uri()
+                    }
+                }
+            )
+
+        if response is None:
+            return []
+
+        assert isinstance(response, dict), f"Unexpected response from Language Server (expected list, got {type(response)}): {response}"
+        ret: list[ls_types.Diagnostic] = []
+        for item in response["items"]:
+            assert isinstance(item, dict), f"Unexpected response from Language Server (expected dict, got {type(item)}): {item}"
+            assert LSPConstants.SEVERITY in item, "Diagnostic item must have a severity"
+            assert LSPConstants.MESSAGE in item, "Diagnostic item must have a message"
+            assert LSPConstants.RANGE in item, "Diagnostic item must have a range"
+
+            # Convert the diagnostic to our type
+            new_item: ls_types.Diagnostic = {
+                "severity": item[LSPConstants.SEVERITY],
+                "message": item[LSPConstants.MESSAGE],
+                "range": item[LSPConstants.RANGE],
+            }
+            ret.append(ls_types.Diagnostic(new_item))
 
         return ret
 
@@ -1533,6 +1581,7 @@ class SolidLanguageServer(ABC):
         defining_symbol = self.request_containing_symbol(def_path, def_line, def_col, strict=False, include_body=include_body)
 
         return defining_symbol
+    
 
     @property
     def cache_path(self) -> Path:

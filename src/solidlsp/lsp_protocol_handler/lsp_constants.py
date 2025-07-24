@@ -61,3 +61,9 @@ class LSPConstants:
 
     # key used to represent the location in symbols
     LOCATION = "location"
+
+    # Severity level of the diagnostic
+    SEVERITY = "severity"
+
+    # The message of the diagnostic
+    MESSAGE = "message"
