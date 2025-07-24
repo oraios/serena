@@ -259,6 +259,7 @@ markers = [
   "csharp: language server running for C#",
   "elixir: language server running for Elixir",
   "terraform: language server running for Terraform",
+  "svelte: language server running for Svelte",
   "snapshot: snapshot tests for symbolic editing operations",
 ]
 
@@ -266,5 +267,10 @@ markers = [
 # Ref: https://github.com/codespell-project/codespell#using-a-config-file
 skip = '.git*,*.svg,*.lock,*.min.*'
 check-hidden = true
+
+[dependency-groups]
+dev = [
+    "types-requests>=2.32.4.20250611",
+]
 # ignore-regex = ''
 # ignore-words-list = ''

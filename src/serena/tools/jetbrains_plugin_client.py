@@ -5,7 +5,7 @@ Client for the Serena JetBrains Plugin
 import json
 import logging
 from pathlib import Path
-from typing import Any, Optional, Self, TypeVar
+from typing import Any, Self, TypeVar
 
 import requests
 from sensai.util.string import ToStringMixin
@@ -75,7 +75,7 @@ class JetBrainsPluginClient(ToStringMixin):
         except ConnectionError:
             return False
 
-    def _make_request(self, method: str, endpoint: str, data: Optional[dict] = None) -> dict[str, Any]:
+    def _make_request(self, method: str, endpoint: str, data: dict | None = None) -> dict[str, Any]:
         url = f"{self.base_url}{endpoint}"
 
         try:
