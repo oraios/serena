@@ -743,12 +743,6 @@ class SolidLanguageServer(ABC):
         assert isinstance(response, dict), f"Unexpected response from Language Server (expected list, got {type(response)}): {response}"
         ret: list[ls_types.Diagnostic] = []
         for item in response["items"]:
-            assert isinstance(item, dict), f"Unexpected response from Language Server (expected dict, got {type(item)}): {item}"
-            assert LSPConstants.SEVERITY in item, "Diagnostic item must have a severity"
-            assert LSPConstants.MESSAGE in item, "Diagnostic item must have a message"
-            assert LSPConstants.RANGE in item, "Diagnostic item must have a range"
-
-            # Convert the diagnostic to our type
             new_item: ls_types.Diagnostic = {
                 "uri": pathlib.Path(str(PurePath(self.repository_root_path, relative_file_path))).as_uri(),
                 "severity": item["severity"],
