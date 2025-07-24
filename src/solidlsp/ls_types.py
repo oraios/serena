@@ -325,7 +325,7 @@ class Diagnostic(TypedDict):
     """ The URI of the text document to which the diagnostics apply. """
     range: Range
     """ The range of the text document to which the diagnostics apply. """
-    severity: NotRequired[int]
+    severity: NotRequired[IntEnum]
     """ The severity of the diagnostic. """
     message: str
     """ The diagnostic message. """

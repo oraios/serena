@@ -750,9 +750,11 @@ class SolidLanguageServer(ABC):
 
             # Convert the diagnostic to our type
             new_item: ls_types.Diagnostic = {
-                "severity": item[LSPConstants.SEVERITY],
-                "message": item[LSPConstants.MESSAGE],
-                "range": item[LSPConstants.RANGE],
+                "uri": pathlib.Path(str(PurePath(self.repository_root_path, relative_file_path))).as_uri(),
+                "severity": item["severity"],
+                "message": item["message"],
+                "range": item["range"],
+                "code": item["code"]
             }
             ret.append(ls_types.Diagnostic(new_item))
 
