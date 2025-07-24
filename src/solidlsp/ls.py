@@ -101,7 +101,12 @@ class SolidLanguageServer(ABC):
 
     @classmethod
     def create(
-        cls, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, timeout: float | None = None
+        cls,
+        config: LanguageServerConfig,
+        logger: LanguageServerLogger,
+        repository_root_path: str,
+        timeout: float | None = None,
+        intelephense_options: dict[str, int] | None = None,
     ) -> "SolidLanguageServer":
         """
         Creates a language specific LanguageServer instance based on the given configuration, and appropriate settings for the programming language.
@@ -113,6 +118,7 @@ class SolidLanguageServer(ABC):
         :param config: The Multilspy configuration.
         :param logger: The logger to use.
         :param timeout: the timeout for requests to the language server. If None, no timeout will be used.
+        :param intelephense_options: optional configuration options for Intelephense (PHP language server only).
         :return LanguageServer: A language specific LanguageServer instance.
         """
         ls: SolidLanguageServer
@@ -190,7 +196,7 @@ class SolidLanguageServer(ABC):
         elif config.code_language == Language.PHP:
             from solidlsp.language_servers.intelephense import Intelephense
 
-            ls = Intelephense(config, logger, repository_root_path)
+            ls = Intelephense(config, logger, repository_root_path, intelephense_options=intelephense_options)
 
         elif config.code_language == Language.CLOJURE:
             from solidlsp.language_servers.clojure_lsp import ClojureLSP

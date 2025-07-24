@@ -424,16 +424,33 @@ class ProjectCommands(AutoRegisteringGroup):
     @click.command("index-deprecated", help="Deprecated alias for 'serena project index'.")
     @click.argument("project", type=click.Path(exists=True), default=os.getcwd(), required=False)
     @click.option("--log-level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="WARNING")
-    def index_deprecated(project: str, log_level: str = "WARNING") -> None:
+    @click.option("--max-memory", type=int, help="Maximum memory (MB) for Intelephense language server (minimum 256)")
+    @click.option("--max-file-size", type=int, help="Maximum file size (bytes) for Intelephense to process (default 1000000)")
+    def index_deprecated(project: str, log_level: str = "WARNING", max_memory: int | None = None, max_file_size: int | None = None) -> None:
         click.echo("Deprecated! Use `project index` instead.")
-        ProjectCommands._index_project(project, log_level)
+
+        # Validate parameters
+        if max_memory is not None and max_memory < 256:
+            raise click.BadParameter("max-memory must be at least 256 MB")
+        if max_file_size is not None and max_file_size <= 0:
+            raise click.BadParameter("max-file-size must be greater than 0")
+
+        ProjectCommands._index_project(project, log_level, max_memory, max_file_size)
 
     @staticmethod
-    def _index_project(project: str, log_level: str) -> None:
+    def _index_project(project: str, log_level: str, max_memory: int | None = None, max_file_size: int | None = None) -> None:
         lvl = logging.getLevelNamesMapping()[log_level.upper()]
         proj = Project.load(os.path.abspath(project))
         print(f"Indexing symbols in project {project}…")
-        ls = proj.create_language_server(log_level=lvl)
+
+        # Prepare Intelephense options if provided
+        intelephense_options = {}
+        if max_memory is not None:
+            intelephense_options["maxMemory"] = max_memory
+        if max_file_size is not None:
+            intelephense_options["maxSize"] = max_file_size
+
+        ls = proj.create_language_server(log_level=lvl, intelephense_options=intelephense_options or None)
         with ls.start_server():
             files = proj.gather_source_files()
             for i, f in enumerate(tqdm(files, desc="Indexing")):
