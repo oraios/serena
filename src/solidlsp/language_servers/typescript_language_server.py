@@ -88,13 +88,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                 RuntimeDependency(
                     id="typescript",
                     description="typescript package",
-                    command="cmd /c npm install --prefix ./ typescript@5.5.4",
-                    platform_id="any",
-                ),
-                RuntimeDependency(
-                    id="typescript-language-server",
-                    description="typescript-language-server package",
-                    command="cmd /c npm install --prefix ./ typescript-language-server@4.3.3",
+                    command="cmd /c npm install --prefix ./ typescript@5.5.4 typescript-language-server@4.3.3",
                     platform_id="any",
                 ),
             ]
@@ -115,7 +109,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         # Install typescript and typescript-language-server if not already installed
         tsserver_ls_dir = os.path.join(cls.ls_resources_dir(), "ts-lsp")
         # tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server.cmd")
-        tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", "typescript-language-server", "lib", "cli.js")
+        tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", "typescript-language-server", "lib", "cli.mjs")
 
         if not os.path.exists(tsserver_executable_path):
             logger.log(f"Typescript Language Server executable not found at {tsserver_executable_path}. Installing...", logging.INFO)
