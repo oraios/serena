@@ -75,7 +75,7 @@ class RuntimeDependencyCollection:
         try:
             if platform.system() == "Windows":
                 subprocess.run(
-                    dep.command,
+                    f'cmd /c {dep.command}',
                     shell=True,
                     check=True,
                     cwd=cwd,
