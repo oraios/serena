@@ -79,17 +79,23 @@ class Intelephense(SolidLanguageServer):
 
         return f"{intelephense_executable_path} --stdio"
 
-    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
+    def __init__(
+        self,
+        config: LanguageServerConfig,
+        logger: LanguageServerLogger,
+        repository_root_path: str,
+        intelephense_options: dict[str, int] | None = None,
+    ):
         # Setup runtime dependencies before initializing
         intelephense_cmd = self._setup_runtime_dependencies(logger, config)
 
         super().__init__(config, logger, repository_root_path, ProcessLaunchInfo(cmd=intelephense_cmd, cwd=repository_root_path), "php")
         self.request_id = 0
+        self.intelephense_options = intelephense_options
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
-        Returns the initialize params for the TypeScript Language Server.
+        Returns the initialize params for the Intelephense Language Server.
         """
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
@@ -111,6 +117,16 @@ class Intelephense(SolidLanguageServer):
                 }
             ],
         }
+
+        # Add initializationOptions if provided
+        if self.intelephense_options:
+            intelephense_settings = {}
+            if "maxMemory" in self.intelephense_options:
+                intelephense_settings["intelephense.maxMemory"] = self.intelephense_options["maxMemory"]
+            if "maxSize" in self.intelephense_options:
+                intelephense_settings["intelephense.files.maxSize"] = self.intelephense_options["maxSize"]
+
+            initialize_params["initializationOptions"] = intelephense_settings
 
         return initialize_params
 

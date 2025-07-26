@@ -246,6 +246,7 @@ class Project:
         log_level: int = logging.INFO,
         ls_timeout: float | None = DEFAULT_TOOL_TIMEOUT - 5,
         trace_lsp_communication: bool = False,
+        intelephense_options: dict[str, int] | None = None,
     ) -> SolidLanguageServer:
         """
         Create a language server for a project. Note that you will have to start it
@@ -256,6 +257,7 @@ class Project:
         :param log_level: the log level for the language server
         :param ls_timeout: the timeout for the language server
         :param trace_lsp_communication: whether to trace LSP communication
+        :param intelephense_options: optional configuration options for Intelephense (PHP only)
         :return: the language server
         """
         ls_config = LanguageServerConfig(
@@ -266,9 +268,20 @@ class Project:
         ls_logger = LanguageServerLogger(log_level=log_level)
 
         log.info(f"Creating language server instance for {self.project_root}.")
-        return SolidLanguageServer.create(
-            ls_config,
-            ls_logger,
-            self.project_root,
-            timeout=ls_timeout,
-        )
+
+        # Pass intelephense_options if provided and language is PHP
+        if self.language == Language.PHP and intelephense_options:
+            return SolidLanguageServer.create(
+                ls_config,
+                ls_logger,
+                self.project_root,
+                timeout=ls_timeout,
+                intelephense_options=intelephense_options,
+            )
+        else:
+            return SolidLanguageServer.create(
+                ls_config,
+                ls_logger,
+                self.project_root,
+                timeout=ls_timeout,
+            )
