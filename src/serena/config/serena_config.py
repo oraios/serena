@@ -192,7 +192,11 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
             raise FileNotFoundError(f"Project root not found: {project_root}")
         with LogTime("Project configuration auto-generation", logger=log):
             project_name = project_name or project_root.name
-            if project_language is None:
+            
+            custom_lsp_config_path = project_root / ".serena" / "custom_lsp.yml"
+            if custom_lsp_config_path.exists():
+                dominant_language = Language.CUSTOM
+            elif project_language is None:
                 language_composition = determine_programming_language_composition(str(project_root))
                 if len(language_composition) == 0:
                     raise ValueError(

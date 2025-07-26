@@ -42,6 +42,7 @@ class Language(str, Enum):
     CLOJURE = "clojure"
     ELIXIR = "elixir"
     TERRAFORM = "terraform"
+    CUSTOM = "custom"
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -62,7 +63,7 @@ class Language(str, Enum):
         """
         Check if the language server is experimental or deprecated.
         """
-        return self in {self.TYPESCRIPT_VTS, self.PYTHON_JEDI, self.CSHARP_OMNISHARP}
+        return self in {self.TYPESCRIPT_VTS, self.PYTHON_JEDI, self.CSHARP_OMNISHARP, self.CUSTOM}
 
     def __str__(self) -> str:
         return self.value
@@ -103,6 +104,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.ex", "*.exs")
             case self.TERRAFORM:
                 return FilenameMatcher("*.tf", "*.tfvars", "*.tfstate")
+            case self.CUSTOM:
+                return FilenameMatcher("*")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
