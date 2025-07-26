@@ -81,6 +81,7 @@ class RuntimeDependencyCollection:
                     cwd=cwd,
                     capture_output=True,
                     text=True,
+                    timeout=60,
                 )
             else:
                 import pwd
