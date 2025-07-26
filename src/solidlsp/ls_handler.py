@@ -150,10 +150,14 @@ class SolidLanguageServerHandler:
 
         cmd = self.process_launch_info.cmd
         is_windows = platform.system() == "Windows"
-        if not isinstance(cmd, str) and not is_windows:
+        if not isinstance(cmd, str):
             # Since we are using the shell, we need to convert the command list to a single string
-            # on Linux/macOS
-            cmd = " ".join(cmd)
+            # on all platforms.
+            if is_windows:
+                # On Windows, it's important to quote arguments correctly for the shell.
+                cmd = subprocess.list2cmdline(cmd)
+            else:
+                cmd = " ".join(cmd)
         log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
         self.process = subprocess.Popen(
             cmd,
