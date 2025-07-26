@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import platform
 import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -72,7 +73,7 @@ class RuntimeDependencyCollection:
     def _run_command(dep: RuntimeDependency, logger: LanguageServerLogger, cwd: str) -> None:
         logger.log(f"Running command for {dep.id}: '{dep.command}' in '{cwd}'", logging.INFO)
         try:
-            if PlatformUtils.get_platform_id().value.startswith("win"):
+            if platform.system() == "Windows":
                 subprocess.run(
                     dep.command,
                     shell=True,
