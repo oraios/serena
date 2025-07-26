@@ -146,7 +146,7 @@ class SolidLanguageServerHandler:
         from the server to the client
         """
         child_proc_env = os.environ.copy()
-        child_proc_env.update(self.process_launch_info.env)
+        # child_proc_env.update(self.process_launch_info.env)
 
         cmd = self.process_launch_info.cmd
         is_windows = platform.system() == "Windows"
