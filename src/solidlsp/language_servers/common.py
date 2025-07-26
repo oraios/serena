@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 from collections.abc import Sequence
@@ -60,7 +61,7 @@ class RuntimeDependencyCollection:
             if dep.url:
                 self._install_from_url(dep, logger, target_dir)
             if dep.command:
-                self._run_command(dep.command, target_dir)
+                self._run_command(dep, logger, target_dir)
             if dep.binary_name:
                 results[dep.id] = os.path.join(target_dir, dep.binary_name)
             else:
@@ -68,29 +69,37 @@ class RuntimeDependencyCollection:
         return results
 
     @staticmethod
-    def _run_command(command: str, cwd: str) -> None:
-        if PlatformUtils.get_platform_id().value.startswith("win"):
-            subprocess.run(
-                command,
-                shell=True,
-                check=True,
-                cwd=cwd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        else:
-            import pwd
+    def _run_command(dep: RuntimeDependency, logger: LanguageServerLogger, cwd: str) -> None:
+        logger.log(f"Running command for {dep.id}: '{dep.command}' in '{cwd}'", logging.INFO)
+        try:
+            if PlatformUtils.get_platform_id().value.startswith("win"):
+                subprocess.run(
+                    dep.command,
+                    shell=True,
+                    check=True,
+                    cwd=cwd,
+                    capture_output=True,
+                    text=True,
+                )
+            else:
+                import pwd
 
-            user = pwd.getpwuid(os.getuid()).pw_name
-            subprocess.run(
-                command,
-                shell=True,
-                check=True,
-                user=user,
-                cwd=cwd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+                user = pwd.getpwuid(os.getuid()).pw_name
+                subprocess.run(
+                    dep.command,
+                    shell=True,
+                    check=True,
+                    user=user,
+                    cwd=cwd,
+                    capture_output=True,
+                    text=True,
+                )
+            logger.log(f"Successfully ran command for {dep.id}.", logging.INFO)
+        except subprocess.CalledProcessError as e:
+            logger.log(f"Error running command for {dep.id}: {e}", logging.ERROR)
+            logger.log(f"Stderr: {e.stderr}", logging.ERROR)
+            logger.log(f"Stdout: {e.stdout}", logging.ERROR)
+            raise
 
     @staticmethod
     def _install_from_url(dep: RuntimeDependency, logger: LanguageServerLogger, target_dir: str) -> None:
