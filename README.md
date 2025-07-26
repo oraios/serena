@@ -80,6 +80,8 @@ With Serena, we provide
      * Ruby (untested)
      * Kotlin (untested)
      * Dart (untested)
+ * custom language servers:
+     * You can configure Serena to use any LSP-compliant language server by providing a simple command to start the server. This allows you to add support for any language that has a language server. See the `custom_lsp.template.yml` file in `src/serena/resources` for an example.
      
    These languages are supported by the language server library, but
    we did not explicitly test whether the support for these languages actually works flawlessly.
