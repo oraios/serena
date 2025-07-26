@@ -158,7 +158,11 @@ class SolidLanguageServerHandler:
                 cmd = subprocess.list2cmdline(cmd)
             else:
                 cmd = " ".join(cmd)
+
         log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
+        log.info("Processed command for Popen: %s", cmd)
+        log.info("CWD for subprocess: %s", self.process_launch_info.cwd)
+        log.info("PATH for subprocess: %s", child_proc_env.get("PATH"))
         self.process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
