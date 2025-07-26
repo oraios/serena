@@ -14,6 +14,7 @@ from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.settings import SolidLSPSettings
 
 
 @dataclasses.dataclass
@@ -32,11 +33,13 @@ class KotlinLanguageServer(SolidLanguageServer):
     Provides Kotlin specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Kotlin.
     """
 
-    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
+    def __init__(
+        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ):
         """
         Creates a Kotlin Language Server instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        runtime_dependency_paths = self._setup_runtime_dependencies(logger, config)
+        runtime_dependency_paths = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
         self.runtime_dependency_paths = runtime_dependency_paths
 
         # Create command to execute the Kotlin Language Server script
@@ -51,10 +54,13 @@ class KotlinLanguageServer(SolidLanguageServer):
             repository_root_path,
             ProcessLaunchInfo(cmd=cmd, env=proc_env, cwd=repository_root_path),
             "kotlin",
+            solidlsp_settings,
         )
 
     @classmethod
-    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> KotlinRuntimeDependencyPaths:
+    def _setup_runtime_dependencies(
+        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
+    ) -> KotlinRuntimeDependencyPaths:
         """
         Setup runtime dependencies for Kotlin Language Server and return the paths.
         """
@@ -111,7 +117,7 @@ class KotlinLanguageServer(SolidLanguageServer):
         java_dependency = runtime_dependencies["java"][platform_id.value]
 
         # Setup paths for dependencies
-        static_dir = os.path.join(cls.ls_resources_dir(), "kotlin_language_server")
+        static_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "kotlin_language_server")
         os.makedirs(static_dir, exist_ok=True)
 
         # Setup Java paths

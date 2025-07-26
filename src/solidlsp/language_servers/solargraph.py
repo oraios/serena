@@ -18,6 +18,7 @@ from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.settings import SolidLSPSettings
 
 
 class Solargraph(SolidLanguageServer):
@@ -26,7 +27,9 @@ class Solargraph(SolidLanguageServer):
     Contains various configurations and settings specific to Ruby.
     """
 
-    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
+    def __init__(
+        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ):
         """
         Creates a Solargraph instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
@@ -38,6 +41,7 @@ class Solargraph(SolidLanguageServer):
             repository_root_path,
             ProcessLaunchInfo(cmd=f"{solargraph_executable_path} stdio", cwd=repository_root_path),
             "ruby",
+            solidlsp_settings,
         )
         self.server_ready = threading.Event()
         self.service_ready_event = threading.Event()

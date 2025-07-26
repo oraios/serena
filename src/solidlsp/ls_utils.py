@@ -183,6 +183,7 @@ class FileUtils:
         """
         Downloads the file from the given URL to the given {target_path}
         """
+        os.makedirs(os.path.dirname(target_path), exist_ok=True)
         try:
             response = requests.get(url, stream=True, timeout=60)
             if response.status_code != 200:

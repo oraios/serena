@@ -11,6 +11,7 @@ from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.settings import SolidLSPSettings
 
 
 class Gopls(SolidLanguageServer):
@@ -70,7 +71,9 @@ class Gopls(SolidLanguageServer):
 
         return True
 
-    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
+    def __init__(
+        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ):
         self._setup_runtime_dependency()
 
         super().__init__(
@@ -79,6 +82,7 @@ class Gopls(SolidLanguageServer):
             repository_root_path,
             ProcessLaunchInfo(cmd="gopls", cwd=repository_root_path),
             "go",
+            solidlsp_settings,
         )
         self.server_ready = threading.Event()
         self.request_id = 0

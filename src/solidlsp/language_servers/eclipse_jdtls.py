@@ -44,18 +44,20 @@ class EclipseJDTLS(SolidLanguageServer):
     The EclipseJDTLS class provides a Java specific implementation of the LanguageServer class
     """
 
-    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
+    def __init__(
+        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ):
         """
         Creates a new EclipseJDTLS instance initializing the language server settings appropriately.
         This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        runtime_dependency_paths = self._setupRuntimeDependencies(logger, config)
+        runtime_dependency_paths = self._setupRuntimeDependencies(logger, config, solidlsp_settings)
         self.runtime_dependency_paths = runtime_dependency_paths
 
         # ws_dir is the workspace directory for the EclipseJDTLS server
         ws_dir = str(
             PurePath(
-                SolidLSPSettings.get_language_server_directory(),
+                solidlsp_settings.ls_resources_dir,
                 "EclipseJDTLS",
                 "workspaces",
                 uuid.uuid4().hex,
@@ -63,14 +65,14 @@ class EclipseJDTLS(SolidLanguageServer):
         )
 
         # shared_cache_location is the global cache used by Eclipse JDTLS across all workspaces
-        shared_cache_location = str(PurePath(SolidLSPSettings.get_global_cache_directory(), "lsp", "EclipseJDTLS", "sharedIndex"))
+        shared_cache_location = str(PurePath(solidlsp_settings.ls_resources_dir, "lsp", "EclipseJDTLS", "sharedIndex"))
+        os.makedirs(shared_cache_location, exist_ok=True)
+        os.makedirs(ws_dir, exist_ok=True)
 
         jre_path = self.runtime_dependency_paths.jre_path
         lombok_jar_path = self.runtime_dependency_paths.lombok_jar_path
 
         jdtls_launcher_jar = self.runtime_dependency_paths.jdtls_launcher_jar_path
-
-        os.makedirs(ws_dir, exist_ok=True)
 
         data_dir = str(PurePath(ws_dir, "data_dir"))
         jdtls_config_path = str(PurePath(ws_dir, "config_path"))
@@ -132,7 +134,9 @@ class EclipseJDTLS(SolidLanguageServer):
         self.intellicode_enable_command_available = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
 
-        super().__init__(config, logger, repository_root_path, ProcessLaunchInfo(cmd, proc_env, proc_cwd), "java")
+        super().__init__(
+            config, logger, repository_root_path, ProcessLaunchInfo(cmd, proc_env, proc_cwd), "java", solidlsp_settings=solidlsp_settings
+        )
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -153,7 +157,9 @@ class EclipseJDTLS(SolidLanguageServer):
         ]
 
     @classmethod
-    def _setupRuntimeDependencies(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> RuntimeDependencyPaths:
+    def _setupRuntimeDependencies(
+        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
+    ) -> RuntimeDependencyPaths:
         """
         Setup runtime dependencies for EclipseJDTLS and return the paths.
         """
@@ -238,7 +244,7 @@ class EclipseJDTLS(SolidLanguageServer):
 
         gradle_path = str(
             PurePath(
-                cls.ls_resources_dir(),
+                cls.ls_resources_dir(solidlsp_settings),
                 "gradle-7.3.3",
             )
         )
@@ -254,7 +260,7 @@ class EclipseJDTLS(SolidLanguageServer):
         assert os.path.exists(gradle_path)
 
         dependency = runtime_dependencies["vscode-java"][platformId.value]
-        vscode_java_path = str(PurePath(cls.ls_resources_dir(), dependency["relative_extraction_path"]))
+        vscode_java_path = str(PurePath(cls.ls_resources_dir(solidlsp_settings), dependency["relative_extraction_path"]))
         os.makedirs(vscode_java_path, exist_ok=True)
         jre_home_path = str(PurePath(vscode_java_path, dependency["jre_home_path"]))
         jre_path = str(PurePath(vscode_java_path, dependency["jre_path"]))
@@ -283,7 +289,7 @@ class EclipseJDTLS(SolidLanguageServer):
         assert os.path.exists(jdtls_readonly_config_path)
 
         dependency = runtime_dependencies["intellicode"]["platform-agnostic"]
-        intellicode_directory_path = str(PurePath(cls.ls_resources_dir(), dependency["relative_extraction_path"]))
+        intellicode_directory_path = str(PurePath(cls.ls_resources_dir(solidlsp_settings), dependency["relative_extraction_path"]))
         os.makedirs(intellicode_directory_path, exist_ok=True)
         intellicode_jar_path = str(PurePath(intellicode_directory_path, dependency["intellicode_jar_path"]))
         intellisense_members_path = str(PurePath(intellicode_directory_path, dependency["intellisense_members_path"]))

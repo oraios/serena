@@ -19,6 +19,7 @@ from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
@@ -29,17 +30,20 @@ class VtsLanguageServer(SolidLanguageServer):
     Contains various configurations and settings specific to TypeScript via vtsls wrapper.
     """
 
-    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
+    def __init__(
+        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ):
         """
         Creates a VtsLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        vts_lsp_executable_path = self._setup_runtime_dependencies(logger, config)
+        vts_lsp_executable_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
         super().__init__(
             config,
             logger,
             repository_root_path,
             ProcessLaunchInfo(cmd=vts_lsp_executable_path, cwd=repository_root_path),
             "typescript",
+            solidlsp_settings,
         )
         self.server_ready = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
@@ -54,7 +58,9 @@ class VtsLanguageServer(SolidLanguageServer):
         ]
 
     @classmethod
-    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    def _setup_runtime_dependencies(
+        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
+    ) -> str:
         """
         Setup runtime dependencies for VTS Language Server and return the command to start the server.
         """
@@ -81,7 +87,7 @@ class VtsLanguageServer(SolidLanguageServer):
                 ),
             ]
         )
-        vts_ls_dir = os.path.join(cls.ls_resources_dir(), "vts-lsp")
+        vts_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "vts-lsp")
         vts_executable_path = os.path.join(vts_ls_dir, "vtsls")
 
         # Verify both node and npm are installed

@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import pathlib
@@ -6,16 +5,18 @@ import stat
 import subprocess
 import threading
 import time
-from pathlib import PurePath
 
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
-from solidlsp.ls_utils import FileUtils, PlatformUtils
+from solidlsp.ls_utils import FileUtils, PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.settings import SolidLSPSettings
+
+from ..common import RuntimeDependency
 
 
 class ElixirTools(SolidLanguageServer):
@@ -68,8 +69,8 @@ class ElixirTools(SolidLanguageServer):
 
         return filtered_response
 
-    @staticmethod
-    def _get_elixir_version():
+    @classmethod
+    def _get_elixir_version(cls):
         """Get the installed Elixir version or None if not found."""
         try:
             result = subprocess.run(["elixir", "--version"], capture_output=True, text=True, check=False)
@@ -79,13 +80,16 @@ class ElixirTools(SolidLanguageServer):
             return None
         return None
 
-    def setupRuntimeDependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    @classmethod
+    def _setup_runtime_dependencies(
+        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
+    ) -> str:
         """
         Setup runtime dependencies for Next LS.
         Downloads the Next LS binary for the current platform and returns the path to the executable.
         """
         # Check if Elixir is available first
-        elixir_version = self._get_elixir_version()
+        elixir_version = cls._get_elixir_version()
         if not elixir_version:
             raise RuntimeError(
                 "Elixir is not installed. Please install Elixir from https://elixir-lang.org/install.html and make sure it is added to your PATH."
@@ -93,70 +97,78 @@ class ElixirTools(SolidLanguageServer):
 
         logger.log(f"Found Elixir: {elixir_version}", logging.INFO)
 
-        platformId = PlatformUtils.get_platform_id()
-
-        with open(str(PurePath(os.path.dirname(__file__), "runtime_dependencies.json")), encoding="utf-8") as f:
-            runtimeDependencies = json.load(f)
-            del runtimeDependencies["_description"]
-
-        os.makedirs(str(PurePath(os.path.abspath(os.path.dirname(__file__)), "static")), exist_ok=True)
-
-        # Map platform IDs to runtime dependency keys
-        platform_mapping = {
-            "linux-x64": "linux-x64",
-            "osx-x64": "darwin-x64",
-            "osx-arm64": "darwin-arm64",
-            "darwin-x64": "darwin-x64",
-            "darwin-arm64": "darwin-arm64",
-            "win-x64": "win-x64",
-        }
-
-        platform_key = platform_mapping.get(platformId.value)
-        if not platform_key:
-            raise RuntimeError(f"Unsupported platform for Next LS: {platformId.value}")
+        platform_id = PlatformUtils.get_platform_id()
 
         # Check for Windows and provide a helpful error message
-        if platformId.value.startswith("win"):
+        if platform_id.value.startswith("win"):
             raise RuntimeError(
                 "Windows is not supported by Next LS. The Next LS project does not provide Windows binaries. "
                 "Consider using Windows Subsystem for Linux (WSL) or a virtual machine with Linux/macOS."
             )
 
-        dependency = runtimeDependencies["next_ls"][platform_key]
-        next_ls_dir = str(PurePath(os.path.abspath(os.path.dirname(__file__)), "static", dependency["relative_extraction_path"]))
-        os.makedirs(next_ls_dir, exist_ok=True)
+        valid_platforms = [
+            PlatformId.LINUX_x64,
+            PlatformId.OSX_x64,
+            PlatformId.OSX_arm64,
+        ]
+        assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for Next LS at the moment"
 
-        executable_path = str(PurePath(next_ls_dir, dependency["executable_name"]))
-        binary_path = str(PurePath(next_ls_dir, dependency["binary_name"]))
+        next_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "next-ls")
+
+        # Define runtime dependencies inline
+        runtime_deps = {
+            PlatformId.LINUX_x64: RuntimeDependency(
+                id="next_ls_linux_amd64",
+                platform_id="linux-x64",
+                url="https://github.com/elixir-tools/next-ls/releases/download/v0.23.3/next_ls_linux_amd64",
+                archive_type="binary",
+                binary_name="next_ls_linux_amd64",
+                extract_path="next_ls",
+            ),
+            PlatformId.OSX_x64: RuntimeDependency(
+                id="next_ls_darwin_amd64",
+                platform_id="osx-x64",
+                url="https://github.com/elixir-tools/next-ls/releases/download/v0.23.3/next_ls_darwin_amd64",
+                archive_type="binary",
+                binary_name="next_ls_darwin_amd64",
+                extract_path="next_ls",
+            ),
+            PlatformId.OSX_arm64: RuntimeDependency(
+                id="next_ls_darwin_arm64",
+                platform_id="osx-arm64",
+                url="https://github.com/elixir-tools/next-ls/releases/download/v0.23.3/next_ls_darwin_arm64",
+                archive_type="binary",
+                binary_name="next_ls_darwin_arm64",
+                extract_path="next_ls",
+            ),
+        }
+
+        dependency = runtime_deps[platform_id]
+        executable_path = os.path.join(next_ls_dir, "nextls")
+        binary_path = os.path.join(next_ls_dir, dependency.binary_name)
 
         if not os.path.exists(executable_path):
-            logger.log(f"Downloading Next LS binary from {dependency['url']}", logging.INFO)
-            FileUtils.download_file(logger, dependency["url"], binary_path)
+            logger.log(f"Downloading Next LS binary from {dependency.url}", logging.INFO)
+            FileUtils.download_file(logger, dependency.url, binary_path)
 
             # Make the binary executable on Unix-like systems
-            if not platformId.value.startswith("win"):
-                os.chmod(binary_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+            os.chmod(binary_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
 
-            # Create a symlink or copy with the expected name
+            # Create a symlink with the expected name
             if binary_path != executable_path:
                 if os.path.exists(executable_path):
                     os.remove(executable_path)
-                if platformId.value.startswith("win"):
-                    # On Windows, copy the file
-                    import shutil
-
-                    shutil.copy2(binary_path, executable_path)
-                else:
-                    # On Unix-like systems, create a symlink
-                    os.symlink(os.path.basename(binary_path), executable_path)
+                os.symlink(os.path.basename(binary_path), executable_path)
 
         assert os.path.exists(executable_path), f"Next LS executable not found at {executable_path}"
 
         logger.log(f"Next LS binary ready at: {executable_path}", logging.INFO)
         return executable_path
 
-    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
-        nextls_executable_path = self.setupRuntimeDependencies(logger, config)
+    def __init__(
+        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ):
+        nextls_executable_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
 
         super().__init__(
             config,
@@ -164,6 +176,7 @@ class ElixirTools(SolidLanguageServer):
             repository_root_path,
             ProcessLaunchInfo(cmd=f'"{nextls_executable_path}" --stdio', cwd=repository_root_path),
             "elixir",
+            solidlsp_settings,
         )
         self.server_ready = threading.Event()
         self.request_id = 0
@@ -171,29 +184,66 @@ class ElixirTools(SolidLanguageServer):
         # Set generous timeout for Next LS which can be slow to initialize and respond
         self.set_request_timeout(180.0)  # 60 seconds for all environments
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    @staticmethod
+    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the Next LS Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), encoding="utf-8") as f:
-            d = json.load(f)
+        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+        initialize_params = {
+            "processId": os.getpid(),
+            "locale": "en",
+            "rootPath": repository_absolute_path,
+            "rootUri": root_uri,
+            "initializationOptions": {
+                "mix_env": "dev",
+                "mix_target": "host",
+                "experimental": {"completions": {"enable": False}},
+                "extensions": {"credo": {"enable": True, "cli_options": []}},
+            },
+            "capabilities": {
+                "textDocument": {
+                    "synchronization": {"didSave": True, "dynamicRegistration": True},
+                    "completion": {
+                        "dynamicRegistration": True,
+                        "completionItem": {"snippetSupport": True, "documentationFormat": ["markdown", "plaintext"]},
+                    },
+                    "definition": {"dynamicRegistration": True},
+                    "references": {"dynamicRegistration": True},
+                    "documentSymbol": {
+                        "dynamicRegistration": True,
+                        "hierarchicalDocumentSymbolSupport": True,
+                        "symbolKind": {"valueSet": list(range(1, 27))},
+                    },
+                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                    "formatting": {"dynamicRegistration": True},
+                    "codeAction": {
+                        "dynamicRegistration": True,
+                        "codeActionLiteralSupport": {
+                            "codeActionKind": {
+                                "valueSet": [
+                                    "quickfix",
+                                    "refactor",
+                                    "refactor.extract",
+                                    "refactor.inline",
+                                    "refactor.rewrite",
+                                    "source",
+                                    "source.organizeImports",
+                                ]
+                            }
+                        },
+                    },
+                },
+                "workspace": {
+                    "workspaceFolders": True,
+                    "didChangeConfiguration": {"dynamicRegistration": True},
+                    "executeCommand": {"dynamicRegistration": True},
+                },
+            },
+            "workspaceFolders": [{"uri": root_uri, "name": os.path.basename(repository_absolute_path)}],
+        }
 
-        del d["_description"]
-
-        d["processId"] = os.getpid()
-        assert d["rootPath"] == "$rootPath"
-        d["rootPath"] = repository_absolute_path
-
-        assert d["rootUri"] == "$rootUri"
-        d["rootUri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["uri"] == "$uri"
-        d["workspaceFolders"][0]["uri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["name"] == "$name"
-        d["workspaceFolders"][0]["name"] = os.path.basename(repository_absolute_path)
-
-        return d
+        return initialize_params
 
     def _start_server(self):
         """Start Next LS server process"""

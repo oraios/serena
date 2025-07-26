@@ -15,6 +15,7 @@ from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
@@ -24,17 +25,20 @@ class RustAnalyzer(SolidLanguageServer):
     Provides Rust specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Rust.
     """
 
-    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
+    def __init__(
+        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ):
         """
         Creates a RustAnalyzer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        rustanalyzer_executable_path = self._setup_runtime_dependencies(logger, config)
+        rustanalyzer_executable_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
         super().__init__(
             config,
             logger,
             repository_root_path,
             ProcessLaunchInfo(cmd=rustanalyzer_executable_path, cwd=repository_root_path),
             "rust",
+            solidlsp_settings,
         )
         self.server_ready = threading.Event()
         self.service_ready_event = threading.Event()
@@ -46,7 +50,9 @@ class RustAnalyzer(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in ["target"]
 
     @classmethod
-    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    def _setup_runtime_dependencies(
+        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
+    ) -> str:
         """
         Setup runtime dependencies for rust_analyzer and return the command to start the server.
         """
@@ -92,7 +98,7 @@ class RustAnalyzer(SolidLanguageServer):
         #     "win-x64",
         # ], "Only linux-x64 and win-x64 platform is supported for in multilspy at the moment"
 
-        rustanalyzer_ls_dir = os.path.join(cls.ls_resources_dir(), "RustAnalyzer")
+        rustanalyzer_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "RustAnalyzer")
         rustanalyzer_executable_path = deps.binary_path(rustanalyzer_ls_dir)
         if not os.path.exists(rustanalyzer_ls_dir):
             os.makedirs(rustanalyzer_ls_dir)

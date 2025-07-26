@@ -16,6 +16,7 @@ from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import DefinitionParams, InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
@@ -34,7 +35,9 @@ class Intelephense(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in ["node_modules", "vendor", "cache"]
 
     @classmethod
-    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    def _setup_runtime_dependencies(
+        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
+    ) -> str:
         """
         Setup runtime dependencies for Intelephense and return the command to start the server.
         """
@@ -58,7 +61,7 @@ class Intelephense(SolidLanguageServer):
         assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
         # Install intelephense if not already installed
-        intelephense_ls_dir = os.path.join(cls.ls_resources_dir(), "php-lsp")
+        intelephense_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "php-lsp")
         os.makedirs(intelephense_ls_dir, exist_ok=True)
         intelephense_executable_path = os.path.join(intelephense_ls_dir, "node_modules", ".bin", "intelephense")
         if not os.path.exists(intelephense_executable_path):
@@ -79,11 +82,20 @@ class Intelephense(SolidLanguageServer):
 
         return f"{intelephense_executable_path} --stdio"
 
-    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
+    def __init__(
+        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ):
         # Setup runtime dependencies before initializing
-        intelephense_cmd = self._setup_runtime_dependencies(logger, config)
+        intelephense_cmd = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
 
-        super().__init__(config, logger, repository_root_path, ProcessLaunchInfo(cmd=intelephense_cmd, cwd=repository_root_path), "php")
+        super().__init__(
+            config,
+            logger,
+            repository_root_path,
+            ProcessLaunchInfo(cmd=intelephense_cmd, cwd=repository_root_path),
+            "php",
+            solidlsp_settings,
+        )
         self.request_id = 0
 
     @staticmethod

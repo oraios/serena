@@ -77,7 +77,7 @@ jobs:
         id: cache-language-servers
         uses: actions/cache@v3
         with:
-          path: src/solidlsp/language_servers/static
+          path: ~/.serena/language_servers/static
           key: language-servers-${{ runner.os }}-v1
           restore-keys: |
             language-servers-${{ runner.os }}-
