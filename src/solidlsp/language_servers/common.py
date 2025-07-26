@@ -72,6 +72,7 @@ class RuntimeDependencyCollection:
     @staticmethod
     def _run_command(dep: RuntimeDependency, logger: LanguageServerLogger, cwd: str) -> None:
         logger.log(f"Running command for {dep.id}: '{dep.command}' in '{cwd}'", logging.INFO)
+        logger.log(f"Inherited PATH for subprocess: {os.environ.get('PATH')}", logging.INFO)
         try:
             if platform.system() == "Windows":
                 subprocess.run(
