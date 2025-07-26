@@ -114,7 +114,9 @@ class TypeScriptLanguageServer(SolidLanguageServer):
 
         # Install typescript and typescript-language-server if not already installed
         tsserver_ls_dir = os.path.join(cls.ls_resources_dir(), "ts-lsp")
-        tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server.cmd")
+        # tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server.cmd")
+        tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", "typescript-language-server", "lib", "cli.js")
+
         if not os.path.exists(tsserver_executable_path):
             logger.log(f"Typescript Language Server executable not found at {tsserver_executable_path}. Installing...", logging.INFO)
             deps.install(logger, tsserver_ls_dir)
@@ -123,7 +125,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             raise FileNotFoundError(
                 f"typescript-language-server executable not found at {tsserver_executable_path}, something went wrong with the installation."
             )
-        return f"cmd /c {tsserver_executable_path} --stdio"
+        return f"node {tsserver_executable_path} --stdio"
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
