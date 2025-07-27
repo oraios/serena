@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import os
+import shlex
+import shutil
 import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
@@ -69,9 +72,12 @@ class RuntimeDependencyCollection:
 
     @staticmethod
     def _run_command(command: str, cwd: str) -> None:
-        if PlatformUtils.get_platform_id().value.startswith("win"):
+        is_windows = PlatformUtils.get_platform_id().value.startswith("win")
+        command_parts = shlex.split(command, posix=not is_windows)
+
+        if is_windows:
             subprocess.run(
-                command,
+                command_parts,
                 check=True,
                 cwd=cwd,
                 stdout=subprocess.DEVNULL,
@@ -82,8 +88,7 @@ class RuntimeDependencyCollection:
 
             user = pwd.getpwuid(os.getuid()).pw_name
             subprocess.run(
-                command,
-                shell=True,
+                command_parts,
                 check=True,
                 user=user,
                 cwd=cwd,
@@ -98,3 +103,97 @@ class RuntimeDependencyCollection:
             FileUtils.download_and_extract_archive(logger, dep.url, dest, dep.archive_type)
         else:
             FileUtils.download_and_extract_archive(logger, dep.url, target_dir, dep.archive_type or "zip")
+
+
+class NodeJsUtils:
+    """
+    Utility functions for Node.js executable resolution across all operating systems.
+    """
+
+    @staticmethod
+    def find_node_executable() -> str | None:
+        """
+        Find the path to the node executable.
+        Returns the full path to node executable or None if not found.
+        """
+        return shutil.which("node")
+
+    @staticmethod
+    def find_npm_executable() -> str | None:
+        """
+        Find the path to the npm executable.
+        Returns the full path to npm executable or None if not found.
+        """
+        return shutil.which("npm")
+
+    @staticmethod
+    def get_npm_cli_script_path() -> str | None:
+        """
+        Get the path to the npm CLI JavaScript script that can be executed with node.
+        Uses npm executable location to find the corresponding npm-cli.js script.
+
+        Returns:
+            Path to npm-cli.js script or None if not found
+
+        """
+        npm_executable = NodeJsUtils.find_npm_executable()
+        if not npm_executable:
+            return None
+
+        npm_path = Path(npm_executable)
+        npm_dir = npm_path.parent
+
+        # Look for node_modules in the same directory as npm executable
+        npm_cli_path = npm_dir / "node_modules" / "npm" / "bin" / "npm-cli.js"
+        if npm_cli_path.exists():
+            return str(npm_cli_path)
+
+        # Alternative location for older versions
+        npm_cli_alt_path = npm_dir / "node_modules" / "npm" / "lib" / "cli.js"
+        if npm_cli_alt_path.exists():
+            return str(npm_cli_alt_path)
+
+        return None
+
+    @staticmethod
+    def build_node_command(node_executable: str, script_path: str, args: list[str] | None = None) -> list[str]:
+        """
+        Build a command list for executing a Node.js script directly with node.
+        Returns a list that can be used with subprocess.run().
+
+        Args:
+            node_executable: Path to the node executable
+            script_path: Path to the JavaScript file to execute
+            args: Additional arguments to pass to the script
+
+        """
+        command = [node_executable, script_path]
+        if args:
+            command.extend(args)
+        return command
+
+    @staticmethod
+    def build_npm_install_command(install_args: list[str]) -> str | None:
+        """
+        Build a command for npm install using direct node execution.
+
+        Args:
+            install_args: Arguments for npm install (e.g., ["install", "--prefix", "./", "package@version"])
+
+        Returns:
+            Complete command string properly quoted for direct execution, or None if node/npm not found
+
+        """
+        node_executable = NodeJsUtils.find_node_executable()
+        npm_cli_script = NodeJsUtils.get_npm_cli_script_path()
+
+        if not node_executable or not npm_cli_script:
+            return None
+
+        command_list = NodeJsUtils.build_node_command(node_executable, npm_cli_script, install_args)
+
+        # Use appropriate quoting for the platform
+        if PlatformUtils.get_platform_id().value.startswith("win"):
+            return subprocess.list2cmdline(command_list)
+        else:
+            return shlex.join(command_list)

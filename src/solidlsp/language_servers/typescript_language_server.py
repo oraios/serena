@@ -5,7 +5,6 @@ Provides TypeScript specific instantiation of the LanguageServer class. Contains
 import logging
 import os
 import pathlib
-import shutil
 import threading
 from time import sleep
 
@@ -18,7 +17,7 @@ from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 
-from .common import RuntimeDependency, RuntimeDependencyCollection
+from .common import NodeJsUtils, RuntimeDependency, RuntimeDependencyCollection
 
 # Platform-specific imports
 if os.name != "nt":  # Unix-like systems
@@ -83,47 +82,61 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy javascript/typescript at the moment"
 
+        # Verify both node and npm are installed using NodeJsUtils
+        node_executable = NodeJsUtils.find_node_executable()
+        assert node_executable is not None, "node is not installed or isn't in PATH. Please install NodeJS and try again."
+        npm_cli_script = NodeJsUtils.get_npm_cli_script_path()
+        assert npm_cli_script is not None, "npm CLI script not found. Please ensure npm is properly installed."
+
+        # Create dependencies using direct node execution
+        typescript_install_cmd = NodeJsUtils.build_npm_install_command(["install", "--prefix", "./", "typescript@5.5.4"])
+        tsserver_install_cmd = NodeJsUtils.build_npm_install_command(["install", "--prefix", "./", "typescript-language-server@4.3.3"])
+
+        assert typescript_install_cmd is not None, "Failed to build TypeScript install command"
+        assert tsserver_install_cmd is not None, "Failed to build TypeScript Language Server install command"
+
         deps = RuntimeDependencyCollection(
             [
                 RuntimeDependency(
                     id="typescript",
                     description="typescript package",
-                    command="npm install --prefix ./ typescript@5.5.4",
+                    command=typescript_install_cmd,
                     platform_id="any",
                 ),
                 RuntimeDependency(
                     id="typescript-language-server",
                     description="typescript-language-server package",
-                    command="npm install --prefix ./ typescript-language-server@4.3.3",
+                    command=tsserver_install_cmd,
                     platform_id="any",
                 ),
             ]
         )
 
-        # Verify both node and npm are installed
-        is_node_installed = shutil.which("node") is not None
-        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which("npm") is not None
-        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
-
-        # Verify both node and npm are installed
-        is_node_installed = shutil.which("node") is not None
-        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which("npm") is not None
-        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
-
         # Install typescript and typescript-language-server if not already installed
         tsserver_ls_dir = os.path.join(cls.ls_resources_dir(), "ts-lsp")
-        tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
-        if not os.path.exists(tsserver_executable_path):
-            logger.log(f"Typescript Language Server executable not found at {tsserver_executable_path}. Installing...", logging.INFO)
+        tsserver_script_path = os.path.join(tsserver_ls_dir, "node_modules", "typescript-language-server", "lib", "cli.mjs")
+
+        if not os.path.exists(tsserver_script_path):
+            logger.log(f"Typescript Language Server script not found at {tsserver_script_path}. Installing...", logging.INFO)
             deps.install(logger, tsserver_ls_dir)
 
-        if not os.path.exists(tsserver_executable_path):
+        if not os.path.exists(tsserver_script_path):
             raise FileNotFoundError(
-                f"typescript-language-server executable not found at {tsserver_executable_path}, something went wrong with the installation."
+                f"typescript-language-server script not found at {tsserver_script_path}, something went wrong with the installation."
             )
-        return f"{tsserver_executable_path} --stdio"
+
+        # Build direct node command for typescript-language-server
+        tsserver_command = NodeJsUtils.build_node_command(node_executable, tsserver_script_path, ["--stdio"])
+
+        # Use appropriate quoting for the platform
+        if PlatformUtils.get_platform_id().value.startswith("win"):
+            import subprocess
+
+            return subprocess.list2cmdline(tsserver_command)
+        else:
+            import shlex
+
+            return shlex.join(tsserver_command)
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
