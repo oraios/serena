@@ -82,9 +82,9 @@ class RuntimeDependencyCollection:
 
         logger.log(f"Running command: {' '.join(command_parts)} in '{cwd}'", logging.INFO)
 
-        if is_windows:
-            try:
-                execution_result = subprocess.run(
+        try:
+            if is_windows:
+                subprocess.run(
                     command_parts,
                     input='',
                     capture_output=True,
@@ -92,24 +92,23 @@ class RuntimeDependencyCollection:
                     timeout=60,
                     cwd=cwd,
                 )
-            except Exception as e:
-                logger.log(f"Command '{command}' failed with error: {e}", logging.ERROR)
-                raise
+            else:
+                import pwd
 
-            logger.log(f"Command '{command}' executed successfully in '{cwd}' with output: {execution_result.stdout.decode()}, stderr: {execution_result.stderr.decode()}", logging.INFO)
-        else:
-            import pwd
+                user = pwd.getpwuid(os.getuid()).pw_name
+                subprocess.run(
+                    command_parts,
+                    check=True,
+                    user=user,
+                    cwd=cwd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+        except Exception as e:
+            logger.log(f"Command '{command}' failed with error: {e}", logging.ERROR)
+            raise
 
-            user = pwd.getpwuid(os.getuid()).pw_name
-            subprocess.run(
-                command_parts,
-                check=True,
-                user=user,
-                cwd=cwd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            logger.log(f"Command '{command}' executed successfully in '{cwd}'", logging.INFO)
+        logger.log(f"Command '{command}' executed successfully in '{cwd}'", logging.INFO)
 
 
     @staticmethod
