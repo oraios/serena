@@ -83,15 +83,20 @@ class RuntimeDependencyCollection:
         logger.log(f"Running command: {' '.join(command_parts)} in '{cwd}'", logging.INFO)
 
         if is_windows:
-            execution_result = subprocess.run(
-                command_parts,
-                input=True,
-                capture_output=True,
-                timeout=60,
-                check=True,
-                cwd=cwd,
-            )
-            logger.log(f"Command '{command}' executed successfully in '{cwd}' with output: {execution_result.stdout.decode()}", logging.INFO)
+            try:
+                execution_result = subprocess.run(
+                    command_parts,
+                    input=True,
+                    capture_output=True,
+                    check=True,
+                    timeout=60,
+                    cwd=cwd,
+                )
+            except Exception as e:
+                logger.log(f"Command '{command}' failed with error: {e}", logging.ERROR)
+                raise
+
+            logger.log(f"Command '{command}' executed successfully in '{cwd}' with output: {execution_result.stdout.decode()}, stderr: {execution_result.stderr.decode()}", logging.INFO)
         else:
             import pwd
 
