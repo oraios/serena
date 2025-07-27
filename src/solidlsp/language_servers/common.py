@@ -85,6 +85,7 @@ class RuntimeDependencyCollection:
         if is_windows:
             execution_result = subprocess.run(
                 command_parts,
+                input=True,
                 capture_output=True,
                 timeout=60,
                 check=True,
