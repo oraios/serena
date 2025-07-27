@@ -18,7 +18,7 @@ from solidlsp.lsp_protocol_handler.lsp_types import DefinitionParams, Initialize
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
-from .common import RuntimeDependency, RuntimeDependencyCollection
+from .common import CommandUtils, RuntimeDependency, RuntimeDependencyCollection
 
 
 class Intelephense(SolidLanguageServer):
@@ -37,7 +37,7 @@ class Intelephense(SolidLanguageServer):
     @classmethod
     def _setup_runtime_dependencies(
         cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> str:
+    ) -> list[str]:
         """
         Setup runtime dependencies for Intelephense and return the command to start the server.
         """
@@ -55,21 +55,26 @@ class Intelephense(SolidLanguageServer):
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy PHP at the moment"
 
         # Verify both node and npm are installed
-        is_node_installed = shutil.which("node") is not None
-        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which("npm") is not None
-        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
+        node_executable = shutil.which("node")
+        assert node_executable is not None, "node is not installed or isn't in PATH. Please install NodeJS and try again."
+        npm_cli_script = CommandUtils.get_npm_path()
+        assert npm_cli_script is not None, "npm CLI script not found. Please ensure npm is properly installed."
 
         # Install intelephense if not already installed
         intelephense_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "php-lsp")
         os.makedirs(intelephense_ls_dir, exist_ok=True)
-        intelephense_executable_path = os.path.join(intelephense_ls_dir, "node_modules", ".bin", "intelephense")
-        if not os.path.exists(intelephense_executable_path):
+        intelephense_script_path = os.path.join(intelephense_ls_dir, "node_modules", "intelephense", "lib", "intelephense.js")
+
+        if not os.path.exists(intelephense_script_path):
+            # Build npm install command using direct node execution
+            install_command = [node_executable, npm_cli_script, "install", "--prefix", "./", "intelephense@1.14.4"]
+
             deps = RuntimeDependencyCollection(
                 [
                     RuntimeDependency(
                         id="intelephense",
-                        command="npm install --prefix ./ intelephense@1.14.4",
+                        command=install_command,
+                        command_shell=False,
                         platform_id="any",
                     )
                 ]
@@ -77,10 +82,11 @@ class Intelephense(SolidLanguageServer):
             deps.install(logger, intelephense_ls_dir)
 
         assert os.path.exists(
-            intelephense_executable_path
-        ), f"intelephense executable not found at {intelephense_executable_path}, something went wrong."
+            intelephense_script_path
+        ), f"intelephense script not found at {intelephense_script_path}, something went wrong."
 
-        return f"{intelephense_executable_path} --stdio"
+        # Return command as list for direct node execution
+        return [node_executable, intelephense_script_path, "--stdio"]
 
     def __init__(
         self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
@@ -92,7 +98,7 @@ class Intelephense(SolidLanguageServer):
             config,
             logger,
             repository_root_path,
-            ProcessLaunchInfo(cmd=intelephense_cmd, cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=intelephense_cmd, cwd=repository_root_path, shell=False),
             "php",
             solidlsp_settings,
         )

@@ -7,6 +7,7 @@ which provides TypeScript language server functionality via VSCode's TypeScript 
 import logging
 import os
 import pathlib
+import shutil
 import threading
 from time import sleep
 
@@ -20,7 +21,7 @@ from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
-from .common import NodeJsUtils, RuntimeDependency, RuntimeDependencyCollection
+from .common import CommandUtils, RuntimeDependency, RuntimeDependencyCollection
 
 
 class VtsLanguageServer(SolidLanguageServer):
@@ -40,7 +41,7 @@ class VtsLanguageServer(SolidLanguageServer):
             config,
             logger,
             repository_root_path,
-            ProcessLaunchInfo(cmd=vts_lsp_executable_path, cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=vts_lsp_executable_path, cwd=repository_root_path, shell=False),
             "typescript",
             solidlsp_settings,
         )
@@ -76,15 +77,14 @@ class VtsLanguageServer(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for vtsls at the moment"
 
-        # Verify both node and npm are installed using NodeJsUtils
-        node_executable = NodeJsUtils.find_node_executable()
+        # Verify both node and npm are installed
+        node_executable = shutil.which("node")
         assert node_executable is not None, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        npm_cli_script = NodeJsUtils.get_npm_cli_script_path()
+        npm_cli_script = CommandUtils.get_npm_path()
         assert npm_cli_script is not None, "npm CLI script not found. Please ensure npm is properly installed."
 
         # Create dependencies using direct node execution
-        vtsls_install_cmd = NodeJsUtils.build_npm_install_command(["install", "--prefix", "./", "@vtsls/language-server@0.2.9"])
-        assert vtsls_install_cmd is not None, "Failed to build VTSLS install command"
+        vtsls_install_cmd = [node_executable, npm_cli_script, "install", "--prefix", "./", "@vtsls/language-server@0.2.9"]
 
         deps = RuntimeDependencyCollection(
             [
@@ -92,6 +92,7 @@ class VtsLanguageServer(SolidLanguageServer):
                     id="vtsls",
                     description="vtsls language server package",
                     command=vtsls_install_cmd,
+                    command_shell=False,
                     platform_id="any",
                 ),
             ]
@@ -109,7 +110,7 @@ class VtsLanguageServer(SolidLanguageServer):
         if not os.path.exists(vts_script_path):
             raise FileNotFoundError(f"vtsls script not found at {vts_script_path}, something went wrong with the installation.")
 
-        vts_command = NodeJsUtils.build_node_command(node_executable, vts_script_path, ["--stdio"])
+        vts_command = [node_executable, vts_script_path, "--stdio"]
 
         return vts_command
 

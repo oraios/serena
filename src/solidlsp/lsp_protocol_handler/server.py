@@ -52,6 +52,9 @@ class ProcessLaunchInfo:
     # The command to launch the process
     cmd: str | list[str]
 
+    # If true, the command will be executed through the shell
+    shell: bool = True
+
     # The environment variables to set for the process
     env: dict[str, str] = dataclasses.field(default_factory=dict)
 

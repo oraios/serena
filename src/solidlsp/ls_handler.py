@@ -150,14 +150,10 @@ class SolidLanguageServerHandler:
 
         cmd = self.process_launch_info.cmd
         is_windows = platform.system() == "Windows"
-        if not isinstance(cmd, str):
+        if not isinstance(cmd, str) and not is_windows:
             # Since we are using the shell, we need to convert the command list to a single string
-            # on all platforms.
-            if is_windows:
-                # On Windows, it's important to quote arguments correctly for the shell.
-                cmd = subprocess.list2cmdline(cmd)
-            else:
-                cmd = " ".join(cmd)
+            # on Linux/macOS
+            cmd = " ".join(cmd)
         log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
         self.process = subprocess.Popen(
             cmd,
@@ -167,7 +163,7 @@ class SolidLanguageServerHandler:
             env=child_proc_env,
             cwd=self.process_launch_info.cwd,
             start_new_session=self.start_independent_lsp_process,
-            shell=not is_windows,
+            shell=self.process_launch_info.shell,
         )
 
         # Check if process terminated immediately
