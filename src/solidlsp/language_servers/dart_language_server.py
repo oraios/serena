@@ -6,6 +6,7 @@ import stat
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
@@ -15,21 +16,22 @@ class DartLanguageServer(SolidLanguageServer):
     Provides Dart specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Dart.
     """
 
-    def __init__(self, config, logger, repository_root_path):
+    def __init__(self, config, logger, repository_root_path, solidlsp_settings: SolidLSPSettings):
         """
         Creates a DartServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        executable_path = self._setup_runtime_dependencies(logger)
+        executable_path = self._setup_runtime_dependencies(logger, solidlsp_settings)
         super().__init__(
             config,
             logger,
             repository_root_path,
             ProcessLaunchInfo(cmd=executable_path, cwd=repository_root_path),
             "dart",
+            solidlsp_settings,
         )
 
     @classmethod
-    def _setup_runtime_dependencies(cls, logger: "LanguageServerLogger") -> str:
+    def _setup_runtime_dependencies(cls, logger: "LanguageServerLogger", solidlsp_settings: SolidLSPSettings) -> str:
         deps = RuntimeDependencyCollection(
             [
                 RuntimeDependency(
@@ -75,7 +77,7 @@ class DartLanguageServer(SolidLanguageServer):
             ]
         )
 
-        dart_ls_dir = cls.ls_resources_dir()
+        dart_ls_dir = cls.ls_resources_dir(solidlsp_settings)
         dart_executable_path = deps.binary_path(dart_ls_dir)
 
         if not os.path.exists(dart_executable_path):

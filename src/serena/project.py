@@ -5,11 +5,13 @@ from pathlib import Path
 import pathspec
 
 from serena.config.serena_config import DEFAULT_TOOL_TIMEOUT, ProjectConfig
+from serena.constants import SERENA_MANAGED_DIR_IN_HOME
 from serena.text_utils import MatchedConsecutiveLines, search_files
 from serena.util.file_system import GitignoreParser, match_path
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
@@ -271,4 +273,5 @@ class Project:
             ls_logger,
             self.project_root,
             timeout=ls_timeout,
+            solidlsp_settings=SolidLSPSettings(solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME),
         )

@@ -13,6 +13,7 @@ from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.settings import SolidLSPSettings
 
 
 class JediServer(SolidLanguageServer):
@@ -20,7 +21,9 @@ class JediServer(SolidLanguageServer):
     Provides Python specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Python.
     """
 
-    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
+    def __init__(
+        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ):
         """
         Creates a JediServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
@@ -30,6 +33,7 @@ class JediServer(SolidLanguageServer):
             repository_root_path,
             ProcessLaunchInfo(cmd="jedi-language-server", cwd=repository_root_path),
             "python",
+            solidlsp_settings,
         )
 
     @override

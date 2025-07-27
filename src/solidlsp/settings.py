@@ -4,21 +4,17 @@ Defines settings for Solid-LSP
 
 import os
 import pathlib
+from dataclasses import dataclass
 
 
+@dataclass
 class SolidLSPSettings:
-    @staticmethod
-    def get_language_server_directory() -> str:
-        """Returns the directory for language servers"""
-        user_home = pathlib.Path.home()
-        multilspy_dir = str(pathlib.PurePath(user_home, ".multilspy"))
-        lsp_dir = str(pathlib.PurePath(multilspy_dir, "lsp"))
-        os.makedirs(lsp_dir, exist_ok=True)
-        return lsp_dir
+    solidlsp_dir: str = str(pathlib.Path.home() / ".solidlsp")
 
-    @staticmethod
-    def get_global_cache_directory() -> str:
-        """Returns the cache directory"""
-        global_cache_dir = os.path.join(str(pathlib.Path.home()), ".multilspy", "global_cache")
-        os.makedirs(global_cache_dir, exist_ok=True)
-        return global_cache_dir
+    def __post_init__(self):
+        os.makedirs(str(self.solidlsp_dir), exist_ok=True)
+        os.makedirs(str(self.ls_resources_dir), exist_ok=True)
+
+    @property
+    def ls_resources_dir(self):
+        return os.path.join(str(self.solidlsp_dir), "language_servers", "static")

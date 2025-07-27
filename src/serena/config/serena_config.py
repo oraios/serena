@@ -47,13 +47,13 @@ class SerenaPaths:
     Provides paths to various Serena-related directories and files.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.user_config_dir: str = SERENA_MANAGED_DIR_IN_HOME
         """
         the path to the user's Serena configuration directory, which is typically ~/.serena
         """
 
-    def get_next_log_file_path(self, prefix: str):
+    def get_next_log_file_path(self, prefix: str) -> str:
         """
         :param prefix: the filename prefix indicating the type of the log file
         :return: the full path to the log file to use

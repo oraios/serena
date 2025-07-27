@@ -12,6 +12,7 @@ from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import PathUtils, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
@@ -57,7 +58,7 @@ class TerraformLS(SolidLanguageServer):
         )
 
     @classmethod
-    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger) -> str:
+    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, solidlsp_settings: SolidLSPSettings) -> str:
         """
         Setup runtime dependencies for terraform-ls.
         Downloads and installs terraform-ls if not already present.
@@ -102,10 +103,10 @@ class TerraformLS(SolidLanguageServer):
         )
         dependency = deps.single_for_current_platform()
 
-        terraform_ls_executable_path = deps.binary_path(cls.ls_resources_dir())
+        terraform_ls_executable_path = deps.binary_path(cls.ls_resources_dir(solidlsp_settings))
         if not os.path.exists(terraform_ls_executable_path):
             logger.log(f"Downloading terraform-ls from {dependency.url}", logging.INFO)
-            deps.install(logger, cls.ls_resources_dir())
+            deps.install(logger, cls.ls_resources_dir(solidlsp_settings))
 
         assert os.path.exists(terraform_ls_executable_path), f"terraform-ls executable not found at {terraform_ls_executable_path}"
 
@@ -115,11 +116,13 @@ class TerraformLS(SolidLanguageServer):
 
         return terraform_ls_executable_path
 
-    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
+    def __init__(
+        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ):
         """
         Creates a TerraformLS instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        terraform_ls_executable_path = self._setup_runtime_dependencies(logger)
+        terraform_ls_executable_path = self._setup_runtime_dependencies(logger, solidlsp_settings)
 
         super().__init__(
             config,
@@ -127,6 +130,7 @@ class TerraformLS(SolidLanguageServer):
             repository_root_path,
             ProcessLaunchInfo(cmd=f"{terraform_ls_executable_path} serve", cwd=repository_root_path),
             "terraform",
+            solidlsp_settings,
         )
         self.server_ready = threading.Event()
         self.request_id = 0

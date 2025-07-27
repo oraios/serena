@@ -15,6 +15,7 @@ from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.settings import SolidLSPSettings
 
 
 class PyrightServer(SolidLanguageServer):
@@ -23,7 +24,9 @@ class PyrightServer(SolidLanguageServer):
     Contains various configurations and settings specific to Python.
     """
 
-    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
+    def __init__(
+        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ):
         """
         Creates a PyrightServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
@@ -36,6 +39,7 @@ class PyrightServer(SolidLanguageServer):
             # Note 2: we can also use `bpyright-langserver --stdio` if we ever are unhappy with pyright
             ProcessLaunchInfo(cmd="python -m pyright.langserver --stdio", cwd=repository_root_path),
             "python",
+            solidlsp_settings,
         )
 
         # Event to signal when initial workspace analysis is complete

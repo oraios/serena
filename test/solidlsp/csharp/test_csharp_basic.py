@@ -13,6 +13,7 @@ from solidlsp.language_servers.csharp_language_server import (
 )
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import SymbolUtils
+from solidlsp.settings import SolidLSPSettings
 
 
 @pytest.mark.csharp
@@ -214,7 +215,9 @@ class TestCSharpSolutionProjectOpening:
             mock_config.ignored_paths = []
 
             # Create CSharpLanguageServer instance
-            CSharpLanguageServer(mock_config, mock_logger, str(temp_path))
+            mock_settings = Mock(spec=SolidLSPSettings)
+            mock_settings.ls_resources_dir = "/tmp/test_ls_resources"
+            CSharpLanguageServer(mock_config, mock_logger, str(temp_path), mock_settings)
 
             # Verify that logger was called with solution file discovery
             mock_logger.log.assert_any_call(f"Found solution/project file: {solution_file}", 20)  # logging.INFO
@@ -236,7 +239,9 @@ class TestCSharpSolutionProjectOpening:
             mock_config.ignored_paths = []
 
             # Create CSharpLanguageServer instance
-            CSharpLanguageServer(mock_config, mock_logger, str(temp_path))
+            mock_settings = Mock(spec=SolidLSPSettings)
+            mock_settings.ls_resources_dir = "/tmp/test_ls_resources"
+            CSharpLanguageServer(mock_config, mock_logger, str(temp_path), mock_settings)
 
             # Verify that logger was called with warning about no solution/project files
             mock_logger.log.assert_any_call(
