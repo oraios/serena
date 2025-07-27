@@ -105,10 +105,10 @@ class RuntimeDependencyCollection:
                     stderr=subprocess.DEVNULL,
                 )
         except Exception as e:
-            logger.log(f"Command '{command}' failed with error: {e}", logging.ERROR)
+            logger.log(f"Command '{' '.join(command_parts)}' failed with error: {e}", logging.ERROR)
             raise
 
-        logger.log(f"Command '{command}' executed successfully in '{cwd}'", logging.INFO)
+        logger.log(f"Command '{' '.join(command_parts)}' executed successfully in '{cwd}'", logging.INFO)
 
 
     @staticmethod
