@@ -129,8 +129,40 @@ class CommandUtils:
 
         """
         npm_executable = shutil.which("npm")
+
+        # If which fails, try common Node.js installation locations
         if not npm_executable:
-            return None
+            # Try to find node first, then look for npm nearby
+            node_executable = shutil.which("node")
+            if node_executable:
+                node_path = Path(node_executable)
+                node_dir = node_path.parent
+
+                # Check if npm is in the same directory as node
+                potential_npm = node_dir / "npm"
+                if potential_npm.exists():
+                    npm_executable = str(potential_npm)
+                else:
+                    # Try common npm locations relative to node
+                    common_locations = [
+                        node_dir / ".." / "lib" / "node_modules" / "npm" / "bin" / "npm-cli.js",
+                        node_dir / ".." / "lib" / "node_modules" / "npm" / "lib" / "cli.js",
+                    ]
+
+                    # On Linux, also check system-wide npm installations
+                    if PlatformUtils.get_platform_id().is_linux():
+                        common_locations.extend([
+                            Path("/usr/lib/node_modules/npm/bin/npm-cli.js"),
+                            Path("/usr/local/lib/node_modules/npm/bin/npm-cli.js"),
+                        ])
+
+                    for location in common_locations:
+                        if location.exists():
+                            return str(location)
+
+            # If still not found, return None
+            if not npm_executable:
+                return None
 
         npm_path = Path(npm_executable)
         npm_dir = npm_path.parent
