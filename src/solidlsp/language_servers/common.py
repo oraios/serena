@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import shlex
 import shutil
@@ -63,7 +64,7 @@ class RuntimeDependencyCollection:
             if dep.url:
                 self._install_from_url(dep, logger, target_dir)
             if dep.command:
-                self._run_command(dep.command, target_dir)
+                self._run_command(dep.command, logger, target_dir)
             if dep.binary_name:
                 results[dep.id] = os.path.join(target_dir, dep.binary_name)
             else:
@@ -71,9 +72,12 @@ class RuntimeDependencyCollection:
         return results
 
     @staticmethod
-    def _run_command(command: str, cwd: str) -> None:
+    def _run_command(command: str, logger: LanguageServerLogger, cwd: str) -> None:
+
         is_windows = PlatformUtils.get_platform_id().value.startswith("win")
         command_parts = shlex.split(command, posix=not is_windows)
+        logger.log(f"Running command: {command} in '{cwd}'", logging.INFO)
+        logger.log(f"Command parts: {command_parts}", logging.INFO)
 
         if is_windows:
             subprocess.run(
@@ -95,6 +99,8 @@ class RuntimeDependencyCollection:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
+
+        logger.log(f"Command '{command}' executed successfully in '{cwd}'", logging.INFO)
 
     @staticmethod
     def _install_from_url(dep: RuntimeDependency, logger: LanguageServerLogger, target_dir: str) -> None:
