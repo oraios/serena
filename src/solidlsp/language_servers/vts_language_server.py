@@ -53,7 +53,7 @@ class VtsLanguageServer(SolidLanguageServer):
         ]
 
     @classmethod
-    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> list[str]:
         """
         Setup runtime dependencies for VTS Language Server and return the command to start the server.
         """
@@ -103,18 +103,9 @@ class VtsLanguageServer(SolidLanguageServer):
         if not os.path.exists(vts_script_path):
             raise FileNotFoundError(f"vtsls script not found at {vts_script_path}, something went wrong with the installation.")
 
-        # Build direct node command for vtsls
         vts_command = NodeJsUtils.build_node_command(node_executable, vts_script_path, ["--stdio"])
 
-        # Use appropriate quoting for the platform
-        if PlatformUtils.get_platform_id().value.startswith("win"):
-            import subprocess
-
-            return subprocess.list2cmdline(vts_command)
-        else:
-            import shlex
-
-            return shlex.join(vts_command)
+        return vts_command
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:

@@ -22,7 +22,7 @@ class RuntimeDependency:
     url: str | None = None
     archive_type: str | None = None
     binary_name: str | None = None
-    command: str | None = None
+    command: str | list[str] | None = None
     package_name: str | None = None
     package_version: str | None = None
     extract_path: str | None = None
@@ -72,11 +72,18 @@ class RuntimeDependencyCollection:
         return results
 
     @staticmethod
-    def _run_command(command: str, logger: LanguageServerLogger, cwd: str) -> None:
+    def _run_command(command: str | list[str], logger: LanguageServerLogger, cwd: str) -> None:
 
         is_windows = PlatformUtils.get_platform_id().value.startswith("win")
-        command_parts = shlex.split(command, posix=not is_windows)
-        logger.log(f"Running command: {command} in '{cwd}'", logging.INFO)
+
+        if isinstance(command, list):
+            command_parts = command
+            command_str = subprocess.list2cmdline(command) if is_windows else shlex.join(command)
+        else:
+            command_parts = shlex.split(command, posix=not is_windows)
+            command_str = command
+
+        logger.log(f"Running command: {command_str} in '{cwd}'", logging.INFO)
         logger.log(f"Command parts: {command_parts}", logging.INFO)
 
         if is_windows:
@@ -179,7 +186,7 @@ class NodeJsUtils:
         return command
 
     @staticmethod
-    def build_npm_install_command(install_args: list[str]) -> str | None:
+    def build_npm_install_command(install_args: list[str]) -> list[str] | None:
         """
         Build a command for npm install using direct node execution.
 
@@ -187,7 +194,7 @@ class NodeJsUtils:
             install_args: Arguments for npm install (e.g., ["install", "--prefix", "./", "package@version"])
 
         Returns:
-            Complete command string properly quoted for direct execution, or None if node/npm not found
+            Complete command list for direct execution, or None if node/npm not found
 
         """
         node_executable = NodeJsUtils.find_node_executable()
@@ -196,10 +203,4 @@ class NodeJsUtils:
         if not node_executable or not npm_cli_script:
             return None
 
-        command_list = NodeJsUtils.build_node_command(node_executable, npm_cli_script, install_args)
-
-        # Use appropriate quoting for the platform
-        if PlatformUtils.get_platform_id().value.startswith("win"):
-            return subprocess.list2cmdline(command_list)
-        else:
-            return shlex.join(command_list)
+        return NodeJsUtils.build_node_command(node_executable, npm_cli_script, install_args)

@@ -65,7 +65,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         ]
 
     @classmethod
-    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> list[str]:
         """
         Setup runtime dependencies for TypeScript Language Server and return the command to start the server.
         """
@@ -125,18 +125,9 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                 f"typescript-language-server script not found at {tsserver_script_path}, something went wrong with the installation."
             )
 
-        # Build direct node command for typescript-language-server
         tsserver_command = NodeJsUtils.build_node_command(node_executable, tsserver_script_path, ["--stdio"])
 
-        # Use appropriate quoting for the platform
-        if PlatformUtils.get_platform_id().value.startswith("win"):
-            import subprocess
-
-            return subprocess.list2cmdline(tsserver_command)
-        else:
-            import shlex
-
-            return shlex.join(tsserver_command)
+        return tsserver_command
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
