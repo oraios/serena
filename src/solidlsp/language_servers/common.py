@@ -86,7 +86,7 @@ class RuntimeDependencyCollection:
             if is_windows:
                 subprocess.run(
                     command_parts,
-                    input='',
+                    input='', # Needed for Claude Code on Windows to avoid hanging
                     capture_output=True,
                     check=True,
                     timeout=60,
