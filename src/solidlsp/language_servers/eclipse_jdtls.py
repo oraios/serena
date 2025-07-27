@@ -11,6 +11,7 @@ import stat
 import threading
 import uuid
 from pathlib import PurePath
+from typing import cast
 
 from overrides import override
 
@@ -625,29 +626,29 @@ class EclipseJDTLS(SolidLanguageServer):
             ],
         }
 
-        initialize_params["initializationOptions"]["workspaceFolders"] = [repo_uri]
+        initialize_params["initializationOptions"]["workspaceFolders"] = [repo_uri]  # type: ignore
         bundles = [self.runtime_dependency_paths.intellicode_jar_path]
-        initialize_params["initializationOptions"]["bundles"] = bundles
-        initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"] = [
+        initialize_params["initializationOptions"]["bundles"] = bundles  # type: ignore
+        initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"] = [  # type: ignore
             {"name": "JavaSE-21", "path": self.runtime_dependency_paths.jre_home_path, "default": True}
         ]
 
-        for runtime in initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"]:
+        for runtime in initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"]:  # type: ignore
             assert "name" in runtime
             assert "path" in runtime
             assert os.path.exists(runtime["path"]), f"Runtime required for eclipse_jdtls at path {runtime['path']} does not exist"
 
-        gradle_settings = initialize_params["initializationOptions"]["settings"]["java"]["import"]["gradle"]
+        gradle_settings = initialize_params["initializationOptions"]["settings"]["java"]["import"]["gradle"]  # type: ignore
         gradle_settings["home"] = self.runtime_dependency_paths.gradle_path
         gradle_settings["java"]["home"] = self.runtime_dependency_paths.jre_path
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Eclipse JDTLS Language Server
         """
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "textDocument/completion":
@@ -665,22 +666,22 @@ class EclipseJDTLS(SolidLanguageServer):
                         self.intellicode_enable_command_available.set()
             return
 
-        def lang_status_handler(params):
+        def lang_status_handler(params: dict) -> None:
             # TODO: Should we wait for
             # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
             # Before proceeding?
             if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
                 self.service_ready_event.set()
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: dict) -> list:
             assert params["command"] == "_java.reloadBundles.command"
             assert params["arguments"] == []
             return []
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)
@@ -700,13 +701,13 @@ class EclipseJDTLS(SolidLanguageServer):
             logging.INFO,
         )
         init_response = self.server.send.initialize(initialize_params)
-        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2
+        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2  # type: ignore
         assert "completionProvider" not in init_response["capabilities"]
         assert "executeCommandProvider" not in init_response["capabilities"]
 
         self.server.notify.initialized({})
 
-        self.server.notify.workspace_did_change_configuration({"settings": initialize_params["initializationOptions"]["settings"]})
+        self.server.notify.workspace_did_change_configuration({"settings": initialize_params["initializationOptions"]["settings"]})  # type: ignore
 
         self.intellicode_enable_command_available.wait()
 

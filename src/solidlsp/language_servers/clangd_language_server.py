@@ -7,6 +7,7 @@ import os
 import pathlib
 import stat
 import threading
+from typing import Any, cast
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
@@ -126,9 +127,9 @@ class ClangdLanguageServer(SolidLanguageServer):
             ],
         }
 
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Clangd Language Server, waits for the server to be ready and yields the LanguageServer instance.
 
@@ -142,7 +143,7 @@ class ClangdLanguageServer(SolidLanguageServer):
         # LanguageServer has been shutdown
         """
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: Any) -> None:
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "workspace/executeCommand":
@@ -150,24 +151,24 @@ class ClangdLanguageServer(SolidLanguageServer):
                     self.resolve_main_method_available.set()
             return
 
-        def lang_status_handler(params):
+        def lang_status_handler(params: Any) -> None:
             # TODO: Should we wait for
             # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
             # Before proceeding?
             if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
                 self.service_ready_event.set()
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: Any) -> list:
             return []
 
-        def do_nothing(params):
+        def do_nothing(params: Any) -> None:
             return
 
-        def check_experimental_status(params):
+        def check_experimental_status(params: Any) -> None:
             if params["quiescent"] == True:
                 self.server_ready.set()
 
-        def window_log_message(msg):
+        def window_log_message(msg: Any) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
         self.server.on_request("client/registerCapability", register_capability_handler)
@@ -188,7 +189,7 @@ class ClangdLanguageServer(SolidLanguageServer):
             logging.INFO,
         )
         init_response = self.server.send.initialize(initialize_params)
-        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2
+        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2  # type: ignore
         assert "completionProvider" in init_response["capabilities"]
         assert init_response["capabilities"]["completionProvider"] == {
             "triggerCharacters": [".", "<", ">", ":", '"', "/", "*"],

@@ -3,6 +3,7 @@ import os
 import shutil
 import stat
 import threading
+from typing import cast
 
 from overrides import override
 
@@ -27,7 +28,7 @@ class TerraformLS(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in [".terraform", "terraform.tfstate.d"]
 
     @staticmethod
-    def _ensure_tf_command_available(logger: LanguageServerLogger):
+    def _ensure_tf_command_available(logger: LanguageServerLogger) -> None:
         logger.log("Starting terraform version detection...", logging.DEBUG)
 
         # 1. Try to find terraform using shutil.which
@@ -141,7 +142,7 @@ class TerraformLS(SolidLanguageServer):
         Returns the initialize params for the Terraform Language Server.
         """
         root_uri = PathUtils.path_to_uri(repository_absolute_path)
-        return {
+        result = {
             "processId": os.getpid(),
             "locale": "en",
             "rootPath": repository_absolute_path,
@@ -166,17 +167,18 @@ class TerraformLS(SolidLanguageServer):
                 }
             ],
         }
+        return cast(InitializeParams, result)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """Start terraform-ls server process"""
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)

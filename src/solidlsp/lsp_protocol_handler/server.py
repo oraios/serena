@@ -95,7 +95,7 @@ class StopLoopException(Exception):
     pass
 
 
-def create_message(payload: PayloadLike):
+def create_message(payload: PayloadLike) -> tuple[bytes, bytes, bytes]:
     body = json.dumps(payload, check_circular=False, ensure_ascii=False, separators=(",", ":")).encode(ENCODING)
     return (
         f"Content-Length: {len(body)}\r\n".encode(ENCODING),
@@ -118,5 +118,5 @@ def content_length(line: bytes) -> int | None:
         try:
             return int(value)
         except ValueError:
-            raise ValueError(f"Invalid Content-Length header: {value}")
+            raise ValueError(f"Invalid Content-Length header: {value!r}")
     return None

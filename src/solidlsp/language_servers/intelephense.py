@@ -7,6 +7,7 @@ import os
 import pathlib
 import shutil
 from time import sleep
+from typing import cast
 
 from overrides import override
 
@@ -14,10 +15,11 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import PlatformId, PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import DefinitionParams, InitializeParams
+from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, InitializeParams, LocationLink
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
+from ..lsp_protocol_handler import lsp_types
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
 
@@ -124,18 +126,18 @@ class Intelephense(SolidLanguageServer):
             ],
         }
 
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """Start Intelephense server process"""
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)
@@ -170,7 +172,7 @@ class Intelephense(SolidLanguageServer):
 
     @override
     # For some reason, the LS may need longer to process this, so we just retry
-    def _send_references_request(self, relative_file_path: str, line: int, column: int):
+    def _send_references_request(self, relative_file_path: str, line: int, column: int) -> list[lsp_types.Location] | None:
         # TODO: The LS doesn't return references contained in other files if it doesn't sleep. This is
         #   despite the LS having processed requests already. I don't know what causes this, but sleeping
         #   one second helps. It may be that sleeping only once is enough but that's hard to reliably test.
@@ -180,7 +182,7 @@ class Intelephense(SolidLanguageServer):
         return super()._send_references_request(relative_file_path, line, column)
 
     @override
-    def _send_definition_request(self, definition_params: DefinitionParams):
+    def _send_definition_request(self, definition_params: DefinitionParams) -> Definition | list[LocationLink] | None:
         # TODO: same as above, also only a problem if the definition is in another file
         sleep(1)
         return super()._send_definition_request(definition_params)

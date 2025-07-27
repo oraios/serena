@@ -120,7 +120,7 @@ class LanguageServerConfig:
     """Paths, dirs or glob-like patterns. The matching will follow the same logic as for .gitignore entries"""
 
     @classmethod
-    def from_dict(cls, env: dict):
+    def from_dict(cls, env: dict) -> Self:
         """
         Create a MultilspyConfig instance from a dictionary
         """

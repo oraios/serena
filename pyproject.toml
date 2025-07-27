@@ -119,7 +119,7 @@ _black_format = "black src scripts test"
 _ruff_format = "ruff check --fix src scripts test"
 lint = ["_black_check", "_ruff_check"]
 format = ["_ruff_format", "_black_format"]
-_mypy = "mypy src/serena"
+_mypy = "mypy src/serena src/solidlsp"
 type-check = ["_mypy"]
 
 [tool.ruff]

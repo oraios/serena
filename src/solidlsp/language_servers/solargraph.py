@@ -10,6 +10,7 @@ import pathlib
 import stat
 import subprocess
 import threading
+from typing import cast
 
 from overrides import override
 
@@ -71,7 +72,7 @@ class Solargraph(SolidLanguageServer):
         # Check if Ruby is installed
         try:
             result = subprocess.run(["ruby", "--version"], check=True, capture_output=True, cwd=repository_root_path)
-            ruby_version = result.stdout.strip()
+            ruby_version = str(result.stdout).strip()
             logger.log(f"Ruby version: {ruby_version}", logging.INFO)
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Error checking for Ruby installation: {e.stderr}") from e
@@ -81,16 +82,16 @@ class Solargraph(SolidLanguageServer):
         # Check if solargraph is installed
         try:
             result = subprocess.run(
-                ["gem", "list", "^solargraph$", "-i"], check=False, capture_output=True, text=True, cwd=repository_root_path
+                ["gem", "list", "^solargraph$", "-i"], check=False, capture_output=True, text=True, cwd=repository_root_path  # type: ignore
             )
-            if result.stdout.strip() == "false":
+            if str(result.stdout).strip() == "false":
                 logger.log("Installing Solargraph...", logging.INFO)
                 subprocess.run(dependency["installCommand"].split(), check=True, capture_output=True, cwd=repository_root_path)
 
             # Get the gem executable path directly
-            result = subprocess.run(["gem", "which", "solargraph"], check=True, capture_output=True, text=True, cwd=repository_root_path)
+            result = subprocess.run(["gem", "which", "solargraph"], check=True, capture_output=True, text=True, cwd=repository_root_path)  # type: ignore
             gem_path = result.stdout.strip()
-            bin_dir = os.path.join(os.path.dirname(os.path.dirname(gem_path)), "bin")
+            bin_dir = os.path.join(os.path.dirname(os.path.dirname(gem_path)), "bin")  # type: ignore
             executable_path = os.path.join(bin_dir, "solargraph")
 
             if not os.path.exists(executable_path):
@@ -122,14 +123,14 @@ class Solargraph(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Solargraph Language Server for Ruby
         """
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "workspace/executeCommand":
@@ -137,20 +138,20 @@ class Solargraph(SolidLanguageServer):
                     self.resolve_main_method_available.set()
             return
 
-        def lang_status_handler(params):
+        def lang_status_handler(params: dict) -> None:
             # TODO: Should we wait for
             # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
             # Before proceeding?
             if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
                 self.service_ready_event.set()
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: dict) -> list:
             return []
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
         self.server.on_request("client/registerCapability", register_capability_handler)

@@ -7,6 +7,7 @@ import os
 import pathlib
 import re
 import threading
+from typing import cast
 
 from overrides import override
 
@@ -56,7 +57,7 @@ class PyrightServer(SolidLanguageServer):
         Returns the initialize params for the Pyright Language Server.
         """
         # Create basic initialization parameters
-        initialize_params: InitializeParams = {  # type: ignore
+        initialize_params = {  # type: ignore
             "processId": os.getpid(),
             "rootPath": repository_absolute_path,
             "rootUri": pathlib.Path(repository_absolute_path).as_uri(),
@@ -107,9 +108,9 @@ class PyrightServer(SolidLanguageServer):
             ],
         }
 
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Pyright Language Server and waits for initial workspace analysis to complete.
 
@@ -127,13 +128,13 @@ class PyrightServer(SolidLanguageServer):
         ```
         """
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: dict) -> list:
             return []
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             """
             Monitor Pyright's log messages to detect when initial analysis is complete.
             Pyright logs "Found X source files" when it finishes scanning the workspace.
@@ -149,7 +150,7 @@ class PyrightServer(SolidLanguageServer):
                 self.analysis_complete.set()
                 self.completions_available.set()
 
-        def check_experimental_status(params):
+        def check_experimental_status(params: dict) -> None:
             """
             Also listen for experimental/serverStatus as a backup signal
             """

@@ -10,6 +10,7 @@ import pathlib
 import shutil
 import threading
 from time import sleep
+from typing import cast
 
 from overrides import override
 
@@ -21,6 +22,7 @@ from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
+from ..lsp_protocol_handler import lsp_types
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
 
@@ -145,9 +147,9 @@ class VtsLanguageServer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the VTS Language Server, waits for the server to be ready and yields the LanguageServer instance.
 
@@ -161,30 +163,30 @@ class VtsLanguageServer(SolidLanguageServer):
         # LanguageServer has been shutdown
         """
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "workspace/executeCommand":
                     self.initialize_searcher_command_available.set()
             return
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: dict) -> list:
             return []
 
-        def workspace_configuration_handler(params):
+        def workspace_configuration_handler(params: dict) -> list[dict] | dict:
             # VTS may request workspace configuration
             # Return empty configuration for each requested item
             if "items" in params:
                 return [{}] * len(params["items"])
             return {}
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
-        def check_experimental_status(params):
+        def check_experimental_status(params: dict) -> None:
             """
             Also listen for experimental/serverStatus as a backup signal
             """
@@ -233,6 +235,6 @@ class VtsLanguageServer(SolidLanguageServer):
 
     # VTS may need longer to process references, so we include a sleep similar to TypeScript LS
     @override
-    def _send_references_request(self, relative_file_path: str, line: int, column: int):
+    def _send_references_request(self, relative_file_path: str, line: int, column: int) -> list[lsp_types.Location] | None:
         sleep(1)
         return super()._send_references_request(relative_file_path, line, column)

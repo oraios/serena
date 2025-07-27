@@ -7,6 +7,7 @@ import logging
 import os
 import pathlib
 import stat
+from typing import cast
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
@@ -114,7 +115,7 @@ class KotlinLanguageServer(SolidLanguageServer):
         }
 
         kotlin_dependency = runtime_dependencies["runtimeDependency"]
-        java_dependency = runtime_dependencies["java"][platform_id.value]
+        java_dependency = runtime_dependencies["java"][platform_id.value]  # type: ignore
 
         # Setup paths for dependencies
         static_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "kotlin_language_server")
@@ -149,7 +150,7 @@ class KotlinLanguageServer(SolidLanguageServer):
         # Download and extract Kotlin Language Server if script doesn't exist
         if not os.path.exists(kotlin_script):
             logger.log("Downloading Kotlin Language Server...", logging.INFO)
-            FileUtils.download_and_extract_archive(logger, kotlin_dependency["url"], static_dir, kotlin_dependency["archiveType"])
+            FileUtils.download_and_extract_archive(logger, kotlin_dependency["url"], static_dir, kotlin_dependency["archiveType"])  # type: ignore
 
             # Make script executable on Unix platforms
             if os.path.exists(kotlin_script) and not platform_id.value.startswith("win-"):
@@ -420,20 +421,20 @@ class KotlinLanguageServer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Kotlin Language Server
         """
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: dict) -> list:
             return []
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
         self.server.on_request("client/registerCapability", do_nothing)

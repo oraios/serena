@@ -5,6 +5,7 @@ Provides Python specific instantiation of the LanguageServer class. Contains var
 import logging
 import os
 import pathlib
+from typing import cast
 
 from overrides import override
 
@@ -150,24 +151,24 @@ class JediServer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the JEDI Language Server
         """
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: dict) -> list:
             return []
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def check_experimental_status(params):
+        def check_experimental_status(params: dict) -> None:
             if params["quiescent"] == True:
                 self.completions_available.set()
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
         self.server.on_request("client/registerCapability", do_nothing)
@@ -188,7 +189,7 @@ class JediServer(SolidLanguageServer):
             logging.INFO,
         )
         init_response = self.server.send.initialize(initialize_params)
-        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2
+        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2  # type: ignore
         assert "completionProvider" in init_response["capabilities"]
         assert init_response["capabilities"]["completionProvider"] == {
             "triggerCharacters": [".", "'", '"'],
