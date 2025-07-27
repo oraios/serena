@@ -86,7 +86,7 @@ class RuntimeDependencyCollection:
             try:
                 execution_result = subprocess.run(
                     command_parts,
-                    input=True,
+                    input='',
                     capture_output=True,
                     check=True,
                     timeout=60,
