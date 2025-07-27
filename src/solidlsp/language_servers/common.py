@@ -80,24 +80,17 @@ class RuntimeDependencyCollection:
         else:
             command_parts = shlex.split(command, posix=not is_windows)
 
-        logger.log(f"Running command parts: {command_parts}", logging.INFO)
+        logger.log(f"Running command: {' '.join(command_parts)} in '{cwd}'", logging.INFO)
 
         if is_windows:
-            process = subprocess.Popen(
+            execution_result = subprocess.run(
                 command_parts,
-                stdout=subprocess.PIPE,
-                stdin=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=os.environ.copy(),
+                capture_output=True,
+                timeout=60,
+                check=True,
                 cwd=cwd,
             )
-            process.wait(60)
-            process.communicate()
-            if process.returncode != 0:
-                logger.log(
-                    f"Command '{command}' failed with return code {process.returncode} in '{cwd}', stderr: {process.stderr.read().decode()}, stdout: {process.stdout.read().decode()}",
-                    logging.ERROR
-                )
+            logger.log(f"Command '{command}' executed successfully in '{cwd}' with output: {execution_result.stdout.decode()}", logging.INFO)
         else:
             import pwd
 
@@ -110,8 +103,8 @@ class RuntimeDependencyCollection:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
+            logger.log(f"Command '{command}' executed successfully in '{cwd}'", logging.INFO)
 
-        logger.log(f"Command '{command}' executed successfully in '{cwd}'", logging.INFO)
 
     @staticmethod
     def _install_from_url(dep: RuntimeDependency, logger: LanguageServerLogger, target_dir: str) -> None:
