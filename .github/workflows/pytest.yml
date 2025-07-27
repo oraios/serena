@@ -28,6 +28,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '>=1.17.0'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       # Add Go bin directory to PATH for this workflow
       # GITHUB_PATH is a special file that GitHub Actions uses to modify PATH
       # Writing to this file adds the directory to the PATH for subsequent steps
