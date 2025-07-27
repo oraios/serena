@@ -83,12 +83,21 @@ class RuntimeDependencyCollection:
         logger.log(f"Running command parts: {command_parts}", logging.INFO)
 
         if is_windows:
-            subprocess.run(
+            process = subprocess.Popen(
                 command_parts,
-                timeout=60,
-                check=True,
-                cwd=cwd
+                stdout=subprocess.PIPE,
+                stdin=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=os.environ.copy(),
+                cwd=cwd,
             )
+            process.wait(60)
+            process.communicate()
+            if process.returncode != 0:
+                logger.log(
+                    f"Command '{command}' failed with return code {process.returncode} in '{cwd}', stderr: {process.stderr.read().decode()}, stdout: {process.stdout.read().decode()}",
+                    logging.ERROR
+                )
         else:
             import pwd
 
