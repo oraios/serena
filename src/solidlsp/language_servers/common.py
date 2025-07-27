@@ -75,24 +75,19 @@ class RuntimeDependencyCollection:
     def _run_command(command: str | list[str], logger: LanguageServerLogger, cwd: str) -> None:
 
         is_windows = PlatformUtils.get_platform_id().value.startswith("win")
-
         if isinstance(command, list):
             command_parts = command
-            command_str = subprocess.list2cmdline(command) if is_windows else shlex.join(command)
         else:
             command_parts = shlex.split(command, posix=not is_windows)
-            command_str = command
 
-        logger.log(f"Running command: {command_str} in '{cwd}'", logging.INFO)
-        logger.log(f"Command parts: {command_parts}", logging.INFO)
+        logger.log(f"Running command parts: {command_parts}", logging.INFO)
 
         if is_windows:
             subprocess.run(
                 command_parts,
+                timeout=60,
                 check=True,
-                cwd=cwd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                cwd=cwd
             )
         else:
             import pwd
