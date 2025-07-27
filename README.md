@@ -271,7 +271,7 @@ you would run this command from the Serena directory,
 uv run serena-mcp-server --transport sse --port 9121
 ```
 
-and then configure your client to connect to `http://localhost/sse:9121`.
+and then configure your client to connect to `http://localhost:9121/sse`.
 
 
 #### Command-Line Arguments

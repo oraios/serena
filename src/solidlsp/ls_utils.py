@@ -247,6 +247,9 @@ class PlatformId(str, Enum):
     LINUX_MUSL_x64 = "linux-musl-x64"
     LINUX_MUSL_arm64 = "linux-musl-arm64"
 
+    def is_windows(self):
+        return self.value.startswith("win")
+
 
 class DotnetVersion(str, Enum):
     """

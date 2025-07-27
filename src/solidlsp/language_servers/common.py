@@ -12,7 +12,6 @@ from pathlib import Path
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
 
-
 @dataclass(kw_only=True)
 class RuntimeDependency:
     """Represents a runtime dependency for a language server."""
@@ -73,42 +72,48 @@ class RuntimeDependencyCollection:
 
     @staticmethod
     def _run_command(command: str | list[str], logger: LanguageServerLogger, cwd: str) -> None:
+        kwargs = {}
+        if PlatformUtils.get_platform_id().is_windows():
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore
+        else:
+            import pwd
 
-        is_windows = PlatformUtils.get_platform_id().value.startswith("win")
+            kwargs["user"] = pwd.getpwuid(os.getuid()).pw_name
+
         if isinstance(command, list):
             command_parts = command
         else:
-            command_parts = shlex.split(command, posix=not is_windows)
+            command_parts = shlex.split(command, posix=not PlatformUtils.get_platform_id().is_windows())
 
-        logger.log(f"Running command: {' '.join(command_parts)} in '{cwd}'", logging.INFO)
+        logger.log(f"Running command: '{' '.join(command_parts)}' in '{cwd}'", logging.INFO)
 
         try:
-            if is_windows:
-                subprocess.run(
-                    command_parts,
-                    input='', # Needed for Claude Code on Windows to avoid hanging
-                    check=True,
-                    timeout=60,
-                    cwd=cwd,
+            completed_process = subprocess.run(
+                command_parts,
+                input='', # Needed for Claude Code on Windows to avoid hanging
+                shell=not PlatformUtils.get_platform_id().is_windows(),
+                capture_output=True,
+                check=True,
+                cwd=cwd,
+                **kwargs,
+            )
+            if completed_process.returncode != 0:
+                logger.log(
+                    f"Command '{' '.join(command_parts)}' failed with return code {completed_process.returncode}, stderr: \n{completed_process.stderr.decode()}, stddout: \n{completed_process.stdout.decode()}",
+                    logging.WARNING,
                 )
+                logger.log(f"Command output:\n{completed_process.stdout}", logging.WARNING)
             else:
-                import pwd
-
-                user = pwd.getpwuid(os.getuid()).pw_name
-                subprocess.run(
-                    command_parts,
-                    check=True,
-                    user=user,
-                    cwd=cwd,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
+                logger.log(
+                    "Command completed successfully",
+                    logging.INFO
                 )
         except Exception as e:
-            logger.log(f"Command '{' '.join(command_parts)}' failed with error: {e}", logging.ERROR)
+            logger.log(
+                f"Failed to run command '{' '.join(command_parts)}': {e}",
+                logging.ERROR
+            )
             raise
-
-        logger.log(f"Command '{' '.join(command_parts)}' executed successfully in '{cwd}'", logging.INFO)
-
 
     @staticmethod
     def _install_from_url(dep: RuntimeDependency, logger: LanguageServerLogger, target_dir: str) -> None:
