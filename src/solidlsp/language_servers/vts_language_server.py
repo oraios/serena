@@ -77,14 +77,24 @@ class VtsLanguageServer(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for vtsls at the moment"
 
-        # Verify both node and npm are installed
+        vtsls_package = "@vtsls/language-server@0.2.9"
+
         node_executable = shutil.which("node")
         assert node_executable is not None, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        npm_cli_script = CommandUtils.get_npm_path()
-        assert npm_cli_script is not None, "npm CLI script not found. Please ensure npm is properly installed."
 
-        # Create dependencies using direct node execution
-        vtsls_install_cmd = [node_executable, npm_cli_script, "install", "--prefix", "./", "@vtsls/language-server@0.2.9"]
+        if platform_id.is_windows():
+            # Windows: Use npm-cli.js with node, otherwise it will fail under Claude Code
+            npm_cli_script = CommandUtils.get_npm_path_windows()
+            assert npm_cli_script is not None, "npm CLI script not found. Please ensure npm is properly installed."
+
+            vtsls_install_cmd = [node_executable, npm_cli_script, "install", "--prefix", "./", vtsls_package]
+            use_shell = False
+        else:
+            # Linux/Mac: Use regular npm with shell=True
+            assert shutil.which("npm") is not None, "npm is not installed or isn't in PATH. Please install npm and try again."
+
+            vtsls_install_cmd = ["npm", "install", "--prefix", "./", vtsls_package]
+            use_shell = True
 
         deps = RuntimeDependencyCollection(
             [
@@ -92,7 +102,7 @@ class VtsLanguageServer(SolidLanguageServer):
                     id="vtsls",
                     description="vtsls language server package",
                     command=vtsls_install_cmd,
-                    command_shell=False,
+                    command_shell=use_shell,
                     platform_id="any",
                 ),
             ]

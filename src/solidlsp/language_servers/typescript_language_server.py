@@ -90,30 +90,32 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy javascript/typescript at the moment"
 
-        # Verify both node and npm are installed
+        packages = ["typescript@5.5.4", "typescript-language-server@4.3.3"]
+
         node_executable = shutil.which("node")
         assert node_executable is not None, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        npm_cli_script = CommandUtils.get_npm_path()
-        assert npm_cli_script is not None, "npm CLI script not found. Please ensure npm is properly installed."
 
-        # Create dependencies using direct node execution
-        typescript_install_cmd = [node_executable, npm_cli_script, "install", "--prefix", "./", "typescript@5.5.4"]
-        tsserver_install_cmd = [node_executable, npm_cli_script, "install", "--prefix", "./", "typescript-language-server@4.3.3"]
+        if platform_id.is_windows():
+            # Windows: Use npm-cli.js with node, otherwise it will fail under Claude Code
+            npm_cli_script = CommandUtils.get_npm_path_windows()
+            assert npm_cli_script is not None, "npm CLI script not found. Please ensure npm is properly installed."
+
+            install_cmd = [node_executable, npm_cli_script, "install", "--prefix", "./"] + packages
+            use_shell = False
+        else:
+            # Linux/Mac: Use regular npm with shell=True
+            assert shutil.which("npm") is not None, "npm is not installed or isn't in PATH. Please install npm and try again."
+
+            install_cmd = ["npm", "install", "--prefix", "./"] + packages
+            use_shell = True
 
         deps = RuntimeDependencyCollection(
             [
                 RuntimeDependency(
-                    id="typescript",
-                    description="typescript package",
-                    command=typescript_install_cmd,
-                    command_shell=False,
-                    platform_id="any",
-                ),
-                RuntimeDependency(
-                    id="typescript-language-server",
-                    description="typescript-language-server package",
-                    command=tsserver_install_cmd,
-                    command_shell=False,
+                    id="typescript-packages",
+                    description=f"npm packages: {', '.join(packages)}",
+                    command=install_cmd,
+                    command_shell=use_shell,
                     platform_id="any",
                 ),
             ]

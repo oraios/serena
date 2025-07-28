@@ -13,6 +13,7 @@ from solidlsp.ls_utils import FileUtils, PlatformUtils
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass(kw_only=True)
 class RuntimeDependency:
     """Represents a runtime dependency for a language server."""
@@ -121,12 +122,15 @@ class CommandUtils:
     """
 
     @staticmethod
-    def get_npm_path() -> str | None:
+    def get_npm_path_windows() -> str | None:
         """
-        Get the path to the npm CLI JavaScript script that can be executed with node.
+        Get the path to npm-cli.js for Windows or None for other platforms.
+
+        On Windows: Returns path to npm-cli.js script for direct node execution
+        On Linux/Mac: Returns None (caller should use regular npm with shell=True)
 
         Returns:
-            Path to npm-cli.js script or None if not found
+            Path to npm-cli.js script on Windows, None on other platforms
 
         """
         if PlatformUtils.get_platform_id().is_windows():
@@ -148,24 +152,6 @@ class CommandUtils:
                 return str(npm_cli_alt_path)
 
             return None
-
-        # For Linux/macOS: use npm config get prefix
         else:
-            try:
-                result = subprocess.run(
-                    "npm config get prefix",
-                    shell=True,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-                if result.returncode == 0:
-                    npm_prefix = result.stdout.strip()
-                    npm_cli_path = Path(npm_prefix) / "lib" / "node_modules" / "npm" / "bin" / "npm-cli.js"
-                    if npm_cli_path.exists():
-                        return str(npm_cli_path)
-            except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
-                logger.warning("Failed to run npm config get prefix: %s", e)
-
+            # On Linux/Mac, return None to indicate caller should use regular npm
             return None

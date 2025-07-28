@@ -54,11 +54,10 @@ class Intelephense(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy PHP at the moment"
 
-        # Verify both node and npm are installed
+        intelephense_package = "intelephense@1.14.4"
+
         node_executable = shutil.which("node")
         assert node_executable is not None, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        npm_cli_script = CommandUtils.get_npm_path()
-        assert npm_cli_script is not None, "npm CLI script not found. Please ensure npm is properly installed."
 
         # Install intelephense if not already installed
         intelephense_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "php-lsp")
@@ -66,15 +65,26 @@ class Intelephense(SolidLanguageServer):
         intelephense_script_path = os.path.join(intelephense_ls_dir, "node_modules", "intelephense", "lib", "intelephense.js")
 
         if not os.path.exists(intelephense_script_path):
-            # Build npm install command using direct node execution
-            install_command = [node_executable, npm_cli_script, "install", "--prefix", "./", "intelephense@1.14.4"]
+            if platform_id.is_windows():
+                # Windows: Use npm-cli.js with node, otherwise it will fail under Claude Code
+                npm_cli_script = CommandUtils.get_npm_path_windows()
+                assert npm_cli_script is not None, "npm CLI script not found. Please ensure npm is properly installed."
+
+                install_command = [node_executable, npm_cli_script, "install", "--prefix", "./", intelephense_package]
+                use_shell = False
+            else:
+                # Linux/Mac: Use regular npm with shell=True
+                assert shutil.which("npm") is not None, "npm is not installed or isn't in PATH. Please install npm and try again."
+
+                install_command = ["npm", "install", "--prefix", "./", intelephense_package]
+                use_shell = True
 
             deps = RuntimeDependencyCollection(
                 [
                     RuntimeDependency(
                         id="intelephense",
                         command=install_command,
-                        command_shell=False,
+                        command_shell=use_shell,
                         platform_id="any",
                     )
                 ]
