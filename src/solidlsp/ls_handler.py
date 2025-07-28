@@ -12,14 +12,15 @@ from queue import Queue
 from typing import Any
 
 import psutil
+from sensai.util.string import ToStringMixin
 
-from solidlsp.ls_exceptions import LanguageServerException
+from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_request import LanguageServerRequest
 from solidlsp.lsp_protocol_handler.lsp_requests import LspNotification
 from solidlsp.lsp_protocol_handler.lsp_types import ErrorCodes
 from solidlsp.lsp_protocol_handler.server import (
     ENCODING,
-    Error,
+    LSPError,
     MessageType,
     PayloadLike,
     ProcessLaunchInfo,
@@ -35,23 +36,50 @@ from solidlsp.lsp_protocol_handler.server import (
 log = logging.getLogger(__name__)
 
 
-class Request:
+class LanguageServerTerminatedException(Exception):
+    """
+    Exception raised when the language server process has terminated unexpectedly.
+    """
+
+    def __init__(self, message: str, cause: Exception | None = None) -> None:
+        super().__init__(message)
+        self.message = message
+        self.cause = cause
+
+    def __str__(self) -> str:
+        return f"LanguageServerTerminatedException: {self.message}" + (f"; Cause: {self.cause}" if self.cause else "")
+
+
+class Request(ToStringMixin):
 
     @dataclass
     class Result:
         payload: PayloadLike | None = None
-        error: Error | None = None
+        error: Exception | None = None
 
         def is_error(self) -> bool:
             return self.error is not None
 
-    def __init__(self) -> None:
+    def __init__(self, request_id: int, method: str) -> None:
+        self._request_id = request_id
+        self._method = method
+        self._status = "pending"
         self._result_queue = Queue()
 
+    def _tostring_includes(self) -> list[str]:
+        return ["_request_id", "_status", "_method"]
+
     def on_result(self, params: PayloadLike) -> None:
+        self._status = "completed"
         self._result_queue.put(Request.Result(payload=params))
 
-    def on_error(self, err: Error) -> None:
+    def on_error(self, err: Exception) -> None:
+        """
+        :param err: the error that occurred while processing the request (typically an LSPError
+            for errors returned by the LS or LanguageServerTerminatedException if the error
+            is due to the language server process terminating unexpectedly).
+        """
+        self._status = "error"
         self._result_queue.put(Request.Result(error=err))
 
     def get_result(self, timeout: float | None = None) -> Result:
@@ -75,10 +103,8 @@ class SolidLanguageServerHandler:
         notify: A LspNotification object that can be used to send notifications to the server.
         cmd: A string that represents the command to launch the language server process.
         process: A subprocess.Popen object that represents the language server process.
-        _received_shutdown: A boolean flag that indicates whether the client has received
-            a shutdown request from the server.
         request_id: An integer that represents the next available request id for the client.
-        _response_handlers: A dictionary that maps request ids to Request objects that
+        _pending_requests: A dictionary that maps request ids to Request objects that
             store the results or errors of the requests.
         on_request_handlers: A dictionary that maps method names to callback functions
             that handle requests from the server.
@@ -104,15 +130,15 @@ class SolidLanguageServerHandler:
         start_independent_lsp_process=True,
         request_timeout: float | None = None,
     ) -> None:
-        self.send = LanguageServerRequest(self.send_request)
+        self.send = LanguageServerRequest(self)
         self.notify = LspNotification(self.send_notification)
 
         self.process_launch_info = process_launch_info
         self.process = None
-        self._received_shutdown = False
+        self._is_shutting_down = False
 
         self.request_id = 1
-        self._response_handlers: dict[Any, Request] = {}
+        self._pending_requests: dict[Any, Request] = {}
         self.on_request_handlers = {}
         self.on_notification_handlers = {}
         self.logger = logger
@@ -176,12 +202,12 @@ class SolidLanguageServerHandler:
 
         # start threads to read stdout and stderr of the process
         threading.Thread(
-            target=self.run_forever,
+            target=self._read_ls_process_stdout,
             name="LSP-stdout-reader",
             daemon=True,
         ).start()
         threading.Thread(
-            target=self.run_forever_stderr,
+            target=self._read_ls_process_stderr,
             name="LSP-stderr-reader",
             daemon=True,
         ).start()
@@ -225,21 +251,6 @@ class SolidLanguageServerHandler:
         # First try to terminate the process tree gracefully
         self._signal_process_tree(process, terminate=True)
 
-        # TODO
-        """
-        # Wait for the process to exit (with timeout)
-        try:
-            asyncio.wait_for(process.wait(), timeout=10)
-        except (asyncio.TimeoutError, Exception):
-            # If termination failed, forcefully kill the process tree
-            self._signal_process_tree(process, terminate=False)
-            try:
-                # Give it one more chance to exit
-                await asyncio.wait_for(process.wait(), timeout=2)
-            except Exception:
-                pass
-        """
-
     def _signal_process_tree(self, process, terminate=True):
         """Send signal (terminate or kill) to the process and all its children."""
         signal_method = "terminate" if terminate else "kill"
@@ -276,21 +287,13 @@ class SolidLanguageServerHandler:
         """
         Perform the shutdown sequence for the client, including sending the shutdown request to the server and notifying it of exit
         """
+        self._is_shutting_down = True
         self._log("Sending shutdown request to server")
         self.send.shutdown()
         self._log("Received shutdown response from server")
-        self._received_shutdown = True
         self._log("Sending exit notification to server")
         self.notify.exit()
         self._log("Sent exit notification to server")
-        # TODO
-        """
-        if self.process and self.process.stdout:
-            self.process.stdout.set_exception(StopLoopException())
-            # This yields the control to the event loop to allow the exception to be handled
-            # in the run_forever and run_forever_stderr methods
-            await asyncio.sleep(0)
-        """
 
     def _log(self, message: str | StringDict) -> None:
         """
@@ -302,27 +305,26 @@ class SolidLanguageServerHandler:
     @staticmethod
     def _read_bytes_from_process(process, stream, num_bytes):
         """Read exactly num_bytes from process stdout"""
-        if process.poll() is not None:
-            # Process has terminated, check if we can still read
-            pass
-
         data = b""
         while len(data) < num_bytes:
             chunk = stream.read(num_bytes - len(data))
             if not chunk:
                 if process.poll() is not None:
-                    raise EOFError(f"Process terminated. Expected {num_bytes} bytes, got {len(data)}")
-                # Process still running but no data available yet
-                time.sleep(0.01)  # Small delay
+                    raise LanguageServerTerminatedException(
+                        f"Process terminated while trying to read response (read {num_bytes} of {len(data)} bytes before termination)"
+                    )
+                # Process still running but no data available yet, retry after a short delay
+                time.sleep(0.01)
                 continue
             data += chunk
         return data
 
-    def run_forever(self) -> bool:
+    def _read_ls_process_stdout(self) -> None:
         """
         Continuously read from the language server process stdout and handle the messages
         invoking the registered response and notification handlers
         """
+        exception: Exception | None = None
         try:
             while self.process and self.process.stdout and self.process.stdout.readable():
                 line = self.process.stdout.readline()
@@ -341,11 +343,20 @@ class SolidLanguageServerHandler:
                 body = self._read_bytes_from_process(self.process, self.process.stdout, num_bytes)
 
                 self._handle_body(body)
-        except (BrokenPipeError, ConnectionResetError):
-            pass
-        return self._received_shutdown
+        except LanguageServerTerminatedException as e:
+            exception = e
+        except (BrokenPipeError, ConnectionResetError) as e:
+            exception = LanguageServerTerminatedException("Language server process terminated while reading stdout", cause=e)
+        except Exception as e:
+            exception = LanguageServerTerminatedException("Unexpected error while reading stdout from language server process", cause=e)
+        log.info("Language server stdout reader thread has terminated")
+        if not self._is_shutting_down:
+            if exception is None:
+                exception = LanguageServerTerminatedException("Language server stdout read process terminated unexpectedly")
+            log.error(str(exception))
+            self._cancel_pending_requests(exception)
 
-    def run_forever_stderr(self) -> None:
+    def _read_ls_process_stderr(self) -> None:
         """
         Continuously read from the language server process stderr and log the messages
         """
@@ -357,6 +368,7 @@ class SolidLanguageServerHandler:
                 self._log("LSP stderr: " + line.decode(ENCODING, errors="replace"))
         except (BrokenPipeError, ConnectionResetError):
             pass
+        log.info("Language server stderr reader thread has terminated")
 
     def _handle_body(self, body: bytes) -> None:
         """
@@ -402,37 +414,47 @@ class SolidLanguageServerHandler:
         """
         self._send_payload(make_response(request_id, params))
 
-    def send_error_response(self, request_id: Any, err: Error) -> None:
+    def send_error_response(self, request_id: Any, err: LSPError) -> None:
         """
         Send error response to the given request id to the server with the given error
         """
         # Use lock to prevent race conditions on tasks and task_counter
         self._send_payload(make_error_response(request_id, err))
 
+    def _cancel_pending_requests(self, exception: Exception) -> None:
+        """
+        Cancel all pending requests by setting their results to an error
+        """
+        with self._response_handlers_lock:
+            log.info("Cancelling %d pending language server requests", len(self._pending_requests))
+            for request in self._pending_requests.values():
+                log.info("Cancelling %s", request)
+                request.on_error(exception)
+            self._pending_requests.clear()
+
     def send_request(self, method: str, params: dict | None = None) -> PayloadLike:
         """
         Send request to the server, register the request id, and wait for the response
         """
-        request = Request()
-
-        # Use lock to prevent race conditions on request_id and _response_handlers
         with self._request_id_lock:
             request_id = self.request_id
             self.request_id += 1
 
+        request = Request(request_id=request_id, method=method)
+        log.debug("Starting: %s", request)
+
         with self._response_handlers_lock:
-            self._response_handlers[request_id] = request
+            self._pending_requests[request_id] = request
 
         self._send_payload(make_request(method, request_id, params))
 
         self._log(f"Waiting for response to request {method} with params:\n{params}")
         result = request.get_result(timeout=self._request_timeout)
+        log.debug("Completed: %s", request)
 
         self._log("Processing result")
         if result.is_error():
-            raise LanguageServerException(
-                f"Could not process request {method} with params:\n{params}.\n  Language server error: {result.error}"
-            ) from result.error
+            raise SolidLSPException(f"Error processing request {method} with params:\n{params}", cause=result.error) from result.error
 
         self._log(f"Returning non-error result, which is:\n{result.payload}")
         return result.payload
@@ -474,14 +496,14 @@ class SolidLanguageServerHandler:
         Handle the response received from the server for a request, using the id to determine the request
         """
         with self._response_handlers_lock:
-            request = self._response_handlers.pop(response["id"])
+            request = self._pending_requests.pop(response["id"])
 
         if "result" in response and "error" not in response:
             request.on_result(response["result"])
         elif "result" not in response and "error" in response:
-            request.on_error(Error.from_lsp(response["error"]))
+            request.on_error(LSPError.from_lsp(response["error"]))
         else:
-            request.on_error(Error(ErrorCodes.InvalidRequest, ""))
+            request.on_error(LSPError(ErrorCodes.InvalidRequest, ""))
 
     def _request_handler(self, response: StringDict) -> None:
         """
@@ -494,7 +516,7 @@ class SolidLanguageServerHandler:
         if not handler:
             self.send_error_response(
                 request_id,
-                Error(
+                LSPError(
                     ErrorCodes.MethodNotFound,
                     f"method '{method}' not handled on client.",
                 ),
@@ -502,10 +524,10 @@ class SolidLanguageServerHandler:
             return
         try:
             self.send_response(request_id, handler(params))
-        except Error as ex:
+        except LSPError as ex:
             self.send_error_response(request_id, ex)
         except Exception as ex:
-            self.send_error_response(request_id, Error(ErrorCodes.InternalError, str(ex)))
+            self.send_error_response(request_id, LSPError(ErrorCodes.InternalError, str(ex)))
 
     def _notification_handler(self, response: StringDict) -> None:
         """
@@ -522,7 +544,7 @@ class SolidLanguageServerHandler:
         except asyncio.CancelledError:
             return
         except Exception as ex:
-            if (not self._received_shutdown) and self.logger:
+            if (not self._is_shutting_down) and self.logger:
                 self.logger(
                     "client",
                     "logger",

@@ -1,15 +1,40 @@
 """
-This module contains the exceptions raised by the Multilspy framework.
+This module contains the exceptions raised by the framework.
 """
 
 
-class LanguageServerException(Exception):
-    """
-    Exceptions raised by the Multilspy framework.
-    """
-
-    def __init__(self, message: str):
+class SolidLSPException(Exception):
+    def __init__(self, message: str, cause: Exception | None = None):
         """
         Initializes the exception with the given message.
+
+        :param message: the message describing the exception
+        :param cause: the original exception that caused this exception, if any.
+            For exceptions raised during request handling, this is typically
+                * an LSPError for errors returned by the LSP server
+                * LanguageServerTerminatedException for errors due to the language server having terminated.
         """
+        self.cause = cause
         super().__init__(message)
+
+    def is_language_server_terminated(self):
+        """
+        :return: True if the exception is caused by the language server having terminated as indicated
+            by the causing exception being an instance of LanguageServerTerminatedException.
+        """
+        from .ls_handler import LanguageServerTerminatedException
+
+        return isinstance(self.cause, LanguageServerTerminatedException)
+
+    def __str__(self) -> str:
+        """
+        Returns a string representation of the exception.
+        """
+        s = super().__str__()
+        if self.cause:
+            if "\n" in s:
+                s += "\n"
+            else:
+                s += " "
+            s += f"(caused by {self.cause})"
+        return s

@@ -1,6 +1,5 @@
 import inspect
 import os
-import traceback
 from abc import ABC
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -16,6 +15,7 @@ from serena.prompt_factory import PromptFactory
 from serena.symbol import LanguageServerSymbolRetriever
 from serena.util.class_decorators import singleton
 from serena.util.inspection import iter_subclasses
+from solidlsp.ls_exceptions import SolidLSPException
 
 if TYPE_CHECKING:
     from serena.agent import LinesRead, MemoriesManager, SerenaAgent
@@ -237,18 +237,24 @@ class Tool(Component):
                         self.agent.reset_language_server()
 
                 # apply the actual tool
-                result = apply_fn(**kwargs)
+                try:
+                    result = apply_fn(**kwargs)
+                except SolidLSPException as e:
+                    if e.is_language_server_terminated():
+                        log.error(f"Language server terminated while executing tool ({e}). Restarting the language server and retrying ...")
+                        self.agent.reset_language_server()
+                        result = apply_fn(**kwargs)
+                    else:
+                        raise
+
+                # record tool usage
                 self.agent.record_tool_usage_if_enabled(kwargs, result, self)
 
             except Exception as e:
                 if not catch_exceptions:
                     raise
-                msg = f"Error executing tool: {e}\n{traceback.format_exc()}"
-                log.error(
-                    f"Error executing tool: {e}. "
-                    f"Consider restarting the language server to solve this (especially, if it's a timeout of a symbolic operation)",
-                    exc_info=e,
-                )
+                msg = f"Error executing tool: {e}"
+                log.error(f"Error executing tool: {e}", exc_info=e)
                 result = msg
 
             if log_call:

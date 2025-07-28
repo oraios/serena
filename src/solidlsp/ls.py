@@ -22,7 +22,7 @@ from serena.text_utils import MatchedConsecutiveLines
 from serena.util.file_system import match_path
 from solidlsp import ls_types
 from solidlsp.ls_config import Language, LanguageServerConfig
-from solidlsp.ls_exceptions import LanguageServerException
+from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_handler import SolidLanguageServerHandler
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PathUtils, TextUtils
@@ -31,7 +31,7 @@ from solidlsp.lsp_protocol_handler import lsp_types as LSPTypes
 from solidlsp.lsp_protocol_handler.lsp_constants import LSPConstants
 from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink, SymbolKind
 from solidlsp.lsp_protocol_handler.server import (
-    Error,
+    LSPError,
     ProcessLaunchInfo,
     StringDict,
 )
@@ -228,7 +228,7 @@ class SolidLanguageServer(ABC):
 
         else:
             logger.log(f"Language {config.code_language} is not supported", logging.ERROR)
-            raise LanguageServerException(f"Language {config.code_language} is not supported")
+            raise SolidLSPException(f"Language {config.code_language} is not supported")
 
         ls.set_request_timeout(timeout)
         return ls
@@ -448,7 +448,7 @@ class SolidLanguageServer(ABC):
                 "open_file called before Language Server started",
                 logging.ERROR,
             )
-            raise LanguageServerException("Language Server not started")
+            raise SolidLSPException("Language Server not started")
 
         absolute_file_path = str(PurePath(self.repository_root_path, relative_file_path))
         uri = pathlib.Path(absolute_file_path).as_uri()
@@ -504,7 +504,7 @@ class SolidLanguageServer(ABC):
                 "insert_text_at_position called before Language Server started",
                 logging.ERROR,
             )
-            raise LanguageServerException("Language Server not started")
+            raise SolidLSPException("Language Server not started")
 
         absolute_file_path = str(PurePath(self.repository_root_path, relative_file_path))
         uri = pathlib.Path(absolute_file_path).as_uri()
@@ -550,7 +550,7 @@ class SolidLanguageServer(ABC):
                 "insert_text_at_position called before Language Server started",
                 logging.ERROR,
             )
-            raise LanguageServerException("Language Server not started")
+            raise SolidLSPException("Language Server not started")
 
         absolute_file_path = str(PurePath(self.repository_root_path, relative_file_path))
         uri = pathlib.Path(absolute_file_path).as_uri()
@@ -594,7 +594,7 @@ class SolidLanguageServer(ABC):
                 "request_definition called before Language Server started",
                 logging.ERROR,
             )
-            raise LanguageServerException("Language Server not started")
+            raise SolidLSPException("Language Server not started")
 
         with self.open_file(relative_file_path):
             # sending request to the language server and waiting for response
@@ -686,14 +686,14 @@ class SolidLanguageServer(ABC):
                 "request_references called before Language Server started",
                 logging.ERROR,
             )
-            raise LanguageServerException("Language Server not started")
+            raise SolidLSPException("Language Server not started")
 
         with self.open_file(relative_file_path):
             try:
                 response = self._send_references_request(relative_file_path, line=line, column=column)
             except Exception as e:
                 # Catch LSP internal error (-32603) and raise a more informative exception
-                if isinstance(e, Error) and getattr(e, "code", None) == -32603:
+                if isinstance(e, LSPError) and getattr(e, "code", None) == -32603:
                     raise RuntimeError(
                         f"LSP internal error (-32603) when requesting references for {relative_file_path}:{line}:{column}. "
                         "This often occurs when requesting references for a symbol not referenced in the expected way. "
@@ -745,7 +745,7 @@ class SolidLanguageServer(ABC):
                 "request_text_document_diagnostics called before Language Server started",
                 logging.ERROR,
             )
-            raise LanguageServerException("Language Server not started")
+            raise SolidLSPException("Language Server not started")
 
         with self.open_file(relative_file_path):
             response = self.server.send.text_document_diagnostic(
@@ -1307,7 +1307,7 @@ class SolidLanguageServer(ABC):
                 "request_referencing_symbols called before Language Server started",
                 logging.ERROR,
             )
-            raise LanguageServerException("Language Server not started")
+            raise SolidLSPException("Language Server not started")
 
         # First, get all references to the symbol
         references = self.request_references(relative_file_path, line, column)
@@ -1579,7 +1579,7 @@ class SolidLanguageServer(ABC):
                 "request_defining_symbol called before Language Server started",
                 logging.ERROR,
             )
-            raise LanguageServerException("Language Server not started")
+            raise SolidLSPException("Language Server not started")
 
         # Get the definition location(s)
         definitions = self.request_definition(relative_file_path, line, column)

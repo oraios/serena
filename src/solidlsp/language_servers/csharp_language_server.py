@@ -20,7 +20,7 @@ from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_exceptions import LanguageServerException
+from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
@@ -246,7 +246,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         elif system == "linux":
             return "linux-x64" if machine in ["x86_64", "amd64"] else "linux-arm64"
         else:
-            raise LanguageServerException(f"Unsupported platform: {system} {machine}")
+            raise SolidLSPException(f"Unsupported platform: {system} {machine}")
 
     @staticmethod
     def _get_runtime_dependencies(runtime_id: str) -> tuple[RuntimeDependency, RuntimeDependency]:
@@ -261,9 +261,9 @@ class CSharpLanguageServer(SolidLanguageServer):
                 dotnet_runtime_dep = dep
 
         if not lang_server_dep:
-            raise LanguageServerException(f"No C# language server dependency found for platform {runtime_id}")
+            raise SolidLSPException(f"No C# language server dependency found for platform {runtime_id}")
         if not dotnet_runtime_dep:
-            raise LanguageServerException(f"No .NET runtime dependency found for platform {runtime_id}")
+            raise SolidLSPException(f"No .NET runtime dependency found for platform {runtime_id}")
 
         return lang_server_dep, dotnet_runtime_dep
 
@@ -310,7 +310,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         cls._extract_language_server(lang_server_dep, package_path, server_dir)
 
         if not server_dll.exists():
-            raise LanguageServerException("Microsoft.CodeAnalysis.LanguageServer.dll not found after extraction")
+            raise SolidLSPException("Microsoft.CodeAnalysis.LanguageServer.dll not found after extraction")
 
         # Make executable on Unix systems
         if platform.system().lower() != "windows":
@@ -336,7 +336,7 @@ class CSharpLanguageServer(SolidLanguageServer):
                     source_dir = possible_dir
                     break
             else:
-                raise LanguageServerException(f"Could not find language server files in package. Searched in {package_path}")
+                raise SolidLSPException(f"Could not find language server files in package. Searched in {package_path}")
 
         # Copy files to cache directory
         server_dir.mkdir(parents=True, exist_ok=True)
@@ -370,7 +370,7 @@ class CSharpLanguageServer(SolidLanguageServer):
                     break
 
             if not package_base_address:
-                raise LanguageServerException("Could not find package base address in Azure NuGet feed")
+                raise SolidLSPException("Could not find package base address in Azure NuGet feed")
 
             # Construct the download URL for the specific package
             package_id_lower = package_name.lower()
@@ -397,7 +397,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             return package_extract_dir
 
         except Exception as e:
-            raise LanguageServerException(
+            raise SolidLSPException(
                 f"Failed to download package {package_name} version {package_version} from Azure NuGet feed: {e}"
             ) from e
 
@@ -462,7 +462,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             return str(dotnet_exe)
 
         except Exception as e:
-            raise LanguageServerException(f"Failed to download .NET 9 runtime from {url}: {e}") from e
+            raise SolidLSPException(f"Failed to download .NET 9 runtime from {url}: {e}") from e
 
     def _get_initialize_params(self) -> InitializeParams:
         """
@@ -637,7 +637,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             self.server.start()
         except Exception as e:
             self.logger.log(f"Failed to start language server process: {e}", logging.ERROR)
-            raise LanguageServerException(f"Failed to start C# language server: {e}")
+            raise SolidLSPException(f"Failed to start C# language server: {e}")
 
         # Send initialization
         initialize_params = self._get_initialize_params()
@@ -647,7 +647,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             init_response = self.server.send.initialize(initialize_params)
             self.logger.log(f"Received initialize response: {init_response}", logging.DEBUG)
         except Exception as e:
-            raise LanguageServerException(f"Failed to initialize C# language server for {self.repository_root_path}: {e}") from e
+            raise SolidLSPException(f"Failed to initialize C# language server for {self.repository_root_path}: {e}") from e
 
         # Apply diagnostic capabilities
         self._force_pull_diagnostics(init_response)

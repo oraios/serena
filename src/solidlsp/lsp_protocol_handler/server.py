@@ -62,7 +62,7 @@ class ProcessLaunchInfo:
     cwd: str = os.getcwd()
 
 
-class Error(Exception):
+class LSPError(Exception):
     def __init__(self, code: ErrorCodes, message: str) -> None:
         super().__init__(message)
         self.code = code
@@ -71,8 +71,8 @@ class Error(Exception):
         return {"code": self.code, "message": super().__str__()}
 
     @classmethod
-    def from_lsp(cls, d: StringDict) -> "Error":
-        return Error(d["code"], d["message"])
+    def from_lsp(cls, d: StringDict) -> "LSPError":
+        return LSPError(d["code"], d["message"])
 
     def __str__(self) -> str:
         return f"{super().__str__()} ({self.code})"
@@ -82,7 +82,7 @@ def make_response(request_id: Any, params: PayloadLike) -> StringDict:
     return {"jsonrpc": "2.0", "id": request_id, "result": params}
 
 
-def make_error_response(request_id: Any, err: Error) -> StringDict:
+def make_error_response(request_id: Any, err: LSPError) -> StringDict:
     return {"jsonrpc": "2.0", "id": request_id, "error": err.to_lsp()}
 
 

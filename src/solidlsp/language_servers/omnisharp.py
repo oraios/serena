@@ -14,7 +14,7 @@ from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_exceptions import LanguageServerException
+from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import DotnetVersion, FileUtils, PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
@@ -71,7 +71,7 @@ class OmniSharp(SolidLanguageServer):
         slnfilename = find_least_depth_sln_file(repository_root_path)
         if slnfilename is None:
             logger.log("No *.sln file found in repository", logging.ERROR)
-            raise LanguageServerException("No SLN file found in repository")
+            raise SolidLSPException("No SLN file found in repository")
 
         cmd = " ".join(
             [
