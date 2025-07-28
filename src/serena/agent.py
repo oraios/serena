@@ -181,6 +181,8 @@ class SerenaAgent:
         log.info("Available projects: {}".format(", ".join(self.serena_config.project_names)))
         log.info(f"Loaded tools ({len(self._all_tools)}): {', '.join([tool.get_name_from_cls() for tool in self._all_tools.values()])}")
 
+        self._check_shell_settings()
+
         # determine the base toolset defining the set of exposed tools (which e.g. the MCP shall see),
         # limited by the Serena config, the context (which is fixed for the session) and JetBrains mode
         tool_inclusion_definitions: list[ToolInclusionDefinition] = [self.serena_config, self._context]
@@ -224,6 +226,16 @@ class SerenaAgent:
                 self.activate_project_from_path_or_name(project)
             except Exception as e:
                 log.error(f"Error activating project '{project}' at startup: {e}", exc_info=e)
+
+    def _check_shell_settings(self) -> None:
+        # On Windows, Claude Code sets COMSPEC to Git-Bash (often even with a path containing spaces),
+        # which causes all sorts of trouble, preventing language servers from being launched correctly.
+        # So we make sure that COMSPEC is unset if it has been set to bash specifically.
+        if platform.system() == "Windows":
+            comspec = os.environ.get("COMSPEC", "")
+            if "bash" in comspec:
+                os.environ["COMSPEC"] = ""  # force use of default shell
+                log.info("Adjusting COMSPEC environment variable to use the default shell instead of '%s'", comspec)
 
     def _ide_context_tool_inclusion_definitions(self, project_root_or_name: str | None) -> list[ToolInclusionDefinition]:
         """

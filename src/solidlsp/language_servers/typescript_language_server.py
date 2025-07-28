@@ -73,7 +73,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
     @classmethod
     def _setup_runtime_dependencies(
         cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> str:
+    ) -> list[str]:
         """
         Setup runtime dependencies for TypeScript Language Server and return the command to start the server.
         """
@@ -95,13 +95,13 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                 RuntimeDependency(
                     id="typescript",
                     description="typescript package",
-                    command="npm install --prefix ./ typescript@5.5.4",
+                    command=["npm", "install", "--prefix", "./", "typescript@5.5.4"],
                     platform_id="any",
                 ),
                 RuntimeDependency(
                     id="typescript-language-server",
                     description="typescript-language-server package",
-                    command="npm install --prefix ./ typescript-language-server@4.3.3",
+                    command=["npm", "install", "--prefix", "./", "typescript-language-server@4.3.3"],
                     platform_id="any",
                 ),
             ]
@@ -131,7 +131,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             raise FileNotFoundError(
                 f"typescript-language-server executable not found at {tsserver_executable_path}, something went wrong with the installation."
             )
-        return f"{tsserver_executable_path} --stdio"
+        return [tsserver_executable_path, "--stdio"]
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
