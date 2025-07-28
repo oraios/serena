@@ -259,6 +259,7 @@ markers = [
   "csharp: language server running for C#",
   "elixir: language server running for Elixir",
   "terraform: language server running for Terraform",
+  "bash: language server running for Bash",
   "snapshot: snapshot tests for symbolic editing operations",
 ]
 
