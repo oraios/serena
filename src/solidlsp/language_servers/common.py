@@ -149,16 +149,42 @@ class CommandUtils:
                         node_dir / ".." / "lib" / "node_modules" / "npm" / "lib" / "cli.js",
                     ]
 
-                    # On Linux, also check system-wide npm installations
+                    # Add platform-specific npm locations
                     if PlatformUtils.get_platform_id().is_linux():
                         common_locations.extend([
                             Path("/usr/lib/node_modules/npm/bin/npm-cli.js"),
                             Path("/usr/local/lib/node_modules/npm/bin/npm-cli.js"),
+                            Path("/usr/share/npm/bin/npm-cli.js"),
+                            Path("/opt/npm/bin/npm-cli.js"),
+                        ])
+                    elif PlatformUtils.get_platform_id().is_osx():
+                        common_locations.extend([
+                            Path("/usr/local/lib/node_modules/npm/bin/npm-cli.js"),
+                            Path("/opt/homebrew/lib/node_modules/npm/bin/npm-cli.js"),  # Apple Silicon Homebrew
                         ])
 
                     for location in common_locations:
                         if location.exists():
                             return str(location)
+
+                    # Last resort: try npm config get prefix directly (Linux/macOS only)
+                    if not PlatformUtils.get_platform_id().is_windows():
+                        try:
+                            result = subprocess.run(
+                                "npm config get prefix",
+                                check=True,
+                                shell=True,
+                                capture_output=True,
+                                text=True,
+                                timeout=5
+                            )
+                            if result.returncode == 0:
+                                npm_prefix = result.stdout.strip()
+                                npm_cli_from_prefix = Path(npm_prefix) / "lib" / "node_modules" / "npm" / "bin" / "npm-cli.js"
+                                if npm_cli_from_prefix.exists():
+                                    return str(npm_cli_from_prefix)
+                        except (subprocess.TimeoutExpired, subprocess.SubprocessError, subprocess.CalledProcessError):
+                            pass
 
             # If still not found, return None
             if not npm_executable:
