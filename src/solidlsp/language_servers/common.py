@@ -11,6 +11,7 @@ from pathlib import Path
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
 
+logger = logging.getLogger(__name__)
 
 @dataclass(kw_only=True)
 class RuntimeDependency:
@@ -128,79 +129,58 @@ class CommandUtils:
             Path to npm-cli.js script or None if not found
 
         """
-        npm_executable = shutil.which("npm")
-
-        # If which fails, try common Node.js installation locations
-        if not npm_executable:
-            # Try to find node first, then look for npm nearby
-            node_executable = shutil.which("node")
-            if node_executable:
-                node_path = Path(node_executable)
-                node_dir = node_path.parent
-
-                # Check if npm is in the same directory as node
-                potential_npm = node_dir / "npm"
-                if potential_npm.exists():
-                    npm_executable = str(potential_npm)
-                else:
-                    # Try common npm locations relative to node
-                    common_locations = [
-                        node_dir / ".." / "lib" / "node_modules" / "npm" / "bin" / "npm-cli.js",
-                        node_dir / ".." / "lib" / "node_modules" / "npm" / "lib" / "cli.js",
-                    ]
-
-                    # Add platform-specific npm locations
-                    if PlatformUtils.get_platform_id().is_linux():
-                        common_locations.extend([
-                            Path("/usr/lib/node_modules/npm/bin/npm-cli.js"),
-                            Path("/usr/local/lib/node_modules/npm/bin/npm-cli.js"),
-                            Path("/usr/share/npm/bin/npm-cli.js"),
-                            Path("/opt/npm/bin/npm-cli.js"),
-                        ])
-                    elif PlatformUtils.get_platform_id().is_osx():
-                        common_locations.extend([
-                            Path("/usr/local/lib/node_modules/npm/bin/npm-cli.js"),
-                            Path("/opt/homebrew/lib/node_modules/npm/bin/npm-cli.js"),  # Apple Silicon Homebrew
-                        ])
-
-                    for location in common_locations:
-                        if location.exists():
-                            return str(location)
-
-                    # Last resort: try npm config get prefix directly (Linux/macOS only)
-                    if not PlatformUtils.get_platform_id().is_windows():
-                        try:
-                            result = subprocess.run(
-                                "npm config get prefix",
-                                check=True,
-                                shell=True,
-                                capture_output=True,
-                                text=True,
-                                timeout=5
-                            )
-                            if result.returncode == 0:
-                                npm_prefix = result.stdout.strip()
-                                npm_cli_from_prefix = Path(npm_prefix) / "lib" / "node_modules" / "npm" / "bin" / "npm-cli.js"
-                                if npm_cli_from_prefix.exists():
-                                    return str(npm_cli_from_prefix)
-                        except (subprocess.TimeoutExpired, subprocess.SubprocessError, subprocess.CalledProcessError):
-                            pass
-
-            # If still not found, return None
+        if PlatformUtils.get_platform_id().is_windows():
+            logger.debug("Using Windows npm resolution approach")
+            npm_executable = shutil.which("npm")
             if not npm_executable:
+                logger.debug("npm not found with which() on Windows")
                 return None
 
-        npm_path = Path(npm_executable)
-        npm_dir = npm_path.parent
+            logger.debug(f"Found npm executable at: {npm_executable}")
+            npm_path = Path(npm_executable)
+            npm_dir = npm_path.parent
 
-        # Look for npm-cli.js in node_modules
-        npm_cli_path = npm_dir / "node_modules" / "npm" / "bin" / "npm-cli.js"
-        if npm_cli_path.exists():
-            return str(npm_cli_path)
+            # Look for npm-cli.js in node_modules
+            npm_cli_path = npm_dir / "node_modules" / "npm" / "bin" / "npm-cli.js"
+            if npm_cli_path.exists():
+                logger.debug(f"Found npm-cli.js at: {npm_cli_path}")
+                return str(npm_cli_path)
 
-        # Alternative location for older versions
-        npm_cli_alt_path = npm_dir / "node_modules" / "npm" / "lib" / "cli.js"
-        if npm_cli_alt_path.exists():
-            return str(npm_cli_alt_path)
+            # Alternative location for older versions
+            npm_cli_alt_path = npm_dir / "node_modules" / "npm" / "lib" / "cli.js"
+            if npm_cli_alt_path.exists():
+                logger.debug(f"Found npm cli.js at: {npm_cli_alt_path}")
+                return str(npm_cli_alt_path)
 
-        return None
+            logger.debug("npm-cli.js not found in expected Windows locations")
+            return None
+
+        # For Linux/macOS: use npm config get prefix
+        else:
+            logger.debug("Using Linux/macOS npm resolution approach")
+            try:
+                result = subprocess.run(
+                    "npm config get prefix",
+                    shell=True,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if result.returncode == 0:
+                    npm_prefix = result.stdout.strip()
+                    logger.debug(f"npm prefix: {npm_prefix}")
+                    npm_cli_path = Path(npm_prefix) / "lib" / "node_modules" / "npm" / "bin" / "npm-cli.js"
+                    if npm_cli_path.exists():
+                        logger.debug(f"Found npm-cli.js at: {npm_cli_path}")
+                        return str(npm_cli_path)
+                    else:
+                        logger.debug(f"npm-cli.js not found at expected location: {npm_cli_path}")
+                else:
+                    logger.debug(f"npm config get prefix failed with return code: {result.returncode}")
+                    logger.debug(f"stderr: {result.stderr}")
+            except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
+                logger.debug(f"Failed to run npm config get prefix: {e}")
+
+            logger.debug("npm-cli.js not found using npm config approach")
+            return None
