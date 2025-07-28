@@ -286,7 +286,7 @@ class SolidLanguageServer(ABC):
         if config.trace_lsp_communication:
 
             def logging_fn(source: str, target: str, msg: StringDict | str):
-                self.logger.log(f"LSP: {source} -> {target}: {str(msg)[:90]}...", self.logger.logger.level)
+                self.logger.log(f"LSP: {source} -> {target}: {msg!s}", self.logger.logger.level)
 
         else:
             logging_fn = None

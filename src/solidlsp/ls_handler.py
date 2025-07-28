@@ -134,7 +134,7 @@ class SolidLanguageServerHandler:
         self.notify = LspNotification(self.send_notification)
 
         self.process_launch_info = process_launch_info
-        self.process = None
+        self.process: subprocess.Popen | None = None
         self._is_shutting_down = False
 
         self.request_id = 1
@@ -326,7 +326,9 @@ class SolidLanguageServerHandler:
         """
         exception: Exception | None = None
         try:
-            while self.process and self.process.stdout and self.process.stdout.readable():
+            while self.process and self.process.stdout:
+                if self.process.poll() is not None:  # process has terminated
+                    break
                 line = self.process.stdout.readline()
                 if not line:
                     continue
@@ -361,14 +363,20 @@ class SolidLanguageServerHandler:
         Continuously read from the language server process stderr and log the messages
         """
         try:
-            while self.process and self.process.stderr and self.process.stderr.readable():
+            while self.process and self.process.stderr:
+                if self.process.poll() is not None:
+                    # process has terminated
+                    break
                 line = self.process.stderr.readline()
                 if not line:
                     continue
-                self._log("LSP stderr: " + line.decode(ENCODING, errors="replace"))
-        except (BrokenPipeError, ConnectionResetError):
-            pass
-        log.info("Language server stderr reader thread has terminated")
+                log.error(line.decode(ENCODING, errors="replace"))
+        except Exception as e:
+            log.error("Error while reading stderr from language server process: %s", e, exc_info=e)
+        if not self._is_shutting_down:
+            log.error("Language server stderr reader thread terminated unexpectedly")
+        else:
+            log.info("Language server stderr reader thread has terminated")
 
     def _handle_body(self, body: bytes) -> None:
         """
