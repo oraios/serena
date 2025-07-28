@@ -189,7 +189,7 @@ class SolidLanguageServerHandler:
             env=child_proc_env,
             cwd=self.process_launch_info.cwd,
             start_new_session=self.start_independent_lsp_process,
-            shell=True,
+            shell=self.process_launch_info.shell,
         )
 
         # Check if process terminated immediately

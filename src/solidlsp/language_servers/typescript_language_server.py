@@ -20,7 +20,7 @@ from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
-from .common import RuntimeDependency, RuntimeDependencyCollection
+from .common import CommandUtils, RuntimeDependency, RuntimeDependencyCollection
 
 # Platform-specific imports
 if os.name != "nt":  # Unix-like systems
@@ -54,7 +54,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             config,
             logger,
             repository_root_path,
-            ProcessLaunchInfo(cmd=ts_lsp_executable_path, cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=ts_lsp_executable_path, cwd=repository_root_path, shell=False),
             "typescript",
             solidlsp_settings,
         )
@@ -73,7 +73,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
     @classmethod
     def _setup_runtime_dependencies(
         cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> str:
+    ) -> list[str]:
         """
         Setup runtime dependencies for TypeScript Language Server and return the command to start the server.
         """
@@ -90,48 +90,54 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy javascript/typescript at the moment"
 
+        packages = ["typescript@5.5.4", "typescript-language-server@4.3.3"]
+
+        node_executable = shutil.which("node")
+        assert node_executable is not None, "node is not installed or isn't in PATH. Please install NodeJS and try again."
+
+        if platform_id.is_windows():
+            # Windows: Use npm-cli.js with node, otherwise it will fail under Claude Code
+            npm_cli_script = CommandUtils.get_npm_path_windows()
+            assert npm_cli_script is not None, "npm CLI script not found. Please ensure npm is properly installed."
+
+            install_cmd = [node_executable, npm_cli_script, "install", "--prefix", "./"] + packages
+            use_shell = False
+        else:
+            # Linux/Mac: Use regular npm with shell=True
+            assert shutil.which("npm") is not None, "npm is not installed or isn't in PATH. Please install npm and try again."
+
+            install_cmd = ["npm", "install", "--prefix", "./"] + packages
+            use_shell = True
+
         deps = RuntimeDependencyCollection(
             [
                 RuntimeDependency(
-                    id="typescript",
-                    description="typescript package",
-                    command="npm install --prefix ./ typescript@5.5.4",
-                    platform_id="any",
-                ),
-                RuntimeDependency(
-                    id="typescript-language-server",
-                    description="typescript-language-server package",
-                    command="npm install --prefix ./ typescript-language-server@4.3.3",
+                    id="typescript-packages",
+                    description=f"npm packages: {', '.join(packages)}",
+                    command=install_cmd,
+                    command_shell=use_shell,
                     platform_id="any",
                 ),
             ]
         )
 
-        # Verify both node and npm are installed
-        is_node_installed = shutil.which("node") is not None
-        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which("npm") is not None
-        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
-
-        # Verify both node and npm are installed
-        is_node_installed = shutil.which("node") is not None
-        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which("npm") is not None
-        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
-
         # Install typescript and typescript-language-server if not already installed
         tsserver_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "ts-lsp")
-        tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
-        if not os.path.exists(tsserver_executable_path):
-            logger.log(f"Typescript Language Server executable not found at {tsserver_executable_path}. Installing...", logging.INFO)
+        tsserver_script_path = os.path.join(tsserver_ls_dir, "node_modules", "typescript-language-server", "lib", "cli.mjs")
+
+        if not os.path.exists(tsserver_script_path):
+            logger.log(f"Typescript Language Server script not found at {tsserver_script_path}. Installing...", logging.INFO)
             with LogTime("Installation of TypeScript language server dependencies", logger=logger.logger):
                 deps.install(logger, tsserver_ls_dir)
 
-        if not os.path.exists(tsserver_executable_path):
+        if not os.path.exists(tsserver_script_path):
             raise FileNotFoundError(
-                f"typescript-language-server executable not found at {tsserver_executable_path}, something went wrong with the installation."
+                f"typescript-language-server script not found at {tsserver_script_path}, something went wrong with the installation."
             )
-        return f"{tsserver_executable_path} --stdio"
+
+        tsserver_command = [node_executable, tsserver_script_path, "--stdio"]
+
+        return tsserver_command
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:

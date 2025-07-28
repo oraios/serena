@@ -251,6 +251,12 @@ class PlatformId(str, Enum):
     def is_windows(self):
         return self.value.startswith("win")
 
+    def is_linux(self):
+        return self.value.startswith("linux")
+
+    def is_osx(self):
+        return self.value.startswith("osx")
+
 
 class DotnetVersion(str, Enum):
     """

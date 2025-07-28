@@ -21,7 +21,7 @@ from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
-from .common import RuntimeDependency, RuntimeDependencyCollection
+from .common import CommandUtils, RuntimeDependency, RuntimeDependencyCollection
 
 
 class VtsLanguageServer(SolidLanguageServer):
@@ -41,7 +41,7 @@ class VtsLanguageServer(SolidLanguageServer):
             config,
             logger,
             repository_root_path,
-            ProcessLaunchInfo(cmd=vts_lsp_executable_path, cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=vts_lsp_executable_path, cwd=repository_root_path, shell=False),
             "typescript",
             solidlsp_settings,
         )
@@ -60,7 +60,7 @@ class VtsLanguageServer(SolidLanguageServer):
     @classmethod
     def _setup_runtime_dependencies(
         cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> str:
+    ) -> list[str]:
         """
         Setup runtime dependencies for VTS Language Server and return the command to start the server.
         """
@@ -77,34 +77,52 @@ class VtsLanguageServer(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for vtsls at the moment"
 
+        vtsls_package = "@vtsls/language-server@0.2.9"
+
+        node_executable = shutil.which("node")
+        assert node_executable is not None, "node is not installed or isn't in PATH. Please install NodeJS and try again."
+
+        if platform_id.is_windows():
+            # Windows: Use npm-cli.js with node, otherwise it will fail under Claude Code
+            npm_cli_script = CommandUtils.get_npm_path_windows()
+            assert npm_cli_script is not None, "npm CLI script not found. Please ensure npm is properly installed."
+
+            vtsls_install_cmd = [node_executable, npm_cli_script, "install", "--prefix", "./", vtsls_package]
+            use_shell = False
+        else:
+            # Linux/Mac: Use regular npm with shell=True
+            assert shutil.which("npm") is not None, "npm is not installed or isn't in PATH. Please install npm and try again."
+
+            vtsls_install_cmd = ["npm", "install", "--prefix", "./", vtsls_package]
+            use_shell = True
+
         deps = RuntimeDependencyCollection(
             [
                 RuntimeDependency(
                     id="vtsls",
                     description="vtsls language server package",
-                    command="npm install --prefix ./ @vtsls/language-server@0.2.9",
+                    command=vtsls_install_cmd,
+                    command_shell=use_shell,
                     platform_id="any",
                 ),
             ]
         )
         vts_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "vts-lsp")
-        vts_executable_path = os.path.join(vts_ls_dir, "vtsls")
-
-        # Verify both node and npm are installed
-        is_node_installed = shutil.which("node") is not None
-        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which("npm") is not None
-        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
         # Install vtsls if not already installed
-        if not os.path.exists(vts_ls_dir):
+        vts_script_path = os.path.join(vts_ls_dir, "node_modules", "@vtsls", "language-server", "bin", "vtsls")
+
+        if not os.path.exists(vts_script_path):
             os.makedirs(vts_ls_dir, exist_ok=True)
+            logger.log(f"VTSLS script not found at {vts_script_path}. Installing...", logging.INFO)
             deps.install(logger, vts_ls_dir)
 
-        vts_executable_path = os.path.join(vts_ls_dir, "node_modules", ".bin", "vtsls")
+        if not os.path.exists(vts_script_path):
+            raise FileNotFoundError(f"vtsls script not found at {vts_script_path}, something went wrong with the installation.")
 
-        assert os.path.exists(vts_executable_path), "vtsls executable not found. Please install @vtsls/language-server and try again."
-        return f"{vts_executable_path} --stdio"
+        vts_command = [node_executable, vts_script_path, "--stdio"]
+
+        return vts_command
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
