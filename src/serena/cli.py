@@ -435,7 +435,7 @@ class ProjectCommands(AutoRegisteringGroup):
     @click.argument("project", type=click.Path(exists=True), default=os.getcwd(), required=False)
     @click.option("--log-level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="WARNING")
     def index_deprecated(project: str, log_level: str = "WARNING") -> None:
-        click.echo("Deprecated! Use `project index` instead.")
+        click.echo("Deprecated! Use `serena project index` instead.")
         ProjectCommands._index_project(project, log_level)
 
     @staticmethod
