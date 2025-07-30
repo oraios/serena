@@ -20,6 +20,8 @@ from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 
+from solidlsp import ls_types
+
 class BashLanguageServer(SolidLanguageServer):
     """
     Provides Bash specific instantiation of the LanguageServer class using bash-language-server.
@@ -72,7 +74,7 @@ class BashLanguageServer(SolidLanguageServer):
                 RuntimeDependency(
                     id="bash-language-server",
                     description="bash-language-server package",
-                    command="npm install --prefix ./ bash-language-server@5.4.0",
+                    command="npm install --prefix ./ bash-language-server@5.6.0",
                     platform_id="any",
                 ),
             ]
@@ -158,6 +160,12 @@ class BashLanguageServer(SolidLanguageServer):
 
         def window_log_message(msg):
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+            # Check for bash-language-server ready signals
+            message_text = msg.get("message", "")
+            if "Analyzing" in message_text or "analysis complete" in message_text.lower():
+                self.logger.log("Bash language server analysis signals detected", logging.INFO)
+                self.server_ready.set()
+                self.completions_available.set()
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
@@ -174,15 +182,145 @@ class BashLanguageServer(SolidLanguageServer):
             logging.INFO,
         )
         init_response = self.server.send.initialize(initialize_params)
+        self.logger.log(f"Received initialize response from bash server: {init_response}", logging.DEBUG)
 
-        # Bash-specific capability checks
+        # Enhanced capability checks for bash-language-server 5.6.0
         assert init_response["capabilities"]["textDocumentSync"] in [1, 2]  # Full or Incremental
         assert "completionProvider" in init_response["capabilities"]
+        
+        # Verify document symbol support is available
+        if "documentSymbolProvider" in init_response["capabilities"]:
+            self.logger.log("Bash server supports document symbols", logging.INFO)
+        else:
+            self.logger.log("Warning: Bash server does not report document symbol support", logging.WARNING)
 
         self.server.notify.initialized({})
 
-        # Set server ready immediately as bash-language-server doesn't have a specific ready signal
-        self.server_ready.set()
-        self.completions_available.set()
+        # Wait for server readiness with timeout
+        self.logger.log("Waiting for Bash language server to be ready...", logging.INFO)
+        if not self.server_ready.wait(timeout=3.0):
+            # Fallback: assume server is ready after timeout
+            self.logger.log("Timeout waiting for bash server ready signal, proceeding anyway", logging.WARNING)
+            self.server_ready.set()
+            self.completions_available.set()
+        else:
+            self.logger.log("Bash server initialization complete", logging.INFO)
 
-        self.logger.log("Bash server is ready", logging.INFO)
+    def request_document_symbols(
+        self, relative_file_path: str, include_body: bool = False
+    ) -> tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]:
+        """
+        Enhanced document symbol request with fallback regex-based function detection for bash files.
+        """
+        # First try the standard LSP approach
+        all_symbols, root_symbols = super().request_document_symbols(relative_file_path, include_body)
+        
+        # Check if we found any function symbols (LSP Symbol Kind 12)
+        has_functions = any(symbol.get("kind") == 12 for symbol in all_symbols)
+        
+        if not has_functions:
+            self.logger.log(f"No functions detected by LSP for {relative_file_path}, using regex fallback", logging.INFO)
+            
+            # Add regex-based function detection
+            detected_functions = self._detect_bash_functions(relative_file_path, include_body)
+            if detected_functions:
+                all_symbols.extend(detected_functions)
+                root_symbols.extend(detected_functions)
+                self.logger.log(f"Found {len(detected_functions)} functions via regex for {relative_file_path}", logging.INFO)
+        
+        return all_symbols, root_symbols
+    
+    def _detect_bash_functions(self, relative_file_path: str, include_body: bool = False) -> list[ls_types.UnifiedSymbolInformation]:
+        """
+        Regex-based detection of bash functions as fallback when LSP doesn't provide them.
+        """
+        import re
+        from solidlsp import ls_types
+        
+        try:
+            # Read the file content directly from filesystem
+            abs_path = os.path.join(self.repository_root_path, relative_file_path)
+            with open(abs_path, 'r', encoding='utf-8') as f:
+                file_content = f.read()
+            lines = file_content.split("\n")
+            
+            detected_functions = []
+            
+            # Regex patterns for bash function definitions
+            # Pattern 1: function name() { ... }
+            # Pattern 2: name() { ... }
+            function_patterns = [
+                re.compile(r'^\s*function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*\)\s*\{'),
+                re.compile(r'^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*\)\s*\{')
+            ]
+            
+            for line_num, line in enumerate(lines):
+                for pattern in function_patterns:
+                    match = pattern.match(line)
+                    if match:
+                        func_name = match.group(1)
+                        
+                        # Find the end of the function by matching braces
+                        start_line = line_num
+                        end_line = self._find_function_end(lines, start_line)
+                        
+                        # Create location information
+                        location = ls_types.Location(
+                            uri=pathlib.Path(abs_path).as_uri(),
+                            range={
+                                "start": {"line": start_line, "character": match.start(1)},
+                                "end": {"line": end_line, "character": 0}
+                            },
+                            absolutePath=abs_path,
+                            relativePath=relative_file_path
+                        )
+                        
+                        # Create the function symbol
+                        func_symbol = ls_types.UnifiedSymbolInformation(
+                            name=func_name,
+                            kind=12,  # LSP Symbol Kind for Function
+                            location=location,
+                            range=location["range"],
+                            selectionRange={
+                                "start": {"line": start_line, "character": match.start(1)},
+                                "end": {"line": start_line, "character": match.end(1)}
+                            },
+                            children=[],
+                            parent=None
+                        )
+                        
+                        # Add function body if requested
+                        if include_body:
+                            func_symbol["body"] = "\n".join(lines[start_line:end_line + 1])
+                        
+                        detected_functions.append(func_symbol)
+                        break
+            
+            return detected_functions
+            
+        except Exception as e:
+            self.logger.log(f"Error in regex-based function detection for {relative_file_path}: {e}", logging.WARNING)
+            return []
+    
+    def _find_function_end(self, lines: list[str], start_line: int) -> int:
+        """
+        Find the end line of a bash function by matching opening and closing braces.
+        """
+        brace_count = 0
+        in_function = False
+        
+        for i in range(start_line, len(lines)):
+            line = lines[i]
+            
+            # Count braces, handling basic cases
+            for char in line:
+                if char == '{':
+                    brace_count += 1
+                    in_function = True
+                elif char == '}' and in_function:
+                    brace_count -= 1
+                    if brace_count == 0:
+                        return i
+        
+        # Fallback: if we can't match braces properly, assume single line or small function
+        return min(start_line + 10, len(lines) - 1)
