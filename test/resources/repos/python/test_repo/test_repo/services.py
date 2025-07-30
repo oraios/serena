@@ -14,15 +14,12 @@ class UserService:
         self.users = user_db or {}
 
     def create_user(self, id: str, name: str, email: str) -> User:
-        """Create a new user and store it - MODIFIED VIA SYMBOLIC OPERATIONS!"""
+        """Create a new user and store it"""
         if id in self.users:
             raise ValueError(f"User with ID {id} already exists")
 
-        # Added logging via symbolic replacement
-        print(f"Creating user: {name} ({email})")
         user = User(id=id, name=name, email=email)
         self.users[id] = user
-        print(f"User {id} created successfully")
         return user
 
     def get_user(self, id: str) -> User | None:
