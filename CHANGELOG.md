@@ -3,6 +3,7 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * Language servers:
+  * **Added support for Lean 4** (requires Lean 4 to be installed via elan)
   * Reliably detect language server termination and propagate the respective error all the way
     back to the tool application, where an unexpected termination is handled by restarting the language server
     and subsequently retrying the tool application.

@@ -28,6 +28,7 @@ def serena_config():
         Language.PHP,
         Language.CSHARP,
         Language.CLOJURE,
+        Language.LEAN4,
     ]:
         repo_path = get_repo_path(language)
         if repo_path.exists():
@@ -78,6 +79,7 @@ class TestSerenaAgent:
                 marks=[pytest.mark.clojure, pytest.mark.skipif(clj.CLI_FAIL, reason=f"Clojure CLI not available: {clj.CLI_FAIL}")],
             ),
             pytest.param(Language.CSHARP, "Calculator", "Class", "Program.cs", marks=pytest.mark.csharp),
+            pytest.param(Language.LEAN4, "Calculator", "Method", "Serena/Basic.lean", marks=pytest.mark.lean4),
         ],
         indirect=["serena_agent"],
     )
@@ -121,6 +123,7 @@ class TestSerenaAgent:
                 marks=[pytest.mark.clojure, pytest.mark.skipif(clj.CLI_FAIL, reason=f"Clojure CLI not available: {clj.CLI_FAIL}")],
             ),
             pytest.param(Language.CSHARP, "Calculator", "Program.cs", "Program.cs", marks=pytest.mark.csharp),
+            pytest.param(Language.LEAN4, "Calculator", "Serena/Basic.lean", "Serena/Basic.lean", marks=pytest.mark.lean4),
         ],
         indirect=["serena_agent"],
     )

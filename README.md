@@ -76,6 +76,7 @@ With Serena, we provide
      * Elixir (Requires NextLS and Elixir install; **Windows not supported** - Next LS does not provide Windows binaries)
      * Clojure
      * C/C++ (You may experience issues with finding references, we are working on it)
+     * Lean 4 (requires [Lean 4 installed via elan](https://lean-lang.org/lean4/doc/quickstart.html). Supports Lake projects with mathlib dependencies - see [detailed guide](LEAN4.md))
  * indirect support (may require some code changes/manual installation) for:
      * Ruby (untested)
      * Kotlin (untested)

@@ -226,6 +226,11 @@ class SolidLanguageServer(ABC):
 
             ls = TerraformLS(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
+        elif config.code_language == Language.LEAN4:
+            from solidlsp.language_servers.lean4_server import Lean4LanguageServer
+
+            ls = Lean4LanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
         else:
             logger.log(f"Language {config.code_language} is not supported", logging.ERROR)
             raise SolidLSPException(f"Language {config.code_language} is not supported")
@@ -295,6 +300,7 @@ class SolidLanguageServer(ABC):
             process_launch_info,
             logger=logging_fn,
             start_independent_lsp_process=config.start_independent_lsp_process,
+            request_timeout=30.0,  # Default timeout of 30 seconds
         )
 
         # Set up the pathspec matcher for the ignored paths

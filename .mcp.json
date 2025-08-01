@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "serena": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/home/ubuntu/serena",
+        "serena",
+        "start-mcp-server",
+        "--context",
+        "ide-assistant",
+        "--project",
+        "/home/ubuntu/serena"
+      ],
+      "env": {}
+    }
+  }
+}
