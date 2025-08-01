@@ -108,27 +108,15 @@ class TestLean4LanguageServer:
         logic_lean_path = str(repo_path / "Serena" / "Logic.lean")
 
         # Open relevant files to enable cross-file references
-        import time
 
         with language_server.open_file(basic_lean_path), language_server.open_file(logic_lean_path):
-            # Give server more time to index files and resolve cross-file dependencies
-            # Lean 4 LSP needs extra time for import resolution and cross-file analysis
-            time.sleep(3)
+            # Wait for server to be ready and files to be indexed
+            self._wait_for_server_indexing(language_server, [basic_lean_path, logic_lean_path])
 
-            # Retry logic for cross-file references (they can be timing-sensitive)
-            references = []
-            max_retries = 5
-            for attempt in range(max_retries):
-                references = language_server.request_references(basic_lean_path, 7, 10)  # cursor on 'Calculator' in structure definition
-
-                # Check if we found cross-file references
-                logic_ref_found = any("Logic.lean" in ref["uri"] for ref in references) if references else False
-
-                if logic_ref_found and len(references) >= 2:
-                    break  # Success!
-
-                if attempt < max_retries - 1:  # Don't sleep on the last attempt
-                    time.sleep(1)  # Wait before retry
+            # Request cross-file references with proper error handling
+            references = self._request_references_with_retries(
+                language_server, basic_lean_path, 7, 10, expected_files=["Logic.lean"], min_refs=2
+            )
 
         assert references, "Expected to find at least some references to Calculator"
         # Should find references in at least Logic.lean
@@ -174,3 +162,86 @@ class TestLean4LanguageServer:
         # Since it's only used within the same file and Lean might not return self-references,
         # we'll make this test more lenient
         assert references is not None, "Expected references to be a list (even if empty)"
+
+    def _wait_for_server_indexing(self, language_server, file_paths: list[str], timeout: float = 10.0) -> None:
+        """Wait for the language server to finish indexing files using status polling."""
+        import time
+
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                # Check if server is responsive by trying a simple request
+                if hasattr(language_server.language_server, "get_dependency_status"):
+                    status = language_server.language_server.get_dependency_status()
+                    # If we can get status and dependencies are ready (or no dependencies), we're good
+                    if status.get("status") in ["ready", "no_dependencies"]:
+                        time.sleep(0.5)  # Small additional wait for file indexing
+                        return
+
+                # Fallback: try a hover request to check responsiveness
+                if file_paths:
+                    _ = language_server.request_hover(file_paths[0], 0, 0)
+                    # If we get any response (even None), server is likely ready
+                    time.sleep(0.5)  # Small additional wait
+                    return
+
+            except Exception:
+                # Server not ready yet, continue polling
+                pass
+
+            time.sleep(0.2)  # Poll every 200ms
+
+        # Timeout reached, proceed anyway with a warning
+        print(f"Warning: Server indexing timeout after {timeout}s, proceeding anyway")
+
+    def _request_references_with_retries(
+        self,
+        language_server,
+        file_path: str,
+        line: int,
+        column: int,
+        expected_files: list[str] | None = None,
+        min_refs: int = 1,
+        max_retries: int = 3,
+        retry_delay: float = 0.5,
+    ) -> list:
+        """Request references with intelligent retry logic based on expectations."""
+        import time
+
+        for attempt in range(max_retries):
+            try:
+                references = language_server.request_references(file_path, line, column)
+
+                if not references:
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_delay)
+                        continue
+                    return []
+
+                # Check if we meet minimum requirements
+                meets_min_refs = len(references) >= min_refs
+                meets_file_expectations = True
+
+                if expected_files:
+                    for expected_file in expected_files:
+                        if not any(expected_file in ref["uri"] for ref in references):
+                            meets_file_expectations = False
+                            break
+
+                # If we meet all criteria, return immediately
+                if meets_min_refs and meets_file_expectations:
+                    return references
+
+                # If this is the last attempt, return what we have
+                if attempt == max_retries - 1:
+                    return references
+
+                # Otherwise, wait and retry
+                time.sleep(retry_delay)
+
+            except Exception:
+                if attempt == max_retries - 1:
+                    raise  # Re-raise on final attempt
+                time.sleep(retry_delay)
+
+        return []

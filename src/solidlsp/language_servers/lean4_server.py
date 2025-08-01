@@ -134,12 +134,16 @@ class Lean4LanguageServer(SolidLanguageServer):
                     if "require " in line and not line.startswith("--"):
                         return True
                 return False
+        except (OSError, UnicodeDecodeError):
+            # If we can't read the file due to permissions, I/O, or encoding issues,
+            # assume there might be dependencies for safety
+            return True
         except Exception:
-            # If we can't read the file, assume there might be dependencies
+            # Unexpected error - log and assume dependencies exist for safety
+            # Note: This is still broad but at least we differentiate from expected file errors
             return True
 
-    @staticmethod
-    def _ensure_dependencies_async(repo_path: str, logger) -> threading.Thread:
+    def _ensure_dependencies_async(self, repo_path: str, logger) -> threading.Thread:
         """Start downloading/building dependencies in the background."""
 
         def download_dependencies():
@@ -152,7 +156,7 @@ class Lean4LanguageServer(SolidLanguageServer):
                     cwd=repo_path,
                     capture_output=True,
                     text=True,
-                    timeout=DEFAULT_DEPENDENCY_TIMEOUT,
+                    timeout=self._dependency_timeout,
                 )
 
                 if result.returncode == 0:
@@ -166,7 +170,7 @@ class Lean4LanguageServer(SolidLanguageServer):
                         cwd=repo_path,
                         capture_output=True,
                         text=True,
-                        timeout=DEFAULT_DEPENDENCY_TIMEOUT,
+                        timeout=self._dependency_timeout,
                     )
 
                     if build_result.returncode == 0:
@@ -177,32 +181,40 @@ class Lean4LanguageServer(SolidLanguageServer):
                     logger.log(f"Lake update failed: {result.stderr}", logging.WARNING)
 
             except subprocess.TimeoutExpired:
-                logger.log("Lake dependency download/build timed out", logging.ERROR)
+                logger.log(f"Lake dependency download/build timed out after {self._dependency_timeout}s", logging.ERROR)
+            except FileNotFoundError:
+                logger.log("Lake command not found. Ensure Lake is installed and in PATH.", logging.ERROR)
+            except OSError as e:
+                logger.log(f"OS error during dependency download: {e}", logging.ERROR)
             except Exception as e:
-                logger.log(f"Error downloading dependencies: {e}", logging.ERROR)
+                logger.log(f"Unexpected error downloading dependencies: {e}", logging.ERROR)
 
-        thread = threading.Thread(target=download_dependencies, daemon=True)
-        thread.start()
-        return thread
+        # Use thread-safe access to manage the dependency thread
+        with self._dependency_lock:
+            thread = threading.Thread(target=download_dependencies, daemon=True)
+            thread.start()
+            self._dependency_thread = thread
+            return thread
 
     def _check_and_upgrade_server(self) -> None:
         """Check if dependencies are ready and upgrade to lake serve if needed."""
-        if self._dependency_thread and self._dependency_thread.is_alive():
-            # Dependencies still downloading
-            return
+        with self._dependency_lock:
+            if self._dependency_thread and self._dependency_thread.is_alive():
+                # Dependencies still downloading
+                return
 
-        lakefile_path = os.path.join(self.repository_root_path, "lakefile.lean")
-        if os.path.exists(lakefile_path) and self._check_dependencies_available(self.repository_root_path):
-            # Dependencies are now ready, check if we need to upgrade
-            current_cmd = getattr(self, "_current_command", "")
-            if current_cmd != "lake serve --":
-                self.logger.log("Dependencies ready, upgrading to lake serve", logging.INFO)
-                try:
-                    # Restart server with lake serve
-                    self._restart_server_with_command("lake serve --")
-                    self._dependencies_ready.set()
-                except Exception as e:
-                    self.logger.log(f"Failed to upgrade to lake serve: {e}", logging.WARNING)
+            lakefile_path = os.path.join(self.repository_root_path, "lakefile.lean")
+            if os.path.exists(lakefile_path) and self._check_dependencies_available(self.repository_root_path):
+                # Dependencies are now ready, check if we need to upgrade
+                current_cmd = getattr(self, "_current_command", "")
+                if current_cmd != "lake serve --":
+                    self.logger.log("Dependencies ready, upgrading to lake serve", logging.INFO)
+                    try:
+                        # Restart server with lake serve
+                        self._restart_server_with_command("lake serve --")
+                        self._dependencies_ready.set()
+                    except Exception as e:
+                        self.logger.log(f"Failed to upgrade to lake serve: {e}", logging.WARNING)
 
     def _restart_server_with_command(self, new_command: str) -> None:
         """Restart the server with a new command."""
@@ -253,6 +265,11 @@ class Lean4LanguageServer(SolidLanguageServer):
         self._max_restart_attempts = MAX_RESTART_ATTEMPTS
         self._last_restart_time = 0.0
         self._restart_cooldown = RESTART_COOLDOWN_SECONDS
+        self._dependency_timeout = DEFAULT_DEPENDENCY_TIMEOUT
+        self._health_check_timeout = DEPENDENCY_CHECK_TIMEOUT
+
+        # Thread-safe state management
+        self._dependency_lock = threading.RLock()  # Reentrant lock for nested access
         self._dependency_thread = None
         self._dependencies_ready = threading.Event()
 
