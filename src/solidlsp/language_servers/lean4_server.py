@@ -6,6 +6,7 @@ import pathlib
 import subprocess
 import threading
 import time
+import tomllib
 from typing import Any
 
 from overrides import override
@@ -118,10 +119,30 @@ class Lean4LanguageServer(SolidLanguageServer):
     @staticmethod
     def _has_external_dependencies(repo_path: str) -> bool:
         """Check if the lakefile declares any external dependencies (require statements)."""
-        lakefile_path = os.path.join(repo_path, "lakefile.lean")
-        if not os.path.exists(lakefile_path):
-            return False
+        lakefile_lean = os.path.join(repo_path, "lakefile.lean")
+        lakefile_toml = os.path.join(repo_path, "lakefile.toml")
 
+        lean_exists = os.path.exists(lakefile_lean)
+        toml_exists = os.path.exists(lakefile_toml)
+
+        if lean_exists and toml_exists:
+            # Both formats exist - this is a configuration error
+            raise RuntimeError(
+                f"Conflicting lakefile formats found in {repo_path}. " "Please use either lakefile.lean OR lakefile.toml, not both."
+            )
+
+        # Prefer lakefile.toml (newer format) over lakefile.lean
+        if toml_exists:
+            return Lean4LanguageServer._check_toml_lakefile_dependencies(lakefile_toml)
+        elif lean_exists:
+            return Lean4LanguageServer._check_lean_lakefile_dependencies(lakefile_lean)
+
+        # No lakefile found - no dependencies
+        return False
+
+    @staticmethod
+    def _check_lean_lakefile_dependencies(lakefile_path: str) -> bool:
+        """Check lakefile.lean for dependencies."""
         try:
             with open(lakefile_path, encoding="utf-8") as f:
                 content = f.read()
@@ -139,9 +160,23 @@ class Lean4LanguageServer(SolidLanguageServer):
             # assume there might be dependencies for safety
             return True
         except Exception:
-            # Unexpected error - log and assume dependencies exist for safety
-            # Note: This is still broad but at least we differentiate from expected file errors
+            # Unexpected error - assume dependencies exist for safety
             return True
+
+    @staticmethod
+    def _check_toml_lakefile_dependencies(lakefile_path: str) -> bool:
+        """Check lakefile.toml for dependencies using proper TOML parsing."""
+        try:
+            with open(lakefile_path, "rb") as f:
+                data = tomllib.load(f)
+                # Check for 'require' key which contains dependency declarations
+                return "require" in data and len(data["require"]) > 0
+        except tomllib.TOMLDecodeError as e:
+            # TOML parsing failed - this is a hard error that should be reported
+            raise RuntimeError(f"Invalid TOML syntax in {lakefile_path}: {e}") from e
+        except (OSError, FileNotFoundError) as e:
+            # File access issues - this is also a hard error
+            raise RuntimeError(f"Cannot read lakefile.toml at {lakefile_path}: {e}") from e
 
     def _ensure_dependencies_async(self, repo_path: str, logger) -> threading.Thread:
         """Start downloading/building dependencies in the background."""
@@ -235,22 +270,40 @@ class Lean4LanguageServer(SolidLanguageServer):
 
     def get_dependency_status(self) -> dict[str, Any]:
         """Get current status of dependency downloads."""
-        lakefile_path = os.path.join(self.repository_root_path, "lakefile.lean")
+        lakefile_lean = os.path.join(self.repository_root_path, "lakefile.lean")
+        lakefile_toml = os.path.join(self.repository_root_path, "lakefile.toml")
 
-        if not os.path.exists(lakefile_path):
+        lean_exists = os.path.exists(lakefile_lean)
+        toml_exists = os.path.exists(lakefile_toml)
+
+        if lean_exists and toml_exists:
+            # Both formats exist - this is a configuration error
+            raise RuntimeError(
+                f"Conflicting lakefile formats found in {self.repository_root_path}. "
+                "Please use either lakefile.lean OR lakefile.toml, not both."
+            )
+
+        has_lakefile = lean_exists or toml_exists
+
+        if not has_lakefile:
             return {"has_dependencies": False, "status": "no_dependencies"}
 
-        if self._dependencies_ready.is_set():
-            return {"has_dependencies": True, "status": "ready"}
+        # Determine which format is being used for logging
+        lakefile_format = "lakefile.toml" if toml_exists else "lakefile.lean"
 
-        if self._dependency_thread and self._dependency_thread.is_alive():
-            return {"has_dependencies": True, "status": "downloading"}
+        if self._dependencies_ready.is_set():
+            return {"has_dependencies": True, "status": "ready", "format": lakefile_format}
+
+        # Use lock to prevent race condition with thread access
+        with self._dependency_lock:
+            if self._dependency_thread and self._dependency_thread.is_alive():
+                return {"has_dependencies": True, "status": "downloading", "format": lakefile_format}
 
         if self._check_dependencies_available(self.repository_root_path):
             self._dependencies_ready.set()  # Update the flag
-            return {"has_dependencies": True, "status": "ready"}
+            return {"has_dependencies": True, "status": "ready", "format": lakefile_format}
 
-        return {"has_dependencies": True, "status": "pending"}
+        return {"has_dependencies": True, "status": "pending", "format": lakefile_format}
 
     def __init__(
         self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
@@ -260,13 +313,13 @@ class Lean4LanguageServer(SolidLanguageServer):
         # Store logger reference early so we can use it
         self.logger = logger
 
-        # Initialize instance variables before using them
+        # Initialize instance variables using configurable settings
         self._restart_count = 0
-        self._max_restart_attempts = MAX_RESTART_ATTEMPTS
+        self._max_restart_attempts = solidlsp_settings.lean4_max_restart_attempts
         self._last_restart_time = 0.0
-        self._restart_cooldown = RESTART_COOLDOWN_SECONDS
-        self._dependency_timeout = DEFAULT_DEPENDENCY_TIMEOUT
-        self._health_check_timeout = DEPENDENCY_CHECK_TIMEOUT
+        self._restart_cooldown = solidlsp_settings.lean4_restart_cooldown_seconds
+        self._dependency_timeout = solidlsp_settings.lean4_dependency_timeout
+        self._health_check_timeout = solidlsp_settings.lean4_health_check_timeout
 
         # Thread-safe state management
         self._dependency_lock = threading.RLock()  # Reentrant lock for nested access
@@ -291,9 +344,24 @@ class Lean4LanguageServer(SolidLanguageServer):
 
     def _determine_server_command(self, repo_path: str) -> str:
         """Determine the appropriate command to start the language server."""
-        # Check if this is a Lake project
-        lakefile_path = os.path.join(repo_path, "lakefile.lean")
-        if os.path.exists(lakefile_path):
+        lakefile_lean = os.path.join(repo_path, "lakefile.lean")
+        lakefile_toml = os.path.join(repo_path, "lakefile.toml")
+
+        lean_exists = os.path.exists(lakefile_lean)
+        toml_exists = os.path.exists(lakefile_toml)
+
+        if lean_exists and toml_exists:
+            # Both formats exist - this is a configuration error
+            raise RuntimeError(
+                f"Conflicting lakefile formats found in {repo_path}. " "Please use either lakefile.lean OR lakefile.toml, not both."
+            )
+
+        is_lake_project = lean_exists or toml_exists
+
+        if is_lake_project:
+            lakefile_type = "lakefile.toml" if toml_exists else "lakefile.lean"
+            self.logger.log(f"Detected Lake project with {lakefile_type}", logging.INFO)
+
             # Check if dependencies are available
             if self._check_dependencies_available(repo_path):
                 self.logger.log("Lake dependencies are available", logging.INFO)
@@ -310,6 +378,7 @@ class Lean4LanguageServer(SolidLanguageServer):
                 return "lean --server"
         else:
             # Single file mode
+            self.logger.log("No lakefile found, using single file mode", logging.INFO)
             self._dependencies_ready.set()  # No dependencies needed for single files
             return "lean --server"
 
@@ -506,23 +575,25 @@ class Lean4LanguageServer(SolidLanguageServer):
                     # Retry the request once after restart
                     self.logger.log("Retrying request after server restart...", logging.INFO)
                     return request_fn(*args, **kwargs)
-                except Exception as retry_error:
+                except (LanguageServerTerminatedException, RuntimeError, OSError) as retry_error:
                     self.logger.log(f"Request failed after restart: {retry_error}", logging.ERROR)
                     raise
             else:
                 raise
-        except Exception:
-            # For other errors, check if server is healthy
+        except (LSPError, TimeoutError, ConnectionError, BrokenPipeError) as lsp_error:
+            # Handle specific LSP communication errors
+            self.logger.log(f"LSP communication error: {lsp_error}", logging.WARNING)
             if not self._check_server_health():
-                self.logger.log("Server health check failed after error", logging.WARNING)
+                self.logger.log("Server health check failed after LSP error", logging.WARNING)
                 # Server might be in bad state, consider restart
                 if self._should_attempt_restart():
                     try:
                         self._restart_server()
                         # Retry the request
                         return request_fn(*args, **kwargs)
-                    except Exception:
-                        pass  # Fall through to re-raise original error
+                    except (LanguageServerTerminatedException, RuntimeError, OSError) as restart_error:
+                        self.logger.log(f"Server restart failed: {restart_error}", logging.ERROR)
+                        # Fall through to re-raise original error
             raise
 
     # Override request methods to add recovery capabilities
