@@ -26,3 +26,6 @@ excluded_tools:
   - prepare_for_new_conversation
   - summarize_changes
   - get_current_config
+
+tool_description_overrides: {}
+

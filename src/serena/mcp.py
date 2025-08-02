@@ -68,10 +68,17 @@ class SerenaMCPFactory:
 
         # Mount the tool description as a combination of the docstring description and
         # the return value description, if it exists.
-        if docstring.description:
-            func_doc = f"{docstring.description.strip().strip('.')}."
+        overridden_description = tool.agent.get_context().tool_description_overrides.get(func_name, None)
+
+        if overridden_description is not None:
+            func_doc = overridden_description
+        elif docstring.description:
+            func_doc = docstring.description
         else:
             func_doc = ""
+        func_doc = func_doc.strip().strip(".")
+        if func_doc:
+            func_doc += "."
         if docstring.returns and (docstring_returns_descr := docstring.returns.description):
             # Only add a space before "Returns" if func_doc is not empty
             prefix = " " if func_doc else ""
@@ -113,6 +120,7 @@ class SerenaMCPFactory:
             for tool in self._iter_tools():
                 mcp_tool = self.make_mcp_tool(tool)
                 mcp._tool_manager._tools[tool.get_name()] = mcp_tool
+            log.info(f"Starting MCP server with {len(mcp._tool_manager._tools)} tools: {list(mcp._tool_manager._tools.keys())}")
 
     @abstractmethod
     def _instantiate_agent(self, serena_config: SerenaConfig, modes: list[SerenaAgentMode]) -> None:

@@ -227,6 +227,12 @@ class SerenaAgent:
             except Exception as e:
                 log.error(f"Error activating project '{project}' at startup: {e}", exc_info=e)
 
+    def get_context(self) -> SerenaAgentContext:
+        return self._context
+
+    def get_tool_description_override(self, tool_name: str) -> str | None:
+        return self._context.tool_description_overrides.get(tool_name, None)
+
     def _check_shell_settings(self) -> None:
         # On Windows, Claude Code sets COMSPEC to Git-Bash (often even with a path containing spaces),
         # which causes all sorts of trouble, preventing language servers from being launched correctly.
@@ -583,3 +589,7 @@ class SerenaAgent:
         if self._gui_log_viewer:
             log.info("Stopping the GUI log window ...")
             self._gui_log_viewer.stop()
+
+    def get_tool_by_name(self, tool_name: str) -> Tool:
+        tool_class = ToolRegistry().get_tool_class_by_name(tool_name)
+        return self.get_tool(tool_class)

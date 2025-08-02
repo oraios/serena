@@ -4,16 +4,28 @@ import pytest
 from mcp.server.fastmcp.tools.base import Tool as MCPTool
 
 from serena.agent import Tool, ToolRegistry
+from serena.config.context_mode import SerenaAgentContext
 from serena.mcp import SerenaMCPFactory
 
 make_tool = SerenaMCPFactory.make_mcp_tool
 
 
+# Create a mock agent for tool initialization
+class MockAgent:
+    def __init__(self):
+        self.project_config = None
+        self.serena_config = None
+
+    @staticmethod
+    def get_context() -> SerenaAgentContext:
+        return SerenaAgentContext.load_default()
+
+
 class BaseMockTool(Tool):
     """A mock Tool class for testing."""
 
-    def __init__(self) -> None:
-        pass
+    def __init__(self):
+        super().__init__(MockAgent())
 
 
 class BasicTool(BaseMockTool):
@@ -274,13 +286,6 @@ def is_test_mock_class(tool_class: type) -> bool:
 @pytest.mark.parametrize("tool_class", ToolRegistry().get_all_tool_classes())
 def test_make_tool_all_tools(tool_class) -> None:
     """Test that make_tool works for all tools in the codebase."""
-
-    # Create a mock agent for tool initialization
-    class MockAgent:
-        def __init__(self):
-            self.project_config = None
-            self.serena_config = None
-
     # Create an instance of the tool
     tool_instance = tool_class(MockAgent())
 

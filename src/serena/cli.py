@@ -26,7 +26,7 @@ from serena.constants import (
     USER_CONTEXT_YAMLS_DIR,
     USER_MODE_YAMLS_DIR,
 )
-from serena.mcp import SerenaMCPFactorySingleProcess
+from serena.mcp import SerenaMCPFactory, SerenaMCPFactorySingleProcess
 from serena.project import Project
 from serena.tools import ToolRegistry
 from serena.util.logging import MemoryLogHandler
@@ -477,6 +477,28 @@ class ToolCommands(AutoRegisteringGroup):
                 click.echo(tool_name)
         else:
             ToolRegistry().print_tool_overview()
+
+    @staticmethod
+    @click.command(
+        "description",
+        help="Print the description of a tool, optionally with a specific context (the latter may modify the default description).",
+    )
+    @click.argument("tool_name", type=str)
+    @click.option("--context", type=str, default=None, help="Context name or path to context file.")
+    def description(tool_name: str, context: str | None = None) -> None:
+        # Load the context
+        serena_context = None
+        if context:
+            serena_context = SerenaAgentContext.load(context)
+
+        agent = SerenaAgent(
+            project=None,
+            serena_config=SerenaConfig(web_dashboard=False, log_level=logging.INFO),
+            context=serena_context,
+        )
+        tool = agent.get_tool_by_name(tool_name)
+        mcp_tool = SerenaMCPFactory.make_mcp_tool(tool)
+        click.echo(mcp_tool.description)
 
 
 class PromptCommands(AutoRegisteringGroup):
