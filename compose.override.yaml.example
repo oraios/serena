@@ -1,0 +1,9 @@
+services:
+  serena:
+    # To work with projects, you must mount them as volumes:
+    volumes:
+      - ./my-project:/workspace/my-project
+      - /path/to/another/project:/workspace/another-project
+    # Add the context for the IDE assistant
+    command:
+      - "uv run --directory . serena-mcp-server --transport sse --port 9121 --host 0.0.0.0 --context ide-assistant"

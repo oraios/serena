@@ -56,6 +56,8 @@ SERENA_DASHBOARD_PORT=8080 docker-compose up serena
 
 ## Quick Start
 
+See the compose.override.yaml.example for a quick start setup. This file is designed to work with the Docker Compose setup and provides a basic configuration for running Serena in Docker.
+
 ### Using Docker Compose (Recommended)
 
 1. **Production mode** (for using Serena as MCP server):
