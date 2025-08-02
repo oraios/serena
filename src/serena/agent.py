@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, Optional, TypeVar
 from sensai.util import logging
 from sensai.util.logging import LogTime
 
+from interprompt.jinja_template import JinjaTemplate
 from serena import serena_version
 from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
 from serena.config.context_mode import RegisteredContext, SerenaAgentContext, SerenaAgentMode
@@ -25,7 +26,8 @@ from serena.config.serena_config import SerenaConfig, ToolInclusionDefinition, T
 from serena.dashboard import SerenaDashboardAPI
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
-from serena.tools import ActivateProjectTool, Tool, ToolRegistry
+from serena.tools import ActivateProjectTool, Tool, ToolMarker, ToolRegistry
+from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
 from solidlsp import SolidLanguageServer
 
@@ -89,6 +91,23 @@ class MemoriesManager:
         memory_file_path = self._get_memory_file_path(name)
         memory_file_path.unlink()
         return f"Memory {name} deleted."
+
+
+class AvailableTools:
+    def __init__(self, tools: list[Tool]):
+        """
+        :param tools: the list of available tools
+        """
+        self.tools = tools
+        self.tool_names = [tool.get_name_from_cls() for tool in tools]
+        self.tool_marker_names = set()
+        for marker_class in iter_subclasses(ToolMarker):
+            for tool in tools:
+                if isinstance(tool, marker_class):
+                    self.tool_marker_names.add(marker_class.__name__)
+
+    def __len__(self) -> int:
+        return len(self.tools)
 
 
 class SerenaAgent:
@@ -192,7 +211,7 @@ class SerenaAgent:
             tool_inclusion_definitions.append(SerenaAgentMode.from_name_internal("jetbrains"))
 
         self._base_tool_set = ToolSet.default().apply(*tool_inclusion_definitions)
-        self._exposed_tools = {tc: t for tc, t in self._all_tools.items() if self._base_tool_set.includes_name(t.get_name())}
+        self._exposed_tools = AvailableTools([t for t in self._all_tools.values() if self._base_tool_set.includes_name(t.get_name())])
         log.info(f"Number of exposed tools: {len(self._exposed_tools)}")
 
         # create executor for starting the language server and running tools in another thread
@@ -301,7 +320,7 @@ class SerenaAgent:
             If a client should attempt to use a tool that is dynamically disabled
             (e.g. because a project is activated that disables it), it will receive an error.
         """
-        return list(self._exposed_tools.values())
+        return list(self._exposed_tools.tools)
 
     def get_active_project(self) -> Project | None:
         """
@@ -335,11 +354,21 @@ class SerenaAgent:
         """
         return list(self._modes)
 
+    def _format_prompt(self, prompt_template: str) -> str:
+        template = JinjaTemplate(prompt_template)
+        return template.render(available_tools=self._exposed_tools.tool_names, available_markers=self._exposed_tools.tool_marker_names)
+
     def create_system_prompt(self) -> str:
-        return self.prompt_factory.create_system_prompt(
-            context_system_prompt=self._context.prompt,
-            mode_system_prompts=[mode.prompt for mode in self._modes],
+        available_markers = self._exposed_tools.tool_marker_names
+        log.info("Generating system prompt with available_tools=(see exposed tools), available_markers=%s", available_markers)
+        system_prompt = self.prompt_factory.create_system_prompt(
+            context_system_prompt=self._format_prompt(self._context.prompt),
+            mode_system_prompts=[self._format_prompt(mode.prompt) for mode in self._modes],
+            available_tools=self._exposed_tools.tool_names,
+            available_markers=available_markers,
         )
+        log.info("System prompt:\n%s", system_prompt)
+        return system_prompt
 
     def _update_active_tools(self) -> None:
         """

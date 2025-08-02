@@ -1,10 +1,10 @@
 import json
 
-from serena.tools import TOOL_DEFAULT_MAX_ANSWER_LENGTH, Tool, ToolMarkerOptional
+from serena.tools import TOOL_DEFAULT_MAX_ANSWER_LENGTH, Tool, ToolMarkerOptional, ToolMarkerSymbolicRead
 from serena.tools.jetbrains_plugin_client import JetBrainsPluginClient
 
 
-class JetBrainsFindSymbolTool(Tool, ToolMarkerOptional):
+class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
     """
     Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
     """
@@ -70,7 +70,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerOptional):
         return self._limit_length(result, max_answer_chars)
 
 
-class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerOptional):
+class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
     """
     Finds symbols that reference the given symbol
     """
@@ -100,7 +100,7 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerOptional):
         return self._limit_length(result, max_answer_chars)
 
 
-class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerOptional):
+class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
     """
     Retrieves an overview of the top-level symbols within a specified file
     """

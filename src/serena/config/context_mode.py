@@ -39,6 +39,10 @@ class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
 
     name: str
     prompt: str
+    """
+    a Jinja2 template for the generation of the system prompt.
+    It is formatted by the agent (see SerenaAgent._format_prompt()).
+    """
     description: str = ""
 
     def _tostring_includes(self) -> list[str]:
@@ -133,6 +137,10 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
 
     name: str
     prompt: str
+    """
+    a Jinja2 template for the generation of the system prompt.
+    It is formatted by the agent (see SerenaAgent._format_prompt()).
+    """
     description: str = ""
 
     def _tostring_includes(self) -> list[str]:

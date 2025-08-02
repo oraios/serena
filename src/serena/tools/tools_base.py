@@ -73,19 +73,37 @@ class Component(ABC):
 TOOL_DEFAULT_MAX_ANSWER_LENGTH = int(2e5)
 
 
-class ToolMarkerCanEdit:
+class ToolMarker:
+    """
+    Base class for tool markers.
+    """
+
+
+class ToolMarkerCanEdit(ToolMarker):
     """
     Marker class for all tools that can perform editing operations on files.
     """
 
 
-class ToolMarkerDoesNotRequireActiveProject:
+class ToolMarkerDoesNotRequireActiveProject(ToolMarker):
     pass
 
 
-class ToolMarkerOptional:
+class ToolMarkerOptional(ToolMarker):
     """
     Marker class for optional tools that are disabled by default.
+    """
+
+
+class ToolMarkerSymbolicRead(ToolMarker):
+    """
+    Marker class for tools that perform symbol read operations.
+    """
+
+
+class ToolMarkerSymbolicEdit(ToolMarkerCanEdit):
+    """
+    Marker class for tools that perform symbolic edit operations.
     """
 
 

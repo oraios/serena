@@ -8,7 +8,13 @@ from collections.abc import Sequence
 from copy import copy
 from typing import Any
 
-from serena.tools import SUCCESS_RESULT, TOOL_DEFAULT_MAX_ANSWER_LENGTH, Tool, ToolMarkerCanEdit
+from serena.tools import (
+    SUCCESS_RESULT,
+    TOOL_DEFAULT_MAX_ANSWER_LENGTH,
+    Tool,
+    ToolMarkerSymbolicEdit,
+    ToolMarkerSymbolicRead,
+)
 from solidlsp.ls_types import SymbolKind
 
 
@@ -42,7 +48,7 @@ class RestartLanguageServerTool(Tool):
         return SUCCESS_RESULT
 
 
-class GetSymbolsOverviewTool(Tool):
+class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
     """
     Gets an overview of the top-level symbols defined in a given file or directory.
     """
@@ -70,7 +76,7 @@ class GetSymbolsOverviewTool(Tool):
         return self._limit_length(result_json_str, max_answer_chars)
 
 
-class FindSymbolTool(Tool):
+class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
     """
     Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
     """
@@ -150,7 +156,7 @@ class FindSymbolTool(Tool):
         return self._limit_length(result, max_answer_chars)
 
 
-class FindReferencingSymbolsTool(Tool):
+class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
     """
     Finds symbols that reference the symbol at the given location (optionally filtered by type).
     """
@@ -204,7 +210,7 @@ class FindReferencingSymbolsTool(Tool):
         return self._limit_length(result, max_answer_chars)
 
 
-class ReplaceSymbolBodyTool(Tool, ToolMarkerCanEdit):
+class ReplaceSymbolBodyTool(Tool, ToolMarkerSymbolicEdit):
     """
     Replaces the full definition of a symbol.
     """
@@ -232,7 +238,7 @@ class ReplaceSymbolBodyTool(Tool, ToolMarkerCanEdit):
         return SUCCESS_RESULT
 
 
-class InsertAfterSymbolTool(Tool, ToolMarkerCanEdit):
+class InsertAfterSymbolTool(Tool, ToolMarkerSymbolicEdit):
     """
     Inserts content after the end of the definition of a given symbol.
     """
@@ -257,7 +263,7 @@ class InsertAfterSymbolTool(Tool, ToolMarkerCanEdit):
         return SUCCESS_RESULT
 
 
-class InsertBeforeSymbolTool(Tool, ToolMarkerCanEdit):
+class InsertBeforeSymbolTool(Tool, ToolMarkerSymbolicEdit):
     """
     Inserts content before the beginning of the definition of a given symbol.
     """
