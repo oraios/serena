@@ -29,13 +29,23 @@ from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency
 
+from serena.config.serena_config import SerenaConfig
+
+DEFAULT_CSHARP_LSP_VERSION = "5.0.0-1.25277.114"
+
+def get_csharp_lsp_version():
+    config = SerenaConfig.from_config_file()
+    if config and "CSharp" in config.language_servers:
+        return config.language_servers["CSharp"].get("nuget_version", DEFAULT_CSHARP_LSP_VERSION)
+    return DEFAULT_CSHARP_LSP_VERSION
+
 # Runtime dependencies configuration
 RUNTIME_DEPENDENCIES = [
     RuntimeDependency(
         id="CSharpLanguageServer",
         description="Microsoft.CodeAnalysis.LanguageServer for Windows (x64)",
         package_name="Microsoft.CodeAnalysis.LanguageServer.win-x64",
-        package_version="5.0.0-1.25329.6",
+        package_version=get_csharp_lsp_version(),
         platform_id="win-x64",
         archive_type="nupkg",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
@@ -45,7 +55,7 @@ RUNTIME_DEPENDENCIES = [
         id="CSharpLanguageServer",
         description="Microsoft.CodeAnalysis.LanguageServer for Windows (ARM64)",
         package_name="Microsoft.CodeAnalysis.LanguageServer.win-arm64",
-        package_version="5.0.0-1.25329.6",
+        package_version=get_csharp_lsp_version(),
         platform_id="win-arm64",
         archive_type="nupkg",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
@@ -55,7 +65,7 @@ RUNTIME_DEPENDENCIES = [
         id="CSharpLanguageServer",
         description="Microsoft.CodeAnalysis.LanguageServer for macOS (x64)",
         package_name="Microsoft.CodeAnalysis.LanguageServer.osx-x64",
-        package_version="5.0.0-1.25329.6",
+        package_version=get_csharp_lsp_version(),
         platform_id="osx-x64",
         archive_type="nupkg",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
@@ -65,7 +75,7 @@ RUNTIME_DEPENDENCIES = [
         id="CSharpLanguageServer",
         description="Microsoft.CodeAnalysis.LanguageServer for macOS (ARM64)",
         package_name="Microsoft.CodeAnalysis.LanguageServer.osx-arm64",
-        package_version="5.0.0-1.25329.6",
+        package_version=get_csharp_lsp_version(),
         platform_id="osx-arm64",
         archive_type="nupkg",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
@@ -75,7 +85,7 @@ RUNTIME_DEPENDENCIES = [
         id="CSharpLanguageServer",
         description="Microsoft.CodeAnalysis.LanguageServer for Linux (x64)",
         package_name="Microsoft.CodeAnalysis.LanguageServer.linux-x64",
-        package_version="5.0.0-1.25329.6",
+        package_version=get_csharp_lsp_version(),
         platform_id="linux-x64",
         archive_type="nupkg",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
@@ -85,7 +95,7 @@ RUNTIME_DEPENDENCIES = [
         id="CSharpLanguageServer",
         description="Microsoft.CodeAnalysis.LanguageServer for Linux (ARM64)",
         package_name="Microsoft.CodeAnalysis.LanguageServer.linux-arm64",
-        package_version="5.0.0-1.25329.6",
+        package_version=get_csharp_lsp_version(),
         platform_id="linux-arm64",
         archive_type="nupkg",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
@@ -168,7 +178,6 @@ def find_solution_or_project_file(root_dir) -> str | None:
 
     # If no .sln file was found, return the first .csproj file
     return csproj_file
-
 
 class CSharpLanguageServer(SolidLanguageServer):
     """
@@ -347,19 +356,20 @@ class CSharpLanguageServer(SolidLanguageServer):
         cls, logger: LanguageServerLogger, package_name: str, package_version: str, solidlsp_settings: SolidLSPSettings
     ) -> Path:
         """
-        Download a NuGet package directly from the Azure NuGet feed.
+        Download a NuGet package directly from the Official NuGet feed.
         Returns the path to the extracted package directory.
         """
-        azure_feed_url = "https://pkgs.dev.azure.com/azure-public/vside/_packaging/vs-impl/nuget/v3/index.json"
+        nuget_feed_url = "https://api.nuget.org/v3/index.json"
+
 
         # Create temporary directory for package download
         temp_dir = Path(cls.ls_resources_dir(solidlsp_settings)) / "temp_downloads"
         temp_dir.mkdir(parents=True, exist_ok=True)
 
         try:
-            # First, get the service index from the Azure feed
-            logger.log("Fetching NuGet service index from Azure feed...", logging.DEBUG)
-            with urllib.request.urlopen(azure_feed_url) as response:
+            # First, get the service index from the Nuget feed
+            logger.log("Fetching NuGet service index from Nuget feed...", logging.DEBUG)
+            with urllib.request.urlopen(nuget_feed_url) as response:
                 service_index = json.loads(response.read().decode())
 
             # Find the package base address (for downloading packages)
@@ -370,7 +380,7 @@ class CSharpLanguageServer(SolidLanguageServer):
                     break
 
             if not package_base_address:
-                raise SolidLSPException("Could not find package base address in Azure NuGet feed")
+                raise SolidLSPException("Could not find package base address in NuGet feed")
 
             # Construct the download URL for the specific package
             package_id_lower = package_name.lower()
@@ -388,7 +398,25 @@ class CSharpLanguageServer(SolidLanguageServer):
             package_extract_dir.mkdir(exist_ok=True)
 
             with zipfile.ZipFile(nupkg_file, "r") as zip_ref:
-                zip_ref.extractall(package_extract_dir)
+                # Extract files one by one to handle potential issues
+                # zip_ref.extractall(package_extract_dir)
+                for member in zip_ref.infolist():
+                    # Skip directories
+                    if member.is_dir():
+                        continue
+
+                    dest_path = package_extract_dir / Path(member.filename)
+                    dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+                    try:
+                        with zip_ref.open(member) as src, open(dest_path, "wb") as dst:
+                            shutil.copyfileobj(src, dst)
+                    except FileNotFoundError as e:
+                        logger.log(f"❌ Could not write {dest_path} (FileNotFoundError): {e}", logging.ERROR)
+                    except OSError as e:
+                        logger.log(f"❌ OSError writing {dest_path}: {e}", logging.ERROR)
+                    except Exception as e:
+                        logger.log(f"❌ Unexpected error extracting {member.filename}: {e}", logging.ERROR)
 
             # Clean up the nupkg file
             nupkg_file.unlink()
@@ -398,7 +426,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         except Exception as e:
             raise SolidLSPException(
-                f"Failed to download package {package_name} version {package_version} from Azure NuGet feed: {e}"
+                f"Failed to download or process package {package_name} version {package_version} from NuGet feed: {e}"
             ) from e
 
     @classmethod

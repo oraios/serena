@@ -350,6 +350,15 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     on the first run, which can take some time and require internet access. Others, like the Anthropic ones, may require an API key
     and rate limits may apply.
     """
+    language_servers: dict[str, dict[str, str]] = field(default_factory=dict)
+    """A mapping of language server names to their configuration.
+    The keys are the names of the language servers, and the values are dictionaries with configuration options.
+    Example:
+    language_servers:
+      CSharp:
+        nuget_package: Microsoft.CodeAnalysis.LanguageServer.win-x64
+        nuget_version: 5.0.0-1.25277.114
+    """
 
     CONFIG_FILE = "serena_config.yml"
     CONFIG_FILE_DOCKER = "serena_config.docker.yml"  # Docker-specific config file; auto-generated if missing, mounted via docker-compose for user customization
@@ -453,6 +462,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         instance.token_count_estimator = loaded_commented_yaml.get(
             "token_count_estimator", RegisteredTokenCountEstimator.TIKTOKEN_GPT4O.name
         )
+        instance.language_servers = loaded_commented_yaml.get("language_servers", {})
 
         # re-save the configuration file if any migrations were performed
         if num_project_migrations > 0:
