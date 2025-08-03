@@ -188,11 +188,24 @@ class SerenaAgent:
             dashboard_url = f"http://127.0.0.1:{port}/dashboard/index.html"
             log.info("Serena web dashboard started at %s", dashboard_url)
             if self.serena_config.web_dashboard_open_on_launch:
-                # open the dashboard URL in the default web browser (using a separate process to control
-                # output redirection)
-                process = multiprocessing.Process(target=self._open_dashboard, args=(dashboard_url,))
-                process.start()
-                process.join(timeout=1)
+                # Fixed browser opening that doesn't interfere with MCP stdio
+                import subprocess
+                import webbrowser
+                
+                # Use subprocess instead of multiprocessing to avoid file descriptor inheritance issues
+                try:
+                    # Open browser in completely isolated subprocess without touching parent's stdio
+                    subprocess.Popen([
+                        'python', '-c', 
+                        f'import webbrowser; webbrowser.open("{dashboard_url}")'
+                    ], 
+                    stdout=subprocess.DEVNULL, 
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL
+                    )
+                    log.info("Browser opened for dashboard (subprocess method)")
+                except Exception as e:
+                    log.warning(f"Failed to open browser: {e}")
 
         # log fundamental information
         log.info(f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()})")
