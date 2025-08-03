@@ -31,12 +31,19 @@ from .common import RuntimeDependency
 
 from serena.config.serena_config import SerenaConfig
 
-DEFAULT_CSHARP_LSP_VERSION = "5.0.0-1.25277.114"
+DEFAULT_NUGET_FEED_URL = "https://pkgs.dev.azure.com/azure-public/vside/_packaging/vs-impl/nuget/v3/index.json"
+DEFAULT_CSHARP_LSP_VERSION = "5.0.0-1.25329.6"
+
+def get_nuget_feed_url() -> str:
+    config = SerenaConfig.from_config_file()
+    if config and "csharp" in config.language_servers:
+        return config.language_servers["csharp"].get("nuget_feed_url", DEFAULT_NUGET_FEED_URL)
+    return DEFAULT_NUGET_FEED_URL
 
 def get_csharp_lsp_version():
     config = SerenaConfig.from_config_file()
-    if config and "CSharp" in config.language_servers:
-        return config.language_servers["CSharp"].get("nuget_version", DEFAULT_CSHARP_LSP_VERSION)
+    if config and "csharp" in config.language_servers:
+        return config.language_servers["csharp"].get("nuget_version", DEFAULT_CSHARP_LSP_VERSION)
     return DEFAULT_CSHARP_LSP_VERSION
 
 # Runtime dependencies configuration
@@ -357,10 +364,9 @@ class CSharpLanguageServer(SolidLanguageServer):
     ) -> Path:
         """
         Download a NuGet package directly from the Official NuGet feed.
-        Returns the path to the extracted package directory.
+        Returns the path to the extracted package directory.        
         """
-        nuget_feed_url = "https://api.nuget.org/v3/index.json"
-
+        nuget_feed_url = get_nuget_feed_url()
 
         # Create temporary directory for package download
         temp_dir = Path(cls.ls_resources_dir(solidlsp_settings)) / "temp_downloads"
