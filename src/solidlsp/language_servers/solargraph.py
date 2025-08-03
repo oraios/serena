@@ -87,19 +87,7 @@ class Solargraph(SolidLanguageServer):
                 logger.log("Installing Solargraph...", logging.INFO)
                 subprocess.run(dependency["installCommand"].split(), check=True, capture_output=True, cwd=repository_root_path)
 
-            # Get the gem executable path directly
-            result = subprocess.run(["gem", "which", "solargraph"], check=True, capture_output=True, text=True, cwd=repository_root_path)
-            gem_path = result.stdout.strip()
-            bin_dir = os.path.join(os.path.dirname(os.path.dirname(gem_path)), "bin")
-            executable_path = os.path.join(bin_dir, "solargraph")
-
-            if not os.path.exists(executable_path):
-                raise RuntimeError(f"Solargraph executable not found at {executable_path}")
-
-            # Ensure the executable has the right permissions
-            os.chmod(executable_path, os.stat(executable_path).st_mode | stat.S_IEXEC)
-
-            return executable_path
+            return "gem exec solargraph"
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to check or install Solargraph. {e.stderr}") from e
 
