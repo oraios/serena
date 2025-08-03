@@ -355,8 +355,8 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     The keys are the names of the language servers, and the values are dictionaries with configuration options.
     Example:
     language_servers:
-      CSharp:
-        nuget_package: Microsoft.CodeAnalysis.LanguageServer.win-x64
+      csharp:
+        nuget_feed_url: https://api.nuget.org/v3/index.json
         nuget_version: 5.0.0-1.25277.114
     """
 
