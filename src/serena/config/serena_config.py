@@ -90,13 +90,13 @@ class ToolSet:
         for definition in tool_inclusion_definitions:
             included_tools = []
             excluded_tools = []
-            for included_tool in definition.included_optional_tools:
+            for included_tool in definition.included_optional_tools or []:
                 if not registry.is_valid_tool_name(included_tool):
                     raise ValueError(f"Invalid tool name '{included_tool}' provided for inclusion")
                 if included_tool not in tool_names:
                     tool_names.add(included_tool)
                     included_tools.append(included_tool)
-            for excluded_tool in definition.excluded_tools:
+            for excluded_tool in definition.excluded_tools or []:
                 if not registry.is_valid_tool_name(excluded_tool):
                     raise ValueError(f"Invalid tool name '{excluded_tool}' provided for exclusion")
                 if excluded_tool in self._tool_names:
