@@ -40,31 +40,41 @@ def scan_directory(
     abs_path = os.path.abspath(path)
     rel_base = os.path.abspath(relative_to) if relative_to else None
 
-    with os.scandir(abs_path) as entries:
-        for entry in entries:
-            entry_path = entry.path
+    try:
+        with os.scandir(abs_path) as entries:
+            for entry in entries:
+                try:
+                    entry_path = entry.path
 
-            if rel_base:
-                result_path = os.path.relpath(entry_path, rel_base)
-            else:
-                result_path = entry_path
+                    if rel_base:
+                        result_path = os.path.relpath(entry_path, rel_base)
+                    else:
+                        result_path = entry_path
 
-            if entry.is_file():
-                if not is_ignored_file(entry_path):
-                    files.append(result_path)
-            elif entry.is_dir():
-                if not is_ignored_dir(entry_path):
-                    directories.append(result_path)
-                    if recursive:
-                        sub_result = scan_directory(
-                            entry_path,
-                            recursive=True,
-                            relative_to=relative_to,
-                            is_ignored_dir=is_ignored_dir,
-                            is_ignored_file=is_ignored_file,
-                        )
-                        files.extend(sub_result.files)
-                        directories.extend(sub_result.directories)
+                    if entry.is_file():
+                        if not is_ignored_file(entry_path):
+                            files.append(result_path)
+                    elif entry.is_dir():
+                        if not is_ignored_dir(entry_path):
+                            directories.append(result_path)
+                            if recursive:
+                                sub_result = scan_directory(
+                                    entry_path,
+                                    recursive=True,
+                                    relative_to=relative_to,
+                                    is_ignored_dir=is_ignored_dir,
+                                    is_ignored_file=is_ignored_file,
+                                )
+                                files.extend(sub_result.files)
+                                directories.extend(sub_result.directories)
+                except (PermissionError, OSError) as ex:
+                    # Skip files/directories that cannot be accessed due to permission issues
+                    log.debug(f'Skipping entry due to permission error: {entry.path}', exc_info=ex)
+                    continue
+    except (PermissionError, OSError) as ex:
+        # Skip the entire directory if it cannot be accessed
+        log.debug(f'Skipping directory due to permission error: {abs_path}', exc_info=ex)
+        return ScanResult([], [])
 
     return ScanResult(directories, files)
 
