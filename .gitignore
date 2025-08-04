@@ -227,6 +227,3 @@ tmp/
 /test/resources/repos/elixir/test_repo/deps
 # Exception: Don't ignore Elixir test repository lib directory (contains source code)
 !/test/resources/repos/elixir/test_repo/lib
-
-# Docker Override
-compose.override.yaml
