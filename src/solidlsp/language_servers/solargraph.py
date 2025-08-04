@@ -57,17 +57,6 @@ class Solargraph(SolidLanguageServer):
         """
         Setup runtime dependencies for Solargraph and return the command to start the server.
         """
-        runtime_dependencies = [
-            {
-                "url": "https://rubygems.org/downloads/solargraph-0.51.1.gem",
-                "installCommand": "gem install solargraph -v 0.51.1",
-                "binaryName": "solargraph",
-                "archiveType": "gem",
-            }
-        ]
-
-        dependency = runtime_dependencies[0]
-
         # Check if Ruby is installed
         try:
             result = subprocess.run(["ruby", "--version"], check=True, capture_output=True, cwd=repository_root_path)
@@ -86,6 +75,16 @@ class Solargraph(SolidLanguageServer):
             return solargraph_path
 
         # Fallback to gem exec
+        runtime_dependencies = [
+            {
+                "url": "https://rubygems.org/downloads/solargraph-0.51.1.gem",
+                "installCommand": "gem install solargraph -v 0.51.1",
+                "binaryName": "solargraph",
+                "archiveType": "gem",
+            }
+        ]
+
+        dependency = runtime_dependencies[0]
         try:
             result = subprocess.run(
                 ["gem", "list", "^solargraph$", "-i"], check=False, capture_output=True, text=True, cwd=repository_root_path
