@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import pathlib
+import shutil
 import subprocess
 import threading
 
@@ -78,6 +79,13 @@ class Solargraph(SolidLanguageServer):
             raise RuntimeError("Ruby is not installed. Please install Ruby before continuing.") from e
 
         # Check if solargraph is installed
+        # First, try to find solargraph in PATH (includes asdf shims)
+        solargraph_path = shutil.which("solargraph")
+        if solargraph_path:
+            logger.log(f"Found solargraph at: {solargraph_path}", logging.INFO)
+            return solargraph_path
+
+        # Fallback to gem exec
         try:
             result = subprocess.run(
                 ["gem", "list", "^solargraph$", "-i"], check=False, capture_output=True, text=True, cwd=repository_root_path
