@@ -30,6 +30,12 @@ https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
   </a>
 </p>
 
+<p align="center">
+  <a href="https://archestra.ai/mcp-catalog/oraios__serena">
+    <img src="https://archestra.ai/mcp-catalog/api/badge/quality/oraios/serena" alt="MCP Catalog Trust Score" />
+  </a>
+</p>
+
 
 
 ### LLM Integration
