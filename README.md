@@ -45,9 +45,11 @@ Serena can be integrated with an LLM in several ways:
      * Claude Code and Claude Desktop, 
      * IDEs like VSCode, Cursor or IntelliJ,
      * Extensions like Cline or Roo Code
-     * and many others, including [the ChatGPT app soon](https://x.com/OpenAIDevs/status/1904957755829481737)
+     * Local agents and UIs like jan, openwebui (using mcpo), and many others
+     * [the ChatGPT app soon](https://x.com/OpenAIDevs/status/1904957755829481737)
  * by using **Agno – the model-agnostic agent framework**.  
-   Serena's Agno-based agent allows you to turn virtually any LLM into a coding agent, whether it's provided by Google, OpenAI or Anthropic (with a paid API key)
+   **Agno now supports MCP out of the box**, making it easy to integrate Serena directly as an MCP server.
+   This allows you to turn virtually any LLM into a coding agent, whether it's provided by Google, OpenAI or Anthropic (with a paid API key)
    or a free model provided by Ollama, Together or Anyscale.
  * by incorporating Serena's tools into an agent framework of your choice.  
    Serena's tool implementation is decoupled from the framework-specific code and can thus easily be adapted to any agent framework.
@@ -112,6 +114,7 @@ implementation.
   * [Other MCP Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)](#other-mcp-clients-cline-roo-code-cursor-windsurf-etc)
   * [Agno Agent](#agno-agent)
   * [Other Agent Frameworks](#other-agent-frameworks)
+  * [Serena as a Library](#serena-as-a-library)
 - [Detailed Usage and Recommendations](#detailed-usage-and-recommendations)
   * [Tool Execution](#tool-execution)
     + [Shell Execution and Editing Tools](#shell-execution-and-editing-tools)
@@ -439,16 +442,41 @@ e.g., for one of the following reasons:
 
 ### Agno Agent
 
-Agno is a model-agnostic agent framework that allows you to turn Serena into an agent 
-(independent of the MCP technology) with a large number of underlying LLMs. Agno is currently
-the simplest way of running Serena in a chat GUI with an LLM of your choice.
+**Agno now supports MCP out of the box**, making it the easiest way to integrate Serena with any LLM through a chat GUI interface. Agno is a model-agnostic agent framework that can use Serena as an MCP server, providing access to all of Serena's coding capabilities with any underlying LLM.
 
-While Agno is not yet entirely stable, we chose it, because it comes with its own open-source UI, 
-making it easy to directly use the agent using a chat interface.  With Agno, Serena is turned into an agent
-(so no longer an MCP Server), so it can be used in programmatic ways (for example for benchmarking or within 
-your application).
+#### Using Serena with Agno's MCP Support (Recommended)
 
-Here's how it works (see also [Agno's documentation](https://docs.agno.com/introduction/playground)):
+The simplest approach is to use Serena as an MCP server with Agno's native MCP integration:
+
+1. Install Agno and set up the agent-ui:
+   ```shell
+   npx create-agent-ui@latest
+   ```
+
+2. Configure your Agno agent to use Serena's MCP server:
+   ```python
+   from agno.agent import Agent
+   from agno.models.openai import OpenAIChat  # or any other model
+   from agno.tools.mcp import MCPTools
+   
+   async with MCPTools(command="uvx --from git+https://github.com/oraios/serena serena start-mcp-server") as mcp_tools:
+       agent = Agent(
+           model=OpenAIChat(id="gpt-4o"),  # or any model you prefer
+           tools=[mcp_tools],
+           markdown=True,
+           show_tool_calls=True
+       )
+   ```
+
+3. Start chatting with your agent - you'll have access to all of Serena's semantic code analysis and editing tools.
+
+This approach works with any LLM supported by Agno, whether it's provided by Google, OpenAI, Anthropic (with a paid API key) or free models from Ollama, Together, or Anyscale.
+
+#### Alternative: Direct Integration (Legacy Approach)
+
+For advanced users who want to integrate Serena's tools directly into Agno (bypassing MCP), you can still use the adapter-based approach. See [Serena as a Library](#serena-as-a-library) section for details on this integration pattern.
+
+Here's how the legacy integration works (see also [Agno's documentation](https://docs.agno.com/introduction/playground)):
 
 1. Download the agent-ui code with npx
    ```shell
@@ -505,6 +533,50 @@ It should be straightforward to incorporate Serena into any
 agent framework (like [pydantic-ai](https://ai.pydantic.dev/), [langgraph](https://langchain-ai.github.io/langgraph/tutorials/introduction/) or others).
 Typically, you need only to write an adapter for Serena's tools to the tool representation in the framework of your choice, 
 as was done by us for Agno with [SerenaAgnoToolkit](/src/serena/agno.py).
+
+### Serena as a Library
+
+For advanced users and developers who want to integrate Serena's capabilities directly into their own applications or agent frameworks, Serena can be used as a Python library. This approach bypasses the MCP protocol and gives you direct access to Serena's tool implementations.
+
+#### Direct Tool Integration
+
+Serena's tool system is designed to be framework-agnostic. Each tool inherits from the base `Tool` class and can be easily adapted to work with any agent framework:
+
+```python
+from serena.agent import SerenaAgent
+from serena.tools.symbol_tools import FindSymbolTool
+from serena.tools.file_tools import ReadFileTool
+
+# Initialize individual tools
+find_symbol = FindSymbolTool()
+read_file = ReadFileTool()
+
+# Or use the full SerenaAgent
+agent = SerenaAgent()
+# Access all tools through agent.tools
+```
+
+#### Framework Adapters
+
+Serena includes adapter implementations for popular frameworks:
+
+- **Agno Integration**: See [`SerenaAgnoToolkit`](/src/serena/agno.py) for a complete example of how to adapt Serena's tools to work with Agno's tool system.
+- **Custom Adapters**: Follow the same pattern to create adapters for other frameworks like LangChain, LlamaIndex, or your own custom agent system.
+
+#### Benefits of Library Integration
+
+- **Lower Latency**: Direct function calls without MCP protocol overhead
+- **Fine-grained Control**: Access to individual tools and their configurations
+- **Custom Workflows**: Build specialized workflows combining Serena's tools with your own logic
+- **Embedded Usage**: Integrate coding capabilities into larger applications
+
+#### Considerations
+
+- **Complexity**: Requires more setup compared to MCP integration
+- **Updates**: Manual updates needed when Serena's tool interfaces change  
+- **Tool Execution**: Direct execution without user approval prompts (use with caution)
+
+For most use cases, we recommend starting with the MCP integration approach and only considering library integration when you need the additional control and performance benefits.
 
 
 ## Detailed Usage and Recommendations
