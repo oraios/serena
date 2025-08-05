@@ -18,6 +18,8 @@ from typing import cast
 
 from overrides import override
 
+from serena.util.zip import SafeZipExtractor
+
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
@@ -387,8 +389,13 @@ class CSharpLanguageServer(SolidLanguageServer):
             package_extract_dir = temp_dir / f"{package_name}.{package_version}"
             package_extract_dir.mkdir(exist_ok=True)
 
-            with zipfile.ZipFile(nupkg_file, "r") as zip_ref:
-                zip_ref.extractall(package_extract_dir)
+            # Use SafeZipExtractor to handle long paths and skip errors
+            extractor = SafeZipExtractor(
+                archive_path=nupkg_file,
+                extract_dir=package_extract_dir,
+                verbose=False
+            )
+            extractor.extract_all()
 
             # Clean up the nupkg file
             nupkg_file.unlink()
