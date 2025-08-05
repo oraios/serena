@@ -260,6 +260,7 @@ markers = [
   "elixir: language server running for Elixir",
   "terraform: language server running for Terraform",
   "snapshot: snapshot tests for symbolic editing operations",
+  "ruby: language server running for Ruby",
 ]
 
 [tool.codespell]
