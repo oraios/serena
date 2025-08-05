@@ -48,6 +48,9 @@ class Solargraph(SolidLanguageServer):
         self.initialize_searcher_command_available = threading.Event()
         self.resolve_main_method_available = threading.Event()
 
+        # Set timeout for Solargraph requests - Bundler environments may need more time
+        self.set_request_timeout(120.0)  # 120 seconds for initialization and requests
+
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["vendor"]
@@ -225,4 +228,16 @@ class Solargraph(SolidLanguageServer):
         self.completions_available.set()
 
         self.server_ready.set()
-        self.server_ready.wait()
+
+        # Wait for server to be ready with timeout, especially important for Bundler environments
+        server_ready_timeout = 60.0
+        self.logger.log(f"Waiting up to {server_ready_timeout} seconds for Solargraph to become ready...", logging.INFO)
+
+        if self.server_ready.wait(timeout=server_ready_timeout):
+            self.logger.log("Solargraph is ready and available for requests", logging.INFO)
+        else:
+            self.logger.log(
+                f"Timeout waiting for Solargraph to become ready within {server_ready_timeout} seconds, proceeding anyway. "
+                "This may indicate slow initialization in Bundler environment or large project indexing.",
+                logging.WARNING,
+            )
