@@ -1,0 +1,12 @@
+# Example configuration for a custom language server.
+#
+# The `start_command` is the command to execute to start the language server.
+# The server must communicate over stdio.
+start_command: "pyright-langserver --stdio"
+
+# The `language_id` is the identifier for the language, as expected by the LSP.
+language_id: "python"
+
+# The `initialization_options` are passed to the language server during initialization.
+# This should be a JSON object.
+initialization_options: {}

@@ -54,6 +54,8 @@ An example script for running tools is provided in [scripts/demo_run_tools.py](s
 
 ## Adding a New Supported Language
 
+Note: For many use cases, it is no longer necessary to write a custom adapter for a new language server. Instead, you can simply configure a custom language server by providing a start command. See the `README.md` for more information.
+
 Serena interacts with code through language servers which are included in
 the `solidlsp` package. It is rather easy to include a new supported language
 if an LSP implementation for it exists. You just need to:
