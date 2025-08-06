@@ -253,6 +253,7 @@ markers = [
   "python: language server running for Python",
   "go: language server running for Go",
   "java: language server running for Java",
+  "lean4: language server running for Lean 4",
   "rust: language server running for Rust",
   "typescript: language server running for TypeScript",
   "php: language server running for PHP",
