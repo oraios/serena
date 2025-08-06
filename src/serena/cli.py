@@ -7,13 +7,6 @@ from logging import Logger
 from pathlib import Path
 from typing import Any, Literal
 
-# Import CREATE_NO_WINDOW safely across platforms
-try:
-    from subprocess import CREATE_NO_WINDOW
-except ImportError:
-    # Not available on non-Windows systems
-    CREATE_NO_WINDOW = 0x08000000
-
 import click
 from sensai.util import logging
 from tqdm import tqdm
@@ -37,6 +30,9 @@ from serena.mcp import SerenaMCPFactory, SerenaMCPFactorySingleProcess
 from serena.project import Project
 from serena.tools import ToolRegistry
 from serena.util.logging import MemoryLogHandler
+
+# Import CREATE_NO_WINDOW from centralized location
+from serena.util.shell import CREATE_NO_WINDOW
 from solidlsp.ls_config import Language
 
 log = logging.getLogger(__name__)

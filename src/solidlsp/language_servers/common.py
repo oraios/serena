@@ -7,15 +7,10 @@ import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+# Import CREATE_NO_WINDOW from centralized location
+from serena.util.shell import CREATE_NO_WINDOW
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
-
-# Import CREATE_NO_WINDOW safely across platforms
-try:
-    from subprocess import CREATE_NO_WINDOW
-except ImportError:
-    # Not available on non-Windows systems
-    CREATE_NO_WINDOW = 0x08000000
 
 log = logging.getLogger(__name__)
 
