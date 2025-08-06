@@ -28,6 +28,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '>=1.17.0'
+      - name: Ensure cached directory exist before calling cache-related actions
+        shell: bash
+        run: |
+          mkdir -p $HOME/.serena/language_servers/static
+          mkdir -p $HOME/.cache/go-build
+          mkdir -p $HOME/go/bin
       # Add Go bin directory to PATH for this workflow
       # GITHUB_PATH is a special file that GitHub Actions uses to modify PATH
       # Writing to this file adds the directory to the PATH for subsequent steps
@@ -49,7 +55,6 @@ jobs:
         with:
           elixir-version: '1.18.4'
           otp-version: '26.1'
-
       - name: Prepare java
         uses: actions/setup-java@v3
         with:

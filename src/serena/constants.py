@@ -10,7 +10,8 @@ SERENA_MANAGED_DIR_IN_HOME = str(_serena_in_home_managed_dir)
 
 # TODO: Path-related constants should be moved to SerenaPaths; don't add further constants here.
 REPO_ROOT = str(_repo_root_path)
-PROMPT_TEMPLATES_DIR = str(_serena_pkg_path / "resources" / "config" / "prompt_templates")
+PROMPT_TEMPLATES_DIR_INTERNAL = str(_serena_pkg_path / "resources" / "config" / "prompt_templates")
+PROMPT_TEMPLATES_DIR_IN_USER_HOME = str(_serena_in_home_managed_dir / "prompt_templates")
 SERENAS_OWN_CONTEXT_YAMLS_DIR = str(_serena_pkg_path / "resources" / "config" / "contexts")
 """The contexts that are shipped with the Serena package, i.e. the default contexts."""
 USER_CONTEXT_YAMLS_DIR = str(_serena_in_home_managed_dir / "contexts")

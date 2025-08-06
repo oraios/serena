@@ -7,14 +7,14 @@ from pathlib import Path
 from sensai.util import logging
 
 from interprompt import autogenerate_prompt_factory_module
-from serena.constants import PROMPT_TEMPLATES_DIR, REPO_ROOT
+from serena.constants import PROMPT_TEMPLATES_DIR_INTERNAL, REPO_ROOT
 
 log = logging.getLogger(__name__)
 
 
 def main():
     autogenerate_prompt_factory_module(
-        prompts_dir=PROMPT_TEMPLATES_DIR,
+        prompts_dir=PROMPT_TEMPLATES_DIR_INTERNAL,
         target_module_path=str(Path(REPO_ROOT) / "src" / "serena" / "generated" / "generated_prompt_factory.py"),
     )
 

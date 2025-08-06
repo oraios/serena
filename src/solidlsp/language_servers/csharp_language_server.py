@@ -7,7 +7,6 @@ import logging
 import os
 import platform
 import shutil
-import stat
 import subprocess
 import tarfile
 import threading
@@ -314,7 +313,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         # Make executable on Unix systems
         if platform.system().lower() != "windows":
-            server_dll.chmod(server_dll.stat().st_mode | stat.S_IEXEC)
+            server_dll.chmod(0o755)
 
         logger.log(f"Successfully installed Microsoft.CodeAnalysis.LanguageServer to {server_dll}", logging.INFO)
         return str(server_dll)
@@ -456,7 +455,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
             # Make dotnet executable on Unix
             if platform.system().lower() != "windows":
-                dotnet_exe.chmod(dotnet_exe.stat().st_mode | stat.S_IEXEC)
+                dotnet_exe.chmod(0o755)
 
             logger.log(f"Successfully installed .NET 9 runtime to {dotnet_exe}", logging.INFO)
             return str(dotnet_exe)

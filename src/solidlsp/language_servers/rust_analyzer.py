@@ -5,7 +5,6 @@ Provides Rust specific instantiation of the LanguageServer class. Contains vario
 import logging
 import os
 import pathlib
-import stat
 import threading
 
 from overrides import override
@@ -60,8 +59,16 @@ class RustAnalyzer(SolidLanguageServer):
             [
                 RuntimeDependency(
                     id="RustAnalyzer",
+                    description="RustAnalyzer for macOS (x64)",
+                    url="https://github.com/rust-lang/rust-analyzer/releases/download/2025-08-04/rust-analyzer-x86_64-apple-darwin.gz",
+                    platform_id="osx-x64",
+                    archive_type="gz",
+                    binary_name="rust_analyzer",
+                ),
+                RuntimeDependency(
+                    id="RustAnalyzer",
                     description="RustAnalyzer for macOS (arm64)",
-                    url="https://github.com/rust-lang/rust-analyzer/releases/download/2023-10-09/rust-analyzer-aarch64-apple-darwin.gz",
+                    url="https://github.com/rust-lang/rust-analyzer/releases/download/2025-08-04/rust-analyzer-aarch64-apple-darwin.gz",
                     platform_id="osx-arm64",
                     archive_type="gz",
                     binary_name="rust_analyzer",
@@ -69,7 +76,7 @@ class RustAnalyzer(SolidLanguageServer):
                 RuntimeDependency(
                     id="RustAnalyzer",
                     description="RustAnalyzer for Linux (x64)",
-                    url="https://github.com/rust-lang/rust-analyzer/releases/download/2023-10-09/rust-analyzer-x86_64-unknown-linux-gnu.gz",
+                    url="https://github.com/rust-lang/rust-analyzer/releases/download/2025-08-04/rust-analyzer-x86_64-unknown-linux-gnu.gz",
                     platform_id="linux-x64",
                     archive_type="gz",
                     binary_name="rust_analyzer",
@@ -77,7 +84,7 @@ class RustAnalyzer(SolidLanguageServer):
                 RuntimeDependency(
                     id="RustAnalyzer",
                     description="RustAnalyzer for Linux (arm64)",
-                    url="https://github.com/rust-lang/rust-analyzer/releases/download/2023-10-09/rust-analyzer-aarch64-unknown-linux-gnu.gz",
+                    url="https://github.com/rust-lang/rust-analyzer/releases/download/2025-08-04/rust-analyzer-aarch64-unknown-linux-gnu.gz",
                     platform_id="linux-arm64",
                     archive_type="gz",
                     binary_name="rust_analyzer",
@@ -85,7 +92,7 @@ class RustAnalyzer(SolidLanguageServer):
                 RuntimeDependency(
                     id="RustAnalyzer",
                     description="RustAnalyzer for Windows (x64)",
-                    url="https://github.com/rust-lang/rust-analyzer/releases/download/2023-10-09/rust-analyzer-x86_64-pc-windows-msvc.zip",
+                    url="https://github.com/rust-lang/rust-analyzer/releases/download/2025-08-04/rust-analyzer-x86_64-pc-windows-msvc.zip",
                     platform_id="win-x64",
                     archive_type="zip",
                     binary_name="rust-analyzer.exe",
@@ -104,7 +111,7 @@ class RustAnalyzer(SolidLanguageServer):
             os.makedirs(rustanalyzer_ls_dir)
             deps.install(logger, rustanalyzer_ls_dir)
         assert os.path.exists(rustanalyzer_executable_path)
-        os.chmod(rustanalyzer_executable_path, stat.S_IEXEC)
+        os.chmod(rustanalyzer_executable_path, 0o755)
 
         return rustanalyzer_executable_path
 

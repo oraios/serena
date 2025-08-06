@@ -68,6 +68,8 @@ SERENA_DASHBOARD_PORT=8080 docker-compose up serena
    docker-compose up serena-dev
    ```
 
+Note: Edit the `compose.yaml` file to customize volume mounts for your projects.
+
 ### Using Docker directly
 
 ```bash
@@ -82,6 +84,24 @@ docker run -it --rm \
   -e SERENA_DOCKER=1 \
   serena
 ```
+
+### Using Docker Compose with Merge Compose files
+
+To use Docker Compose with merge files, you can create a `compose.override.yml` file to customize the configuration:
+
+```yaml
+services:
+  serena:
+    # To work with projects, you must mount them as volumes:
+    volumes:
+      - ./my-project:/workspace/my-project
+      - /path/to/another/project:/workspace/another-project
+    # Add the context for the IDE assistant option:
+    command:
+      - "uv run --directory . serena-mcp-server --transport sse --port 9121 --host 0.0.0.0 --context ide-assistant"
+```
+
+See the [Docker Merge Compose files documentation](https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/) for more details on using merge files.
 
 ## Accessing the Dashboard
 

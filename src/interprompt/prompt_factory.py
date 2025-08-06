@@ -10,9 +10,11 @@ log = logging.getLogger(__name__)
 class PromptFactoryBase:
     """Base class for auto-generated prompt factory classes."""
 
-    def __init__(self, prompts_dir: str, lang_code: str = DEFAULT_LANG_CODE, fallback_mode=LanguageFallbackMode.EXCEPTION):
+    def __init__(self, prompts_dir: str | list[str], lang_code: str = DEFAULT_LANG_CODE, fallback_mode=LanguageFallbackMode.EXCEPTION):
         """
-        :param prompts_dir: the directory containing the prompt templates and prompt lists
+        :param prompts_dir: the directory containing the prompt templates and prompt lists.
+            If a list is provided, will look for prompt templates in the dirs from left to right
+            (first one containing the desired template wins).
         :param lang_code: the language code to use for retrieving the prompt templates and prompt lists.
             Leave as `default` for single-language use cases.
         :param fallback_mode: the fallback mode to use when a prompt template or prompt list is not found for the requested language.

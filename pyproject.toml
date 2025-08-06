@@ -18,7 +18,7 @@ dependencies = [
   "pyright>=1.1.396,<2",
   "overrides>=7.7.0,<8",
   "python-dotenv>=1.0.0, <2",
-  "mcp>=1.5.0",
+  "mcp==1.12.3",
   "flask>=3.0.0",
   "sensai-utils>=1.5.0",
   "pydantic>=2.10.6",

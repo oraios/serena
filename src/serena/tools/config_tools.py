@@ -1,7 +1,7 @@
 import json
 
 from serena.config.context_mode import SerenaAgentMode
-from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject
+from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional
 
 
 class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
@@ -35,7 +35,7 @@ class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
         return result_str
 
 
-class RemoveProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
+class RemoveProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional):
     """
     Removes a project from the Serena configuration.
     """
@@ -50,7 +50,7 @@ class RemoveProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
         return f"Successfully removed project '{project_name}' from configuration."
 
 
-class SwitchModesTool(Tool):
+class SwitchModesTool(Tool, ToolMarkerOptional):
     """
     Activates modes by providing a list of their names
     """
@@ -71,7 +71,7 @@ class SwitchModesTool(Tool):
         return result_str
 
 
-class GetCurrentConfigTool(Tool):
+class GetCurrentConfigTool(Tool, ToolMarkerOptional):
     """
     Prints the current configuration of the agent, including the active and available projects, tools, contexts, and modes.
     """

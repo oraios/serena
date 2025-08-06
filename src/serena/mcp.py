@@ -68,10 +68,17 @@ class SerenaMCPFactory:
 
         # Mount the tool description as a combination of the docstring description and
         # the return value description, if it exists.
-        if docstring.description:
-            func_doc = f"{docstring.description.strip().strip('.')}."
+        overridden_description = tool.agent.get_context().tool_description_overrides.get(func_name, None)
+
+        if overridden_description is not None:
+            func_doc = overridden_description
+        elif docstring.description:
+            func_doc = docstring.description
         else:
             func_doc = ""
+        func_doc = func_doc.strip().strip(".")
+        if func_doc:
+            func_doc += "."
         if docstring.returns and (docstring_returns_descr := docstring.returns.description):
             # Only add a space before "Returns" if func_doc is not empty
             prefix = " " if func_doc else ""
@@ -113,6 +120,7 @@ class SerenaMCPFactory:
             for tool in self._iter_tools():
                 mcp_tool = self.make_mcp_tool(tool)
                 mcp._tool_manager._tools[tool.get_name()] = mcp_tool
+            log.info(f"Starting MCP server with {len(mcp._tool_manager._tools)} tools: {list(mcp._tool_manager._tools.keys())}")
 
     @abstractmethod
     def _instantiate_agent(self, serena_config: SerenaConfig, modes: list[SerenaAgentMode]) -> None:
@@ -170,9 +178,8 @@ class SerenaMCPFactory:
         # `.env` files (e.g. containing LOG_LEVEL) that are not supposed to override the MCP settings;
         # retain only FASTMCP_ prefix for already set environment variables.
         Settings.model_config = SettingsConfigDict(env_prefix="FASTMCP_")
-
-        mcp_settings: Settings = Settings(lifespan=self.server_lifespan, host=host, port=port)
-        mcp = FastMCP(**mcp_settings.model_dump())
+        instructions = self._get_initial_instructions()
+        mcp = FastMCP(lifespan=self.server_lifespan, host=host, port=port, instructions=instructions)
         return mcp
 
     @asynccontextmanager
@@ -180,6 +187,10 @@ class SerenaMCPFactory:
     async def server_lifespan(self, mcp_server: FastMCP) -> AsyncIterator[None]:
         """Manage server startup and shutdown lifecycle."""
         yield None  # ensures MyPy understands we yield None
+
+    @abstractmethod
+    def _get_initial_instructions(self) -> str:
+        pass
 
 
 class SerenaMCPFactorySingleProcess(SerenaMCPFactory):
@@ -206,6 +217,11 @@ class SerenaMCPFactorySingleProcess(SerenaMCPFactory):
     def _iter_tools(self) -> Iterator[Tool]:
         assert self.agent is not None
         yield from self.agent.get_exposed_tool_instances()
+
+    def _get_initial_instructions(self) -> str:
+        assert self.agent is not None
+        # we don't use the tool (which at the time of writing calls this method), since the tool may be disabled by the config
+        return self.agent.create_system_prompt()
 
     @asynccontextmanager
     async def server_lifespan(self, mcp_server: FastMCP) -> AsyncIterator[None]:

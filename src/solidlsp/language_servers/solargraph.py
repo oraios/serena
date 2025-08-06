@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import pathlib
-import stat
+import shutil
 import subprocess
 import threading
 
@@ -57,17 +57,6 @@ class Solargraph(SolidLanguageServer):
         """
         Setup runtime dependencies for Solargraph and return the command to start the server.
         """
-        runtime_dependencies = [
-            {
-                "url": "https://rubygems.org/downloads/solargraph-0.51.1.gem",
-                "installCommand": "gem install solargraph -v 0.51.1",
-                "binaryName": "solargraph",
-                "archiveType": "gem",
-            }
-        ]
-
-        dependency = runtime_dependencies[0]
-
         # Check if Ruby is installed
         try:
             result = subprocess.run(["ruby", "--version"], check=True, capture_output=True, cwd=repository_root_path)
@@ -79,6 +68,23 @@ class Solargraph(SolidLanguageServer):
             raise RuntimeError("Ruby is not installed. Please install Ruby before continuing.") from e
 
         # Check if solargraph is installed
+        # First, try to find solargraph in PATH (includes asdf shims)
+        solargraph_path = shutil.which("solargraph")
+        if solargraph_path:
+            logger.log(f"Found solargraph at: {solargraph_path}", logging.INFO)
+            return solargraph_path
+
+        # Fallback to gem exec
+        runtime_dependencies = [
+            {
+                "url": "https://rubygems.org/downloads/solargraph-0.51.1.gem",
+                "installCommand": "gem install solargraph -v 0.51.1",
+                "binaryName": "solargraph",
+                "archiveType": "gem",
+            }
+        ]
+
+        dependency = runtime_dependencies[0]
         try:
             result = subprocess.run(
                 ["gem", "list", "^solargraph$", "-i"], check=False, capture_output=True, text=True, cwd=repository_root_path
@@ -87,19 +93,7 @@ class Solargraph(SolidLanguageServer):
                 logger.log("Installing Solargraph...", logging.INFO)
                 subprocess.run(dependency["installCommand"].split(), check=True, capture_output=True, cwd=repository_root_path)
 
-            # Get the gem executable path directly
-            result = subprocess.run(["gem", "which", "solargraph"], check=True, capture_output=True, text=True, cwd=repository_root_path)
-            gem_path = result.stdout.strip()
-            bin_dir = os.path.join(os.path.dirname(os.path.dirname(gem_path)), "bin")
-            executable_path = os.path.join(bin_dir, "solargraph")
-
-            if not os.path.exists(executable_path):
-                raise RuntimeError(f"Solargraph executable not found at {executable_path}")
-
-            # Ensure the executable has the right permissions
-            os.chmod(executable_path, os.stat(executable_path).st_mode | stat.S_IEXEC)
-
-            return executable_path
+            return "gem exec solargraph"
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to check or install Solargraph. {e.stderr}") from e
 

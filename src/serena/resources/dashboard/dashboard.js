@@ -1,5 +1,6 @@
 class LogMessage {
     constructor(message, toolNames) {
+        message = this.escapeHtml(message);
         const logLevel = this.determineLogLevel(message);
         const highlightedMessage = this.highlightToolNames(message, toolNames);
         this.$elem = $('<div>').addClass('log-' + logLevel).html(highlightedMessage + '\n');
@@ -27,6 +28,21 @@ class LogMessage {
         });
         return highlightedMessage;
     }
+
+    escapeHtml (convertString) {
+        if (typeof convertString !== 'string') return convertString; 
+
+        const patterns = {
+            '<'  : '&lt;',
+            '>'  : '&gt;',
+            '&'  : '&amp;',
+            '"'  : '&quot;',
+            '\'' : '&#x27;',
+            '`'  : '&#x60;'
+        };
+
+        return convertString.replace(/[<>&"'`]/g, match => patterns[match]);
+  };
 }
 
 class Dashboard {
@@ -36,6 +52,7 @@ class Dashboard {
         this.toolNames = [];
         this.currentMaxIdx = -1;
         this.pollInterval = null;
+        this.failureCount = 0;
         this.$logContainer = $('#log-container');
         this.$errorContainer = $('#error-container');
         this.$loadButton = $('#load-logs');
@@ -145,6 +162,7 @@ class Dashboard {
                 start_idx: self.currentMaxIdx + 1
             }),
             success: function(response) {
+                self.failureCount = 0;
                 // Only append new messages if we have any
                 if (response.messages && response.messages.length > 0) {
                     let wasAtBottom = false;
@@ -174,6 +192,11 @@ class Dashboard {
             },
             error: function(xhr, status, error) {
                 console.error('Error polling for new logs:', error);
+                self.failureCount++;
+                if (self.failureCount >= 3) {
+                    console.log('Server appears to be down, closing tab');
+                    window.close();
+                }
             }
         });
     }

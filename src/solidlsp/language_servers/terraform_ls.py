@@ -1,7 +1,6 @@
 import logging
 import os
 import shutil
-import stat
 import threading
 
 from overrides import override
@@ -112,7 +111,7 @@ class TerraformLS(SolidLanguageServer):
 
         # Make the executable file executable on Unix-like systems
         if platform_id.value != "win-x64":
-            os.chmod(terraform_ls_executable_path, stat.S_IEXEC | stat.S_IREAD)
+            os.chmod(terraform_ls_executable_path, 0o755)
 
         return terraform_ls_executable_path
 

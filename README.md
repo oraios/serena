@@ -195,6 +195,16 @@ Note that no matter how you run the MCP server, Serena will, by default, start a
 MCP server (since many clients fail to clean up processes correctly).
 This and other settings can be adjusted in the [configuration](#configuration) and/or by providing [command-line arguments](#command-line-arguments).
 
+##### Using uvx
+
+`uvx` can be used to run the latest version of Serena directly from the repository, without an explicit local installation.
+
+```shell
+uvx --from git+https://github.com/oraios/serena serena start-mcp-server
+```
+
+Explore the CLI to see some of the customization options that serena provides (more info on them below).
+
 ###### Local Installation
 
 1. Clone the repository and change into it.
@@ -202,38 +212,19 @@ This and other settings can be adjusted in the [configuration](#configuration) a
    git clone https://github.com/oraios/serena
    cd serena
    ```
-2. Optionally create the configuration file in your home directory, i.e.
-
-      * `~/.serena/serena_config.yml` on Linux and macOS, or
-      * `%USERPROFILE%\.serena\serena_config.yml` on Windows.  
-
-   by copying the template and then adjusting it according to your needs:   
+2. Optionally edit the configuration file in your home directory with 
    ```shell
-   mkdir ~/.serena
-   cp src/serena/resources/serena_config.template.yml ~/.serena/serena_config.yml
+   uv run serena config edit
    ```
    If you just want the default config, you can skip this part, and a config file will be created when you first run Serena.
 3. Run the server with `uv`:
    ```shell
-   uv run serena-mcp-server
+   uv run serena start-mcp-server
    ```
-   When running from outside the serena installation directory, be sure to pass it, i.e. use
+   When running from outside the serena installation directory, be sure to pass it, i.e., use
    ```shell
-    uv run --directory /abs/path/to/serena serena-mcp-server
-    ```
-
-##### Using uvx
-
-`uvx` can be used to run the latest version of Serena directly from the repository, without an explicit local installation.
-
-* Windows:
-  ```shell
-  uvx --from git+https://github.com/oraios/serena serena-mcp-server.exe
-  ```
-* Other operating systems:
-  ```shell
-  uvx --from git+https://github.com/oraios/serena serena-mcp-server
-  ```
+    uv run --directory /abs/path/to/serena serena start-mcp-server
+   ```
 
 ##### Using Docker (Experimental)
 
@@ -243,7 +234,7 @@ You can run the Serena MCP server directly via docker as follows,
 assuming that the projects you want to work on are all located in `/path/to/your/projects`:
 
 ```shell
-docker run --rm -i --network host -v /path/to/your/projects:/workspaces/projects ghcr.io/oraios/serena:latest serena-mcp-server --transport stdio
+docker run --rm -i --network host -v /path/to/your/projects:/workspaces/projects ghcr.io/oraios/serena:latest serena start-mcp-server --transport stdio
 ```
 
 Replace `/path/to/your/projects` with the absolute path to your projects directory. The Docker approach provides:
@@ -263,12 +254,12 @@ therefore needs to be configured with a launch command.
 When using instead the SSE mode, which uses HTTP-based communication, you control the server lifecycle yourself,
 i.e. you start the server and provide the client with the URL to connect to it.
 
-Simply provide `serena-mcp-server` with the `--transport sse` option and optionally provide the port.
+Simply provide `start-mcp-server` with the `--transport sse` option and optionally provide the port.
 For example, to run the Serena MCP server in SSE mode on port 9121 using a local installation,
 you would run this command from the Serena directory, 
 
 ```shell
-uv run serena-mcp-server --transport sse --port 9121
+uv run serena start-mcp-server --transport sse --port 9121
 ```
 
 and then configure your client to connect to `http://localhost:9121/sse`.
@@ -289,12 +280,22 @@ Serena's behavior (active tools and prompts as well as logging configuration, et
 1. The `serena_config.yml` for general settings that apply to all clients and projects.
    It is located in your user directory under `.serena/serena_config.yml`.
    If you do not explicitly create the file, it will be auto-generated when you first run Serena.
-2. In the arguments passed to the `serena-mcp-server` in your client's config (see below), 
+   You can edit it directly or use
+   ```shell
+   uvx --from git+https://github.com/oraios/serena serena config edit
+   ```
+   (or use the `--directory` command version).
+2. In the arguments passed to the `start-mcp-server` in your client's config (see below), 
    which will apply to all sessions started by the respective client. In particular, the [context](#contexts) parameter
    should be set appropriately for Serena to be best adjusted to existing tools and capabilities of your client.
    See for a detailed explanation. You can override all entries from the `serena_config.yml` through command line arguments.
 3. In the `.serena/project.yml` file within your project. This will hold project-level configuration that is used whenever
-   that project is activated.
+   that project is activated. This file will be autogenerated when you first use Serena on that project, but you can also
+   generate it explicitly with
+   ```shell
+   uvx --from git+https://github.com/oraios/serena serena project generate-yml
+   ```
+   (or use the `--directory` command version).
 4. Through the currently active set of [modes](#modes).
 
 
@@ -323,20 +324,17 @@ project, the file `.serena/project.yml` will be generated. You can adjust the la
 same name.
 
 If you are mostly working with the same project, you can also configure to always activate a project at startup
-by passing `--project <path_or_name>` to the `serena-mcp-server` command in your client's MCP config.
+by passing `--project <path_or_name>` to the `start-mcp-server` command in your client's MCP config.
 
 ℹ️ For larger projects, we recommend that you index your project to accelerate Serena's tools; otherwise the first
 tool application may be very slow.
-To do so, run one of these commands the project directory or pass the path to the project as an argument:
+To do so, run this from the project directory (or pass the path to the project as an argument):
 
-* When using a local installation:
-  ```shell
-  uv run --directory /abs/path/to/serena index-project
-  ```
-* When using uvx:
-  ```shell
-  uvx --from git+https://github.com/oraios/serena index-project
-  ```
+```shell
+uvx --from git+https://github.com/oraios/serena serena project index
+```
+
+(or use the `--directory` command version).
 
 ### Claude Code
 
@@ -351,15 +349,16 @@ claude mcp add serena -- <serena-mcp-server> --context ide-assistant --project $
 where `<serena-mcp-server>` is your way of [running the Serena MCP server](#running-the-serena-mcp-server).
 For example, when using `uvx`, you would run
 ```shell
-claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena-mcp-server --context ide-assistant --project $(pwd)
+claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context ide-assistant --project $(pwd)
 ```
 
-ℹ️ Serena comes with an instruction text, and Claude needs to read it to properly use Serena's tools. 
-  Once in Claude Code, you can ask to "read Serena's initial instructions" or run `/mcp__serena__initial_instructions` to load the instruction text. 
-  Do this whenever you start a new conversation and after any compacting operation to ensure Claude remains properly configured to use Serena's tools.
-
-ℹ️ **NEW**: an alternative to the above is adding the instructions as part of the system prompt, then you will not need to run the command above or to remember re-running it after compacting.
-  This can be achieved through starting claude code with `claude --append-system-prompt $(uvx --from git+https://github.com/oraios/serena serena print-system-prompt)`. Note that this is **experimental**, Claude may not understand the instructions correctly in this way, and we haven't thoroughly tested the resulting behavior. Please report any issues you encounter.
+ℹ️ Serena comes with an instruction text, and Claude needs to read it to properly use Serena's tools.
+  As of version `v1.0.52`, claude code reads the instructions of the MCP server, so this **is handled automatically**.
+  If you are using an older version, or if Claude fails to read the instructions, you can ask it explicitly
+  to "read Serena's initial instructions" or run `/mcp__serena__initial_instructions` to load the instruction text.
+  If you want to make use of that, you will have to enable the corresponding tool explicitly by adding `initial_instructions` to the `included_optional_tools`
+  in your config.
+  Note that you may have to make Claude read the instructions you start a new conversation and after any compacting operation to ensure Claude remains properly configured to use Serena's tools.
 
 
 ### Claude Desktop
@@ -374,7 +373,7 @@ Add the `serena` MCP server configuration, using a [run command](#running-the-se
        "mcpServers": {
            "serena": {
                "command": "/abs/path/to/uv",
-               "args": ["run", "--directory", "/abs/path/to/serena", "serena-mcp-server"]
+               "args": ["run", "--directory", "/abs/path/to/serena", "serena", "start-mcp-server"]
            }
        }
    }
@@ -385,7 +384,7 @@ Add the `serena` MCP server configuration, using a [run command](#running-the-se
        "mcpServers": {
            "serena": {
                "command": "/abs/path/to/uvx",
-               "args": ["--from", "git+https://github.com/oraios/serena", "serena-mcp-server"]
+               "args": ["--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server"]
            }
        }
   }
@@ -396,7 +395,7 @@ Add the `serena` MCP server configuration, using a [run command](#running-the-se
        "mcpServers": {
            "serena": {
                "command": "docker",
-               "args": ["run", "--rm", "-i", "--network", "host", "-v", "/path/to/your/projects:/workspaces/projects", "ghcr.io/oraios/serena:latest", "serena-mcp-server", "--transport", "stdio"]
+               "args": ["run", "--rm", "-i", "--network", "host", "-v", "/path/to/your/projects:/workspaces/projects", "ghcr.io/oraios/serena:latest", "serena", "start-mcp-server", "--transport", "stdio"]
            }
        }
    }
@@ -578,14 +577,20 @@ When launching Serena, specify modes using `--mode <mode-name>`; multiple modes 
 #### Customization
 
 You can create your own contexts and modes to precisely tailor Serena to your needs in two ways:
-*  **Adding to Serena's configuration directory**: Create new `.yml` files in the `config/contexts/` or `config/modes/` directories within your local Serena repository. These custom contexts/modes will be automatically registered and available for use by their name (filename without the `.yml` extension). They will also appear in listings of available contexts/modes.
-*  **Using external YAML files**: When starting Serena, you can provide an absolute path to a custom `.yml` file for a context or mode.
+*   You can use Serena's CLI to manage modes and contexts. Check out
+    ```shell
+    uvx --from git+https://github.com/oraios/serena serena mode --help
+    uvx --from git+https://github.com/oraios/serena serena context --help
+    ```
+    *NOTE*: Custom contexts/modes are simply YAML files in `<home>/.serena`, they are automatically registered and available for use by their name (filename without the `.yml` extension). If you don't want to use Serena's CLI, you can create and manage them in any way you see fit.
+*  **Using external YAML files**: When starting Serena, you can also provide an absolute path to a custom `.yml` file for a context or mode.
 
 A context or mode YAML file typically defines:
 *   `name`: (Optional if filename is used) The name of the context/mode.
 *   `prompt`: A string that will be incorporated into Serena's system prompt.
-*   `description`: (Optional) A brief description.
+*   `description`: (Optional) A brief description, not passed to the LLM.
 *   `excluded_tools`: A list of tool names (strings) to disable when this context/mode is active.
+*   `included_optional_tools`: A list of tool names that are disabled by default and have to be explicitly enabled by the user.
 
 This customization allows for deep integration and adaptation of Serena to specific project requirements or personal preferences.
 
@@ -738,11 +743,10 @@ subscriptions.
 
 ### Subscription-Based Coding Agents
 
-The most prominent subscription-based coding agents are parts of IDEs like
+Many prominent subscription-based coding agents are parts of IDEs like
 Windsurf, Cursor and VSCode.
 Serena's functionality is similar to Cursor's Agent, Windsurf's Cascade or
-VSCode's
-upcoming [agent mode](https://code.visualstudio.com/blogs/2025/02/24/introducing-copilot-agent-mode).
+VSCode's agent mode.
 
 Serena has the advantage of not requiring a subscription.
 A potential disadvantage is that it
@@ -750,7 +754,7 @@ is not directly integrated into an IDE, so the inspection of newly written code
 is not as seamless.
 
 More technical differences are:
-* Serena is not bound to a specific IDE.
+* Serena is not bound to a specific IDE or CLI.
   Serena's MCP server can be used with any MCP client (including some IDEs),
   and the Agno-based agent provides additional ways of applying its functionality.
 * Serena is not bound to a specific large language model or API.
@@ -826,7 +830,7 @@ For details on contributing, see [here](/CONTRIBUTING.md).
 
 ## Full List of Tools
 
-Here is the full list of Serena's tools with a short description (output of `uv run serena-list-tools`):
+Here is the full list of Serena's tools with a short description (output of `uv run serena tools list`):
 
  * `activate_project`: Activates a project by name.
  * `check_onboarding_performed`: Checks whether project onboarding was already performed.
@@ -840,9 +844,7 @@ Here is the full list of Serena's tools with a short description (output of `uv 
  * `get_active_project`: Gets the name of the currently active project (if any) and lists existing projects
  * `get_current_config`: Prints the current configuration of the agent, including the active modes, tools, and context.
  * `get_symbols_overview`: Gets an overview of the top-level symbols defined in a given file or directory.
- * `initial_instructions`: Gets the initial instructions for the current project.
-    Should only be used in settings where the system prompt cannot be set,
-    e.g. in clients you have no control over, like Claude Desktop.
+ * `initial_instructions`: Gets the initial instructions for the current project. Disabled by default, has to be enabled explicitly by using `included_optional_tools`
  * `insert_after_symbol`: Inserts content after the end of the definition of a given symbol.
  * `insert_at_line`: Inserts content at a given line in a file.
  * `insert_before_symbol`: Inserts content before the beginning of the definition of a given symbol.

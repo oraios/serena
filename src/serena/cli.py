@@ -1,3 +1,4 @@
+import glob
 import os
 import shutil
 import subprocess
@@ -16,6 +17,8 @@ from serena.config.serena_config import ProjectConfig, SerenaConfig, SerenaPaths
 from serena.constants import (
     DEFAULT_CONTEXT,
     DEFAULT_MODES,
+    PROMPT_TEMPLATES_DIR_IN_USER_HOME,
+    PROMPT_TEMPLATES_DIR_INTERNAL,
     SERENA_LOG_FORMAT,
     SERENA_MANAGED_DIR_IN_HOME,
     SERENAS_OWN_CONTEXT_YAMLS_DIR,
@@ -23,7 +26,7 @@ from serena.constants import (
     USER_CONTEXT_YAMLS_DIR,
     USER_MODE_YAMLS_DIR,
 )
-from serena.mcp import SerenaMCPFactorySingleProcess
+from serena.mcp import SerenaMCPFactory, SerenaMCPFactorySingleProcess
 from serena.project import Project
 from serena.tools import ToolRegistry
 from serena.util.logging import MemoryLogHandler
@@ -475,6 +478,113 @@ class ToolCommands(AutoRegisteringGroup):
         else:
             ToolRegistry().print_tool_overview()
 
+    @staticmethod
+    @click.command(
+        "description",
+        help="Print the description of a tool, optionally with a specific context (the latter may modify the default description).",
+    )
+    @click.argument("tool_name", type=str)
+    @click.option("--context", type=str, default=None, help="Context name or path to context file.")
+    def description(tool_name: str, context: str | None = None) -> None:
+        # Load the context
+        serena_context = None
+        if context:
+            serena_context = SerenaAgentContext.load(context)
+
+        agent = SerenaAgent(
+            project=None,
+            serena_config=SerenaConfig(web_dashboard=False, log_level=logging.INFO),
+            context=serena_context,
+        )
+        tool = agent.get_tool_by_name(tool_name)
+        mcp_tool = SerenaMCPFactory.make_mcp_tool(tool)
+        click.echo(mcp_tool.description)
+
+
+class PromptCommands(AutoRegisteringGroup):
+    def __init__(self) -> None:
+        super().__init__(name="prompts", help="Commands related to Serena's prompts that are outside of contexts and modes.")
+
+    @staticmethod
+    def _get_user_prompt_yaml_path(prompt_yaml_name: str) -> str:
+        os.makedirs(PROMPT_TEMPLATES_DIR_IN_USER_HOME, exist_ok=True)
+        return os.path.join(PROMPT_TEMPLATES_DIR_IN_USER_HOME, prompt_yaml_name)
+
+    @staticmethod
+    @click.command("list", help="Lists yamls that are used for defining prompts.")
+    def list() -> None:
+        serena_prompt_yaml_names = [os.path.basename(f) for f in glob.glob(PROMPT_TEMPLATES_DIR_INTERNAL + "/*.yml")]
+        for prompt_yaml_name in serena_prompt_yaml_names:
+            user_prompt_yaml_path = PromptCommands._get_user_prompt_yaml_path(prompt_yaml_name)
+            if os.path.exists(user_prompt_yaml_path):
+                click.echo(f"{user_prompt_yaml_path} merged with default prompts in {prompt_yaml_name}")
+            else:
+                click.echo(prompt_yaml_name)
+
+    @staticmethod
+    @click.command("create-override", help="Create an override of an internal prompts yaml for customizing Serena's prompts")
+    @click.argument("prompt_yaml_name")
+    def create_override(prompt_yaml_name: str) -> None:
+        """
+        :param prompt_yaml_name: The yaml name of the prompt you want to override. Call the `list` command for discovering valid prompt yaml names.
+        :return:
+        """
+        # for convenience, we can pass names without .yml
+        if not prompt_yaml_name.endswith(".yml"):
+            prompt_yaml_name = prompt_yaml_name + ".yml"
+        user_prompt_yaml_path = PromptCommands._get_user_prompt_yaml_path(prompt_yaml_name)
+        if os.path.exists(user_prompt_yaml_path):
+            raise FileExistsError(f"{user_prompt_yaml_path} already exists.")
+        serena_prompt_yaml_path = os.path.join(PROMPT_TEMPLATES_DIR_INTERNAL, prompt_yaml_name)
+        shutil.copyfile(serena_prompt_yaml_path, user_prompt_yaml_path)
+        _open_in_editor(user_prompt_yaml_path)
+
+    @staticmethod
+    @click.command("edit-override", help="Edit an existing prompt override file")
+    @click.argument("prompt_yaml_name")
+    def edit_override(prompt_yaml_name: str) -> None:
+        """
+        :param prompt_yaml_name: The yaml name of the prompt override to edit.
+        :return:
+        """
+        # for convenience, we can pass names without .yml
+        if not prompt_yaml_name.endswith(".yml"):
+            prompt_yaml_name = prompt_yaml_name + ".yml"
+        user_prompt_yaml_path = PromptCommands._get_user_prompt_yaml_path(prompt_yaml_name)
+        if not os.path.exists(user_prompt_yaml_path):
+            click.echo(f"Override file '{prompt_yaml_name}' not found. Create it with: prompts create-override {prompt_yaml_name}")
+            return
+        _open_in_editor(user_prompt_yaml_path)
+
+    @staticmethod
+    @click.command("list-overrides", help="List existing prompt override files")
+    def list_overrides() -> None:
+        os.makedirs(PROMPT_TEMPLATES_DIR_IN_USER_HOME, exist_ok=True)
+        serena_prompt_yaml_names = [os.path.basename(f) for f in glob.glob(PROMPT_TEMPLATES_DIR_INTERNAL + "/*.yml")]
+        override_files = glob.glob(os.path.join(PROMPT_TEMPLATES_DIR_IN_USER_HOME, "*.yml"))
+        for file_path in override_files:
+            if os.path.basename(file_path) in serena_prompt_yaml_names:
+                click.echo(file_path)
+
+    @staticmethod
+    @click.command("delete-override", help="Delete a prompt override file")
+    @click.argument("prompt_yaml_name")
+    def delete_override(prompt_yaml_name: str) -> None:
+        """
+
+        :param prompt_yaml_name:  The yaml name of the prompt override to delete."
+        :return:
+        """
+        # for convenience, we can pass names without .yml
+        if not prompt_yaml_name.endswith(".yml"):
+            prompt_yaml_name = prompt_yaml_name + ".yml"
+        user_prompt_yaml_path = PromptCommands._get_user_prompt_yaml_path(prompt_yaml_name)
+        if not os.path.exists(user_prompt_yaml_path):
+            click.echo(f"Override file '{prompt_yaml_name}' not found.")
+            return
+        os.remove(user_prompt_yaml_path)
+        click.echo(f"Deleted override file '{prompt_yaml_name}'.")
+
 
 # Expose groups so we can reference them in pyproject.toml
 mode = ModeCommands()
@@ -482,6 +592,7 @@ context = ContextCommands()
 project = ProjectCommands()
 config = SerenaConfigCommands()
 tools = ToolCommands()
+prompts = PromptCommands()
 
 # Expose toplevel commands for the same reason
 top_level = TopLevelCommands()
@@ -489,7 +600,7 @@ start_mcp_server = top_level.start_mcp_server
 index_project = project.index_deprecated
 
 # needed for the help script to work - register all subcommands to the top-level group
-for subgroup in (mode, context, project, config, tools):
+for subgroup in (mode, context, project, config, tools, prompts):
     top_level.add_command(subgroup)
 
 

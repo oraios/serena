@@ -5,7 +5,7 @@ Tools supporting the general workflow of the agent
 import json
 import platform
 
-from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject
+from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional
 
 
 class CheckOnboardingPerformedTool(Tool):
@@ -96,7 +96,7 @@ class ThinkAboutWhetherYouAreDoneTool(Tool):
         return self.prompt_factory.create_think_about_whether_you_are_done()
 
 
-class SummarizeChangesTool(Tool):
+class SummarizeChangesTool(Tool, ToolMarkerOptional):
     """
     Provides instructions for summarizing the changes made to the codebase.
     """
@@ -122,7 +122,7 @@ class PrepareForNewConversationTool(Tool):
         return self.prompt_factory.create_prepare_for_new_conversation()
 
 
-class InitialInstructionsTool(Tool, ToolMarkerDoesNotRequireActiveProject):
+class InitialInstructionsTool(Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional):
     """
     Gets the initial instructions for the current project.
     Should only be used in settings where the system prompt cannot be set,
