@@ -14,8 +14,12 @@ from typing import Any
 import psutil
 from sensai.util.string import ToStringMixin
 
-# Import CREATE_NO_WINDOW from centralized location
-from serena.util.shell import CREATE_NO_WINDOW
+# Import CREATE_NO_WINDOW safely across platforms
+try:
+    from subprocess import CREATE_NO_WINDOW
+except ImportError:
+    # Not available on non-Windows systems
+    CREATE_NO_WINDOW = 0x08000000
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_request import LanguageServerRequest
 from solidlsp.lsp_protocol_handler.lsp_requests import LspNotification
