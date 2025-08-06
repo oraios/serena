@@ -206,7 +206,14 @@ class SolidLanguageServerHandler:
             # On Unix-like systems, ensure the process runs in background
             # without inheriting terminal properties
             if self.start_independent_lsp_process:
-                popen_kwargs["preexec_fn"] = os.setsid
+                def safe_setsid():
+                    try:
+                        os.setsid()
+                    except OSError:
+                        # setsid can fail if already a session leader or in certain test environments
+                        # This is not critical, so we continue without it
+                        pass
+                popen_kwargs["preexec_fn"] = safe_setsid
 
         self.process = subprocess.Popen(cmd, **popen_kwargs)
 
