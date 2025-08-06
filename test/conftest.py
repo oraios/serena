@@ -146,12 +146,4 @@ def project(request: LanguageParamRequest):
     yield create_default_project(language)
 
 
-@pytest.fixture(scope="session")
-def bash_language_server():
-    """Create a Bash language server instance for testing."""
-    server = create_default_ls(Language.BASH)
-    server.start()
-    try:
-        yield server
-    finally:
-        server.stop()
+
