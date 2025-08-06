@@ -81,7 +81,7 @@ class RuntimeDependencyCollection:
     @staticmethod
     def _run_command(command: str | list[str], cwd: str) -> None:
         from typing import Any
-        
+
         run_kwargs: dict[str, Any] = {}
         if PlatformUtils.get_platform_id().is_windows():
             run_kwargs["creationflags"] = CREATE_NO_WINDOW
