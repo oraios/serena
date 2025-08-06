@@ -203,25 +203,94 @@ class BashLanguageServer(SolidLanguageServer):
         self, relative_file_path: str, include_body: bool = False
     ) -> tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]:
         """
-        Enhanced document symbol request with fallback regex-based function detection for bash files.
+        Enhanced document symbol request with hybrid LSP + regex-based function detection for bash files.
+        
+        This method combines both LSP-based detection and regex-based detection to provide comprehensive
+        function discovery. This dual approach is necessary because:
+        
+        1. bash-language-server (v5.6.0) has inconsistent function detection capabilities
+        2. Some bash function syntaxes are not reliably detected by the LSP server
+        3. Files may contain mixed function notation styles within the same file
+        4. Different formatting or indentation can affect LSP detection
+        
+        The hybrid approach ensures maximum compatibility and comprehensive function discovery
+        for reliable symbolic editing operations in Serena.
         """
-        # First try the standard LSP approach
-        all_symbols, root_symbols = super().request_document_symbols(relative_file_path, include_body)
+        # First get symbols from the standard LSP approach
+        lsp_all_symbols, lsp_root_symbols = super().request_document_symbols(relative_file_path, include_body)
         
-        # Check if we found any function symbols (LSP Symbol Kind 12)
-        has_functions = any(symbol.get("kind") == 12 for symbol in all_symbols)
+        # Always run regex-based function detection for comprehensive coverage
+        # This addresses bash-language-server limitations and ensures we catch all function patterns
+        self.logger.log(f"Running hybrid function detection (LSP + regex) for {relative_file_path}", logging.DEBUG)
         
-        if not has_functions:
-            self.logger.log(f"No functions detected by LSP for {relative_file_path}, using regex fallback", logging.INFO)
+        regex_detected_functions = self._detect_bash_functions(relative_file_path, include_body)
+        
+        # Merge LSP and regex results, avoiding duplicates
+        merged_all_symbols, merged_root_symbols = self._merge_function_detections(
+            lsp_all_symbols, lsp_root_symbols, regex_detected_functions
+        )
+        
+        # Log detection results for debugging
+        lsp_functions = [s for s in lsp_all_symbols if s.get("kind") == 12]
+        total_functions = [s for s in merged_all_symbols if s.get("kind") == 12]
+        
+        self.logger.log(
+            f"Function detection for {relative_file_path}: LSP={len(lsp_functions)}, "
+            f"Regex={len(regex_detected_functions)}, Total={len(total_functions)}", 
+            logging.INFO
+        )
+        
+        return merged_all_symbols, merged_root_symbols
+
+    def _merge_function_detections(
+        self, 
+        lsp_all_symbols: list[ls_types.UnifiedSymbolInformation], 
+        lsp_root_symbols: list[ls_types.UnifiedSymbolInformation],
+        regex_detected_functions: list[ls_types.UnifiedSymbolInformation]
+    ) -> tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]:
+        """
+        Merge LSP-detected symbols with regex-detected functions, avoiding duplicates.
+        
+        This method:
+        1. Keeps all non-function symbols from LSP detection
+        2. Keeps all LSP-detected functions (they have more accurate positioning)
+        3. Adds regex-detected functions that weren't found by LSP
+        4. Uses function names to detect duplicates
+        
+        Args:
+            lsp_all_symbols: All symbols detected by LSP
+            lsp_root_symbols: Root-level symbols detected by LSP
+            regex_detected_functions: Functions detected by regex (all are root-level)
+        
+        Returns:
+            Tuple of (merged_all_symbols, merged_root_symbols)
+        """
+        # Extract function names that LSP already detected
+        lsp_function_names = set()
+        for symbol in lsp_all_symbols:
+            if symbol.get("kind") == 12:  # LSP Symbol Kind 12 = Function
+                lsp_function_names.add(symbol["name"])
+        
+        # Start with all LSP symbols (both functions and non-functions)
+        merged_all_symbols = lsp_all_symbols.copy()
+        merged_root_symbols = lsp_root_symbols.copy()
+        
+        # Add regex-detected functions that weren't found by LSP
+        added_functions = 0
+        for regex_function in regex_detected_functions:
+            function_name = regex_function["name"]
             
-            # Add regex-based function detection
-            detected_functions = self._detect_bash_functions(relative_file_path, include_body)
-            if detected_functions:
-                all_symbols.extend(detected_functions)
-                root_symbols.extend(detected_functions)
-                self.logger.log(f"Found {len(detected_functions)} functions via regex for {relative_file_path}", logging.INFO)
+            # Only add if this function wasn't detected by LSP
+            if function_name not in lsp_function_names:
+                merged_all_symbols.append(regex_function)
+                merged_root_symbols.append(regex_function)  # All regex functions are root-level
+                added_functions += 1
+                self.logger.log(f"Added regex-detected function '{function_name}' not found by LSP", logging.DEBUG)
         
-        return all_symbols, root_symbols
+        if added_functions > 0:
+            self.logger.log(f"Merged {added_functions} additional functions from regex detection", logging.INFO)
+        
+        return merged_all_symbols, merged_root_symbols
     
     def _detect_bash_functions(self, relative_file_path: str, include_body: bool = False) -> list[ls_types.UnifiedSymbolInformation]:
         """
