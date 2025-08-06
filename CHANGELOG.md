@@ -6,6 +6,11 @@ Status of the `main` branch. Changes prior to the next official version change w
   * Reliably detect language server termination and propagate the respective error all the way
     back to the tool application, where an unexpected termination is handled by restarting the language server
     and subsequently retrying the tool application.
+  * Add comprehensive bash language support with bash-language-server integration
+    * Support for .sh and .bash file extensions
+    * Hybrid function detection (LSP + regex fallback) for reliable symbolic editing
+    * Automatic Node.js/npm dependency management 
+    * Cross-platform compatibility including Windows
 
 Fixes:
 * Ignore `.git` in check for ignored paths and improve performance of `find_all_non_ignored_files`
