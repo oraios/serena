@@ -18,8 +18,6 @@ from typing import cast
 
 from overrides import override
 
-from serena.util.zip import SafeZipExtractor
-
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
@@ -28,6 +26,7 @@ from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.zip import SafeZipExtractor
 
 from .common import RuntimeDependency
 

@@ -5,7 +5,7 @@ import zipfile
 from pathlib import Path
 import pytest
 
-from serena.util.zip import SafeZipExtractor
+from solidlsp.util.zip import SafeZipExtractor
 
 
 @pytest.fixture

@@ -50,14 +50,14 @@ class SafeZipExtractor:
             raise FileNotFoundError(f"Archive not found: {self.archive_path}")
 
         if self.verbose:
-            log.info("Extracting from: %s to %s", self.archive_path, self.extract_dir)
+            log.info(f"Extracting from: {self.archive_path} to {self.extract_dir}")
 
         with zipfile.ZipFile(self.archive_path, "r") as zip_ref:
             for member in zip_ref.infolist():
                 if self._should_extract(member.filename):
                     self._extract_member(zip_ref, member)
                 elif self.verbose:
-                    log.info("Skipped: %s", member.filename)
+                    log.info(f"Skipped: {member.filename}")
 
     def _should_extract(self, filename: str) -> bool:
         """
@@ -98,10 +98,11 @@ class SafeZipExtractor:
             with zip_ref.open(member) as source, open(final_path, "wb") as target:
                 target.write(source.read())
 
-            log.info("Extracted: %s", member.filename)
+            if self.verbose:
+                log.info(f"Extracted: {member.filename}")
 
         except Exception as e:
-            log.error("Failed to extract %s: %s", member.filename, e)
+            log.error(f"Failed to extract {member.filename}: {e}")
 
     @staticmethod
     def _normalize_path(path: Path) -> Path:
