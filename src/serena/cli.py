@@ -1,11 +1,19 @@
 import glob
 import os
+import platform
 import shutil
 import subprocess
 import sys
 from logging import Logger
 from pathlib import Path
 from typing import Any, Literal
+
+# Import CREATE_NO_WINDOW safely across platforms
+try:
+    from subprocess import CREATE_NO_WINDOW
+except ImportError:
+    # Not available on non-Windows systems
+    CREATE_NO_WINDOW = 0x08000000
 
 import click
 from sensai.util import logging
@@ -41,17 +49,24 @@ def _open_in_editor(path: str) -> None:
     """Open the given file in the system's default editor or viewer."""
     editor = os.environ.get("EDITOR")
     try:
+        # Configure subprocess arguments to prevent terminal/window spawning
+        run_kwargs: dict[str, Any] = {}
+        if sys.platform.startswith("win"):
+            run_kwargs["creationflags"] = CREATE_NO_WINDOW
+        else:
+            run_kwargs["start_new_session"] = True
+
         if editor:
-            subprocess.run([editor, path], check=False)
+            subprocess.run([editor, path], check=False, **run_kwargs)
         elif sys.platform.startswith("win"):
             try:
                 os.startfile(path)
             except OSError:
-                subprocess.run(["notepad.exe", path], check=False)
+                subprocess.run(["notepad.exe", path], check=False, **run_kwargs)
         elif sys.platform == "darwin":
-            subprocess.run(["open", path], check=False)
+            subprocess.run(["open", path], check=False, **run_kwargs)
         else:
-            subprocess.run(["xdg-open", path], check=False)
+            subprocess.run(["xdg-open", path], check=False, **run_kwargs)
     except Exception as e:
         print(f"Failed to open {path}: {e}")
 

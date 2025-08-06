@@ -10,6 +10,13 @@ from dataclasses import dataclass
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
 
+# Import CREATE_NO_WINDOW safely across platforms
+try:
+    from subprocess import CREATE_NO_WINDOW
+except ImportError:
+    # Not available on non-Windows systems
+    CREATE_NO_WINDOW = 0x08000000
+
 log = logging.getLogger(__name__)
 
 
@@ -73,13 +80,17 @@ class RuntimeDependencyCollection:
 
     @staticmethod
     def _run_command(command: str | list[str], cwd: str) -> None:
-        kwargs = {}
+        from typing import Any
+        
+        run_kwargs: dict[str, Any] = {}
         if PlatformUtils.get_platform_id().is_windows():
-            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore
+            run_kwargs["creationflags"] = CREATE_NO_WINDOW
         else:
             import pwd
 
-            kwargs["user"] = pwd.getpwuid(os.getuid()).pw_name
+            run_kwargs["user"] = pwd.getpwuid(os.getuid()).pw_name
+            # On Unix-like systems, start new session to detach from terminal
+            run_kwargs["start_new_session"] = True
 
         is_windows = platform.system() == "Windows"
         if not isinstance(command, str) and not is_windows:
@@ -96,7 +107,7 @@ class RuntimeDependencyCollection:
             cwd=cwd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            **kwargs,
+            **run_kwargs,
         )
         if completed_process.returncode != 0:
             log.warning("Command '%s' failed with return code %d", command, completed_process.returncode)

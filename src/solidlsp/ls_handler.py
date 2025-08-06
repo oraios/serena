@@ -14,6 +14,13 @@ from typing import Any
 import psutil
 from sensai.util.string import ToStringMixin
 
+# Import CREATE_NO_WINDOW safely across platforms
+try:
+    from subprocess import CREATE_NO_WINDOW
+except ImportError:
+    # Not available on non-Windows systems
+    CREATE_NO_WINDOW = 0x08000000
+
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_request import LanguageServerRequest
 from solidlsp.lsp_protocol_handler.lsp_requests import LspNotification
@@ -181,16 +188,27 @@ class SolidLanguageServerHandler:
             # on Linux/macOS
             cmd = " ".join(cmd)
         log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
-        self.process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stdin=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=child_proc_env,
-            cwd=self.process_launch_info.cwd,
-            start_new_session=self.start_independent_lsp_process,
-            shell=True,
-        )
+
+        # Configure subprocess arguments to prevent terminal/window spawning
+        popen_kwargs: dict[str, Any] = {
+            "stdout": subprocess.PIPE,
+            "stdin": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+            "env": child_proc_env,
+            "cwd": self.process_launch_info.cwd,
+            "start_new_session": self.start_independent_lsp_process,
+            "shell": not is_windows,  # Use shell on non-Windows platforms only
+        }
+
+        # Add platform-specific flags to prevent window creation
+        if is_windows:
+            popen_kwargs["creationflags"] = CREATE_NO_WINDOW
+        else:
+            # On Unix-like systems, ensure the process runs in background
+            # without inheriting terminal properties
+            popen_kwargs["preexec_fn"] = os.setsid if self.start_independent_lsp_process else None
+
+        self.process = subprocess.Popen(cmd, **popen_kwargs)
 
         # Check if process terminated immediately
         if self.process.returncode is not None:
