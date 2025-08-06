@@ -47,14 +47,7 @@ class BashLanguageServer(SolidLanguageServer):
         self.server_ready = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
 
-    @override
-    def is_ignored_dirname(self, dirname: str) -> bool:
-        return super().is_ignored_dirname(dirname) or dirname in [
-            "node_modules",
-            ".cache",
-            "tmp",
-            "temp",
-        ]
+
 
     @classmethod
     def _setup_runtime_dependencies(
