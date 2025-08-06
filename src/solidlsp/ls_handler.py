@@ -206,7 +206,8 @@ class SolidLanguageServerHandler:
         else:
             # On Unix-like systems, ensure the process runs in background
             # without inheriting terminal properties
-            popen_kwargs["preexec_fn"] = os.setsid if self.start_independent_lsp_process else None
+            if self.start_independent_lsp_process:
+                popen_kwargs["preexec_fn"] = os.setsid
 
         self.process = subprocess.Popen(cmd, **popen_kwargs)
 
