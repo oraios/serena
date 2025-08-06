@@ -189,33 +189,35 @@ class SolidLanguageServerHandler:
         log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
 
         # Configure subprocess arguments to prevent terminal/window spawning
-        popen_kwargs: dict[str, Any] = {
+        # Keep original shell behavior but add window suppression
+        def safe_setsid():
+            try:
+                os.setsid()
+            except OSError:
+                # setsid can fail if already a session leader or in certain test environments
+                # This is not critical, so we continue without it
+                pass
+
+        # Start with base arguments, keeping original shell logic
+        popen_args = {
             "stdout": subprocess.PIPE,
             "stdin": subprocess.PIPE,
             "stderr": subprocess.PIPE,
             "env": child_proc_env,
             "cwd": self.process_launch_info.cwd,
             "start_new_session": self.start_independent_lsp_process,
-            "shell": not is_windows,  # Use shell on non-Windows platforms only
+            "shell": True,  # Keep original shell=True for all platforms
         }
 
         # Add platform-specific flags to prevent window creation
         if is_windows:
-            popen_kwargs["creationflags"] = CREATE_NO_WINDOW
+            popen_args["creationflags"] = CREATE_NO_WINDOW
         else:
             # On Unix-like systems, ensure the process runs in background
-            # without inheriting terminal properties
             if self.start_independent_lsp_process:
-                def safe_setsid():
-                    try:
-                        os.setsid()
-                    except OSError:
-                        # setsid can fail if already a session leader or in certain test environments
-                        # This is not critical, so we continue without it
-                        pass
-                popen_kwargs["preexec_fn"] = safe_setsid
+                popen_args["preexec_fn"] = safe_setsid
 
-        self.process = subprocess.Popen(cmd, **popen_kwargs)
+        self.process = subprocess.Popen(cmd, **popen_args)
 
         # Check if process terminated immediately
         if self.process.returncode is not None:

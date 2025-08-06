@@ -34,47 +34,48 @@ def execute_shell_command(command: str, cwd: str | None = None, capture_stderr: 
 
     is_windows = platform.system() == "Windows"
 
-    # Configure subprocess arguments to prevent terminal/window spawning
-    popen_kwargs: dict[str, Any] = {
-        "shell": not is_windows,
-        "stdin": subprocess.DEVNULL,
-        "stdout": subprocess.PIPE,
-        "stderr": subprocess.PIPE if capture_stderr else None,
-        "text": True,
-        "encoding": "utf-8",
-        "errors": "replace",
-        "cwd": cwd,
-    }
-
-    # Add platform-specific flags to prevent window creation
+    # Platform-specific kwargs for window suppression
+    platform_kwargs: dict[str, Any] = {}
     if is_windows:
-        popen_kwargs["creationflags"] = CREATE_NO_WINDOW
+        platform_kwargs["creationflags"] = CREATE_NO_WINDOW
     else:
         # On Unix-like systems, start new session to detach from terminal
-        popen_kwargs["start_new_session"] = True
+        platform_kwargs["start_new_session"] = True
 
-    process = subprocess.Popen(command, **popen_kwargs)
+    process = subprocess.Popen(
+        command,
+        shell=not is_windows,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE if capture_stderr else None,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=cwd,
+        **platform_kwargs,
+    )
 
     stdout, stderr = process.communicate()
     return ShellCommandResult(stdout=stdout, stderr=stderr, return_code=process.returncode, cwd=cwd)
 
 
 def subprocess_check_output(args: list[str], encoding: str = "utf-8", strip: bool = True, timeout: float | None = None) -> str:
-    run_kwargs: dict[str, Any] = {
-        "stdin": subprocess.DEVNULL,
-        "stderr": subprocess.PIPE,
-        "timeout": timeout,
-        "env": os.environ.copy(),
-    }
-
-    # Add platform-specific flags to prevent window creation
+    # Platform-specific kwargs for window suppression
+    platform_kwargs: dict[str, Any] = {}
     if platform.system() == "Windows":
-        run_kwargs["creationflags"] = CREATE_NO_WINDOW
+        platform_kwargs["creationflags"] = CREATE_NO_WINDOW
     else:
         # On Unix-like systems, start new session to detach from terminal
-        run_kwargs["start_new_session"] = True
+        platform_kwargs["start_new_session"] = True
 
-    output = subprocess.check_output(args, **run_kwargs).decode(encoding)
+    output = subprocess.check_output(
+        args,
+        stdin=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        timeout=timeout,
+        env=os.environ.copy(),
+        **platform_kwargs,
+    ).decode(encoding)
     if strip:
         output = output.strip()
     return output
