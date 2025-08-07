@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,21 +13,63 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <script src="dashboard.js"></script>
     <style>
+        :root {
+            /* Light theme variables */
+            --bg-primary: #f5f5f5;
+            --bg-secondary: #ffffff;
+            --text-primary: #000000;
+            --text-secondary: #333333;
+            --text-muted: #666666;
+            --border-color: #ddd;
+            --btn-primary: #eaa45d;
+            --btn-hover: #dca662;
+            --btn-disabled: #6c757d;
+            --shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            --tool-highlight: #ffff00;
+            --log-debug: #808080;
+            --log-info: #000000;
+            --log-warning: #FF8C00;
+            --log-error: #FF0000;
+            --stats-header: #f8f9fa;
+        }
+
+        [data-theme="dark"] {
+            /* Dark theme variables */
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #2d2d2d;
+            --text-primary: #ffffff;
+            --text-secondary: #e0e0e0;
+            --text-muted: #b0b0b0;
+            --border-color: #444;
+            --btn-primary: #eaa45d;
+            --btn-hover: #dca662;
+            --btn-disabled: #6c757d;
+            --shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            --tool-highlight: #ffff00;
+            --log-debug: #808080;
+            --log-info: #ffffff;
+            --log-warning: #FF8C00;
+            --log-error: #FF0000;
+            --stats-header: #3a3a3a;
+        }
+
         body {
             font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
             margin: 0;
             padding: 20px;
-            background-color: #f5f5f5;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
-        
+
         .header {
             text-align: center;
             margin-bottom: 20px;
         }
-        
+
         .log-container {
-            background-color: white;
-            border: 1px solid #ddd;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
             border-radius: 5px;
             height: 600px;
             overflow-y: auto;
@@ -35,11 +78,18 @@
             white-space: pre-wrap;
             font-size: 12px;
             line-height: 1.4;
+            color: var(--text-primary);
+            transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
         }
-        
+
         .controls {
             margin-bottom: 10px;
             text-align: center;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
         }
 
         .logo {
@@ -48,58 +98,83 @@
         }
 
         .btn {
-            background-color: #eaa45d;
+            background-color: var(--btn-primary);
             color: white;
             border: none;
             padding: 8px 16px;
             border-radius: 4px;
             cursor: pointer;
             font-size: 14px;
+            transition: background-color 0.3s ease;
         }
-        
+
         .btn:hover {
-            background-color: #dca662;
+            background-color: var(--btn-hover);
         }
-        
+
         .btn:disabled {
-            background-color: #6c757d;
+            background-color: var(--btn-disabled);
             cursor: not-allowed;
         }
-        
+
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 6px 12px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+        }
+
+        .theme-toggle:hover {
+            background-color: var(--border-color);
+        }
+
+        .theme-toggle .icon {
+            font-size: 16px;
+        }
+
         .log-debug {
-            color: #808080; /* Gray */
+            color: var(--log-debug);
         }
+
         .log-info {
-            color: #000000; /* Black */
+            color: var(--log-info);
         }
+
         .log-warning {
-            color: #FF8C00; /* Dark Orange */
+            color: var(--log-warning);
         }
+
         .log-error {
-            color: #FF0000; /* Red */
+            color: var(--log-error);
         }
+
         .log-default {
-            color: #000000; /* Black */
+            color: var(--log-info);
         }
-        
+
         /* Tool name highlighting */
         .tool-name {
-            background-color: #ffff00; /* Yellow background */
+            background-color: var(--tool-highlight);
             font-weight: bold;
         }
-        
+
         .loading {
             text-align: center;
-            color: #666;
+            color: var(--text-muted);
             font-style: italic;
         }
-        
+
         .error-message {
-            color: #FF0000;
+            color: var(--log-error);
             text-align: center;
             margin: 10px 0;
         }
-        
+
         .charts-container {
             display: flex;
             flex-wrap: wrap;
@@ -108,72 +183,86 @@
             max-width: 1400px;
             margin: 0 auto;
         }
-        
+
         .chart-group {
             flex: 1;
             min-width: 280px;
             max-width: 320px;
             text-align: center;
         }
-        
+
         .chart-wide {
             flex: 0 0 100%;
             min-width: 100%;
             margin-top: 10px;
         }
-        
+
         .chart-group h3 {
             margin: 0 0 10px 0;
-            color: #333;
+            color: var(--text-secondary);
         }
-        
+
         .stats-summary {
             margin: 0 auto;
             border-collapse: collapse;
-            background: white;
+            background: var(--bg-secondary);
             border-radius: 5px;
             overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: var(--shadow);
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
         }
-        
+
         .stats-summary th,
         .stats-summary td {
             padding: 10px 20px;
             text-align: left;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+            transition: border-color 0.3s ease, color 0.3s ease;
         }
-        
+
         .stats-summary th {
-            background-color: #f8f9fa;
+            background-color: var(--stats-header);
             font-weight: bold;
+            transition: background-color 0.3s ease;
         }
-        
+
         .stats-summary tr:last-child td {
             border-bottom: none;
         }
-        
+
         @media (max-width: 768px) {
             .charts-container {
                 flex-direction: column;
             }
-            
+
             .chart-group,
             .chart-wide {
                 min-width: auto;
                 max-width: none;
             }
+
+            .controls {
+                flex-direction: column;
+                gap: 5px;
+            }
         }
     </style>
 </head>
+
 <body>
     <div class="header">
         <img src="serena-logs.png" alt="Serena" style="max-width: 400px; height: auto;">
     </div>
-    
+
     <div class="controls">
         <button id="load-logs" class="btn">Reload Log</button>
         <button id="shutdown" class="btn">Shutdown Server</button>
         <button id="toggle-stats" class="btn">Show Stats</button>
+        <div id="theme-toggle" class="theme-toggle" title="Toggle theme">
+            <span class="icon" id="theme-icon">🌙</span>
+            <span id="theme-text">Dark</span>
+        </div>
     </div>
 
     <div id="error-container"></div>
@@ -184,14 +273,14 @@
             <button id="refresh-stats" class="btn">Refresh Stats</button>
             <button id="clear-stats" class="btn">Clear Stats</button>
         </div>
-        
+
         <div id="stats-summary" style="margin-bottom:20px; text-align:center;"></div>
         <div id="estimator-name" style="text-align:center; margin-bottom:10px;"></div>
-        <div id="no-stats-message" style="text-align:center; color:#666; font-style:italic; display:none;">
-          No tool stats collected. Have you enabled tool stats collection in the configuration?
+        <div id="no-stats-message" style="text-align:center; color:var(--text-muted); font-style:italic; display:none;">
+            No tool stats collected. Have you enabled tool stats collection in the configuration?
         </div>
 
-        
+
         <div class="charts-container">
             <div class="chart-group">
                 <h3>Tool Calls</h3>
@@ -213,9 +302,10 @@
     </div>
 
     <script>
-        $(document).ready(function() {
+        $(document).ready(function () {
             const dashboard = new Dashboard();
         });
     </script>
 </body>
+
 </html>
