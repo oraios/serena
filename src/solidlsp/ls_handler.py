@@ -370,7 +370,13 @@ class SolidLanguageServerHandler:
                 line = self.process.stderr.readline()
                 if not line:
                     continue
-                log.error(line.decode(ENCODING, errors="replace"))
+                line = line.decode(ENCODING, errors="replace")
+                line_lower = line.lower()
+                if "error" in line_lower or "exception" in line_lower or line.startswith("E["):
+                    level = logging.ERROR
+                else:
+                    level = logging.INFO
+                log.log(level, line)
         except Exception as e:
             log.error("Error while reading stderr from language server process: %s", e, exc_info=e)
         if not self._is_shutting_down:

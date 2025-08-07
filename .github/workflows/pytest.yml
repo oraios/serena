@@ -102,6 +102,9 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: uv pip install -e ".[dev]"
+      - name: Check formatting
+        shell: bash
+        run: uv run poe lint
       - name: Test with pytest
         shell: bash
         run: uv run poe test

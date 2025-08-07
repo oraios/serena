@@ -25,6 +25,7 @@ from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.zip import SafeZipExtractor
 
 from .common import RuntimeDependency
 
@@ -386,8 +387,9 @@ class CSharpLanguageServer(SolidLanguageServer):
             package_extract_dir = temp_dir / f"{package_name}.{package_version}"
             package_extract_dir.mkdir(exist_ok=True)
 
-            with zipfile.ZipFile(nupkg_file, "r") as zip_ref:
-                zip_ref.extractall(package_extract_dir)
+            # Use SafeZipExtractor to handle long paths and skip errors
+            extractor = SafeZipExtractor(archive_path=nupkg_file, extract_dir=package_extract_dir, verbose=False)
+            extractor.extract_all()
 
             # Clean up the nupkg file
             nupkg_file.unlink()
