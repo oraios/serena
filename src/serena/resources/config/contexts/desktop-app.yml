@@ -11,3 +11,7 @@ prompt: |
   a diagram in addition to your text-based communication. Note that in the chat interface you have various rendering
   options for text, html, and mermaid diagrams, as has been explained to you in your initial instructions.
 excluded_tools: []
+included_optional_tools:
+  - switch_modes
+
+tool_description_overrides: {}

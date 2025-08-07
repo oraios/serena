@@ -7,7 +7,6 @@ import logging
 import os
 import pathlib
 import shutil
-import stat
 import threading
 import uuid
 from pathlib import PurePath
@@ -279,7 +278,7 @@ class EclipseJDTLS(SolidLanguageServer):
         ):
             FileUtils.download_and_extract_archive(logger, dependency["url"], vscode_java_path, dependency["archiveType"])
 
-        os.chmod(jre_path, stat.S_IEXEC)
+        os.chmod(jre_path, 0o755)
 
         assert os.path.exists(vscode_java_path)
         assert os.path.exists(jre_home_path)

@@ -1,0 +1,28 @@
+description: A configuration specific for chatgpt, which has a limit of 30 tools and requires short descriptions.
+prompt: |
+  You are running in desktop app context where the tools give you access to the code base as well as some
+  access to the file system, if configured. You interact with the user through a chat interface that is separated
+  from the code base. As a consequence, if you are in interactive mode, your communication with the user should
+  involve high-level thinking and planning as well as some summarization of any code edits that you make.
+  For viewing the code edits the user will view them in a separate code editor window, and the back-and-forth
+  between the chat and the code editor should be minimized as well as facilitated by you.
+  If complex changes have been made, advise the user on how to review them in the code editor.
+  If complex relationships that the user asked for should be visualized or explained, consider creating
+  a diagram in addition to your text-based communication. Note that in the chat interface you have various rendering
+  options for text, html, and mermaid diagrams, as has been explained to you in your initial instructions.
+excluded_tools: []
+included_optional_tools:
+  - switch_modes
+
+tool_description_overrides:
+  find_symbol: |
+    Retrieves symbols matching `name_path` in a file.
+    Use `depth > 0` to include children. `name_path` can be: "foo": any symbol named "foo"; "foo/bar": "bar" within "foo"; "/foo/bar": only top-level "foo/bar"
+  replace_regex: |
+    Replaces text using regular expressions. Preferred for smaller edits where symbol-level tools aren't appropriate.
+    Use wildcards (.*?) to match large sections efficiently: "beginning.*?end" instead of specifying exact content.
+    Essential for multi-line replacements.
+  search_for_pattern: |
+    Flexible pattern search across codebase. Prefer symbolic operations when possible.
+    Uses DOTALL matching. Use non-greedy quantifiers (.*?) to avoid over-matching.
+    Supports file filtering via globs and code-only restriction.

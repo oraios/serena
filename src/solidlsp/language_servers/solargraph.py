@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import pathlib
-import stat
+import shutil
 import subprocess
 import threading
 
@@ -48,6 +48,9 @@ class Solargraph(SolidLanguageServer):
         self.initialize_searcher_command_available = threading.Event()
         self.resolve_main_method_available = threading.Event()
 
+        # Set timeout for Solargraph requests - Bundler environments may need more time
+        self.set_request_timeout(120.0)  # 120 seconds for initialization and requests
+
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["vendor"]
@@ -57,17 +60,6 @@ class Solargraph(SolidLanguageServer):
         """
         Setup runtime dependencies for Solargraph and return the command to start the server.
         """
-        runtime_dependencies = [
-            {
-                "url": "https://rubygems.org/downloads/solargraph-0.51.1.gem",
-                "installCommand": "gem install solargraph -v 0.51.1",
-                "binaryName": "solargraph",
-                "archiveType": "gem",
-            }
-        ]
-
-        dependency = runtime_dependencies[0]
-
         # Check if Ruby is installed
         try:
             result = subprocess.run(["ruby", "--version"], check=True, capture_output=True, cwd=repository_root_path)
@@ -78,18 +70,84 @@ class Solargraph(SolidLanguageServer):
         except FileNotFoundError as e:
             raise RuntimeError("Ruby is not installed. Please install Ruby before continuing.") from e
 
-        # Check if solargraph is installed
-        try:
-            result = subprocess.run(
-                ["gem", "list", "^solargraph$", "-i"], check=False, capture_output=True, text=True, cwd=repository_root_path
-            )
-            if result.stdout.strip() == "false":
-                logger.log("Installing Solargraph...", logging.INFO)
-                subprocess.run(dependency["installCommand"].split(), check=True, capture_output=True, cwd=repository_root_path)
+        # Check for Bundler project (Gemfile exists)
+        gemfile_path = os.path.join(repository_root_path, "Gemfile")
+        gemfile_lock_path = os.path.join(repository_root_path, "Gemfile.lock")
+        is_bundler_project = os.path.exists(gemfile_path)
 
-            return "gem exec solargraph"
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to check or install Solargraph. {e.stderr}") from e
+        if is_bundler_project:
+            logger.log("Detected Bundler project (Gemfile found)", logging.INFO)
+
+            # Check if bundle command is available
+            bundle_path = shutil.which("bundle")
+            if not bundle_path:
+                # Try common bundle executables
+                for bundle_cmd in ["bin/bundle", "bundle"]:
+                    bundle_full_path = (
+                        os.path.join(repository_root_path, bundle_cmd) if bundle_cmd.startswith("bin/") else shutil.which(bundle_cmd)
+                    )
+                    if bundle_full_path and os.path.exists(bundle_full_path):
+                        bundle_path = bundle_full_path if bundle_cmd.startswith("bin/") else bundle_cmd
+                        break
+
+            if not bundle_path:
+                raise RuntimeError("Bundler project detected but 'bundle' command not found. Please install Bundler.")
+
+            # Check if solargraph is in Gemfile.lock
+            solargraph_in_bundle = False
+            if os.path.exists(gemfile_lock_path):
+                try:
+                    with open(gemfile_lock_path) as f:
+                        content = f.read()
+                        solargraph_in_bundle = "solargraph" in content.lower()
+                except Exception as e:
+                    logger.log(f"Warning: Could not read Gemfile.lock: {e}", logging.WARNING)
+
+            if solargraph_in_bundle:
+                logger.log("Found solargraph in Gemfile.lock", logging.INFO)
+                return f"{bundle_path} exec solargraph"
+            else:
+                logger.log(
+                    "solargraph not found in Gemfile.lock. Please add 'gem \"solargraph\"' to your Gemfile and run 'bundle install'",
+                    logging.WARNING,
+                )
+                # Fall through to global installation check
+
+        # Check if solargraph is installed globally
+        # First, try to find solargraph in PATH (includes asdf shims)
+        solargraph_path = shutil.which("solargraph")
+        if solargraph_path:
+            logger.log(f"Found solargraph at: {solargraph_path}", logging.INFO)
+            return solargraph_path
+
+        # Fallback to gem exec (for non-Bundler projects or when global solargraph not found)
+        if not is_bundler_project:
+            runtime_dependencies = [
+                {
+                    "url": "https://rubygems.org/downloads/solargraph-0.51.1.gem",
+                    "installCommand": "gem install solargraph -v 0.51.1",
+                    "binaryName": "solargraph",
+                    "archiveType": "gem",
+                }
+            ]
+
+            dependency = runtime_dependencies[0]
+            try:
+                result = subprocess.run(
+                    ["gem", "list", "^solargraph$", "-i"], check=False, capture_output=True, text=True, cwd=repository_root_path
+                )
+                if result.stdout.strip() == "false":
+                    logger.log("Installing Solargraph...", logging.INFO)
+                    subprocess.run(dependency["installCommand"].split(), check=True, capture_output=True, cwd=repository_root_path)
+
+                return "gem exec solargraph"
+            except subprocess.CalledProcessError as e:
+                raise RuntimeError(f"Failed to check or install Solargraph. {e.stderr}") from e
+        else:
+            raise RuntimeError(
+                "This appears to be a Bundler project, but solargraph is not available. "
+                "Please add 'gem \"solargraph\"' to your Gemfile and run 'bundle install'."
+            )
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
@@ -170,4 +228,16 @@ class Solargraph(SolidLanguageServer):
         self.completions_available.set()
 
         self.server_ready.set()
-        self.server_ready.wait()
+
+        # Wait for server to be ready with timeout, especially important for Bundler environments
+        server_ready_timeout = 60.0
+        self.logger.log(f"Waiting up to {server_ready_timeout} seconds for Solargraph to become ready...", logging.INFO)
+
+        if self.server_ready.wait(timeout=server_ready_timeout):
+            self.logger.log("Solargraph is ready and available for requests", logging.INFO)
+        else:
+            self.logger.log(
+                f"Timeout waiting for Solargraph to become ready within {server_ready_timeout} seconds, proceeding anyway. "
+                "This may indicate slow initialization in Bundler environment or large project indexing.",
+                logging.WARNING,
+            )

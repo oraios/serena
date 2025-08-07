@@ -2,3 +2,10 @@
 description: Description of the context, not used in the code.
 prompt: Prompt that will form part of the system prompt/initial instructions for agents started in this context.
 excluded_tools: []
+
+# several tools are excluded by default and have to be explicitly included by the user
+included_optional_tools: []
+
+# mapping of tool names to an override of their descriptions (the default description is the docstring of the Tool's apply method).
+# Sometimes, tool descriptions are too long (e.g., for ChatGPT), or users may want to override them for another reason.
+tool_description_overrides: {}

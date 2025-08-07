@@ -10,15 +10,8 @@ class WriteMemoryTool(Tool):
 
     def apply(self, memory_name: str, content: str, max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH) -> str:
         """
-        Write some information about this project that can be useful for future tasks to a memory.
-        Use markdown formatting for the content.
-        The information should be short and to the point.
-        The memory name should be meaningful, such that from the name you can infer what the information is about.
-        It is better to have multiple small memories than to have a single large one because
-        memories will be read one by one and we only ever want to read relevant memories.
-
-        This tool is either called during the onboarding process or when you have identified
-        something worth remembering about the project from the past conversation.
+        Write some information about this project that can be useful for future tasks to a memory in md format.
+        The memory name should be meaningful.
         """
         if len(content) > max_answer_chars:
             raise ValueError(

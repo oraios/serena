@@ -96,7 +96,7 @@ class ThinkAboutWhetherYouAreDoneTool(Tool):
         return self.prompt_factory.create_think_about_whether_you_are_done()
 
 
-class SummarizeChangesTool(Tool):
+class SummarizeChangesTool(Tool, ToolMarkerOptional):
     """
     Provides instructions for summarizing the changes made to the codebase.
     """

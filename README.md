@@ -75,6 +75,7 @@ With Serena, we provide
      * Java (_Note_: startup is slow, initial startup especially so. There may be issues with java on macos and linux, we are working on it.)
      * Elixir (Requires NextLS and Elixir install; **Windows not supported** - Next LS does not provide Windows binaries)
      * Clojure
+     * Bash (Requires Node.js and npm for bash-language-server installation)
      * C/C++ (You may experience issues with finding references, we are working on it)
  * indirect support (may require some code changes/manual installation) for:
      * Ruby (untested)

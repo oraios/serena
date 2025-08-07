@@ -4,11 +4,18 @@ Language server-related tools
 
 import dataclasses
 import json
+import os
 from collections.abc import Sequence
 from copy import copy
 from typing import Any
 
-from serena.tools import SUCCESS_RESULT, TOOL_DEFAULT_MAX_ANSWER_LENGTH, Tool, ToolMarkerCanEdit
+from serena.tools import (
+    SUCCESS_RESULT,
+    TOOL_DEFAULT_MAX_ANSWER_LENGTH,
+    Tool,
+    ToolMarkerSymbolicEdit,
+    ToolMarkerSymbolicRead,
+)
 from solidlsp.ls_types import SymbolKind
 
 
@@ -33,44 +40,45 @@ class RestartLanguageServerTool(Tool):
 
     def apply(self) -> str:
         """Use this tool only on explicit user request or after confirmation.
-        It may be necessary to restart the language server if the user performs edits
-        not through Serena, so the language server state becomes outdated and further editing attempts lead to errors.
-
-        If such editing errors happen, you should suggest using this tool.
+        It may be necessary to restart the language server if it hangs.
         """
         self.agent.reset_language_server()
         return SUCCESS_RESULT
 
 
-class GetSymbolsOverviewTool(Tool):
+class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
     """
     Gets an overview of the top-level symbols defined in a given file or directory.
     """
 
     def apply(self, relative_path: str, max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH) -> str:
         """
-        Gets an overview of the given file or directory.
-        For each analyzed file, we list the top-level symbols in the file (name_path, kind).
-        Use this tool to get a high-level understanding of the code symbols.
-        Calling this is often a good idea before more targeted reading, searching or editing operations on the code symbols.
-        Before requesting a symbol overview, it is usually a good idea to narrow down the scope of the overview
-        by first understanding the basic directory structure of the repository that you can get from memories
-        or by using the `list_dir` and `find_file` tools (or similar).
+        Use this tool to get a high-level understanding of the code symbols in a file.
+        This should be the first tool to call when you want to understand a new file, unless you already know
+        what you are looking for.
 
         :param relative_path: the relative path to the file or directory to get the overview of
         :param max_answer_chars: if the overview is longer than this number of characters,
             no content will be returned. Don't adjust unless there is really no other way to get the content
             required for the task. If the overview is too long, you should use a smaller directory instead,
             (e.g. a subdirectory).
-        :return: a JSON object mapping relative paths of all contained files to info about top-level symbols in the file (name_path, kind).
+        :return: a JSON object containing info about top-level symbols in the file
         """
         symbol_retriever = self.create_language_server_symbol_retriever()
-        result = symbol_retriever.get_symbol_overview(relative_path)
-        result_json_str = json.dumps({k: [dataclasses.asdict(i) for i in l] for k, l in result.items()})
+        file_path = os.path.join(self.project.project_root, relative_path)
+
+        # The symbol overview is capable of working with both files and directories,
+        # but we want to ensure that the user provides a file path.
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File or directory {relative_path} does not exist in the project.")
+        if os.path.isdir(file_path):
+            raise ValueError(f"Expected a file path, but got a directory path: {relative_path}. ")
+        result = symbol_retriever.get_symbol_overview(relative_path)[relative_path]
+        result_json_str = json.dumps([dataclasses.asdict(i) for i in result])
         return self._limit_length(result_json_str, max_answer_chars)
 
 
-class FindSymbolTool(Tool):
+class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
     """
     Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
     """
@@ -132,7 +140,7 @@ class FindSymbolTool(Tool):
         :param exclude_kinds: Optional. List of LSP symbol kind integers to exclude. Takes precedence over `include_kinds`.
         :param substring_matching: If True, use substring matching for the last segment of `name`.
         :param max_answer_chars: Max characters for the JSON result. If exceeded, no content is returned.
-        :return: JSON string: a list of symbols (with locations) matching the name.
+        :return: a list of symbols (with locations) matching the name.
         """
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
@@ -150,7 +158,7 @@ class FindSymbolTool(Tool):
         return self._limit_length(result, max_answer_chars)
 
 
-class FindReferencingSymbolsTool(Tool):
+class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
     """
     Finds symbols that reference the symbol at the given location (optionally filtered by type).
     """
@@ -164,10 +172,8 @@ class FindReferencingSymbolsTool(Tool):
         max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
     ) -> str:
         """
-        Finds symbols that reference the symbol at the given `name_path`. The result will contain metadata about the referencing symbols
-        as well as a short code snippet around the reference (unless `include_body` is True, then the short snippet will be omitted).
-        Note that among other kinds of references, this function can be used to find (direct) subclasses of a class,
-        as subclasses are referencing symbols that have the kind class.
+        Finds references to the symbol at the given `name_path`. The result will contain metadata about the referencing symbols
+        as well as a short code snippet around the reference.
 
         :param name_path: for finding the symbol to find references for, same logic as in the `find_symbol` tool.
         :param relative_path: the relative path to the file containing the symbol for which to find references.
@@ -204,7 +210,7 @@ class FindReferencingSymbolsTool(Tool):
         return self._limit_length(result, max_answer_chars)
 
 
-class ReplaceSymbolBodyTool(Tool, ToolMarkerCanEdit):
+class ReplaceSymbolBodyTool(Tool, ToolMarkerSymbolicEdit):
     """
     Replaces the full definition of a symbol.
     """
@@ -232,7 +238,7 @@ class ReplaceSymbolBodyTool(Tool, ToolMarkerCanEdit):
         return SUCCESS_RESULT
 
 
-class InsertAfterSymbolTool(Tool, ToolMarkerCanEdit):
+class InsertAfterSymbolTool(Tool, ToolMarkerSymbolicEdit):
     """
     Inserts content after the end of the definition of a given symbol.
     """
@@ -257,7 +263,7 @@ class InsertAfterSymbolTool(Tool, ToolMarkerCanEdit):
         return SUCCESS_RESULT
 
 
-class InsertBeforeSymbolTool(Tool, ToolMarkerCanEdit):
+class InsertBeforeSymbolTool(Tool, ToolMarkerSymbolicEdit):
     """
     Inserts content before the beginning of the definition of a given symbol.
     """
@@ -269,9 +275,9 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerCanEdit):
         body: str,
     ) -> str:
         """
-        Inserts the given body/content before the beginning of the definition of the given symbol (via the symbol's location).
-        A typical use case is to insert a new class, function, method, field or variable assignment.
-        It also can be used to insert a new import statement before the first symbol in the file.
+        Inserts the given content before the beginning of the definition of the given symbol (via the symbol's location).
+        A typical use case is to insert a new class, function, method, field or variable assignment; or
+        a new import statement before the first symbol in the file.
 
         :param name_path: name path of the symbol before which to insert content (definitions in the `find_symbol` tool apply)
         :param relative_path: the relative path to the file containing the symbol

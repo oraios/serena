@@ -14,7 +14,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 from serena.text_utils import search_files
-from serena.tools import SUCCESS_RESULT, TOOL_DEFAULT_MAX_ANSWER_LENGTH, EditedFileContext, Tool, ToolMarkerCanEdit
+from serena.tools import SUCCESS_RESULT, TOOL_DEFAULT_MAX_ANSWER_LENGTH, EditedFileContext, Tool, ToolMarkerCanEdit, ToolMarkerOptional
 from serena.util.file_system import scan_directory
 
 
@@ -29,7 +29,6 @@ class ReadFileTool(Tool):
         """
         Reads the given file or a chunk of it. Generally, symbolic operations
         like find_symbol or find_referencing_symbols should be preferred if you know which symbols you are looking for.
-        Reading the entire file is only recommended if there is no other way to get the content required for the task.
 
         :param relative_path: the relative path to the file to read
         :param start_line: the 0-based index of the first line to be retrieved.
@@ -60,14 +59,7 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
 
     def apply(self, relative_path: str, content: str) -> str:
         """
-        Write a new file (or overwrite an existing file). For existing files, it is strongly recommended
-        to use symbolic operations like replace_symbol_body or insert_after_symbol/insert_before_symbol, if possible.
-        You can also use insert_at_line to insert content at a specific line for existing files if the symbolic operations
-        are not the right choice for what you want to do.
-
-        If ever used on an existing file, the content has to be the complete content of that file (so it
-        may never end with something like "The remaining content of the file is left unchanged.").
-        For operations that just replace a part of a file, use the replace_lines or the symbolic editing tools instead.
+        Write a new file or overwrite an existing file.
 
         :param relative_path: the relative path to the file to create
         :param content: the (utf-8-encoded) content to write to the file
@@ -200,7 +192,7 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
         return SUCCESS_RESULT
 
 
-class DeleteLinesTool(Tool, ToolMarkerCanEdit):
+class DeleteLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
     """
     Deletes a range of lines within a file.
     """
@@ -228,7 +220,7 @@ class DeleteLinesTool(Tool, ToolMarkerCanEdit):
         return SUCCESS_RESULT
 
 
-class ReplaceLinesTool(Tool, ToolMarkerCanEdit):
+class ReplaceLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
     """
     Replaces a range of lines within a file with new content.
     """
@@ -259,7 +251,7 @@ class ReplaceLinesTool(Tool, ToolMarkerCanEdit):
         return SUCCESS_RESULT
 
 
-class InsertAtLineTool(Tool, ToolMarkerCanEdit):
+class InsertAtLineTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
     """
     Inserts content at a given line in a file.
     """
@@ -351,7 +343,7 @@ class SearchForPatternTool(Tool):
             For example, for finding classes or methods from a name pattern.
             Setting to False is a better choice if you also want to search in non-code files, like in html or yaml files,
             which is why it is the default.
-        :return: A JSON object mapping file paths to lists of matched consecutive lines (with context, if requested).
+        :return: A mapping of file paths to lists of matched consecutive lines.
         """
         abs_path = os.path.join(self.get_project_root(), relative_path)
         if not os.path.exists(abs_path):
