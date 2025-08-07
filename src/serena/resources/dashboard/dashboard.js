@@ -500,14 +500,56 @@ class Dashboard {
     }
 
     initializeTheme() {
-        // Get saved theme from localStorage or default to 'light'
-        const savedTheme = localStorage.getItem('serena-theme') || 'light';
-        this.setTheme(savedTheme);
+        // Check if user has manually set a theme preference
+        const savedTheme = localStorage.getItem('serena-theme');
+        
+        if (savedTheme) {
+            // User has manually set a preference, use it
+            this.setTheme(savedTheme);
+        } else {
+            // No manual preference, detect system color scheme
+            this.detectSystemTheme();
+        }
+        
+        // Listen for system theme changes
+        this.setupSystemThemeListener();
+    }
+
+    detectSystemTheme() {
+        // Check if system prefers dark mode
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const theme = prefersDark ? 'dark' : 'light';
+        this.setTheme(theme);
+    }
+
+    setupSystemThemeListener() {
+        // Listen for changes in system color scheme
+        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        
+        const handleSystemThemeChange = (e) => {
+            // Only auto-switch if user hasn't manually set a preference
+            const savedTheme = localStorage.getItem('serena-theme');
+            if (!savedTheme) {
+                const newTheme = e.matches ? 'dark' : 'light';
+                this.setTheme(newTheme);
+            }
+        };
+        
+        // Add listener for system theme changes
+        if (mediaQuery.addEventListener) {
+            mediaQuery.addEventListener('change', handleSystemThemeChange);
+        } else {
+            // Fallback for older browsers
+            mediaQuery.addListener(handleSystemThemeChange);
+        }
     }
 
     toggleTheme() {
         const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
         const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+        
+        // When user manually toggles, save their preference
+        localStorage.setItem('serena-theme', newTheme);
         this.setTheme(newTheme);
     }
 
