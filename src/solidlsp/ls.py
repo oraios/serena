@@ -226,6 +226,11 @@ class SolidLanguageServer(ABC):
 
             ls = TerraformLS(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
+        elif config.code_language == Language.BASH:
+            from solidlsp.language_servers.bash_language_server import BashLanguageServer
+
+            ls = BashLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
         else:
             logger.log(f"Language {config.code_language} is not supported", logging.ERROR)
             raise SolidLSPException(f"Language {config.code_language} is not supported")

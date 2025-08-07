@@ -235,6 +235,7 @@ ignore = [
   "SIM117",   # forbids nested with statements
   "C400",     # wants to unnecessarily force use of list comprehension
   "UP037",    # can incorrectly (!) convert quoted type to unquoted type, causing an error
+  "UP045",    # imposes T | None instead of Optional[T]
 ]
 unfixable = ["F841", "F601", "F602", "B018"]
 extend-fixable = ["F401", "B905", "W291"]
@@ -259,7 +260,9 @@ markers = [
   "csharp: language server running for C#",
   "elixir: language server running for Elixir",
   "terraform: language server running for Terraform",
+  "bash: language server running for Bash",
   "snapshot: snapshot tests for symbolic editing operations",
+  "ruby: language server running for Ruby",
 ]
 
 [tool.codespell]

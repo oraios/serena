@@ -56,6 +56,13 @@ class ClojureLSP(SolidLanguageServer):
             ),
             RuntimeDependency(
                 id="clojure-lsp",
+                url=f"{clojure_lsp_releases}/clojure-lsp-native-macos-amd64.zip",
+                platform_id="osx-x64",
+                archive_type="zip",
+                binary_name="clojure-lsp",
+            ),
+            RuntimeDependency(
+                id="clojure-lsp",
                 url=f"{clojure_lsp_releases}/clojure-lsp-native-linux-aarch64.zip",
                 platform_id="linux-arm64",
                 archive_type="zip",

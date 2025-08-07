@@ -69,6 +69,13 @@ jobs:
         with:
           terraform_version: "1.5.0"
           terraform_wrapper: false
+      - name: Install Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+      - name: Install Ruby language server
+        shell: bash
+        run: gem install solargraph
       - name: Install uv
         shell: bash
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -95,6 +102,9 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: uv pip install -e ".[dev]"
+      - name: Check formatting
+        shell: bash
+        run: uv run poe lint
       - name: Test with pytest
         shell: bash
         run: uv run poe test
