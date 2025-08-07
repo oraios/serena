@@ -43,7 +43,7 @@ class Solargraph(SolidLanguageServer):
             "ruby",
             solidlsp_settings,
         )
-        self.server_ready = threading.Event()
+        self.analysis_complete = threading.Event()
         self.service_ready_event = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
         self.resolve_main_method_available = threading.Event()
@@ -155,12 +155,48 @@ class Solargraph(SolidLanguageServer):
         Returns the initialize params for the Solargraph Language Server.
         """
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
-        initialize_params = {
-            "capabilities": {},
-            "trace": "verbose",
+        initialize_params: InitializeParams = {  # type: ignore
             "processId": os.getpid(),
             "rootPath": repository_absolute_path,
-            "rootUri": pathlib.Path(repository_absolute_path).as_uri(),
+            "rootUri": root_uri,
+            "initializationOptions": {
+                "diagnostics": True,
+                "formatting": True,
+                "completion": True,
+                "hover": True,
+            },
+            "capabilities": {
+                "workspace": {
+                    "workspaceEdit": {"documentChanges": True},
+                    "didChangeConfiguration": {"dynamicRegistration": True},
+                    "didChangeWatchedFiles": {"dynamicRegistration": True},
+                    "symbol": {
+                        "dynamicRegistration": True,
+                        "symbolKind": {"valueSet": list(range(1, 27))},
+                    },
+                    "executeCommand": {"dynamicRegistration": True},
+                },
+                "textDocument": {
+                    "synchronization": {"dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True, "didSave": True},
+                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                    "signatureHelp": {
+                        "dynamicRegistration": True,
+                        "signatureInformation": {
+                            "documentationFormat": ["markdown", "plaintext"],
+                            "parameterInformation": {"labelOffsetSupport": True},
+                        },
+                    },
+                    "definition": {"dynamicRegistration": True},
+                    "references": {"dynamicRegistration": True},
+                    "documentSymbol": {
+                        "dynamicRegistration": True,
+                        "symbolKind": {"valueSet": list(range(1, 27))},
+                        "hierarchicalDocumentSymbolSupport": True,
+                    },
+                    "publishDiagnostics": {"relatedInformation": True},
+                },
+            },
+            "trace": "verbose",
             "workspaceFolders": [
                 {
                     "uri": root_uri,
@@ -184,11 +220,11 @@ class Solargraph(SolidLanguageServer):
             return
 
         def lang_status_handler(params):
-            # TODO: Should we wait for
-            # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
-            # Before proceeding?
-            if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
-                self.service_ready_event.set()
+            self.logger.log(f"LSP: language/status: {params}", logging.INFO)
+            if params.get("type") == "ServiceReady" and params.get("message") == "Service is ready.":
+                self.logger.log("Solargraph service is ready.", logging.INFO)
+                self.analysis_complete.set()
+                self.completions_available.set()
 
         def execute_client_command_handler(params):
             return []
@@ -225,19 +261,14 @@ class Solargraph(SolidLanguageServer):
             "triggerCharacters": [".", ":", "@"],
         }
         self.server.notify.initialized({})
-        self.completions_available.set()
 
-        self.server_ready.set()
-
-        # Wait for server to be ready with timeout, especially important for Bundler environments
-        server_ready_timeout = 60.0
-        self.logger.log(f"Waiting up to {server_ready_timeout} seconds for Solargraph to become ready...", logging.INFO)
-
-        if self.server_ready.wait(timeout=server_ready_timeout):
-            self.logger.log("Solargraph is ready and available for requests", logging.INFO)
+        # Wait for Solargraph to complete its initial workspace analysis
+        # This prevents issues by ensuring background tasks finish
+        self.logger.log("Waiting for Solargraph to complete initial workspace analysis...", logging.INFO)
+        if self.analysis_complete.wait(timeout=60.0):
+            self.logger.log("Solargraph initial analysis complete, server ready", logging.INFO)
         else:
-            self.logger.log(
-                f"Timeout waiting for Solargraph to become ready within {server_ready_timeout} seconds, proceeding anyway. "
-                "This may indicate slow initialization in Bundler environment or large project indexing.",
-                logging.WARNING,
-            )
+            self.logger.log("Timeout waiting for Solargraph analysis completion, proceeding anyway", logging.WARNING)
+            # Fallback: assume analysis is complete after timeout
+            self.analysis_complete.set()
+            self.completions_available.set()
