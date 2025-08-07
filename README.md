@@ -4,10 +4,17 @@
 </p>
 
 * :rocket: Serena is a powerful **coding agent toolkit** capable of turning an LLM into a fully-featured agent that works **directly on your codebase**.
+  Unlike most other tools, it is not tied to an LLM, framework or an interface, making it easy to use it in a variety of ways.
 * :wrench: Serena provides essential **semantic code retrieval and editing tools** that are akin to an IDE's capabilities, extracting code entities at the symbol level and exploiting relational structure. When combined with an existing coding agent, these tools greatly enhance (token) efficiency.
 * :free: Serena is **free & open-source**, enhancing the capabilities of LLMs you already have access to free of charge.
 
-### Demonstration
+### Demonstration 1 - Efficient Operation in Claude Code
+
+Here is a demonstration of Serena efficiently retrieving and editing code within Claude Code, thereby saving tokens and time. Note that efficient editing and retrieval are not only useful for saving costs, but also for generally improving the quality of the code produced by the LLM. This effect may be less pronounced in very small projects, but often becomes of crucial importance in larger ones.
+
+https://github.com/user-attachments/assets/ab78ebe0-f77d-43cc-879a-cc399efefd87
+
+### Demonstration 2 - Serena in Claude Desktop
 
 Here is a demonstration of Serena implementing a small feature for itself (a better log GUI) with Claude Desktop.
 Note how Serena's tools enable Claude to find and edit the right symbols.
@@ -42,14 +49,13 @@ For example, **supercharge the performance of Claude Code** with a [one-line she
 Serena can be integrated with an LLM in several ways:
  * by using the **model context protocol (MCP)**.  
    Serena provides an MCP server which integrates with 
-     * Claude Code and Claude Desktop, 
+     * Claude Code and Claude Desktop,
+     * Terminal-based clients like Codex, Gemini-CLI, Qwen3-Coder, rovodev, OpenHands CLI and others,
      * IDEs like VSCode, Cursor or IntelliJ,
      * Extensions like Cline or Roo Code
-     * and many others, including [the ChatGPT app soon](https://x.com/OpenAIDevs/status/1904957755829481737)
- * by using **Agno – the model-agnostic agent framework**.  
-   Serena's Agno-based agent allows you to turn virtually any LLM into a coding agent, whether it's provided by Google, OpenAI or Anthropic (with a paid API key)
-   or a free model provided by Ollama, Together or Anyscale.
- * by incorporating Serena's tools into an agent framework of your choice.  
+     * Local clients like [OpenWebUI](https://docs.openwebui.com/openapi-servers/mcp), [Jan](https://jan.ai/docs/mcp-examples/browser/browserbase#enable-mcp), [Agno](https://docs.agno.com/introduction/playground) and others
+ * by using [mcpo to connect it to ChatGPT](docs/serena_on_chatgpt.md) or other clients that don't support MCP but do support tool calling.
+ * by incorporating Serena's tools into an agent framework of your choice, as illustrated [here](docs/custom_agent.md).  
    Serena's tool implementation is decoupled from the framework-specific code and can thus easily be adapted to any agent framework.
 
 ### Programming Language Support & Semantic Analysis Capabilities
@@ -71,7 +77,9 @@ With Serena, we provide
      * PHP
      * Go (need to install go and gopls first)
      * Rust
-     * C# (requires dotnet to be installed. We switched the underlying language server recently, please report any issues you encounter)
+     * C#
+     * Ruby
+     * Swift
      * Java (_Note_: startup is slow, initial startup especially so. There may be issues with java on macos and linux, we are working on it.)
      * Elixir (Requires NextLS and Elixir install; **Windows not supported** - Next LS does not provide Windows binaries)
      * Clojure
@@ -79,7 +87,6 @@ With Serena, we provide
      * C/C++ (You may experience issues with finding references, we are working on it)
      * Swift (requires Swift and sourcekit-lsp to be installed)
  * indirect support (may require some code changes/manual installation) for:
-     * Ruby (untested)
      * Kotlin (untested)
      * Dart (untested)
      
@@ -98,22 +105,27 @@ implementation.
 <!-- toc -->
 
 - [What Can I Use Serena For?](#what-can-i-use-serena-for)
+  * [As MCP Server](#as-mcp-server)
+  * [As Library](#as-library)
 - [Free Coding Agents with Serena](#free-coding-agents-with-serena)
+  * [Note](#note)
 - [Quick Start](#quick-start)
   * [Running the Serena MCP Server](#running-the-serena-mcp-server)
     + [Usage](#usage)
-        * [Local Installation](#local-installation)
       - [Using uvx](#using-uvx)
+        * [Local Installation](#local-installation)
       - [Using Docker (Experimental)](#using-docker-experimental)
     + [SSE Mode](#sse-mode)
     + [Command-Line Arguments](#command-line-arguments)
   * [Configuration](#configuration)
   * [Project Activation & Indexing](#project-activation--indexing)
   * [Claude Code](#claude-code)
+  * [Other Terminal-Based Clients](#other-terminal-based-clients)
   * [Claude Desktop](#claude-desktop)
-  * [Other MCP Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)](#other-mcp-clients-cline-roo-code-cursor-windsurf-etc)
-  * [Agno Agent](#agno-agent)
-  * [Other Agent Frameworks](#other-agent-frameworks)
+  * [MCP Coding Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)](#mcp-coding-clients-cline-roo-code-cursor-windsurf-etc)
+  * [Local GUIs and Frameworks](#local-guis-and-frameworks)
+  * [Custom Integrations](#custom-integrations)
+    + [Other Agent Frameworks](#other-agent-frameworks)
 - [Detailed Usage and Recommendations](#detailed-usage-and-recommendations)
   * [Tool Execution](#tool-execution)
     + [Shell Execution and Editing Tools](#shell-execution-and-editing-tools)
@@ -142,42 +154,16 @@ implementation.
 
 <!-- tocstop -->
 
-## What Can I Use Serena For?
-
-You can use Serena for any coding tasks – whether it is focussed on analysis, planning, 
-designing new components or refactoring existing ones.
-Since Serena's tools allow an LLM to close the cognitive perception-action loop, 
-agents based on Serena can autonomously carry out coding tasks from start to finish – 
-from the initial analysis to the implementation, testing and, finally, the version
-control system commit.
-
-Serena can read, write and execute code, read logs and the terminal output.
-While we do not necessarily encourage it, "vibe coding" is certainly possible, and if you 
-want to almost feel like "the code no longer exists",
-you may find Serena even more adequate for vibing than an agent inside an IDE
-(since you will have a separate GUI that really lets you forget).
-
-## Free Coding Agents with Serena
-
-Even the free tier of Anthropic's Claude has support for MCP Servers, so you can use Serena with Claude for free.
-Presumably, the same will soon be possible with ChatGPT Desktop once support for MCP servers is added.  
-Through Agno, you furthermore have the option to use Serena with a free/open-weights model.
-
-Serena is [Oraios AI](https://oraios-ai.de/)'s contribution to the developer community.  
-We use it ourselves on a regular basis.
-
-We got tired of having to pay multiple
-IDE-based subscriptions (such as Windsurf or Cursor) that forced us to keep purchasing tokens on top of the chat subscription costs we already had.
-The substantial API costs incurred by tools like Claude Code, Cline, Aider and other API-based tools are similarly unattractive.
-We thus built Serena with the prospect of being able to cancel most other subscriptions.
-
 ## Quick Start
 
 Serena can be used in various ways, below you will find instructions for selected integrations.
 
-- If you just want to turn Claude into a free-to-use coding agent, we recommend using Serena through [Claude Code](#claude-code) or [Claude Desktop](#claude-desktop).
-- If you want to use Gemini or any other model, and you want a GUI experience, you can use [Agno](#agno-agent) or one of the many other GUIs that support MCP servers.
+- For coding with Claude, we recommend using Serena through [Claude Code](#claude-code) or [Claude Desktop](#claude-desktop). You can also use Serena in most other [terminal-based clients](#other-terminal-based-clients).
+- If you want a GUI experience outside an IDE, you can use one of the many [local GUIs](#local-guis-and-frameworks) that support MCP servers.
+  You can also connect Serena to many web clients (including ChatGPT) using [mcpo](docs/serena_on_chatgpt.md).
 - If you want to use Serena integrated in your IDE, see the section on [other MCP clients](#other-mcp-clients---cline-roo-code-cursor-windsurf-etc).
+- You can use Serena as a library for building your own applications. We try to keep the public API stable, but you should still
+  expect breaking changes and pin Serena to a fixed version if you use it as a dependency.
 
 Serena is managed by `uv`, so you will need to [install it](https://docs.astral.sh/uv/getting-started/installation/)).
 
@@ -244,6 +230,8 @@ Replace `/path/to/your/projects` with the absolute path to your projects directo
 - No need to install language servers and dependencies locally
 - Consistent environment across different systems
 
+Alternatively, use the docker-compose file provided in the repository.
+
 See the [Docker documentation](DOCKER.md) for detailed setup instructions, configuration options, and known limitations.
 
 #### SSE Mode
@@ -277,7 +265,11 @@ Run with parameter `--help` to get a list of available options.
 
 ### Configuration
 
-Serena's behavior (active tools and prompts as well as logging configuration, etc.) is configured in four places:
+Serena is very flexible in terms of configuration. While for most users, the default configurations will work,
+you can fully adjust it to your needs by editing a few yaml files. You can disable tools, change Serena's instructions
+(what we denote as the `system_prompt`), adjust the output of tools that just provide a prompt, and even adjust tool descriptions.
+
+Serena is configured in four places:
 
 1. The `serena_config.yml` for general settings that apply to all clients and projects.
    It is located in your user directory under `.serena/serena_config.yml`.
@@ -298,19 +290,11 @@ Serena's behavior (active tools and prompts as well as logging configuration, et
    uvx --from git+https://github.com/oraios/serena serena project generate-yml
    ```
    (or use the `--directory` command version).
-4. Through the currently active set of [modes](#modes).
+4. Through the context and modes. Explore the [modes and contexts](#modes-and-contexts) section for more details.
 
-
-> ⚠️ **Note:** Serena is under active development. We are continuously adding features, improving stability and the UX.
-> As a result, configuration may change in a breaking manner. If you have an invalid configuration,
-> the MCP server or Serena-based Agent may fail to start (investigate the MCP logs in the former case).
-> Check the [changelog](CHANGELOG.md)
-> and the configuration templates when updating Serena, adapting your configurations accordingly.
 
 After the initial setup, continue with one of the sections below, depending on how you
 want to use Serena.
-
-You can just ask the LLM to show you the config of your session, Serena has a tool for it.
 
 ### Project Activation & Indexing
 
@@ -362,6 +346,16 @@ claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena 
   in your config.
   Note that you may have to make Claude read the instructions you start a new conversation and after any compacting operation to ensure Claude remains properly configured to use Serena's tools.
 
+### Other Terminal-Based Clients
+
+There are many terminal-based coding assistants that support MCP servers, such as [Codex](https://github.com/openai/codex?tab=readme-ov-file#model-context-protocol-mcp), 
+[Gemini-CLI](https://github.com/google-gemini/gemini-cli), [Qwen3-Coder](https://github.com/QwenLM/Qwen3-Coder),
+[rovodev](https://community.atlassian.com/forums/Rovo-for-Software-Teams-Beta/Introducing-Rovo-Dev-CLI-AI-Powered-Development-in-your-terminal/ba-p/3043623),
+the [OpenHands CLI](https://docs.all-hands.dev/usage/how-to/cli-mode) and [opencode](https://github.com/sst/opencode).
+
+They generally benefit from the symbolic tools provided by Serena. You might want to customize some aspects of Serena
+by writing your own context, modes or prompts to adjust it to your workflow, to other MCP servers you are using, and to 
+the client's internal capabilities.
 
 ### Claude Desktop
 
@@ -423,7 +417,7 @@ After restarting, you should see Serena's tools in your chat interface (notice t
 
 For more information on MCP servers with Claude Desktop, see [the official quick start guide](https://modelcontextprotocol.io/quickstart/user).
 
-### Other MCP Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)
+### MCP Coding Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)
 
 Being an MCP Server, Serena can be included in any MCP Client. The same configuration as above,
 perhaps with small client-specific modifications, should work. Most of the popular
@@ -439,74 +433,14 @@ e.g., for one of the following reasons:
 2. You are on Linux and don't want to use the [community-created Claude Desktop](https://github.com/aaddrick/claude-desktop-debian).
 3. You want tighter integration of Serena into your IDE and don't mind paying for that.
 
-### Agno Agent
+### Local GUIs and Frameworks
 
-Agno is a model-agnostic agent framework that allows you to turn Serena into an agent 
-(independent of the MCP technology) with a large number of underlying LLMs. Agno is currently
-the simplest way of running Serena in a chat GUI with an LLM of your choice.
-
-While Agno is not yet entirely stable, we chose it, because it comes with its own open-source UI, 
-making it easy to directly use the agent using a chat interface.  With Agno, Serena is turned into an agent
-(so no longer an MCP Server), so it can be used in programmatic ways (for example for benchmarking or within 
-your application).
-
-Here's how it works (see also [Agno's documentation](https://docs.agno.com/introduction/playground)):
-
-1. Download the agent-ui code with npx
-   ```shell
-   npx create-agent-ui@latest
-   ```
-   or, alternatively, clone it manually:
-   ```shell
-   git clone https://github.com/agno-agi/agent-ui.git
-   cd agent-ui 
-   pnpm install 
-   pnpm dev
-   ```
-
-2. Install serena with the optional requirements:
-   ```shell
-   # You can also only select agno,google or agno,anthropic instead of all-extras
-   uv pip install --all-extras -r pyproject.toml -e .
-   ```
-   
-3. Copy `.env.example` to `.env` and fill in the API keys for the provider(s) you
-   intend to use.
-
-4. Start the agno agent app with
-   ```shell
-   uv run python scripts/agno_agent.py
-   ```
-   By default, the script uses Claude as the model, but you can choose any model
-   supported by Agno (which is essentially any existing model).
-
-5. In a new terminal, start the agno UI with
-   ```shell
-   cd agent-ui 
-   pnpm dev
-   ```
-   Connect the UI to the agent you started above and start chatting. You will have
-   the same tools as in the MCP server version.
-
-
-Here is a short demo of Serena performing a small analysis task with the newest Gemini model:
-
-https://github.com/user-attachments/assets/ccfcb968-277d-4ca9-af7f-b84578858c62
-
-
-⚠️ IMPORTANT: In contrast to the MCP server approach, tool execution in the Agno UI does
-not ask for the user's permission. The shell tool is particularly critical, as it can perform arbitrary code execution. 
-While we have never encountered any issues with
-this in our testing with Claude, allowing this may not be entirely safe. 
-You may choose to disable certain tools for your setup in your Serena project's
-configuration file (`.yml`).
-
-### Other Agent Frameworks
-
-It should be straightforward to incorporate Serena into any
-agent framework (like [pydantic-ai](https://ai.pydantic.dev/), [langgraph](https://langchain-ai.github.io/langgraph/tutorials/introduction/) or others).
-Typically, you need only to write an adapter for Serena's tools to the tool representation in the framework of your choice, 
-as was done by us for Agno with [SerenaAgnoToolkit](/src/serena/agno.py).
+Over the last months, several technologies have emerged that allow you to run a powerful local GUI
+and connect it to an MCP server. They will work with Serena out of the box.
+Some of the leading open source GUI technologies offering this are 
+[Jan](https://jan.ai/docs/mcp), [OpenHands](https://github.com/All-Hands-AI/OpenHands/),
+[OpenWebUI](https://docs.openwebui.com/openapi-servers/mcp) and [Agno](https://docs.agno.com/introduction/playground).
+They allow combining Serena with almost any LLM (including locally running ones) and offer various other integrations.
 
 
 ## Detailed Usage and Recommendations
@@ -580,19 +514,17 @@ When launching Serena, specify modes using `--mode <mode-name>`; multiple modes 
 
 You can create your own contexts and modes to precisely tailor Serena to your needs in two ways:
 *   You can use Serena's CLI to manage modes and contexts. Check out
+
     ```shell
     uvx --from git+https://github.com/oraios/serena serena mode --help
+    ```
+    and
+
+    ```shell
     uvx --from git+https://github.com/oraios/serena serena context --help
     ```
     *NOTE*: Custom contexts/modes are simply YAML files in `<home>/.serena`, they are automatically registered and available for use by their name (filename without the `.yml` extension). If you don't want to use Serena's CLI, you can create and manage them in any way you see fit.
 *  **Using external YAML files**: When starting Serena, you can also provide an absolute path to a custom `.yml` file for a context or mode.
-
-A context or mode YAML file typically defines:
-*   `name`: (Optional if filename is used) The name of the context/mode.
-*   `prompt`: A string that will be incorporated into Serena's system prompt.
-*   `description`: (Optional) A brief description, not passed to the LLM.
-*   `excluded_tools`: A list of tool names (strings) to disable when this context/mode is active.
-*   `included_optional_tools`: A list of tool names that are disabled by default and have to be explicitly enabled by the user.
 
 This customization allows for deep integration and adaptation of Serena to specific project requirements or personal preferences.
 
@@ -830,25 +762,20 @@ It is also relatively straightforward to add [support for a new programming lang
 We look forward to seeing what the community will come up with! 
 For details on contributing, see [here](/CONTRIBUTING.md).
 
-## Full List of Tools
+## List of Tools
 
-Here is the full list of Serena's tools with a short description (output of `uv run serena tools list`):
+Here is the list of Serena's default tools with a short description (output of `uv run serena tools list`):
 
  * `activate_project`: Activates a project by name.
  * `check_onboarding_performed`: Checks whether project onboarding was already performed.
  * `create_text_file`: Creates/overwrites a file in the project directory.
- * `delete_lines`: Deletes a range of lines within a file.
  * `delete_memory`: Deletes a memory from Serena's project-specific memory store.
  * `execute_shell_command`: Executes a shell command.
- * `find_referencing_code_snippets`: Finds code snippets in which the symbol at the given location is referenced.
+ * `find_file`: Finds files in the given relative paths
  * `find_referencing_symbols`: Finds symbols that reference the symbol at the given location (optionally filtered by type).
  * `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
- * `get_active_project`: Gets the name of the currently active project (if any) and lists existing projects
- * `get_current_config`: Prints the current configuration of the agent, including the active modes, tools, and context.
  * `get_symbols_overview`: Gets an overview of the top-level symbols defined in a given file or directory.
- * `initial_instructions`: Gets the initial instructions for the current project. Disabled by default, has to be enabled explicitly by using `included_optional_tools`
  * `insert_after_symbol`: Inserts content after the end of the definition of a given symbol.
- * `insert_at_line`: Inserts content at a given line in a file.
  * `insert_before_symbol`: Inserts content before the beginning of the definition of a given symbol.
  * `list_dir`: Lists files and directories in the given directory (optionally with recursion).
  * `list_memories`: Lists memories in Serena's project-specific memory store.
@@ -856,14 +783,30 @@ Here is the full list of Serena's tools with a short description (output of `uv 
  * `prepare_for_new_conversation`: Provides instructions for preparing for a new conversation (in order to continue with the necessary context).
  * `read_file`: Reads a file within the project directory.
  * `read_memory`: Reads the memory with the given name from Serena's project-specific memory store.
- * `replace_lines`: Replaces a range of lines within a file with new content.
+ * `replace_regex`: Replaces content in a file by using regular expressions.
  * `replace_symbol_body`: Replaces the full definition of a symbol.
  * `restart_language_server`: Restarts the language server, may be necessary when edits not through Serena happen.
  * `search_for_pattern`: Performs a search for a pattern in the project.
- * `summarize_changes`: Provides instructions for summarizing the changes made to the codebase.
- * `switch_modes`: Activates modes by providing a list of their names
  * `think_about_collected_information`: Thinking tool for pondering the completeness of collected information.
  * `think_about_task_adherence`: Thinking tool for determining whether the agent is still on track with the current task.
  * `think_about_whether_you_are_done`: Thinking tool for determining whether the task is truly completed.
  * `write_memory`: Writes a named memory (for future reference) to Serena's project-specific memory store.
 
+There are several tools that are disabled by default, and have to be enabled explicitly, e.g., through the context or modes.
+Note that several of our default contexts do enable some of these tools. For example, the `desktop-app` context enables the `execute_shell_command` tool.
+
+The full list of optional tools is (output of `uv run serena tools list --only-optional`):
+
+ * `delete_lines`: Deletes a range of lines within a file.
+ * `get_current_config`: Prints the current configuration of the agent, including the active and available projects, tools, contexts, and modes.
+ * `initial_instructions`: Gets the initial instructions for the current project.
+    Should only be used in settings where the system prompt cannot be set,
+    e.g. in clients you have no control over, like Claude Desktop.
+ * `insert_at_line`: Inserts content at a given line in a file.
+ * `jet_brains_find_referencing_symbols`: Finds symbols that reference the given symbol
+ * `jet_brains_find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
+ * `jet_brains_get_symbols_overview`: Retrieves an overview of the top-level symbols within a specified file
+ * `remove_project`: Removes a project from the Serena configuration.
+ * `replace_lines`: Replaces a range of lines within a file with new content.
+ * `summarize_changes`: Provides instructions for summarizing the changes made to the codebase.
+ * `switch_modes`: Activates modes by providing a list of their names
