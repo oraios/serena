@@ -77,6 +77,7 @@ With Serena, we provide
      * Clojure
      * Bash (Requires Node.js and npm for bash-language-server installation)
      * C/C++ (You may experience issues with finding references, we are working on it)
+     * Swift (requires Swift and sourcekit-lsp to be installed)
  * indirect support (may require some code changes/manual installation) for:
      * Ruby (untested)
      * Kotlin (untested)
