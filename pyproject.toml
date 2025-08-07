@@ -263,6 +263,7 @@ markers = [
   "bash: language server running for Bash",
   "snapshot: snapshot tests for symbolic editing operations",
   "ruby: language server running for Ruby",
+  "erlang: language server running for Erlang",
 ]
 
 [tool.codespell]
