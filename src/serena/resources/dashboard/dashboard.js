@@ -524,11 +524,25 @@ class Dashboard {
             this.$themeText.text('Dark');
         }
         
+        // Update the logo based on theme
+        this.updateLogo(theme);
+        
         // Save to localStorage
         localStorage.setItem('serena-theme', theme);
         
         // Update charts if they exist
         this.updateChartsTheme();
+    }
+
+    updateLogo(theme) {
+        const logoElement = document.getElementById('serena-logo');
+        if (logoElement) {
+            if (theme === 'dark') {
+                logoElement.src = 'serena-logs-dark-mode.png';
+            } else {
+                logoElement.src = 'serena-logs.png';
+            }
+        }
     }
 
     updateChartsTheme() {
