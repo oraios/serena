@@ -267,32 +267,12 @@ class Solargraph(SolidLanguageServer):
             "capabilities": {
                 "workspace": {
                     "workspaceEdit": {"documentChanges": True},
-                    "didChangeConfiguration": {"dynamicRegistration": True},
-                    "didChangeWatchedFiles": {"dynamicRegistration": True},
-                    "symbol": {
-                        "dynamicRegistration": True,
-                        "symbolKind": {"valueSet": list(range(1, 27))},
-                    },
-                    "executeCommand": {"dynamicRegistration": True},
                 },
                 "textDocument": {
-                    "synchronization": {"dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True, "didSave": True},
-                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
-                    "signatureHelp": {
-                        "dynamicRegistration": True,
-                        "signatureInformation": {
-                            "documentationFormat": ["markdown", "plaintext"],
-                            "parameterInformation": {"labelOffsetSupport": True},
-                        },
-                    },
-                    "definition": {"dynamicRegistration": True},
-                    "references": {"dynamicRegistration": True},
                     "documentSymbol": {
-                        "dynamicRegistration": True,
-                        "symbolKind": {"valueSet": list(range(1, 27))},
                         "hierarchicalDocumentSymbolSupport": True,
+                        "symbolKind": {"valueSet": list(range(1, 27))},
                     },
-                    "publishDiagnostics": {"relatedInformation": True},
                 },
             },
             "trace": "verbose",
