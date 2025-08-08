@@ -178,8 +178,7 @@ class Solargraph(SolidLanguageServer):
             except subprocess.CalledProcessError as e:
                 error_msg = e.stderr.decode() if e.stderr else str(e)
                 raise RuntimeError(
-                    f"Failed to check or install Solargraph: {error_msg}\n"
-                    "Please try installing manually: gem install solargraph"
+                    f"Failed to check or install Solargraph: {error_msg}\nPlease try installing manually: gem install solargraph"
                 ) from e
         else:
             raise RuntimeError(
