@@ -13,7 +13,7 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from logging import Logger
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from sensai.util import logging
 from sensai.util.logging import LogTime
@@ -149,7 +149,7 @@ class SerenaAgent:
             return memory_log_handler
 
         # open GUI log window if enabled
-        self._gui_log_viewer: Optional["GuiLogViewer"] = None
+        self._gui_log_viewer: "GuiLogViewer" | None = None
         if self.serena_config.gui_log_window_enabled:
             if platform.system() == "Darwin":
                 log.warning("GUI log window is not supported on macOS")

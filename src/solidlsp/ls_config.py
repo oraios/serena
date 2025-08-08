@@ -118,6 +118,8 @@ class LanguageServerConfig:
     start_independent_lsp_process: bool = True
     ignored_paths: list[str] = field(default_factory=list)
     """Paths, dirs or glob-like patterns. The matching will follow the same logic as for .gitignore entries"""
+    encoding: str = "utf-8"
+    """Text file encoding to use when reading source files"""
 
     @classmethod
     def from_dict(cls, env: dict):

@@ -264,6 +264,7 @@ class Project:
             code_language=self.language,
             ignored_paths=self._ignored_patterns,
             trace_lsp_communication=trace_lsp_communication,
+            encoding=self.project_config.encoding,
         )
         ls_logger = LanguageServerLogger(log_level=log_level)
 
