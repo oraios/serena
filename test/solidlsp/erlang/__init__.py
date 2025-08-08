@@ -3,10 +3,9 @@ import platform
 
 def _test_erlang_ls_available() -> str:
     """Test if Erlang LS is available and return error reason if not."""
-    # Check if we're on Windows (may have different requirements)
+    # Check if we're on Windows (Erlang LS doesn't support Windows)
     if platform.system() == "Windows":
-        # Erlang LS should work on Windows, but may need different checks
-        pass
+        return "Erlang LS does not support Windows"
 
     # Try to import and check Erlang availability
     try:
