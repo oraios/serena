@@ -1,6 +1,7 @@
 """Erlang Language Server implementation using Erlang LS."""
 
 import logging
+import os
 import shutil
 import subprocess
 import threading
@@ -162,25 +163,29 @@ class ErlangLanguageServer(SolidLanguageServer):
         self.server.notify.initialized({})
         self.completions_available.set()
 
-        # Wait for Erlang LS to be ready - use generous timeout for CI environments
-        ready_timeout = 120.0  # Increased for CI environments like Ubuntu/macOS
-        self.logger.log(f"Waiting up to {ready_timeout} seconds for Erlang LS readiness...", logging.INFO)
+        # Wait for Erlang LS to be ready - adjust timeout based on environment
+        is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
+        ready_timeout = 180.0 if is_ci else 60.0  # Much longer for CI environments
+        env_desc = "CI" if is_ci else "local"
+        self.logger.log(f"Waiting up to {ready_timeout} seconds for Erlang LS readiness ({env_desc} environment)...", logging.INFO)
 
         if self.server_ready.wait(timeout=ready_timeout):
             self.logger.log("Erlang LS is ready and available for requests", logging.INFO)
 
-            # Add settling period for indexing - increased for CI stability
-            settling_time = 10.0  # Increased for CI environments
+            # Add settling period for indexing - adjust based on environment
+            settling_time = 15.0 if is_ci else 5.0
             self.logger.log(f"Allowing {settling_time} seconds for Erlang LS indexing to complete...", logging.INFO)
             time.sleep(settling_time)
             self.logger.log("Erlang LS settling period complete", logging.INFO)
         else:
             # Set ready anyway and continue - Erlang LS might not send explicit ready messages
-            self.logger.log("Erlang LS readiness timeout reached, proceeding anyway (common in CI)", logging.WARNING)
+            self.logger.log(
+                f"Erlang LS readiness timeout reached after {ready_timeout}s, proceeding anyway (common in CI)", logging.WARNING
+            )
             self.server_ready.set()
 
             # Still give some time for basic initialization even without explicit readiness signal
-            basic_settling_time = 15.0
+            basic_settling_time = 20.0 if is_ci else 10.0
             self.logger.log(f"Allowing {basic_settling_time} seconds for basic Erlang LS initialization...", logging.INFO)
             time.sleep(basic_settling_time)
             self.logger.log("Basic Erlang LS initialization period complete", logging.INFO)
