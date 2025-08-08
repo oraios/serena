@@ -262,10 +262,6 @@ class Solargraph(SolidLanguageServer):
             "rootPath": repository_absolute_path,
             "rootUri": root_uri,
             "initializationOptions": {
-                "diagnostics": True,
-                "formatting": True,
-                "completion": True,
-                "hover": True,
                 "exclude": exclude_patterns,
             },
             "capabilities": {
