@@ -446,6 +446,7 @@ class ProjectCommands(AutoRegisteringGroup):
     @staticmethod
     def _index_project(project: str, log_level: str) -> None:
         lvl = logging.getLevelNamesMapping()[log_level.upper()]
+        logging.configure(level=lvl)
         proj = Project.load(os.path.abspath(project))
         print(f"Indexing symbols in project {project}…")
         ls = proj.create_language_server(log_level=lvl)
