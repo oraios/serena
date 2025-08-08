@@ -23,6 +23,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     * Hybrid function detection (LSP + regex fallback) for reliable symbolic editing
     * Automatic Node.js/npm dependency management 
     * Cross-platform compatibility including Windows
+  * Enhance Solargraph (Ruby) integration
+    * Automatic Rails project detection via config/application.rb, Rakefile, and Gemfile analysis
+    * Ruby/Rails-specific exclude patterns for improved indexing performance (vendor/, .bundle/, tmp/, log/, coverage/)
+    * Enhanced error handling with detailed diagnostics and Ruby manager-specific installation instructions (rbenv, RVM, asdf)
+    * Improved LSP capability negotiation and analysis completion detection
+    * Better Bundler and Solargraph installation error messages with clear resolution steps
 
 Fixes:
 * Ignore `.git` in check for ignored paths and improve performance of `find_all_non_ignored_files`
