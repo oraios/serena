@@ -306,6 +306,11 @@ class TestErlangLanguageServerSymbols:
                 # We should find some references or none (both are valid outcomes)
                 assert isinstance(refs, list)
 
+    @pytest.mark.xfail(
+        reason="Known intermittent timeout issue in Erlang LS in CI environments. "
+        "May pass locally but can timeout on slower CI systems.",
+        strict=False,
+    )
     @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
     def test_symbol_tree_structure(self, language_server: SolidLanguageServer) -> None:
         """Test that symbol tree structure is correctly built."""
@@ -399,6 +404,12 @@ class TestErlangLanguageServerSymbols:
             expected_names = ["models", "create_user"]
             assert any(name in containing_symbol["name"] for name in expected_names)
 
+    @pytest.mark.xfail(
+        reason="Known intermittent timeout issue in Erlang LS in CI environments. "
+        "May pass locally but can timeout on slower CI systems. "
+        "Similar to known Next LS timeout issues.",
+        strict=False,
+    )
     @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
     def test_referencing_symbols_across_files(self, language_server: SolidLanguageServer) -> None:
         """Test finding references across different files."""

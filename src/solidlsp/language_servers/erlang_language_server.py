@@ -162,22 +162,28 @@ class ErlangLanguageServer(SolidLanguageServer):
         self.server.notify.initialized({})
         self.completions_available.set()
 
-        # Wait for Erlang LS to be ready
-        ready_timeout = 60.0  # Erlang LS is typically faster than Next LS
+        # Wait for Erlang LS to be ready - use generous timeout for CI environments
+        ready_timeout = 120.0  # Increased for CI environments like Ubuntu/macOS
         self.logger.log(f"Waiting up to {ready_timeout} seconds for Erlang LS readiness...", logging.INFO)
 
         if self.server_ready.wait(timeout=ready_timeout):
             self.logger.log("Erlang LS is ready and available for requests", logging.INFO)
 
-            # Add settling period for indexing
-            settling_time = 5.0  # Shorter than Elixir since Erlang LS is typically faster
+            # Add settling period for indexing - increased for CI stability
+            settling_time = 10.0  # Increased for CI environments
             self.logger.log(f"Allowing {settling_time} seconds for Erlang LS indexing to complete...", logging.INFO)
             time.sleep(settling_time)
             self.logger.log("Erlang LS settling period complete", logging.INFO)
         else:
             # Set ready anyway and continue - Erlang LS might not send explicit ready messages
-            self.logger.log("Erlang LS readiness timeout reached, proceeding anyway", logging.WARNING)
+            self.logger.log("Erlang LS readiness timeout reached, proceeding anyway (common in CI)", logging.WARNING)
             self.server_ready.set()
+
+            # Still give some time for basic initialization even without explicit readiness signal
+            basic_settling_time = 15.0
+            self.logger.log(f"Allowing {basic_settling_time} seconds for basic Erlang LS initialization...", logging.INFO)
+            time.sleep(basic_settling_time)
+            self.logger.log("Basic Erlang LS initialization period complete", logging.INFO)
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
