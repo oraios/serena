@@ -584,13 +584,17 @@ class LanguageServerSymbolRetriever:
         name_path: str
         kind: int
 
+        @classmethod
+        def from_symbol(cls, symbol: LanguageServerSymbol) -> Self:
+            return cls(name_path=symbol.get_name_path(), kind=int(symbol.symbol_kind))
+
     def get_symbol_overview(self, relative_path: str) -> dict[str, list[SymbolOverviewElement]]:
-        path_to_symbol_infos = self._lang_server.request_overview(relative_path)
+        path_to_unified_symbols = self._lang_server.request_overview(relative_path)
         result = {}
-        for file_path, symbols in path_to_symbol_infos.items():
+        for file_path, unified_symbols in path_to_unified_symbols.items():
             # TODO: maybe include not just top-level symbols? We could filter by kind to exclude variables
             #  The language server methods would need to be adjusted for this.
-            result[file_path] = [self.SymbolOverviewElement(name_path=symbol[0], kind=int(symbol[1])) for symbol in symbols]
+            result[file_path] = [self.SymbolOverviewElement.from_symbol(LanguageServerSymbol(s)) for s in unified_symbols]
         return result
 
 

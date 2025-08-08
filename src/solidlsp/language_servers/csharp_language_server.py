@@ -623,7 +623,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             """Handle client/registerCapability requests."""
             # Just acknowledge the request - we don't need to track these for now
             return
-        
+
         def handle_project_needs_restore(params):
             return
 
