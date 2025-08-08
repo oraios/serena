@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import threading
@@ -43,7 +44,7 @@ class Solargraph(SolidLanguageServer):
             "ruby",
             solidlsp_settings,
         )
-        self.server_ready = threading.Event()
+        self.analysis_complete = threading.Event()
         self.service_ready_event = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
         self.resolve_main_method_available = threading.Event()
@@ -53,7 +54,18 @@ class Solargraph(SolidLanguageServer):
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
-        return super().is_ignored_dirname(dirname) or dirname in ["vendor"]
+        ruby_ignored_dirs = [
+            "vendor",  # Ruby vendor directory
+            ".bundle",  # Bundler cache
+            "tmp",  # Temporary files
+            "log",  # Log files
+            "coverage",  # Test coverage reports
+            ".yardoc",  # YARD documentation cache
+            "doc",  # Generated documentation
+            "node_modules",  # Node modules (for Rails with JS)
+            "storage",  # Active Storage files (Rails)
+        ]
+        return super().is_ignored_dirname(dirname) or dirname in ruby_ignored_dirs
 
     @staticmethod
     def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig, repository_root_path: str) -> str:
@@ -62,13 +74,30 @@ class Solargraph(SolidLanguageServer):
         """
         # Check if Ruby is installed
         try:
-            result = subprocess.run(["ruby", "--version"], check=True, capture_output=True, cwd=repository_root_path)
+            result = subprocess.run(["ruby", "--version"], check=True, capture_output=True, cwd=repository_root_path, text=True)
             ruby_version = result.stdout.strip()
             logger.log(f"Ruby version: {ruby_version}", logging.INFO)
+
+            # Extract version number for compatibility checks
+            version_match = re.search(r"ruby (\d+)\.(\d+)\.(\d+)", ruby_version)
+            if version_match:
+                major, minor, patch = map(int, version_match.groups())
+                if major < 2 or (major == 2 and minor < 6):
+                    logger.log(f"Warning: Ruby {major}.{minor}.{patch} detected. Solargraph works best with Ruby 2.6+", logging.WARNING)
+
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Error checking for Ruby installation: {e.stderr}") from e
+            error_msg = e.stderr.decode() if e.stderr else "Unknown error"
+            raise RuntimeError(
+                f"Error checking Ruby installation: {error_msg}. Please ensure Ruby is properly installed and in PATH."
+            ) from e
         except FileNotFoundError as e:
-            raise RuntimeError("Ruby is not installed. Please install Ruby before continuing.") from e
+            raise RuntimeError(
+                "Ruby is not installed or not found in PATH. Please install Ruby using one of these methods:\n"
+                "  - Using rbenv: rbenv install 3.0.0 && rbenv global 3.0.0\n"
+                "  - Using RVM: rvm install 3.0.0 && rvm use 3.0.0 --default\n"
+                "  - Using asdf: asdf install ruby 3.0.0 && asdf global ruby 3.0.0\n"
+                "  - System package manager (brew install ruby, apt install ruby, etc.)"
+            ) from e
 
         # Check for Bundler project (Gemfile exists)
         gemfile_path = os.path.join(repository_root_path, "Gemfile")
@@ -91,7 +120,12 @@ class Solargraph(SolidLanguageServer):
                         break
 
             if not bundle_path:
-                raise RuntimeError("Bundler project detected but 'bundle' command not found. Please install Bundler.")
+                raise RuntimeError(
+                    "Bundler project detected but 'bundle' command not found. Please install Bundler:\n"
+                    "  - gem install bundler\n"
+                    "  - Or use your Ruby version manager's bundler installation\n"
+                    "  - Ensure the bundle command is in your PATH"
+                )
 
             # Check if solargraph is in Gemfile.lock
             solargraph_in_bundle = False
@@ -142,7 +176,10 @@ class Solargraph(SolidLanguageServer):
 
                 return "gem exec solargraph"
             except subprocess.CalledProcessError as e:
-                raise RuntimeError(f"Failed to check or install Solargraph. {e.stderr}") from e
+                error_msg = e.stderr.decode() if e.stderr else str(e)
+                raise RuntimeError(
+                    f"Failed to check or install Solargraph: {error_msg}\nPlease try installing manually: gem install solargraph"
+                ) from e
         else:
             raise RuntimeError(
                 "This appears to be a Bundler project, but solargraph is not available. "
@@ -150,17 +187,119 @@ class Solargraph(SolidLanguageServer):
             )
 
     @staticmethod
+    def _detect_rails_project(repository_root_path: str) -> bool:
+        """
+        Detect if this is a Rails project by checking for Rails-specific files.
+        """
+        rails_indicators = [
+            "config/application.rb",
+            "config/environment.rb",
+            "app/controllers/application_controller.rb",
+            "Rakefile",
+        ]
+
+        for indicator in rails_indicators:
+            if os.path.exists(os.path.join(repository_root_path, indicator)):
+                return True
+
+        # Check for Rails in Gemfile
+        gemfile_path = os.path.join(repository_root_path, "Gemfile")
+        if os.path.exists(gemfile_path):
+            try:
+                with open(gemfile_path) as f:
+                    content = f.read().lower()
+                    if "gem 'rails'" in content or 'gem "rails"' in content:
+                        return True
+            except Exception:
+                pass
+
+        return False
+
+    @staticmethod
+    def _get_ruby_exclude_patterns(repository_root_path: str) -> list[str]:
+        """
+        Get Ruby and Rails-specific exclude patterns for better performance.
+        """
+        base_patterns = [
+            "**/vendor/**",  # Ruby vendor directory (similar to node_modules)
+            "**/.bundle/**",  # Bundler cache
+            "**/tmp/**",  # Temporary files
+            "**/log/**",  # Log files
+            "**/coverage/**",  # Test coverage reports
+            "**/.yardoc/**",  # YARD documentation cache
+            "**/doc/**",  # Generated documentation
+            "**/.git/**",  # Git directory
+            "**/node_modules/**",  # Node modules (for Rails with JS)
+            "**/public/assets/**",  # Rails compiled assets
+        ]
+
+        # Add Rails-specific patterns if this is a Rails project
+        if Solargraph._detect_rails_project(repository_root_path):
+            rails_patterns = [
+                "**/public/packs/**",  # Webpacker output
+                "**/public/webpack/**",  # Webpack output
+                "**/storage/**",  # Active Storage files
+                "**/tmp/cache/**",  # Rails cache
+                "**/tmp/pids/**",  # Process IDs
+                "**/tmp/sessions/**",  # Session files
+                "**/tmp/sockets/**",  # Socket files
+                "**/db/*.sqlite3",  # SQLite databases
+            ]
+            base_patterns.extend(rails_patterns)
+
+        return base_patterns
+
+    @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the Solargraph Language Server.
         """
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
-        initialize_params = {
-            "capabilities": {},
-            "trace": "verbose",
+        exclude_patterns = Solargraph._get_ruby_exclude_patterns(repository_absolute_path)
+
+        initialize_params: InitializeParams = {  # type: ignore
             "processId": os.getpid(),
             "rootPath": repository_absolute_path,
-            "rootUri": pathlib.Path(repository_absolute_path).as_uri(),
+            "rootUri": root_uri,
+            "initializationOptions": {
+                "diagnostics": True,
+                "formatting": True,
+                "completion": True,
+                "hover": True,
+                "exclude": exclude_patterns,
+            },
+            "capabilities": {
+                "workspace": {
+                    "workspaceEdit": {"documentChanges": True},
+                    "didChangeConfiguration": {"dynamicRegistration": True},
+                    "didChangeWatchedFiles": {"dynamicRegistration": True},
+                    "symbol": {
+                        "dynamicRegistration": True,
+                        "symbolKind": {"valueSet": list(range(1, 27))},
+                    },
+                    "executeCommand": {"dynamicRegistration": True},
+                },
+                "textDocument": {
+                    "synchronization": {"dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True, "didSave": True},
+                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                    "signatureHelp": {
+                        "dynamicRegistration": True,
+                        "signatureInformation": {
+                            "documentationFormat": ["markdown", "plaintext"],
+                            "parameterInformation": {"labelOffsetSupport": True},
+                        },
+                    },
+                    "definition": {"dynamicRegistration": True},
+                    "references": {"dynamicRegistration": True},
+                    "documentSymbol": {
+                        "dynamicRegistration": True,
+                        "symbolKind": {"valueSet": list(range(1, 27))},
+                        "hierarchicalDocumentSymbolSupport": True,
+                    },
+                    "publishDiagnostics": {"relatedInformation": True},
+                },
+            },
+            "trace": "verbose",
             "workspaceFolders": [
                 {
                     "uri": root_uri,
@@ -184,11 +323,11 @@ class Solargraph(SolidLanguageServer):
             return
 
         def lang_status_handler(params):
-            # TODO: Should we wait for
-            # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
-            # Before proceeding?
-            if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
-                self.service_ready_event.set()
+            self.logger.log(f"LSP: language/status: {params}", logging.INFO)
+            if params.get("type") == "ServiceReady" and params.get("message") == "Service is ready.":
+                self.logger.log("Solargraph service is ready.", logging.INFO)
+                self.analysis_complete.set()
+                self.completions_available.set()
 
         def execute_client_command_handler(params):
             return []
@@ -225,19 +364,14 @@ class Solargraph(SolidLanguageServer):
             "triggerCharacters": [".", ":", "@"],
         }
         self.server.notify.initialized({})
-        self.completions_available.set()
 
-        self.server_ready.set()
-
-        # Wait for server to be ready with timeout, especially important for Bundler environments
-        server_ready_timeout = 60.0
-        self.logger.log(f"Waiting up to {server_ready_timeout} seconds for Solargraph to become ready...", logging.INFO)
-
-        if self.server_ready.wait(timeout=server_ready_timeout):
-            self.logger.log("Solargraph is ready and available for requests", logging.INFO)
+        # Wait for Solargraph to complete its initial workspace analysis
+        # This prevents issues by ensuring background tasks finish
+        self.logger.log("Waiting for Solargraph to complete initial workspace analysis...", logging.INFO)
+        if self.analysis_complete.wait(timeout=60.0):
+            self.logger.log("Solargraph initial analysis complete, server ready", logging.INFO)
         else:
-            self.logger.log(
-                f"Timeout waiting for Solargraph to become ready within {server_ready_timeout} seconds, proceeding anyway. "
-                "This may indicate slow initialization in Bundler environment or large project indexing.",
-                logging.WARNING,
-            )
+            self.logger.log("Timeout waiting for Solargraph analysis completion, proceeding anyway", logging.WARNING)
+            # Fallback: assume analysis is complete after timeout
+            self.analysis_complete.set()
+            self.completions_available.set()
