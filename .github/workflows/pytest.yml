@@ -53,8 +53,8 @@ jobs:
         if: runner.os != 'Windows'
         uses: erlef/setup-beam@v1
         with:
-          elixir-version: '1.18.4'
-          otp-version: '26.1'
+          elixir-version: "1.18.4"
+          otp-version: "26.1"
       - name: Install Erlang Language Server
         if: runner.os != 'Windows'
         shell: bash
