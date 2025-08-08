@@ -73,19 +73,19 @@ Language servers provide support for a wide range of programming languages.
 With Serena, we provide 
  * direct, out-of-the-box support for:
      * Python
-     * TypeScript/Javascript (currently has some instability issues, we are working on it)
+     * TypeScript/Javascript
      * PHP
-     * Go (need to install go and gopls first)
+     * Go (requires installation of gopls)
      * Rust
      * C#
      * Ruby
      * Swift
      * Java (_Note_: startup is slow, initial startup especially so. There may be issues with java on macos and linux, we are working on it.)
-     * Elixir (Requires NextLS and Elixir install; **Windows not supported** - Next LS does not provide Windows binaries)
+     * Elixir (Requires NextLS and Elixir install; **Windows not supported**)
      * Clojure
-     * Bash (Requires Node.js and npm for bash-language-server installation)
+     * Bash
      * C/C++ (You may experience issues with finding references, we are working on it)
-     * Swift (requires Swift and sourcekit-lsp to be installed)
+     * Swift
  * indirect support (may require some code changes/manual installation) for:
      * Kotlin (untested)
      * Dart (untested)
@@ -104,11 +104,6 @@ implementation.
 
 <!-- toc -->
 
-- [What Can I Use Serena For?](#what-can-i-use-serena-for)
-  * [As MCP Server](#as-mcp-server)
-  * [As Library](#as-library)
-- [Free Coding Agents with Serena](#free-coding-agents-with-serena)
-  * [Note](#note)
 - [Quick Start](#quick-start)
   * [Running the Serena MCP Server](#running-the-serena-mcp-server)
     + [Usage](#usage)
@@ -124,8 +119,6 @@ implementation.
   * [Claude Desktop](#claude-desktop)
   * [MCP Coding Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)](#mcp-coding-clients-cline-roo-code-cursor-windsurf-etc)
   * [Local GUIs and Frameworks](#local-guis-and-frameworks)
-  * [Custom Integrations](#custom-integrations)
-    + [Other Agent Frameworks](#other-agent-frameworks)
 - [Detailed Usage and Recommendations](#detailed-usage-and-recommendations)
   * [Tool Execution](#tool-execution)
     + [Shell Execution and Editing Tools](#shell-execution-and-editing-tools)
@@ -150,7 +143,7 @@ implementation.
   * [Other MCP-Based Coding Agents](#other-mcp-based-coding-agents)
 - [Acknowledgements](#acknowledgements)
 - [Customizing and Extending Serena](#customizing-and-extending-serena)
-- [Full List of Tools](#full-list-of-tools)
+- [List of Tools](#list-of-tools)
 
 <!-- tocstop -->
 
