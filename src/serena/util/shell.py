@@ -4,6 +4,8 @@ import subprocess
 
 from pydantic import BaseModel
 
+from solidlsp.util.subprocess_util import subprocess_kwargs
+
 
 class ShellCommandResult(BaseModel):
     stdout: str
@@ -36,6 +38,7 @@ def execute_shell_command(command: str, cwd: str | None = None, capture_stderr: 
         encoding="utf-8",
         errors="replace",
         cwd=cwd,
+        **subprocess_kwargs(),
     )
 
     stdout, stderr = process.communicate()
@@ -43,15 +46,7 @@ def execute_shell_command(command: str, cwd: str | None = None, capture_stderr: 
 
 
 def subprocess_check_output(args: list[str], encoding: str = "utf-8", strip: bool = True, timeout: float | None = None) -> str:
-    kwargs = {
-        "stdin": subprocess.DEVNULL,
-        "stderr": subprocess.PIPE,
-        "timeout": timeout,
-        "env": os.environ.copy(),
-    }
-    if platform.system() == "Windows":
-        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore
-    output = subprocess.check_output(args, **kwargs).decode(encoding)  # type: ignore
+    output = subprocess.check_output(args, stdin=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=timeout, env=os.environ.copy(), **subprocess_kwargs()).decode(encoding)  # type: ignore
     if strip:
         output = output.strip()
     return output

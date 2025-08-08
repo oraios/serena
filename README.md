@@ -85,7 +85,6 @@ With Serena, we provide
      * Clojure
      * Bash
      * C/C++ (You may experience issues with finding references, we are working on it)
-     * Swift
  * indirect support (may require some code changes/manual installation) for:
      * Kotlin (untested)
      * Dart (untested)
@@ -291,7 +290,12 @@ want to use Serena.
 
 ### Project Activation & Indexing
 
-The recommended way is to just ask the LLM to activate a project by providing it an absolute path to, or,
+
+If you are mostly working with the same project, you can configure to always activate it at startup
+by passing `--project <path_or_name>` to the `start-mcp-server` command in your client's MCP config.
+This is especially useful for clients which configure MCP servers on a per-project basis, like Claude Code.
+
+Otherwise, the recommended way is to just ask the LLM to activate a project by providing it an absolute path to, or,
 in case the project was activated in the past, by its name. The default project name is the directory name.
 
   * "Activate the project /path/to/my_project"
@@ -301,9 +305,6 @@ All projects that have been activated will be automatically added to your `seren
 project, the file `.serena/project.yml` will be generated. You can adjust the latter, e.g., by changing the name
 (which you refer to during the activation) or other options. Make sure to not have two different projects with the
 same name.
-
-If you are mostly working with the same project, you can also configure to always activate a project at startup
-by passing `--project <path_or_name>` to the `start-mcp-server` command in your client's MCP config.
 
 ℹ️ For larger projects, we recommend that you index your project to accelerate Serena's tools; otherwise the first
 tool application may be very slow.
@@ -337,7 +338,7 @@ claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena 
   to "read Serena's initial instructions" or run `/mcp__serena__initial_instructions` to load the instruction text.
   If you want to make use of that, you will have to enable the corresponding tool explicitly by adding `initial_instructions` to the `included_optional_tools`
   in your config.
-  Note that you may have to make Claude read the instructions you start a new conversation and after any compacting operation to ensure Claude remains properly configured to use Serena's tools.
+  Note that you may have to make Claude read the instructions when you start a new conversation and after any compacting operation to ensure Claude remains properly configured to use Serena's tools.
 
 ### Other Terminal-Based Clients
 
@@ -402,7 +403,7 @@ community version](https://github.com/aaddrick/claude-desktop-debian).
 
 ⚠️ Be sure to fully quit the Claude Desktop application, as closing Claude will just minimize it to the system tray – at least on Windows.  
 
-⚠️ Some clients, currently including Claude Desktop, may leave behind zombie processes. You will have to find and terminate them manually then.
+⚠️ Some clients may leave behind zombie processes. You will have to find and terminate them manually then.
     With Serena, you can activate the [dashboard](#serenas-logs-the-dashboard-and-gui-tool) to prevent unnoted processes and also use the dashboard
     for shutting down Serena.
 

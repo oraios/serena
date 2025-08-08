@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
+from solidlsp.util.subprocess_util import subprocess_kwargs
 
 log = logging.getLogger(__name__)
 
@@ -73,10 +74,8 @@ class RuntimeDependencyCollection:
 
     @staticmethod
     def _run_command(command: str | list[str], cwd: str) -> None:
-        kwargs = {}
-        if PlatformUtils.get_platform_id().is_windows():
-            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore
-        else:
+        kwargs = subprocess_kwargs()
+        if not PlatformUtils.get_platform_id().is_windows():
             import pwd
 
             kwargs["user"] = pwd.getpwuid(os.getuid()).pw_name

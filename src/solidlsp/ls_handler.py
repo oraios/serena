@@ -32,6 +32,7 @@ from solidlsp.lsp_protocol_handler.server import (
     make_request,
     make_response,
 )
+from solidlsp.util.subprocess_util import subprocess_kwargs
 
 log = logging.getLogger(__name__)
 
@@ -181,6 +182,8 @@ class SolidLanguageServerHandler:
             # on Linux/macOS
             cmd = " ".join(cmd)
         log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
+        kwargs = subprocess_kwargs()
+        kwargs["start_new_session"] = self.start_independent_lsp_process
         self.process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -188,8 +191,8 @@ class SolidLanguageServerHandler:
             stderr=subprocess.PIPE,
             env=child_proc_env,
             cwd=self.process_launch_info.cwd,
-            start_new_session=self.start_independent_lsp_process,
             shell=True,
+            **kwargs,
         )
 
         # Check if process terminated immediately
