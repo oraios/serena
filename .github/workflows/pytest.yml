@@ -55,6 +55,18 @@ jobs:
         with:
           elixir-version: '1.18.4'
           otp-version: '26.1'
+      - name: Install Erlang Language Server
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          # Install rebar3 if not already available
+          which rebar3 || (curl -fsSL https://github.com/erlang/rebar3/releases/download/3.23.0/rebar3 -o /tmp/rebar3 && chmod +x /tmp/rebar3 && sudo mv /tmp/rebar3 /usr/local/bin/rebar3)
+          # Clone and build erlang_ls
+          git clone https://github.com/erlang-ls/erlang_ls.git /tmp/erlang_ls
+          cd /tmp/erlang_ls
+          make install
+          # Ensure erlang_ls is in PATH
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
       - name: Prepare java
         uses: actions/setup-java@v3
         with:
