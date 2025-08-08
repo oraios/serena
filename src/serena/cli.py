@@ -468,15 +468,26 @@ class ToolCommands(AutoRegisteringGroup):
         )
 
     @staticmethod
-    @click.command("list", help="Prints an overview of all tools implemented in Serena (not just the active ones for your project).")
+    @click.command(
+        "list",
+        help="Prints an overview of the tools that are active by default (not just the active ones for your project). For viewing all tools, pass `--all / -a`",
+    )
     @click.option("--quiet", "-q", is_flag=True)
-    def list(quiet: bool = False) -> None:
+    @click.option("--all", "-a", "include_optional", is_flag=True, help="List all tools, including those not enabled by default.")
+    @click.option("--only-optional", is_flag=True, help="List only optional tools (those not enabled by default).")
+    def list(quiet: bool = False, include_optional: bool = False, only_optional: bool = False) -> None:
         tool_registry = ToolRegistry()
         if quiet:
-            for tool_name in tool_registry.get_tool_names_default_enabled():
+            if only_optional:
+                tool_names = tool_registry.get_tool_names_optional()
+            elif include_optional:
+                tool_names = tool_registry.get_tool_names()
+            else:
+                tool_names = tool_registry.get_tool_names_default_enabled()
+            for tool_name in tool_names:
                 click.echo(tool_name)
         else:
-            ToolRegistry().print_tool_overview()
+            ToolRegistry().print_tool_overview(include_optional=include_optional, only_optional=only_optional)
 
     @staticmethod
     @click.command(

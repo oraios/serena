@@ -226,6 +226,11 @@ class SolidLanguageServer(ABC):
 
             ls = TerraformLS(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
+        elif config.code_language == Language.SWIFT:
+            from solidlsp.language_servers.sourcekit_lsp import SourceKitLSP
+
+            ls = SourceKitLSP(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
         elif config.code_language == Language.BASH:
             from solidlsp.language_servers.bash_language_server import BashLanguageServer
 

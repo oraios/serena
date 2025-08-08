@@ -2,6 +2,18 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  * **Initial instructions no longer need to be loaded by the user**
+  * Significantly extended CLI 
+
+* Configuration:
+  * Simplify customization of modes and contexts, including CLI support.
+  * Possibility to customize the system prompt and outputs of simple tools, including CLI support.
+  * Possibility to override tool descriptions through the context YAML.
+  * Prompt templates are now automatically adapted to the enabled tools.
+  * Several tools are now excluded by default, need to be included explicitly.
+  * New context for ChatGPT
+
 * Language servers:
   * Reliably detect language server termination and propagate the respective error all the way
     back to the tool application, where an unexpected termination is handled by restarting the language server
