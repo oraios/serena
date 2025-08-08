@@ -85,7 +85,6 @@ With Serena, we provide
      * Clojure
      * Bash
      * C/C++ (You may experience issues with finding references, we are working on it)
-     * Swift
  * indirect support (may require some code changes/manual installation) for:
      * Kotlin (untested)
      * Dart (untested)
