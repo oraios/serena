@@ -165,8 +165,19 @@ class ErlangLanguageServer(SolidLanguageServer):
 
         # Wait for Erlang LS to be ready - adjust timeout based on environment
         is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
-        ready_timeout = 180.0 if is_ci else 60.0  # Much longer for CI environments
-        env_desc = "CI" if is_ci else "local"
+        is_macos = os.uname().sysname == "Darwin" if hasattr(os, 'uname') else False
+        
+        # macOS in CI can be particularly slow for language server startup
+        if is_ci and is_macos:
+            ready_timeout = 240.0  # 4 minutes for macOS CI
+            env_desc = "macOS CI"
+        elif is_ci:
+            ready_timeout = 180.0  # 3 minutes for other CI
+            env_desc = "CI"
+        else:
+            ready_timeout = 60.0  # 1 minute for local
+            env_desc = "local"
+            
         self.logger.log(f"Waiting up to {ready_timeout} seconds for Erlang LS readiness ({env_desc} environment)...", logging.INFO)
 
         if self.server_ready.wait(timeout=ready_timeout):

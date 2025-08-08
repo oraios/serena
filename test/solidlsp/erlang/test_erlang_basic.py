@@ -10,8 +10,11 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 
+from . import ERLANG_LS_UNAVAILABLE, ERLANG_LS_UNAVAILABLE_REASON
+
 
 @pytest.mark.erlang
+@pytest.mark.skipif(ERLANG_LS_UNAVAILABLE, reason=f"Erlang LS not available: {ERLANG_LS_UNAVAILABLE_REASON}")
 class TestErlangLanguageServerBasics:
     """Test basic functionality of the Erlang language server."""
 
