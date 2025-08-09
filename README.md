@@ -768,7 +768,7 @@ Here is the list of Serena's default tools with a short description (output of `
  * `find_file`: Finds files in the given relative paths
  * `find_referencing_symbols`: Finds symbols that reference the symbol at the given location (optionally filtered by type).
  * `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
- * `get_symbols_overview`: Gets an overview of the top-level symbols defined in a given file or directory.
+ * `get_symbols_overview`: Gets an overview of the top-level symbols defined in a given file.
  * `insert_after_symbol`: Inserts content after the end of the definition of a given symbol.
  * `insert_before_symbol`: Inserts content before the beginning of the definition of a given symbol.
  * `list_dir`: Lists files and directories in the given directory (optionally with recursion).

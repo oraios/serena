@@ -48,7 +48,7 @@ class RestartLanguageServerTool(Tool):
 
 class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
     """
-    Gets an overview of the top-level symbols defined in a given file or directory.
+    Gets an overview of the top-level symbols defined in a given file.
     """
 
     def apply(self, relative_path: str, max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH) -> str:
@@ -57,11 +57,10 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
         This should be the first tool to call when you want to understand a new file, unless you already know
         what you are looking for.
 
-        :param relative_path: the relative path to the file or directory to get the overview of
+        :param relative_path: the relative path to the file to get the overview of
         :param max_answer_chars: if the overview is longer than this number of characters,
             no content will be returned. Don't adjust unless there is really no other way to get the content
-            required for the task. If the overview is too long, you should use a smaller directory instead,
-            (e.g. a subdirectory).
+            required for the task.
         :return: a JSON object containing info about top-level symbols in the file
         """
         symbol_retriever = self.create_language_server_symbol_retriever()
