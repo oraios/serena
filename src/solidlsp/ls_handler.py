@@ -8,7 +8,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from queue import Queue
+from queue import Empty, Queue
 from typing import Any
 
 import psutil
@@ -84,7 +84,12 @@ class Request(ToStringMixin):
         self._result_queue.put(Request.Result(error=err))
 
     def get_result(self, timeout: float | None = None) -> Result:
-        return self._result_queue.get(timeout=timeout)
+        try:
+            return self._result_queue.get(timeout=timeout)
+        except Empty as e:
+            if timeout is not None:
+                raise TimeoutError(f"Request timed out ({timeout=})") from e
+            raise e
 
 
 class SolidLanguageServerHandler:

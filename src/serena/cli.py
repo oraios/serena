@@ -434,33 +434,51 @@ class ProjectCommands(AutoRegisteringGroup):
         default="WARNING",
         help="Log level for indexing.",
     )
-    def index(project: str, log_level: str = "WARNING") -> None:
-        ProjectCommands._index_project(project, log_level)
+    @click.option("--timeout", type=float, default=10, help="Timeout for indexing a single file.")
+    def index(project: str, log_level: str, timeout: float) -> None:
+        ProjectCommands._index_project(project, log_level, timeout=timeout)
 
     @staticmethod
     @click.command("index-deprecated", help="Deprecated alias for 'serena project index'.")
     @click.argument("project", type=click.Path(exists=True), default=os.getcwd(), required=False)
     @click.option("--log-level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="WARNING")
-    def index_deprecated(project: str, log_level: str = "WARNING") -> None:
+    @click.option("--timeout", type=float, default=10, help="Timeout for indexing a single file.")
+    def index_deprecated(project: str, log_level: str, timeout: float) -> None:
         click.echo("Deprecated! Use `serena project index` instead.")
-        ProjectCommands._index_project(project, log_level)
+        ProjectCommands._index_project(project, log_level, timeout=timeout)
 
     @staticmethod
-    def _index_project(project: str, log_level: str) -> None:
+    def _index_project(project: str, log_level: str, timeout: float) -> None:
         lvl = logging.getLevelNamesMapping()[log_level.upper()]
         logging.configure(level=lvl)
         proj = Project.load(os.path.abspath(project))
-        print(f"Indexing symbols in project {project}…")
-        ls = proj.create_language_server(log_level=lvl)
+        click.echo(f"Indexing symbols in project {project}…")
+        ls = proj.create_language_server(log_level=lvl, ls_timeout=timeout)
+        log_file = os.path.join(project, ".serena", "logs", "indexing.txt")
+
+        collected_exceptions: list[Exception] = []
+        files_failed = []
         with ls.start_server():
             files = proj.gather_source_files()
             for i, f in enumerate(tqdm(files, desc="Indexing")):
-                ls.request_document_symbols(f, include_body=False)
-                ls.request_document_symbols(f, include_body=True)
+                try:
+                    ls.request_document_symbols(f, include_body=False)
+                    ls.request_document_symbols(f, include_body=True)
+                except TimeoutError as e:
+                    log.error(f"Failed to index {f}, continuing.")
+                    collected_exceptions.append(e)
+                    files_failed.append(f)
                 if (i + 1) % 10 == 0:
                     ls.save_cache()
             ls.save_cache()
-        print(f"Symbols saved to {ls.cache_path}")
+        click.echo(f"Symbols saved to {ls.cache_path}")
+        if len(files_failed) > 0:
+            os.makedirs(os.path.dirname(log_file), exist_ok=True)
+            with open(log_file, "w") as f:
+                for file, exception in zip(files_failed, collected_exceptions, strict=True):
+                    f.write(f"{file}\n")
+                    f.write(f"{exception}\n")
+            click.echo(f"Failed to index {len(files_failed)} files, see:\n{log_file}")
 
     @staticmethod
     @click.command("is_ignored_path", help="Check if a path is ignored by the project configuration.")
@@ -634,9 +652,7 @@ class ProjectCommands(AutoRegisteringGroup):
                     tools_working = False
 
                 if len(find_refs_data) == 0 and pattern_matches == 0:
-                    log.warning(
-                        "Both FindReferencingSymbolsTool and SearchForPatternTool found no matches - this might indicate an issue"
-                    )
+                    log.warning("Both FindReferencingSymbolsTool and SearchForPatternTool found no matches - this might indicate an issue")
 
                 log.info("Health check completed successfully")
 
