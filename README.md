@@ -74,7 +74,7 @@ With Serena, we provide
 * direct, out-of-the-box support for:
   * Python
   * TypeScript/Javascript
-  * PHP
+  * PHP (uses Intelephense LSP; set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features)
   * Go (requires installation of gopls)
   * Rust
   * C#

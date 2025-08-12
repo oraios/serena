@@ -101,7 +101,7 @@ class Intelephense(SolidLanguageServer):
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """
-        Returns the initialize params for the TypeScript Language Server.
+        Returns the initialize params for the Intelephense Language Server.
         """
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
@@ -123,6 +123,13 @@ class Intelephense(SolidLanguageServer):
                 }
             ],
         }
+
+        # Add license key if provided via environment variable
+        license_key = os.environ.get("INTELEPHENSE_LICENSE_KEY")
+        if license_key:
+            initialize_params["initializationOptions"] = {
+                "licenceKey": license_key
+            }
 
         return initialize_params
 
