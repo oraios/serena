@@ -127,9 +127,7 @@ class Intelephense(SolidLanguageServer):
         # Add license key if provided via environment variable
         license_key = os.environ.get("INTELEPHENSE_LICENSE_KEY")
         if license_key:
-            initialize_params["initializationOptions"] = {
-                "licenceKey": license_key
-            }
+            initialize_params["initializationOptions"] = {"licenceKey": license_key}
 
         return initialize_params
 
