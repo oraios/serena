@@ -271,8 +271,21 @@ class Tool(Component):
             except Exception as e:
                 if not catch_exceptions:
                     raise
-                msg = f"Error executing tool: {e}"
-                log.error(f"Error executing tool: {e}", exc_info=e)
+                # Provide clearer, tool-scoped error messages (especially for timeouts)
+                tool_name = self.get_name_from_cls()
+                timeout_hint = ""
+                try:
+                    # Detect concurrent.futures timeout without importing directly
+                    import concurrent.futures  # type: ignore
+
+                    if isinstance(e, concurrent.futures.TimeoutError):
+                        tt = self.agent.serena_config.tool_timeout
+                        timeout_hint = f" (timeout after {tt}s)" if tt else " (timeout)"
+                except Exception:  # pragma: no cover
+                    pass
+
+                msg = f"Error executing tool {tool_name}:{timeout_hint} {e}".rstrip()
+                log.error(msg, exc_info=e)
                 result = msg
 
             if log_call:

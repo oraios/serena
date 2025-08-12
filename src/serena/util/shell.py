@@ -1,6 +1,7 @@
 import os
 import platform
 import subprocess
+from subprocess import TimeoutExpired
 
 from pydantic import BaseModel
 
@@ -14,7 +15,12 @@ class ShellCommandResult(BaseModel):
     stderr: str | None = None
 
 
-def execute_shell_command(command: str, cwd: str | None = None, capture_stderr: bool = False) -> ShellCommandResult:
+def execute_shell_command(
+    command: str,
+    cwd: str | None = None,
+    capture_stderr: bool = False,
+    timeout: float | None = None,
+) -> ShellCommandResult:
     """
     Execute a shell command and return the output.
 
@@ -41,8 +47,25 @@ def execute_shell_command(command: str, cwd: str | None = None, capture_stderr: 
         **subprocess_kwargs(),
     )
 
-    stdout, stderr = process.communicate()
-    return ShellCommandResult(stdout=stdout, stderr=stderr, return_code=process.returncode, cwd=cwd)
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+        return ShellCommandResult(stdout=stdout, stderr=stderr, return_code=process.returncode, cwd=cwd)
+    except TimeoutExpired:
+        try:
+            process.kill()
+        except Exception:
+            pass
+        # Try to collect whatever output is available to aid debugging
+        try:
+            out_tail = (process.stdout.read() if process.stdout else "") or ""  # type: ignore
+        except Exception:
+            out_tail = ""
+        try:
+            err_tail = (process.stderr.read() if process.stderr else "") or ""  # type: ignore
+        except Exception:
+            err_tail = ""
+        # Use a conventional timeout-like code (124) to signal timeout
+        return ShellCommandResult(stdout=out_tail, stderr=err_tail, return_code=124, cwd=cwd)
 
 
 def subprocess_check_output(args: list[str], encoding: str = "utf-8", strip: bool = True, timeout: float | None = None) -> str:
