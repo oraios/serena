@@ -203,7 +203,7 @@ class BashLanguageServer(SolidLanguageServer):
         Uses the standard LSP documentSymbol request which provides reliable function detection
         for all bash function syntaxes including:
         - function name() { ... } (with function keyword)
-        - name() { ... } (traditional syntax) 
+        - name() { ... } (traditional syntax)
         - Functions with various indentation levels
         - Functions with comments before/after/inside
 
@@ -213,9 +213,10 @@ class BashLanguageServer(SolidLanguageServer):
 
         Returns:
             Tuple of (all_symbols, root_symbols) detected by the LSP server
+
         """
         self.logger.log(f"Requesting document symbols via LSP for {relative_file_path}", logging.DEBUG)
-        
+
         # Use the standard LSP approach - bash-language-server handles all function syntaxes correctly
         all_symbols, root_symbols = super().request_document_symbols(relative_file_path, include_body)
 

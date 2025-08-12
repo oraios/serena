@@ -80,14 +80,13 @@ class TestBashLanguageServerBasics:
 
         assert len(utils_function_symbols) >= 8, f"Should find at least 8 functions in utils.sh, found {len(utils_function_symbols)}"
 
-    # Removed: test_bash_regex_fallback_detection 
+    # Removed: test_bash_regex_fallback_detection
     # This test was for the hybrid detection approach which has been removed.
     # The standard LSP approach handles all function detection correctly.
 
     @pytest.mark.parametrize("language_server", [Language.BASH], indirect=True)
     def test_bash_function_syntax_patterns(self, language_server: SolidLanguageServer) -> None:
         """Test that LSP detects different bash function syntax patterns correctly."""
-        
         # Test main.sh (has both 'function' keyword and traditional syntax)
         main_all_symbols, main_root_symbols = language_server.request_document_symbols("main.sh", include_body=False)
         main_functions = [symbol for symbol in main_all_symbols if symbol.get("kind") == 12]
@@ -109,7 +108,7 @@ class TestBashLanguageServerBasics:
         # Verify all expected utils functions are detected by LSP
         expected_utils = [
             "to_uppercase",
-            "to_lowercase", 
+            "to_lowercase",
             "trim_whitespace",
             "backup_file",
             "contains_element",
