@@ -193,9 +193,12 @@ class Project:
             return [relative_path]
         else:
             for root, dirs, files in os.walk(start_path, followlinks=True):
-                dirs[:] = [d for d in dirs if not self._is_ignored_relative_path(os.path.join(root, d))]
+                # Filter directories using relative paths to avoid false positives from absolute paths (e.g., parent dirs like .codex)
+                dirs[:] = [
+                    d for d in dirs if not self._is_ignored_relative_path(os.path.relpath(os.path.join(root, d), start=self.project_root))
+                ]
                 for file in files:
-                    rel_file_path = os.path.relpath(os.path.join(root, file), start=self.project_root)
+                    rel_file_path = os.path.relpath(os.path.join(root, file), start=self.project_root).replace(os.path.sep, "/")
                     try:
                         if not self._is_ignored_relative_path(rel_file_path):
                             rel_file_paths.append(rel_file_path)
