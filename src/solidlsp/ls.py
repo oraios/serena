@@ -193,9 +193,17 @@ class SolidLanguageServer(ABC):
             ls = Gopls(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
         elif config.code_language == Language.RUBY:
-            from solidlsp.language_servers.solargraph import Solargraph
+            # Choose Ruby LSP based on environment variable
+            ruby_lsp_type = os.environ.get("SOLIDLSP_RUBY_LSP", "solargraph").lower()
 
-            ls = Solargraph(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+            if ruby_lsp_type == "ruby-lsp" or ruby_lsp_type == "ruby_lsp":
+                from solidlsp.language_servers.ruby_lsp import RubyLSP
+
+                ls = RubyLSP(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+            else:  # default to solargraph
+                from solidlsp.language_servers.solargraph import Solargraph
+
+                ls = Solargraph(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
         elif config.code_language == Language.DART:
             from solidlsp.language_servers.dart_language_server import DartLanguageServer

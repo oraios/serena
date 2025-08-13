@@ -34,6 +34,8 @@ dependencies = [
   "tqdm>=4.67.1",
   "tiktoken>=0.9.0",
   "anthropic>=0.54.0",
+  "typing-extensions>=4.14.1",
+  "lsprotocol>=2025.0.0",
 ]
 
 [[tool.uv.index]]
@@ -270,5 +272,11 @@ markers = [
 # Ref: https://github.com/codespell-project/codespell#using-a-config-file
 skip = '.git*,*.svg,*.lock,*.min.*'
 check-hidden = true
-# ignore-regex = ''
-# ignore-words-list = ''
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+    "mypy>=1.17.0",
+    "ruff>=0.12.5",
+    "types-requests>=2.32.4.20250809",
+]
