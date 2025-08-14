@@ -2,3 +2,6 @@
 description: Description of the mode, not used in the code.
 prompt: Prompt that will form part of the message sent to the model when activating this mode.
 excluded_tools: []
+
+# several tools are excluded by default and have to be explicitly included by the user
+included_optional_tools: []

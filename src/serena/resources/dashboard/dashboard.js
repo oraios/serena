@@ -1,5 +1,6 @@
 class LogMessage {
     constructor(message, toolNames) {
+        message = this.escapeHtml(message);
         const logLevel = this.determineLogLevel(message);
         const highlightedMessage = this.highlightToolNames(message, toolNames);
         this.$elem = $('<div>').addClass('log-' + logLevel).html(highlightedMessage + '\n');
@@ -27,6 +28,21 @@ class LogMessage {
         });
         return highlightedMessage;
     }
+
+    escapeHtml (convertString) {
+        if (typeof convertString !== 'string') return convertString; 
+
+        const patterns = {
+            '<'  : '&lt;',
+            '>'  : '&gt;',
+            '&'  : '&amp;',
+            '"'  : '&quot;',
+            '\'' : '&#x27;',
+            '`'  : '&#x60;'
+        };
+
+        return convertString.replace(/[<>&"'`]/g, match => patterns[match]);
+  };
 }
 
 class Dashboard {
@@ -36,6 +52,7 @@ class Dashboard {
         this.toolNames = [];
         this.currentMaxIdx = -1;
         this.pollInterval = null;
+        this.failureCount = 0;
         this.$logContainer = $('#log-container');
         this.$errorContainer = $('#error-container');
         this.$loadButton = $('#load-logs');
@@ -44,6 +61,9 @@ class Dashboard {
         this.$statsSection = $('#stats-section');
         this.$refreshStats = $('#refresh-stats');
         this.$clearStats = $('#clear-stats');
+        this.$themeToggle = $('#theme-toggle');
+        this.$themeIcon = $('#theme-icon');
+        this.$themeText = $('#theme-text');
 
         this.countChart = null;
         this.tokensChart = null;
@@ -56,6 +76,10 @@ class Dashboard {
         this.$toggleStats.click(this.toggleStats.bind(this));
         this.$refreshStats.click(this.loadStats.bind(this));
         this.$clearStats.click(this.clearStats.bind(this));
+        this.$themeToggle.click(this.toggleTheme.bind(this));
+
+        // initialize theme
+        this.initializeTheme();
 
         // initialize the application
         this.loadToolNames().then(function() {
@@ -145,6 +169,7 @@ class Dashboard {
                 start_idx: self.currentMaxIdx + 1
             }),
             success: function(response) {
+                self.failureCount = 0;
                 // Only append new messages if we have any
                 if (response.messages && response.messages.length > 0) {
                     let wasAtBottom = false;
@@ -174,6 +199,11 @@ class Dashboard {
             },
             error: function(xhr, status, error) {
                 console.error('Error polling for new logs:', error);
+                self.failureCount++;
+                if (self.failureCount >= 3) {
+                    console.log('Server appears to be down, closing tab');
+                    window.close();
+                }
             }
         });
     }
@@ -278,6 +308,11 @@ class Dashboard {
         // Register datalabels plugin
         Chart.register(ChartDataLabels);
 
+        // Get theme-aware colors
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const textColor = isDark ? '#ffffff' : '#000000';
+        const gridColor = isDark ? '#444' : '#ddd';
+
         // Tool calls pie chart
         this.countChart = new Chart(countCtx, {
             type: 'pie',
@@ -290,7 +325,12 @@ class Dashboard {
             },
             options: {
                 plugins: {
-                    legend: { display: true },
+                    legend: { 
+                        display: true,
+                        labels: {
+                            color: textColor
+                        }
+                    },
                     datalabels: {
                         display: true,
                         color: 'white',
@@ -313,7 +353,12 @@ class Dashboard {
             },
             options: {
                 plugins: {
-                    legend: { display: true },
+                    legend: { 
+                        display: true,
+                        labels: {
+                            color: textColor
+                        }
+                    },
                     datalabels: {
                         display: true,
                         color: 'white',
@@ -336,7 +381,12 @@ class Dashboard {
             },
             options: {
                 plugins: {
-                    legend: { display: true },
+                    legend: { 
+                        display: true,
+                        labels: {
+                            color: textColor
+                        }
+                    },
                     datalabels: {
                         display: true,
                         color: 'white',
@@ -372,21 +422,56 @@ class Dashboard {
             },
             options: {
                 responsive: true,
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: textColor
+                        }
+                    }
+                },
                 scales: {
+                    x: {
+                        ticks: {
+                            color: textColor
+                        },
+                        grid: {
+                            color: gridColor
+                        }
+                    },
                     y: {
                         type: 'linear',
                         display: true,
                         position: 'left',
                         beginAtZero: true,
-                        title: { display: true, text: 'Input Tokens' }
+                        title: { 
+                            display: true, 
+                            text: 'Input Tokens',
+                            color: textColor
+                        },
+                        ticks: {
+                            color: textColor
+                        },
+                        grid: {
+                            color: gridColor
+                        }
                     },
                     y1: {
                         type: 'linear',
                         display: true,
                         position: 'right',
                         beginAtZero: true,
-                        title: { display: true, text: 'Output Tokens' },
-                        grid: { drawOnChartArea: false }
+                        title: { 
+                            display: true, 
+                            text: 'Output Tokens',
+                            color: textColor
+                        },
+                        ticks: {
+                            color: textColor
+                        },
+                        grid: { 
+                            drawOnChartArea: false,
+                            color: gridColor
+                        }
                     }
                 }
             }
@@ -412,6 +497,135 @@ class Dashboard {
             </table>
         `;
         $('#stats-summary').html(tableHtml);
+    }
+
+    initializeTheme() {
+        // Check if user has manually set a theme preference
+        const savedTheme = localStorage.getItem('serena-theme');
+        
+        if (savedTheme) {
+            // User has manually set a preference, use it
+            this.setTheme(savedTheme);
+        } else {
+            // No manual preference, detect system color scheme
+            this.detectSystemTheme();
+        }
+        
+        // Listen for system theme changes
+        this.setupSystemThemeListener();
+    }
+
+    detectSystemTheme() {
+        // Check if system prefers dark mode
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const theme = prefersDark ? 'dark' : 'light';
+        this.setTheme(theme);
+    }
+
+    setupSystemThemeListener() {
+        // Listen for changes in system color scheme
+        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        
+        const handleSystemThemeChange = (e) => {
+            // Only auto-switch if user hasn't manually set a preference
+            const savedTheme = localStorage.getItem('serena-theme');
+            if (!savedTheme) {
+                const newTheme = e.matches ? 'dark' : 'light';
+                this.setTheme(newTheme);
+            }
+        };
+        
+        // Add listener for system theme changes
+        if (mediaQuery.addEventListener) {
+            mediaQuery.addEventListener('change', handleSystemThemeChange);
+        } else {
+            // Fallback for older browsers
+            mediaQuery.addListener(handleSystemThemeChange);
+        }
+    }
+
+    toggleTheme() {
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+        const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+        
+        // When user manually toggles, save their preference
+        localStorage.setItem('serena-theme', newTheme);
+        this.setTheme(newTheme);
+    }
+
+    setTheme(theme) {
+        // Set the theme on the document element
+        document.documentElement.setAttribute('data-theme', theme);
+        
+        // Update the toggle button
+        if (theme === 'dark') {
+            this.$themeIcon.text('☀️');
+            this.$themeText.text('Light');
+        } else {
+            this.$themeIcon.text('🌙');
+            this.$themeText.text('Dark');
+        }
+        
+        // Update the logo based on theme
+        this.updateLogo(theme);
+        
+        // Save to localStorage
+        localStorage.setItem('serena-theme', theme);
+        
+        // Update charts if they exist
+        this.updateChartsTheme();
+    }
+
+    updateLogo(theme) {
+        const logoElement = document.getElementById('serena-logo');
+        if (logoElement) {
+            if (theme === 'dark') {
+                logoElement.src = 'serena-logs-dark-mode.png';
+            } else {
+                logoElement.src = 'serena-logs.png';
+            }
+        }
+    }
+
+    updateChartsTheme() {
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const textColor = isDark ? '#ffffff' : '#000000';
+        const gridColor = isDark ? '#444' : '#ddd';
+        
+        // Update existing charts
+        if (this.countChart) {
+            this.countChart.options.scales.x.ticks.color = textColor;
+            this.countChart.options.scales.y.ticks.color = textColor;
+            this.countChart.options.scales.x.grid.color = gridColor;
+            this.countChart.options.scales.y.grid.color = gridColor;
+            this.countChart.update();
+        }
+        
+        if (this.inputChart) {
+            this.inputChart.options.scales.x.ticks.color = textColor;
+            this.inputChart.options.scales.y.ticks.color = textColor;
+            this.inputChart.options.scales.x.grid.color = gridColor;
+            this.inputChart.options.scales.y.grid.color = gridColor;
+            this.inputChart.update();
+        }
+        
+        if (this.outputChart) {
+            this.outputChart.options.scales.x.ticks.color = textColor;
+            this.outputChart.options.scales.y.ticks.color = textColor;
+            this.outputChart.options.scales.x.grid.color = gridColor;
+            this.outputChart.options.scales.y.grid.color = gridColor;
+            this.outputChart.update();
+        }
+        
+        if (this.tokensChart) {
+            this.tokensChart.options.scales.x.ticks.color = textColor;
+            this.tokensChart.options.scales.y.ticks.color = textColor;
+            this.tokensChart.options.scales.y1.ticks.color = textColor;
+            this.tokensChart.options.scales.x.grid.color = gridColor;
+            this.tokensChart.options.scales.y.grid.color = gridColor;
+            this.tokensChart.options.scales.y1.grid.color = gridColor;
+            this.tokensChart.update();
+        }
     }
 
     shutdown() {

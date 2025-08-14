@@ -27,7 +27,13 @@ jobs:
           python-version: "${{ matrix.python-version }}"
       - uses: actions/setup-go@v5
         with:
-          go-version: '>=1.17.0'
+          go-version: ">=1.17.0"
+      - name: Ensure cached directory exist before calling cache-related actions
+        shell: bash
+        run: |
+          mkdir -p $HOME/.serena/language_servers/static
+          mkdir -p $HOME/.cache/go-build
+          mkdir -p $HOME/go/bin
       # Add Go bin directory to PATH for this workflow
       # GITHUB_PATH is a special file that GitHub Actions uses to modify PATH
       # Writing to this file adds the directory to the PATH for subsequent steps
@@ -36,8 +42,8 @@ jobs:
         uses: actions/cache@v3
         with:
           path: |
-            ${{ env.HOME }}/go/bin
-            ${{ env.HOME }}/.cache/go-build
+            ~/go/bin
+            ~/.cache/go-build
           key: go-binaries-${{ runner.os }}-gopls-latest
       - name: Install gopls
         if: steps.cache-go-binaries.outputs.cache-hit != 'true'
@@ -47,8 +53,8 @@ jobs:
         if: runner.os != 'Windows'
         uses: erlef/setup-beam@v1
         with:
-          elixir-version: '1.18.4'
-          otp-version: '26.1'
+          elixir-version: "1.18.4"
+          otp-version: "26.1"
 
       - name: Prepare java
         uses: actions/setup-java@v3
@@ -64,6 +70,47 @@ jobs:
         with:
           terraform_version: "1.5.0"
           terraform_wrapper: false
+      # - name: Install swift
+      #   if: runner.os != 'Windows'
+      #   uses: swift-actions/setup-swift@v2
+      # Installation of swift with the action screws with installation of ruby on macOS for some reason
+      # We can try again when version 3 of the action is released, where they will also use swiftly
+      # Until then, we use custom code to install swift. Sourcekit-lsp is installed automatically with swift
+      - name: Install Swift with swiftly (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          echo "=== Installing swiftly on macOS ==="
+          curl -O https://download.swift.org/swiftly/darwin/swiftly.pkg && \
+          installer -pkg swiftly.pkg -target CurrentUserHomeDirectory && \
+          ~/.swiftly/bin/swiftly init --quiet-shell-followup && \
+          . "${SWIFTLY_HOME_DIR:-$HOME/.swiftly}/env.sh" && \
+          hash -r
+          swiftly install --use 6.1.2
+          swiftly use 6.1.2
+          echo "~/.swiftly/bin" >> $GITHUB_PATH
+          echo "Swiftly installed successfully"
+      - name: Install Swift with swiftly (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          echo "=== Installing swiftly on Ubuntu ==="
+          curl -O https://download.swift.org/swiftly/linux/swiftly-$(uname -m).tar.gz && \
+          tar zxf swiftly-$(uname -m).tar.gz && \
+          ./swiftly init --quiet-shell-followup && \
+          . "${SWIFTLY_HOME_DIR:-$HOME/.local/share/swiftly}/env.sh" && \
+          hash -r
+          swiftly install --use 6.1.2
+          swiftly use 6.1.2
+          sudo apt-get -y install libcurl4-openssl-dev
+          echo "=== Adding Swift toolchain to PATH ==="
+          echo "$HOME/.local/share/swiftly/bin" >> $GITHUB_PATH
+          echo "Swiftly installed successfully!"
+      - name: Install Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+      - name: Install Ruby language server
+        shell: bash
+        run: gem install solargraph
       - name: Install uv
         shell: bash
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -77,7 +124,7 @@ jobs:
         id: cache-language-servers
         uses: actions/cache@v3
         with:
-          path: ${{ env.HOME }}/.serena/language_servers/static
+          path: ~/.serena/language_servers/static
           key: language-servers-${{ runner.os }}-v1
           restore-keys: |
             language-servers-${{ runner.os }}-
@@ -90,6 +137,9 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: uv pip install -e ".[dev]"
+      - name: Check formatting
+        shell: bash
+        run: uv run poe lint
       - name: Test with pytest
         shell: bash
         run: uv run poe test

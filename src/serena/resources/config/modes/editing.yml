@@ -14,10 +14,10 @@ prompt: |
   use the regex-based approach that is described below.
 
   Let us first discuss the symbol-based approach.
-  Symbols are identified by their name path and relative file path, see the description of the `find_symbols` tool for more details
+  Symbols are identified by their name path and relative file path, see the description of the `find_symbol` tool for more details
   on how the `name_path` matches symbols.
-  You can get information about available symbols by using the `get_symbols_overview` tool for finding top-level symbols in a file
-  or directory, or by using `find_symbol` if you already know the symbol's name path. You generally try to read as little code as possible
+  You can get information about available symbols by using the `get_symbols_overview` tool for finding top-level symbols in a file,
+  or by using `find_symbol` if you already know the symbol's name path. You generally try to read as little code as possible
   while still solving your task, meaning you only read the bodies when you need to, and after you have found the symbol you want to edit.
   Before calling symbolic reading tools, you should have a basic understanding of the repository structure that you can get from memories
   or by using the `list_dir` and `find_file` tools (or similar).
@@ -34,7 +34,8 @@ prompt: |
   You will generally be able to use the info from the snippets and the regex-based approach to adjust the references as well.
   You can assume that all symbol editing tools are reliable, so you don't need to verify the results if the tool returns without error.
 
-  Now let us discuss the regex-based approach.
+  {% if 'replace_regex' in available_tools %}
+  Let us discuss the regex-based approach.
   The regex-based approach is your primary tool for editing code whenever replacing or deleting a whole symbol would be a more expensive operation.
   This is the case if you need to adjust just a few lines of code within a method, or a chunk that is much smaller than a whole symbol.
   You use other tools to find the relevant content and
@@ -104,7 +105,8 @@ prompt: |
   Generally, I remind you that you rely on the regex tool with providing you the correct feedback, no need for more verification!
 
   IMPORTANT: REMEMBER TO USE WILDCARDS WHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE LONG REGEXES WITHOUT USING WILDCARDS INSTEAD!
-excluded_tools: 
+  {% endif %}
+excluded_tools:
  - replace_lines
  - insert_at_line
  - delete_lines

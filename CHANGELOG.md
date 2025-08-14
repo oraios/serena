@@ -2,11 +2,34 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  * **Initial instructions no longer need to be loaded by the user**
+  * Significantly extended CLI
+  * Removed `replace_regex` tool from `ide-assistant` and `codex` contexts.
+    The current string replacement tool in Claude Code seems to be sufficiently efficient and is better
+    integrated with the IDE. Users who want to enable `replace_regex` can do so by customizing the context.
+
+* Configuration:
+  * Simplify customization of modes and contexts, including CLI support.
+  * Possibility to customize the system prompt and outputs of simple tools, including CLI support.
+  * Possibility to override tool descriptions through the context YAML.
+  * Prompt templates are now automatically adapted to the enabled tools.
+  * Several tools are now excluded by default, need to be included explicitly.
+  * New context for ChatGPT
+
 * Language servers:
   * **Added support for Lean 4** (requires Lean 4 to be installed via elan)
   * Reliably detect language server termination and propagate the respective error all the way
     back to the tool application, where an unexpected termination is handled by restarting the language server
     and subsequently retrying the tool application.
+  * **Add support for Swift**
+  * **Add support for Bash**
+  * Enhance Solargraph (Ruby) integration
+    * Automatic Rails project detection via config/application.rb, Rakefile, and Gemfile analysis
+    * Ruby/Rails-specific exclude patterns for improved indexing performance (vendor/, .bundle/, tmp/, log/, coverage/)
+    * Enhanced error handling with detailed diagnostics and Ruby manager-specific installation instructions (rbenv, RVM, asdf)
+    * Improved LSP capability negotiation and analysis completion detection
+    * Better Bundler and Solargraph installation error messages with clear resolution steps
 
 Fixes:
 * Ignore `.git` in check for ignored paths and improve performance of `find_all_non_ignored_files`

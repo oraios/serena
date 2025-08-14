@@ -8,7 +8,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from queue import Queue
+from queue import Empty, Queue
 from typing import Any
 
 import psutil
@@ -32,6 +32,7 @@ from solidlsp.lsp_protocol_handler.server import (
     make_request,
     make_response,
 )
+from solidlsp.util.subprocess_util import subprocess_kwargs
 
 log = logging.getLogger(__name__)
 
@@ -83,7 +84,12 @@ class Request(ToStringMixin):
         self._result_queue.put(Request.Result(error=err))
 
     def get_result(self, timeout: float | None = None) -> Result:
-        return self._result_queue.get(timeout=timeout)
+        try:
+            return self._result_queue.get(timeout=timeout)
+        except Empty as e:
+            if timeout is not None:
+                raise TimeoutError(f"Request timed out ({timeout=})") from e
+            raise e
 
 
 class SolidLanguageServerHandler:
@@ -181,6 +187,8 @@ class SolidLanguageServerHandler:
             # on Linux/macOS
             cmd = " ".join(cmd)
         log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
+        kwargs = subprocess_kwargs()
+        kwargs["start_new_session"] = self.start_independent_lsp_process
         self.process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -188,8 +196,8 @@ class SolidLanguageServerHandler:
             stderr=subprocess.PIPE,
             env=child_proc_env,
             cwd=self.process_launch_info.cwd,
-            start_new_session=self.start_independent_lsp_process,
             shell=True,
+            **kwargs,
         )
 
         # Check if process terminated immediately
@@ -370,7 +378,13 @@ class SolidLanguageServerHandler:
                 line = self.process.stderr.readline()
                 if not line:
                     continue
-                log.error(line.decode(ENCODING, errors="replace"))
+                line = line.decode(ENCODING, errors="replace")
+                line_lower = line.lower()
+                if "error" in line_lower or "exception" in line_lower or line.startswith("E["):
+                    level = logging.ERROR
+                else:
+                    level = logging.INFO
+                log.log(level, line)
         except Exception as e:
             log.error("Error while reading stderr from language server process: %s", e, exc_info=e)
         if not self._is_shutting_down:

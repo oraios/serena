@@ -87,6 +87,39 @@ class TestCSharpLanguageServer:
         assert "ToString" in symbol_names
         assert "IsAdult" in symbol_names
 
+    @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
+    def test_find_referencing_symbols_across_files(self, language_server: SolidLanguageServer) -> None:
+        """Test finding references to Calculator.Subtract method across files."""
+        # First, find the Subtract method in Program.cs
+        file_path = os.path.join("Program.cs")
+        symbols = language_server.request_document_symbols(file_path)
+
+        # Flatten the symbols if they're nested
+        symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+
+        subtract_symbol = None
+        for sym in symbol_list:
+            if sym.get("name") == "Subtract":
+                subtract_symbol = sym
+                break
+
+        assert subtract_symbol is not None, "Could not find 'Subtract' method symbol in Program.cs"
+
+        # Get references to the Subtract method
+        sel_start = subtract_symbol["selectionRange"]["start"]
+        refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
+
+        # Should find references in both Program.cs and Models/Person.cs
+        ref_files = [ref.get("relativePath", "") for ref in refs]
+        print(f"Found references: {refs}")
+        print(f"Reference files: {ref_files}")
+
+        # Check that we have references from both files
+        assert any("Program.cs" in ref_file for ref_file in ref_files), "Should find reference in Program.cs"
+        assert any(
+            "Models/Person.cs" in ref_file for ref_file in ref_files
+        ), "Should find reference in Models/Person.cs where Calculator.Subtract is called"
+
 
 @pytest.mark.csharp
 class TestCSharpSolutionProjectOpening:

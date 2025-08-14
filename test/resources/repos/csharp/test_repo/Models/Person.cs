@@ -1,3 +1,5 @@
+using TestProject;
+
 namespace TestProject.Models
 {
     public class Person
@@ -21,6 +23,12 @@ namespace TestProject.Models
         public bool IsAdult()
         {
             return Age >= 18;
+        }
+        
+        public int CalculateYearsUntilRetirement()
+        {
+            var calculator = new Calculator();
+            return calculator.Subtract(65, Age);
         }
     }
 }

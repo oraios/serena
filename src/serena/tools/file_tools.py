@@ -14,7 +14,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 from serena.text_utils import search_files
-from serena.tools import SUCCESS_RESULT, TOOL_DEFAULT_MAX_ANSWER_LENGTH, EditedFileContext, Tool, ToolMarkerCanEdit
+from serena.tools import SUCCESS_RESULT, TOOL_DEFAULT_MAX_ANSWER_LENGTH, EditedFileContext, Tool, ToolMarkerCanEdit, ToolMarkerOptional
 from serena.util.file_system import scan_directory
 
 
@@ -29,7 +29,6 @@ class ReadFileTool(Tool):
         """
         Reads the given file or a chunk of it. Generally, symbolic operations
         like find_symbol or find_referencing_symbols should be preferred if you know which symbols you are looking for.
-        Reading the entire file is only recommended if there is no other way to get the content required for the task.
 
         :param relative_path: the relative path to the file to read
         :param start_line: the 0-based index of the first line to be retrieved.
@@ -60,30 +59,29 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
 
     def apply(self, relative_path: str, content: str) -> str:
         """
-        Write a new file (or overwrite an existing file). For existing files, it is strongly recommended
-        to use symbolic operations like replace_symbol_body or insert_after_symbol/insert_before_symbol, if possible.
-        You can also use insert_at_line to insert content at a specific line for existing files if the symbolic operations
-        are not the right choice for what you want to do.
-
-        If ever used on an existing file, the content has to be the complete content of that file (so it
-        may never end with something like "The remaining content of the file is left unchanged.").
-        For operations that just replace a part of a file, use the replace_lines or the symbolic editing tools instead.
+        Write a new file or overwrite an existing file.
 
         :param relative_path: the relative path to the file to create
         :param content: the (utf-8-encoded) content to write to the file
         :return: a message indicating success or failure
         """
-        self.project.validate_relative_path(relative_path)
-
-        abs_path = (Path(self.get_project_root()) / relative_path).resolve()
+        project_root = self.get_project_root()
+        abs_path = (Path(project_root) / relative_path).resolve()
         will_overwrite_existing = abs_path.exists()
+
+        if will_overwrite_existing:
+            self.project.validate_relative_path(relative_path)
+        else:
+            assert abs_path.is_relative_to(
+                self.get_project_root()
+            ), f"Cannot create file outside of the project directory, got {relative_path=}"
 
         abs_path.parent.mkdir(parents=True, exist_ok=True)
         abs_path.write_text(content, encoding="utf-8")
         answer = f"File created: {relative_path}."
         if will_overwrite_existing:
             answer += " Overwrote existing file."
-        return answer
+        return json.dumps(answer)
 
 
 class ListDirTool(Tool):
@@ -200,7 +198,7 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
         return SUCCESS_RESULT
 
 
-class DeleteLinesTool(Tool, ToolMarkerCanEdit):
+class DeleteLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
     """
     Deletes a range of lines within a file.
     """
@@ -228,7 +226,7 @@ class DeleteLinesTool(Tool, ToolMarkerCanEdit):
         return SUCCESS_RESULT
 
 
-class ReplaceLinesTool(Tool, ToolMarkerCanEdit):
+class ReplaceLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
     """
     Replaces a range of lines within a file with new content.
     """
@@ -259,7 +257,7 @@ class ReplaceLinesTool(Tool, ToolMarkerCanEdit):
         return SUCCESS_RESULT
 
 
-class InsertAtLineTool(Tool, ToolMarkerCanEdit):
+class InsertAtLineTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
     """
     Inserts content at a given line in a file.
     """
@@ -297,8 +295,8 @@ class SearchForPatternTool(Tool):
         substring_pattern: str,
         context_lines_before: int = 0,
         context_lines_after: int = 0,
-        paths_include_glob: str | None = None,
-        paths_exclude_glob: str | None = None,
+        paths_include_glob: str = "",
+        paths_exclude_glob: str = "",
         relative_path: str = "",
         restrict_search_to_code_files: bool = False,
         max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
@@ -335,10 +333,10 @@ class SearchForPatternTool(Tool):
         :param context_lines_after: Number of lines of context to include after each match
         :param paths_include_glob: optional glob pattern specifying files to include in the search.
             Matches against relative file paths from the project root (e.g., "*.py", "src/**/*.ts").
-            Only matches files, not directories.
+            Only matches files, not directories. If left empty, all non-ignored files will be included.
         :param paths_exclude_glob: optional glob pattern specifying files to exclude from the search.
             Matches against relative file paths from the project root (e.g., "*test*", "**/*_generated.py").
-            Takes precedence over paths_include_glob. Only matches files, not directories.
+            Takes precedence over paths_include_glob. Only matches files, not directories. If left empty, no files are excluded.
         :param relative_path: only subpaths of this path (relative to the repo root) will be analyzed. If a path to a single
             file is passed, only that will be searched. The path must exist, otherwise a `FileNotFoundError` is raised.
         :param max_answer_chars: if the output is longer than this number of characters,
@@ -351,7 +349,7 @@ class SearchForPatternTool(Tool):
             For example, for finding classes or methods from a name pattern.
             Setting to False is a better choice if you also want to search in non-code files, like in html or yaml files,
             which is why it is the default.
-        :return: A JSON object mapping file paths to lists of matched consecutive lines (with context, if requested).
+        :return: A mapping of file paths to lists of matched consecutive lines.
         """
         abs_path = os.path.join(self.get_project_root(), relative_path)
         if not os.path.exists(abs_path):
@@ -363,8 +361,8 @@ class SearchForPatternTool(Tool):
                 relative_path=relative_path,
                 context_lines_before=context_lines_before,
                 context_lines_after=context_lines_after,
-                paths_include_glob=paths_include_glob,
-                paths_exclude_glob=paths_exclude_glob,
+                paths_include_glob=paths_include_glob.strip(),
+                paths_exclude_glob=paths_exclude_glob.strip(),
             )
         else:
             if os.path.isfile(abs_path):

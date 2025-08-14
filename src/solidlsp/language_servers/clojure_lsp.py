@@ -6,7 +6,6 @@ import logging
 import os
 import pathlib
 import shutil
-import stat
 import subprocess
 import threading
 
@@ -52,6 +51,13 @@ class ClojureLSP(SolidLanguageServer):
                 id="clojure-lsp",
                 url=f"{clojure_lsp_releases}/clojure-lsp-native-macos-aarch64.zip",
                 platform_id="osx-arm64",
+                archive_type="zip",
+                binary_name="clojure-lsp",
+            ),
+            RuntimeDependency(
+                id="clojure-lsp",
+                url=f"{clojure_lsp_releases}/clojure-lsp-native-macos-amd64.zip",
+                platform_id="osx-x64",
                 archive_type="zip",
                 binary_name="clojure-lsp",
             ),
@@ -118,7 +124,7 @@ class ClojureLSP(SolidLanguageServer):
             deps.install(logger, clojurelsp_ls_dir)
         if not os.path.exists(clojurelsp_executable_path):
             raise FileNotFoundError(f"Download failed? Could not find clojure-lsp executable at {clojurelsp_executable_path}")
-        os.chmod(clojurelsp_executable_path, stat.S_IEXEC)
+        os.chmod(clojurelsp_executable_path, 0o755)
         return clojurelsp_executable_path
 
     @staticmethod

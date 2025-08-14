@@ -19,15 +19,8 @@ class ExecuteShellCommandTool(Tool, ToolMarkerCanEdit):
         max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
     ) -> str:
         """
-        Execute a shell command and return its output.
-
-        IMPORTANT: you should always consider the memory about suggested shell commands before using this tool.
-        If this memory was not loaded in the current conversation, you should load it using the `read_memory` tool
-        before using this tool.
-
-        You should have at least once looked at the suggested shell commands from the corresponding memory
-        created during the onboarding process before using this tool.
-        Never execute unsafe shell commands like `rm -rf /` or similar! Generally be very careful with deletions.
+        Execute a shell command and return its output. If there is a memory about suggested commands, read that first.
+        Never execute unsafe shell commands like `rm -rf /` or similar!
 
         :param command: the shell command to execute
         :param cwd: the working directory to execute the command in. If None, the project root will be used.

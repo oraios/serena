@@ -19,10 +19,9 @@ prompt: |
 excluded_tools:
   - create_text_file
   - read_file
-  - delete_lines
-  - replace_lines
-  - insert_at_line
   - execute_shell_command
   - prepare_for_new_conversation
-  - summarize_changes
-  - get_current_config
+  - replace_regex
+
+tool_description_overrides: {}
+

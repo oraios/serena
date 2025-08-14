@@ -5,6 +5,7 @@ This guide explains how to add support for a new programming language to Serena.
 ## Overview
 
 Adding a new language involves:
+
 1. **Language Server Implementation** - Creating a language-specific server class
 2. **Language Registration** - Adding the language to enums and configurations  
 3. **Test Repository** - Creating a minimal test project
@@ -154,6 +155,7 @@ test/resources/repos/new_language/test_repo/
 ### 3.2 Example Source Files
 
 Create meaningful source files that demonstrate:
+
 - **Classes/Types** - For symbol testing
 - **Functions/Methods** - For reference finding
 - **Imports/Dependencies** - For cross-file operations
@@ -203,6 +205,7 @@ Consider adding new cases to the parametrized tests in `test_serena_agent.py` fo
 ### 5 Documentation
 
 Update:
+
 - **README.md** - Add language to supported languages list
 - **CHANGELOG.md** - Document the new language support
 - **Language-specific docs** - Installation requirements, known issues

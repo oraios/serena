@@ -25,6 +25,7 @@ from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_handler import SolidLanguageServerHandler
 from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils, PathUtils, TextUtils
 from solidlsp.lsp_protocol_handler import lsp_types
 from solidlsp.lsp_protocol_handler import lsp_types as LSPTypes
@@ -230,6 +231,16 @@ class SolidLanguageServer(ABC):
             from solidlsp.language_servers.lean4_server import Lean4LanguageServer
 
             ls = Lean4LanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.SWIFT:
+            from solidlsp.language_servers.sourcekit_lsp import SourceKitLSP
+
+            ls = SourceKitLSP(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.BASH:
+            from solidlsp.language_servers.bash_language_server import BashLanguageServer
+
+            ls = BashLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
         else:
             logger.log(f"Language {config.code_language} is not supported", logging.ERROR)
@@ -1161,33 +1172,21 @@ class SolidLanguageServer(ABC):
         end_column = len(lines[-1])
         return ls_types.Range(start=ls_types.Position(line=0, character=0), end=ls_types.Position(line=end_line, character=end_column))
 
-    def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, ls_types.SymbolKind, int, int]]]:
+    def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[UnifiedSymbolInformation]]:
         """
-        An overview of the given directory.
-
-        Maps relative paths of all contained files to info about top-level symbols in the file
-        (name, kind, line, column).
+        :return: A mapping of all relative paths analyzed to lists of top-level symbols in the corresponding file.
         """
         symbol_tree = self.request_full_symbol_tree(relative_dir_path)
         # Initialize result dictionary
-        result: dict[str, list[tuple[str, ls_types.SymbolKind, int, int]]] = defaultdict(list)
+        result: dict[str, list[UnifiedSymbolInformation]] = defaultdict(list)
 
         # Helper function to process a symbol and its children
         def process_symbol(symbol: ls_types.UnifiedSymbolInformation):
             if symbol["kind"] == ls_types.SymbolKind.File:
                 # For file symbols, process their children (top-level symbols)
                 for child in symbol["children"]:
-                    assert "location" in child
-                    assert "selectionRange" in child
                     path = Path(child["location"]["absolutePath"]).resolve().relative_to(self.repository_root_path)
-                    result[str(path)].append(
-                        (
-                            child["name"],
-                            child["kind"],
-                            child["selectionRange"]["start"]["line"],
-                            child["selectionRange"]["start"]["character"],
-                        )
-                    )
+                    result[str(path)].append(child)
             # For package/directory symbols, process their children
             for child in symbol["children"]:
                 process_symbol(child)
@@ -1197,28 +1196,19 @@ class SolidLanguageServer(ABC):
             process_symbol(root)
         return result
 
-    def request_document_overview(self, relative_file_path: str) -> list[tuple[str, ls_types.SymbolKind, int, int]]:
+    def request_document_overview(self, relative_file_path: str) -> list[UnifiedSymbolInformation]:
         """
-        An overview of the given file.
-        Returns the list of tuples (name, kind, line, column) of all top-level symbols in the file.
+        :return: the top-level symbols in the given file.
         """
         _, document_roots = self.request_document_symbols(relative_file_path)
-        result = []
-        for root in document_roots:
-            try:
-                result.append(
-                    (root["name"], root["kind"], root["selectionRange"]["start"]["line"], root["selectionRange"]["start"]["character"])
-                )
-            except KeyError as e:
-                raise KeyError(f"Could not process symbol of name {root.get('name', 'unknown')} in {relative_file_path=}") from e
-        return result
+        return document_roots
 
-    def request_overview(self, within_relative_path: str) -> dict[str, list[tuple[str, ls_types.SymbolKind, int, int]]]:
+    def request_overview(self, within_relative_path: str) -> dict[str, list[UnifiedSymbolInformation]]:
         """
         An overview of all symbols in the given file or directory.
 
         :param within_relative_path: the relative path to the file or directory to get the overview of.
-        :return: A mapping of all relative paths analyzed to lists of tuples (name, kind, line, column) of all top-level symbols in the corresponding file.
+        :return: A mapping of all relative paths analyzed to lists of top-level symbols in the corresponding file.
         """
         abs_path = (Path(self.repository_root_path) / within_relative_path).resolve()
         if not abs_path.exists():

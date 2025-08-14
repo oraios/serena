@@ -5,7 +5,6 @@ Provides C/C++ specific instantiation of the LanguageServer class. Contains vari
 import logging
 import os
 import pathlib
-import stat
 import threading
 
 from solidlsp.ls import SolidLanguageServer
@@ -95,7 +94,7 @@ class ClangdLanguageServer(SolidLanguageServer):
                 f"Clangd executable not found at {clangd_executable_path}.\n"
                 "Make sure you have installed clangd. See https://clangd.llvm.org/installation"
             )
-        os.chmod(clangd_executable_path, stat.S_IEXEC)
+        os.chmod(clangd_executable_path, 0o755)
 
         return clangd_executable_path
 

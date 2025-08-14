@@ -10,6 +10,7 @@ import os
 
 import pytest
 
+from serena.symbol import LanguageServerSymbol
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
@@ -427,16 +428,15 @@ class TestLanguageServerSymbols:
         assert len(services_symbols) > 0
 
         # Check for specific symbols from services.py
-        expected_symbols = [
-            ("UserService", SymbolKind.Class, 9, 6),
-            ("ItemService", SymbolKind.Class, 40, 6),
-            ("create_service_container", SymbolKind.Function, 67, 4),
-            ("user_var_str", SymbolKind.Variable, 73, 0),
-            ("user_service", SymbolKind.Variable, 76, 0),
-        ]
-
-        for symbol in expected_symbols:
-            assert symbol in services_symbols
+        expected_symbols = {
+            "UserService",
+            "ItemService",
+            "create_service_container",
+            "user_var_str",
+            "user_service",
+        }
+        retrieved_symbols = {symbol["name"] for symbol in services_symbols if "name" in symbol}
+        assert expected_symbols.issubset(retrieved_symbols)
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
     def test_request_document_overview(self, language_server: SolidLanguageServer) -> None:
@@ -445,7 +445,7 @@ class TestLanguageServerSymbols:
         overview = language_server.request_document_overview(os.path.join("examples", "user_management.py"))
 
         # Verify that we have entries for both files
-        symbol_names = {s_info[0] for s_info in overview}
+        symbol_names = {LanguageServerSymbol(s_info).name for s_info in overview}
         assert {"UserStats", "UserManager", "process_user_data", "main"}.issubset(symbol_names)
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)

@@ -1,7 +1,6 @@
 import logging
 import os
 import pathlib
-import stat
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_logger import LanguageServerLogger
@@ -84,7 +83,7 @@ class DartLanguageServer(SolidLanguageServer):
             deps.install(logger, dart_ls_dir)
 
         assert os.path.exists(dart_executable_path)
-        os.chmod(dart_executable_path, stat.S_IEXEC)
+        os.chmod(dart_executable_path, 0o755)
 
         return f"{dart_executable_path} language-server --client-id multilspy.dart --client-version 1.2"
 

@@ -7,13 +7,13 @@ import logging
 import os
 import platform
 import shutil
-import stat
 import subprocess
 import tarfile
 import threading
 import urllib.request
 import zipfile
 from pathlib import Path
+from time import sleep
 from typing import cast
 
 from overrides import override
@@ -22,10 +22,12 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_types import Location
 from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.zip import SafeZipExtractor
 
 from .common import RuntimeDependency
 
@@ -314,7 +316,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         # Make executable on Unix systems
         if platform.system().lower() != "windows":
-            server_dll.chmod(server_dll.stat().st_mode | stat.S_IEXEC)
+            server_dll.chmod(0o755)
 
         logger.log(f"Successfully installed Microsoft.CodeAnalysis.LanguageServer to {server_dll}", logging.INFO)
         return str(server_dll)
@@ -387,8 +389,9 @@ class CSharpLanguageServer(SolidLanguageServer):
             package_extract_dir = temp_dir / f"{package_name}.{package_version}"
             package_extract_dir.mkdir(exist_ok=True)
 
-            with zipfile.ZipFile(nupkg_file, "r") as zip_ref:
-                zip_ref.extractall(package_extract_dir)
+            # Use SafeZipExtractor to handle long paths and skip errors
+            extractor = SafeZipExtractor(archive_path=nupkg_file, extract_dir=package_extract_dir, verbose=False)
+            extractor.extract_all()
 
             # Clean up the nupkg file
             nupkg_file.unlink()
@@ -456,7 +459,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
             # Make dotnet executable on Unix
             if platform.system().lower() != "windows":
-                dotnet_exe.chmod(dotnet_exe.stat().st_mode | stat.S_IEXEC)
+                dotnet_exe.chmod(0o755)
 
             logger.log(f"Successfully installed .NET 9 runtime to {dotnet_exe}", logging.INFO)
             return str(dotnet_exe)
@@ -623,6 +626,9 @@ class CSharpLanguageServer(SolidLanguageServer):
             # Just acknowledge the request - we don't need to track these for now
             return
 
+        def handle_project_needs_restore(params):
+            return
+
         # Set up notification handlers
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", handle_progress)
@@ -630,6 +636,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         self.server.on_request("workspace/configuration", handle_workspace_configuration)
         self.server.on_request("window/workDoneProgress/create", handle_work_done_progress_create)
         self.server.on_request("client/registerCapability", handle_register_capability)
+        self.server.on_request("workspace/_roslyn_projectNeedsRestore", handle_project_needs_restore)
 
         self.logger.log("Starting Microsoft.CodeAnalysis.LanguageServer process", logging.INFO)
 
@@ -730,3 +737,10 @@ class CSharpLanguageServer(SolidLanguageServer):
             project_uris = [PathUtils.path_to_uri(project_file) for project_file in project_files]
             self.server.notify.send_notification("project/open", {"projects": project_uris})
             self.logger.log(f"Opened project files: {project_files}", logging.DEBUG)
+
+    @override
+    def request_references(self, relative_file_path: str, line: int, column: int) -> list[Location]:
+        # Like in the typescript LS, we need to wait here for the language server to
+        # get correct results that include cross-file references.
+        sleep(1)
+        return super().request_references(relative_file_path, line, column)
