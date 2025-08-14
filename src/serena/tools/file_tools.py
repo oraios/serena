@@ -100,6 +100,15 @@ class ListDirTool(Tool):
             required for the task.
         :return: a JSON object with the names of directories and files within the given directory
         """
+        # Check if the directory exists before validation
+        if not self.project.relative_path_exists(relative_path):
+            error_info = {
+                "error": f"Directory not found: {relative_path}",
+                "project_root": self.get_project_root(),
+                "hint": "Check if the path is correct relative to the project root",
+            }
+            return json.dumps(error_info)
+
         self.project.validate_relative_path(relative_path)
 
         dirs, files = scan_directory(
