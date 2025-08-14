@@ -2,7 +2,7 @@
 
 Serena is under active development. We are just discovering what it can do and where the limitations lie.
 
-Feel free to share your learnings by opening open new issues, feature requests and extensions.
+Feel free to share your learnings by opening new issues, feature requests and extensions.
 
 ## Developer Environment Setup
 

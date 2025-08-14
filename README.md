@@ -9,7 +9,7 @@
 * :free: Serena is **free & open-source**, enhancing the capabilities of LLMs you already have access to free of charge.
 
 You can think of Serena as an IDE for a coding agent. With it, the agent no longer needs to read entire
-files, perform grep-like searches or string replacements to find and and edit the right code. Instead, it can use code centered tools like `find_symbol`, `find_referencing_symbols` and `insert_after_symbol`.
+files, perform grep-like searches or string replacements to find and edit the right code. Instead, it can use code centered tools like `find_symbol`, `find_referencing_symbols` and `insert_after_symbol`.
 
 ### Users' Feedback
 
