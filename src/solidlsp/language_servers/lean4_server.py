@@ -128,7 +128,7 @@ class Lean4LanguageServer(SolidLanguageServer):
         if lean_exists and toml_exists:
             # Both formats exist - this is a configuration error
             raise RuntimeError(
-                f"Conflicting lakefile formats found in {repo_path}. " "Please use either lakefile.lean OR lakefile.toml, not both."
+                f"Conflicting lakefile formats found in {repo_path}. Please use either lakefile.lean OR lakefile.toml, not both."
             )
 
         # Prefer lakefile.toml (newer format) over lakefile.lean
@@ -353,7 +353,7 @@ class Lean4LanguageServer(SolidLanguageServer):
         if lean_exists and toml_exists:
             # Both formats exist - this is a configuration error
             raise RuntimeError(
-                f"Conflicting lakefile formats found in {repo_path}. " "Please use either lakefile.lean OR lakefile.toml, not both."
+                f"Conflicting lakefile formats found in {repo_path}. Please use either lakefile.lean OR lakefile.toml, not both."
             )
 
         is_lake_project = lean_exists or toml_exists
