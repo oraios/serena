@@ -16,6 +16,7 @@ class SolidLSPSettings:
     lean4_max_restart_attempts: int = 3
     lean4_restart_cooldown_seconds: float = 5.0
     lean4_health_check_timeout: float = 2.0
+    lean4_mathlib_symbol_timeout: float = 10.0  # Timeout for symbol requests in files with Mathlib imports
 
     def __post_init__(self):
         os.makedirs(str(self.solidlsp_dir), exist_ok=True)

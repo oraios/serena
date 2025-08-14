@@ -89,8 +89,10 @@ class TestSerenaAgent:
         result = find_symbol_tool.apply_ex(name_path=symbol_name)
 
         symbols = json.loads(result)
+        # Debug output
+        print(f"DEBUG: Symbols found for {symbol_name}: {symbols}")
         assert any(
-            symbol_name in s["name_path"] and expected_kind.lower() in s["kind"].lower() and expected_file in s["relative_path"]
+            symbol_name in s["name_path"] and expected_kind.lower() in s["kind"].lower() and expected_file in s.get("relative_path", "")
             for s in symbols
         ), f"Expected to find {symbol_name} ({expected_kind}) in {expected_file}"
 
@@ -136,12 +138,14 @@ class TestSerenaAgent:
 
         time.sleep(1)
         symbols = json.loads(result)
+        # Debug output
+        print(f"DEBUG find_symbol_references: Symbols for {symbol_name}: {symbols}")
         # Find the definition
         def_symbol = symbols[0]
 
         # Now find references
         find_refs_tool = agent.get_tool(FindReferencingSymbolsTool)
-        result = find_refs_tool.apply_ex(name_path=def_symbol["name_path"], relative_path=def_symbol["relative_path"])
+        result = find_refs_tool.apply_ex(name_path=def_symbol["name_path"], relative_path=def_symbol.get("relative_path", def_file))
 
         refs = json.loads(result)
         assert any(
