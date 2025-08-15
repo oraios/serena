@@ -228,7 +228,3 @@ class BashLanguageServer(SolidLanguageServer):
         )
 
         return all_symbols, root_symbols
-
-    # Removed: _merge_function_detections, _detect_bash_functions, _find_function_end
-    # These methods were part of a hybrid detection approach based on incorrect assumptions
-    # about bash-language-server limitations. The LSP server handles all function syntaxes correctly.
