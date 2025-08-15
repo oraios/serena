@@ -21,6 +21,8 @@ excluded_tools:
   - read_file
   - execute_shell_command
   - prepare_for_new_conversation
+  - replace_regex
+
 
 tool_description_overrides: {}
 

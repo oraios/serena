@@ -599,9 +599,9 @@ class SerenaAgent:
     def print_tool_overview(self) -> None:
         ToolRegistry().print_tool_overview(self._active_tools.values())
 
-    def mark_file_modified(self, relativ_path: str) -> None:
+    def mark_file_modified(self, relative_path: str) -> None:
         assert self.lines_read is not None
-        self.lines_read.invalidate_lines_read(relativ_path)
+        self.lines_read.invalidate_lines_read(relative_path)
 
     def __del__(self) -> None:
         """

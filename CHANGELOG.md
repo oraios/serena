@@ -4,7 +4,10 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * General:
   * **Initial instructions no longer need to be loaded by the user**
-  * Significantly extended CLI 
+  * Significantly extended CLI
+  * Removed `replace_regex` tool from `ide-assistant` and `codex` contexts.
+    The current string replacement tool in Claude Code seems to be sufficiently efficient and is better
+    integrated with the IDE. Users who want to enable `replace_regex` can do so by customizing the context.
 
 * Configuration:
   * Simplify customization of modes and contexts, including CLI support.

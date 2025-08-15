@@ -225,7 +225,8 @@ class GitignoreParser:
                     # Non-anchored patterns can match anywhere below the gitignore directory
                     # We need to preserve this behavior
                     if line.startswith("**/"):
-                        adjusted_pattern = line
+                        # Even if pattern starts with **, it should still be scoped to the subdirectory
+                        adjusted_pattern = os.path.join(rel_dir, line)
                     else:
                         # Add the directory prefix but also allow matching in subdirectories
                         adjusted_pattern = os.path.join(rel_dir, "**", line)

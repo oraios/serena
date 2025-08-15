@@ -22,7 +22,7 @@ from serena.constants import (
     DEFAULT_ENCODING,
     PROJECT_TEMPLATE_FILE,
     REPO_ROOT,
-    SELENA_CONFIG_TEMPLATE_FILE,
+    SERENA_CONFIG_TEMPLATE_FILE,
     SERENA_MANAGED_DIR_IN_HOME,
     SERENA_MANAGED_DIR_NAME,
 )
@@ -365,7 +365,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         :param config_file_path: the path where the configuration file should be generated
         """
         log.info(f"Auto-generating Serena configuration file in {config_file_path}")
-        loaded_commented_yaml = load_yaml(SELENA_CONFIG_TEMPLATE_FILE, preserve_comments=True)
+        loaded_commented_yaml = load_yaml(SERENA_CONFIG_TEMPLATE_FILE, preserve_comments=True)
         save_yaml(config_file_path, loaded_commented_yaml, preserve_comments=True)
 
     @classmethod
