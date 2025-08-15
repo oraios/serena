@@ -12,6 +12,7 @@ import re
 from collections import defaultdict
 from fnmatch import fnmatch
 from pathlib import Path
+from typing import Union
 
 from serena.text_utils import search_files
 from serena.tools import SUCCESS_RESULT, TOOL_DEFAULT_MAX_ANSWER_LENGTH, EditedFileContext, Tool, ToolMarkerCanEdit, ToolMarkerOptional
@@ -24,7 +25,7 @@ class ReadFileTool(Tool):
     """
 
     def apply(
-        self, relative_path: str, start_line: int = 0, end_line: int | None = None, max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH
+        self, relative_path: str, start_line: Union[int, str] = 0, end_line: Union[int, str, None] = None, max_answer_chars: Union[int, str] = TOOL_DEFAULT_MAX_ANSWER_LENGTH
     ) -> str:
         """
         Reads the given file or a chunk of it. Generally, symbolic operations
@@ -38,6 +39,34 @@ class ReadFileTool(Tool):
             required for the task.
         :return: the full text of the file at the given relative path
         """
+        # Handle type conversion for end_line parameter
+        if end_line is not None:
+            if isinstance(end_line, str):
+                try:
+                    end_line = int(end_line)
+                except ValueError:
+                    return f"Error: end_line must be an integer, got '{end_line}'"
+            elif not isinstance(end_line, int):
+                return f"Error: end_line must be an integer, got {type(end_line).__name__}"
+        
+        # Handle type conversion for start_line parameter
+        if isinstance(start_line, str):
+            try:
+                start_line = int(start_line)
+            except ValueError:
+                return f"Error: start_line must be an integer, got '{start_line}'"
+        elif not isinstance(start_line, int):
+            return f"Error: start_line must be an integer, got {type(start_line).__name__}"
+        
+        # Handle type conversion for max_answer_chars parameter
+        if isinstance(max_answer_chars, str):
+            try:
+                max_answer_chars = int(max_answer_chars)
+            except ValueError:
+                return f"Error: max_answer_chars must be an integer, got '{max_answer_chars}'"
+        elif not isinstance(max_answer_chars, int):
+            return f"Error: max_answer_chars must be an integer, got {type(max_answer_chars).__name__}"
+
         self.project.validate_relative_path(relative_path)
 
         result = self.project.read_file(relative_path)
@@ -89,7 +118,7 @@ class ListDirTool(Tool):
     Lists files and directories in the given directory (optionally with recursion).
     """
 
-    def apply(self, relative_path: str, recursive: bool, max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH) -> str:
+    def apply(self, relative_path: str, recursive: bool, max_answer_chars: Union[int, str] = TOOL_DEFAULT_MAX_ANSWER_LENGTH) -> str:
         """
         Lists all non-gitignored files and directories in the given directory (optionally with recursion).
 
@@ -216,8 +245,8 @@ class DeleteLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
     def apply(
         self,
         relative_path: str,
-        start_line: int,
-        end_line: int,
+        start_line: Union[int, str],
+        end_line: Union[int, str],
     ) -> str:
         """
         Deletes the given lines in the file.
@@ -244,8 +273,8 @@ class ReplaceLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
     def apply(
         self,
         relative_path: str,
-        start_line: int,
-        end_line: int,
+        start_line: Union[int, str],
+        end_line: Union[int, str],
         content: str,
     ) -> str:
         """
@@ -275,7 +304,7 @@ class InsertAtLineTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
     def apply(
         self,
         relative_path: str,
-        line: int,
+        line: Union[int, str],
         content: str,
     ) -> str:
         """
@@ -303,13 +332,13 @@ class SearchForPatternTool(Tool):
     def apply(
         self,
         substring_pattern: str,
-        context_lines_before: int = 0,
-        context_lines_after: int = 0,
-        paths_include_glob: str = "",
-        paths_exclude_glob: str = "",
+        context_lines_before: Union[int, str] = 0,
+        context_lines_after: Union[int, str] = 0,
+        paths_include_glob: str | None = None,
+        paths_exclude_glob: str | None = None,
         relative_path: str = "",
         restrict_search_to_code_files: bool = False,
-        max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
+        max_answer_chars: Union[int, str] = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
     ) -> str:
         """
         Offers a flexible search for arbitrary patterns in the codebase, including the
