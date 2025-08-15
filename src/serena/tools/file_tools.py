@@ -196,7 +196,32 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
         self.project.validate_relative_path(relative_path)
         with EditedFileContext(relative_path, self.agent) as context:
             original_content = context.get_original_content()
-            updated_content, n = re.subn(regex, repl, original_content, flags=re.DOTALL | re.MULTILINE)
+
+            # Simple fix for escape sequence handling in regex replacements
+            # The issue: re.subn() interprets escape sequences in replacement strings
+            # Solution: Double backslashes except for backreferences (\1, \2, etc.)
+            def process_replacement_string(s: str) -> str:
+                result = []
+                i = 0
+                while i < len(s):
+                    if s[i] == "\\" and i + 1 < len(s):
+                        next_char = s[i + 1]
+                        # Preserve backreferences (\1, \2, etc.) for regex functionality
+                        if next_char.isdigit():
+                            result.append(s[i : i + 2])
+                            i += 2
+                        else:
+                            # Double the backslash to prevent re.subn() from interpreting it
+                            result.append("\\\\")
+                            i += 1
+                    else:
+                        result.append(s[i])
+                        i += 1
+                return "".join(result)
+
+            processed_repl = process_replacement_string(repl)
+
+            updated_content, n = re.subn(regex, processed_repl, original_content, flags=re.DOTALL | re.MULTILINE)
             if n == 0:
                 return f"Error: No matches found for regex '{regex}' in file '{relative_path}'."
             if not allow_multiple_occurrences and n > 1:
