@@ -79,29 +79,9 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
       - name: Install coursier
-        shell: bash
-        run: |
-          if [[ "${{ runner.os }}" == "Linux" ]]; then
-            curl -fL https://github.com/coursier/launchers/raw/master/cs-x86_64-pc-linux.gz | gzip -d > cs
-            chmod +x cs
-            sudo mv cs /usr/local/bin/
-            /usr/local/bin/cs install coursier
-            echo "$HOME/.local/share/coursier/bin" >> $GITHUB_PATH
-            if [ ! -f /usr/local/bin/coursier ] && [ -f "$HOME/.local/share/coursier/bin/coursier" ]; then
-              sudo ln -sf "$HOME/.local/share/coursier/bin/coursier" /usr/local/bin/coursier
-            fi  
-          elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            brew install coursier/formulas/coursier
-          elif [[ "${{ runner.os }}" == "Windows" ]]; then
-            curl -fL -o cs.exe https://github.com/coursier/launchers/raw/master/cs-x86_64-pc-win32.exe
-            mkdir -p "$HOME/bin"
-            mv cs.exe "$HOME/bin/"
-            echo "$HOME/bin" >> $GITHUB_PATH
-            export PATH="$HOME/bin:$PATH"
-            "$HOME/bin/cs.exe" install coursier --install-dir "$HOME/bin"
-            cp "$HOME/bin/cs.exe" "$HOME/bin/coursier.exe"
-            "$HOME/bin/cs.exe" --version && "$HOME/bin/coursier.exe" --version 
-          fi
+        uses: coursier/setup-action@v1
+        with:
+          jvm: temurin:17
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
         with:

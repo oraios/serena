@@ -135,8 +135,11 @@ class Language(str, Enum):
                 return FilenameMatcher("*.nix")
             case self.ERLANG:
                 return FilenameMatcher("*.erl", "*.hrl", "*.escript", "*.config", "*.app", "*.app.src")
+<<<<<<< HEAD
             case self.AL:
                 return FilenameMatcher("*.al", "*.dal")
+=======
+>>>>>>> bf00108 (support scala(metals) lsp)
             case self.SCALA:
                 return FilenameMatcher("*.scala", "*.sbt")
             case _:

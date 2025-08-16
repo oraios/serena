@@ -80,25 +80,25 @@ class ScalaLanguageServer(SolidLanguageServer):
         coursier_command_path = shutil.which("coursier")
         cs_command_path = shutil.which("cs")
 
-        if not os.path.exists(metals_executable):
-            if not coursier_command_path:
-                raise RuntimeError("'coursier' not found isn't in PATH. Please install coursier try again.")
+        if not coursier_command_path:
+            raise RuntimeError(
+                "'coursier' not found isn't in PATH. Please install coursier try again."
+            )
 
+        if not cs_command_path:
+            logger.log("'cs' command not found. Trying to install it using 'coursier'.", logging.INFO)
+            try:
+                logger.log("Running 'coursier setup --yes' to install 'cs'...", logging.INFO)
+                subprocess.run([coursier_command_path, "setup", "--yes"], check=True, capture_output=True, text=True)
+            except subprocess.CalledProcessError as e:
+                raise RuntimeError(f"Failed to set up 'cs' command with 'coursier setup'. Stderr: {e.stderr}")
+
+            cs_command_path = shutil.which("cs")
             if not cs_command_path:
-                logger.log("'cs' command not found. Trying to install it using 'coursier'.", logging.INFO)
-                try:
-                    logger.log("Running 'coursier setup --yes' to install 'cs'...", logging.INFO)
-                    subprocess.run([coursier_command_path, "setup", "--yes"], check=True, capture_output=True, text=True)
-                except subprocess.CalledProcessError as e:
-                    raise RuntimeError(f"Failed to set up 'cs' command with 'coursier setup'. Stderr: {e.stderr}")
+                raise RuntimeError("'cs' command not found after running 'coursier setup'. Please check your PATH or install it manually.")
+            logger.log("'cs' command installed successfully.", logging.INFO)
 
-                cs_command_path = shutil.which("cs")
-                if not cs_command_path:
-                    raise RuntimeError(
-                        "'cs' command not found after running 'coursier setup'. Please check your PATH or install it manually."
-                    )
-                logger.log("'cs' command installed successfully.", logging.INFO)
-
+        if not os.path.exists(metals_executable):
             logger.log(f"metals executable not found at {metals_executable}, bootstrapping...", logging.INFO)
             artifact = "org.scalameta:metals_2.13:1.6.2"
             cmd = [
@@ -119,9 +119,9 @@ class ScalaLanguageServer(SolidLanguageServer):
                 metals_executable,
                 "-f",
             ]
-            logger.log("Bootstrapping metals...", logging.INFO)
+            logger.logger.info("Bootstrapping metals...")
             subprocess.run(cmd, cwd=metals_home, check=True)
-            logger.log("Bootstrapping metals finished.", logging.INFO)
+            logger.logger.info("Bootstrapping metals finished.")
         return [metals_executable]
 
     @staticmethod
