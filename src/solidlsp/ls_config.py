@@ -53,6 +53,7 @@ class Language(str, Enum):
     NIX = "nix"
     ERLANG = "erlang"
     AL = "al"
+    SCALA = "scala"
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -136,6 +137,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.erl", "*.hrl", "*.escript", "*.config", "*.app", "*.app.src")
             case self.AL:
                 return FilenameMatcher("*.al", "*.dal")
+            case self.SCALA:
+                return FilenameMatcher("*.scala", "*.sbt")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

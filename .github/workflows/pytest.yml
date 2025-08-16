@@ -78,6 +78,10 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+      - name: Install coursier
+        uses: coursier/setup-action@v1
+        with:
+          jvm: temurin:17
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
         with:

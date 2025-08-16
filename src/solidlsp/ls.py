@@ -150,6 +150,135 @@ class SolidLanguageServer(ABC):
         # (which, unfortunately, differs from the signature of the base class).
         # If this assumption is ever violated, we need branching logic here.
         ls = ls_class(config, logger, repository_root_path, solidlsp_settings)  # type: ignore
+        if config.code_language == Language.PYTHON:
+            from solidlsp.language_servers.pyright_server import (
+                PyrightServer,
+            )
+
+            ls = PyrightServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+        elif config.code_language == Language.PYTHON_JEDI:
+            from solidlsp.language_servers.jedi_server import JediServer
+
+            ls = JediServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+        elif config.code_language == Language.JAVA:
+            from solidlsp.language_servers.eclipse_jdtls import (
+                EclipseJDTLS,
+            )
+
+            ls = EclipseJDTLS(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.KOTLIN:
+            from solidlsp.language_servers.kotlin_language_server import (
+                KotlinLanguageServer,
+            )
+
+            ls = KotlinLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.RUST:
+            from solidlsp.language_servers.rust_analyzer import (
+                RustAnalyzer,
+            )
+
+            ls = RustAnalyzer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.CSHARP:
+            from solidlsp.language_servers.csharp_language_server import CSharpLanguageServer
+
+            ls = CSharpLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+        elif config.code_language == Language.CSHARP_OMNISHARP:
+            from solidlsp.language_servers.omnisharp import OmniSharp
+
+            ls = OmniSharp(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+        elif config.code_language == Language.TYPESCRIPT:
+            from solidlsp.language_servers.typescript_language_server import (
+                TypeScriptLanguageServer,
+            )
+
+            ls = TypeScriptLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+        elif config.code_language == Language.TYPESCRIPT_VTS:
+            # VTS based Language Server implementation, need to experiment to see if it improves performance
+            from solidlsp.language_servers.vts_language_server import VtsLanguageServer
+
+            ls = VtsLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+        elif config.code_language == Language.GO:
+            from solidlsp.language_servers.gopls import Gopls
+
+            ls = Gopls(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.RUBY:
+            from solidlsp.language_servers.solargraph import Solargraph
+
+            ls = Solargraph(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.DART:
+            from solidlsp.language_servers.dart_language_server import DartLanguageServer
+
+            ls = DartLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.CPP:
+            from solidlsp.language_servers.clangd_language_server import ClangdLanguageServer
+
+            ls = ClangdLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.PHP:
+            from solidlsp.language_servers.intelephense import Intelephense
+
+            ls = Intelephense(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.CLOJURE:
+            from solidlsp.language_servers.clojure_lsp import ClojureLSP
+
+            ls = ClojureLSP(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.ELIXIR:
+            from solidlsp.language_servers.elixir_tools.elixir_tools import ElixirTools
+
+            ls = ElixirTools(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.TERRAFORM:
+            from solidlsp.language_servers.terraform_ls import TerraformLS
+
+            ls = TerraformLS(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.SWIFT:
+            from solidlsp.language_servers.sourcekit_lsp import SourceKitLSP
+
+            ls = SourceKitLSP(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.BASH:
+            from solidlsp.language_servers.bash_language_server import BashLanguageServer
+
+            ls = BashLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.ZIG:
+            from solidlsp.language_servers.zls import ZigLanguageServer
+
+            ls = ZigLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.NIX:
+            from solidlsp.language_servers.nixd_ls import NixLanguageServer
+
+            ls = NixLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.LUA:
+            from solidlsp.language_servers.lua_ls import LuaLanguageServer
+
+            ls = LuaLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.ERLANG:
+            from solidlsp.language_servers.erlang_language_server import ErlangLanguageServer
+
+            ls = ErlangLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+        elif config.code_language == Language.SCALA:
+            from solidlsp.language_servers.scala_language_server import (
+                ScalaLanguageServer,
+            )
+
+            ls = ScalaLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+        else:
+            logger.log(f"Language {config.code_language} is not supported", logging.ERROR)
+            raise SolidLSPException(f"Language {config.code_language} is not supported")
+
         ls.set_request_timeout(timeout)
         return ls
 
