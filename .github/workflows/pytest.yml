@@ -133,7 +133,8 @@ jobs:
         run: |
           Write-Host "=== Installing ghcup on Windows ==="
           $env:GHCUP_INSTALL_BASE_PREFIX = "$env:USERPROFILE"
-          Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://get-ghcup.haskell.org'))
+          $installScript = (New-Object System.Net.WebClient).DownloadString('https://get-ghcup.haskell.org')
+          Invoke-Expression $installScript
           $ghcupBin = Join-Path $env:USERPROFILE ".ghcup\bin"
           echo $ghcupBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           & "$ghcupBin\ghcup.exe" install ghc 9.12.2
