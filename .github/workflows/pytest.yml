@@ -238,8 +238,24 @@ jobs:
         run: |
           ghcup install ghc 9.12.2 --set
           ghcup install hls 2.11.0.0 --set
-          ghc --version
+          # Refresh shell environment
+          source ~/.ghcup/env || true
+          echo "$HOME/.ghcup/bin" >> $GITHUB_PATH
+          # Verify installation
+          which ghc && ghc --version
+          which haskell-language-server-wrapper || which haskell-language-server
           haskell-language-server-wrapper --version || haskell-language-server --version
+        shell: bash
+      - name: Pre-build Haskell test project for HLS
+        run: |
+          cd test/resources/repos/haskell/test_repo
+          # Ensure cabal can find dependencies and build the project
+          cabal update
+          cabal configure
+          cabal build --dependencies-only
+          cabal build
+          echo "Haskell test project built successfully"
+        shell: bash
       - name: Install uv
         shell: bash
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
