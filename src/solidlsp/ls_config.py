@@ -48,6 +48,7 @@ class Language(str, Enum):
     TERRAFORM = "terraform"
     SWIFT = "swift"
     BASH = "bash"
+    HASKELL = "haskell"
     ZIG = "zig"
     LUA = "lua"
     NIX = "nix"
@@ -126,6 +127,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.swift")
             case self.BASH:
                 return FilenameMatcher("*.sh", "*.bash")
+            case self.HASKELL:
+                return FilenameMatcher("*.hs", "*.lhs", "*.cabal")
             case self.ZIG:
                 return FilenameMatcher("*.zig", "*.zon")
             case self.LUA:

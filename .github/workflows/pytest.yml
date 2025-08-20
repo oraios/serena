@@ -232,6 +232,37 @@ jobs:
           fi
           
           echo "$HOME/.nix-profile/bin" >> $GITHUB_PATH
+      - name: Install Haskell toolchain via ghcup (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          echo "=== Installing ghcup ==="
+          curl -sSf https://get-ghcup.haskell.org | BOOTSTRAP_HASKELL_YES=1 sh
+          export GHCUP=$HOME/.ghcup
+          echo "$HOME/.ghcup/bin" >> $GITHUB_PATH
+          . "$HOME/.ghcup/env"
+          echo "=== Installing GHC and HLS ==="
+          ghcup install ghc 9.12.2
+          ghcup set ghc 9.12.2
+          ghcup install hls 2.11.0.0
+          ghcup set hls 2.11.0.0
+          ghc --version
+          haskell-language-server-wrapper --version || haskell-language-server --version
+      - name: Install Haskell toolchain via ghcup (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== Installing ghcup on Windows ==="
+          $env:GHCUP_INSTALL_BASE_PREFIX = "$env:USERPROFILE"
+          Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://get-ghcup.haskell.org'))
+          $ghcupBin = Join-Path $env:USERPROFILE ".ghcup\bin"
+          echo $ghcupBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & "$ghcupBin\ghcup.exe" install ghc 9.12.2
+          & "$ghcupBin\ghcup.exe" set ghc 9.12.2
+          & "$ghcupBin\ghcup.exe" install hls 2.11.0.0
+          & "$ghcupBin\ghcup.exe" set hls 2.11.0.0
+          & "$ghcupBin\ghc.exe" --version
+          if (Test-Path "$ghcupBin\haskell-language-server-wrapper.exe") { & "$ghcupBin\haskell-language-server-wrapper.exe" --version } else { & "$ghcupBin\haskell-language-server.exe" --version }
       - name: Install uv
         shell: bash
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
