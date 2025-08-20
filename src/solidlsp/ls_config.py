@@ -44,6 +44,7 @@ class Language(str, Enum):
     TERRAFORM = "terraform"
     SWIFT = "swift"
     BASH = "bash"
+    SVELTE = "svelte"
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -109,6 +110,15 @@ class Language(str, Enum):
                 return FilenameMatcher("*.swift")
             case self.BASH:
                 return FilenameMatcher("*.sh", "*.bash")
+            case self.SVELTE:
+                # Svelte projects include .svelte files and all TypeScript/JavaScript files
+                path_patterns = ["*.svelte", "*.svelte.ts", "*.svelte.js"]
+                # Add all TypeScript/JavaScript file patterns (same as TYPESCRIPT)
+                for prefix in ["c", "m", ""]:
+                    for postfix in ["x", ""]:
+                        for base_pattern in ["ts", "js"]:
+                            path_patterns.append(f"*.{prefix}{base_pattern}{postfix}")
+                return FilenameMatcher(*path_patterns)
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
