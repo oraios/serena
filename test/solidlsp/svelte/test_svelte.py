@@ -3,6 +3,7 @@ Test Svelte Language Server
 """
 
 import os
+import sys
 
 import pytest
 
@@ -12,6 +13,7 @@ from solidlsp.ls_utils import SymbolUtils
 
 
 @pytest.mark.svelte
+@pytest.mark.skipif(sys.platform == "win32", reason="svelte-proxy-lsp requires additional setup on Windows")
 class TestSvelteServer:
     @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
     def test_find_definition_svelte_component(self, language_server: SolidLanguageServer) -> None:

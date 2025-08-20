@@ -75,8 +75,13 @@ class SvelteLanguageServer(SolidLanguageServer):
         # Verify both node and npx are installed
         is_node_installed = shutil.which("node") is not None
         assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
+
+        # Check for npx availability (might not be available in all environments)
         is_npx_installed = shutil.which("npx") is not None
-        assert is_npx_installed, "npx is not installed or isn't in PATH. Please install npm and try again."
+        if not is_npx_installed:
+            # On Windows CI or environments without npx, we can't use svelte-proxy-lsp
+            logger.log("npx is not available, svelte-proxy-lsp cannot be installed automatically", logging.WARNING)
+            raise RuntimeError("npx is not available. Please install npm and ensure npx is in PATH for Svelte language server support.")
 
         # Always use npx to run svelte-proxy-lsp (it will auto-install if needed)
         logger.log("Using npx to run svelte-proxy-lsp@latest (will auto-install if needed)", logging.INFO)
