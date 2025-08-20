@@ -102,7 +102,7 @@ With Serena, we provide
   * TypeScript/Javascript
   * PHP (uses Intelephense LSP; set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features)
   * Go (requires installation of gopls)
-  * Rust
+  * Rust (requires [rustup](https://rustup.rs/) - uses rust-analyzer from your toolchain)
   * C#
   * Ruby
   * Swift

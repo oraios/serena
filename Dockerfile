@@ -41,6 +41,15 @@ ENV PATH="${PATH}:/root/.local/bin"
 # Install the latest version of uv
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
+# Install Rust and rustup for rust-analyzer support (minimal profile)
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo
+ENV PATH="${CARGO_HOME}/bin:${PATH}"
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+    --default-toolchain stable \
+    --profile minimal \
+    && rustup component add rust-analyzer
+
 # Set the working directory
 WORKDIR /workspaces/serena
 
