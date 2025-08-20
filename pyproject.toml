@@ -262,6 +262,7 @@ markers = [
   "terraform: language server running for Terraform",
   "swift: language server running for Swift",
   "bash: language server running for Bash",
+  "haskell: language server running for Haskell",
   "snapshot: snapshot tests for symbolic editing operations",
   "ruby: language server running for Ruby",
 ]

@@ -1,0 +1,22 @@
+cabal-version:       3.4
+name:                hls-demo
+version:             0.1.0.0
+build-type:          Simple
+synopsis:            Demo project for Haskell Language Server testing
+description:         A simple Haskell library with advanced features for testing HLS capabilities
+license:             MIT
+category:            Development
+maintainer:          test@example.com
+
+library
+  exposed-modules:     Lib
+  hs-source-dirs:      src
+  build-depends:       base >=4.14 && <5
+  default-language:    Haskell2010
+
+executable hls-demo-exe
+  main-is:             Main.hs
+  hs-source-dirs:      app
+  build-depends:       base >=4.14 && <5,
+                       hls-demo
+  default-language:    Haskell2010
