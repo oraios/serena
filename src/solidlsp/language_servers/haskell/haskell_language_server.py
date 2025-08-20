@@ -1,9 +1,8 @@
+import json
 import logging
 import os
 import pathlib
 import shutil
-import json
-import subprocess
 import threading
 import time
 
@@ -12,10 +11,11 @@ from overrides import override
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_utils import PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
-from solidlsp.ls_utils import PlatformUtils, FileUtils
+
 from ..common import RuntimeDependencyCollection
 
 
@@ -78,9 +78,8 @@ class HaskellLanguageServer(SolidLanguageServer):
                 }
             )
         from ..common import RuntimeDependency
-        collection = RuntimeDependencyCollection(
-            dependencies=[RuntimeDependency(**m) for m in mapped]
-        )
+
+        collection = RuntimeDependencyCollection(dependencies=[RuntimeDependency(**m) for m in mapped])
         # Install for current platform if binary missing
         # This will place the binary under hls_dir (or subdir), and we compute the path
         results = collection.install(logger, hls_dir)
