@@ -336,9 +336,16 @@ in case the project was activated in the past, by its name. The default project 
 * "Activate the project my_project"
 
 All projects that have been activated will be automatically added to your `serena_config.yml`, and for each
-project, the file `.serena/project.yml` will be generated. You can adjust the latter, e.g., by changing the name
-(which you refer to during the activation) or other options. Make sure to not have two different projects with the
-same name.
+project, the file `.serena/project.yml` will be generated. You can adjust the latter to configure project-specific settings:
+- `project_name`: The name used to activate the project (must be unique)
+- `language`: The primary programming language (python, typescript, java, etc.)
+- `ignored_paths`: Additional paths to ignore (uses gitignore syntax)
+- `read_only`: Set to true to disable all editing tools
+- `allowed_external_paths`: List of paths outside the project that Serena can access (see security warning below)
+- `excluded_tools`: List of tool names to disable for this project
+
+Make sure to not have two different projects with the same name.
+For a complete list of options, see the project template in `src/serena/resources/project.template.yml`.
 
 ℹ️ For larger projects, we recommend that you index your project to accelerate Serena's tools; otherwise the first
 tool application may be very slow.
@@ -527,6 +534,15 @@ If you only want to use Serena purely for analyzing code and suggesting implemen
 without modifying the codebase, you can enable read-only mode by setting `read_only: true` in your project configuration file.
 This will automatically disable all editing tools and prevent any modifications to your codebase while still
 allowing all analysis and exploration capabilities.
+
+In some cases, you may need to allow Serena to access files outside the project directory, such as shared libraries
+or configuration files. You can configure this by adding paths to the `allowed_external_paths` list in your project configuration file:
+```yaml
+allowed_external_paths:
+  - /home/user/shared/libraries
+  - ../shared-config
+```
+**⚠️ Security Warning**: Allowing external paths relaxes Serena's security restrictions. Only add paths that you trust and that are necessary for your project. Serena will display warnings at startup when external paths are configured.
 
 In general, be sure to back up your work and use a version control system in order to avoid
 losing any work.

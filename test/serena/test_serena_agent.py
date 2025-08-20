@@ -275,3 +275,34 @@ class TestSerenaAgent:
 
         symbols = json.loads(result)
         assert not symbols, f"Expected to find no symbols for {name_path}. Symbols found: {symbols}"
+
+    def test_project_config_with_allowed_external_paths(self):
+        """Test that ProjectConfig correctly handles allowed_external_paths."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_path = Path(temp_dir)
+
+            # Create a sample ProjectConfig with external paths
+            config = ProjectConfig(
+                project_name="test_external",
+                language=Language.PYTHON,
+                allowed_external_paths=["/home/user/shared", "../external", str(project_path / "symlink")],
+            )
+
+            # Test that the paths are stored correctly
+            assert len(config.allowed_external_paths) == 3
+            assert "/home/user/shared" in config.allowed_external_paths
+            assert "../external" in config.allowed_external_paths
+
+            # Test serialization and deserialization
+            config_dict = {
+                "project_name": config.project_name,
+                "language": config.language.value,
+                "allowed_external_paths": config.allowed_external_paths,
+            }
+
+            # Create a new config from dict
+            loaded_config = ProjectConfig._from_dict(config_dict)
+            assert loaded_config.allowed_external_paths == config.allowed_external_paths

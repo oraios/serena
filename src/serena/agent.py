@@ -27,6 +27,7 @@ from serena.dashboard import SerenaDashboardAPI
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.tools import ActivateProjectTool, Tool, ToolMarker, ToolRegistry
+from serena.util.file_system import match_path
 from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
 from solidlsp import SolidLanguageServer
@@ -317,6 +318,131 @@ class SerenaAgent:
             raise ValueError("Cannot get project root if no project is active.")
         return project.project_root
 
+    def path_is_inside_project(self, path: str | Path) -> bool:
+        """
+        Checks if the given (absolute or relative) path is inside the project directory.
+        Note that even relative paths may be outside if the contain ".." or point to symlinks.
+        """
+        path = Path(path)
+        _proj_root = Path(self.get_project_root())
+        if not path.is_absolute():
+            path = _proj_root / path
+
+        path = path.resolve()
+        return path.is_relative_to(_proj_root)
+
+    def path_is_gitignored(self, path: str | Path) -> bool:
+        """
+        Checks if the given path is ignored by git. Non absolute paths are assumed to be relative to the project root.
+        For external paths, checks if the path would be ignored from any configured root (project or external).
+        """
+        if self._active_project is None:
+            return False
+
+        path = Path(path)
+
+        # For non-absolute paths, treat as relative to project root
+        if not path.is_absolute():
+            relative_path = path
+            # always ignore paths inside .git
+            if len(relative_path.parts) > 0 and relative_path.parts[0] == ".git":
+                return True
+            return match_path(str(relative_path), self._active_project.get_ignore_spec(), root_path=self.get_project_root())
+
+        # For absolute paths, check against all possible roots
+
+        # First, check if ignored from project root (if path is inside project)
+        try:
+            relative_path = path.relative_to(self.get_project_root())
+            # always ignore paths inside .git
+            if len(relative_path.parts) > 0 and relative_path.parts[0] == ".git":
+                return True
+            if match_path(str(relative_path), self._active_project.get_ignore_spec(), root_path=self.get_project_root()):
+                return True
+        except ValueError:
+            # Path is not inside project root
+            pass
+
+        # If path is in allowed external directories, check gitignore from those roots too
+        if self.path_is_in_allowed_external(path):
+            for ext_path_str in self._active_project.project_config.allowed_external_paths:
+                ext_path = Path(ext_path_str)
+                if not ext_path.is_absolute():
+                    ext_path = Path(self._active_project.project_root) / ext_path
+                ext_path = ext_path.resolve()
+
+                try:
+                    # Get path relative to this external directory
+                    relative_to_ext = path.relative_to(ext_path)
+                    # Check .git directories
+                    if ".git" in relative_to_ext.parts:
+                        return True
+                    # Apply project's gitignore patterns relative to external directory
+                    if match_path(str(relative_to_ext), self._active_project.get_ignore_spec(), root_path=str(ext_path)):
+                        return True
+                except ValueError:
+                    # Path is not relative to this external directory
+                    continue
+
+        return False
+
+    def path_is_in_allowed_external(self, path: str | Path) -> bool:
+        """
+        Checks if the given path is within one of the allowed external directories.
+
+        :param path: The path to check (absolute or relative)
+        :return: True if the path is within an allowed external directory
+        """
+        if self._active_project is None:
+            return False
+
+        allowed_paths = self._active_project.project_config.allowed_external_paths
+        if not allowed_paths:
+            return False
+
+        path = Path(path)
+        # Resolve the path to absolute
+        if not path.is_absolute():
+            path = Path(self.get_project_root()) / path
+        path = path.resolve()
+
+        # Check each allowed external path
+        for allowed in allowed_paths:
+            allowed_path = Path(allowed)
+            # If relative, make it relative to project root
+            if not allowed_path.is_absolute():
+                allowed_path = Path(self.get_project_root()) / allowed_path
+
+            try:
+                # Resolve to handle symlinks and .. components
+                allowed_path = allowed_path.resolve()
+                # Check if the path is within this allowed directory
+                if path.is_relative_to(allowed_path) or path == allowed_path:
+                    return True
+            except (ValueError, OSError):
+                # Skip invalid paths
+                log.warning(f"Invalid allowed external path: {allowed}")
+                continue
+
+        return False
+
+    def validate_relative_path(self, relative_path: str) -> None:
+        """
+        Validates that the given relative path is safe to read or edit,
+        meaning it's inside the project directory (or an allowed external directory)
+        and is not ignored by git.
+        """
+        # Check if path is inside project or in allowed external paths
+        if not self.path_is_inside_project(relative_path):
+            # If not inside project, check if it's in allowed external paths
+            if not self.path_is_in_allowed_external(relative_path):
+                raise ValueError(
+                    f"{relative_path=} points to path outside of the repository root and is not in allowed external paths, can't use it for safety reasons"
+                )
+
+        if self.path_is_gitignored(relative_path):
+            raise ValueError(f"File {relative_path} is gitignored, can't read or edit it for safety reasons")
+
     def get_exposed_tool_instances(self) -> list["Tool"]:
         """
         :return: the tool instances which are exposed (e.g. to the MCP client).
@@ -437,6 +563,19 @@ class SerenaAgent:
         log.info(f"Activating {project.project_name} at {project.project_root}")
         self._active_project = project
         self._update_active_tools()
+
+        # Log warnings if external paths are configured
+        if project.project_config.allowed_external_paths:
+            log.warning(f"SECURITY: Project {project.project_name} has allowed external paths:")
+            for ext_path in project.project_config.allowed_external_paths:
+                try:
+                    allowed_path = Path(ext_path)
+                    if not allowed_path.is_absolute():
+                        allowed_path = Path(project.project_root) / allowed_path
+                    resolved = allowed_path.resolve()
+                    log.warning(f"  - {ext_path} -> {resolved}")
+                except Exception as e:
+                    log.warning(f"  - {ext_path} -> [ERROR: {e}]")
 
         # initialize project-specific instances which do not depend on the language server
         self.memories_manager = MemoriesManager(project.project_root)

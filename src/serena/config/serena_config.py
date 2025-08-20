@@ -167,6 +167,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
     ignore_all_files_in_gitignore: bool = True
     initial_prompt: str = ""
     encoding: str = DEFAULT_ENCODING
+    allowed_external_paths: list[str] = field(default_factory=list)
 
     SERENA_DEFAULT_PROJECT_FILE = "project.yml"
 
@@ -245,6 +246,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
             ignore_all_files_in_gitignore=data.get("ignore_all_files_in_gitignore", True),
             initial_prompt=data.get("initial_prompt", ""),
             encoding=data.get("encoding", DEFAULT_ENCODING),
+            allowed_external_paths=data.get("allowed_external_paths", []),
         )
 
     @classmethod
