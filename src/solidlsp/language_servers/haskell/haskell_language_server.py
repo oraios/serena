@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import pathlib
@@ -16,7 +15,51 @@ from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
-from ..common import RuntimeDependencyCollection
+from ..common import RuntimeDependency, RuntimeDependencyCollection
+
+# Runtime dependencies configuration - moved from JSON to Python per maintainer feedback
+RUNTIME_DEPENDENCIES = [
+    RuntimeDependency(
+        id="HLS",
+        description="HLS 2.11.0.0 for macOS arm64",
+        url="https://downloads.haskell.org/~hls/haskell-language-server-2.11.0.0/haskell-language-server-2.11.0.0-aarch64-apple-darwin.tar.xz",
+        platform_id="osx-arm64",
+        archive_type="xztar",
+        binary_name="haskell-language-server-wrapper",
+    ),
+    RuntimeDependency(
+        id="HLS",
+        description="HLS 2.11.0.0 for macOS x64",
+        url="https://downloads.haskell.org/~hls/haskell-language-server-2.11.0.0/haskell-language-server-2.11.0.0-x86_64-apple-darwin.tar.xz",
+        platform_id="osx-x64",
+        archive_type="xztar",
+        binary_name="haskell-language-server-wrapper",
+    ),
+    RuntimeDependency(
+        id="HLS",
+        description="HLS 2.11.0.0 for Linux x64",
+        url="https://downloads.haskell.org/~hls/haskell-language-server-2.11.0.0/haskell-language-server-2.11.0.0-x86_64-linux-unknown.tar.xz",
+        platform_id="linux-x64",
+        archive_type="xztar",
+        binary_name="haskell-language-server-wrapper",
+    ),
+    RuntimeDependency(
+        id="HLS",
+        description="HLS 2.11.0.0 for Linux arm64 (aarch64)",
+        url="https://downloads.haskell.org/~hls/haskell-language-server-2.11.0.0/haskell-language-server-2.11.0.0-aarch64-linux-ubuntu2004.tar.xz",
+        platform_id="linux-arm64",
+        archive_type="xztar",
+        binary_name="haskell-language-server-wrapper",
+    ),
+    RuntimeDependency(
+        id="HLS",
+        description="HLS 2.11.0.0 for Windows x64",
+        url="https://downloads.haskell.org/~hls/haskell-language-server-2.11.0.0/haskell-language-server-2.11.0.0-x86_64-mingw64.zip",
+        platform_id="win-x64",
+        archive_type="zip",
+        binary_name="haskell-language-server-wrapper.exe",
+    ),
+]
 
 
 class HaskellLanguageServer(SolidLanguageServer):
@@ -39,50 +82,37 @@ class HaskellLanguageServer(SolidLanguageServer):
         ]
 
     @staticmethod
-    def _find_hls_executable() -> list[str]:
+    def _find_hls_executable() -> list[str] | None:
+        """Find HLS executable on PATH. Returns None if not found instead of raising exception."""
         # Prefer the wrapper, fallback to hls direct binary
         for exe in ["haskell-language-server-wrapper", "haskell-language-server"]:
             path = shutil.which(exe)
             if path:
                 # HLS accepts --lsp to run as LSP server; wrapper may not require it, but it's supported
                 return [path, "--lsp"]
-        raise RuntimeError(
-            "Could not find HLS. Install via ghcup and ensure haskell-language-server-wrapper or haskell-language-server is on PATH."
-        )
+        return None
 
     @classmethod
     def _ensure_managed_hls(cls, logger: LanguageServerLogger, settings: SolidLSPSettings) -> str:
         """Download a pinned HLS if not present and return its path."""
         hls_dir = os.path.join(cls.ls_resources_dir(settings), "hls-2.11.0.0")
         os.makedirs(hls_dir, exist_ok=True)
-        runtime_json = os.path.join(os.path.dirname(__file__), "runtime_dependencies.json")
-        with open(runtime_json, encoding="utf-8") as f:
-            d = json.load(f)
-            runtime_deps = d["runtimeDependencies"]
-        # Map JSON keys (camelCase) to RuntimeDependency fields (snake_case)
-        mapped = []
-        for dep in runtime_deps:
-            archive_type = dep.get("archiveType")
-            # normalize tar.xz to xztar which FileUtils supports as "xztar"
-            if archive_type == "txz":
-                archive_type = "xztar"
-            mapped.append(
-                {
-                    "id": dep.get("id"),
-                    "platform_id": dep.get("platformId"),
-                    "url": dep.get("url"),
-                    "archive_type": archive_type,
-                    "binary_name": dep.get("binaryName"),
-                    "extract_path": dep.get("extractPath"),
-                    "description": dep.get("description"),
-                }
-            )
-        from ..common import RuntimeDependency
 
-        collection = RuntimeDependencyCollection(dependencies=[RuntimeDependency(**m) for m in mapped])
+        # Get the runtime dependency for current platform
+        platform_id = PlatformUtils.get_platform_id()
+        hls_dependency = None
+
+        for dep in RUNTIME_DEPENDENCIES:
+            if dep.platform_id == platform_id.value:
+                hls_dependency = dep
+                break
+
+        if not hls_dependency:
+            raise RuntimeError(f"No HLS dependency found for platform {platform_id.value}")
+
+        runtime_collection = RuntimeDependencyCollection([hls_dependency])
         # Install for current platform if binary missing
-        # This will place the binary under hls_dir (or subdir), and we compute the path
-        results = collection.install(logger, hls_dir)
+        results = runtime_collection.install(logger, hls_dir)
         # Choose the first result path as the binary; on Unix, ensure executable
         bin_path = next(iter(results.values()))
         if not os.path.exists(bin_path):
@@ -97,10 +127,13 @@ class HaskellLanguageServer(SolidLanguageServer):
                     break
             if candidate:
                 bin_path = candidate
-        if not os.path.exists(bin_path):
-            raise RuntimeError("Managed HLS download did not yield a usable binary")
-        if not PlatformUtils.get_platform_id().is_windows():
+            else:
+                raise RuntimeError(f"Could not locate HLS binary in {hls_dir}")
+
+        # Make sure the binary is executable on Unix systems
+        if os.name != "nt":  # Not Windows
             os.chmod(bin_path, 0o755)
+
         return bin_path
 
     def __init__(
@@ -110,13 +143,13 @@ class HaskellLanguageServer(SolidLanguageServer):
         repository_root_path: str,
         solidlsp_settings: SolidLSPSettings,
     ):
-        # PATH-first
-        try:
-            cmd = self._find_hls_executable()
-        except RuntimeError:
+        # PATH-first approach
+        cmd = self._find_hls_executable()
+        if cmd is None:
             # Managed fallback
             managed_bin = self._ensure_managed_hls(logger, solidlsp_settings)
             cmd = [managed_bin, "--lsp"]
+
         logger.log(f"Starting HLS using: {' '.join(cmd)}", logging.INFO)
 
         super().__init__(
