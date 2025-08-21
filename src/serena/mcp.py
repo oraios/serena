@@ -38,7 +38,7 @@ def configure_logging(*args, **kwargs) -> None:  # type: ignore
 
 
 # patch the logging configuration function in fastmcp, because it's hard-coded and broken
-server.configure_logging = configure_logging
+server.configure_logging = configure_logging # type: ignore
 
 
 @dataclass
@@ -75,7 +75,7 @@ class SerenaMCPFactory:
             if not isinstance(node, dict):
                 # lists get handled by parent calls
                 return node
-
+            
             # ---- handle type ----
             t = node.get("type")
             if isinstance(t, str):
@@ -106,6 +106,15 @@ class SerenaMCPFactory:
             # ---- simplify anyOf/oneOf if they only differ by integer/number ----
             for key in ("oneOf", "anyOf"):
                 if key in node and isinstance(node[key], list):
+                    # Special case: anyOf or oneOf with "type X" and "null"
+                    if len(node[key]) == 2:
+                        types = [sub.get("type") for sub in node[key]]
+                        if "null" in types:
+                            non_null_type = next(t for t in types if t != "null")
+                            if isinstance(non_null_type, str):
+                                node["type"] = non_null_type
+                                node.pop(key, None)
+                                continue
                     simplified = []
                     changed = False
                     for sub in node[key]:
@@ -114,7 +123,7 @@ class SerenaMCPFactory:
                     # If all subs are the same after integer→number, collapse
                     try:
                         import json
-
+            
                         canon = [json.dumps(x, sort_keys=True) for x in simplified]
                         if len(set(canon)) == 1:
                             # copy the single schema up
@@ -333,7 +342,7 @@ class SerenaMCPFactorySingleProcess(SerenaMCPFactory):
 
     @asynccontextmanager
     async def server_lifespan(self, mcp_server: FastMCP) -> AsyncIterator[None]:
-        openai_tool_compatible = self.context.name in ["chatgpt", "codex"]
+        openai_tool_compatible = self.context.name in ["chatgpt", "codex", "openai-agent"]
         self._set_mcp_tools(mcp_server, openai_tool_compatible=openai_tool_compatible)
         log.info("MCP server lifetime setup complete")
         yield

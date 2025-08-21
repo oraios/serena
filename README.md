@@ -552,6 +552,8 @@ Choose the context that best matches the type of integration you are using.
 When launching Serena, specify the context using `--context <context-name>`.  
 Note that for cases where parameter lists are specified (e.g. Claude Desktop), you must add two parameters to the list.
 
+If you are using a local server (such as Llama.cpp) which requires you to use OpenAI-compatible tool descriptions, use context `openai-agent` instead of `agent`.
+
 #### Modes
 
 Modes further refine Serena's behavior for specific types of tasks or interaction styles. Multiple modes can be active simultaneously, allowing you to combine their effects. Modes influence the system prompt and can also alter the set of available tools by excluding certain ones.
