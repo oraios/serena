@@ -2,6 +2,7 @@ import pytest
 from serena.mcp import SerenaMCPFactorySingleProcess
 from serena.config.serena_config import SerenaConfig
 
+
 def load_agent():
     """
     Load a minimal agent to expose the default set of tools.
@@ -12,10 +13,12 @@ def load_agent():
     cfg = SerenaConfig.from_config_file()
     # Enable every optional tool in the configuration
     from serena.tools.tools_base import ToolRegistry
+
     registry = ToolRegistry()
     cfg.included_optional_tools = tuple(registry.get_tool_names_optional())
     cfg.excluded_tools = tuple()
     return cfg
+
 
 @pytest.mark.parametrize("context", ("chatgpt", "codex", "openai-agent"))
 def test_all_tool_parameters_have_type(context):
@@ -42,8 +45,6 @@ def test_all_tool_parameters_have_type(context):
         else:
             for pname, prop in params["properties"].items():
                 if "type" not in prop:
-                    issues.append(
-                        f"Tool {tool.get_name()!r} parameter {pname!r} missing 'type'"
-                    )
+                    issues.append(f"Tool {tool.get_name()!r} parameter {pname!r} missing 'type'")
         if issues:
             raise AssertionError("\n".join(issues))

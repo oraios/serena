@@ -38,7 +38,7 @@ def configure_logging(*args, **kwargs) -> None:  # type: ignore
 
 
 # patch the logging configuration function in fastmcp, because it's hard-coded and broken
-server.configure_logging = configure_logging # type: ignore
+server.configure_logging = configure_logging  # type: ignore
 
 
 @dataclass
@@ -75,7 +75,7 @@ class SerenaMCPFactory:
             if not isinstance(node, dict):
                 # lists get handled by parent calls
                 return node
-            
+
             # ---- handle type ----
             t = node.get("type")
             if isinstance(t, str):
@@ -123,7 +123,7 @@ class SerenaMCPFactory:
                     # If all subs are the same after integer→number, collapse
                     try:
                         import json
-            
+
                         canon = [json.dumps(x, sort_keys=True) for x in simplified]
                         if len(set(canon)) == 1:
                             # copy the single schema up
