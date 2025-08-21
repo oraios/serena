@@ -43,7 +43,7 @@ class KotlinLanguageServer(SolidLanguageServer):
         self.runtime_dependency_paths = runtime_dependency_paths
 
         # Create command to execute the Kotlin Language Server script
-        cmd = f'"{self.runtime_dependency_paths.kotlin_executable_path}"'
+        cmd = [f'"{self.runtime_dependency_paths.kotlin_executable_path}"', "--stdio"]
 
         # Set environment variables including JAVA_HOME
         proc_env = {"JAVA_HOME": self.runtime_dependency_paths.java_home_path}
@@ -76,7 +76,7 @@ class KotlinLanguageServer(SolidLanguageServer):
             "runtimeDependency": {
                 "id": "KotlinLsp",
                 "description": "Kotlin Language Server",
-                "url": "https://github.com/fwcd/kotlin-language-server/releases/download/1.3.13/server.zip",
+                "url": "https://download-cdn.jetbrains.com/kotlin-lsp/0.253.10629/kotlin-0.253.10629.zip",
                 "archiveType": "zip",
             },
             "java": {
@@ -138,13 +138,13 @@ class KotlinLanguageServer(SolidLanguageServer):
         assert os.path.exists(java_path), f"Java executable not found at {java_path}"
 
         # Setup Kotlin Language Server paths
-        kotlin_ls_dir = os.path.join(static_dir, "server")
+        kotlin_ls_dir = static_dir
 
         # Get platform-specific executable script path
         if platform_id.value.startswith("win-"):
-            kotlin_script = os.path.join(kotlin_ls_dir, "bin", "kotlin-language-server.bat")
+            kotlin_script = os.path.join(kotlin_ls_dir,"kotlin-lsp.cmd")
         else:
-            kotlin_script = os.path.join(kotlin_ls_dir, "bin", "kotlin-language-server")
+            kotlin_script = os.path.join(kotlin_ls_dir,"kotlin-lsp.sh")
 
         # Download and extract Kotlin Language Server if script doesn't exist
         if not os.path.exists(kotlin_script):
