@@ -110,6 +110,13 @@ class TestSerenaAgent:
                 os.path.join("src", "main", "java", "test_repo", "Main.java"),
                 marks=pytest.mark.java,
             ),
+            pytest.param(
+                Language.KOTLIN,
+                "Model",
+                os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
+                os.path.join("src", "main", "kotlin", "test_repo", "Main.kt"),
+                marks=pytest.mark.kotlin,
+            ),
             pytest.param(Language.RUST, "add", os.path.join("src", "lib.rs"), os.path.join("src", "main.rs"), marks=pytest.mark.rust),
             pytest.param(Language.TYPESCRIPT, "helperFunction", "index.ts", "use_helper.ts", marks=pytest.mark.typescript),
             pytest.param(Language.PHP, "helperFunction", "helper.php", "index.php", marks=pytest.mark.php),
