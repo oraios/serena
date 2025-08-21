@@ -552,7 +552,7 @@ Choose the context that best matches the type of integration you are using.
 When launching Serena, specify the context using `--context <context-name>`.  
 Note that for cases where parameter lists are specified (e.g. Claude Desktop), you must add two parameters to the list.
 
-If you are using a local server (such as Llama.cpp) which requires you to use OpenAI-compatible tool descriptions, use context `openai-agent` instead of `agent`.
+If you are using a local server (such as Llama.cpp) which requires you to use OpenAI-compatible tool descriptions, use context `oaicompat-agent` instead of `agent`.
 
 #### Modes
 

@@ -342,7 +342,7 @@ class SerenaMCPFactorySingleProcess(SerenaMCPFactory):
 
     @asynccontextmanager
     async def server_lifespan(self, mcp_server: FastMCP) -> AsyncIterator[None]:
-        openai_tool_compatible = self.context.name in ["chatgpt", "codex", "openai-agent"]
+        openai_tool_compatible = self.context.name in ["chatgpt", "codex", "oaicompat-agent"]
         self._set_mcp_tools(mcp_server, openai_tool_compatible=openai_tool_compatible)
         log.info("MCP server lifetime setup complete")
         yield

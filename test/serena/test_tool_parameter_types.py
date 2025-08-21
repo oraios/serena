@@ -1,32 +1,21 @@
+import logging
+
 import pytest
-from serena.mcp import SerenaMCPFactorySingleProcess
+
 from serena.config.serena_config import SerenaConfig
+from serena.mcp import SerenaMCPFactorySingleProcess
+from serena.tools.tools_base import ToolRegistry
 
 
-def load_agent():
-    """
-    Load a minimal agent to expose the default set of tools.
-    The tests run inside the container so a very small config file
-    is sufficient.  The default SerenaConfig reads the config
-    from ``src/serena/resources/config/contexts/<context>.yml``.
-    """
-    cfg = SerenaConfig.from_config_file()
-    # Enable every optional tool in the configuration
-    from serena.tools.tools_base import ToolRegistry
-
-    registry = ToolRegistry()
-    cfg.included_optional_tools = tuple(registry.get_tool_names_optional())
-    cfg.excluded_tools = tuple()
-    return cfg
-
-
-@pytest.mark.parametrize("context", ("chatgpt", "codex", "openai-agent"))
+@pytest.mark.parametrize("context", ("chatgpt", "codex", "oaicompat-agent"))
 def test_all_tool_parameters_have_type(context):
     """
     For every tool exposed by Serena, ensure that the generated
     Open‑AI schema contains a ``type`` entry for each parameter.
     """
-    cfg = load_agent()
+    cfg = SerenaConfig(gui_log_window_enabled=False, web_dashboard=False, log_level=logging.ERROR)
+    registry = ToolRegistry()
+    cfg.included_optional_tools = tuple(registry.get_tool_names_optional())
     factory = SerenaMCPFactorySingleProcess(context=context)
     # Initialize the agent so that the tools are available
     factory._instantiate_agent(cfg, [])
