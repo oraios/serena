@@ -1,6 +1,10 @@
 # latest
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+## New Features
+
+* **Dart language support**: Added full support for Dart programming language with comprehensive test coverage. Dart projects are now fully supported with symbol navigation, definition finding, and reference detection capabilities.
+
 ## Breaking Changes
 
 * **Rust support now requires rustup**: The rust-analyzer is no longer bundled with Serena. Instead, it uses the rust-analyzer from your Rust toolchain managed by rustup. This ensures compatibility with your Rust version and eliminates outdated bundled binaries. If you don't have rustup installed, you'll need to install it from https://rustup.rs/

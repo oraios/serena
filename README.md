@@ -111,9 +111,9 @@ With Serena, we provide
   * Clojure
   * Bash
   * C/C++ (You may experience issues with finding references, we are working on it)
+  * Dart
 * indirect support (may require some code changes/manual installation) for:
   * Kotlin (untested)
-  * Dart (untested)
 
    These languages are supported by the language server library, but
    we did not explicitly test whether the support for these languages actually works flawlessly.
