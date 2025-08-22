@@ -68,7 +68,7 @@ class TestSerenaAgent:
             pytest.param(Language.PYTHON, "User", "Class", "models.py", marks=pytest.mark.python),
             pytest.param(Language.GO, "Helper", "Function", "main.go", marks=pytest.mark.go),
             pytest.param(Language.JAVA, "Model", "Class", "Model.java", marks=pytest.mark.java),
-            pytest.param(Language.KOTLIN, "Model", "Class", "Model.kt", marks=pytest.mark.kotlin),
+            pytest.param(Language.KOTLIN, "Model", "Struct", "Model.kt", marks=pytest.mark.kotlin),
             pytest.param(Language.RUST, "add", "Function", "lib.rs", marks=pytest.mark.rust),
             pytest.param(Language.TYPESCRIPT, "DemoClass", "Class", "index.ts", marks=pytest.mark.typescript),
             pytest.param(Language.PHP, "helperFunction", "Function", "helper.php", marks=pytest.mark.php),
