@@ -142,9 +142,9 @@ class KotlinLanguageServer(SolidLanguageServer):
 
         # Get platform-specific executable script path
         if platform_id.value.startswith("win-"):
-            kotlin_script = os.path.join(kotlin_ls_dir,"kotlin-lsp.cmd")
+            kotlin_script = os.path.join(kotlin_ls_dir, "kotlin-lsp.cmd")
         else:
-            kotlin_script = os.path.join(kotlin_ls_dir,"kotlin-lsp.sh")
+            kotlin_script = os.path.join(kotlin_ls_dir, "kotlin-lsp.sh")
 
         # Download and extract Kotlin Language Server if script doesn't exist
         if not os.path.exists(kotlin_script):

@@ -65,6 +65,11 @@ jobs:
         uses: DeLaGuardo/setup-clojure@13.4
         with:
           cli: latest
+      - name: Setup kotlin
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
         with:
