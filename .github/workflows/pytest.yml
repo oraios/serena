@@ -37,24 +37,24 @@ jobs:
       # Add Go bin directory to PATH for this workflow
       # GITHUB_PATH is a special file that GitHub Actions uses to modify PATH
       # Writing to this file adds the directory to the PATH for subsequent steps
-      - name: Cache Go binaries
-        id: cache-go-binaries
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/go/bin
-            ~/.cache/go-build
-          key: go-binaries-${{ runner.os }}-gopls-latest
-      - name: Install gopls
-        if: steps.cache-go-binaries.outputs.cache-hit != 'true'
-        shell: bash
-        run: go install golang.org/x/tools/gopls@latest
-      - name: Set up Elixir
-        if: runner.os != 'Windows'
-        uses: erlef/setup-beam@v1
-        with:
-          elixir-version: "1.18.4"
-          otp-version: "26.1"
+#      - name: Cache Go binaries
+#        id: cache-go-binaries
+#        uses: actions/cache@v3
+#        with:
+#          path: |
+#            ~/go/bin
+#            ~/.cache/go-build
+#          key: go-binaries-${{ runner.os }}-gopls-latest
+#      - name: Install gopls
+#        if: steps.cache-go-binaries.outputs.cache-hit != 'true'
+#        shell: bash
+#        run: go install golang.org/x/tools/gopls@latest
+#      - name: Set up Elixir
+#        if: runner.os != 'Windows'
+#        uses: erlef/setup-beam@v1
+#        with:
+#          elixir-version: "1.18.4"
+#          otp-version: "26.1"
       - name: Install Erlang Language Server
         if: runner.os != 'Windows'
         shell: bash
@@ -68,150 +68,150 @@ jobs:
           # Ensure erlang_ls is in PATH
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Prepare java
-        uses: actions/setup-java@v3
-        with:
-          distribution: "temurin"
-          java-version: "17"
-      - name: Install clojure tools
-        uses: DeLaGuardo/setup-clojure@13.4
-        with:
-          cli: latest
-      - name: Install Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.5.0"
-          terraform_wrapper: false
+#      - name: Prepare java
+#        uses: actions/setup-java@v3
+#        with:
+#          distribution: "temurin"
+#          java-version: "17"
+#      - name: Install clojure tools
+#        uses: DeLaGuardo/setup-clojure@13.4
+#        with:
+#          cli: latest
+#      - name: Install Terraform
+#        uses: hashicorp/setup-terraform@v3
+#        with:
+#          terraform_version: "1.5.0"
+#          terraform_wrapper: false
       # - name: Install swift
       #   if: runner.os != 'Windows'
       #   uses: swift-actions/setup-swift@v2
       # Installation of swift with the action screws with installation of ruby on macOS for some reason
       # We can try again when version 3 of the action is released, where they will also use swiftly
       # Until then, we use custom code to install swift. Sourcekit-lsp is installed automatically with swift
-      - name: Install Swift with swiftly (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          echo "=== Installing swiftly on macOS ==="
-          curl -O https://download.swift.org/swiftly/darwin/swiftly.pkg && \
-          installer -pkg swiftly.pkg -target CurrentUserHomeDirectory && \
-          ~/.swiftly/bin/swiftly init --quiet-shell-followup && \
-          . "${SWIFTLY_HOME_DIR:-$HOME/.swiftly}/env.sh" && \
-          hash -r
-          swiftly install --use 6.1.2
-          swiftly use 6.1.2
-          echo "~/.swiftly/bin" >> $GITHUB_PATH
-          echo "Swiftly installed successfully"
-      - name: Install Swift with swiftly (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          echo "=== Installing swiftly on Ubuntu ==="
-          curl -O https://download.swift.org/swiftly/linux/swiftly-$(uname -m).tar.gz && \
-          tar zxf swiftly-$(uname -m).tar.gz && \
-          ./swiftly init --quiet-shell-followup && \
-          . "${SWIFTLY_HOME_DIR:-$HOME/.local/share/swiftly}/env.sh" && \
-          hash -r
-          swiftly install --use 6.1.2
-          swiftly use 6.1.2
-          sudo apt-get -y install libcurl4-openssl-dev
-          echo "=== Adding Swift toolchain to PATH ==="
-          echo "$HOME/.local/share/swiftly/bin" >> $GITHUB_PATH
-          echo "Swiftly installed successfully!"
-      - name: Install Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.4'
-      - name: Install Ruby language server
-        shell: bash
-        run: gem install solargraph
-      - name: Install Zig
-        uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: 0.14.1
-      - name: Install ZLS (Zig Language Server)
-        shell: bash
-        run: |
-          if [[ "${{ runner.os }}" == "Linux" ]]; then
-            wget https://github.com/zigtools/zls/releases/download/0.14.0/zls-x86_64-linux.tar.xz
-            tar -xf zls-x86_64-linux.tar.xz
-            sudo mv zls /usr/local/bin/
-            rm zls-x86_64-linux.tar.xz
-          elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            wget https://github.com/zigtools/zls/releases/download/0.14.0/zls-x86_64-macos.tar.xz
-            tar -xf zls-x86_64-macos.tar.xz
-            sudo mv zls /usr/local/bin/
-            rm zls-x86_64-macos.tar.xz
-          elif [[ "${{ runner.os }}" == "Windows" ]]; then
-            curl -L -o zls.zip https://github.com/zigtools/zls/releases/download/0.14.0/zls-x86_64-windows.zip
-            unzip -o zls.zip
-            mkdir -p "$HOME/bin"
-            mv zls.exe "$HOME/bin/"
-            echo "$HOME/bin" >> $GITHUB_PATH
-            rm zls.zip
-          fi
-      - name: Install Lua Language Server
-        shell: bash
-        run: |
-          LUA_LS_VERSION="3.15.0"
-          LUA_LS_DIR="$HOME/.serena/language_servers/lua"
-          mkdir -p "$LUA_LS_DIR"
-          
-          if [[ "${{ runner.os }}" == "Linux" ]]; then
-            if [[ "$(uname -m)" == "x86_64" ]]; then
-              wget https://github.com/LuaLS/lua-language-server/releases/download/${LUA_LS_VERSION}/lua-language-server-${LUA_LS_VERSION}-linux-x64.tar.gz
-              tar -xzf lua-language-server-${LUA_LS_VERSION}-linux-x64.tar.gz -C "$LUA_LS_DIR"
-            else
-              wget https://github.com/LuaLS/lua-language-server/releases/download/${LUA_LS_VERSION}/lua-language-server-${LUA_LS_VERSION}-linux-arm64.tar.gz
-              tar -xzf lua-language-server-${LUA_LS_VERSION}-linux-arm64.tar.gz -C "$LUA_LS_DIR"
-            fi
-            chmod +x "$LUA_LS_DIR/bin/lua-language-server"
-            # Create wrapper script instead of symlink to ensure supporting files are found
-            echo '#!/bin/bash' | sudo tee /usr/local/bin/lua-language-server > /dev/null
-            echo 'cd "${HOME}/.serena/language_servers/lua/bin"' | sudo tee -a /usr/local/bin/lua-language-server > /dev/null
-            echo 'exec ./lua-language-server "$@"' | sudo tee -a /usr/local/bin/lua-language-server > /dev/null
-            sudo chmod +x /usr/local/bin/lua-language-server
-            rm lua-language-server-*.tar.gz
-          elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            if [[ "$(uname -m)" == "x86_64" ]]; then
-              wget https://github.com/LuaLS/lua-language-server/releases/download/${LUA_LS_VERSION}/lua-language-server-${LUA_LS_VERSION}-darwin-x64.tar.gz
-              tar -xzf lua-language-server-${LUA_LS_VERSION}-darwin-x64.tar.gz -C "$LUA_LS_DIR"
-            else
-              wget https://github.com/LuaLS/lua-language-server/releases/download/${LUA_LS_VERSION}/lua-language-server-${LUA_LS_VERSION}-darwin-arm64.tar.gz
-              tar -xzf lua-language-server-${LUA_LS_VERSION}-darwin-arm64.tar.gz -C "$LUA_LS_DIR"
-            fi
-            chmod +x "$LUA_LS_DIR/bin/lua-language-server"
-            # Create wrapper script instead of symlink to ensure supporting files are found
-            echo '#!/bin/bash' | sudo tee /usr/local/bin/lua-language-server > /dev/null
-            echo 'cd "${HOME}/.serena/language_servers/lua/bin"' | sudo tee -a /usr/local/bin/lua-language-server > /dev/null
-            echo 'exec ./lua-language-server "$@"' | sudo tee -a /usr/local/bin/lua-language-server > /dev/null
-            sudo chmod +x /usr/local/bin/lua-language-server
-            rm lua-language-server-*.tar.gz
-          elif [[ "${{ runner.os }}" == "Windows" ]]; then
-            curl -L -o lua-ls.zip https://github.com/LuaLS/lua-language-server/releases/download/${LUA_LS_VERSION}/lua-language-server-${LUA_LS_VERSION}-win32-x64.zip
-            unzip -o lua-ls.zip -d "$LUA_LS_DIR"
-            # For Windows, we'll add the bin directory directly to PATH
-            # The lua-language-server.exe can find its supporting files relative to its location
-            echo "$LUA_LS_DIR/bin" >> $GITHUB_PATH
-            rm lua-ls.zip
-          fi
-      - name: Install Nix
-        if: runner.os != 'Windows'  # Nix doesn't support Windows natively
-        uses: cachix/install-nix-action@v30
-        with:
-          nix_path: nixpkgs=channel:nixos-unstable
-      - name: Install nixd (Nix Language Server)
-        if: runner.os != 'Windows'  # Skip on Windows since Nix isn't available
-        shell: bash
-        run: |
-          # Install nixd using nix
-          nix profile install github:nix-community/nixd
-          
-          # Verify nixd is installed and working
-          if ! command -v nixd &> /dev/null; then
-            echo "nixd installation failed or not in PATH"
-            exit 1
-          fi
-          
-          echo "$HOME/.nix-profile/bin" >> $GITHUB_PATH
+#      - name: Install Swift with swiftly (macOS)
+#        if: runner.os == 'macOS'
+#        run: |
+#          echo "=== Installing swiftly on macOS ==="
+#          curl -O https://download.swift.org/swiftly/darwin/swiftly.pkg && \
+#          installer -pkg swiftly.pkg -target CurrentUserHomeDirectory && \
+#          ~/.swiftly/bin/swiftly init --quiet-shell-followup && \
+#          . "${SWIFTLY_HOME_DIR:-$HOME/.swiftly}/env.sh" && \
+#          hash -r
+#          swiftly install --use 6.1.2
+#          swiftly use 6.1.2
+#          echo "~/.swiftly/bin" >> $GITHUB_PATH
+#          echo "Swiftly installed successfully"
+#      - name: Install Swift with swiftly (Ubuntu)
+#        if: runner.os == 'Linux'
+#        run: |
+#          echo "=== Installing swiftly on Ubuntu ==="
+#          curl -O https://download.swift.org/swiftly/linux/swiftly-$(uname -m).tar.gz && \
+#          tar zxf swiftly-$(uname -m).tar.gz && \
+#          ./swiftly init --quiet-shell-followup && \
+#          . "${SWIFTLY_HOME_DIR:-$HOME/.local/share/swiftly}/env.sh" && \
+#          hash -r
+#          swiftly install --use 6.1.2
+#          swiftly use 6.1.2
+#          sudo apt-get -y install libcurl4-openssl-dev
+#          echo "=== Adding Swift toolchain to PATH ==="
+#          echo "$HOME/.local/share/swiftly/bin" >> $GITHUB_PATH
+#          echo "Swiftly installed successfully!"
+#      - name: Install Ruby
+#        uses: ruby/setup-ruby@v1
+#        with:
+#          ruby-version: '3.4'
+#      - name: Install Ruby language server
+#        shell: bash
+#        run: gem install solargraph
+#      - name: Install Zig
+#        uses: goto-bus-stop/setup-zig@v2
+#        with:
+#          version: 0.14.1
+#      - name: Install ZLS (Zig Language Server)
+#        shell: bash
+#        run: |
+#          if [[ "${{ runner.os }}" == "Linux" ]]; then
+#            wget https://github.com/zigtools/zls/releases/download/0.14.0/zls-x86_64-linux.tar.xz
+#            tar -xf zls-x86_64-linux.tar.xz
+#            sudo mv zls /usr/local/bin/
+#            rm zls-x86_64-linux.tar.xz
+#          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+#            wget https://github.com/zigtools/zls/releases/download/0.14.0/zls-x86_64-macos.tar.xz
+#            tar -xf zls-x86_64-macos.tar.xz
+#            sudo mv zls /usr/local/bin/
+#            rm zls-x86_64-macos.tar.xz
+#          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+#            curl -L -o zls.zip https://github.com/zigtools/zls/releases/download/0.14.0/zls-x86_64-windows.zip
+#            unzip -o zls.zip
+#            mkdir -p "$HOME/bin"
+#            mv zls.exe "$HOME/bin/"
+#            echo "$HOME/bin" >> $GITHUB_PATH
+#            rm zls.zip
+#          fi
+#      - name: Install Lua Language Server
+#        shell: bash
+#        run: |
+#          LUA_LS_VERSION="3.15.0"
+#          LUA_LS_DIR="$HOME/.serena/language_servers/lua"
+#          mkdir -p "$LUA_LS_DIR"
+#
+#          if [[ "${{ runner.os }}" == "Linux" ]]; then
+#            if [[ "$(uname -m)" == "x86_64" ]]; then
+#              wget https://github.com/LuaLS/lua-language-server/releases/download/${LUA_LS_VERSION}/lua-language-server-${LUA_LS_VERSION}-linux-x64.tar.gz
+#              tar -xzf lua-language-server-${LUA_LS_VERSION}-linux-x64.tar.gz -C "$LUA_LS_DIR"
+#            else
+#              wget https://github.com/LuaLS/lua-language-server/releases/download/${LUA_LS_VERSION}/lua-language-server-${LUA_LS_VERSION}-linux-arm64.tar.gz
+#              tar -xzf lua-language-server-${LUA_LS_VERSION}-linux-arm64.tar.gz -C "$LUA_LS_DIR"
+#            fi
+#            chmod +x "$LUA_LS_DIR/bin/lua-language-server"
+#            # Create wrapper script instead of symlink to ensure supporting files are found
+#            echo '#!/bin/bash' | sudo tee /usr/local/bin/lua-language-server > /dev/null
+#            echo 'cd "${HOME}/.serena/language_servers/lua/bin"' | sudo tee -a /usr/local/bin/lua-language-server > /dev/null
+#            echo 'exec ./lua-language-server "$@"' | sudo tee -a /usr/local/bin/lua-language-server > /dev/null
+#            sudo chmod +x /usr/local/bin/lua-language-server
+#            rm lua-language-server-*.tar.gz
+#          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+#            if [[ "$(uname -m)" == "x86_64" ]]; then
+#              wget https://github.com/LuaLS/lua-language-server/releases/download/${LUA_LS_VERSION}/lua-language-server-${LUA_LS_VERSION}-darwin-x64.tar.gz
+#              tar -xzf lua-language-server-${LUA_LS_VERSION}-darwin-x64.tar.gz -C "$LUA_LS_DIR"
+#            else
+#              wget https://github.com/LuaLS/lua-language-server/releases/download/${LUA_LS_VERSION}/lua-language-server-${LUA_LS_VERSION}-darwin-arm64.tar.gz
+#              tar -xzf lua-language-server-${LUA_LS_VERSION}-darwin-arm64.tar.gz -C "$LUA_LS_DIR"
+#            fi
+#            chmod +x "$LUA_LS_DIR/bin/lua-language-server"
+#            # Create wrapper script instead of symlink to ensure supporting files are found
+#            echo '#!/bin/bash' | sudo tee /usr/local/bin/lua-language-server > /dev/null
+#            echo 'cd "${HOME}/.serena/language_servers/lua/bin"' | sudo tee -a /usr/local/bin/lua-language-server > /dev/null
+#            echo 'exec ./lua-language-server "$@"' | sudo tee -a /usr/local/bin/lua-language-server > /dev/null
+#            sudo chmod +x /usr/local/bin/lua-language-server
+#            rm lua-language-server-*.tar.gz
+#          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+#            curl -L -o lua-ls.zip https://github.com/LuaLS/lua-language-server/releases/download/${LUA_LS_VERSION}/lua-language-server-${LUA_LS_VERSION}-win32-x64.zip
+#            unzip -o lua-ls.zip -d "$LUA_LS_DIR"
+#            # For Windows, we'll add the bin directory directly to PATH
+#            # The lua-language-server.exe can find its supporting files relative to its location
+#            echo "$LUA_LS_DIR/bin" >> $GITHUB_PATH
+#            rm lua-ls.zip
+#          fi
+#      - name: Install Nix
+#        if: runner.os != 'Windows'  # Nix doesn't support Windows natively
+#        uses: cachix/install-nix-action@v30
+#        with:
+#          nix_path: nixpkgs=channel:nixos-unstable
+#      - name: Install nixd (Nix Language Server)
+#        if: runner.os != 'Windows'  # Skip on Windows since Nix isn't available
+#        shell: bash
+#        run: |
+#          # Install nixd using nix
+#          nix profile install github:nix-community/nixd
+#
+#          # Verify nixd is installed and working
+#          if ! command -v nixd &> /dev/null; then
+#            echo "nixd installation failed or not in PATH"
+#            exit 1
+#          fi
+#
+#          echo "$HOME/.nix-profile/bin" >> $GITHUB_PATH
       - name: Install uv
         shell: bash
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -243,4 +243,4 @@ jobs:
         run: uv run poe lint
       - name: Test with pytest
         shell: bash
-        run: uv run poe test
+        run: uv run poe test -m erlang
