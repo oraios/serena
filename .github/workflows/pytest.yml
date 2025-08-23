@@ -49,12 +49,12 @@ jobs:
 #        if: steps.cache-go-binaries.outputs.cache-hit != 'true'
 #        shell: bash
 #        run: go install golang.org/x/tools/gopls@latest
-#      - name: Set up Elixir
-#        if: runner.os != 'Windows'
-#        uses: erlef/setup-beam@v1
-#        with:
-#          elixir-version: "1.18.4"
-#          otp-version: "26.1"
+      - name: Set up Beam and Elixir
+        if: runner.os != 'Windows'
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.18.4"
+          otp-version: "26.1"
       - name: Install Erlang Language Server
         if: runner.os != 'Windows'
         shell: bash
