@@ -64,7 +64,7 @@ jobs:
           # Clone and build erlang_ls
           git clone https://github.com/erlang-ls/erlang_ls.git /tmp/erlang_ls
           cd /tmp/erlang_ls
-          sudo make install
+          sudo env "PATH=$PATH" make install PREFIX=/usr/local
           # Ensure erlang_ls is in PATH
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 #       - name: Install clojure tools
