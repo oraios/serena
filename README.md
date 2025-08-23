@@ -102,19 +102,20 @@ With Serena, we provide direct, out-of-the-box support for:
   * PHP (uses Intelephense LSP; set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features)
   * Go (requires installation of gopls)
   * Rust (requires [rustup](https://rustup.rs/) - uses rust-analyzer from your toolchain)
+  * C/C++ (you may experience issues with finding references, we are working on it)
+  * Zig (requires installation of ZLS - Zig Language Server)
   * C#
   * Ruby
   * Swift
+  * Kotlin (uses the pre-alpha [official kotlin LS](https://github.com/Kotlin/kotlin-lsp), some issues may appear)
   * Java (_Note_: startup is slow, initial startup especially so. There may be issues with java on macos and linux, we are working on it.)
-  * Elixir (requires installation of NextLS and Elixir; **Windows not supported**)
   * Clojure
+  * Dart
   * Bash
-  * C/C++ (you may experience issues with finding references, we are working on it)
-  * Zig (requires installation of ZLS - Zig Language Server)
   * Lua (automatically downloads lua-language-server if not installed)
   * Nix (requires nixd installation)
-  * Dart
-  * Kotlin (uses the pre-alpha [official kotlin LS](https://github.com/Kotlin/kotlin-lsp), some issues may appear)
+  * Elixir (requires installation of NextLS and Elixir; **Windows not supported**)
+  * Erlang (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls), experimental, might be slow or hang)
 
 Support for further languages can easily be added by providing a shallow adapter for a new language server implementation,
 see Serena's [memory on that](.serena/memories/adding_new_language_support_guide.md).
