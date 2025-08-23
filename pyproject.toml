@@ -112,7 +112,7 @@ PYDEVD_DISABLE_FILE_VALIDATION = "1"
 # Uses PYTEST_MARKERS env var for default markers
 # For custom markers, one can either adjust the env var or just use -m option in the command line,
 # as the second -m option will override the first one.
-test = "pytest test -vv -m \"${PYTEST_MARKERS:-not java and not rust}\""
+test = "pytest test -vv -m \"${PYTEST_MARKERS:-not java and not rust and not erlang}\""
 _black_check = "black --check src scripts test"
 _ruff_check = "ruff check src scripts test"
 _black_format = "black src scripts test"
