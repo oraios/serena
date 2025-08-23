@@ -67,21 +67,20 @@ jobs:
           make install
           # Ensure erlang_ls is in PATH
           echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-#      - name: Prepare java
-#        uses: actions/setup-java@v3
-#        with:
-#          distribution: "temurin"
-#          java-version: "17"
-#      - name: Install clojure tools
-#        uses: DeLaGuardo/setup-clojure@13.4
-#        with:
-#          cli: latest
-#      - name: Install Terraform
-#        uses: hashicorp/setup-terraform@v3
-#        with:
-#          terraform_version: "1.5.0"
-#          terraform_wrapper: false
+#       - name: Install clojure tools
+#         uses: DeLaGuardo/setup-clojure@13.4
+#         with:
+#           cli: latest
+#       - name: Setup kotlin
+#         uses: actions/setup-java@v4
+#         with:
+#           distribution: 'temurin'
+#           java-version: '17'
+#       - name: Install Terraform
+#         uses: hashicorp/setup-terraform@v3
+#         with:
+#           terraform_version: "1.5.0"
+#           terraform_wrapper: false
       # - name: Install swift
       #   if: runner.os != 'Windows'
       #   uses: swift-actions/setup-swift@v2
