@@ -7,7 +7,6 @@ import os
 import pathlib
 import shutil
 import threading
-from time import sleep
 
 from overrides import override
 from sensai.util.logging import LogTime
@@ -250,12 +249,5 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         self.completions_available.set()
 
     @override
-    # For some reason, the LS may need longer to process this, so we just retry
-    def _send_references_request(self, relative_file_path: str, line: int, column: int):
-        # TODO: The LS doesn't return references contained in other files if it doesn't sleep. This is
-        #   despite the LS having processed requests already. I don't know what causes this, but sleeping
-        #   one second helps. It may be that sleeping only once is enough but that's hard to reliably test.
-        #   It may be that even this 1sec is not enough in larger TS projects, at some point we should find what
-        #   causes this and solve it.
-        sleep(1)
-        return super()._send_references_request(relative_file_path, line, column)
+    def _get_wait_time_for_cross_file_referencing(self) -> float:
+        return 1

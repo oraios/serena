@@ -125,6 +125,7 @@ volumes:
 - `SERENA_DOCKER=1`: Set automatically to indicate Docker environment
 - `SERENA_PORT`: MCP server port (default: 9121)
 - `SERENA_DASHBOARD_PORT`: Web dashboard port (default: 24282)
+- `INTELEPHENSE_LICENSE_KEY`: License key for Intelephense PHP LSP premium features (optional)
 
 ## Troubleshooting
 

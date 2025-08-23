@@ -65,17 +65,23 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
         :param content: the (utf-8-encoded) content to write to the file
         :return: a message indicating success or failure
         """
-        self.project.validate_relative_path(relative_path)
-
-        abs_path = (Path(self.get_project_root()) / relative_path).resolve()
+        project_root = self.get_project_root()
+        abs_path = (Path(project_root) / relative_path).resolve()
         will_overwrite_existing = abs_path.exists()
+
+        if will_overwrite_existing:
+            self.project.validate_relative_path(relative_path)
+        else:
+            assert abs_path.is_relative_to(
+                self.get_project_root()
+            ), f"Cannot create file outside of the project directory, got {relative_path=}"
 
         abs_path.parent.mkdir(parents=True, exist_ok=True)
         abs_path.write_text(content, encoding="utf-8")
         answer = f"File created: {relative_path}."
         if will_overwrite_existing:
             answer += " Overwrote existing file."
-        return answer
+        return json.dumps(answer)
 
 
 class ListDirTool(Tool):
@@ -94,6 +100,15 @@ class ListDirTool(Tool):
             required for the task.
         :return: a JSON object with the names of directories and files within the given directory
         """
+        # Check if the directory exists before validation
+        if not self.project.relative_path_exists(relative_path):
+            error_info = {
+                "error": f"Directory not found: {relative_path}",
+                "project_root": self.get_project_root(),
+                "hint": "Check if the path is correct relative to the project root",
+            }
+            return json.dumps(error_info)
+
         self.project.validate_relative_path(relative_path)
 
         dirs, files = scan_directory(
@@ -172,6 +187,7 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
             Dot matches all characters, multi-line matching is enabled.
         :param repl: the string to replace the matched content with, which may contain
             backreferences like \1, \2, etc.
+            Make sure to escape special characters appropriately, e.g., use `\\n` for a literal `\n`.
         :param allow_multiple_occurrences: if True, the regex may match multiple occurrences in the file
             and all of them will be replaced.
             If this is set to False and the regex matches multiple occurrences, an error will be returned
@@ -289,8 +305,8 @@ class SearchForPatternTool(Tool):
         substring_pattern: str,
         context_lines_before: int = 0,
         context_lines_after: int = 0,
-        paths_include_glob: str | None = None,
-        paths_exclude_glob: str | None = None,
+        paths_include_glob: str = "",
+        paths_exclude_glob: str = "",
         relative_path: str = "",
         restrict_search_to_code_files: bool = False,
         max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
@@ -327,10 +343,10 @@ class SearchForPatternTool(Tool):
         :param context_lines_after: Number of lines of context to include after each match
         :param paths_include_glob: optional glob pattern specifying files to include in the search.
             Matches against relative file paths from the project root (e.g., "*.py", "src/**/*.ts").
-            Only matches files, not directories.
+            Only matches files, not directories. If left empty, all non-ignored files will be included.
         :param paths_exclude_glob: optional glob pattern specifying files to exclude from the search.
             Matches against relative file paths from the project root (e.g., "*test*", "**/*_generated.py").
-            Takes precedence over paths_include_glob. Only matches files, not directories.
+            Takes precedence over paths_include_glob. Only matches files, not directories. If left empty, no files are excluded.
         :param relative_path: only subpaths of this path (relative to the repo root) will be analyzed. If a path to a single
             file is passed, only that will be searched. The path must exist, otherwise a `FileNotFoundError` is raised.
         :param max_answer_chars: if the output is longer than this number of characters,
@@ -355,8 +371,8 @@ class SearchForPatternTool(Tool):
                 relative_path=relative_path,
                 context_lines_before=context_lines_before,
                 context_lines_after=context_lines_after,
-                paths_include_glob=paths_include_glob,
-                paths_exclude_glob=paths_exclude_glob,
+                paths_include_glob=paths_include_glob.strip(),
+                paths_exclude_glob=paths_exclude_glob.strip(),
             )
         else:
             if os.path.isfile(abs_path):

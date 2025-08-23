@@ -1,4 +1,5 @@
 import glob
+import json
 import os
 import shutil
 import subprocess
@@ -9,6 +10,7 @@ from typing import Any, Literal
 
 import click
 from sensai.util import logging
+from sensai.util.logging import FileLoggerContext, datetime_tag
 from tqdm import tqdm
 
 from serena.agent import SerenaAgent
@@ -28,7 +30,7 @@ from serena.constants import (
 )
 from serena.mcp import SerenaMCPFactory, SerenaMCPFactorySingleProcess
 from serena.project import Project
-from serena.tools import ToolRegistry
+from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsOverviewTool, SearchForPatternTool, ToolRegistry
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
 from solidlsp.util.subprocess_util import subprocess_kwargs
@@ -432,32 +434,239 @@ class ProjectCommands(AutoRegisteringGroup):
         default="WARNING",
         help="Log level for indexing.",
     )
-    def index(project: str, log_level: str = "WARNING") -> None:
-        ProjectCommands._index_project(project, log_level)
+    @click.option("--timeout", type=float, default=10, help="Timeout for indexing a single file.")
+    def index(project: str, log_level: str, timeout: float) -> None:
+        ProjectCommands._index_project(project, log_level, timeout=timeout)
 
     @staticmethod
     @click.command("index-deprecated", help="Deprecated alias for 'serena project index'.")
     @click.argument("project", type=click.Path(exists=True), default=os.getcwd(), required=False)
     @click.option("--log-level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="WARNING")
-    def index_deprecated(project: str, log_level: str = "WARNING") -> None:
+    @click.option("--timeout", type=float, default=10, help="Timeout for indexing a single file.")
+    def index_deprecated(project: str, log_level: str, timeout: float) -> None:
         click.echo("Deprecated! Use `serena project index` instead.")
-        ProjectCommands._index_project(project, log_level)
+        ProjectCommands._index_project(project, log_level, timeout=timeout)
 
     @staticmethod
-    def _index_project(project: str, log_level: str) -> None:
+    def _index_project(project: str, log_level: str, timeout: float) -> None:
         lvl = logging.getLevelNamesMapping()[log_level.upper()]
+        logging.configure(level=lvl)
         proj = Project.load(os.path.abspath(project))
-        print(f"Indexing symbols in project {project}…")
-        ls = proj.create_language_server(log_level=lvl)
+        click.echo(f"Indexing symbols in project {project}…")
+        ls = proj.create_language_server(log_level=lvl, ls_timeout=timeout)
+        log_file = os.path.join(project, ".serena", "logs", "indexing.txt")
+
+        collected_exceptions: list[Exception] = []
+        files_failed = []
         with ls.start_server():
             files = proj.gather_source_files()
             for i, f in enumerate(tqdm(files, desc="Indexing")):
-                ls.request_document_symbols(f, include_body=False)
-                ls.request_document_symbols(f, include_body=True)
+                try:
+                    ls.request_document_symbols(f, include_body=False)
+                    ls.request_document_symbols(f, include_body=True)
+                except TimeoutError as e:
+                    log.error(f"Failed to index {f}, continuing.")
+                    collected_exceptions.append(e)
+                    files_failed.append(f)
                 if (i + 1) % 10 == 0:
                     ls.save_cache()
             ls.save_cache()
-        print(f"Symbols saved to {ls.cache_path}")
+        click.echo(f"Symbols saved to {ls.cache_path}")
+        if len(files_failed) > 0:
+            os.makedirs(os.path.dirname(log_file), exist_ok=True)
+            with open(log_file, "w") as f:
+                for file, exception in zip(files_failed, collected_exceptions, strict=True):
+                    f.write(f"{file}\n")
+                    f.write(f"{exception}\n")
+            click.echo(f"Failed to index {len(files_failed)} files, see:\n{log_file}")
+
+    @staticmethod
+    @click.command("is_ignored_path", help="Check if a path is ignored by the project configuration.")
+    @click.argument("path", type=click.Path(exists=False, file_okay=True, dir_okay=True))
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    def is_ignored_path(path: str, project: str) -> None:
+        """
+        Check if a given path is ignored by the project configuration.
+
+        :param path: The path to check.
+        :param project: The path to the project directory, defaults to the current working directory.
+        """
+        proj = Project.load(os.path.abspath(project))
+        if os.path.isabs(path):
+            path = os.path.relpath(path, start=proj.project_root)
+        is_ignored = proj.is_ignored_path(path)
+        click.echo(f"Path '{path}' IS {'ignored' if is_ignored else 'IS NOT ignored'} by the project configuration.")
+
+    @staticmethod
+    @click.command("index-file", help="Index a single file by saving its symbols to the LSP cache.")
+    @click.argument("file", type=click.Path(exists=True, file_okay=True, dir_okay=False))
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    @click.option("--verbose", "-v", is_flag=True, help="Print detailed information about the indexed symbols.")
+    def index_file(file: str, project: str, verbose: bool) -> None:
+        """
+        Index a single file by saving its symbols to the LSP cache, useful for debugging.
+        :param file: path to the file to index, must be inside the project directory.
+        :param project: path to the project directory, defaults to the current working directory.
+        :param verbose: if set, prints detailed information about the indexed symbols.
+        """
+        proj = Project.load(os.path.abspath(project))
+        if os.path.isabs(file):
+            file = os.path.relpath(file, start=proj.project_root)
+        if proj.is_ignored_path(file, ignore_non_source_files=True):
+            click.echo(f"'{file}' is ignored or declared as non-code file by the project configuration, won't index.")
+            exit(1)
+        ls = proj.create_language_server()
+        with ls.start_server():
+            symbols, _ = ls.request_document_symbols(file, include_body=False)
+            ls.request_document_symbols(file, include_body=True)
+            if verbose:
+                click.echo(f"Symbols in file '{file}':")
+                for symbol in symbols:
+                    click.echo(f"  - {symbol['name']} at line {symbol['selectionRange']['start']['line']} of kind {symbol['kind']}")
+            ls.save_cache()
+            click.echo(f"Successfully indexed file '{file}', {len(symbols)} symbols saved to {ls.cache_path}.")
+
+    @staticmethod
+    @click.command("health-check", help="Perform a comprehensive health check of the project's tools and language server.")
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    def health_check(project: str) -> None:
+        """
+        Perform a comprehensive health check of the project's tools and language server.
+
+        :param project: path to the project directory, defaults to the current working directory.
+        """
+        # NOTE: completely written by Claude Code, only functionality was reviewed, not implementation
+        logging.configure(level=logging.INFO)
+        project_path = os.path.abspath(project)
+        proj = Project.load(project_path)
+
+        # Create log file with timestamp
+        timestamp = datetime_tag()
+        log_dir = os.path.join(project_path, ".serena", "logs", "health-checks")
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, f"health_check_{timestamp}.log")
+
+        with FileLoggerContext(log_file, append=False, enabled=True):
+            log.info("Starting health check for project: %s", project_path)
+
+            try:
+                # Create SerenaAgent with dashboard disabled
+                log.info("Creating SerenaAgent with disabled dashboard...")
+                config = SerenaConfig(gui_log_window_enabled=False, web_dashboard=False)
+                agent = SerenaAgent(project=project_path, serena_config=config)
+                log.info("SerenaAgent created successfully")
+
+                # Find first non-empty file that can be analyzed
+                log.info("Searching for analyzable files...")
+                files = proj.gather_source_files()
+                target_file = None
+
+                for file_path in files:
+                    try:
+                        full_path = os.path.join(project_path, file_path)
+                        if os.path.getsize(full_path) > 0:
+                            target_file = file_path
+                            log.info("Found analyzable file: %s", target_file)
+                            break
+                    except (OSError, FileNotFoundError):
+                        continue
+
+                if not target_file:
+                    log.error("No analyzable files found in project")
+                    click.echo("❌ Health check failed: No analyzable files found")
+                    click.echo(f"Log saved to: {log_file}")
+                    return
+
+                # Get tools from agent
+                overview_tool = agent.get_tool(GetSymbolsOverviewTool)
+                find_symbol_tool = agent.get_tool(FindSymbolTool)
+                find_refs_tool = agent.get_tool(FindReferencingSymbolsTool)
+                search_pattern_tool = agent.get_tool(SearchForPatternTool)
+
+                # Test 1: Get symbols overview
+                log.info("Testing GetSymbolsOverviewTool on file: %s", target_file)
+                overview_result = agent.execute_task(lambda: overview_tool.apply(target_file))
+                overview_data = json.loads(overview_result)
+                log.info("GetSymbolsOverviewTool returned %d symbols", len(overview_data))
+
+                if not overview_data:
+                    log.error("No symbols found in file %s", target_file)
+                    click.echo("❌ Health check failed: No symbols found in target file")
+                    click.echo(f"Log saved to: {log_file}")
+                    return
+
+                # Extract suitable symbol (prefer class or function over variables)
+                # LSP symbol kinds: 5=class, 12=function, 6=method, 9=constructor
+                preferred_kinds = [5, 12, 6, 9]  # class, function, method, constructor
+
+                selected_symbol = None
+                for symbol in overview_data:
+                    if symbol.get("kind") in preferred_kinds:
+                        selected_symbol = symbol
+                        break
+
+                # If no preferred symbol found, use first available
+                if not selected_symbol:
+                    selected_symbol = overview_data[0]
+                    log.info("No class or function found, using first available symbol")
+
+                symbol_name = selected_symbol.get("name_path", "unknown")
+                symbol_kind = selected_symbol.get("kind", "unknown")
+                log.info("Using symbol for testing: %s (kind: %d)", symbol_name, symbol_kind)
+
+                # Test 2: FindSymbolTool
+                log.info("Testing FindSymbolTool for symbol: %s", symbol_name)
+                find_symbol_result = agent.execute_task(
+                    lambda: find_symbol_tool.apply(symbol_name, relative_path=target_file, include_body=True)
+                )
+                find_symbol_data = json.loads(find_symbol_result)
+                log.info("FindSymbolTool found %d matches for symbol %s", len(find_symbol_data), symbol_name)
+
+                # Test 3: FindReferencingSymbolsTool
+                log.info("Testing FindReferencingSymbolsTool for symbol: %s", symbol_name)
+                try:
+                    find_refs_result = agent.execute_task(lambda: find_refs_tool.apply(symbol_name, relative_path=target_file))
+                    find_refs_data = json.loads(find_refs_result)
+                    log.info("FindReferencingSymbolsTool found %d references for symbol %s", len(find_refs_data), symbol_name)
+                except Exception as e:
+                    log.warning("FindReferencingSymbolsTool failed for symbol %s: %s", symbol_name, str(e))
+                    find_refs_data = []
+
+                # Test 4: SearchForPatternTool to verify references
+                log.info("Testing SearchForPatternTool for pattern: %s", symbol_name)
+                try:
+                    search_result = agent.execute_task(
+                        lambda: search_pattern_tool.apply(substring_pattern=symbol_name, restrict_search_to_code_files=True)
+                    )
+                    search_data = json.loads(search_result)
+                    pattern_matches = sum(len(matches) for matches in search_data.values())
+                    log.info("SearchForPatternTool found %d pattern matches for %s", pattern_matches, symbol_name)
+                except Exception as e:
+                    log.warning("SearchForPatternTool failed for pattern %s: %s", symbol_name, str(e))
+                    pattern_matches = 0
+
+                # Verify tools worked as expected
+                tools_working = True
+                if not find_symbol_data:
+                    log.error("FindSymbolTool returned no results")
+                    tools_working = False
+
+                if len(find_refs_data) == 0 and pattern_matches == 0:
+                    log.warning("Both FindReferencingSymbolsTool and SearchForPatternTool found no matches - this might indicate an issue")
+
+                log.info("Health check completed successfully")
+
+                if tools_working:
+                    click.echo("✅ Health check passed - All tools working correctly")
+                else:
+                    click.echo("⚠️  Health check completed with warnings - Check log for details")
+
+            except Exception as e:
+                log.exception("Health check failed with exception: %s", str(e))
+                click.echo(f"❌ Health check failed: {e!s}")
+
+            finally:
+                click.echo(f"Log saved to: {log_file}")
 
 
 class ToolCommands(AutoRegisteringGroup):

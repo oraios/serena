@@ -71,6 +71,14 @@ class ClangdLanguageServer(SolidLanguageServer):
                 ),
                 RuntimeDependency(
                     id="Clangd",
+                    description="Clangd for macOS (x64)",
+                    url="https://github.com/clangd/clangd/releases/download/19.1.2/clangd-mac-19.1.2.zip",
+                    platform_id="osx-x64",
+                    archive_type="zip",
+                    binary_name="clangd_19.1.2/bin/clangd",
+                ),
+                RuntimeDependency(
+                    id="Clangd",
                     description="Clangd for macOS (Arm64)",
                     url="https://github.com/clangd/clangd/releases/download/19.1.2/clangd-mac-19.1.2.zip",
                     platform_id="osx-arm64",

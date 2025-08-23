@@ -37,8 +37,11 @@ class TestGitignoreParser:
         │   ├── .gitignore
         │   ├── main.py
         │   ├── test.log
-        │   └── build/
-        │       └── output.o
+        │   ├── build/
+        │   │   └── output.o
+        │   └── lib/
+        │       ├── .gitignore
+        │       └── cache.tmp
         └── docs/
             ├── .gitignore
             ├── api.md
@@ -48,6 +51,7 @@ class TestGitignoreParser:
         # Create directories
         (self.repo_path / "src").mkdir()
         (self.repo_path / "src" / "build").mkdir()
+        (self.repo_path / "src" / "lib").mkdir()
         (self.repo_path / "docs").mkdir()
         (self.repo_path / "docs" / "temp").mkdir()
 
@@ -57,6 +61,7 @@ class TestGitignoreParser:
         (self.repo_path / "src" / "main.py").touch()
         (self.repo_path / "src" / "test.log").touch()
         (self.repo_path / "src" / "build" / "output.o").touch()
+        (self.repo_path / "src" / "lib" / "cache.tmp").touch()
         (self.repo_path / "docs" / "api.md").touch()
         (self.repo_path / "docs" / "temp" / "draft.md").touch()
 
@@ -79,6 +84,15 @@ build/
 """
         )
 
+        # Create src/lib/.gitignore (deeply nested)
+        src_lib_gitignore = self.repo_path / "src" / "lib" / ".gitignore"
+        src_lib_gitignore.write_text(
+            """# Library gitignore
+*.tmp
+*.cache
+"""
+        )
+
         # Create docs/.gitignore
         docs_gitignore = self.repo_path / "docs" / ".gitignore"
         docs_gitignore.write_text(
@@ -93,10 +107,10 @@ temp/
         parser = GitignoreParser(str(self.repo_path))
 
         assert parser.repo_root == str(self.repo_path.absolute())
-        assert len(parser.get_ignore_specs()) == 3
+        assert len(parser.get_ignore_specs()) == 4
 
     def test_find_gitignore_files(self):
-        """Test finding all gitignore files in repository."""
+        """Test finding all gitignore files in repository, including deeply nested ones."""
         parser = GitignoreParser(str(self.repo_path))
 
         # Get file paths from specs
@@ -106,9 +120,10 @@ temp/
         rel_paths = [os.path.relpath(f, self.repo_path) for f in gitignore_files]
         rel_paths.sort()
 
-        assert len(rel_paths) == 3
+        assert len(rel_paths) == 4
         assert ".gitignore" in rel_paths
         assert os.path.join("src", ".gitignore") in rel_paths
+        assert os.path.join("src", "lib", ".gitignore") in rel_paths  # Deeply nested
         assert os.path.join("docs", ".gitignore") in rel_paths
 
     def test_parse_patterns_root_directory(self):
@@ -191,6 +206,16 @@ test.log
 
         # But temp/ outside docs should not be ignored by docs/.gitignore
         assert not parser.should_ignore("temp/file.txt")
+
+        # Test deeply nested .gitignore in src/lib/
+        # .tmp files in src/lib should be ignored
+        assert parser.should_ignore("src/lib/cache.tmp")
+
+        # .cache files in src/lib should also be ignored
+        assert parser.should_ignore("src/lib/data.cache")
+
+        # But .tmp files outside src/lib should not be ignored by src/lib/.gitignore
+        assert not parser.should_ignore("src/other.tmp")
 
     def test_anchored_vs_non_anchored_patterns(self):
         """Test the difference between anchored and non-anchored patterns."""
@@ -562,3 +587,122 @@ src/*.o
 
         # Note: Negation patterns in pathspec work differently than in git
         # This is a limitation of the pathspec library
+
+    def test_subdirectory_gitignore_pattern_scoping(self):
+        """Test that subdirectory .gitignore patterns are scoped correctly."""
+        # Create test structure: foo/ with subdirectory bar/
+        test_dir = self.repo_path / "test_subdir_scoping"
+        test_dir.mkdir()
+        (test_dir / "foo").mkdir()
+        (test_dir / "foo" / "bar").mkdir()
+
+        # Create files in various locations
+        (test_dir / "foo.txt").touch()  # root level
+        (test_dir / "foo" / "foo.txt").touch()  # in foo/
+        (test_dir / "foo" / "bar" / "foo.txt").touch()  # in foo/bar/
+
+        # Test case 1: foo.txt in foo/.gitignore should only ignore in foo/ subtree
+        gitignore = test_dir / "foo" / ".gitignore"
+        gitignore.write_text("foo.txt\n")
+
+        parser = GitignoreParser(str(test_dir))
+
+        # foo.txt at root should NOT be ignored by foo/.gitignore
+        assert not parser.should_ignore("foo.txt"), "Root foo.txt should not be ignored by foo/.gitignore"
+
+        # foo.txt in foo/ should be ignored
+        assert parser.should_ignore("foo/foo.txt"), "foo/foo.txt should be ignored"
+
+        # foo.txt in foo/bar/ should be ignored (within foo/ subtree)
+        assert parser.should_ignore("foo/bar/foo.txt"), "foo/bar/foo.txt should be ignored"
+
+    def test_anchored_pattern_in_subdirectory(self):
+        """Test that anchored patterns in subdirectory only match immediate children."""
+        test_dir = self.repo_path / "test_anchored_subdir"
+        test_dir.mkdir()
+        (test_dir / "foo").mkdir()
+        (test_dir / "foo" / "bar").mkdir()
+
+        # Create files
+        (test_dir / "foo.txt").touch()  # root level
+        (test_dir / "foo" / "foo.txt").touch()  # in foo/
+        (test_dir / "foo" / "bar" / "foo.txt").touch()  # in foo/bar/
+
+        # Test case 2: /foo.txt in foo/.gitignore should only match foo/foo.txt
+        gitignore = test_dir / "foo" / ".gitignore"
+        gitignore.write_text("/foo.txt\n")
+
+        parser = GitignoreParser(str(test_dir))
+
+        # foo.txt at root should NOT be ignored
+        assert not parser.should_ignore("foo.txt"), "Root foo.txt should not be ignored"
+
+        # foo.txt directly in foo/ should be ignored
+        assert parser.should_ignore("foo/foo.txt"), "foo/foo.txt should be ignored by /foo.txt pattern"
+
+        # foo.txt in foo/bar/ should NOT be ignored (anchored pattern only matches immediate children)
+        assert not parser.should_ignore("foo/bar/foo.txt"), "foo/bar/foo.txt should NOT be ignored by /foo.txt pattern"
+
+    def test_double_star_pattern_scoping(self):
+        """Test that **/pattern in subdirectory only applies within that subtree."""
+        test_dir = self.repo_path / "test_doublestar_scope"
+        test_dir.mkdir()
+        (test_dir / "foo").mkdir()
+        (test_dir / "foo" / "bar").mkdir()
+        (test_dir / "other").mkdir()
+
+        # Create files
+        (test_dir / "foo.txt").touch()  # root level
+        (test_dir / "foo" / "foo.txt").touch()  # in foo/
+        (test_dir / "foo" / "bar" / "foo.txt").touch()  # in foo/bar/
+        (test_dir / "other" / "foo.txt").touch()  # in other/
+
+        # Test case 3: **/foo.txt in foo/.gitignore should only ignore within foo/ subtree
+        gitignore = test_dir / "foo" / ".gitignore"
+        gitignore.write_text("**/foo.txt\n")
+
+        parser = GitignoreParser(str(test_dir))
+
+        # foo.txt at root should NOT be ignored
+        assert not parser.should_ignore("foo.txt"), "Root foo.txt should not be ignored by foo/.gitignore"
+
+        # foo.txt in foo/ should be ignored
+        assert parser.should_ignore("foo/foo.txt"), "foo/foo.txt should be ignored"
+
+        # foo.txt in foo/bar/ should be ignored (within foo/ subtree)
+        assert parser.should_ignore("foo/bar/foo.txt"), "foo/bar/foo.txt should be ignored"
+
+        # foo.txt in other/ should NOT be ignored (outside foo/ subtree)
+        assert not parser.should_ignore("other/foo.txt"), "other/foo.txt should NOT be ignored by foo/.gitignore"
+
+    def test_anchored_double_star_pattern(self):
+        """Test that /**/pattern in subdirectory works correctly."""
+        test_dir = self.repo_path / "test_anchored_doublestar"
+        test_dir.mkdir()
+        (test_dir / "foo").mkdir()
+        (test_dir / "foo" / "bar").mkdir()
+        (test_dir / "other").mkdir()
+
+        # Create files
+        (test_dir / "foo.txt").touch()  # root level
+        (test_dir / "foo" / "foo.txt").touch()  # in foo/
+        (test_dir / "foo" / "bar" / "foo.txt").touch()  # in foo/bar/
+        (test_dir / "other" / "foo.txt").touch()  # in other/
+
+        # Test case 4: /**/foo.txt in foo/.gitignore should correctly ignore only within foo/ subtree
+        gitignore = test_dir / "foo" / ".gitignore"
+        gitignore.write_text("/**/foo.txt\n")
+
+        parser = GitignoreParser(str(test_dir))
+
+        # foo.txt at root should NOT be ignored
+        assert not parser.should_ignore("foo.txt"), "Root foo.txt should not be ignored"
+
+        # foo.txt in foo/ should be ignored
+        assert parser.should_ignore("foo/foo.txt"), "foo/foo.txt should be ignored"
+
+        # foo.txt in foo/bar/ should be ignored (within foo/ subtree)
+        assert parser.should_ignore("foo/bar/foo.txt"), "foo/bar/foo.txt should be ignored"
+
+        # foo.txt in other/ should NOT be ignored (outside foo/ subtree)
+        assert not parser.should_ignore("other/foo.txt"), "other/foo.txt should NOT be ignored by foo/.gitignore"

@@ -735,3 +735,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             project_uris = [PathUtils.path_to_uri(project_file) for project_file in project_files]
             self.server.notify.send_notification("project/open", {"projects": project_uris})
             self.logger.log(f"Opened project files: {project_files}", logging.DEBUG)
+
+    @override
+    def _get_wait_time_for_cross_file_referencing(self) -> float:
+        return 1

@@ -1,13 +1,13 @@
-import glob
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
 
 import pathspec
 from pathspec import PathSpec
+from sensai.util.logging import LogTime
 
 log = logging.getLogger(__name__)
 
@@ -40,31 +40,41 @@ def scan_directory(
     abs_path = os.path.abspath(path)
     rel_base = os.path.abspath(relative_to) if relative_to else None
 
-    with os.scandir(abs_path) as entries:
-        for entry in entries:
-            entry_path = entry.path
+    try:
+        with os.scandir(abs_path) as entries:
+            for entry in entries:
+                try:
+                    entry_path = entry.path
 
-            if rel_base:
-                result_path = os.path.relpath(entry_path, rel_base)
-            else:
-                result_path = entry_path
+                    if rel_base:
+                        result_path = os.path.relpath(entry_path, rel_base)
+                    else:
+                        result_path = entry_path
 
-            if entry.is_file():
-                if not is_ignored_file(entry_path):
-                    files.append(result_path)
-            elif entry.is_dir():
-                if not is_ignored_dir(entry_path):
-                    directories.append(result_path)
-                    if recursive:
-                        sub_result = scan_directory(
-                            entry_path,
-                            recursive=True,
-                            relative_to=relative_to,
-                            is_ignored_dir=is_ignored_dir,
-                            is_ignored_file=is_ignored_file,
-                        )
-                        files.extend(sub_result.files)
-                        directories.extend(sub_result.directories)
+                    if entry.is_file():
+                        if not is_ignored_file(entry_path):
+                            files.append(result_path)
+                    elif entry.is_dir():
+                        if not is_ignored_dir(entry_path):
+                            directories.append(result_path)
+                            if recursive:
+                                sub_result = scan_directory(
+                                    entry_path,
+                                    recursive=True,
+                                    relative_to=relative_to,
+                                    is_ignored_dir=is_ignored_dir,
+                                    is_ignored_file=is_ignored_file,
+                                )
+                                files.extend(sub_result.files)
+                                directories.extend(sub_result.directories)
+                except PermissionError as ex:
+                    # Skip files/directories that cannot be accessed due to permission issues
+                    log.debug(f"Skipping entry due to permission error: {entry.path}", exc_info=ex)
+                    continue
+    except PermissionError as ex:
+        # Skip the entire directory if it cannot be accessed
+        log.debug(f"Skipping directory due to permission error: {abs_path}", exc_info=ex)
+        return ScanResult([], [])
 
     return ScanResult(directories, files)
 
@@ -128,20 +138,36 @@ class GitignoreParser:
 
     def _load_gitignore_files(self) -> None:
         """Load all gitignore files from the repository."""
-        gitignore_files = self._find_gitignore_files()
+        with LogTime("Loading of .gitignore files", logger=log):
+            for gitignore_path in self._iter_gitignore_files():
+                log.info("Processing .gitignore file: %s", gitignore_path)
+                spec = self._create_ignore_spec(gitignore_path)
+                if spec.patterns:  # Only add non-empty specs
+                    self.ignore_specs.append(spec)
 
-        for gitignore_file in gitignore_files:
-            spec = self._create_ignore_spec(gitignore_file)
-            if spec.patterns:  # Only add non-empty specs
-                self.ignore_specs.append(spec)
-
-    def _find_gitignore_files(self) -> list[str]:
+    def _iter_gitignore_files(self, follow_symlinks: bool = False) -> Iterator[str]:
         """
-        Find all .gitignore files in the repository.
+        Iteratively discover .gitignore files in a top-down fashion, starting from the repository root.
+        Directory paths are skipped if they match any already loaded ignore patterns.
 
-        :return: List of absolute paths to .gitignore files
+        :return: an iterator yielding paths to .gitignore files (top-down)
         """
-        return glob.glob(self.repo_root + "/.gitignore") + glob.glob(self.repo_root + "/**/.gitignore")
+        queue: list[str] = [self.repo_root]
+
+        def scan(abs_path: str | None):
+            for entry in os.scandir(abs_path):
+                if entry.is_dir(follow_symlinks=follow_symlinks):
+                    queue.append(entry.path)
+                elif entry.is_file(follow_symlinks=follow_symlinks) and entry.name == ".gitignore":
+                    yield entry.path
+
+        while queue:
+            next_abs_path = queue.pop(0)
+            if next_abs_path != self.repo_root:
+                rel_path = os.path.relpath(next_abs_path, self.repo_root)
+                if self.should_ignore(rel_path):
+                    continue
+            yield from scan(next_abs_path)
 
     def _create_ignore_spec(self, gitignore_file_path: str) -> GitignoreSpec:
         """
@@ -214,7 +240,8 @@ class GitignoreParser:
                     # Non-anchored patterns can match anywhere below the gitignore directory
                     # We need to preserve this behavior
                     if line.startswith("**/"):
-                        adjusted_pattern = line
+                        # Even if pattern starts with **, it should still be scoped to the subdirectory
+                        adjusted_pattern = os.path.join(rel_dir, line)
                     else:
                         # Add the directory prefix but also allow matching in subdirectories
                         adjusted_pattern = os.path.join(rel_dir, "**", line)

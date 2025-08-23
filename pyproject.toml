@@ -4,7 +4,7 @@ requires = ["hatchling"]
 
 [project]
 name = "serena-agent"
-version = "0.1.3"
+version = "0.1.4"
 description = ""
 authors = [{ name = "Oraios AI", email = "info@oraios-ai.de" }]
 readme = "README.md"
@@ -264,6 +264,10 @@ markers = [
   "bash: language server running for Bash",
   "snapshot: snapshot tests for symbolic editing operations",
   "ruby: language server running for Ruby",
+  "zig: language server running for Zig",
+  "lua: language server running for Lua",
+  "nix: language server running for Nix",
+  "dart: language server running for Dart",
   "erlang: language server running for Erlang",
 ]
 

@@ -5,6 +5,8 @@ Provides Rust specific instantiation of the LanguageServer class. Contains vario
 import logging
 import os
 import pathlib
+import shutil
+import subprocess
 import threading
 
 from overrides import override
@@ -16,13 +18,62 @@ from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
-from .common import RuntimeDependency, RuntimeDependencyCollection
-
 
 class RustAnalyzer(SolidLanguageServer):
     """
     Provides Rust specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Rust.
     """
+
+    @staticmethod
+    def _get_rustup_version():
+        """Get installed rustup version or None if not found."""
+        try:
+            result = subprocess.run(["rustup", "--version"], capture_output=True, text=True, check=False)
+            if result.returncode == 0:
+                return result.stdout.strip()
+        except FileNotFoundError:
+            return None
+        return None
+
+    @staticmethod
+    def _get_rust_analyzer_path():
+        """Get rust-analyzer path via rustup or system PATH."""
+        # First try rustup
+        try:
+            result = subprocess.run(["rustup", "which", "rust-analyzer"], capture_output=True, text=True, check=False)
+            if result.returncode == 0:
+                return result.stdout.strip()
+        except FileNotFoundError:
+            pass
+
+        # Fallback to system PATH
+        return shutil.which("rust-analyzer")
+
+    @staticmethod
+    def _ensure_rust_analyzer_installed():
+        """Ensure rust-analyzer is available, install via rustup if needed."""
+        path = RustAnalyzer._get_rust_analyzer_path()
+        if path:
+            return path
+
+        # Check if rustup is available
+        if not RustAnalyzer._get_rustup_version():
+            raise RuntimeError(
+                "Neither rust-analyzer nor rustup is installed.\n"
+                "Please install Rust via https://rustup.rs/ or install rust-analyzer separately."
+            )
+
+        # Try to install rust-analyzer component
+        result = subprocess.run(["rustup", "component", "add", "rust-analyzer"], check=False, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(f"Failed to install rust-analyzer via rustup: {result.stderr}")
+
+        # Try again after installation
+        path = RustAnalyzer._get_rust_analyzer_path()
+        if not path:
+            raise RuntimeError("rust-analyzer installation succeeded but binary not found in PATH")
+
+        return path
 
     def __init__(
         self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
@@ -30,7 +81,9 @@ class RustAnalyzer(SolidLanguageServer):
         """
         Creates a RustAnalyzer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        rustanalyzer_executable_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
+        rustanalyzer_executable_path = self._ensure_rust_analyzer_installed()
+        logger.log(f"Using rust-analyzer at: {rustanalyzer_executable_path}", logging.INFO)
+
         super().__init__(
             config,
             logger,
@@ -47,73 +100,6 @@ class RustAnalyzer(SolidLanguageServer):
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["target"]
-
-    @classmethod
-    def _setup_runtime_dependencies(
-        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> str:
-        """
-        Setup runtime dependencies for rust_analyzer and return the command to start the server.
-        """
-        deps = RuntimeDependencyCollection(
-            [
-                RuntimeDependency(
-                    id="RustAnalyzer",
-                    description="RustAnalyzer for macOS (x64)",
-                    url="https://github.com/rust-lang/rust-analyzer/releases/download/2025-08-04/rust-analyzer-x86_64-apple-darwin.gz",
-                    platform_id="osx-x64",
-                    archive_type="gz",
-                    binary_name="rust_analyzer",
-                ),
-                RuntimeDependency(
-                    id="RustAnalyzer",
-                    description="RustAnalyzer for macOS (arm64)",
-                    url="https://github.com/rust-lang/rust-analyzer/releases/download/2025-08-04/rust-analyzer-aarch64-apple-darwin.gz",
-                    platform_id="osx-arm64",
-                    archive_type="gz",
-                    binary_name="rust_analyzer",
-                ),
-                RuntimeDependency(
-                    id="RustAnalyzer",
-                    description="RustAnalyzer for Linux (x64)",
-                    url="https://github.com/rust-lang/rust-analyzer/releases/download/2025-08-04/rust-analyzer-x86_64-unknown-linux-gnu.gz",
-                    platform_id="linux-x64",
-                    archive_type="gz",
-                    binary_name="rust_analyzer",
-                ),
-                RuntimeDependency(
-                    id="RustAnalyzer",
-                    description="RustAnalyzer for Linux (arm64)",
-                    url="https://github.com/rust-lang/rust-analyzer/releases/download/2025-08-04/rust-analyzer-aarch64-unknown-linux-gnu.gz",
-                    platform_id="linux-arm64",
-                    archive_type="gz",
-                    binary_name="rust_analyzer",
-                ),
-                RuntimeDependency(
-                    id="RustAnalyzer",
-                    description="RustAnalyzer for Windows (x64)",
-                    url="https://github.com/rust-lang/rust-analyzer/releases/download/2025-08-04/rust-analyzer-x86_64-pc-windows-msvc.zip",
-                    platform_id="win-x64",
-                    archive_type="zip",
-                    binary_name="rust-analyzer.exe",
-                ),
-            ]
-        )
-
-        # assert platform_id.value in [
-        #     "linux-x64",
-        #     "win-x64",
-        # ], "Only linux-x64 and win-x64 platform is supported for in multilspy at the moment"
-
-        rustanalyzer_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "RustAnalyzer")
-        rustanalyzer_executable_path = deps.binary_path(rustanalyzer_ls_dir)
-        if not os.path.exists(rustanalyzer_ls_dir):
-            os.makedirs(rustanalyzer_ls_dir)
-            deps.install(logger, rustanalyzer_ls_dir)
-        assert os.path.exists(rustanalyzer_executable_path)
-        os.chmod(rustanalyzer_executable_path, 0o755)
-
-        return rustanalyzer_executable_path
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:

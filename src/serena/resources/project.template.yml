@@ -11,7 +11,7 @@ ignore_all_files_in_gitignore: true
 # list of additional paths to ignore
 # same syntax as gitignore, so you can use * and **
 # Was previously called `ignored_dirs`, please update your config if you are using that.
-# Added (renamed)on 2025-04-07
+# Added (renamed) on 2025-04-07
 ignored_paths: []
 
 # whether the project is in read-only mode
@@ -35,7 +35,7 @@ read_only: false
 #  * `find_referencing_symbols`: Finds symbols that reference the symbol at the given location (optionally filtered by type).
 #  * `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
 #  * `get_current_config`: Prints the current configuration of the agent, including the active and available projects, tools, contexts, and modes.
-#  * `get_symbols_overview`: Gets an overview of the top-level symbols defined in a given file or directory.
+#  * `get_symbols_overview`: Gets an overview of the top-level symbols defined in a given file.
 #  * `initial_instructions`: Gets the initial instructions for the current project.
 #     Should only be used in settings where the system prompt cannot be set,
 #     e.g. in clients you have no control over, like Claude Desktop.

@@ -81,61 +81,27 @@ class TestBashLanguageServerBasics:
         assert len(utils_function_symbols) >= 8, f"Should find at least 8 functions in utils.sh, found {len(utils_function_symbols)}"
 
     @pytest.mark.parametrize("language_server", [Language.BASH], indirect=True)
-    def test_bash_regex_fallback_detection(self, language_server: SolidLanguageServer) -> None:
-        """Test the regex-based fallback function detection directly."""
-        # Check if the method exists (it should if we have our enhanced bash server)
-        if not hasattr(language_server, "_detect_bash_functions"):
-            pytest.fail("Enhanced bash function detection not available - this may be due to test environment setup")
-
-        # Test the _detect_bash_functions method directly
-        detected_functions = language_server._detect_bash_functions("main.sh", include_body=True)
-
-        # Should detect functions even if LSP doesn't provide them
-        assert len(detected_functions) == 3, f"Should detect exactly 3 functions, found {len(detected_functions)}"
-
-        function_names = [func["name"] for func in detected_functions]
-        assert "greet_user" in function_names, "Regex should detect greet_user function"
-        assert "process_items" in function_names, "Regex should detect process_items function"
-        assert "main" in function_names, "Regex should detect main function"
-
-        # Check that symbols have proper structure
-        for func in detected_functions:
-            assert func["kind"] == 12, f"Function {func['name']} should have LSP Symbol Kind 12"
-            assert "location" in func, f"Function {func['name']} should have location info"
-            assert "range" in func, f"Function {func['name']} should have range info"
-            assert "selectionRange" in func, f"Function {func['name']} should have selectionRange info"
-
-            # Check location structure
-            location = func["location"]
-            assert "uri" in location, f"Function {func['name']} location should have URI"
-            assert "range" in location, f"Function {func['name']} location should have range"
-            assert "relativePath" in location, f"Function {func['name']} location should have relative path"
-
-    @pytest.mark.parametrize("language_server", [Language.BASH], indirect=True)
     def test_bash_function_syntax_patterns(self, language_server: SolidLanguageServer) -> None:
-        """Test detection of different bash function syntax patterns."""
-        # Check if the method exists (it should if we have our enhanced bash server)
-        if not hasattr(language_server, "_detect_bash_functions"):
-            pytest.fail("Enhanced bash function detection not available - this may be due to test environment setup")
-
-        # Test main.sh (has 'function' keyword functions and regular function)
-        main_functions = language_server._detect_bash_functions("main.sh", include_body=False)
+        """Test that LSP detects different bash function syntax patterns correctly."""
+        # Test main.sh (has both 'function' keyword and traditional syntax)
+        main_all_symbols, main_root_symbols = language_server.request_document_symbols("main.sh", include_body=False)
+        main_functions = [symbol for symbol in main_all_symbols if symbol.get("kind") == 12]
+        main_function_names = [func["name"] for func in main_functions]
 
         # Test utils.sh (all use 'function' keyword)
-        utils_functions = language_server._detect_bash_functions("utils.sh", include_body=False)
-
-        # Verify we detect both syntax patterns
-        main_function_names = [func["name"] for func in main_functions]
+        utils_all_symbols, utils_root_symbols = language_server.request_document_symbols("utils.sh", include_body=False)
+        utils_functions = [symbol for symbol in utils_all_symbols if symbol.get("kind") == 12]
         utils_function_names = [func["name"] for func in utils_functions]
 
-        # main() uses regular syntax: main() {
-        assert "main" in main_function_names, "Should detect regular function syntax"
+        # Verify LSP detects both syntax patterns
+        # main() uses traditional syntax: main() {
+        assert "main" in main_function_names, "LSP should detect traditional function syntax"
 
         # Functions with 'function' keyword: function name() {
-        assert "greet_user" in main_function_names, "Should detect function keyword syntax"
-        assert "to_uppercase" in utils_function_names, "Should detect function keyword syntax in utils"
+        assert "greet_user" in main_function_names, "LSP should detect function keyword syntax"
+        assert "process_items" in main_function_names, "LSP should detect function keyword syntax"
 
-        # Verify all expected utils functions are detected
+        # Verify all expected utils functions are detected by LSP
         expected_utils = [
             "to_uppercase",
             "to_lowercase",
@@ -148,4 +114,8 @@ class TestBashLanguageServerBasics:
         ]
 
         for expected_func in expected_utils:
-            assert expected_func in utils_function_names, f"Should detect {expected_func} function"
+            assert expected_func in utils_function_names, f"LSP should detect {expected_func} function"
+
+        # Verify total counts match expectations
+        assert len(main_functions) >= 3, f"Should find at least 3 functions in main.sh, found {len(main_functions)}"
+        assert len(utils_functions) >= 8, f"Should find at least 8 functions in utils.sh, found {len(utils_functions)}"

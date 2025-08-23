@@ -1,6 +1,7 @@
 import os
 import tempfile
 from pathlib import Path
+from typing import cast
 from unittest.mock import Mock, patch
 
 import pytest
@@ -86,6 +87,43 @@ class TestCSharpLanguageServer:
         assert "Email" in symbol_names
         assert "ToString" in symbol_names
         assert "IsAdult" in symbol_names
+
+    @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
+    def test_find_referencing_symbols_across_files(self, language_server: SolidLanguageServer) -> None:
+        """Test finding references to Calculator.Subtract method across files."""
+        # First, find the Subtract method in Program.cs
+        file_path = os.path.join("Program.cs")
+        symbols = language_server.request_document_symbols(file_path)
+
+        # Flatten the symbols if they're nested
+        symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+
+        subtract_symbol = None
+        for sym in symbol_list:
+            if sym.get("name") == "Subtract":
+                subtract_symbol = sym
+                break
+
+        assert subtract_symbol is not None, "Could not find 'Subtract' method symbol in Program.cs"
+
+        # Get references to the Subtract method
+        sel_start = subtract_symbol["selectionRange"]["start"]
+        refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
+
+        # Should find references in both Program.cs and Models/Person.cs
+        ref_files = cast(list[str], [ref.get("relativePath", "") for ref in refs])
+        print(f"Found references: {refs}")
+        print(f"Reference files: {ref_files}")
+
+        # Check that we have references from both files
+        assert any("Program.cs" in ref_file for ref_file in ref_files), "Should find reference in Program.cs"
+        assert any(
+            os.path.join("Models", "Person.cs") in ref_file for ref_file in ref_files
+        ), "Should find reference in Models/Person.cs where Calculator.Subtract is called"
+
+        # check for a second time, since the first call may trigger initialization and change the state of the LS
+        refs_second_call = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
+        assert refs_second_call == refs, "Second call to request_references should return the same results"
 
 
 @pytest.mark.csharp

@@ -22,7 +22,7 @@ from serena.constants import (
     DEFAULT_ENCODING,
     PROJECT_TEMPLATE_FILE,
     REPO_ROOT,
-    SELENA_CONFIG_TEMPLATE_FILE,
+    SERENA_CONFIG_TEMPLATE_FILE,
     SERENA_MANAGED_DIR_IN_HOME,
     SERENA_MANAGED_DIR_NAME,
 )
@@ -198,12 +198,12 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                     raise ValueError(
                         f"No source files found in {project_root}\n\n"
                         f"To use Serena with this project, you need to either:\n"
-                        f"1. Add source files in one of the supported languages (Python, JavaScript/TypeScript, Java, C#, Rust, Go, Ruby, C++, PHP)\n"
+                        f"1. Add source files in one of the supported languages (Python, JavaScript/TypeScript, Java, C#, Rust, Go, Ruby, C++, PHP, Swift, Elixir, Terraform, Bash)\n"
                         f"2. Create a project configuration file manually at:\n"
                         f"   {os.path.join(project_root, cls.rel_path_to_project_yml())}\n\n"
                         f"Example project.yml:\n"
                         f"  project_name: {project_name}\n"
-                        f"  language: python  # or typescript, java, csharp, rust, go, ruby, cpp, php\n"
+                        f"  language: python  # or typescript, java, csharp, rust, go, ruby, cpp, php, swift, elixir, terraform, bash\n"
                     )
                 # find the language with the highest percentage
                 dominant_language = max(language_composition.keys(), key=lambda lang: language_composition[lang])
@@ -365,7 +365,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         :param config_file_path: the path where the configuration file should be generated
         """
         log.info(f"Auto-generating Serena configuration file in {config_file_path}")
-        loaded_commented_yaml = load_yaml(SELENA_CONFIG_TEMPLATE_FILE, preserve_comments=True)
+        loaded_commented_yaml = load_yaml(SERENA_CONFIG_TEMPLATE_FILE, preserve_comments=True)
         save_yaml(config_file_path, loaded_commented_yaml, preserve_comments=True)
 
     @classmethod

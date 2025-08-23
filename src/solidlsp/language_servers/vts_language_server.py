@@ -9,7 +9,6 @@ import os
 import pathlib
 import shutil
 import threading
-from time import sleep
 
 from overrides import override
 
@@ -231,8 +230,6 @@ class VtsLanguageServer(SolidLanguageServer):
             self.server_ready.set()
         self.completions_available.set()
 
-    # VTS may need longer to process references, so we include a sleep similar to TypeScript LS
     @override
-    def _send_references_request(self, relative_file_path: str, line: int, column: int):
-        sleep(1)
-        return super()._send_references_request(relative_file_path, line, column)
+    def _get_wait_time_for_cross_file_referencing(self) -> float:
+        return 1

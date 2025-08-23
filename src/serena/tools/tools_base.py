@@ -70,7 +70,7 @@ class Component(ABC):
         return self.agent.lines_read
 
 
-TOOL_DEFAULT_MAX_ANSWER_LENGTH = int(2e5)
+TOOL_DEFAULT_MAX_ANSWER_LENGTH = int(15e4)
 
 
 class ToolMarker:
