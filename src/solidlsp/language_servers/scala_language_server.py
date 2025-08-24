@@ -81,9 +81,7 @@ class ScalaLanguageServer(SolidLanguageServer):
         cs_command_path = shutil.which("cs")
 
         if not coursier_command_path:
-            raise RuntimeError(
-                "'coursier' not found isn't in PATH. Please install coursier try again."
-            )
+            raise RuntimeError("'coursier' not found isn't in PATH. Please install coursier try again.")
 
         if not cs_command_path:
             logger.log("'cs' command not found. Trying to install it using 'coursier'.", logging.INFO)
