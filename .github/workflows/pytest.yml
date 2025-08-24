@@ -94,13 +94,13 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          curl -fL https://github.com/coursier/launchers/raw/master/cs-aarch64-apple-darwin.gz | gzip -d > cs
-          chmod +x cs
-          sudo mv cs /usr/local/bin/
-          /usr/local/bin/cs install coursier
-          echo "$HOME/.local/share/coursier/bin" >> $GITHUB_PATH
-          if [ ! -f /usr/local/bin/coursier ] && [ -f "$HOME/.local/share/coursier/bin/coursier" ]; then
-            sudo ln -sf "$HOME/.local/share/coursier/bin/coursier" /usr/local/bin/coursier
+          # Use Homebrew to install coursier (most reliable on macOS)
+          brew install coursier/formulas/coursier
+          # Verify installation
+          which coursier && coursier --version
+          # Also ensure cs is available
+          if ! which cs; then
+            ln -sf $(which coursier) /usr/local/bin/cs
           fi
       - name: Install coursier (Windows)
         if: runner.os == 'Windows'
@@ -110,8 +110,13 @@ jobs:
           mkdir -p "$HOME/bin"
           mv cs.exe "$HOME/bin/"
           echo "$HOME/bin" >> $GITHUB_PATH
-          "$HOME/bin/cs.exe" install coursier
-          echo "$HOME/.local/share/coursier/bin" >> $GITHUB_PATH
+          export PATH="$HOME/bin:$PATH"
+          # Install coursier command
+          "$HOME/bin/cs.exe" install coursier --install-dir "$HOME/bin"
+          # Create coursier.exe symlink/copy
+          cp "$HOME/bin/cs.exe" "$HOME/bin/coursier.exe"
+          # Verify installation
+          "$HOME/bin/cs.exe" --version && "$HOME/bin/coursier.exe" --version
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
         with:
