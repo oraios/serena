@@ -78,10 +78,40 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-      - name: Install coursier
-        uses: coursier/setup-action@v1
-        with:
-          jvm: temurin:17
+      - name: Install coursier (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          curl -fL https://github.com/coursier/launchers/raw/master/cs-x86_64-pc-linux.gz | gzip -d > cs
+          chmod +x cs
+          sudo mv cs /usr/local/bin/
+          /usr/local/bin/cs install coursier
+          echo "$HOME/.local/share/coursier/bin" >> $GITHUB_PATH
+          if [ ! -f /usr/local/bin/coursier ] && [ -f "$HOME/.local/share/coursier/bin/coursier" ]; then
+            sudo ln -sf "$HOME/.local/share/coursier/bin/coursier" /usr/local/bin/coursier
+          fi
+      - name: Install coursier (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          curl -fL https://github.com/coursier/launchers/raw/master/cs-aarch64-apple-darwin.gz | gzip -d > cs
+          chmod +x cs
+          sudo mv cs /usr/local/bin/
+          /usr/local/bin/cs install coursier
+          echo "$HOME/.local/share/coursier/bin" >> $GITHUB_PATH
+          if [ ! -f /usr/local/bin/coursier ] && [ -f "$HOME/.local/share/coursier/bin/coursier" ]; then
+            sudo ln -sf "$HOME/.local/share/coursier/bin/coursier" /usr/local/bin/coursier
+          fi
+      - name: Install coursier (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          curl -fL -o cs.exe https://github.com/coursier/launchers/raw/master/cs-x86_64-pc-win32.exe
+          mkdir -p "$HOME/bin"
+          mv cs.exe "$HOME/bin/"
+          echo "$HOME/bin" >> $GITHUB_PATH
+          "$HOME/bin/cs.exe" install coursier
+          echo "$HOME/.local/share/coursier/bin" >> $GITHUB_PATH
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
         with:
