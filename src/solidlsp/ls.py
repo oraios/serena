@@ -257,7 +257,12 @@ class SolidLanguageServer(ABC):
             from solidlsp.language_servers.erlang_language_server import ErlangLanguageServer
 
             ls = ErlangLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+        elif config.code_language == Language.SCALA:
+            from solidlsp.language_servers.scala_language_server import (
+                ScalaLanguageServer,
+            )
 
+            ls = ScalaLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
         else:
             logger.log(f"Language {config.code_language} is not supported", logging.ERROR)
             raise SolidLSPException(f"Language {config.code_language} is not supported")
