@@ -15,6 +15,7 @@ from pathlib import Path
 
 from overrides import override
 
+from solidlsp import ls_types
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
@@ -27,6 +28,82 @@ class NixLanguageServer(SolidLanguageServer):
     """
     Provides Nix specific instantiation of the LanguageServer class using nixd.
     """
+
+    def _extend_nix_symbol_range_to_include_semicolon(
+        self, symbol: ls_types.UnifiedSymbolInformation, file_content: str
+    ) -> ls_types.UnifiedSymbolInformation:
+        """
+        Extend symbol range to include trailing semicolon for Nix attribute symbols.
+
+        nixd provides ranges that exclude semicolons (expression-level), but serena needs
+        statement-level ranges that include semicolons for proper replacement.
+        """
+        if not symbol.get("range"):
+            return symbol
+
+        range_info = symbol["range"]
+        end_line = range_info["end"]["line"]
+        end_char = range_info["end"]["character"]
+
+        # Split file content into lines
+        lines = file_content.split("\n")
+        if end_line >= len(lines):
+            return symbol
+
+        line = lines[end_line]
+
+        # Check if there's a semicolon immediately after the current range end
+        if end_char < len(line) and line[end_char] == ";":
+            # Extend range to include the semicolon
+            new_range = {"start": range_info["start"], "end": {"line": end_line, "character": end_char + 1}}
+
+            # Create modified symbol with extended range
+            extended_symbol = symbol.copy()
+            extended_symbol["range"] = new_range
+
+            # CRITICAL: Also update the location.range if it exists
+            if extended_symbol.get("location"):
+                location = extended_symbol["location"].copy()
+                if "range" in location:
+                    location["range"] = new_range.copy()
+                extended_symbol["location"] = location
+
+            return extended_symbol
+
+        return symbol
+
+    @override
+    def request_document_symbols(
+        self, relative_file_path: str, include_body: bool = False
+    ) -> tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]:
+        """
+        Override to extend Nix symbol ranges to include trailing semicolons.
+
+        nixd provides expression-level ranges (excluding semicolons) but serena needs
+        statement-level ranges (including semicolons) for proper symbol replacement.
+        """
+        # Get symbols from parent implementation
+        all_symbols, root_symbols = super().request_document_symbols(relative_file_path, include_body)
+
+        # Get file content for range extension
+        file_content = self.language_server.retrieve_full_file_content(relative_file_path)
+
+        # Extend ranges for all symbols recursively
+        def extend_symbol_and_children(symbol: ls_types.UnifiedSymbolInformation) -> ls_types.UnifiedSymbolInformation:
+            # Extend this symbol's range
+            extended = self._extend_nix_symbol_range_to_include_semicolon(symbol, file_content)
+
+            # Extend children recursively
+            if extended.get("children"):
+                extended["children"] = [extend_symbol_and_children(child) for child in extended["children"]]
+
+            return extended
+
+        # Apply range extension to all symbols
+        extended_all_symbols = [extend_symbol_and_children(sym) for sym in all_symbols]
+        extended_root_symbols = [extend_symbol_and_children(sym) for sym in root_symbols]
+
+        return extended_all_symbols, extended_root_symbols
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
