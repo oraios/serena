@@ -281,7 +281,15 @@ class PlatformUtils:
         if system == "Windows" and machine == "":
             machine = cls._determine_windows_machine_type()
         system_map = {"Windows": "win", "Darwin": "osx", "Linux": "linux"}
-        machine_map = {"AMD64": "x64", "x86_64": "x64", "i386": "x86", "i686": "x86", "aarch64": "arm64", "arm64": "arm64"}
+        machine_map = {
+            "AMD64": "x64",
+            "x86_64": "x64",
+            "i386": "x86",
+            "i686": "x86",
+            "aarch64": "arm64",
+            "arm64": "arm64",
+            "ARM64": "arm64",
+        }
         if system in system_map and machine in machine_map:
             platform_id = system_map[system] + "-" + machine_map[machine]
             if system == "Linux" and bitness == "64bit":

@@ -33,7 +33,6 @@ def execute_shell_command(command: str, cwd: str | None = None, capture_stderr: 
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE if capture_stderr else None,
-        creationflags=subprocess.CREATE_NO_WINDOW if is_windows else 0,  # type: ignore
         text=True,
         encoding="utf-8",
         errors="replace",

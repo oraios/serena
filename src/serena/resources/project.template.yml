@@ -11,7 +11,7 @@ ignore_all_files_in_gitignore: true
 # list of additional paths to ignore
 # same syntax as gitignore, so you can use * and **
 # Was previously called `ignored_dirs`, please update your config if you are using that.
-# Added (renamed)on 2025-04-07
+# Added (renamed) on 2025-04-07
 ignored_paths: []
 
 # whether the project is in read-only mode

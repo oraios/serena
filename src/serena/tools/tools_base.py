@@ -70,9 +70,6 @@ class Component(ABC):
         return self.agent.lines_read
 
 
-TOOL_DEFAULT_MAX_ANSWER_LENGTH = int(2e5)
-
-
 class ToolMarker:
     """
     Base class for tool markers.
@@ -214,8 +211,11 @@ class Tool(Component):
                 params[param] = value
         log.info(f"{self.get_name_from_cls()}: {dict_string(params)}")
 
-    @staticmethod
-    def _limit_length(result: str, max_answer_chars: int) -> str:
+    def _limit_length(self, result: str, max_answer_chars: int) -> str:
+        if max_answer_chars == -1:
+            max_answer_chars = self.agent.serena_config.default_max_tool_answer_chars
+        if max_answer_chars <= 0:
+            raise ValueError(f"Must be positive or the default (-1), got: {max_answer_chars=}")
         if (n_chars := len(result)) > max_answer_chars:
             result = (
                 f"The answer is too long ({n_chars} characters). "

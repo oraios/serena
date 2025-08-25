@@ -1,6 +1,7 @@
 import os
 import tempfile
 from pathlib import Path
+from typing import cast
 from unittest.mock import Mock, patch
 
 import pytest
@@ -110,15 +111,19 @@ class TestCSharpLanguageServer:
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
 
         # Should find references in both Program.cs and Models/Person.cs
-        ref_files = [ref.get("relativePath", "") for ref in refs]
+        ref_files = cast(list[str], [ref.get("relativePath", "") for ref in refs])
         print(f"Found references: {refs}")
         print(f"Reference files: {ref_files}")
 
         # Check that we have references from both files
         assert any("Program.cs" in ref_file for ref_file in ref_files), "Should find reference in Program.cs"
         assert any(
-            "Models/Person.cs" in ref_file for ref_file in ref_files
+            os.path.join("Models", "Person.cs") in ref_file for ref_file in ref_files
         ), "Should find reference in Models/Person.cs where Calculator.Subtract is called"
+
+        # check for a second time, since the first call may trigger initialization and change the state of the LS
+        refs_second_call = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
+        assert refs_second_call == refs, "Second call to request_references should return the same results"
 
 
 @pytest.mark.csharp

@@ -4,7 +4,7 @@ requires = ["hatchling"]
 
 [project]
 name = "serena-agent"
-version = "0.1.3"
+version = "0.1.4"
 description = ""
 authors = [{ name = "Oraios AI", email = "info@oraios-ai.de" }]
 readme = "README.md"
@@ -112,7 +112,7 @@ PYDEVD_DISABLE_FILE_VALIDATION = "1"
 # Uses PYTEST_MARKERS env var for default markers
 # For custom markers, one can either adjust the env var or just use -m option in the command line,
 # as the second -m option will override the first one.
-test = "pytest test -vv -m \"${PYTEST_MARKERS:-not java and not rust}\""
+test = "pytest test -vv -m \"${PYTEST_MARKERS:-not java and not rust and not erlang}\""
 _black_check = "black --check src scripts test"
 _ruff_check = "ruff check src scripts test"
 _black_format = "black src scripts test"
@@ -255,6 +255,7 @@ markers = [
   "go: language server running for Go",
   "java: language server running for Java",
   "lean4: language server running for Lean 4",
+  "kotlin: language server running for kotlin",
   "rust: language server running for Rust",
   "typescript: language server running for TypeScript",
   "php: language server running for PHP",
@@ -265,6 +266,11 @@ markers = [
   "bash: language server running for Bash",
   "snapshot: snapshot tests for symbolic editing operations",
   "ruby: language server running for Ruby",
+  "zig: language server running for Zig",
+  "lua: language server running for Lua",
+  "nix: language server running for Nix",
+  "dart: language server running for Dart",
+  "erlang: language server running for Erlang",
 ]
 
 [tool.codespell]

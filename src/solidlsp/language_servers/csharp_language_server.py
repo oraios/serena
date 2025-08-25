@@ -13,7 +13,6 @@ import threading
 import urllib.request
 import zipfile
 from pathlib import Path
-from time import sleep
 from typing import cast
 
 from overrides import override
@@ -22,7 +21,6 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_logger import LanguageServerLogger
-from solidlsp.ls_types import Location
 from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -739,8 +737,5 @@ class CSharpLanguageServer(SolidLanguageServer):
             self.logger.log(f"Opened project files: {project_files}", logging.DEBUG)
 
     @override
-    def request_references(self, relative_file_path: str, line: int, column: int) -> list[Location]:
-        # Like in the typescript LS, we need to wait here for the language server to
-        # get correct results that include cross-file references.
-        sleep(1)
-        return super().request_references(relative_file_path, line, column)
+    def _get_wait_time_for_cross_file_referencing(self) -> float:
+        return 1

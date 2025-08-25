@@ -1,6 +1,31 @@
-# Latest
-
+# latest
 Status of the `main` branch. Changes prior to the next official version change will appear here.
+
+* Language support:
+  * **Add support for Zig** via ZLS (cross-file references may not fully work on Windows)
+  * **Add support for Lua** via lua-language-server
+  * **Add support for Nix** requires nixd installation (Windows not supported)
+  * **Dart now officially supported**: Dart was always working, but now tests were added, and it is promoted to "officially supported"
+  * **Rust now uses already installed rustup**: The rust-analyzer is no longer bundled with Serena. Instead, it uses the rust-analyzer from your Rust toolchain managed by rustup. This ensures compatibility with your Rust version and eliminates outdated bundled binaries.
+  * **Kotlin now officially supported**: We now use the official Kotlin LS, tests run through and performance is good, even though the LS is in an early development stage. 
+  * **Add support for Erlang** experimental, may hang or be slow, uses the recently archived [erlang_ls](https://github.com/erlang-ls/erlang_ls)
+
+* Client support:
+  * New mode `oaicompat-agent` and extensions in the openai tool compatibility, **permitting Serena to work with llama.cpp**
+
+* General:
+  * Various fixes related to indexing, special paths and determation of ignored paths
+  * Decreased `TOOL_DEFAULT_MAX_ANSWER_LENGTH` to be in accordance with (below) typical max-tokens configurations
+
+# 0.1.4
+
+## Summary
+
+This likely is the last release before the stable version 1.0.0 which will come together with the jetbrains IDE extension.
+We release it for users who install Serena from a tag, since the last tag cannot be installed due to a breaking change in the mcp dependency (see #381).
+
+Since the last release, several new languages were supported, and the Serena CLI and configurability were significantly extended.
+We thank all external contributors who made a lot of the improvements possible!
 
 * General:
   * **Initial instructions no longer need to be loaded by the user**
@@ -35,6 +60,7 @@ Fixes:
 * Ignore `.git` in check for ignored paths and improve performance of `find_all_non_ignored_files`
 * Fix language server startup issues on Windows when using Claude Code (which was due to
   default shell reconfiguration imposed by Claude Code)
+* Additional wait for initialization in C# language server before requesting references, allowing cross-file references to be found.
 
 # 0.1.3
 
