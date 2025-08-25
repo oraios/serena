@@ -62,6 +62,7 @@ dev = [
   "ruff>=0.0.285",
   "toml-sort>=0.24.2",
   "types-pyyaml>=6.0.12.20241230",
+  "types-requests>=2.32.0",
   "syrupy>=4.9.1",
 ]
 agno = ["agno>=1.2.6", "sqlalchemy>=2.0.40"]

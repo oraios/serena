@@ -19,6 +19,13 @@ ignored_paths: []
 # Added on 2025-04-18
 read_only: false
 
+# Additional paths outside the project directory that Serena is allowed to access
+# WARNING: This is a security feature relaxation. Use with caution!
+# Paths can be:
+#   - Absolute: /home/user/shared/libraries
+#   - Relative to project root: ../shared-config
+# Added on 2025-01-14
+allowed_external_paths: []
 
 # list of tool names to exclude. We recommend not excluding any tools, see the readme for more details.
 # Below is the complete list of tools for convenience.
