@@ -91,10 +91,12 @@ class ScalaLanguageServer(SolidLanguageServer):
                     subprocess.run([coursier_command_path, "setup", "--yes"], check=True, capture_output=True, text=True)
                 except subprocess.CalledProcessError as e:
                     raise RuntimeError(f"Failed to set up 'cs' command with 'coursier setup'. Stderr: {e.stderr}")
-    
+
                 cs_command_path = shutil.which("cs")
                 if not cs_command_path:
-                    raise RuntimeError("'cs' command not found after running 'coursier setup'. Please check your PATH or install it manually.")
+                    raise RuntimeError(
+                        "'cs' command not found after running 'coursier setup'. Please check your PATH or install it manually."
+                    )
                 logger.log("'cs' command installed successfully.", logging.INFO)
 
             logger.log(f"metals executable not found at {metals_executable}, bootstrapping...", logging.INFO)

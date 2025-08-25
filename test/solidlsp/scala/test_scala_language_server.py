@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 
 import pytest
 
@@ -8,46 +9,78 @@ from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.settings import SolidLSPSettings
 
+RELATIVE_FILE_PATH = "src/main/scala/Main.scala"
+MAIN_FILE_PATH = "src/main/scala/Main.scala"
+TEST_POSITIONS = [
+    (18, 15),
+    (18, 12),
+    (19, 15),
+]
+EXPECTED_FILE_PATTERN = "Main.scala"
+EXPECTED_SYMBOLS = ["Main", "main", "add", "processUser"]
+EXPECTED_FILE_PATTERNS = ["Utils.scala", "Main.scala"]
+
 
 @pytest.fixture(scope="module")
 def scala_ls():
-    # Define the path to your test Scala repository
     repo_root = os.path.abspath("test/resources/repos/scala")
-
-    # Create a dummy logger
     logger = LanguageServerLogger(logging.getLogger(__name__))
-
-    # Create a LanguageServerConfig for Scala
     config = LanguageServerConfig(code_language=Language.SCALA)
-
-    # Create SolidLSPSettings
     solidlsp_settings = SolidLSPSettings()
-
-    # Instantiate the ScalaLanguageServer
     ls = ScalaLanguageServer(config, logger, repo_root, solidlsp_settings)
 
-    # Start the server and yield it for tests
     with ls.start_server():
         yield ls
 
 
 def test_scala_document_symbols(scala_ls):
-    # Test document symbols for Main.scala
-    relative_file_path = "src/main/scala/Main.scala"
-    symbols, _ = scala_ls.request_document_symbols(relative_file_path)
-
-    # Assert that expected symbols are found
+    """Test document symbols for Main.scala"""
+    symbols, _ = scala_ls.request_document_symbols(RELATIVE_FILE_PATH)
     symbol_names = [s["name"] for s in symbols]
-    assert "Main" in symbol_names
-    assert "main" in symbol_names
-    assert "add" in symbol_names
 
-    # You can add more specific assertions about symbol kinds, ranges, etc.
-    main_object = next(s for s in symbols if s["name"] == "Main")
-    assert main_object["kind"] == 2  # Module (or Object in Scala's case)
+    assert symbol_names[0] == "com.example"
+    assert symbol_names[1] == "Main"
+    assert symbol_names[2] == "main"
+    assert symbol_names[7] == "add"
+    assert symbol_names[8] == "processUser"
 
-    main_method = next(s for s in symbols if s["name"] == "main")
-    assert main_method["kind"] == 6  # Method
+    assert symbols[0]["kind"] == 4
+    assert symbols[1]["kind"] == 2
+    assert symbols[2]["kind"] == 6
+    assert symbols[7]["kind"] == 6
+    assert symbols[8]["kind"] == 6
 
-    add_method = next(s for s in symbols if s["name"] == "add")
-    assert add_method["kind"] == 6  # Method
+
+def test_scala_references_within_same_file(scala_ls):
+    """Test finding references within the same file."""
+
+    references_results = []
+    for line, char in TEST_POSITIONS:
+        refs = scala_ls.request_references(RELATIVE_FILE_PATH, line, char)
+        references_results.append(refs)
+
+    assert references_results[0] == []
+    assert references_results[1] == []
+    assert len(references_results[2]) == 1
+
+    first_ref = references_results[2][0]
+    assert first_ref["uri"].endswith("Main.scala")
+    assert first_ref["range"]["start"]["line"] == 19
+    assert first_ref["range"]["start"]["character"] == 14
+    assert first_ref["range"]["end"]["line"] == 19
+    assert first_ref["range"]["end"]["character"] == 17
+
+
+def test_scala_references_across_files_utils_multiply(scala_ls):
+    """Test finding references method across files."""
+
+    references = scala_ls.request_references(MAIN_FILE_PATH, 9, 25)
+    assert len(references) == 1
+
+    first_ref = references[0]
+    assert first_ref["uri"].startswith("file://")
+    assert first_ref["uri"].endswith("Main.scala")
+    assert first_ref["range"]["start"]["line"] == 9
+    assert first_ref["range"]["start"]["character"] == 23
+    assert first_ref["range"]["end"]["line"] == 9
+    assert first_ref["range"]["end"]["character"] == 29
