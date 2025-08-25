@@ -9,6 +9,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   * **Rust now uses already installed rustup**: The rust-analyzer is no longer bundled with Serena. Instead, it uses the rust-analyzer from your Rust toolchain managed by rustup. This ensures compatibility with your Rust version and eliminates outdated bundled binaries.
   * **Kotlin now officially supported**: We now use the official Kotlin LS, tests run through and performance is good, even though the LS is in an early development stage. 
   * **Add support for Erlang** experimental, may hang or be slow, uses the recently archived [erlang_ls](https://github.com/erlang-ls/erlang_ls)
+  * **Ruby dual language server support**: Added ruby-lsp as the modern primary Ruby language server. Solargraph remains available as an experimental legacy option. ruby-lsp supports both .rb and .erb files, while Solargraph supports .rb files only.
 
 * Client support:
   * New mode `oaicompat-agent` and extensions in the openai tool compatibility, **permitting Serena to work with llama.cpp**

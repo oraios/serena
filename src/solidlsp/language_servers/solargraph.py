@@ -44,6 +44,11 @@ class Solargraph(SolidLanguageServer):
             "ruby",
             solidlsp_settings,
         )
+        # Override internal language enum for file matching (excludes .erb files)
+        # while keeping LSP languageId as "ruby" for protocol compliance
+        from solidlsp.ls_config import Language
+
+        self.language = Language.RUBY_SOLARGRAPH
         self.analysis_complete = threading.Event()
         self.service_ready_event = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
