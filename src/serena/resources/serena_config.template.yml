@@ -33,6 +33,12 @@ trace_lsp_communication: False
 # whether to trace the communication between Serena and the language servers.
 # This is useful for debugging language server issues.
 
+ls_specifics: {}
+# Added on 23.08.2025
+# Advanced configuration option allowing to configure language server implementation specific options. Maps the language server class name to the options
+# Have a look at the docstring of the constructors of the LS implementations within solidlsp to see which options are available.
+# No documentation on options means no options are available
+
 tool_timeout: 240
 # timeout, in seconds, after which tool executions are terminated
 
