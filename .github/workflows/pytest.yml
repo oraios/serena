@@ -123,7 +123,9 @@ jobs:
           ruby-version: '3.4'
       - name: Install Ruby language server
         shell: bash
-        run: gem install solargraph
+        run: |
+          gem install solargraph
+          gem install ruby-lsp
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
