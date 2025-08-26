@@ -78,9 +78,29 @@ class RubyLsp(SolidLanguageServer):
         return 0.5  # 500ms should be sufficient for ruby-lsp
 
     @staticmethod
-    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig, repository_root_path: str) -> str:
+    def _find_executable_with_extensions(executable_name: str) -> str | None:
         """
-        Setup runtime dependencies for ruby-lsp and return the command to start the server.
+        Find executable with Windows-specific extensions (.bat, .cmd, .exe) if on Windows.
+        Returns the full path to the executable or None if not found.
+        """
+        import platform
+
+        if platform.system() == "Windows":
+            # Try Windows-specific extensions first
+            for ext in [".bat", ".cmd", ".exe"]:
+                path = shutil.which(f"{executable_name}{ext}")
+                if path:
+                    return path
+            # Fall back to default search
+            return shutil.which(executable_name)
+        else:
+            # Unix systems
+            return shutil.which(executable_name)
+
+    @staticmethod
+    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig, repository_root_path: str) -> list[str]:
+        """
+        Setup runtime dependencies for ruby-lsp and return the command list to start the server.
         Installation strategy: Bundler project > global ruby-lsp > gem install ruby-lsp
         """
         # Check if Ruby is installed
@@ -120,14 +140,15 @@ class RubyLsp(SolidLanguageServer):
         if is_bundler_project:
             logger.log("Detected Bundler project (Gemfile found)", logging.INFO)
 
-            # Check if bundle command is available
-            bundle_path = shutil.which("bundle")
+            # Check if bundle command is available using Windows-compatible search
+            bundle_path = RubyLsp._find_executable_with_extensions("bundle")
             if not bundle_path:
                 # Try common bundle executables
                 for bundle_cmd in ["bin/bundle", "bundle"]:
-                    bundle_full_path = (
-                        os.path.join(repository_root_path, bundle_cmd) if bundle_cmd.startswith("bin/") else shutil.which(bundle_cmd)
-                    )
+                    if bundle_cmd.startswith("bin/"):
+                        bundle_full_path = os.path.join(repository_root_path, bundle_cmd)
+                    else:
+                        bundle_full_path = RubyLsp._find_executable_with_extensions(bundle_cmd)
                     if bundle_full_path and os.path.exists(bundle_full_path):
                         bundle_path = bundle_full_path if bundle_cmd.startswith("bin/") else bundle_cmd
                         break
@@ -150,7 +171,7 @@ class RubyLsp(SolidLanguageServer):
 
                 if ruby_lsp_in_bundle:
                     logger.log("Found ruby-lsp in Gemfile.lock", logging.INFO)
-                    return f"{bundle_path} exec ruby-lsp"
+                    return [bundle_path, "exec", "ruby-lsp"]
                 else:
                     logger.log(
                         "ruby-lsp not found in Gemfile.lock. Consider adding 'gem \"ruby-lsp\"' to your Gemfile for better compatibility.",
@@ -158,18 +179,20 @@ class RubyLsp(SolidLanguageServer):
                     )
                     # Fall through to global installation check
 
-        # Check if ruby-lsp is available globally
-        ruby_lsp_path = shutil.which("ruby-lsp")
+        # Check if ruby-lsp is available globally using Windows-compatible search
+        ruby_lsp_path = RubyLsp._find_executable_with_extensions("ruby-lsp")
         if ruby_lsp_path:
             logger.log(f"Found ruby-lsp at: {ruby_lsp_path}", logging.INFO)
-            return "ruby-lsp"
+            return [ruby_lsp_path]
 
         # Try to install ruby-lsp globally
         logger.log("ruby-lsp not found, attempting to install globally...", logging.INFO)
         try:
             subprocess.run(["gem", "install", "ruby-lsp"], check=True, capture_output=True, cwd=repository_root_path)
             logger.log("Successfully installed ruby-lsp globally", logging.INFO)
-            return "ruby-lsp"
+            # Find the newly installed ruby-lsp executable
+            ruby_lsp_path = RubyLsp._find_executable_with_extensions("ruby-lsp")
+            return [ruby_lsp_path] if ruby_lsp_path else ["ruby-lsp"]
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr if isinstance(e.stderr, str) else e.stderr.decode() if e.stderr else str(e)
             if is_bundler_project:
