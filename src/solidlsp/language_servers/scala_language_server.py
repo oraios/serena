@@ -119,9 +119,9 @@ class ScalaLanguageServer(SolidLanguageServer):
                 metals_executable,
                 "-f",
             ]
-            logger.log("Bootstrapping metals...")
+            logger.log("Bootstrapping metals...", logging.INFO)
             subprocess.run(cmd, cwd=metals_home, check=True)
-            logger.log("Bootstrapping metals finished.")
+            logger.log("Bootstrapping metals finished.", logging.INFO)
         return [metals_executable]
 
     @staticmethod
