@@ -167,16 +167,28 @@ class FileUtils:
     def read_file(logger: LanguageServerLogger, file_path: str) -> str:
         """
         Reads the file at the given path and returns the contents as a string.
+        Tries multiple encodings in order: utf-8, utf-8-sig, latin-1, cp1252
         """
         if not os.path.exists(file_path):
             logger.log(f"File read '{file_path}' failed: File does not exist.", logging.ERROR)
             raise SolidLSPException(f"File read '{file_path}' failed: File does not exist.")
-        try:
-            with open(file_path, encoding="utf-8") as inp_file:
-                return inp_file.read()
-        except Exception as exc:
-            logger.log(f"File read '{file_path}' failed to read with encoding 'utf-8': {exc}", logging.ERROR)
-            raise SolidLSPException("File read failed.") from None
+
+        encodings = ["utf-8", "utf-8-sig", "latin-1", "cp1252"]
+        last_exception = None
+
+        for encoding in encodings:
+            try:
+                with open(file_path, encoding=encoding) as inp_file:
+                    content = inp_file.read()
+                    if encoding != "utf-8":
+                        logger.log(f"File read '{file_path}' succeeded with encoding '{encoding}'", logging.DEBUG)
+                    return content
+            except Exception as exc:
+                last_exception = exc
+                continue
+
+        logger.log(f"File read '{file_path}' failed with all encodings {encodings}: {last_exception}", logging.ERROR)
+        raise SolidLSPException("File read failed.") from None
 
     @staticmethod
     def download_file(logger: LanguageServerLogger, url: str, target_path: str) -> None:

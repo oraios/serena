@@ -464,7 +464,7 @@ class ProjectCommands(AutoRegisteringGroup):
                 try:
                     ls.request_document_symbols(f, include_body=False)
                     ls.request_document_symbols(f, include_body=True)
-                except TimeoutError as e:
+                except Exception as e:
                     log.error(f"Failed to index {f}, continuing.")
                     collected_exceptions.append(e)
                     files_failed.append(f)
