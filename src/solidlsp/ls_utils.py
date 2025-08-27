@@ -9,6 +9,7 @@ import platform
 import shutil
 import subprocess
 import uuid
+import zipfile
 from enum import Enum
 from pathlib import Path, PurePath
 
@@ -206,9 +207,22 @@ class FileUtils:
             tmp_files.append(tmp_file_name)
             os.makedirs(os.path.dirname(tmp_file_name), exist_ok=True)
             FileUtils.download_file(logger, url, tmp_file_name)
-            if archive_type in ["zip", "tar", "gztar", "bztar", "xztar"]:
+            if archive_type in ["tar", "gztar", "bztar", "xztar"]:
                 os.makedirs(target_path, exist_ok=True)
                 shutil.unpack_archive(tmp_file_name, target_path, archive_type)
+            elif archive_type == "zip": 
+                os.makedirs(target_path, exist_ok=True)
+                with zipfile.ZipFile(tmp_file_name, "r") as zip_ref:
+                    for zip_info in zip_ref.infolist():
+                        extracted_path = zip_ref.extract(zip_info, target_path)
+                        ZIP_SYSTEM_UNIX = 3 # zip file created on Unix system
+                        if zip_info.create_system != ZIP_SYSTEM_UNIX:
+                            continue
+                        # extractall() does not preserve permissions
+                        # see. https://github.com/python/cpython/issues/59999
+                        attrs = (zip_info.external_attr >> 16) & 0o777
+                        if attrs:
+                            os.chmod(extracted_path, attrs)
             elif archive_type == "zip.gz":
                 os.makedirs(target_path, exist_ok=True)
                 tmp_file_name_ungzipped = tmp_file_name + ".zip"
