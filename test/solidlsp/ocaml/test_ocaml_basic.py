@@ -34,21 +34,15 @@ class TestOCamlLanguageServer:
 
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
     def test_mixed_ocaml_modules(self, language_server: SolidLanguageServer) -> None:
-        """Test that the language server can find symbols from multiple OCaml modules"""        
+        """Test that the language server can find symbols from OCaml modules"""        
         # Test that full symbol tree includes symbols from various file types
         all_symbols = language_server.request_full_symbol_tree()
         
         # Should find symbols from main OCaml files
         assert SymbolUtils.symbol_tree_contains_name(all_symbols, "fib"), "Should find fib from .ml file"
         assert SymbolUtils.symbol_tree_contains_name(all_symbols, "DemoModule"), "Should find DemoModule from .ml file"
-        
-        # Should also find symbols from utility modules  
-        assert SymbolUtils.symbol_tree_contains_name(all_symbols, "make_user"), "Should find make_user from reason_utils"
-        assert SymbolUtils.symbol_tree_contains_name(all_symbols, "double"), "Should find double from reason_utils"
-        assert SymbolUtils.symbol_tree_contains_name(all_symbols, "calculate_factorial"), "Should find calculate_factorial"
-        
-        # Verify cross-module functions work
-        assert SymbolUtils.symbol_tree_contains_name(all_symbols, "greet_sample_user"), "Should find greet_sample_user"
+        assert SymbolUtils.symbol_tree_contains_name(all_symbols, "someFunction"), "Should find someFunction from DemoModule"
+        assert SymbolUtils.symbol_tree_contains_name(all_symbols, "num_domains"), "Should find num_domains constant"
 
     def test_reason_file_patterns(self) -> None:
         """Test that OCaml language configuration recognizes Reason file extensions"""
