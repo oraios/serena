@@ -263,6 +263,11 @@ class SolidLanguageServer(ABC):
 
             ls = ErlangLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
+        elif config.code_language == Language.OCAML:
+            from solidlsp.language_servers.ocaml_lsp_server.ocaml_lsp_server import OcamlLanguageServer
+
+            ls = OcamlLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
         else:
             logger.log(f"Language {config.code_language} is not supported", logging.ERROR)
             raise SolidLSPException(f"Language {config.code_language} is not supported")

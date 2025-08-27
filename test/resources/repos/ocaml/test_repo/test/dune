@@ -1,2 +1,3 @@
 (test
- (name test_test_repo))
+ (name test_test_repo)
+ (libraries test_repo))

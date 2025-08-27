@@ -270,6 +270,7 @@ markers = [
   "nix: language server running for Nix",
   "dart: language server running for Dart",
   "erlang: language server running for Erlang",
+  "ocaml: language server running for OCaml and Reason",
 ]
 
 [tool.codespell]

@@ -231,6 +231,12 @@ tmp/
 # Exception: Don't ignore Nix test repository lib directory (contains source code)
 !/test/resources/repos/nix/test_repo/lib
 
+# Exception: Don't ignore OCaml test repository lib directory (contains source code)
+!/test/resources/repos/ocaml/test_repo/lib
+
 # Swift
 /test/resources/repos/swift/test_repo/.build
 /test/resources/repos/swift/test_repo/.swiftpm
+
+# OCaml
+/test/resources/repos/ocaml/test_repo/_build
