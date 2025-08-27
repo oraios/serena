@@ -23,7 +23,7 @@ EXPECTED_FILE_PATTERNS = ["Utils.scala", "Main.scala"]
 @pytest.fixture(scope="module")
 def scala_ls():
     repo_root = os.path.abspath("test/resources/repos/scala")
-    logger = LanguageServerLogger(logging.getLogger(__name__))
+    logger = LanguageServerLogger(json_format=False, log_level=logging.INFO)
     config = LanguageServerConfig(code_language=Language.SCALA)
     solidlsp_settings = SolidLSPSettings()
     ls = ScalaLanguageServer(config, logger, repo_root, solidlsp_settings)
