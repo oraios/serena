@@ -210,12 +210,12 @@ class FileUtils:
             if archive_type in ["tar", "gztar", "bztar", "xztar"]:
                 os.makedirs(target_path, exist_ok=True)
                 shutil.unpack_archive(tmp_file_name, target_path, archive_type)
-            elif archive_type == "zip": 
+            elif archive_type == "zip":
                 os.makedirs(target_path, exist_ok=True)
                 with zipfile.ZipFile(tmp_file_name, "r") as zip_ref:
                     for zip_info in zip_ref.infolist():
                         extracted_path = zip_ref.extract(zip_info, target_path)
-                        ZIP_SYSTEM_UNIX = 3 # zip file created on Unix system
+                        ZIP_SYSTEM_UNIX = 3  # zip file created on Unix system
                         if zip_info.create_system != ZIP_SYSTEM_UNIX:
                             continue
                         # extractall() does not preserve permissions
