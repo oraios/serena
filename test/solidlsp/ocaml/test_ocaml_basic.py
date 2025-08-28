@@ -1,5 +1,4 @@
 import os
-import platform
 import subprocess
 
 import pytest
@@ -12,7 +11,7 @@ from solidlsp.ls_utils import SymbolUtils
 def _check_opam_available() -> bool:
     """Check if OPAM is available and working."""
     try:
-        result = subprocess.run(["opam", "--version"], check=True, capture_output=True, text=True)
+        subprocess.run(["opam", "--version"], check=True, capture_output=True, text=True)
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
