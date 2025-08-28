@@ -278,6 +278,9 @@ class RubyLsp(SolidLanguageServer):
                     "workspaceEdit": {"documentChanges": True},
                     "configuration": True,
                 },
+                "window": {
+                    "workDoneProgress": True,
+                },
                 "textDocument": {
                     "documentSymbol": {
                         "hierarchicalDocumentSymbolSupport": True,
@@ -333,28 +336,40 @@ class RubyLsp(SolidLanguageServer):
 
         def progress_handler(params: dict) -> None:
             # ruby-lsp sends progress notifications during indexing
+            self.logger.log(f"LSP: $/progress: {params}", logging.DEBUG)
             if "value" in params:
                 value = params["value"]
                 # Check for completion indicators
-                if value.get("kind") == "end" or value.get("percentage") == 100:
-                    self.logger.log("ruby-lsp indexing complete", logging.INFO)
+                if value.get("kind") == "end":
+                    self.logger.log("ruby-lsp indexing complete ($/progress end)", logging.INFO)
                     self.analysis_complete.set()
                     self.completions_available.set()
-            # Handle alternative progress format
-            elif "token" in params and isinstance(params.get("token"), str):
+                elif value.get("kind") == "begin":
+                    self.logger.log("ruby-lsp indexing started ($/progress begin)", logging.INFO)
+                elif "percentage" in value:
+                    percentage = value.get("percentage", 0)
+                    self.logger.log(f"ruby-lsp indexing progress: {percentage}%", logging.DEBUG)
+            # Handle direct progress format (fallback)
+            elif "token" in params and "value" in params:
                 token = params.get("token")
-                if "indexing" in token.lower():
+                if isinstance(token, str) and "indexing" in token.lower():
                     value = params.get("value", {})
                     if value.get("kind") == "end" or value.get("percentage") == 100:
-                        self.logger.log("ruby-lsp indexing complete", logging.INFO)
+                        self.logger.log("ruby-lsp indexing complete (token progress)", logging.INFO)
                         self.analysis_complete.set()
                         self.completions_available.set()
+
+        def window_work_done_progress_create(params: dict) -> None:
+            """Handle workDoneProgress/create requests from ruby-lsp"""
+            self.logger.log(f"LSP: window/workDoneProgress/create: {params}", logging.DEBUG)
+            return {}
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("language/status", lang_status_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
         self.server.on_notification("$/progress", progress_handler)
+        self.server.on_request("window/workDoneProgress/create", window_work_done_progress_create)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
         self.logger.log("Starting ruby-lsp server process", logging.INFO)
