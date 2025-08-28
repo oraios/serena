@@ -137,15 +137,16 @@ jobs:
           # Install required packages
           opam install -y dune ocaml-lsp-server
           
-          # Debug: Show where things are installed
+          # IMMEDIATELY activate OPAM environment in current shell
+          eval $(opam env)
+          
+          # NOW check where things are (will work because env is active)
           echo "OPAM bin directory: $(opam var bin)"
           echo "Current PATH: $PATH"
-          echo "Dune location: $(which dune || echo 'not found in PATH')"
-          echo "OCamlLSP location: $(which ocamllsp || echo 'not found in PATH')"
+          echo "Dune location: $(which dune)"
+          echo "OCamlLSP location: $(which ocamllsp)"
           
-          # Ensure OPAM environment is available for subsequent steps
-          eval $(opam env)
-          # Export each environment variable separately to GITHUB_ENV
+          # Export environment variables to GITHUB_ENV for subsequent steps
           opam env | sed 's/export //' | sed "s/'/\"/g" | sed 's/;.*//' >> $GITHUB_ENV
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@v2
