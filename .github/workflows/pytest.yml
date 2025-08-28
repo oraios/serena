@@ -125,11 +125,13 @@ jobs:
         shell: bash
         run: gem install ruby-lsp
       - name: Install OCaml and opam
+        if: runner.os != 'Windows'
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: "5.2.x"
           dune-cache: true
       - name: Install OCaml Language Server
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           # Initialize opam environment
