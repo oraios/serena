@@ -6,6 +6,7 @@ import time
 import pytest
 
 import test.solidlsp.clojure as clj
+import test.solidlsp.go as go_test
 from serena.agent import SerenaAgent
 from serena.config.serena_config import ProjectConfig, RegisteredProject, SerenaConfig
 from serena.project import Project
@@ -66,7 +67,16 @@ class TestSerenaAgent:
         "serena_agent,symbol_name,expected_kind,expected_file",
         [
             pytest.param(Language.PYTHON, "User", "Class", "models.py", marks=pytest.mark.python),
-            pytest.param(Language.GO, "Helper", "Function", "main.go", marks=pytest.mark.go),
+            pytest.param(
+                Language.GO,
+                "Helper",
+                "Function",
+                "main.go",
+                marks=[
+                    pytest.mark.go,
+                    pytest.mark.skipif(go_test.GOPLS_UNAVAILABLE, reason=f"gopls not available: {go_test.GOPLS_UNAVAILABLE_REASON}"),
+                ],
+            ),
             pytest.param(Language.JAVA, "Model", "Class", "Model.java", marks=pytest.mark.java),
             pytest.param(Language.KOTLIN, "Model", "Struct", "Model.kt", marks=pytest.mark.kotlin),
             pytest.param(Language.RUST, "add", "Function", "lib.rs", marks=pytest.mark.rust),
@@ -104,7 +114,16 @@ class TestSerenaAgent:
                 os.path.join("test_repo", "services.py"),
                 marks=pytest.mark.python,
             ),
-            pytest.param(Language.GO, "Helper", "main.go", "main.go", marks=pytest.mark.go),
+            pytest.param(
+                Language.GO,
+                "Helper",
+                "main.go",
+                "main.go",
+                marks=[
+                    pytest.mark.go,
+                    pytest.mark.skipif(go_test.GOPLS_UNAVAILABLE, reason=f"gopls not available: {go_test.GOPLS_UNAVAILABLE_REASON}"),
+                ],
+            ),
             pytest.param(
                 Language.JAVA,
                 "Model",
@@ -150,9 +169,9 @@ class TestSerenaAgent:
         result = find_refs_tool.apply_ex(name_path=def_symbol["name_path"], relative_path=def_symbol["relative_path"])
 
         refs = json.loads(result)
-        assert any(
-            ref["relative_path"] == ref_file for ref in refs
-        ), f"Expected to find reference to {symbol_name} in {ref_file}. refs={refs}"
+        assert any(ref["relative_path"] == ref_file for ref in refs), (
+            f"Expected to find reference to {symbol_name} in {ref_file}. refs={refs}"
+        )
 
     @pytest.mark.parametrize(
         "serena_agent,name_path,substring_matching,expected_symbol_name,expected_kind,expected_file",
@@ -248,7 +267,9 @@ class TestSerenaAgent:
             and expected_kind.lower() in s["kind"].lower()
             and expected_file in s["relative_path"]
             for s in symbols
-        ), f"Expected to find {name_path} ({expected_kind}) in {expected_file} for {agent._active_project.language.name}. Symbols: {symbols}"
+        ), (
+            f"Expected to find {name_path} ({expected_kind}) in {expected_file} for {agent._active_project.language.name}. Symbols: {symbols}"
+        )
 
     @pytest.mark.parametrize(
         "serena_agent,name_path",
