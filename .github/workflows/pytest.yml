@@ -268,4 +268,11 @@ jobs:
         run: uv run poe lint
       - name: Test with pytest
         shell: bash
-        run: uv run poe test
+        run: |
+          if [[ "${{ runner.os }}" != "Windows" ]] && command -v opam &> /dev/null; then
+            # Run tests with OPAM environment activated for better OCaml support
+            opam exec -- uv run poe test
+          else
+            # Regular test execution for Windows or when OPAM is not available
+            uv run poe test
+          fi
