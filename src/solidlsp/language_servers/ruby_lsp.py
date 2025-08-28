@@ -335,10 +335,20 @@ class RubyLsp(SolidLanguageServer):
             # ruby-lsp sends progress notifications during indexing
             if "value" in params:
                 value = params["value"]
-                if value.get("kind") == "end":
+                # Check for completion indicators
+                if value.get("kind") == "end" or value.get("percentage") == 100:
                     self.logger.log("ruby-lsp indexing complete", logging.INFO)
                     self.analysis_complete.set()
                     self.completions_available.set()
+            # Handle alternative progress format
+            elif "token" in params and isinstance(params.get("token"), str):
+                token = params.get("token")
+                if "indexing" in token.lower():
+                    value = params.get("value", {})
+                    if value.get("kind") == "end" or value.get("percentage") == 100:
+                        self.logger.log("ruby-lsp indexing complete", logging.INFO)
+                        self.analysis_complete.set()
+                        self.completions_available.set()
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("language/status", lang_status_handler)
