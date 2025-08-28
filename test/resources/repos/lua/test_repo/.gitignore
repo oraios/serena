@@ -1,0 +1,13 @@
+# Lua specific
+*.luac
+.luarocks/
+lua_modules/
+luarocks/
+
+# Build artifacts
+build/
+dist/
+
+# IDE
+.vscode/
+.idea/

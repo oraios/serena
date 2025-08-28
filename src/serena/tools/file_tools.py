@@ -14,7 +14,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 from serena.text_utils import search_files
-from serena.tools import SUCCESS_RESULT, TOOL_DEFAULT_MAX_ANSWER_LENGTH, EditedFileContext, Tool, ToolMarkerCanEdit, ToolMarkerOptional
+from serena.tools import SUCCESS_RESULT, EditedFileContext, Tool, ToolMarkerCanEdit, ToolMarkerOptional
 from serena.util.file_system import scan_directory
 
 
@@ -23,9 +23,7 @@ class ReadFileTool(Tool):
     Reads a file within the project directory.
     """
 
-    def apply(
-        self, relative_path: str, start_line: int = 0, end_line: int | None = None, max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH
-    ) -> str:
+    def apply(self, relative_path: str, start_line: int = 0, end_line: int | None = None, max_answer_chars: int = -1) -> str:
         """
         Reads the given file or a chunk of it. Generally, symbolic operations
         like find_symbol or find_referencing_symbols should be preferred if you know which symbols you are looking for.
@@ -89,15 +87,15 @@ class ListDirTool(Tool):
     Lists files and directories in the given directory (optionally with recursion).
     """
 
-    def apply(self, relative_path: str, recursive: bool, max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH) -> str:
+    def apply(self, relative_path: str, recursive: bool, max_answer_chars: int = -1) -> str:
         """
         Lists all non-gitignored files and directories in the given directory (optionally with recursion).
 
         :param relative_path: the relative path to the directory to list; pass "." to scan the project root
         :param recursive: whether to scan subdirectories recursively
         :param max_answer_chars: if the output is longer than this number of characters,
-            no content will be returned. Don't adjust unless there is really no other way to get the content
-            required for the task.
+            no content will be returned. -1 means the default value from the config will be used.
+            Don't adjust unless there is really no other way to get the content required for the task.
         :return: a JSON object with the names of directories and files within the given directory
         """
         # Check if the directory exists before validation
@@ -309,7 +307,7 @@ class SearchForPatternTool(Tool):
         paths_exclude_glob: str = "",
         relative_path: str = "",
         restrict_search_to_code_files: bool = False,
-        max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
+        max_answer_chars: int = -1,
     ) -> str:
         """
         Offers a flexible search for arbitrary patterns in the codebase, including the
@@ -350,7 +348,9 @@ class SearchForPatternTool(Tool):
         :param relative_path: only subpaths of this path (relative to the repo root) will be analyzed. If a path to a single
             file is passed, only that will be searched. The path must exist, otherwise a `FileNotFoundError` is raised.
         :param max_answer_chars: if the output is longer than this number of characters,
-            no content will be returned. Don't adjust unless there is really no other way to get the content
+            no content will be returned.
+            -1 means the default value from the config will be used.
+            Don't adjust unless there is really no other way to get the content
             required for the task. Instead, if the output is too long, you should
             make a stricter query.
         :param restrict_search_to_code_files: whether to restrict the search to only those files where

@@ -44,6 +44,11 @@ class Solargraph(SolidLanguageServer):
             "ruby",
             solidlsp_settings,
         )
+        # Override internal language enum for file matching (excludes .erb files)
+        # while keeping LSP languageId as "ruby" for protocol compliance
+        from solidlsp.ls_config import Language
+
+        self.language = Language.RUBY_SOLARGRAPH
         self.analysis_complete = threading.Event()
         self.service_ready_event = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
@@ -99,6 +104,20 @@ class Solargraph(SolidLanguageServer):
                 "  - System package manager (brew install ruby, apt install ruby, etc.)"
             ) from e
 
+        # Helper function for Windows-compatible executable search
+        def find_executable_with_extensions(executable_name: str) -> str | None:
+            """Find executable with Windows-specific extensions if on Windows."""
+            import platform
+
+            if platform.system() == "Windows":
+                for ext in [".bat", ".cmd", ".exe"]:
+                    path = shutil.which(f"{executable_name}{ext}")
+                    if path:
+                        return path
+                return shutil.which(executable_name)
+            else:
+                return shutil.which(executable_name)
+
         # Check for Bundler project (Gemfile exists)
         gemfile_path = os.path.join(repository_root_path, "Gemfile")
         gemfile_lock_path = os.path.join(repository_root_path, "Gemfile.lock")
@@ -108,13 +127,14 @@ class Solargraph(SolidLanguageServer):
             logger.log("Detected Bundler project (Gemfile found)", logging.INFO)
 
             # Check if bundle command is available
-            bundle_path = shutil.which("bundle")
+            bundle_path = find_executable_with_extensions("bundle")
             if not bundle_path:
                 # Try common bundle executables
                 for bundle_cmd in ["bin/bundle", "bundle"]:
-                    bundle_full_path = (
-                        os.path.join(repository_root_path, bundle_cmd) if bundle_cmd.startswith("bin/") else shutil.which(bundle_cmd)
-                    )
+                    if bundle_cmd.startswith("bin/"):
+                        bundle_full_path = os.path.join(repository_root_path, bundle_cmd)
+                    else:
+                        bundle_full_path = find_executable_with_extensions(bundle_cmd)
                     if bundle_full_path and os.path.exists(bundle_full_path):
                         bundle_path = bundle_full_path if bundle_cmd.startswith("bin/") else bundle_cmd
                         break
@@ -148,8 +168,8 @@ class Solargraph(SolidLanguageServer):
                 # Fall through to global installation check
 
         # Check if solargraph is installed globally
-        # First, try to find solargraph in PATH (includes asdf shims)
-        solargraph_path = shutil.which("solargraph")
+        # First, try to find solargraph in PATH (includes asdf shims) with Windows support
+        solargraph_path = find_executable_with_extensions("solargraph")
         if solargraph_path:
             logger.log(f"Found solargraph at: {solargraph_path}", logging.INFO)
             return solargraph_path

@@ -1,0 +1,12 @@
+{
+    "enable_build_on_save": true,
+    "build_on_save_args": ["build"],
+    "enable_autofix": false,
+    "semantic_tokens": "full",
+    "enable_inlay_hints": true,
+    "inlay_hints_show_builtin": true,
+    "inlay_hints_exclude_single_argument": true,
+    "inlay_hints_show_parameter_name": true,
+    "skip_std_references": false,
+    "max_detail_length": 1048576
+}

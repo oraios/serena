@@ -1,5 +1,5 @@
 ---
-name: Issue Template
+name: Issue (bug, performance problem, question)
 about: General Issue
 title: ''
 labels: ''

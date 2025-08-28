@@ -48,6 +48,11 @@ jetbrains: False
 # NOTE: The plugin is yet unreleased. This is for Serena developers only.
 
 
+default_max_tool_answer_chars: 150000
+# Used as default for tools where the apply method has a default maximal answer length.
+# Even though the value of the max_answer_chars can be changed when calling the tool, it may make sense to adjust this default
+# through the global configuration.
+
 record_tool_usage_stats:  False
 # whether to record tool usage statistics, they will be shown in the web dashboard if recording is active.
 

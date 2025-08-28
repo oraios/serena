@@ -39,11 +39,17 @@ class Language(str, Enum):
     DART = "dart"
     CPP = "cpp"
     PHP = "php"
+    R = "r"
     CLOJURE = "clojure"
     ELIXIR = "elixir"
     TERRAFORM = "terraform"
     SWIFT = "swift"
     BASH = "bash"
+    ZIG = "zig"
+    LUA = "lua"
+    NIX = "nix"
+    ERLANG = "erlang"
+    AL = "al"
     HASKELL = "haskell"
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
@@ -53,6 +59,10 @@ class Language(str, Enum):
     CSHARP_OMNISHARP = "csharp_omnisharp"
     """OmniSharp language server for C# (instead of the default csharp-ls by microsoft).
     Currently has problems with finding references, and generally seems less stable and performant.
+    """
+    RUBY_SOLARGRAPH = "ruby_solargraph"
+    """Solargraph language server for Ruby (legacy, experimental).
+    Use Language.RUBY (ruby-lsp) for better performance and modern LSP features.
     """
 
     @classmethod
@@ -65,7 +75,7 @@ class Language(str, Enum):
         """
         Check if the language server is experimental or deprecated.
         """
-        return self in {self.TYPESCRIPT_VTS, self.PYTHON_JEDI, self.CSHARP_OMNISHARP}
+        return self in {self.TYPESCRIPT_VTS, self.PYTHON_JEDI, self.CSHARP_OMNISHARP, self.RUBY_SOLARGRAPH}
 
     def __str__(self) -> str:
         return self.value
@@ -91,6 +101,8 @@ class Language(str, Enum):
             case self.GO:
                 return FilenameMatcher("*.go")
             case self.RUBY:
+                return FilenameMatcher("*.rb", "*.erb")
+            case self.RUBY_SOLARGRAPH:
                 return FilenameMatcher("*.rb")
             case self.CPP:
                 return FilenameMatcher("*.cpp", "*.h", "*.hpp", "*.c", "*.hxx", "*.cc", "*.cxx")
@@ -100,6 +112,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.dart")
             case self.PHP:
                 return FilenameMatcher("*.php")
+            case self.R:
+                return FilenameMatcher("*.R", "*.r", "*.Rmd", "*.Rnw")
             case self.CLOJURE:
                 return FilenameMatcher("*.clj", "*.cljs", "*.cljc", "*.edn")  # codespell:ignore edn
             case self.ELIXIR:
@@ -110,6 +124,16 @@ class Language(str, Enum):
                 return FilenameMatcher("*.swift")
             case self.BASH:
                 return FilenameMatcher("*.sh", "*.bash")
+            case self.ZIG:
+                return FilenameMatcher("*.zig", "*.zon")
+            case self.LUA:
+                return FilenameMatcher("*.lua")
+            case self.NIX:
+                return FilenameMatcher("*.nix")
+            case self.ERLANG:
+                return FilenameMatcher("*.erl", "*.hrl", "*.escript", "*.config", "*.app", "*.app.src")
+            case self.AL:
+                return FilenameMatcher("*.al", "*.dal")
             case self.HASKELL:
                 # Haskell sources and literate Haskell; include cabal files for project context
                 return FilenameMatcher("*.hs", "*.lhs", "*.cabal")

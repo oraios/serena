@@ -63,6 +63,7 @@ dev = [
   "toml-sort>=0.24.2",
   "types-pyyaml>=6.0.12.20241230",
   "syrupy>=4.9.1",
+  "types-requests>=2.32.4.20241230",
 ]
 agno = ["agno>=1.2.6", "sqlalchemy>=2.0.40"]
 google = ["google-genai>=1.8.0"]
@@ -112,7 +113,7 @@ PYDEVD_DISABLE_FILE_VALIDATION = "1"
 # Uses PYTEST_MARKERS env var for default markers
 # For custom markers, one can either adjust the env var or just use -m option in the command line,
 # as the second -m option will override the first one.
-test = "pytest test -vv -m \"${PYTEST_MARKERS:-not java and not rust}\""
+test = "pytest test -vv -m \"${PYTEST_MARKERS:-not java and not rust and not erlang}\""
 _black_check = "black --check src scripts test"
 _ruff_check = "ruff check src scripts test"
 _black_format = "black src scripts test"
@@ -254,6 +255,7 @@ markers = [
   "python: language server running for Python",
   "go: language server running for Go",
   "java: language server running for Java",
+  "kotlin: language server running for kotlin",
   "rust: language server running for Rust",
   "typescript: language server running for TypeScript",
   "php: language server running for PHP",
@@ -262,9 +264,16 @@ markers = [
   "terraform: language server running for Terraform",
   "swift: language server running for Swift",
   "bash: language server running for Bash",
-  "haskell: language server running for Haskell",
+  "r: language server running for R",
   "snapshot: snapshot tests for symbolic editing operations",
-  "ruby: language server running for Ruby",
+  "ruby: language server running for Ruby (uses ruby-lsp)",
+  "zig: language server running for Zig",
+  "lua: language server running for Lua",
+  "nix: language server running for Nix",
+  "dart: language server running for Dart",
+  "erlang: language server running for Erlang",
+  "al: language server running for AL (Microsoft Dynamics 365 Business Central)",
+  "haskell: language server running for Haskell",
 ]
 
 [tool.codespell]

@@ -84,6 +84,8 @@ class SolidLanguageServer(ABC):
     It is used to communicate with Language Servers of different programming languages.
     """
 
+    CACHE_FOLDER_NAME = "cache"
+
     # To be overridden and extended by subclasses
     def is_ignored_dirname(self, dirname: str) -> bool:
         """
@@ -194,6 +196,11 @@ class SolidLanguageServer(ABC):
             ls = Gopls(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
         elif config.code_language == Language.RUBY:
+            from solidlsp.language_servers.ruby_lsp import RubyLsp
+
+            ls = RubyLsp(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.RUBY_SOLARGRAPH:
             from solidlsp.language_servers.solargraph import Solargraph
 
             ls = Solargraph(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
@@ -212,6 +219,11 @@ class SolidLanguageServer(ABC):
             from solidlsp.language_servers.intelephense import Intelephense
 
             ls = Intelephense(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.R:
+            from solidlsp.language_servers.r_language_server import RLanguageServer
+
+            ls = RLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
         elif config.code_language == Language.CLOJURE:
             from solidlsp.language_servers.clojure_lsp import ClojureLSP
@@ -238,11 +250,35 @@ class SolidLanguageServer(ABC):
 
             ls = BashLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
+        elif config.code_language == Language.ZIG:
+            from solidlsp.language_servers.zls import ZigLanguageServer
+
+            ls = ZigLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.NIX:
+            from solidlsp.language_servers.nixd_ls import NixLanguageServer
+
+            ls = NixLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.LUA:
+            from solidlsp.language_servers.lua_ls import LuaLanguageServer
+
+            ls = LuaLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.ERLANG:
+            from solidlsp.language_servers.erlang_language_server import ErlangLanguageServer
+
+            ls = ErlangLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
+        elif config.code_language == Language.AL:
+            from solidlsp.language_servers.al_language_server import ALLanguageServer
+
+            ls = ALLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
         elif config.code_language == Language.HASKELL:
             from solidlsp.language_servers.haskell.haskell_language_server import HaskellLanguageServer
 
             ls = HaskellLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
-
         else:
             logger.log(f"Language {config.code_language} is not supported", logging.ERROR)
             raise SolidLSPException(f"Language {config.code_language} is not supported")
@@ -337,7 +373,7 @@ class SolidLanguageServer(ABC):
         LS may return incomplete results on calls to `request_references` (only references found in the same file),
         if the LS is not fully initialized yet.
         """
-        return 0
+        return 2
 
     def set_request_timeout(self, timeout: float | None) -> None:
         """
@@ -623,6 +659,12 @@ class SolidLanguageServer(ABC):
             )
             raise SolidLSPException("Language Server not started")
 
+        if not self._has_waited_for_cross_file_references:
+            # Some LS require waiting for a while before they can return cross-file definitions.
+            # This is a workaround for such LS that don't have a reliable "finished initializing" signal.
+            sleep(self._get_wait_time_for_cross_file_referencing())
+            self._has_waited_for_cross_file_references = True
+
         with self.open_file(relative_file_path):
             # sending request to the language server and waiting for response
             definition_params = cast(
@@ -650,12 +692,7 @@ class SolidLanguageServer(ABC):
                     new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
                     new_item["relativePath"] = PathUtils.get_relative_path(new_item["absolutePath"], self.repository_root_path)
                     ret.append(ls_types.Location(new_item))
-                elif (
-                    LSPConstants.ORIGIN_SELECTION_RANGE in item
-                    and LSPConstants.TARGET_URI in item
-                    and LSPConstants.TARGET_RANGE in item
-                    and LSPConstants.TARGET_SELECTION_RANGE in item
-                ):
+                elif LSPConstants.TARGET_URI in item and LSPConstants.TARGET_RANGE in item and LSPConstants.TARGET_SELECTION_RANGE in item:
                     new_item: ls_types.Location = {}
                     new_item["uri"] = item[LSPConstants.TARGET_URI]
                     new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
@@ -1614,7 +1651,13 @@ class SolidLanguageServer(ABC):
         """
         The path to the cache file for the document symbols.
         """
-        return Path(self.repository_root_path) / ".serena" / "cache" / self.language_id / "document_symbols_cache_v23-06-25.pkl"
+        return (
+            Path(self.repository_root_path)
+            / self._solidlsp_settings.project_data_relative_path
+            / self.CACHE_FOLDER_NAME
+            / self.language_id
+            / "document_symbols_cache_v23-06-25.pkl"
+        )
 
     def save_cache(self):
         with self._cache_lock:

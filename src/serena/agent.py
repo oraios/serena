@@ -135,6 +135,12 @@ class SerenaAgent:
         # obtain serena configuration using the decoupled factory function
         self.serena_config = serena_config or SerenaConfig.from_config_file()
 
+        # project-specific instances, which will be initialized upon project activation
+        self._active_project: Project | None = None
+        self.language_server: SolidLanguageServer | None = None
+        self.memories_manager: MemoriesManager | None = None
+        self.lines_read: LinesRead | None = None
+
         # adjust log level
         serena_log_level = self.serena_config.log_level
         if Logger.root.level > serena_log_level:
@@ -183,7 +189,7 @@ class SerenaAgent:
         # start the dashboard (web frontend), registering its log handler
         if self.serena_config.web_dashboard:
             self._dashboard_thread, port = SerenaDashboardAPI(
-                get_memory_log_handler(), tool_names, tool_usage_stats=self._tool_usage_stats
+                get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats
             ).run_in_thread()
             dashboard_url = f"http://127.0.0.1:{port}/dashboard/index.html"
             log.info("Serena web dashboard started at %s", dashboard_url)
@@ -223,13 +229,6 @@ class SerenaAgent:
         # Initialize the prompt factory
         self.prompt_factory = SerenaPromptFactory()
         self._project_activation_callback = project_activation_callback
-
-        # project-specific instances, which will be initialized upon project activation
-        self._active_project: Project | None = None
-        self._active_project_root: str | None = None
-        self.language_server: SolidLanguageServer | None = None
-        self.memories_manager: MemoriesManager | None = None
-        self.lines_read: LinesRead | None = None
 
         # set the active modes
         if modes is None:
