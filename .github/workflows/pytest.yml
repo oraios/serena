@@ -145,9 +145,6 @@ jobs:
           echo "Current PATH: $PATH"
           echo "Dune location: $(which dune)"
           echo "OCamlLSP location: $(which ocamllsp)"
-          
-          # Export environment variables to GITHUB_ENV for subsequent steps
-          opam env | sed 's/export //' | sed "s/'/\"/g" | sed 's/;.*//' >> $GITHUB_ENV
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
