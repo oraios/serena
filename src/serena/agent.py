@@ -2,6 +2,7 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
+import atexit
 import multiprocessing
 import os
 import platform
@@ -247,6 +248,13 @@ class SerenaAgent:
                 self.activate_project_from_path_or_name(project)
             except Exception as e:
                 log.error(f"Error activating project '{project}' at startup: {e}", exc_info=e)
+
+        # Initialize cleanup tracking
+        self._cleaned_up = False
+        self._is_initialized = True
+
+        # Register cleanup with atexit for guaranteed cleanup on normal exit
+        atexit.register(self.cleanup)
 
     def get_context(self) -> SerenaAgentContext:
         return self._context
@@ -605,19 +613,6 @@ class SerenaAgent:
         assert self.lines_read is not None
         self.lines_read.invalidate_lines_read(relative_path)
 
-    def __enter__(self) -> "SerenaAgent":
-        """Context manager entry - returns self for use in with statements"""
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        """Context manager exit - ensures proper cleanup of language server"""
-        self.cleanup()
-
     def _cleanup_typescript_processes(self) -> None:
         """Kill any remaining TypeScript server processes on Unix-like systems."""
         if os.name != "nt":  # Unix-like systems
@@ -634,6 +629,11 @@ class SerenaAgent:
 
     def cleanup(self) -> None:
         """Explicitly clean up resources - stops language server immediately"""
+        # Prevent double cleanup
+        if self._cleaned_up:
+            return
+        self._cleaned_up = True
+
         if self.is_language_server_running():
             log.info("Explicitly stopping the language server via cleanup()...")
             assert self.language_server is not None

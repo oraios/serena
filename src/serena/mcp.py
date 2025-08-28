@@ -345,4 +345,10 @@ class SerenaMCPFactorySingleProcess(SerenaMCPFactory):
         openai_tool_compatible = self.context.name in ["chatgpt", "codex", "oaicompat-agent"]
         self._set_mcp_tools(mcp_server, openai_tool_compatible=openai_tool_compatible)
         log.info("MCP server lifetime setup complete")
-        yield
+        try:
+            yield
+        finally:
+            # Ensure cleanup when MCP server shuts down
+            if self.agent is not None:
+                log.info("MCP server shutting down, cleaning up SerenaAgent...")
+                self.agent.cleanup()
