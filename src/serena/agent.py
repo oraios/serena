@@ -603,21 +603,63 @@ class SerenaAgent:
         assert self.lines_read is not None
         self.lines_read.invalidate_lines_read(relative_path)
 
+    def __enter__(self) -> "SerenaAgent":
+        """Context manager entry - returns self for use in with statements"""
+        return self
+
+    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any) -> None:
+        """Context manager exit - ensures proper cleanup of language server"""
+        self.cleanup()
+
+    def cleanup(self) -> None:
+        """Explicitly clean up resources - stops language server immediately"""
+        if self.is_language_server_running():
+            log.info("Explicitly stopping the language server via cleanup()...")
+            assert self.language_server is not None
+            self.language_server.save_cache()
+            self.language_server.stop()
+            # Force process termination if still running
+            if hasattr(self.language_server, "_handler") and self.language_server._handler:
+                handler = self.language_server._handler
+                if hasattr(handler, "process") and handler.process:
+                    try:
+                        handler.process.terminate()
+                        handler.process.wait(timeout=1)
+                    except:
+                        try:
+                            handler.process.kill()
+                        except:
+                            pass
+            self.language_server = None
+        if self._gui_log_viewer:
+            log.info("Stopping the GUI log window...")
+            self._gui_log_viewer.stop()
+            self._gui_log_viewer = None
+
     def __del__(self) -> None:
         """
         Destructor to clean up the language server instance and GUI logger
         """
         if not hasattr(self, "_is_initialized"):
             return
-        log.info("SerenaAgent is shutting down ...")
-        if self.is_language_server_running():
-            log.info("Stopping the language server ...")
-            assert self.language_server is not None
-            self.language_server.save_cache()
-            self.language_server.stop()
-        if self._gui_log_viewer:
-            log.info("Stopping the GUI log window ...")
-            self._gui_log_viewer.stop()
+        log.info("SerenaAgent is shutting down via destructor...")
+        # Use the cleanup method to ensure proper termination
+        try:
+            self.cleanup()
+        except Exception as e:
+            log.error(f"Error during cleanup in destructor: {e}")
+        
+        # Extra aggressive cleanup for TypeScript servers specifically
+        try:
+            import subprocess
+            import os
+            if os.name != "nt":  # Unix-like systems
+                # Kill any remaining TypeScript servers spawned by this process
+                subprocess.run(["pkill", "-9", "-f", "tsserver"], capture_output=True)
+                subprocess.run(["pkill", "-9", "-f", "typescript-language-server"], capture_output=True)
+                subprocess.run(["pkill", "-9", "-f", "typingsInstaller"], capture_output=True)
+        except:
+            pass
 
     def get_tool_by_name(self, tool_name: str) -> Tool:
         tool_class = ToolRegistry().get_tool_class_by_name(tool_name)
