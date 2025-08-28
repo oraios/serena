@@ -132,15 +132,12 @@ jobs:
       - name: Install OCaml Language Server
         shell: bash
         run: |
-          # Install ocaml-lsp-server via opam
-          opam install -y ocaml-lsp-server
-          # Ensure opam binaries are in PATH
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            # Windows uses a different opam path structure
-            echo "$USERPROFILE/.opam/default/bin" >> $GITHUB_PATH
-          else
-            echo "$HOME/.opam/default/bin" >> $GITHUB_PATH
-          fi
+          # Initialize opam environment
+          eval $(opam env)
+          # Install dune and ocaml-lsp-server
+          opam install -y dune ocaml-lsp-server
+          # Verify installation
+          opam exec -- which ocamllsp || echo "ocamllsp not found in PATH"
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
