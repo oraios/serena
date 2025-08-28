@@ -13,6 +13,7 @@ from enum import Enum
 from pathlib import Path, PurePath
 
 import requests
+from charset_normalizer import from_path
 
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_logger import LanguageServerLogger
@@ -167,28 +168,70 @@ class FileUtils:
     def read_file(logger: LanguageServerLogger, file_path: str) -> str:
         """
         Reads the file at the given path and returns the contents as a string.
-        Tries multiple encodings in order: utf-8, utf-8-sig, latin-1, cp1252
+        First attempts UTF-8, then uses charset-normalizer for reliable encoding detection on failure.
         """
         if not os.path.exists(file_path):
             logger.log(f"File read '{file_path}' failed: File does not exist.", logging.ERROR)
             raise SolidLSPException(f"File read '{file_path}' failed: File does not exist.")
 
-        encodings = ["utf-8", "utf-8-sig", "latin-1", "cp1252"]
-        last_exception = None
+        # First attempt: try UTF-8 (fastest and most common case)
+        try:
+            with open(file_path, encoding="utf-8") as inp_file:
+                return inp_file.read()
+        except UnicodeDecodeError:
+            # UTF-8 failed, use charset-normalizer for reliable detection
+            logger.log(f"[ENCODING] UTF-8 failed for '{file_path}', detecting encoding...", logging.DEBUG)
+        except Exception as exc:
+            logger.log(f"File read '{file_path}' failed: {exc}", logging.ERROR)
+            raise SolidLSPException("File read failed.") from exc
 
-        for encoding in encodings:
-            try:
-                with open(file_path, encoding=encoding) as inp_file:
-                    content = inp_file.read()
-                    if encoding != "utf-8":
-                        logger.log(f"File read '{file_path}' succeeded with encoding '{encoding}'", logging.DEBUG)
-                    return content
-            except Exception as exc:
-                last_exception = exc
-                continue
+        # Second attempt: detect encoding using charset-normalizer
+        try:
+            detection_result = from_path(file_path).best()
+            if detection_result is None:
+                logger.log(f"File read '{file_path}' failed: Could not detect encoding", logging.ERROR)
+                raise SolidLSPException("File read failed: Could not detect encoding.")
 
-        logger.log(f"File read '{file_path}' failed with all encodings {encodings}: {last_exception}", logging.ERROR)
-        raise SolidLSPException("File read failed.") from None
+            detected_encoding = detection_result.encoding
+            confidence = detection_result.percent_coherence
+
+            # If confidence is very low, try common fallback encodings first
+            if confidence < 50.0:  # Low confidence threshold
+                fallback_encodings = ["latin-1", "cp1252", "utf-8-sig"]
+                logger.log(
+                    f"[ENCODING] Low confidence ({confidence:.1f}%) for detected '{detected_encoding}', trying fallback encodings",
+                    logging.DEBUG,
+                )
+
+                for encoding in fallback_encodings:
+                    try:
+                        with open(file_path, encoding=encoding) as inp_file:
+                            content = inp_file.read()
+                            logger.log(f"[ENCODING] Successfully read '{file_path}' with fallback encoding '{encoding}'", logging.DEBUG)
+                            return content
+                    except Exception:
+                        continue
+
+                # Fallbacks failed, use detected encoding anyway
+                logger.log(
+                    f"[ENCODING] Fallback encodings failed for '{file_path}', using detected '{detected_encoding}' anyway",
+                    logging.DEBUG,
+                )
+            else:
+                logger.log(
+                    f"[ENCODING] Successfully detected '{detected_encoding}' with {confidence:.1f}% confidence for '{file_path}'",
+                    logging.DEBUG,
+                )
+
+            # Read with detected encoding
+            with open(file_path, encoding=detected_encoding) as inp_file:
+                content = inp_file.read()
+                logger.log(f"[ENCODING] Successfully read '{file_path}' with detected encoding '{detected_encoding}'", logging.DEBUG)
+                return content
+
+        except Exception as exc:
+            logger.log(f"File read '{file_path}' failed with encoding detection: {exc}", logging.ERROR)
+            raise SolidLSPException("File read failed.") from exc
 
     @staticmethod
     def download_file(logger: LanguageServerLogger, url: str, target_path: str) -> None:
