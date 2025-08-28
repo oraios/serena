@@ -58,27 +58,35 @@ class TestRLanguageServer:
     @pytest.mark.parametrize("repo_path", [Language.R], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer, repo_path: Path):
         """Test finding function references across files."""
-        utils_file = str(repo_path / "R/utils.R") 
         analysis_file = str(repo_path / "examples/analysis.R")
         
-        # Find references to calculate_mean function from its definition in utils.R
-        # calculate_mean is defined around line 6 in utils.R
-        references = language_server.request_references(utils_file, 5, 0)  # cursor on function name
+        # Test from usage side: find references to calculate_mean from its usage in analysis.R
+        # In analysis.R line 13: calculate_mean(clean_data$value) 
+        # calculate_mean function call is at line 13 (0-indexed: line 12)
+        references = language_server.request_references(analysis_file, 12, 15)  # cursor on 'calculate_mean' 
         
         assert references, f"Expected non-empty references for calculate_mean but got {references=}"
-        # Should find at least the usage in analysis.R line 13: calculate_mean(clean_data$value)
+        
+        # Must find the definition in utils.R (cross-file reference)
         reference_files = [ref["uri"] for ref in references]
-        assert any(uri.endswith("analysis.R") for uri in reference_files), "Reference in analysis.R not found"
+        assert any(uri.endswith("utils.R") for uri in reference_files), "Cross-file reference to definition in utils.R not found"
+        
+        # Verify we actually found the right location in utils.R
+        utils_refs = [ref for ref in references if ref["uri"].endswith("utils.R")]
+        assert len(utils_refs) >= 1, "Should find at least one reference in utils.R"
+        utils_ref = utils_refs[0]
+        # Should be around line 6 where calculate_mean is defined (0-indexed: line 5)
+        assert utils_ref["range"]["start"]["line"] == 5, f"Expected reference at line 5 in utils.R, got line {utils_ref['range']['start']['line']}"
 
     def test_file_matching(self):
         """Test that R files are properly matched."""
         from solidlsp.ls_config import Language
         matcher = Language.R.get_source_fn_matcher()
         
-        assert matcher.matches("script.R")
-        assert matcher.matches("analysis.r") 
-        assert not matcher.matches("script.py")
-        assert not matcher.matches("README.md")
+        assert matcher.is_relevant_filename("script.R")
+        assert matcher.is_relevant_filename("analysis.r") 
+        assert not matcher.is_relevant_filename("script.py")
+        assert not matcher.is_relevant_filename("README.md")
 
     def test_r_language_enum(self):
         """Test R language enum value."""
