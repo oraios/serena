@@ -47,12 +47,12 @@ class TestRLanguageServer:
         # Find definition of create_data_frame function call (0-indexed: line 6)
         definition_location_list = language_server.request_definition(analysis_file, 6, 17)  # cursor on 'create_data_frame'
         
-        if definition_location_list:  # Some R language servers may not support go-to-definition
-            assert len(definition_location_list) >= 1
-            definition_location = definition_location_list[0]
-            assert definition_location["uri"].endswith("utils.R")
-            # Definition should be around line 37 (0-indexed: 36) where create_data_frame is defined
-            assert definition_location["range"]["start"]["line"] >= 35
+        assert definition_location_list, f"Expected non-empty definition_location_list but got {definition_location_list=}"
+        assert len(definition_location_list) >= 1
+        definition_location = definition_location_list[0]
+        assert definition_location["uri"].endswith("utils.R")
+        # Definition should be around line 37 (0-indexed: 36) where create_data_frame is defined
+        assert definition_location["range"]["start"]["line"] >= 35
 
     @pytest.mark.parametrize("language_server", [Language.R], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.R], indirect=True)
@@ -65,10 +65,10 @@ class TestRLanguageServer:
         # calculate_mean is defined around line 6 in utils.R
         references = language_server.request_references(utils_file, 5, 0)  # cursor on function name
         
-        if references:  # Some R language servers may not support find references
-            # Should find at least the usage in analysis.R line 13: calculate_mean(clean_data$value)
-            reference_files = [ref["uri"] for ref in references]
-            assert any(uri.endswith("analysis.R") for uri in reference_files), "Reference in analysis.R not found"
+        assert references, f"Expected non-empty references for calculate_mean but got {references=}"
+        # Should find at least the usage in analysis.R line 13: calculate_mean(clean_data$value)
+        reference_files = [ref["uri"] for ref in references]
+        assert any(uri.endswith("analysis.R") for uri in reference_files), "Reference in analysis.R not found"
 
     def test_file_matching(self):
         """Test that R files are properly matched."""
