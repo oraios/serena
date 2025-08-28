@@ -136,15 +136,6 @@ jobs:
         run: |
           # Install required packages
           opam install -y dune ocaml-lsp-server
-          
-          # IMMEDIATELY activate OPAM environment in current shell
-          eval $(opam env)
-          
-          # NOW check where things are (will work because env is active)
-          echo "OPAM bin directory: $(opam var bin)"
-          echo "Current PATH: $PATH"
-          echo "Dune location: $(which dune)"
-          echo "OCamlLSP location: $(which ocamllsp)"
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
