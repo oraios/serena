@@ -270,9 +270,7 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ runner.os }}" != "Windows" ]] && command -v opam &> /dev/null; then
-            # Run tests with OPAM environment activated for better OCaml support
-            opam exec -- uv run poe test
-          else
-            # Regular test execution for Windows or when OPAM is not available
-            uv run poe test
+            # Activate OPAM environment for OCaml support
+            eval $(opam env)
           fi
+          uv run poe test
