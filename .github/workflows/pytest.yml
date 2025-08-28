@@ -130,20 +130,23 @@ jobs:
         with:
           ocaml-compiler: "5.2.x"
           dune-cache: true
-      - name: Install OCaml Language Server
+      - name: Install OCaml packages
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          # The ocaml/setup-ocaml action already configured the environment
-          # Just install the required packages using opam exec
+          # Install required packages
           opam install -y dune ocaml-lsp-server
           
-          # Verify installations using opam exec
-          opam exec -- which dune || (echo "dune not found" && exit 1)
-          opam exec -- which ocamllsp || (echo "ocamllsp not found" && exit 1)
+          # Debug: Show where things are installed
+          echo "OPAM bin directory: $(opam var bin)"
+          echo "Current PATH: $PATH"
+          echo "Dune location: $(which dune || echo 'not found in PATH')"
+          echo "OCamlLSP location: $(which ocamllsp || echo 'not found in PATH')"
           
-          # Export the correct PATH to GITHUB_ENV (without 'export' prefix)
-          echo "PATH=$(opam var bin):$PATH" >> $GITHUB_ENV
+          # Ensure OPAM environment is available for subsequent steps
+          eval $(opam env)
+          # Export each environment variable separately to GITHUB_ENV
+          opam env | sed 's/export //' | sed "s/'/\"/g" | sed 's/;.*//' >> $GITHUB_ENV
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@v2
         with:

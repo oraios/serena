@@ -1,5 +1,4 @@
 import os
-import subprocess
 
 import pytest
 
@@ -8,22 +7,7 @@ from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
 
 
-def _check_opam_available() -> bool:
-    """Check if OPAM is available and working."""
-    try:
-        subprocess.run(["opam", "--version"], check=True, capture_output=True, text=True)
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return False
-
-
-OPAM_UNAVAILABLE = not _check_opam_available()
-OPAM_SKIP_REASON = "OPAM is not available or not working properly"
-
-# Skip OCaml tests when OPAM is not available (especially on Windows)
-pytestmark = [pytest.mark.ocaml, pytest.mark.skipif(OPAM_UNAVAILABLE, reason=OPAM_SKIP_REASON)]
-
-
+@pytest.mark.ocaml
 class TestOCamlLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
