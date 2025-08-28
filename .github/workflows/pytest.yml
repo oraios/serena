@@ -134,12 +134,19 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          # Initialize opam environment
+          # Initialize opam environment and export to GITHUB_ENV
           eval $(opam env)
+          echo "PATH=$(opam var bin):$PATH" >> $GITHUB_ENV
+          
           # Install dune and ocaml-lsp-server
           opam install -y dune ocaml-lsp-server
-          # Verify installation
-          opam exec -- which ocamllsp || echo "ocamllsp not found in PATH"
+          
+          # Verify installations
+          which dune || (echo "dune not found" && exit 1)
+          which ocamllsp || (echo "ocamllsp not found" && exit 1)
+          
+          # Export OPAM environment variables for subsequent steps
+          opam env >> $GITHUB_ENV
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
