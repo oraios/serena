@@ -15,7 +15,6 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from logging import Logger
 from pathlib import Path
-from types import TracebackType
 from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
 from sensai.util import logging
@@ -251,7 +250,6 @@ class SerenaAgent:
 
         # Initialize cleanup tracking
         self._cleaned_up = False
-        self._is_initialized = True
 
         # Register cleanup with atexit for guaranteed cleanup on normal exit
         atexit.register(self.cleanup)
@@ -662,7 +660,7 @@ class SerenaAgent:
         """
         Destructor to clean up the language server instance and GUI logger
         """
-        if not hasattr(self, "_is_initialized"):
+        if not hasattr(self, "_cleaned_up"):
             return
         log.info("SerenaAgent is shutting down via destructor...")
         # Use the cleanup method to ensure proper termination
@@ -670,9 +668,6 @@ class SerenaAgent:
             self.cleanup()
         except Exception as e:
             log.error(f"Error during cleanup in destructor: {e}")
-
-        # Extra aggressive cleanup for TypeScript servers specifically
-        self._cleanup_typescript_processes()
 
     def get_tool_by_name(self, tool_name: str) -> Tool:
         tool_class = ToolRegistry().get_tool_class_by_name(tool_name)

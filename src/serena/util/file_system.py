@@ -1,6 +1,6 @@
 import logging
 import os
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
@@ -154,7 +154,7 @@ class GitignoreParser:
         """
         queue: list[str] = [self.repo_root]
 
-        def scan(abs_path: str | None):
+        def scan(abs_path: str | None) -> Generator[str, None, None]:
             for entry in os.scandir(abs_path):
                 if entry.is_dir(follow_symlinks=follow_symlinks):
                     queue.append(entry.path)
