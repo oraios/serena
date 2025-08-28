@@ -34,10 +34,10 @@ class TestOCamlLanguageServer:
 
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
     def test_mixed_ocaml_modules(self, language_server: SolidLanguageServer) -> None:
-        """Test that the language server can find symbols from OCaml modules"""        
+        """Test that the language server can find symbols from OCaml modules"""
         # Test that full symbol tree includes symbols from various file types
         all_symbols = language_server.request_full_symbol_tree()
-        
+
         # Should find symbols from main OCaml files
         assert SymbolUtils.symbol_tree_contains_name(all_symbols, "fib"), "Should find fib from .ml file"
         assert SymbolUtils.symbol_tree_contains_name(all_symbols, "DemoModule"), "Should find DemoModule from .ml file"
@@ -47,18 +47,18 @@ class TestOCamlLanguageServer:
     def test_reason_file_patterns(self) -> None:
         """Test that OCaml language configuration recognizes Reason file extensions"""
         from solidlsp.ls_config import Language
-        
+
         ocaml_lang = Language.OCAML
         file_matcher = ocaml_lang.get_source_fn_matcher()
-        
+
         # Test OCaml extensions
         assert file_matcher.is_relevant_filename("test.ml"), "Should match .ml files"
         assert file_matcher.is_relevant_filename("test.mli"), "Should match .mli files"
-        
+
         # Test Reason extensions
-        assert file_matcher.is_relevant_filename("test.re"), "Should match .re files"  
+        assert file_matcher.is_relevant_filename("test.re"), "Should match .re files"
         assert file_matcher.is_relevant_filename("test.rei"), "Should match .rei files"
-        
+
         # Test non-matching extensions
         assert not file_matcher.is_relevant_filename("test.py"), "Should not match .py files"
         assert not file_matcher.is_relevant_filename("test.js"), "Should not match .js files"

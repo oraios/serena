@@ -124,6 +124,23 @@ jobs:
       - name: Install Ruby language server
         shell: bash
         run: gem install ruby-lsp
+      - name: Install OCaml and opam
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.2.x"
+          dune-cache: true
+      - name: Install OCaml Language Server
+        shell: bash
+        run: |
+          # Install ocaml-lsp-server via opam
+          opam install -y ocaml-lsp-server
+          # Ensure opam binaries are in PATH
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            # Windows uses a different opam path structure
+            echo "$USERPROFILE/.opam/default/bin" >> $GITHUB_PATH
+          else
+            echo "$HOME/.opam/default/bin" >> $GITHUB_PATH
+          fi
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
