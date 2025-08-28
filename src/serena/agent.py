@@ -5,6 +5,7 @@ The Serena Model Context Protocol (MCP) Server
 import multiprocessing
 import os
 import platform
+import subprocess
 import sys
 import threading
 import webbrowser
@@ -13,6 +14,7 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from logging import Logger
 from pathlib import Path
+from types import TracebackType
 from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
 from sensai.util import logging
@@ -607,9 +609,28 @@ class SerenaAgent:
         """Context manager entry - returns self for use in with statements"""
         return self
 
-    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Context manager exit - ensures proper cleanup of language server"""
         self.cleanup()
+
+    def _cleanup_typescript_processes(self) -> None:
+        """Kill any remaining TypeScript server processes on Unix-like systems."""
+        if os.name != "nt":  # Unix-like systems
+            typescript_processes = ["tsserver", "typescript-language-server", "typingsInstaller"]
+            for process_name in typescript_processes:
+                try:
+                    subprocess.run(
+                        ["pkill", "-9", "-f", process_name],
+                        capture_output=True,
+                        check=False,  # Don't raise exception if no process found
+                    )
+                except (OSError, subprocess.SubprocessError) as e:
+                    log.debug(f"Failed to kill {process_name} processes: {e}")
 
     def cleanup(self) -> None:
         """Explicitly clean up resources - stops language server immediately"""
@@ -625,11 +646,12 @@ class SerenaAgent:
                     try:
                         handler.process.terminate()
                         handler.process.wait(timeout=1)
-                    except:
+                    except (OSError, TimeoutError) as e:
+                        log.debug(f"Failed to terminate process gracefully: {e}")
                         try:
                             handler.process.kill()
-                        except:
-                            pass
+                        except (OSError, ProcessLookupError) as e:
+                            log.debug(f"Failed to kill process: {e}")
             self.language_server = None
         if self._gui_log_viewer:
             log.info("Stopping the GUI log window...")
@@ -648,18 +670,9 @@ class SerenaAgent:
             self.cleanup()
         except Exception as e:
             log.error(f"Error during cleanup in destructor: {e}")
-        
+
         # Extra aggressive cleanup for TypeScript servers specifically
-        try:
-            import subprocess
-            import os
-            if os.name != "nt":  # Unix-like systems
-                # Kill any remaining TypeScript servers spawned by this process
-                subprocess.run(["pkill", "-9", "-f", "tsserver"], capture_output=True)
-                subprocess.run(["pkill", "-9", "-f", "typescript-language-server"], capture_output=True)
-                subprocess.run(["pkill", "-9", "-f", "typingsInstaller"], capture_output=True)
-        except:
-            pass
+        self._cleanup_typescript_processes()
 
     def get_tool_by_name(self, tool_name: str) -> Tool:
         tool_class = ToolRegistry().get_tool_class_by_name(tool_name)
