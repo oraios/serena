@@ -234,3 +234,4 @@ tmp/
 # Swift
 /test/resources/repos/swift/test_repo/.build
 /test/resources/repos/swift/test_repo/.swiftpm
+journal.md
