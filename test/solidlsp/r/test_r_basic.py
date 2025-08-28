@@ -2,6 +2,7 @@
 Basic tests for R Language Server integration
 """
 
+import platform
 from pathlib import Path
 
 import pytest
@@ -38,10 +39,10 @@ class TestRLanguageServer:
         assert expected_functions.issubset(function_names), f"Expected functions {expected_functions} but found {function_names}"
 
     @pytest.mark.parametrize("language_server", [Language.R], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.R], indirect=True)
-    def test_find_definition_across_files(self, language_server: SolidLanguageServer, repo_path: Path):
+    def test_find_definition_across_files(self, language_server: SolidLanguageServer):
         """Test finding function definitions across files."""
-        analysis_file = str(repo_path / "examples/analysis.R")
+        # Use relative path like other successful tests
+        analysis_file = "examples/analysis.R"
 
         # In analysis.R line 7: create_data_frame(n = 50)
         # The function create_data_frame is defined in R/utils.R

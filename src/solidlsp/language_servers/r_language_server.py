@@ -211,8 +211,9 @@ class RLanguageServer(SolidLanguageServer):
 
             # Find all R files in the project
             r_files = []
+            repo_path = pathlib.Path(self.repository_root_path)
             for pattern in ["*.R", "*.r"]:
-                r_files.extend(glob.glob(os.path.join(self.repository_root_path, "**", pattern), recursive=True))
+                r_files.extend(str(p) for p in repo_path.rglob(pattern))
 
             # Convert to relative paths
             r_files = [os.path.relpath(f, self.repository_root_path) for f in r_files]
@@ -253,7 +254,7 @@ class RLanguageServer(SolidLanguageServer):
 
         try:
             # Read the file content
-            file_path = os.path.join(self.repository_root_path, relative_file_path)
+            file_path = pathlib.Path(self.repository_root_path) / relative_file_path
             with open(file_path, encoding="utf-8") as f:
                 content = f.read()
 
