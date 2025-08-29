@@ -127,7 +127,7 @@ jobs:
       - name: Install OCaml and opam
         uses: ocaml/setup-ocaml@v3
         with:
-          ocaml-compiler: "5.2.x"
+          ocaml-compiler: ${{ runner.os == 'Windows' && '4.14' || '5.2.x' }}
           dune-cache: true
           opam-repositories: |
             ${{ runner.os == 'Windows' && 'opam-repository-mingw: https://github.com/ocaml-opam/opam-repository-mingw.git#sunset' || '' }}
