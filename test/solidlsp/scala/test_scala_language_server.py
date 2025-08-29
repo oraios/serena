@@ -78,5 +78,5 @@ def test_scala_references_across_files_utils_multiply(scala_ls):
     assert first_def["uri"].endswith("Utils.scala")
     assert first_def["range"]["start"]["line"] == 7
     assert first_def["range"]["start"]["character"] == 6
-    assert first_ref["range"]["end"]["line"] == 7
-    assert first_ref["range"]["end"]["character"] == 16
+    assert first_def["range"]["end"]["line"] == 7
+    assert first_def["range"]["end"]["character"] == 16
