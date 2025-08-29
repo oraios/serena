@@ -119,8 +119,6 @@ class OcamlLanguageServer(SolidLanguageServer):
             if platform.system() != "Windows":
                 os.chmod(executable_path, os.stat(executable_path).st_mode | stat.S_IEXEC)
 
-            logger.log(f"Executable found ocaml-lsp-server. Path: {executable_path}", logging.INFO)
-
             return executable_path
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to find the executable ocaml-lsp-server: {e.stderr}")
