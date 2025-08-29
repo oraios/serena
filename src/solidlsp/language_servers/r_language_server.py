@@ -207,7 +207,6 @@ class RLanguageServer(SolidLanguageServer):
         expensive parsing work during language server initialization.
         """
         try:
-            import glob
 
             # Find all R files in the project
             r_files = []

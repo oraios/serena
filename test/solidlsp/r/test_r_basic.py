@@ -2,7 +2,6 @@
 Basic tests for R Language Server integration
 """
 
-import platform
 from pathlib import Path
 
 import pytest
