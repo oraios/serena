@@ -34,7 +34,7 @@ def scala_ls():
 
 def test_scala_document_symbols(scala_ls):
     """Test document symbols for Main.scala"""
-    symbols, _ = scala_ls.request_document_symbols(RELATIVE_FILE_PATH)
+    symbols, _ = scala_ls.request_document_symbols(MAIN_FILE_PATH)
     symbol_names = [s["name"] for s in symbols]
 
     assert symbol_names[0] == "com.example"
@@ -54,7 +54,7 @@ def test_scala_references_within_same_file(scala_ls):
     """Test finding references within the same file."""
     references_results = []
     for line, char in TEST_POSITIONS:
-        refs = scala_ls.request_references(RELATIVE_FILE_PATH, line, char)
+        refs = scala_ls.request_references(MAIN_FILE_PATH, line, char)
         references_results.append(refs)
 
     assert references_results[0] == []
@@ -70,14 +70,13 @@ def test_scala_references_within_same_file(scala_ls):
 
 
 def test_scala_references_across_files_utils_multiply(scala_ls):
-    """Test finding references method across files."""
-    references = scala_ls.request_references(MAIN_FILE_PATH, 9, 25)
-    assert len(references) == 1
+    definitions = scala_ls.request_definition(MAIN_FILE_PATH, 8, 25)
+    assert len(definitions) == 1
 
-    first_ref = references[0]
-    assert first_ref["uri"].startswith("file://")
-    assert first_ref["uri"].endswith("Main.scala")
-    assert first_ref["range"]["start"]["line"] == 9
-    assert first_ref["range"]["start"]["character"] == 23
-    assert first_ref["range"]["end"]["line"] == 9
-    assert first_ref["range"]["end"]["character"] == 29
+    first_def = definitions[0]
+    assert first_def["uri"].startswith("file://")
+    assert first_def["uri"].endswith("Utils.scala")
+    assert first_def["range"]["start"]["line"] == 7
+    assert first_def["range"]["start"]["character"] == 6
+    assert first_ref["range"]["end"]["line"] == 7
+    assert first_ref["range"]["end"]["character"] == 16
