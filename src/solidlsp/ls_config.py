@@ -48,6 +48,7 @@ class Language(str, Enum):
     LUA = "lua"
     NIX = "nix"
     ERLANG = "erlang"
+    OCAML = "ocaml"
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -127,6 +128,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.nix")
             case self.ERLANG:
                 return FilenameMatcher("*.erl", "*.hrl", "*.escript", "*.config", "*.app", "*.app.src")
+            case self.OCAML:
+                return FilenameMatcher("*.ml", "*.mli", "*.re", "*.rei")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

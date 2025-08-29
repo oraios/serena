@@ -124,6 +124,19 @@ jobs:
       - name: Install Ruby language server
         shell: bash
         run: gem install ruby-lsp
+      - name: Install OCaml and opam
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ runner.os == 'Windows' && '4.14' || '5.2.x' }}
+          dune-cache: true
+          opam-repositories: |
+            ${{ runner.os == 'Windows' && 'opam-repository-mingw: https://github.com/ocaml-opam/opam-repository-mingw.git#sunset' || '' }}
+            default: https://github.com/ocaml/opam-repository.git
+      - name: Install OCaml packages
+        shell: bash
+        run: |
+          # Install required packages
+          opam install -y dune ocaml-lsp-server
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
@@ -244,4 +257,9 @@ jobs:
         run: uv run poe lint
       - name: Test with pytest
         shell: bash
-        run: uv run poe test
+        run: |
+          if command -v opam &> /dev/null; then
+            # Activate OPAM environment for OCaml support
+            eval $(opam env)
+          fi
+          uv run poe test

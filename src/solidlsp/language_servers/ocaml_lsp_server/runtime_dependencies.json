@@ -1,0 +1,13 @@
+{
+  "_description": "Used to download the runtime dependencies for running OCaml LSP Server. Obtained from https://github.com/ocaml/ocaml-lsp/releases",
+  "runtimeDependencies": [
+    {
+      "id": "OcamlLSP",
+      "description": "OCaml LSP Server for macOS (arm64)",
+      "url": "https://github.com/ocaml/ocaml-lsp/archive/refs/tags/1.22.0.zip",
+      "installCommand": "opam install --yes ocaml-lsp-server",
+      "binaryName": "ocaml-lsp-server",
+      "archiveType": "zip"
+    }
+  ]
+}
