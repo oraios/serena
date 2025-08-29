@@ -6,10 +6,8 @@ import threading
 
 from overrides import override
 
-from solidlsp import ls_types
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -172,6 +170,3 @@ class RLanguageServer(SolidLanguageServer):
 
         # R Language Server is ready after initialization
         self.server_ready.set()
-
-
-
