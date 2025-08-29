@@ -7,6 +7,7 @@ import logging
 import os
 import pathlib
 import platform
+import re
 import stat
 import subprocess
 import threading
@@ -67,6 +68,31 @@ class OcamlLanguageServer(SolidLanguageServer):
         except FileNotFoundError:
             raise RuntimeError("OPAM is not installed. Please install OPAM before continuing.")
 
+        # Check OCaml version compatibility
+        try:
+            ocaml_version_result = subprocess.run(
+                ["opam", "exec", "--", "ocaml", "-version"],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=repository_root_path,
+                **subprocess_kwargs(),
+            )
+            version_match = re.search(r"(\d+\.\d+\.\d+)", ocaml_version_result.stdout)
+            if version_match:
+                version = version_match.group(1)
+                logger.log(f"OCaml version: {version}", logging.INFO)
+                if version == "5.1.0":
+                    raise RuntimeError(
+                        f"OCaml {version} is incompatible with ocaml-lsp-server. "
+                        "Please use OCaml < 5.1 or >= 5.1.1. "
+                        "Consider creating a new opam switch: 'opam switch create <name> ocaml-base-compiler.4.14.2'"
+                    )
+        except subprocess.CalledProcessError as e:
+            logger.log(f"Warning: Could not check OCaml version: {e.stderr}", logging.WARNING)
+        except FileNotFoundError:
+            logger.log("Warning: OCaml not found in PATH, version check skipped", logging.WARNING)
+
         # Check if ocaml-lsp-server is installed
         try:
             result = subprocess.run(
@@ -79,9 +105,28 @@ class OcamlLanguageServer(SolidLanguageServer):
             )
             if "# No matches found" in result.stdout:
                 logger.log("Installing ocaml-lsp-server...", logging.INFO)
-                subprocess.run(
-                    dependency["installCommand"].split(), check=True, capture_output=True, cwd=repository_root_path, **subprocess_kwargs()
-                )
+                try:
+                    install_result = subprocess.run(
+                        dependency["installCommand"].split(),
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                        cwd=repository_root_path,
+                        **subprocess_kwargs(),
+                    )
+                    logger.log("Successfully installed ocaml-lsp-server", logging.INFO)
+                    if install_result.stdout:
+                        logger.log(f"Installation output: {install_result.stdout}", logging.DEBUG)
+                except subprocess.CalledProcessError as e:
+                    error_msg = f"Failed to install ocaml-lsp-server. Error: {e.stderr}\n"
+                    if "5.1.0" in str(e.stderr) or "version" in str(e.stderr).lower():
+                        error_msg += (
+                            "This may be due to OCaml version incompatibility. "
+                            "ocaml-lsp-server requires OCaml < 5.1 or >= 5.1.1. "
+                            "Current OCaml version may not be supported."
+                        )
+                    logger.log(error_msg, logging.ERROR)
+                    raise RuntimeError(error_msg)
 
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to check or install ocaml-lsp-server: {e.stderr}")
@@ -121,7 +166,45 @@ class OcamlLanguageServer(SolidLanguageServer):
 
             return executable_path
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to find the executable ocaml-lsp-server: {e.stderr}")
+            error_details = f"Command failed: {e.cmd}\nReturn code: {e.returncode}\nStderr: {e.stderr}"
+            logger.log(f"Failed to locate ocaml-lsp-server executable. {error_details}", logging.ERROR)
+
+            # Provide helpful diagnostics
+            try:
+                # Check if opam switch is properly set
+                switch_result = subprocess.run(
+                    ["opam", "switch", "show"],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    cwd=repository_root_path,
+                    **subprocess_kwargs(),
+                )
+                logger.log(f"Current opam switch: {switch_result.stdout.strip()}", logging.INFO)
+
+                # Check what's installed in current switch
+                list_result = subprocess.run(
+                    ["opam", "list", "-i"],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    cwd=repository_root_path,
+                    **subprocess_kwargs(),
+                )
+                installed_packages = list_result.stdout
+                if "ocaml-lsp-server" in installed_packages:
+                    logger.log("ocaml-lsp-server appears to be installed but not in PATH", logging.ERROR)
+                else:
+                    logger.log("ocaml-lsp-server not found in installed packages", logging.ERROR)
+
+            except Exception as diag_error:
+                logger.log(f"Could not gather diagnostic information: {diag_error}", logging.WARNING)
+
+            raise RuntimeError(
+                f"Failed to find ocaml-lsp-server executable. {error_details}\n"
+                "This usually means ocaml-lsp-server is not installed or not in PATH. "
+                "Try: 1) Check opam switch, 2) Install ocaml-lsp-server, 3) Ensure opam env is activated."
+            )
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:

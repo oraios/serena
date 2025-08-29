@@ -58,6 +58,32 @@ Each supported language has:
 3. **Test Repository** in `test/resources/repos/<language>/`
 4. **Test Suite** in `test/solidlsp/<language>/`
 
+#### OCaml Language Server Requirements
+**Important**: OCaml support has specific version requirements:
+- **OCaml version**: < 5.1 OR >= 5.1.1 (OCaml 5.1.0 is NOT supported by ocaml-lsp-server)
+- **Recommended versions**: OCaml 4.14.x (stable) or OCaml 5.1.1+ (latest)
+- **OPAM must be installed** and properly configured
+- **Installation**: `opam install ocaml-lsp-server dune`
+
+**Creating a compatible opam switch**:
+```bash
+# For stable OCaml 4.14.x
+opam switch create serena-ocaml ocaml-base-compiler.4.14.2
+eval $(opam env)
+opam install ocaml-lsp-server dune
+
+# For latest OCaml 5.1.1+
+opam switch create serena-ocaml ocaml-base-compiler.5.1.1
+eval $(opam env)
+opam install ocaml-lsp-server dune
+```
+
+**Troubleshooting**: If OCaml tests fail with "ocaml-lsp-server not found", check:
+1. Current opam switch: `opam switch show`
+2. OCaml version: `ocaml -version` 
+3. LSP server installation: `opam list -i ocaml-lsp-server`
+4. Environment activation: `eval $(opam env)`
+
 ### Memory & Knowledge System
 
 - **Markdown-based storage** in `.serena/memories/` directories
