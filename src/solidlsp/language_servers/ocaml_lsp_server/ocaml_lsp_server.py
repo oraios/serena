@@ -36,11 +36,14 @@ class OcamlLanguageServer(SolidLanguageServer):
         ocaml_lsp_executable_path = self._setup_runtime_dependencies(logger, repository_root_path)
         logger.log(f"Using ocaml-lsp-server at: {ocaml_lsp_executable_path}", logging.INFO)
 
+        # Configure OCaml LSP server with .merlin file support
+        ocaml_lsp_cmd = [ocaml_lsp_executable_path, "--fallback-read-dot-merlin"]
+
         super().__init__(
             config,
             logger,
             repository_root_path,
-            ProcessLaunchInfo(cmd=ocaml_lsp_executable_path, cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=ocaml_lsp_cmd, cwd=repository_root_path),
             "ocaml",
             solidlsp_settings,
         )

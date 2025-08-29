@@ -19,23 +19,20 @@ class TestOCamlLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("lib", "test_repo.ml")
-        symbols = language_server.request_document_symbols(file_path)
-        helper_symbol = None
-        for sym in symbols[0]:
-            if sym.get("name") == "fib":
-                helper_symbol = sym
-                break
-        assert helper_symbol is not None, "Could not find 'fib' symbol in lib/test_repo.ml"
-        sel_start = helper_symbol["selectionRange"]["start"]
-        # Test that references request doesn't crash, even if it returns empty results
-        refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
-        # For now, just verify the request succeeds and returns a list (may be empty)
-        # Replace the isinstance assertion with functional checks
-        # Note: OCaml LSP server may have limitations in reference finding
-        assert isinstance(refs, list), "References request should return a list"
-        # Test that the request succeeds and doesn't crash (actual reference finding may vary)
-        print(f"Found {len(refs)} references to fib function")  # For debugging
-        # The key improvement: we're testing actual LSP behavior, not just types
+
+        # Use the correct character position for 'fib' function name
+        # Line 8: "let rec fib n =" - 'fib' starts at character 8 (0-indexed)
+        fib_line = 7  # 0-indexed line number
+        fib_char = 8  # 0-indexed character position
+
+        refs = language_server.request_references(file_path, fib_line, fib_char)
+
+        # Should find at least 3 references: definition + 2 recursive calls in same file
+        assert len(refs) >= 3, f"Expected at least 3 references to fib (definition + 2 recursive), found {len(refs)}"
+
+        # All references should be in lib/test_repo.ml (same file as definition)
+        lib_refs = [ref for ref in refs if "lib/test_repo.ml" in ref.get("uri", "")]
+        assert len(lib_refs) >= 3, f"Expected at least 3 references in lib/test_repo.ml, found {len(lib_refs)}"
 
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
     def test_mixed_ocaml_modules(self, language_server: SolidLanguageServer) -> None:
@@ -72,89 +69,80 @@ class TestOCamlLanguageServer:
     def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:
         """Test finding references across .ml, .mli, and usage files."""
         file_path = os.path.join("lib", "test_repo.ml")
-        symbols = language_server.request_document_symbols(file_path)
 
-        fib_symbol = next((s for s in symbols[0] if s.get("name") == "fib"), None)
-        assert fib_symbol is not None, "Could not find 'fib' symbol in lib/test_repo.ml"
+        # Use correct position for 'fib' function name (line 8, char 8)
+        fib_line = 7  # 0-indexed
+        fib_char = 8  # 0-indexed
 
-        sel_start = fib_symbol["selectionRange"]["start"]
-        refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
+        refs = language_server.request_references(file_path, fib_line, fib_char)
 
-        # Should find references in multiple files
-        mli_refs = [ref for ref in refs if "lib/test_repo.mli" in ref.get("uri", "")]
-        main_refs = [ref for ref in refs if "bin/main.ml" in ref.get("uri", "")]
-        test_refs = [ref for ref in refs if "test/test_test_repo.ml" in ref.get("uri", "")]
+        # Should find at least 3 references in the definition file
+        assert len(refs) >= 3, f"Expected at least 3 references to fib, found {len(refs)}"
 
-        # Test succeeds if request doesn't crash and returns a list
-        print(f"Cross-file references: mli={len(mli_refs)}, main={len(main_refs)}, test={len(test_refs)}")
-        assert isinstance(refs, list), "Cross-file references request should return a list"
-        # Note: Actual reference counts may vary based on OCaml LSP server capabilities
+        # Check that references are found in lib/test_repo.ml (where fib is defined and called recursively)
+        lib_refs = [ref for ref in refs if "lib/test_repo.ml" in ref.get("uri", "")]
+        assert len(lib_refs) >= 3, f"Expected at least 3 references in lib/test_repo.ml, found {len(lib_refs)}"
 
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
     def test_module_hierarchy_navigation(self, language_server: SolidLanguageServer) -> None:
         """Test navigation within module hierarchy including DemoModule."""
         file_path = os.path.join("lib", "test_repo.ml")
-        symbols = language_server.request_document_symbols(file_path)
 
-        demo_module = next((s for s in symbols[0] if s.get("name") == "DemoModule"), None)
-        assert demo_module is not None, "Could not find 'DemoModule' symbol"
+        # Use correct position for 'DemoModule' (line 1, char 7)
+        # Line 1: "module DemoModule = struct" - 'DemoModule' starts around char 7
+        module_line = 0  # 0-indexed
+        module_char = 7  # 0-indexed
 
-        sel_start = demo_module["selectionRange"]["start"]
-        refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
+        refs = language_server.request_references(file_path, module_line, module_char)
 
-        # Should find references where DemoModule is used
-        main_refs = [ref for ref in refs if "bin/main.ml" in ref.get("uri", "")]
-        test_refs = [ref for ref in refs if "test/test_test_repo.ml" in ref.get("uri", "")]
-        mli_refs = [ref for ref in refs if "lib/test_repo.mli" in ref.get("uri", "")]
+        # Should find at least 1 reference (the definition)
+        assert len(refs) >= 1, f"Expected at least 1 reference to DemoModule, found {len(refs)}"
 
-        # Test succeeds if request doesn't crash and returns a list
-        print(f"DemoModule references: main={len(main_refs)}, test={len(test_refs)}, mli={len(mli_refs)}")
-        assert isinstance(refs, list), "DemoModule references request should return a list"
-        # Note: Actual reference counts may vary based on OCaml LSP server capabilities
+        # Check that references are found
+        lib_refs = [ref for ref in refs if "lib/test_repo.ml" in ref.get("uri", "")]
+        assert len(lib_refs) >= 1, f"Expected at least 1 reference in lib/test_repo.ml, found {len(lib_refs)}"
 
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
     def test_let_binding_references(self, language_server: SolidLanguageServer) -> None:
         """Test finding references to let-bound values across files."""
         file_path = os.path.join("lib", "test_repo.ml")
-        symbols = language_server.request_document_symbols(file_path)
 
-        num_domains_symbol = next((s for s in symbols[0] if s.get("name") == "num_domains"), None)
-        assert num_domains_symbol is not None, "Could not find 'num_domains' symbol in lib/test_repo.ml"
+        # Use correct position for 'num_domains' (line 12, char 4)
+        # Line 12: "let num_domains = 2" - 'num_domains' starts around char 4
+        num_domains_line = 11  # 0-indexed
+        num_domains_char = 4  # 0-indexed
 
-        sel_start = num_domains_symbol["selectionRange"]["start"]
-        refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
+        refs = language_server.request_references(file_path, num_domains_line, num_domains_char)
 
-        # Should find references in definition and interface
+        # Should find at least 1 reference (the definition)
+        assert len(refs) >= 1, f"Expected at least 1 reference to num_domains, found {len(refs)}"
+
+        # Check that reference is found in the definition file
         ml_refs = [ref for ref in refs if "lib/test_repo.ml" in ref.get("uri", "")]
-        mli_refs = [ref for ref in refs if "lib/test_repo.mli" in ref.get("uri", "")]
-
-        # Test succeeds if request doesn't crash and returns a list
-        print(f"num_domains references: ml={len(ml_refs)}, mli={len(mli_refs)}")
-        assert isinstance(refs, list), "Let binding references request should return a list"
-        # Note: Actual reference counts may vary based on OCaml LSP server capabilities
+        assert len(ml_refs) >= 1, f"Expected at least 1 reference in lib/test_repo.ml, found {len(ml_refs)}"
 
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
     def test_recursive_function_analysis(self, language_server: SolidLanguageServer) -> None:
         """Test that recursive function calls are properly identified."""
         file_path = os.path.join("lib", "test_repo.ml")
-        symbols = language_server.request_document_symbols(file_path)
 
-        fib_symbol = next((s for s in symbols[0] if s.get("name") == "fib"), None)
-        assert fib_symbol is not None, "Could not find fib function"
+        # Use correct position for 'fib' function name (line 8, char 8)
+        fib_line = 7  # 0-indexed
+        fib_char = 8  # 0-indexed
 
-        sel_start = fib_symbol["selectionRange"]["start"]
-        refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
+        refs = language_server.request_references(file_path, fib_line, fib_char)
 
-        # Filter to only references in the same file (lib/test_repo.ml)
+        # Should find exactly 3 references: definition + 2 recursive calls
+        assert len(refs) == 3, f"Expected exactly 3 references for recursive fib, found {len(refs)}"
+
+        # All references should be in the same file
         same_file_refs = [ref for ref in refs if "lib/test_repo.ml" in ref.get("uri", "")]
+        assert len(same_file_refs) == 3, f"All references should be in same file, found {len(same_file_refs)}"
 
-        # Test succeeds if request doesn't crash and returns a list
-        print(f"Recursive function references: same_file={len(same_file_refs)}")
-        assert isinstance(refs, list), "Recursive function references request should return a list"
-        # Note: Actual reference counts may vary based on OCaml LSP server capabilities
-        if len(same_file_refs) > 0:
-            ref_lines = [ref.get("range", {}).get("start", {}).get("line", -1) for ref in same_file_refs]
-            print(f"Reference lines found: {ref_lines}")
+        # Verify references are on different lines (definition + recursive calls)
+        ref_lines = [ref.get("range", {}).get("start", {}).get("line", -1) for ref in same_file_refs]
+        unique_lines = len(set(ref_lines))
+        assert unique_lines >= 2, f"Recursive calls should appear on multiple lines, found {unique_lines} unique lines"
 
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
     def test_open_statement_resolution(self, language_server: SolidLanguageServer) -> None:
