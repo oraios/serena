@@ -21,7 +21,7 @@ class RLanguageServer(SolidLanguageServer):
 
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
-        return 2.0  # Increase wait time for R language server cross-file referencing
+        return 5.0  # R language server needs extra time for workspace indexing in CI environments
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
