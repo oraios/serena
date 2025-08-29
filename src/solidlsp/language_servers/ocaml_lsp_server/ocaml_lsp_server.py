@@ -106,8 +106,10 @@ class OcamlLanguageServer(SolidLanguageServer):
 
         try:
             # Find the path to the ocaml-lsp-server executable using cross-platform approach
+            logger.log(f"Searching for ocamllsp executable on {platform.system()}", logging.INFO)
             if platform.system() == "Windows":
                 # Use 'where' command on Windows instead of 'which'
+                logger.log("Windows detected: using 'where' command via opam exec", logging.INFO)
                 result = subprocess.run(
                     ["opam", "exec", "--", "where", "ocamllsp"],
                     check=True,
@@ -116,10 +118,13 @@ class OcamlLanguageServer(SolidLanguageServer):
                     cwd=repository_root_path,
                     **subprocess_kwargs(),
                 )
+                logger.log(f"Windows 'where' command output: {result.stdout!r}", logging.INFO)
                 # Windows 'where' may return multiple paths, take the first one
                 executable_path = result.stdout.strip().split("\n")[0]
+                logger.log(f"Selected first path: {executable_path!r}", logging.INFO)
             else:
                 # Use 'which' command on Unix systems
+                logger.log("Unix system detected: using 'which' command via opam exec", logging.INFO)
                 result = subprocess.run(
                     ["opam", "exec", "--", "which", "ocamllsp"],
                     check=True,
@@ -129,23 +134,36 @@ class OcamlLanguageServer(SolidLanguageServer):
                     **subprocess_kwargs(),
                 )
                 executable_path = result.stdout.strip()
+                logger.log(f"Unix 'which' command result: {executable_path!r}", logging.INFO)
 
             # If the simple approach fails, try alternative methods
+            logger.log(
+                f"Checking if executable path is valid: {executable_path!r}, exists={os.path.exists(executable_path) if executable_path else False}",
+                logging.INFO,
+            )
             if not executable_path or not os.path.exists(executable_path):
+                logger.log("Primary path resolution failed, trying fallback methods", logging.WARNING)
                 # Fallback 1: Try to find using shutil.which with extensions
+                logger.log("Fallback 1: Using shutil.which with extensions", logging.INFO)
                 alt_path = self._find_executable_with_extensions("ocamllsp")
+                logger.log(f"shutil.which result: {alt_path!r}", logging.INFO)
                 if alt_path:
                     executable_path = alt_path
+                    logger.log(f"Using fallback path: {executable_path}", logging.INFO)
                 else:
                     # Fallback 2: Construct path directly from OPAM bin directory
+                    logger.log("Fallback 2: Constructing path from OPAM bin directory", logging.INFO)
                     result = subprocess.run(
                         ["opam", "var", "bin"], check=True, capture_output=True, text=True, cwd=repository_root_path, **subprocess_kwargs()
                     )
                     opam_bin = result.stdout.strip()
                     executable_name = "ocamllsp.exe" if platform.system() == "Windows" else "ocamllsp"
                     executable_path = os.path.join(opam_bin, executable_name)
+                    logger.log(f"OPAM bin directory: {opam_bin!r}, constructed path: {executable_path!r}", logging.INFO)
 
+            logger.log(f"Final executable path check: {executable_path!r}, exists={os.path.exists(executable_path)}", logging.INFO)
             if not os.path.exists(executable_path):
+                logger.log(f"FATAL: Final path check failed for {executable_path}", logging.ERROR)
                 raise RuntimeError(f"ocaml-lsp-server executable not found at {executable_path}")
 
             # Ensure the executable has the right permissions (skip on Windows as chmod behaves differently)
@@ -156,6 +174,8 @@ class OcamlLanguageServer(SolidLanguageServer):
 
             return executable_path
         except subprocess.CalledProcessError as e:
+            logger.log(f"Subprocess error during path resolution: {e.stderr}", logging.ERROR)
+            logger.log(f"Failed command details: cmd={e.cmd}, returncode={e.returncode}", logging.ERROR)
             raise RuntimeError(f"Failed to find the executable ocaml-lsp-server: {e.stderr}")
 
     @staticmethod

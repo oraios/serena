@@ -137,6 +137,27 @@ jobs:
         run: |
           # Install required packages
           opam install -y dune ocaml-lsp-server
+      - name: Debug OCaml LSP server path (Windows only)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "=== Debugging OCaml LSP server path resolution ==="
+          echo "OPAM environment:"
+          opam env
+          echo "OPAM bin directory:"
+          opam var bin || echo "Failed to get OPAM bin"
+          echo "Searching for ocamllsp with where:"
+          opam exec -- where ocamllsp || echo "where command failed"
+          echo "Searching for ocamllsp.exe with where:"
+          opam exec -- where ocamllsp.exe || echo "where ocamllsp.exe failed"
+          echo "Manual search in OPAM bin:"
+          OPAM_BIN=$(opam var bin 2>/dev/null || echo "")
+          if [ -n "$OPAM_BIN" ]; then
+            echo "OPAM bin contents:"
+            ls -la "$OPAM_BIN" || echo "Failed to list OPAM bin"
+            echo "Looking for ocamllsp variants:"
+            find "$OPAM_BIN" -name "*ocamllsp*" 2>/dev/null || echo "No ocamllsp found"
+          fi
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
@@ -262,4 +283,5 @@ jobs:
             # Activate OPAM environment for OCaml support
             eval $(opam env)
           fi
-          uv run poe test
+          # Enable verbose output to see actual test failures
+          uv run poe test -v
