@@ -2,6 +2,7 @@
 Basic tests for R Language Server integration
 """
 
+import os
 from pathlib import Path
 
 import pytest
@@ -26,7 +27,7 @@ class TestRLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.R], indirect=True)
     def test_symbol_retrieval(self, language_server: SolidLanguageServer):
         """Test R document symbol extraction."""
-        all_symbols, root_symbols = language_server.request_document_symbols("R/utils.R")
+        all_symbols, root_symbols = language_server.request_document_symbols(os.path.join("R", "utils.R"))
 
         # Should find the three exported functions
         function_symbols = [s for s in all_symbols if s.get("kind") == 12]  # Function kind
@@ -38,10 +39,9 @@ class TestRLanguageServer:
         assert expected_functions.issubset(function_names), f"Expected functions {expected_functions} but found {function_names}"
 
     @pytest.mark.parametrize("language_server", [Language.R], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.R], indirect=True)
-    def test_find_definition_across_files(self, language_server: SolidLanguageServer, repo_path: Path):
+    def test_find_definition_across_files(self, language_server: SolidLanguageServer):
         """Test finding function definitions across files."""
-        analysis_file = str(repo_path / "examples/analysis.R")
+        analysis_file = os.path.join("examples", "analysis.R")
 
         # In analysis.R line 7: create_data_frame(n = 50)
         # The function create_data_frame is defined in R/utils.R
@@ -56,10 +56,9 @@ class TestRLanguageServer:
         assert definition_location["range"]["start"]["line"] >= 35
 
     @pytest.mark.parametrize("language_server", [Language.R], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.R], indirect=True)
-    def test_find_references_across_files(self, language_server: SolidLanguageServer, repo_path: Path):
+    def test_find_references_across_files(self, language_server: SolidLanguageServer):
         """Test finding function references across files."""
-        analysis_file = str(repo_path / "examples/analysis.R")
+        analysis_file = os.path.join("examples", "analysis.R")
 
         # Test from usage side: find references to calculate_mean from its usage in analysis.R
         # In analysis.R line 13: calculate_mean(clean_data$value)

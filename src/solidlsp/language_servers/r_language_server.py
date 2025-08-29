@@ -20,6 +20,10 @@ class RLanguageServer(SolidLanguageServer):
     """R Language Server implementation using the languageserver R package."""
 
     @override
+    def _get_wait_time_for_cross_file_referencing(self) -> float:
+        return 2.0  # Increase wait time for R language server cross-file referencing
+
+    @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         # For R projects, ignore common directories
         return super().is_ignored_dirname(dirname) or dirname in [
