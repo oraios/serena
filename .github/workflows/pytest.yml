@@ -279,7 +279,7 @@ jobs:
       - name: Test with pytest
         shell: bash
         run: |
-          if [[ "${{ runner.os }}" != "Windows" ]] && command -v opam &> /dev/null; then
+          if command -v opam &> /dev/null; then
             # Activate OPAM environment for OCaml support
             eval $(opam env)
           fi
