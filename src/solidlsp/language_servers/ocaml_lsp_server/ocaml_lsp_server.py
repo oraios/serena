@@ -6,6 +6,8 @@ import json
 import logging
 import os
 import pathlib
+import platform
+import shutil
 import stat
 import subprocess
 import threading
@@ -17,6 +19,7 @@ from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_kwargs
 
 
 class OcamlLanguageServer(SolidLanguageServer):
@@ -43,6 +46,23 @@ class OcamlLanguageServer(SolidLanguageServer):
         )
         self.server_ready = threading.Event()
 
+    def _find_executable_with_extensions(self, executable_name: str) -> str | None:
+        """
+        Find executable with Windows-specific extensions (.bat, .cmd, .exe) if on Windows.
+        Returns the full path to the executable or None if not found.
+        """
+        if platform.system() == "Windows":
+            # Try Windows-specific extensions first
+            for ext in [".bat", ".cmd", ".exe"]:
+                path = shutil.which(f"{executable_name}{ext}")
+                if path:
+                    return path
+            # Fall back to default search
+            return shutil.which(executable_name)
+        else:
+            # Unix systems
+            return shutil.which(executable_name)
+
     def _setup_runtime_dependencies(self, logger: LanguageServerLogger, repository_root_path: str) -> str:
         """
         Setup runtime dependencies for ocaml-lsp (supports both OCaml and Reason).
@@ -55,7 +75,9 @@ class OcamlLanguageServer(SolidLanguageServer):
 
         # Check if OPAM is installed
         try:
-            result = subprocess.run(["opam", "--version"], check=True, capture_output=True, text=True, cwd=repository_root_path)
+            result = subprocess.run(
+                ["opam", "--version"], check=True, capture_output=True, text=True, cwd=repository_root_path, **subprocess_kwargs()
+            )
             opam_version = result.stdout.strip()
             logger.log(f"OPAM version: {opam_version}", logging.INFO)
         except subprocess.CalledProcessError as e:
@@ -66,27 +88,69 @@ class OcamlLanguageServer(SolidLanguageServer):
         # Check if ocaml-lsp-server is installed
         try:
             result = subprocess.run(
-                ["opam", "list", "-i", "ocaml-lsp-server"], check=False, capture_output=True, text=True, cwd=repository_root_path
+                ["opam", "list", "-i", "ocaml-lsp-server"],
+                check=False,
+                capture_output=True,
+                text=True,
+                cwd=repository_root_path,
+                **subprocess_kwargs(),
             )
             if "# No matches found" in result.stdout:
                 logger.log("Installing ocaml-lsp-server...", logging.INFO)
-                subprocess.run(dependency["installCommand"].split(), check=True, capture_output=True, cwd=repository_root_path)
+                subprocess.run(
+                    dependency["installCommand"].split(), check=True, capture_output=True, cwd=repository_root_path, **subprocess_kwargs()
+                )
 
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to check or install ocaml-lsp-server: {e.stderr}")
 
         try:
-            # Find the path to the ocaml-lsp-server executable
-            result = subprocess.run(
-                ["opam", "exec", "--", "which", "ocamllsp"], check=True, capture_output=True, text=True, cwd=repository_root_path
-            )
-            executable_path = result.stdout.strip()
+            # Find the path to the ocaml-lsp-server executable using cross-platform approach
+            if platform.system() == "Windows":
+                # Use 'where' command on Windows instead of 'which'
+                result = subprocess.run(
+                    ["opam", "exec", "--", "where", "ocamllsp"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    cwd=repository_root_path,
+                    **subprocess_kwargs(),
+                )
+                # Windows 'where' may return multiple paths, take the first one
+                executable_path = result.stdout.strip().split("\n")[0]
+            else:
+                # Use 'which' command on Unix systems
+                result = subprocess.run(
+                    ["opam", "exec", "--", "which", "ocamllsp"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    cwd=repository_root_path,
+                    **subprocess_kwargs(),
+                )
+                executable_path = result.stdout.strip()
+
+            # If the simple approach fails, try alternative methods
+            if not executable_path or not os.path.exists(executable_path):
+                # Fallback 1: Try to find using shutil.which with extensions
+                alt_path = self._find_executable_with_extensions("ocamllsp")
+                if alt_path:
+                    executable_path = alt_path
+                else:
+                    # Fallback 2: Construct path directly from OPAM bin directory
+                    result = subprocess.run(
+                        ["opam", "var", "bin"], check=True, capture_output=True, text=True, cwd=repository_root_path, **subprocess_kwargs()
+                    )
+                    opam_bin = result.stdout.strip()
+                    executable_name = "ocamllsp.exe" if platform.system() == "Windows" else "ocamllsp"
+                    executable_path = os.path.join(opam_bin, executable_name)
 
             if not os.path.exists(executable_path):
                 raise RuntimeError(f"ocaml-lsp-server executable not found at {executable_path}")
 
-            # Ensure the executable has the right permissions
-            os.chmod(executable_path, os.stat(executable_path).st_mode | stat.S_IEXEC)
+            # Ensure the executable has the right permissions (skip on Windows as chmod behaves differently)
+            if platform.system() != "Windows":
+                os.chmod(executable_path, os.stat(executable_path).st_mode | stat.S_IEXEC)
 
             logger.log(f"Executable found ocaml-lsp-server. Path: {executable_path}", logging.INFO)
 
