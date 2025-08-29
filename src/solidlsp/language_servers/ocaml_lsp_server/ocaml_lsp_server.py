@@ -87,16 +87,30 @@ class OcamlLanguageServer(SolidLanguageServer):
             raise RuntimeError(f"Failed to check or install ocaml-lsp-server: {e.stderr}")
 
         try:
-            # Find the path to the ocaml-lsp-server executable
-            result = subprocess.run(
-                ["opam", "exec", "--", "which", "ocamllsp"],
-                check=True,
-                capture_output=True,
-                text=True,
-                cwd=repository_root_path,
-                **subprocess_kwargs(),
-            )
-            executable_path = result.stdout.strip()
+            # Find the path to the ocaml-lsp-server executable using platform-specific commands
+            if platform.system() == "Windows":
+                # Windows uses 'where' command
+                result = subprocess.run(
+                    ["opam", "exec", "--", "where", "ocamllsp"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    cwd=repository_root_path,
+                    **subprocess_kwargs(),
+                )
+                # Windows 'where' may return multiple paths, take the first one
+                executable_path = result.stdout.strip().split("\n")[0]
+            else:
+                # Unix systems use 'which' command
+                result = subprocess.run(
+                    ["opam", "exec", "--", "which", "ocamllsp"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    cwd=repository_root_path,
+                    **subprocess_kwargs(),
+                )
+                executable_path = result.stdout.strip()
 
             if not os.path.exists(executable_path):
                 raise RuntimeError(f"ocaml-lsp-server executable not found at {executable_path}")
