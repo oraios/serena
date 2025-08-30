@@ -34,7 +34,6 @@ dependencies = [
   "tqdm>=4.67.1",
   "tiktoken>=0.9.0",
   "anthropic>=0.54.0",
-  "poethepoet>=0.36.0",
 ]
 
 [[tool.uv.index]]
