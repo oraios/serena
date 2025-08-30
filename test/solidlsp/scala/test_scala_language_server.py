@@ -72,17 +72,17 @@ def test_scala_references_within_same_file(scala_ls):
 def test_scala_find_definition_and_references_across_files(scala_ls):
     definitions = scala_ls.request_definition(MAIN_FILE_PATH, 8, 25)
     assert len(definitions) == 1
-    
+
     first_def = definitions[0]
     assert first_def["uri"].endswith("Utils.scala")
     assert first_def["range"]["start"]["line"] == 7
     assert first_def["range"]["start"]["character"] == 6
     assert first_def["range"]["end"]["line"] == 7
     assert first_def["range"]["end"]["character"] == 14
-    
+
     references = scala_ls.request_references(MAIN_FILE_PATH, 8, 25)
     assert len(references) >= 1
-    
+
     first_ref = references[0]
     assert first_ref["uri"].endswith("Main.scala")
     assert first_ref["range"]["start"]["line"] == 8
