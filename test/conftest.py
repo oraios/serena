@@ -43,6 +43,20 @@ def create_ls(
     gitignore_parser = GitignoreParser(str(repo_path))
     for spec in gitignore_parser.get_ignore_specs():
         ignored_paths.extend(spec.patterns)
+    # Allow turning on verbose logging for specific language servers during tests via env vars.
+    # Example: CSHARP_LS_TEST_DEBUG=1 uv run pytest test/solidlsp/csharp -s
+    try:
+        import os
+        if language == Language.CSHARP and os.environ.get("CSHARP_LS_TEST_DEBUG") == "1":
+            log_level = logging.DEBUG
+        # Generic override: SOLIDLSP_TEST_LOG_LEVEL=DEBUG/INFO/WARNING/ERROR
+        generic_level = os.environ.get("SOLIDLSP_TEST_LOG_LEVEL")
+        if generic_level:
+            lvl = getattr(logging, generic_level.upper(), None)
+            if isinstance(lvl, int):
+                log_level = lvl
+    except Exception:
+        pass
     config = LanguageServerConfig(code_language=language, ignored_paths=ignored_paths, trace_lsp_communication=trace_lsp_communication)
     logger = LanguageServerLogger(log_level=log_level)
     return SolidLanguageServer.create(
