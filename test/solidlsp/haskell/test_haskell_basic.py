@@ -9,7 +9,6 @@ These tests focus on the following methods:
 """
 
 import os
-import time
 
 import pytest
 
@@ -27,9 +26,6 @@ class TestHaskellLanguageServerSymbols:
     def test_document_symbols_lib_exact_content(self, language_server: SolidLanguageServer) -> None:
         """Test document symbols for Lib.hs and verify exact symbol content."""
         file_path = os.path.join("src", "Lib.hs")
-
-        # Give HLS some time to fully analyze the file
-        time.sleep(2)
 
         symbols = language_server.request_document_symbols(file_path)
         assert symbols is not None, "Should receive symbols from HLS"
@@ -49,19 +45,16 @@ class TestHaskellLanguageServerSymbols:
                         if isinstance(child, dict) and "name" in child:
                             symbol_names.append(child["name"])
 
-        # Verify we can find key Haskell functions and data types
+        # Verify exact symbols are present
         expected_symbols = ["add", "hello", "safeDiv", "Calculator", "User", "validateUser"]
-        found_symbols = [name for name in expected_symbols if name in symbol_names]
 
-        assert len(found_symbols) >= 3, f"Expected at least 3 key symbols, found: {found_symbols} from all symbols: {symbol_names[:10]}"
+        for expected in expected_symbols:
+            assert expected in symbol_names, f"Expected symbol '{expected}' not found in symbols: {symbol_names}"
 
     @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
     def test_document_symbols_main_exact_content(self, language_server: SolidLanguageServer) -> None:
         """Test document symbols for Main.hs."""
         file_path = os.path.join("app", "Main.hs")
-
-        # Give HLS some time to fully analyze the file
-        time.sleep(2)
 
         symbols = language_server.request_document_symbols(file_path)
         assert symbols is not None, "Should receive symbols from Main.hs"
@@ -104,12 +97,10 @@ class TestHaskellLanguageServerSymbols:
                         add_symbol = child
                         break
 
-        if not add_symbol:
-            pytest.skip("add function symbol not found in document symbols")
+        assert add_symbol is not None, "add function symbol not found in document symbols"
 
         # Get the range of the add function
-        if "range" not in add_symbol or "start" not in add_symbol["range"]:
-            pytest.skip("add function symbol doesn't have range information")
+        assert "range" in add_symbol and "start" in add_symbol["range"], "add function symbol doesn't have range information"
 
         add_start = add_symbol["range"]["start"]
         test_line = add_start["line"]
@@ -118,9 +109,7 @@ class TestHaskellLanguageServerSymbols:
         # Test containing symbol
         containing_symbol = language_server.request_containing_symbol(file_path, test_line, test_char, include_body=True)
 
-        if containing_symbol is None:
-            # HLS might not support containing symbol or need more time
-            pytest.skip("request_containing_symbol returned None - HLS may not support this feature yet")
+        assert containing_symbol is not None, "request_containing_symbol returned None - HLS should support this feature"
 
         # Verify we found the correct symbol
         assert containing_symbol["name"] == "add", f"Expected 'add', got '{containing_symbol.get('name')}'"
@@ -148,8 +137,7 @@ class TestHaskellLanguageServerSymbols:
                         calculator_symbol = child
                         break
 
-        if not calculator_symbol or "range" not in calculator_symbol:
-            pytest.skip("Calculator data type symbol not found or missing range")
+        assert calculator_symbol is not None and "range" in calculator_symbol, "Calculator data type symbol not found or missing range"
 
         calc_start = calculator_symbol["range"]["start"]
         test_line = calc_start["line"]
@@ -157,8 +145,7 @@ class TestHaskellLanguageServerSymbols:
 
         containing_symbol = language_server.request_containing_symbol(file_path, test_line, test_char)
 
-        if containing_symbol is None:
-            pytest.skip("request_containing_symbol returned None for data type")
+        assert containing_symbol is not None, "request_containing_symbol should work for data types"
 
         assert containing_symbol["name"] == "Calculator", f"Expected 'Calculator', got '{containing_symbol.get('name')}'"
 
@@ -184,8 +171,7 @@ class TestHaskellLanguageServerSymbols:
                         add_symbol = child
                         break
 
-        if not add_symbol:
-            pytest.skip("add function with selectionRange not found")
+        assert add_symbol is not None, "add function with selectionRange not found"
 
         sel_start = add_symbol["selectionRange"]["start"]
         refs = language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
@@ -221,8 +207,7 @@ class TestHaskellLanguageServerSymbols:
                         user_symbol = child
                         break
 
-        if not user_symbol:
-            pytest.skip("User data type with selectionRange not found")
+        assert user_symbol is not None, "User data type with selectionRange not found"
 
         sel_start = user_symbol["selectionRange"]["start"]
         refs = language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
@@ -238,8 +223,7 @@ class TestHaskellLanguageServerSymbols:
         # We'll test position 9, 15 which should be on the 'add' call
         defining_symbol = language_server.request_defining_symbol(main_file, 9, 15)
 
-        if defining_symbol is None:
-            pytest.skip("request_defining_symbol returned None - may not be supported yet")
+        assert defining_symbol is not None, "request_defining_symbol should work - go-to-definition is a basic LSP feature"
 
         # Should find the definition of 'add' function
         assert "name" in defining_symbol, "Defining symbol should have name"
@@ -267,22 +251,22 @@ class TestHaskellLanguageServerSymbols:
                         add_symbol = child
                         break
 
-        if not add_symbol:
-            pytest.skip("add function with selectionRange not found for cross-file test")
+        assert add_symbol is not None, "add function with selectionRange not found for cross-file test"
 
         sel_start = add_symbol["selectionRange"]["start"]
         refs = language_server.request_referencing_symbols(src_file, sel_start["line"], sel_start["character"])
 
         assert isinstance(refs, list), f"Expected list of references, got {type(refs)}"
 
-        # Check if any references are from different files (cross-file)
-        file_paths = set()
+        # Verify structure and content of references - should find the 'add' function
+        # The 'add' function is defined in Lib.hs and used in Main.hs
+        reference_names = []
         for ref in refs:
-            if hasattr(ref, "location") and "uri" in ref.location:
-                file_paths.add(ref.location["uri"])
-            elif hasattr(ref, "symbol") and "location" in ref.symbol and "uri" in ref.symbol["location"]:
-                file_paths.add(ref.symbol["location"]["uri"])
+            if hasattr(ref, "symbol"):
+                symbol = ref.symbol
+                assert "name" in symbol, "Reference symbol should have name"
+                assert "kind" in symbol, "Reference symbol should have kind"
+                reference_names.append(symbol["name"])
 
-        # We might find cross-file references or not, depending on HLS indexing
-        # This test mainly verifies the structure works
-        assert len(file_paths) >= 0, "Should not error when looking for cross-file references"
+        # Cross-file references should include the 'add' function
+        assert "add" in reference_names, f"Expected to find 'add' function in references: {reference_names}"

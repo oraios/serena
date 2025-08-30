@@ -2,6 +2,7 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * Language support:
+  * **Add support for Haskell** via Haskell Language Server (HLS). Supports document symbols, go-to-definition, references, and cross-file navigation. Requires ghcup or HLS on PATH.
   * **Add support for AL (Application Language)** for Microsoft Dynamics 365 Business Central development. Requires VS Code AL extension (ms-dynamics-smb.al).
   * **Add support for R** via the R languageserver package with LSP integration, performance optimizations, and fallback symbol extraction
   * **Add support for Zig** via ZLS (cross-file references may not fully work on Windows)

@@ -197,19 +197,19 @@ class HaskellLanguageServer(SolidLanguageServer):
             "workspaceFolders": [{"uri": root_uri, "name": os.path.basename(repository_absolute_path)}],
         }
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """Start HLS server process and wait for readiness."""
 
-        def register_capability_handler(params):
+        def register_capability_handler(params) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg) -> None:
             # Example helpful logs for readiness
             message_text = msg.get("message", "")
             self.logger.log(f"LSP: window/logMessage: {message_text}", logging.INFO)
             # HLS tends to be ready right after initialize; we don't rely on a special string here
 
-        def do_nothing(params):
+        def do_nothing(params) -> None:
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)
@@ -233,7 +233,13 @@ class HaskellLanguageServer(SolidLanguageServer):
         self.server.notify.initialized({})
         self.completions_available.set()
 
-        # HLS is typically ready after initialize; add short settling time for indexing
-        time.sleep(2.0)
+        # HLS is typically ready after initialize; add settling time for indexing
+        # HLS needs time to fully analyze and index Haskell projects
+        time.sleep(4.0)
         self.server_ready.set()
         self.server_ready.wait()
+
+    @override
+    def _get_wait_time_for_cross_file_referencing(self) -> float:
+        # HLS needs extra time for cross-file indexing due to slower boot and analysis
+        return 4.0
