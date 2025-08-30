@@ -255,13 +255,8 @@ class ScalaLanguageServer(SolidLanguageServer):
         self.server.send.initialize(initialize_params)
 
         self.server.notify.initialized({})
-        timeout = 90.0
-        if self.server_ready.wait(timeout=timeout):
-            self.logger.log("Scala server is ready", logging.INFO)
-        else:
-            self.logger.log(f"Timeout waiting for Scala server to become ready after {timeout}s, proceeding anyway", logging.INFO)
-            # Fallback: assume server is ready after timeout
-            self.server_ready.set()
+        # scala LS doesn't send a reliable ready signal, assume it's ready immediately
+        self.server_ready.set()
         self.completions_available.set()
 
     @override
