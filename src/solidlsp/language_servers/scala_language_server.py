@@ -88,11 +88,10 @@ class ScalaLanguageServer(SolidLanguageServer):
         cs_command_path = shutil.which("cs")
 
         if not os.path.exists(metals_executable):
-            if not coursier_command_path:
-                raise RuntimeError("'coursier' not found isn't in PATH. Please install coursier try again.")
-
             if not cs_command_path:
                 logger.log("'cs' command not found. Trying to install it using 'coursier'.", logging.INFO)
+                if not coursier_command_path:
+                    raise RuntimeError("'coursier' not found isn't in PATH. Please install coursier try again.")
                 try:
                     logger.log("Running 'coursier setup --yes' to install 'cs'...", logging.INFO)
                     subprocess.run([coursier_command_path, "setup", "--yes"], check=True, capture_output=True, text=True)
