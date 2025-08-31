@@ -188,9 +188,6 @@ class ScalaLanguageServer(SolidLanguageServer):
                     self.server_ready.set()
             return
 
-        def execute_client_command_handler(params):
-            return []
-
         def do_nothing(params):
             return
 
@@ -217,30 +214,19 @@ class ScalaLanguageServer(SolidLanguageServer):
                 return actions[0]
             return None
 
-        def check_experimental_status(params):
-            """
-            Also Listen for experimental/serverStatus as a backup signal
-            """
-            if params.get("quiescent") == True:
-                self.server_ready.set()
-                self.completions_available.set()
-
         def check_metals_status(params):
             """
             Listen for metals/status notifications
             """
             self.logger.log(f"Received metals/status: {params}", logging.DEBUG)
-            if params.get("text") == "Indexing finished":
-                self.logger.log("Metals indexing finished, marking as ready", logging.INFO)
-                self.server_ready.set()
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_request("window/showMessageRequest", window_show_message_request)
-        self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
+        self.server.on_request("workspace/executeClientCommand", do_nothing)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
-        self.server.on_notification("experimental/serverStatus", check_experimental_status)
+        self.server.on_notification("experimental/serverStatus", do_nothing)
         self.server.on_notification("metals/status", check_metals_status)
 
         self.logger.log("Starting Scala server process", logging.INFO)
