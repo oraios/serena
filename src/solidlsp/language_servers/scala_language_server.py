@@ -160,7 +160,7 @@ class ScalaLanguageServer(SolidLanguageServer):
                 "openFilesOnRenameProvider": False,
                 "quickPickProvider": False,
                 "renameFileThreshold": 200,
-                "statusBarProvider": "false",
+                "statusBarProvider": "log-message",
                 "treeViewProvider": False,
                 "testExplorerProvider": False,
                 "openNewWindowProvider": False,
@@ -233,6 +233,7 @@ class ScalaLanguageServer(SolidLanguageServer):
             if params.get("text") == "Indexing finished":
                 self.logger.log("Metals indexing finished, marking as ready", logging.INFO)
                 self.server_ready.set()
+                self.completions_available.set()
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
@@ -255,10 +256,3 @@ class ScalaLanguageServer(SolidLanguageServer):
         self.server.send.initialize(initialize_params)
 
         self.server.notify.initialized({})
-        # scala LS doesn't send a reliable ready signal, assume it's ready immediately
-        self.server_ready.set()
-        self.completions_available.set()
-
-    @override
-    def _get_wait_time_for_cross_file_referencing(self) -> float:
-        return 5
