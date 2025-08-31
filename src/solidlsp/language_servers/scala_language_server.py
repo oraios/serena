@@ -261,4 +261,4 @@ class ScalaLanguageServer(SolidLanguageServer):
 
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
-        return 90
+        return 180
