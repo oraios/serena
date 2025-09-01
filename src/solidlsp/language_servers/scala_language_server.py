@@ -205,7 +205,6 @@ class ScalaLanguageServer(SolidLanguageServer):
             if "find references" in msg or "references again" in msg:
                 self._metals_refs_retry_event.set()
 
-
         def window_show_message_request(params):
             """
             Handle window/showMessageRequest from Metals

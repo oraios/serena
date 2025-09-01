@@ -22,6 +22,7 @@ EXPECTED_FILE_PATTERNS = ["Utils.scala", "Main.scala"]
 
 pytestmark = pytest.mark.scala
 
+
 @pytest.fixture(scope="module")
 def scala_ls():
     repo_root = os.path.abspath("test/resources/repos/scala")
