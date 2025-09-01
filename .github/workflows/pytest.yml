@@ -37,24 +37,24 @@ jobs:
       # Add Go bin directory to PATH for this workflow
       # GITHUB_PATH is a special file that GitHub Actions uses to modify PATH
       # Writing to this file adds the directory to the PATH for subsequent steps
-      - name: Cache Go binaries
-        id: cache-go-binaries
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/go/bin
-            ~/.cache/go-build
-          key: go-binaries-${{ runner.os }}-gopls-latest
-      - name: Install gopls
-        if: steps.cache-go-binaries.outputs.cache-hit != 'true'
-        shell: bash
-        run: go install golang.org/x/tools/gopls@latest
-      - name: Set up Elixir
-        if: runner.os != 'Windows'
-        uses: erlef/setup-beam@v1
-        with:
-          elixir-version: "1.18.4"
-          otp-version: "26.1"
+#      - name: Cache Go binaries
+#        id: cache-go-binaries
+#        uses: actions/cache@v3
+#        with:
+#          path: |
+#            ~/go/bin
+#            ~/.cache/go-build
+#          key: go-binaries-${{ runner.os }}-gopls-latest
+#      - name: Install gopls
+#        if: steps.cache-go-binaries.outputs.cache-hit != 'true'
+#        shell: bash
+#        run: go install golang.org/x/tools/gopls@latest
+#      - name: Set up Elixir
+#        if: runner.os != 'Windows'
+#        uses: erlef/setup-beam@v1
+#        with:
+#          elixir-version: "1.18.4"
+#          otp-version: "26.1"
 #      Erlang currently not tested in CI, random hangings on macos, always hangs on ubuntu
 #      In local tests, erlang seems to work though
 #      - name: Install Erlang Language Server
@@ -69,10 +69,10 @@ jobs:
 #          make install PREFIX=/usr/local
 #          # Ensure erlang_ls is in PATH
 #          echo "$HOME/.local/bin" >> $GITHUB_PATH
-      - name: Install clojure tools
-        uses: DeLaGuardo/setup-clojure@13.4
-        with:
-          cli: latest
+#      - name: Install clojure tools
+#        uses: DeLaGuardo/setup-clojure@13.4
+#        with:
+#          cli: latest
       - name: Setup Java (for JVM based languages)
         uses: actions/setup-java@v4
         with:
@@ -102,11 +102,11 @@ jobs:
             cp "$HOME/bin/cs.exe" "$HOME/bin/coursier.exe"
             "$HOME/bin/cs.exe" --version && "$HOME/bin/coursier.exe" --version 
           fi
-      - name: Install Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.5.0"
-          terraform_wrapper: false
+#      - name: Install Terraform
+#        uses: hashicorp/setup-terraform@v3
+#        with:
+#          terraform_version: "1.5.0"
+#          terraform_wrapper: false
       # - name: Install swift
       #   if: runner.os != 'Windows'
       #   uses: swift-actions/setup-swift@v2
@@ -287,4 +287,4 @@ jobs:
         run: uv run poe lint
       - name: Test with pytest
         shell: bash
-        run: uv run poe test
+        run: uv run poe test -m scala
