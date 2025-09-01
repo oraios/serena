@@ -202,7 +202,6 @@ class ScalaLanguageServer(SolidLanguageServer):
 
         def window_log_message(msg):
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
-            msg = (params or {}).get("message", "").lower()
             if "find references" in msg or "references again" in msg:
                 self._metals_refs_retry_event.set()
 
