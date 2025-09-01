@@ -279,7 +279,7 @@ class ScalaLanguageServer(SolidLanguageServer):
 
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
-        return 5
+        return 10
 
     @override
     def request_references(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:
