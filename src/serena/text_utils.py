@@ -2,7 +2,8 @@ import fnmatch
 import logging
 import os
 import re
-from collections.abc import Callable
+import time
+from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Self
@@ -287,6 +288,81 @@ def glob_match(pattern: str, path: str) -> bool:
         return fnmatch.fnmatch(path, pattern)
 
 
+def search_text_optimized(
+    compiled_pattern: re.Pattern,
+    content: str,
+    source_file_path: str | None = None,
+    allow_multiline_match: bool = True,
+    context_lines_before: int = 0,
+    context_lines_after: int = 0,
+) -> list[MatchedConsecutiveLines]:
+    """
+    Optimized version of search_text that accepts pre-compiled pattern and uses efficient line indexing.
+
+    :param compiled_pattern: Pre-compiled regex pattern
+    :param content: The text content to search
+    :param source_file_path: Optional path to the source file
+    :param allow_multiline_match: Whether to search across multiple lines
+    :param context_lines_before: Number of context lines to include before matches
+    :param context_lines_after: Number of context lines to include after matches
+    :return: List of MatchedConsecutiveLines objects
+    """
+    if not content:
+        return []
+
+    matches = []
+    lines = content.splitlines()
+    total_lines = len(lines)
+
+    # Build line offset index for efficient line number calculation
+    line_offsets = [0]
+    offset = 0
+    for line in lines:
+        offset += len(line) + 1  # +1 for newline
+        line_offsets.append(offset)
+
+    def pos_to_line_num(pos: int) -> int:
+        """Binary search to find line number for a position."""
+        left, right = 0, len(line_offsets) - 1
+        while left < right:
+            mid = (left + right) // 2
+            if line_offsets[mid] <= pos:
+                left = mid + 1
+            else:
+                right = mid
+        return left
+
+    # Search for matches
+    for match in compiled_pattern.finditer(content):
+        start_pos = match.start()
+        end_pos = match.end()
+
+        # Use binary search for line numbers (much faster than counting newlines)
+        start_line_num = pos_to_line_num(start_pos)
+        end_line_num = pos_to_line_num(end_pos - 1)  # -1 to handle edge case
+
+        # Calculate the range of lines to include in the context
+        context_start = max(1, start_line_num - context_lines_before)
+        context_end = min(total_lines, end_line_num + context_lines_after)
+
+        # Create TextLine objects for the context
+        context_lines = []
+        for i in range(context_start - 1, context_end):
+            line_num = i + 1
+            if context_start <= line_num < start_line_num:
+                match_type = LineType.BEFORE_MATCH
+            elif end_line_num < line_num <= context_end:
+                match_type = LineType.AFTER_MATCH
+            else:
+                match_type = LineType.MATCH
+
+            context_lines.append(TextLine(line_number=line_num, line_content=lines[i], match_type=match_type))
+
+        matches.append(MatchedConsecutiveLines(lines=context_lines, source_file_path=source_file_path))
+
+    return matches
+
+
 def search_files(
     relative_file_paths: list[str],
     pattern: str,
@@ -311,6 +387,13 @@ def search_files(
     :param paths_exclude_glob: Optional glob pattern to exclude files from the list
     :return: List of MatchedConsecutiveLines objects
     """
+    # Pre-compile the regex pattern once for all files (major optimization)
+    try:
+        compiled_pattern = re.compile(pattern, re.DOTALL)
+    except re.error as e:
+        log.error(f"Invalid regex pattern: {pattern}. Error: {e}")
+        return []
+
     # Pre-filter paths (done sequentially to avoid overhead)
     # Use proper glob matching instead of gitignore patterns
     filtered_paths = []
@@ -330,8 +413,8 @@ def search_files(
         try:
             abs_path = os.path.join(root_path, path)
             file_content = file_reader(abs_path)
-            search_results = search_text(
-                pattern,
+            search_results = search_text_optimized(
+                compiled_pattern,
                 content=file_content,
                 source_file_path=path,
                 allow_multiline_match=True,
@@ -345,10 +428,12 @@ def search_files(
             log.debug(f"Error processing {path}: {e}")
             return {"path": path, "results": [], "error": str(e)}
 
-    # Execute in parallel using joblib
+    # Use multiprocessing backend for CPU-bound regex operations (avoids GIL)
+    # Use loky backend which is more robust than multiprocessing
     results = Parallel(
         n_jobs=-1,
-        backend="threading",
+        backend="loky",
+        batch_size="auto",
     )(delayed(process_single_file)(path) for path in filtered_paths)
 
     # Collect results and errors
@@ -366,3 +451,436 @@ def search_files(
 
     log.info(f"Found {len(matches)} total matches across {len(filtered_paths)} files")
     return matches
+
+
+def search_files_chunked(
+    relative_file_paths: list[str] | Generator[str, None, None],
+    pattern: str,
+    root_path: str = "",
+    file_reader: Callable[[str], str] = default_file_reader,
+    context_lines_before: int = 0,
+    context_lines_after: int = 0,
+    paths_include_glob: str | None = None,
+    paths_exclude_glob: str | None = None,
+    max_results: int | None = None,
+    chunk_size: int = 100,
+    timeout_seconds: int | None = None,
+    show_progress: bool = True,
+) -> list[MatchedConsecutiveLines]:
+    """
+    Chunked version of search_files that processes files in batches and supports early termination.
+    Optimized for large codebases (6000+ files, 1M+ LOC).
+
+    :param relative_file_paths: List or generator of relative file paths
+    :param pattern: Pattern to search for
+    :param root_path: Root path to resolve relative paths against
+    :param file_reader: Function to read a file
+    :param context_lines_before: Number of context lines to include before matches
+    :param context_lines_after: Number of context lines to include after matches
+    :param paths_include_glob: Optional glob pattern to include files
+    :param paths_exclude_glob: Optional glob pattern to exclude files
+    :param max_results: Maximum number of results to return (early termination)
+    :param chunk_size: Number of files to process in each batch
+    :param timeout_seconds: Maximum time to spend searching
+    :param show_progress: Whether to log progress updates
+    :return: List of MatchedConsecutiveLines objects
+    """
+    start_time = time.time()
+
+    # Pre-compile the regex pattern once
+    try:
+        compiled_pattern = re.compile(pattern, re.DOTALL)
+    except re.error as e:
+        log.error(f"Invalid regex pattern: {pattern}. Error: {e}")
+        return []
+
+    all_matches: list[MatchedConsecutiveLines] = []
+    skipped_files: list[tuple[str, str]] = []
+    files_processed = 0
+    files_skipped_filter = 0
+    last_progress_time = start_time
+
+    def should_continue() -> bool:
+        """Check if we should continue processing."""
+        if timeout_seconds:
+            if time.time() - start_time > timeout_seconds:
+                return False
+        if max_results and len(all_matches) >= max_results:
+            return False
+        return True
+
+    def log_progress(force: bool = False) -> None:
+        """Log progress at reasonable intervals."""
+        nonlocal last_progress_time
+        now = time.time()
+        if force or (show_progress and now - last_progress_time > 2.0):  # Log every 2 seconds
+            elapsed = now - start_time
+            rate = files_processed / elapsed if elapsed > 0 else 0
+            log.info(
+                f"Progress: {files_processed} files processed, "
+                f"{len(all_matches)} matches found, "
+                f"{rate:.1f} files/sec, "
+                f"{elapsed:.1f}s elapsed"
+            )
+            last_progress_time = now
+
+    def process_file_batch(batch: list[str]) -> tuple[list[MatchedConsecutiveLines], list[tuple[str, str]]]:
+        """Process a batch of files in parallel."""
+
+        def process_single_file(path: str) -> dict[str, Any]:
+            try:
+                abs_path = os.path.join(root_path, path)
+                file_content = file_reader(abs_path)
+                search_results = search_text_optimized(
+                    compiled_pattern,
+                    content=file_content,
+                    source_file_path=path,
+                    allow_multiline_match=True,
+                    context_lines_before=context_lines_before,
+                    context_lines_after=context_lines_after,
+                )
+                return {"path": path, "results": search_results, "error": None}
+            except Exception as e:
+                return {"path": path, "results": [], "error": str(e)}
+
+        # Process batch in parallel with timeout consideration
+        remaining_time = None
+        if timeout_seconds:
+            elapsed = time.time() - start_time
+            remaining_time = max(1, int(timeout_seconds - elapsed))
+
+        try:
+            results = Parallel(
+                n_jobs=-1,
+                backend="loky",
+                batch_size="auto",
+                timeout=remaining_time,
+            )(delayed(process_single_file)(path) for path in batch)
+        except Exception as e:
+            log.warning(f"Batch processing error: {e}")
+            return [], [(path, str(e)) for path in batch]
+
+        batch_matches = []
+        batch_errors = []
+
+        for result in results:
+            if result["error"]:
+                batch_errors.append((result["path"], result["error"]))
+            else:
+                batch_matches.extend(result["results"])
+
+        return batch_matches, batch_errors
+
+    # Process files in chunks
+    current_batch = []
+
+    # Convert generator to iterator if needed
+    file_iterator = iter(relative_file_paths)
+
+    try:
+        for path in file_iterator:
+            if not should_continue():
+                log.info("Stopping search: limit reached or timeout")
+                break
+
+            # Apply filtering
+            if paths_include_glob and not glob_match(paths_include_glob, path):
+                files_skipped_filter += 1
+                continue
+            if paths_exclude_glob and glob_match(paths_exclude_glob, path):
+                files_skipped_filter += 1
+                continue
+
+            current_batch.append(path)
+
+            # Process batch when it reaches chunk_size
+            if len(current_batch) >= chunk_size:
+                if not should_continue():
+                    break
+
+                batch_matches, batch_errors = process_file_batch(current_batch)
+                all_matches.extend(batch_matches)
+                skipped_files.extend(batch_errors)
+                files_processed += len(current_batch)
+                current_batch = []
+
+                log_progress()
+
+                # Early termination if we have enough results
+                if max_results and len(all_matches) >= max_results:
+                    log.info(f"Reached max_results limit ({max_results}), stopping search")
+                    break
+
+        # Process remaining files in the last batch
+        if current_batch and should_continue():
+            batch_matches, batch_errors = process_file_batch(current_batch)
+            all_matches.extend(batch_matches)
+            skipped_files.extend(batch_errors)
+            files_processed += len(current_batch)
+
+    except KeyboardInterrupt:
+        log.warning("Search interrupted by user")
+    except Exception as e:
+        log.error(f"Unexpected error during search: {e}")
+
+    # Final progress log
+    log_progress(force=True)
+
+    elapsed = time.time() - start_time
+
+    if skipped_files:
+        log.debug(f"Failed to read {len(skipped_files)} files")
+    if files_skipped_filter > 0:
+        log.debug(f"Skipped {files_skipped_filter} files due to glob filters")
+
+    log.info(f"Search complete: processed {files_processed} files in {elapsed:.1f}s, found {len(all_matches)} matches")
+
+    # Limit results if max_results is specified
+    if max_results and len(all_matches) > max_results:
+        all_matches = all_matches[:max_results]
+
+    return all_matches
+
+
+def search_files_chunked_with_state(
+    relative_file_paths: list[str] | Generator[str, None, None],
+    pattern: str,
+    root_path: str = "",
+    file_reader: Callable[[str], str] = default_file_reader,
+    context_lines_before: int = 0,
+    context_lines_after: int = 0,
+    paths_include_glob: str | None = None,
+    paths_exclude_glob: str | None = None,
+    max_results: int | None = None,
+    chunk_size: int = 100,
+    timeout_seconds: int | None = None,
+    show_progress: bool = True,
+    skip_files: int = 0,
+) -> tuple[list[MatchedConsecutiveLines], dict[str, Any]]:
+    """
+    Stateful version of search_files_chunked that supports continuation/pagination.
+    Returns both matches and search state for resuming interrupted searches.
+
+    :param relative_file_paths: List or generator of relative file paths
+    :param pattern: Pattern to search for
+    :param root_path: Root path to resolve relative paths against
+    :param file_reader: Function to read a file
+    :param context_lines_before: Number of context lines to include before matches
+    :param context_lines_after: Number of context lines to include after matches
+    :param paths_include_glob: Optional glob pattern to include files
+    :param paths_exclude_glob: Optional glob pattern to exclude files
+    :param max_results: Maximum number of results to return (early termination)
+    :param chunk_size: Number of files to process in each batch
+    :param timeout_seconds: Maximum time to spend searching
+    :param show_progress: Whether to log progress updates
+    :param skip_files: Number of files to skip at the beginning (for continuation)
+    :return: Tuple of (matches, search_state)
+    """
+    start_time = time.time()
+
+    # Pre-compile the regex pattern once
+    try:
+        compiled_pattern = re.compile(pattern, re.DOTALL)
+    except re.error as e:
+        log.error(f"Invalid regex pattern: {pattern}. Error: {e}")
+        return [], {"error": str(e)}
+
+    all_matches: list[MatchedConsecutiveLines] = []
+    skipped_files: list[tuple[str, str]] = []
+    files_processed = 0
+    files_skipped_filter = 0
+    files_skipped_total = skip_files
+    last_progress_time = start_time
+    timed_out = False
+    has_more_files = False
+
+    def should_continue() -> bool:
+        """Check if we should continue processing."""
+        nonlocal timed_out
+        if timeout_seconds:
+            if time.time() - start_time > timeout_seconds:
+                timed_out = True
+                return False
+        if max_results and len(all_matches) >= max_results:
+            return False
+        return True
+
+    def log_progress(force: bool = False) -> None:
+        """Log progress at reasonable intervals."""
+        nonlocal last_progress_time
+        now = time.time()
+        if force or (show_progress and now - last_progress_time > 2.0):  # Log every 2 seconds
+            elapsed = now - start_time
+            rate = files_processed / elapsed if elapsed > 0 else 0
+            log.info(
+                f"Progress: {files_processed} files processed "
+                f"(skipped {files_skipped_total}), "
+                f"{len(all_matches)} matches found, "
+                f"{rate:.1f} files/sec, "
+                f"{elapsed:.1f}s elapsed"
+            )
+            last_progress_time = now
+
+    def process_file_batch(batch: list[str]) -> tuple[list[MatchedConsecutiveLines], list[tuple[str, str]]]:
+        """Process a batch of files in parallel with thread-safe timeout."""
+
+        def process_single_file(path: str) -> dict[str, Any]:
+            try:
+                abs_path = os.path.join(root_path, path)
+                file_content = file_reader(abs_path)
+                search_results = search_text_optimized(
+                    compiled_pattern,
+                    content=file_content,
+                    source_file_path=path,
+                    allow_multiline_match=True,
+                    context_lines_before=context_lines_before,
+                    context_lines_after=context_lines_after,
+                )
+                return {"path": path, "results": search_results, "error": None}
+            except Exception as e:
+                return {"path": path, "results": [], "error": str(e)}
+
+        # Calculate remaining time for this batch
+        remaining_time = None
+        if timeout_seconds:
+            elapsed = time.time() - start_time
+            remaining_time = max(1, int(timeout_seconds - elapsed))
+            if remaining_time <= 0:
+                return [], [(path, "timeout") for path in batch]
+
+        try:
+            # Use joblib's timeout parameter which is thread-safe
+            results = Parallel(
+                n_jobs=-1,
+                backend="loky",
+                batch_size="auto",
+                timeout=remaining_time,
+            )(delayed(process_single_file)(path) for path in batch)
+        except Exception as e:
+            log.warning(f"Batch processing error: {e}")
+            return [], [(path, str(e)) for path in batch]
+
+        batch_matches = []
+        batch_errors = []
+
+        for result in results:
+            if result["error"]:
+                batch_errors.append((result["path"], result["error"]))
+            else:
+                batch_matches.extend(result["results"])
+
+        return batch_matches, batch_errors
+
+    # Process files in chunks with skip support
+    current_batch = []
+    file_count = 0
+
+    # Convert generator to iterator if needed
+    file_iterator = iter(relative_file_paths)
+
+    try:
+        for path in file_iterator:
+            # Skip files if we're continuing from a previous search
+            if file_count < skip_files:
+                file_count += 1
+                continue
+
+            if not should_continue():
+                log.info("Stopping search: limit reached or timeout")
+                # Check if there are more files
+                try:
+                    next(file_iterator)
+                    has_more_files = True
+                except StopIteration:
+                    has_more_files = False
+                break
+
+            # Apply filtering
+            if paths_include_glob and not glob_match(paths_include_glob, path):
+                files_skipped_filter += 1
+                file_count += 1
+                continue
+            if paths_exclude_glob and glob_match(paths_exclude_glob, path):
+                files_skipped_filter += 1
+                file_count += 1
+                continue
+
+            current_batch.append(path)
+            file_count += 1
+
+            # Process batch when it reaches chunk_size
+            if len(current_batch) >= chunk_size:
+                if not should_continue():
+                    # Check if there are more files
+                    try:
+                        next(file_iterator)
+                        has_more_files = True
+                    except StopIteration:
+                        has_more_files = False
+                    break
+
+                batch_matches, batch_errors = process_file_batch(current_batch)
+                all_matches.extend(batch_matches)
+                skipped_files.extend(batch_errors)
+                files_processed += len(current_batch)
+                current_batch = []
+
+                log_progress()
+
+                # Early termination if we have enough results
+                if max_results and len(all_matches) >= max_results:
+                    log.info(f"Reached max_results limit ({max_results}), stopping search")
+                    # Check if there are more files
+                    try:
+                        next(file_iterator)
+                        has_more_files = True
+                    except StopIteration:
+                        has_more_files = False
+                    break
+        else:
+            # Iterator exhausted normally
+            has_more_files = False
+
+        # Process remaining files in the last batch
+        if current_batch and should_continue():
+            batch_matches, batch_errors = process_file_batch(current_batch)
+            all_matches.extend(batch_matches)
+            skipped_files.extend(batch_errors)
+            files_processed += len(current_batch)
+
+    except KeyboardInterrupt:
+        log.warning("Search interrupted by user")
+        has_more_files = True
+    except Exception as e:
+        log.error(f"Unexpected error during search: {e}")
+
+    # Final progress log
+    log_progress(force=True)
+
+    elapsed = time.time() - start_time
+
+    if skipped_files:
+        log.debug(f"Failed to read {len(skipped_files)} files")
+    if files_skipped_filter > 0:
+        log.debug(f"Skipped {files_skipped_filter} files due to glob filters")
+
+    log.info(f"Search complete: processed {files_processed} files in {elapsed:.1f}s, " f"found {len(all_matches)} matches")
+
+    # Calculate where to resume from
+    next_skip_files = skip_files + files_processed + files_skipped_filter
+
+    # Create search state
+    search_state = {
+        "files_processed": files_processed,
+        "files_skipped_total": files_skipped_total + files_skipped_filter,
+        "next_skip_files": next_skip_files,
+        "has_more_files": has_more_files,
+        "timed_out": timed_out,
+        "total_elapsed": elapsed,
+    }
+
+    # Limit results if max_results is specified
+    if max_results and len(all_matches) > max_results:
+        all_matches = all_matches[:max_results]
+
+    return all_matches, search_state

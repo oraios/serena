@@ -7,13 +7,17 @@ File and file system-related tools, specifically for
 """
 
 import json
+import logging
 import os
 import re
-from collections import defaultdict
+from collections.abc import Generator
 from fnmatch import fnmatch
 from pathlib import Path
+from typing import Any
 
-from serena.text_utils import search_files
+log = logging.getLogger(__name__)
+
+from serena.text_utils import LineType, MatchedConsecutiveLines, search_files_chunked_with_state
 from serena.tools import SUCCESS_RESULT, TOOL_DEFAULT_MAX_ANSWER_LENGTH, EditedFileContext, Tool, ToolMarkerCanEdit, ToolMarkerOptional
 from serena.util.file_system import scan_directory
 
@@ -310,6 +314,11 @@ class SearchForPatternTool(Tool):
         relative_path: str = "",
         restrict_search_to_code_files: bool = False,
         max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
+        max_results: int = 100,
+        timeout_seconds: int = 30,
+        show_progress: bool = True,
+        skip_files: int = 0,
+        return_search_state: bool = False,
     ) -> str:
         """
         Offers a flexible search for arbitrary patterns in the codebase, including the
@@ -359,45 +368,148 @@ class SearchForPatternTool(Tool):
             For example, for finding classes or methods from a name pattern.
             Setting to False is a better choice if you also want to search in non-code files, like in html or yaml files,
             which is why it is the default.
+        :param max_results: Maximum number of results to return (default 100). Search stops after finding this many matches.
+        :param timeout_seconds: Maximum time in seconds to spend searching (default 30). Returns partial results if timeout.
+        :param show_progress: Whether to log progress during long searches (default True).
+        :param skip_files: Number of files to skip at the beginning (for pagination/continuation).
+        :param return_search_state: Whether to include pagination info in response for continuing searches.
         :return: A mapping of file paths to lists of matched consecutive lines.
         """
+        import time
+
         abs_path = os.path.join(self.get_project_root(), relative_path)
         if not os.path.exists(abs_path):
             raise FileNotFoundError(f"Relative path {relative_path} does not exist.")
 
-        if restrict_search_to_code_files:
-            matches = self.project.search_source_files_for_pattern(
-                pattern=substring_pattern,
-                relative_path=relative_path,
-                context_lines_before=context_lines_before,
-                context_lines_after=context_lines_after,
-                paths_include_glob=paths_include_glob.strip(),
-                paths_exclude_glob=paths_exclude_glob.strip(),
-            )
-        else:
-            if os.path.isfile(abs_path):
-                rel_paths_to_search = [relative_path]
-            else:
-                dirs, rel_paths_to_search = scan_directory(
-                    path=abs_path,
-                    recursive=True,
-                    is_ignored_dir=self.project.is_ignored_path,
-                    is_ignored_file=self.project.is_ignored_path,
-                    relative_to=self.get_project_root(),
+        start_time = time.time()
+
+        # Validate the pattern for efficiency
+        try:
+            re.compile(substring_pattern, re.DOTALL)
+        except re.error as e:
+            return json.dumps({"error": f"Invalid regex pattern: {e}"})
+
+        try:
+            if restrict_search_to_code_files:
+                # Use generator for memory efficiency
+                file_generator = (
+                    self.project.gather_source_files_generator(relative_path=relative_path)
+                    if hasattr(self.project, "gather_source_files_generator")
+                    else self.project.gather_source_files(relative_path=relative_path)
                 )
-            # TODO (maybe): not super efficient to walk through the files again and filter if glob patterns are provided
-            #   but it probably never matters and this version required no further refactoring
-            matches = search_files(
-                rel_paths_to_search,
-                substring_pattern,
-                root_path=self.get_project_root(),
-                paths_include_glob=paths_include_glob,
-                paths_exclude_glob=paths_exclude_glob,
-            )
-        # group matches by file
-        file_to_matches: dict[str, list[str]] = defaultdict(list)
+
+                if show_progress:
+                    log.info(f"Searching code files for pattern: {substring_pattern[:50]}...")
+
+                # Use chunked search with progress and continuation
+                matches, search_state = search_files_chunked_with_state(
+                    file_generator,
+                    substring_pattern,
+                    root_path=self.get_project_root(),
+                    context_lines_before=context_lines_before,
+                    context_lines_after=context_lines_after,
+                    paths_include_glob=paths_include_glob.strip(),
+                    paths_exclude_glob=paths_exclude_glob.strip(),
+                    max_results=max_results,
+                    chunk_size=50,  # Process 50 files at a time
+                    timeout_seconds=timeout_seconds,
+                    show_progress=show_progress,
+                    skip_files=skip_files,
+                )
+            else:
+                rel_paths_to_search: list[str] | Generator[str, None, None]
+                if os.path.isfile(abs_path):
+                    rel_paths_to_search = [relative_path]
+                else:
+                    # Use generator-based directory scan for memory efficiency
+                    from serena.util.file_system import scan_directory_generator
+
+                    rel_paths_generator = scan_directory_generator(
+                        path=abs_path,
+                        recursive=True,
+                        is_ignored_dir=self.project.is_ignored_path,
+                        is_ignored_file=self.project.is_ignored_path,
+                        relative_to=self.get_project_root(),
+                    )
+                    rel_paths_to_search = rel_paths_generator
+
+                if show_progress:
+                    log.info(f"Searching all files for pattern: {substring_pattern[:50]}...")
+
+                # Use chunked search with progress and continuation
+                matches, search_state = search_files_chunked_with_state(
+                    rel_paths_to_search,
+                    substring_pattern,
+                    root_path=self.get_project_root(),
+                    context_lines_before=context_lines_before,
+                    context_lines_after=context_lines_after,
+                    paths_include_glob=paths_include_glob.strip(),
+                    paths_exclude_glob=paths_exclude_glob.strip(),
+                    max_results=max_results,
+                    chunk_size=50,
+                    timeout_seconds=timeout_seconds,
+                    show_progress=show_progress,
+                    skip_files=skip_files,
+                )
+
+        except Exception as e:
+            log.error(f"Search error: {e}")
+            return json.dumps({"error": str(e), "hint": "Try a more specific pattern or search path"})
+
+        elapsed = time.time() - start_time
+
+        if show_progress:
+            log.info(f"Search completed in {elapsed:.1f}s, found {len(matches)} matches")
+
+        # Format results
+        formatted_matches = self._format_matches(matches[:max_results])
+
+        # Add metadata
+        metadata: dict[str, Any] = {
+            "total_matches": len(matches),
+            "returned_matches": min(len(matches), max_results),
+            "search_time_seconds": round(elapsed, 2),
+            "files_processed": search_state["files_processed"],
+            "files_skipped": search_state["files_skipped_total"],
+        }
+
+        # Add pagination info if requested or if search was limited
+        if return_search_state or search_state["has_more_files"] or search_state["timed_out"]:
+            pagination = {
+                "has_more_files": search_state["has_more_files"],
+                "next_skip_files": search_state["next_skip_files"],
+                "timed_out": search_state["timed_out"],
+            }
+
+            if search_state["timed_out"]:
+                pagination["resume_hint"] = f"Search timed out. To continue, use skip_files={search_state['next_skip_files']}"
+            elif search_state["has_more_files"]:
+                pagination["resume_hint"] = f"More files available. To continue, use skip_files={search_state['next_skip_files']}"
+
+            metadata["pagination"] = pagination
+
+        if len(matches) > max_results:
+            metadata["note"] = f"Showing first {max_results} of {len(matches)} total matches. Use more specific patterns to reduce results."
+
+        final_result = {"metadata": metadata, "matches": formatted_matches}
+
+        result_json = json.dumps(final_result)
+        return self._limit_length(result_json, max_answer_chars)
+
+    def _format_matches(self, matches: list[MatchedConsecutiveLines]) -> dict[str, list[str]]:
+        """Format matches for JSON output."""
+        result: dict[str, list[str]] = {}
         for match in matches:
-            assert match.source_file_path is not None
-            file_to_matches[match.source_file_path].append(match.to_display_string())
-        result = json.dumps(file_to_matches)
-        return self._limit_length(result, max_answer_chars)
+            file_path = match.source_file_path or "unknown"
+            if file_path not in result:
+                result[file_path] = []
+
+            # Format lines with line numbers
+            formatted_lines = []
+            for line in match.lines:
+                prefix = "  > " if line.match_type == LineType.MATCH else "    "
+                formatted_lines.append(f"{prefix}{line.line_number:4d}: {line.line_content}")
+
+            result[file_path].append("\n".join(formatted_lines))
+
+        return result

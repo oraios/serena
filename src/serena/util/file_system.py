@@ -1,7 +1,7 @@
 import glob
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
@@ -77,6 +77,55 @@ def scan_directory(
         return ScanResult([], [])
 
     return ScanResult(directories, files)
+
+
+def scan_directory_generator(
+    path: str,
+    recursive: bool = False,
+    relative_to: str | None = None,
+    is_ignored_dir: Callable[[str], bool] = lambda x: False,
+    is_ignored_file: Callable[[str], bool] = lambda x: False,
+) -> Generator[str, None, None]:
+    """
+    Generator version of scan_directory that yields file paths one at a time.
+    Memory-efficient for large directories.
+
+    :param path: the path to scan
+    :param recursive: whether to recursively scan subdirectories
+    :param relative_to: the path to which the results should be relative to; if None, provide absolute paths
+    :param is_ignored_dir: a function to determine whether a directory should be ignored
+    :param is_ignored_file: a function to determine whether a file should be ignored
+    :yield: file paths one at a time
+    """
+    abs_path = os.path.abspath(path)
+    rel_base = os.path.abspath(relative_to) if relative_to else None
+
+    def scan_dir(dir_path: str) -> Generator[str, None, None]:
+        try:
+            with os.scandir(dir_path) as entries:
+                for entry in entries:
+                    try:
+                        entry_path = entry.path
+
+                        if entry.is_file():
+                            if not is_ignored_file(entry_path):
+                                if rel_base:
+                                    yield os.path.relpath(entry_path, rel_base)
+                                else:
+                                    yield entry_path
+                        elif entry.is_dir() and recursive:
+                            if not is_ignored_dir(entry_path):
+                                # Recursively scan subdirectory
+                                yield from scan_dir(entry_path)
+                    except PermissionError:
+                        # Skip files/directories that cannot be accessed
+                        continue
+        except PermissionError:
+            # Skip the entire directory if it cannot be accessed
+            return
+
+    # Start scanning from the root path
+    yield from scan_dir(abs_path)
 
 
 def find_all_non_ignored_files(repo_root: str) -> list[str]:

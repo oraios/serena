@@ -1,5 +1,6 @@
 import logging
 import os
+from collections.abc import Generator
 from pathlib import Path
 
 import pathspec
@@ -204,6 +205,31 @@ class Project:
                             f"File {rel_file_path} not found (possibly due it being a symlink), skipping it in request_parsed_files",
                         )
             return rel_file_paths
+
+    def gather_source_files_generator(self, relative_path: str = "") -> Generator[str, None, None]:
+        """Generator version of gather_source_files - more memory efficient for large codebases
+
+        :param relative_path: if provided, restrict search to this path
+        :yield: relative paths of source files one at a time
+        """
+        start_path = os.path.join(self.project_root, relative_path)
+        if not os.path.exists(start_path):
+            raise FileNotFoundError(f"Relative path {start_path} not found.")
+        if os.path.isfile(start_path):
+            yield relative_path
+            return
+
+        for root, dirs, files in os.walk(start_path, followlinks=True):
+            dirs[:] = [d for d in dirs if not self._is_ignored_relative_path(os.path.join(root, d))]
+            for file in files:
+                rel_file_path = os.path.relpath(os.path.join(root, file), start=self.project_root)
+                try:
+                    if not self._is_ignored_relative_path(rel_file_path):
+                        yield rel_file_path
+                except FileNotFoundError:
+                    log.warning(
+                        f"File {rel_file_path} not found (possibly due it being a symlink), skipping it",
+                    )
 
     def search_source_files_for_pattern(
         self,
