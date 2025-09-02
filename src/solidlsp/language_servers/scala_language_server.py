@@ -69,6 +69,7 @@ class ScalaLanguageServer(SolidLanguageServer):
         metals_executable = os.path.join(metals_home, "metals")
         coursier_command_path = shutil.which("coursier")
         cs_command_path = shutil.which("cs")
+        bloop_command_path = shutil.which("bloop")
 
         if not os.path.exists(metals_executable):
             if not cs_command_path:
@@ -87,6 +88,14 @@ class ScalaLanguageServer(SolidLanguageServer):
                         "'cs' command not found after running 'coursier setup'. Please check your PATH or install it manually."
                     )
                 logger.log("'cs' command installed successfully.", logging.INFO)
+            if not bloop_command_path:
+                logger.log("'bloop' command not found. Trying to install it using 'cs'.", logging.INFO)
+                try:
+                    logger.log("Running cs install bloop ...", logging.INFO)
+                    subprocess.run([cs_command_path, "install", "bloop", "--only-prebuilt=true"])
+                except  subprocess.CalledProcessError as e:
+                    raise RuntimeError(f"Failed to set up 'bloop' command with 'cs install bloop'. Stderr: {e.stderr}") 
+
 
             logger.log(f"metals executable not found at {metals_executable}, bootstrapping...", logging.INFO)
             artifact = "org.scalameta:metals_2.13:1.6.2"
