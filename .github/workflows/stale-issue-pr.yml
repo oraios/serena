@@ -16,10 +16,10 @@ jobs:
 
           # ---- Issue settings ----
           days-before-issue-stale: 30  # Issues become stale after 30 days inactive
-          days-before-issue-close: 60 # Close Issues 180 days after stale
+          days-before-issue-close: 60 # Close Issues 60 days after stale
           stale-issue-message: |
             This issue has been inactive for 30 days and is now marked as stale.
-            It will be automatically closed in 180 days if no further activity occurs.
+            It will be automatically closed in 60 days if no further activity occurs.
           close-issue-message: |
             Since it has been a long time without updates, the issue has been automatically closed.
             If you need to continue, please reopen or create a new issue.
