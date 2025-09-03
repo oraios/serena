@@ -82,13 +82,11 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
 
         # Run diagnostics for supported file types
         from serena.tools.symbol_tools import _run_diagnostics_after_edit
+
         diagnostics_result = _run_diagnostics_after_edit(self, relative_path)
 
         if diagnostics_result:
-            result = {
-                "message": answer,
-                "diagnostics": diagnostics_result
-            }
+            result = {"message": answer, "diagnostics": diagnostics_result}
             return json.dumps(result)
 
         return json.dumps(answer)
@@ -218,13 +216,11 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
 
         # Run diagnostics for supported file types
         from serena.tools.symbol_tools import _run_diagnostics_after_edit
+
         diagnostics_result = _run_diagnostics_after_edit(self, relative_path)
 
         if diagnostics_result:
-            result = {
-                "message": SUCCESS_RESULT,
-                "diagnostics": diagnostics_result
-            }
+            result = {"message": SUCCESS_RESULT, "diagnostics": diagnostics_result}
             return json.dumps(result)
 
         return SUCCESS_RESULT

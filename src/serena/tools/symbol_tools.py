@@ -22,7 +22,7 @@ from solidlsp.ls_types import SymbolKind
 def _should_run_diagnostics_for_file(relative_path: str) -> bool:
     """Check if a file should have diagnostics run on it after editing."""
     # Check for TypeScript/JavaScript extensions
-    typescript_extensions = ('.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs')
+    typescript_extensions = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
     if relative_path.endswith(typescript_extensions):
         return True
 
@@ -49,16 +49,11 @@ def _run_diagnostics_after_edit(tool_instance, relative_path: str) -> dict[str, 
 
         # Only return diagnostics if there are any issues
         if diagnostics:
-            return {
-                'diagnostics_found': len(diagnostics),
-                'diagnostics': diagnostics
-            }
+            return {"diagnostics_found": len(diagnostics), "diagnostics": diagnostics}
         return None
     except Exception as e:
         # Don't fail the main operation if diagnostics fail
-        return {
-            'diagnostics_error': f'Failed to run diagnostics: {str(e)}'
-        }
+        return {"diagnostics_error": f"Failed to run diagnostics: {e!s}"}
 
 
 def _sanitize_symbol_dict(symbol_dict: dict[str, Any]) -> dict[str, Any]:
@@ -135,8 +130,8 @@ class GetDiagnosticsTool(Tool, ToolMarkerSymbolicRead):
         :param include_debug: whether to include debug information in the response
         :return: a JSON object containing diagnostic information for the file
         """
-        import time
         import threading
+        import time
         from pathlib import Path
 
         file_path = os.path.join(self.project.project_root, relative_path)
@@ -149,37 +144,41 @@ class GetDiagnosticsTool(Tool, ToolMarkerSymbolicRead):
         # Storage for collected diagnostics
         collected_diagnostics = []
         diagnostics_received = threading.Event()
-        debug_info = {
-            'file_uri': None,
-            'handler_registered': False,
-            'notifications_received': 0,
-            'matching_notifications': 0,
-            'timeout_occurred': False,
-            'final_diagnostics_count': 0
-        } if include_debug else None
+        debug_info = (
+            {
+                "file_uri": None,
+                "handler_registered": False,
+                "notifications_received": 0,
+                "matching_notifications": 0,
+                "timeout_occurred": False,
+                "final_diagnostics_count": 0,
+            }
+            if include_debug
+            else None
+        )
 
         # Get the file URI for matching
         file_uri = Path(file_path).as_uri()
         if debug_info:
-            debug_info['file_uri'] = file_uri
+            debug_info["file_uri"] = file_uri
 
         def diagnostic_handler(notification_params):
             """Handler for textDocument/publishDiagnostics notifications"""
             if debug_info:
-                debug_info['notifications_received'] += 1
-            notification_uri = notification_params.get('uri')
+                debug_info["notifications_received"] += 1
+            notification_uri = notification_params.get("uri")
 
             if notification_uri == file_uri:
                 if debug_info:
-                    debug_info['matching_notifications'] += 1
+                    debug_info["matching_notifications"] += 1
                 collected_diagnostics.clear()
-                collected_diagnostics.extend(notification_params.get('diagnostics', []))
+                collected_diagnostics.extend(notification_params.get("diagnostics", []))
                 diagnostics_received.set()
 
         # Register the notification handler
-        self.agent.language_server.server.on_notification('textDocument/publishDiagnostics', diagnostic_handler)
+        self.agent.language_server.server.on_notification("textDocument/publishDiagnostics", diagnostic_handler)
         if debug_info:
-            debug_info['handler_registered'] = True
+            debug_info["handler_registered"] = True
 
         try:
             # Open the file to trigger diagnostics
@@ -190,24 +189,21 @@ class GetDiagnosticsTool(Tool, ToolMarkerSymbolicRead):
                 # Wait for diagnostics to be published (with timeout)
                 if diagnostics_received.wait(timeout=10.0):
                     if debug_info:
-                        debug_info['timeout_occurred'] = False
+                        debug_info["timeout_occurred"] = False
                 else:
                     if debug_info:
-                        debug_info['timeout_occurred'] = True
+                        debug_info["timeout_occurred"] = True
 
                 if debug_info:
-                    debug_info['final_diagnostics_count'] = len(collected_diagnostics)
+                    debug_info["final_diagnostics_count"] = len(collected_diagnostics)
         finally:
             # Clean up the notification handler
-            if 'textDocument/publishDiagnostics' in self.agent.language_server.server.on_notification_handlers:
-                del self.agent.language_server.server.on_notification_handlers['textDocument/publishDiagnostics']
+            if "textDocument/publishDiagnostics" in self.agent.language_server.server.on_notification_handlers:
+                del self.agent.language_server.server.on_notification_handlers["textDocument/publishDiagnostics"]
 
         # Create result
         if include_debug:
-            result = {
-                'diagnostics': collected_diagnostics,
-                'debug_info': debug_info
-            }
+            result = {"diagnostics": collected_diagnostics, "debug_info": debug_info}
         else:
             result = collected_diagnostics
 
@@ -227,8 +223,8 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         depth: int = 0,
         relative_path: str = "",
         include_body: bool = False,
-        include_kinds: list[int] = [],  # noqa: B006
-        exclude_kinds: list[int] = [],  # noqa: B006
+        include_kinds: list[int] | None = None,
+        exclude_kinds: list[int] | None = None,
         substring_matching: bool = False,
         max_answer_chars: int = -1,
     ) -> str:
@@ -283,6 +279,8 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             -1 means the default value from the config will be used.
         :return: a list of symbols (with locations) matching the name.
         """
+        include_kinds = include_kinds or []
+        exclude_kinds = exclude_kinds or []
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
         symbol_retriever = self.create_language_server_symbol_retriever()
@@ -308,8 +306,8 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         self,
         name_path: str,
         relative_path: str,
-        include_kinds: list[int] = [],  # noqa: B006
-        exclude_kinds: list[int] = [],  # noqa: B006
+        include_kinds: list[int] | None = None,
+        exclude_kinds: list[int] | None = None,
         max_answer_chars: int = -1,
     ) -> str:
         """
@@ -324,6 +322,8 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         :param max_answer_chars: same as in the `find_symbol` tool.
         :return: a list of JSON objects with the symbols referencing the requested symbol
         """
+        include_kinds = include_kinds or []
+        exclude_kinds = exclude_kinds or []
         include_body = False  # It is probably never a good idea to include the body of the referencing symbols
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
@@ -381,10 +381,7 @@ class ReplaceSymbolBodyTool(Tool, ToolMarkerSymbolicEdit):
         diagnostics_result = _run_diagnostics_after_edit(self, relative_path)
 
         if diagnostics_result:
-            result = {
-                "message": SUCCESS_RESULT,
-                "diagnostics": diagnostics_result
-            }
+            result = {"message": SUCCESS_RESULT, "diagnostics": diagnostics_result}
             return json.dumps(result)
 
         return SUCCESS_RESULT
@@ -417,10 +414,7 @@ class InsertAfterSymbolTool(Tool, ToolMarkerSymbolicEdit):
         diagnostics_result = _run_diagnostics_after_edit(self, relative_path)
 
         if diagnostics_result:
-            result = {
-                "message": SUCCESS_RESULT,
-                "diagnostics": diagnostics_result
-            }
+            result = {"message": SUCCESS_RESULT, "diagnostics": diagnostics_result}
             return json.dumps(result)
 
         return SUCCESS_RESULT
@@ -453,10 +447,7 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerSymbolicEdit):
         diagnostics_result = _run_diagnostics_after_edit(self, relative_path)
 
         if diagnostics_result:
-            result = {
-                "message": SUCCESS_RESULT,
-                "diagnostics": diagnostics_result
-            }
+            result = {"message": SUCCESS_RESULT, "diagnostics": diagnostics_result}
             return json.dumps(result)
 
         return SUCCESS_RESULT

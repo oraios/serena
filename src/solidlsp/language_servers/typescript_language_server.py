@@ -52,16 +52,17 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             return False
 
         # Extract file path from URI
-        if file_uri.startswith('file://'):
+        if file_uri.startswith("file://"):
             file_path = file_uri[7:]  # Remove 'file://' prefix
         else:
             file_path = file_uri
 
         # Check file extension
-        typescript_extensions = {'.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'}
+        typescript_extensions = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}
 
         # Also process files with no extension (likely Node.js bash scripts)
         import os
+
         _, ext = os.path.splitext(file_path)
         if not ext:  # No extension
             return True
@@ -138,12 +139,6 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         is_npm_installed = shutil.which("npm") is not None
         assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
-        # Verify both node and npm are installed
-        is_node_installed = shutil.which("node") is not None
-        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which("npm") is not None
-        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
-
         # Install typescript and typescript-language-server if not already installed
         tsserver_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "ts-lsp")
         tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
@@ -185,7 +180,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                         "versionSupport": False,
                         "tagSupport": {"valueSet": [1, 2]},
                         "codeDescriptionSupport": True,
-                        "dataSupport": True
+                        "dataSupport": True,
                     },
                 },
                 "workspace": {
@@ -241,8 +236,8 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             Filter diagnostics to only process TypeScript/JavaScript files.
             Ignore diagnostics for other file types like Python, Rust, etc.
             """
-            if 'uri' in params:
-                if not self._should_process_file(params['uri']):
+            if "uri" in params:
+                if not self._should_process_file(params["uri"]):
                     # Skip diagnostics for non-TypeScript/JavaScript files
                     return
             # If it's a TypeScript/JavaScript file, let the default handler process it
@@ -255,7 +250,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             """
             Also listen for experimental/serverStatus as a backup signal
             """
-            if params.get("quiescent") == True:
+            if params.get("quiescent") is True:
                 self.server_ready.set()
                 self.completions_available.set()
 
