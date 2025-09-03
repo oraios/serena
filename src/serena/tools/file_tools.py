@@ -79,6 +79,18 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
         answer = f"File created: {relative_path}."
         if will_overwrite_existing:
             answer += " Overwrote existing file."
+
+        # Run diagnostics for supported file types
+        from serena.tools.symbol_tools import _run_diagnostics_after_edit
+        diagnostics_result = _run_diagnostics_after_edit(self, relative_path)
+
+        if diagnostics_result:
+            result = {
+                "message": answer,
+                "diagnostics": diagnostics_result
+            }
+            return json.dumps(result)
+
         return json.dumps(answer)
 
 
@@ -203,6 +215,18 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
                     "Please revise the regex to be more specific or enable allow_multiple_occurrences if this is expected."
                 )
             context.set_updated_content(updated_content)
+
+        # Run diagnostics for supported file types
+        from serena.tools.symbol_tools import _run_diagnostics_after_edit
+        diagnostics_result = _run_diagnostics_after_edit(self, relative_path)
+
+        if diagnostics_result:
+            result = {
+                "message": SUCCESS_RESULT,
+                "diagnostics": diagnostics_result
+            }
+            return json.dumps(result)
+
         return SUCCESS_RESULT
 
 
