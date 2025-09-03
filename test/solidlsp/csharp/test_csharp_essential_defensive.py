@@ -36,7 +36,6 @@ def test_managed_sdk_and_buildhost_repair(tmp_path, monkeypatch):
         rid = "osx-arm64" if uname.machine in ("arm64",) else "osx-x64"
     else:
         rid = "linux-arm64" if uname.machine in ("aarch64", "arm64") else "linux-x64"
-        rid = "linux-arm64" if uname.machine in ("aarch64", "arm64") else "linux-x64"
     pkg_ver = os.environ.get("CSHARP_LS_VERSION", "5.0.0-1.25329.6")
     # Implementation stores language server under directory name: <package_name>.<version>
     # where package_name already includes the RID (e.g., Microsoft.CodeAnalysis.LanguageServer.win-x64)
