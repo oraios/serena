@@ -1,4 +1,5 @@
 import os
+import platform
 from pathlib import Path
 
 import pytest
@@ -28,8 +29,14 @@ def test_managed_sdk_and_buildhost_repair(tmp_path, monkeypatch):
     managed_dotnet = managed_sdk_dir / ("dotnet.exe" if os.name == "nt" else "dotnet")
     managed_dotnet.write_text("managed")
 
-    # Fake server package directory (cached) missing BuildHost dirs
-    rid = "win-x64" if os.name == "nt" else ("linux-x64" if os.uname().machine in ("x86_64", "amd64") else "linux-arm64")
+    uname = platform.uname()
+    if os.name == "nt":
+        rid = "win-x64"
+    elif uname.system == "Darwin":
+        rid = "osx-arm64" if uname.machine in ("arm64",) else "osx-x64"
+    else:
+        rid = "linux-arm64" if uname.machine in ("aarch64", "arm64") else "linux-x64"
+        rid = "linux-arm64" if uname.machine in ("aarch64", "arm64") else "linux-x64"
     pkg_ver = os.environ.get("CSHARP_LS_VERSION", "5.0.0-1.25329.6")
     # Implementation stores language server under directory name: <package_name>.<version>
     # where package_name already includes the RID (e.g., Microsoft.CodeAnalysis.LanguageServer.win-x64)
