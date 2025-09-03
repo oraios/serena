@@ -4,9 +4,10 @@ from unittest.mock import patch
 import pytest
 
 from solidlsp.language_servers.csharp_language_server import CSharpLanguageServer
-from solidlsp.ls_config import LanguageServerConfig, Language
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.settings import SolidLSPSettings
+
 
 @pytest.mark.csharp
 class TestCrossFileReferencesNoDelay:
@@ -34,7 +35,9 @@ class TestCrossFileReferencesNoDelay:
             """namespace Demo.Models { public class Person { public string Name => Calculator.Subtract(2,1).ToString(); } }"""
         )
         # minimal csproj
-        (ws / "Demo.csproj").write_text("<Project Sdk='Microsoft.NET.Sdk'><PropertyGroup><TargetFramework>net9.0</TargetFramework></PropertyGroup></Project>")
+        (ws / "Demo.csproj").write_text(
+            "<Project Sdk='Microsoft.NET.Sdk'><PropertyGroup><TargetFramework>net9.0</TargetFramework></PropertyGroup></Project>"
+        )
         return ws
 
     @pytest.fixture
@@ -48,13 +51,14 @@ class TestCrossFileReferencesNoDelay:
                 srv = CSharpLanguageServer(cfg, logger, str(workspace), settings)
                 # Mock underlying super().request_references to emulate immediate available cross-file refs
                 original = srv.__class__.__mro__[1].request_references
-                
+
                 def fake_request(self, rel, line, col):  # type: ignore[override]
                     # Return synthetic two-file refs showing cross-file presence
                     return [
                         {"relativePath": rel, "line": line},
                         {"relativePath": os.path.join("Models", "Person.cs"), "line": 0},
                     ]
+
                 srv.__class__.__mro__[1].request_references = fake_request  # type: ignore
                 try:
                     yield srv

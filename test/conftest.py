@@ -47,6 +47,7 @@ def create_ls(
     # Example: CSHARP_LS_TEST_DEBUG=1 uv run pytest test/solidlsp/csharp -s
     try:
         import os
+
         if language == Language.CSHARP and os.environ.get("CSHARP_LS_TEST_DEBUG") == "1":
             log_level = logging.DEBUG
         # Generic override: SOLIDLSP_TEST_LOG_LEVEL=DEBUG/INFO/WARNING/ERROR

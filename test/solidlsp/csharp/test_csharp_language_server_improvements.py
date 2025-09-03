@@ -40,7 +40,7 @@ def temp_workspace(tmp_path):
     """Create a temporary workspace with C# files."""
     workspace = tmp_path / "test_workspace"
     workspace.mkdir()
-    
+
     # Create a simple .csproj file
     csproj_content = """<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -48,7 +48,7 @@ def temp_workspace(tmp_path):
   </PropertyGroup>
 </Project>"""
     (workspace / "TestProject.csproj").write_text(csproj_content)
-    
+
     # Create a simple C# file
     cs_content = """using System;
 
@@ -63,7 +63,7 @@ namespace TestProject
     }
 }"""
     (workspace / "Program.cs").write_text(cs_content)
-    
+
     return str(workspace)
 
 
@@ -72,25 +72,25 @@ class TestCSharpLanguageServerImprovements:
 
     def test_environment_variable_setup(self, mock_logger, mock_config, mock_settings, temp_workspace):
         """Test that environment variables are properly set for the language server process."""
-        with patch('solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed') as mock_ensure:
+        with patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed") as mock_ensure:
             mock_ensure.return_value = ("/usr/bin/dotnet", "/path/to/server.dll")
-            with patch('solidlsp.language_servers.csharp_language_server.SolidLanguageServer.__init__'):
+            with patch("solidlsp.language_servers.csharp_language_server.SolidLanguageServer.__init__"):
                 server = CSharpLanguageServer(mock_config, mock_logger, temp_workspace, mock_settings)
                 server.logger = mock_logger  # Inject logger since base __init__ is patched out
                 # Check that environment variables are set
-                assert hasattr(server, 'dotnet_dir')
-                assert server.dotnet_dir.replace('\\', '/') == '/usr/bin'
+                assert hasattr(server, "dotnet_dir")
+                assert server.dotnet_dir.replace("\\", "/") == "/usr/bin"
 
     # Removed: VSCode detection test (feature dropped).
 
     def test_windows_path_length_warning(self, mock_logger, mock_config, mock_settings, temp_workspace):
         """Test Windows path length warning functionality."""
-        with patch('solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed') as mock_ensure:
+        with patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed") as mock_ensure:
             mock_ensure.return_value = ("/usr/bin/dotnet", "/path/to/server.dll")
-            with patch('solidlsp.language_servers.csharp_language_server.SolidLanguageServer.__init__'):
-                with patch('platform.system') as mock_platform:
+            with patch("solidlsp.language_servers.csharp_language_server.SolidLanguageServer.__init__"):
+                with patch("platform.system") as mock_platform:
                     mock_platform.return_value = "Windows"
-                    with patch.object(CSharpLanguageServer, 'ls_resources_dir') as mock_resources_dir:
+                    with patch.object(CSharpLanguageServer, "ls_resources_dir") as mock_resources_dir:
                         long_path = "C:\\" + "very_long_directory_name\\" * 10 + "resources"
                         mock_resources_dir.return_value = long_path
                         CSharpLanguageServer(mock_config, mock_logger, temp_workspace, mock_settings)
@@ -99,33 +99,41 @@ class TestCSharpLanguageServerImprovements:
 
     def test_readiness_event_present(self, mock_logger, mock_config, mock_settings, temp_workspace):
         """Ensure readiness-related structures exist (replacement for legacy heartbeat)."""
-        with patch('solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed') as mock_ensure:
+        with patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed") as mock_ensure:
             mock_ensure.return_value = ("/usr/bin/dotnet", "/path/to/server.dll")
-            with patch('solidlsp.language_servers.csharp_language_server.SolidLanguageServer.__init__'):
+            with patch("solidlsp.language_servers.csharp_language_server.SolidLanguageServer.__init__"):
                 server = CSharpLanguageServer(mock_config, mock_logger, temp_workspace, mock_settings)
-                assert hasattr(server, '_ready_event')
+                assert hasattr(server, "_ready_event")
                 assert not server._ready_event.is_set()
 
     def test_progress_tracking(self, mock_logger, mock_config, mock_settings, temp_workspace):
         """Test progress tracking and telemetry functionality."""
-        with patch('solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed') as mock_ensure:
+        with patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed") as mock_ensure:
             mock_ensure.return_value = ("/usr/bin/dotnet", "/path/to/server.dll")
-            with patch('solidlsp.language_servers.csharp_language_server.SolidLanguageServer.__init__'):
+            with patch("solidlsp.language_servers.csharp_language_server.SolidLanguageServer.__init__"):
                 server = CSharpLanguageServer(mock_config, mock_logger, temp_workspace, mock_settings)
                 server.logger = mock_logger
-                assert hasattr(server, 'progress_operations')
+                assert hasattr(server, "progress_operations")
                 assert isinstance(server.progress_operations, dict)
-                with patch.object(server, 'logger', mock_logger):
-                    begin_params = {"token": "test_token", "value": {"kind": "begin", "title": "Indexing project", "message": "Starting indexing", "percentage": 0}}
+                with patch.object(server, "logger", mock_logger):
+                    begin_params = {
+                        "token": "test_token",
+                        "value": {"kind": "begin", "title": "Indexing project", "message": "Starting indexing", "percentage": 0},
+                    }
                     token = begin_params["token"]
                     value = begin_params["value"]
-                    server.progress_operations[token] = {"title": value.get("title", ""), "start_time": time.time(), "type": "indexing", "last_update": time.time()}
+                    server.progress_operations[token] = {
+                        "title": value.get("title", ""),
+                        "start_time": time.time(),
+                        "type": "indexing",
+                        "last_update": time.time(),
+                    }
                     assert token in server.progress_operations
                     assert server.progress_operations[token]["type"] == "indexing"
 
     def test_enhanced_error_handling(self, mock_logger, mock_config, mock_settings, temp_workspace):
         """Test enhanced error handling in server setup."""
-        with patch('solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._get_runtime_id') as mock_runtime_id:
+        with patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._get_runtime_id") as mock_runtime_id:
             mock_runtime_id.side_effect = Exception("Platform detection failed")
             with pytest.raises(SolidLSPException) as exc_info:
                 CSharpLanguageServer._ensure_server_installed(mock_logger, mock_config, mock_settings)
@@ -135,15 +143,17 @@ class TestCSharpLanguageServerImprovements:
 
     def test_path_validation(self, mock_logger, mock_config, mock_settings):
         """Test path validation in server setup."""
-        with patch('solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._get_runtime_id') as mock_runtime_id:
+        with patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._get_runtime_id") as mock_runtime_id:
             mock_runtime_id.return_value = "win-x64"
-            with patch('solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._get_runtime_dependencies') as mock_deps:
+            with patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._get_runtime_dependencies") as mock_deps:
                 mock_lang_dep = Mock()
                 mock_runtime_dep = Mock()
                 mock_deps.return_value = (mock_lang_dep, mock_runtime_dep)
-                with patch('solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_dotnet_runtime') as mock_dotnet:
+                with patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_dotnet_runtime") as mock_dotnet:
                     mock_dotnet.return_value = "/nonexistent/dotnet"
-                    with patch('solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_language_server') as mock_server:
+                    with patch(
+                        "solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_language_server"
+                    ) as mock_server:
                         mock_server.return_value = "/nonexistent/server.dll"
                         with pytest.raises(SolidLSPException) as exc_info:
                             CSharpLanguageServer._ensure_server_installed(mock_logger, mock_config, mock_settings)
@@ -151,9 +161,9 @@ class TestCSharpLanguageServerImprovements:
 
     def test_timeout_extension_logic(self, mock_logger, mock_config, mock_settings, temp_workspace):
         """Test timeout extension for heavy operations."""
-        with patch('solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed') as mock_ensure:
+        with patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed") as mock_ensure:
             mock_ensure.return_value = ("/usr/bin/dotnet", "/path/to/server.dll")
-            with patch('solidlsp.language_servers.csharp_language_server.SolidLanguageServer.__init__'):
+            with patch("solidlsp.language_servers.csharp_language_server.SolidLanguageServer.__init__"):
                 server = CSharpLanguageServer(mock_config, mock_logger, temp_workspace, mock_settings)
                 server.logger = mock_logger
                 server.server = Mock()
@@ -164,23 +174,23 @@ class TestCSharpLanguageServerImprovements:
                 _ = server._send_request_with_timeout("textDocument/codeAction", {}, timeout=30)
                 future_mock.result.assert_called_once()
                 call_args = future_mock.result.call_args
-                assert call_args[1]['timeout'] >= 60
+                assert call_args[1]["timeout"] >= 60
 
     def test_initialization_complete_tracking(self, mock_logger, mock_config, mock_settings, temp_workspace):
         """Test that initialization completion is properly tracked."""
-        with patch('solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed') as mock_ensure:
+        with patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed") as mock_ensure:
             mock_ensure.return_value = ("/usr/bin/dotnet", "/path/to/server.dll")
-            with patch('solidlsp.language_servers.csharp_language_server.SolidLanguageServer.__init__'):
+            with patch("solidlsp.language_servers.csharp_language_server.SolidLanguageServer.__init__"):
                 server = CSharpLanguageServer(mock_config, mock_logger, temp_workspace, mock_settings)
-                assert hasattr(server, 'initialization_complete')
+                assert hasattr(server, "initialization_complete")
                 assert isinstance(server.initialization_complete, threading.Event)
                 assert not server.initialization_complete.is_set()
 
     def test_shutdown_cleanup(self, mock_logger, mock_config, mock_settings, temp_workspace):
         """Test proper cleanup during shutdown (without heartbeat)."""
-        with patch('solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed') as mock_ensure:
+        with patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed") as mock_ensure:
             mock_ensure.return_value = ("/usr/bin/dotnet", "/path/to/server.dll")
-            with patch('solidlsp.language_servers.csharp_language_server.SolidLanguageServer.__init__'):
+            with patch("solidlsp.language_servers.csharp_language_server.SolidLanguageServer.__init__"):
                 server = CSharpLanguageServer(mock_config, mock_logger, temp_workspace, mock_settings)
                 server.logger = mock_logger
                 server.shutdown()
@@ -193,9 +203,9 @@ class TestCSharpLanguageServerRegressionSuite:
     @pytest.fixture
     def mock_dependencies(self):
         """Setup common mock dependencies."""
-        with patch('solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed') as mock_ensure:
+        with patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed") as mock_ensure:
             mock_ensure.return_value = ("/usr/bin/dotnet", "/path/to/server.dll")
-            with patch('solidlsp.language_servers.csharp_language_server.SolidLanguageServer.__init__') as mock_super_init:
+            with patch("solidlsp.language_servers.csharp_language_server.SolidLanguageServer.__init__") as mock_super_init:
                 yield mock_ensure, mock_super_init
 
     def test_existing_initialization_flow(self, mock_dependencies, tmp_path):
@@ -212,8 +222,8 @@ class TestCSharpLanguageServerRegressionSuite:
         server = CSharpLanguageServer(mock_config, mock_logger, str(workspace), settings)
         server.logger = mock_logger  # inject since base __init__ patched
         mock_super_init.assert_called_once()
-    # Heartbeat removed: ensure progress tracking still present
-        assert hasattr(server, 'progress_operations')
+        # Heartbeat removed: ensure progress tracking still present
+        assert hasattr(server, "progress_operations")
 
     def test_solution_discovery_unchanged(self, mock_dependencies, tmp_path):
         """Test that solution/project discovery logic remains unchanged."""

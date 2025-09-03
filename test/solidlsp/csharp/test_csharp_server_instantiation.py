@@ -21,7 +21,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from solidlsp.language_servers.csharp_language_server import CSharpLanguageServer
-from solidlsp.ls_config import LanguageServerConfig, Language
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.settings import SolidLSPSettings
 
@@ -50,7 +50,11 @@ def test_csharp_language_server_instantiation_basic(tmp_path, monkeypatch):
     settings = SolidLSPSettings(solidlsp_dir=str(tmp_path / ".serena"))
 
     # Patch heavy behaviors: prevent actual process spawn & network
-    with patch.object(CSharpLanguageServer, "_ensure_server_installed", return_value=(str(dotnet), str(server_dir / "Microsoft.CodeAnalysis.LanguageServer.dll"))):
+    with patch.object(
+        CSharpLanguageServer,
+        "_ensure_server_installed",
+        return_value=(str(dotnet), str(server_dir / "Microsoft.CodeAnalysis.LanguageServer.dll")),
+    ):
         with patch("solidlsp.language_servers.csharp_language_server.SolidLanguageServer.__init__", return_value=None):
             # Also stub _start_server so we don't launch real process
             with patch.object(CSharpLanguageServer, "_start_server", return_value=None):
@@ -65,4 +69,4 @@ def test_csharp_language_server_instantiation_basic(tmp_path, monkeypatch):
 
     # DOTNET_ROOT should point inside managed resources (indirect env filter validation)
     # We don't access internal environment mapping directly; rely on settings path presence
-    assert (Path(settings.solidlsp_dir).exists()), "SolidLSP managed dir should be created"
+    assert Path(settings.solidlsp_dir).exists(), "SolidLSP managed dir should be created"

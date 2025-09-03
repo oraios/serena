@@ -45,11 +45,11 @@ class DummyServer:
 
 def _build_server(tmp_path, mock_logger, mock_config, mock_settings):
     # Patch heavy installation & parent init
-    with patch('solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed') as mock_ensure:
-        mock_ensure.return_value = (str(tmp_path / 'dotnet'), str(tmp_path / 'server.dll'))
-        (tmp_path / 'dotnet').write_text('')
-        (tmp_path / 'server.dll').write_text('')
-    with patch('solidlsp.language_servers.csharp_language_server.SolidLanguageServer.__init__') as mock_super_init:
+    with patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed") as mock_ensure:
+        mock_ensure.return_value = (str(tmp_path / "dotnet"), str(tmp_path / "server.dll"))
+        (tmp_path / "dotnet").write_text("")
+        (tmp_path / "server.dll").write_text("")
+    with patch("solidlsp.language_servers.csharp_language_server.SolidLanguageServer.__init__") as mock_super_init:
         mock_super_init.return_value = None
         server = CSharpLanguageServer(mock_config, mock_logger, str(tmp_path), mock_settings)
         server.logger = mock_logger  # inject logger since base __init__ is patched out
@@ -74,7 +74,7 @@ def test_fallback_readiness(tmp_path, mock_logger, mock_config, mock_settings):
     assert not server.is_ready()
     server._fallback_readiness_timer()
     assert server.is_ready()
-    assert server._ready_reason == 'fallback'
+    assert server._ready_reason == "fallback"
 
 
 def test_progress_quiet_triggers_readiness(tmp_path, mock_logger, mock_config, mock_settings):
@@ -82,10 +82,10 @@ def test_progress_quiet_triggers_readiness(tmp_path, mock_logger, mock_config, m
     server.server = DummyServer(result=[])  # type: ignore[attr-defined]
     server._progress_quiet_seconds = 0  # minimal quiet time
     # Simulate active progress operation
-    server.progress_operations['tok'] = {"start_time": time.time(), "last_update": time.time(), "type": "indexing", "title": "Index"}
+    server.progress_operations["tok"] = {"start_time": time.time(), "last_update": time.time(), "type": "indexing", "title": "Index"}
     assert not server.is_ready()
     # End operation
-    del server.progress_operations['tok']
+    del server.progress_operations["tok"]
     # Force quiet period
     server._last_progress_activity = time.time() - 0.1
     server._get_wait_time_for_cross_file_referencing()

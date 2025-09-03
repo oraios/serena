@@ -1,4 +1,5 @@
 """Utilities for secure, deterministic downloads (retries & safe extraction)."""
+
 from __future__ import annotations
 
 import logging
@@ -29,8 +30,10 @@ def download_with_retries(
     import urllib.request
 
     if fetch_fn is None:
+
         def _default_fetch(u: str, p: Path):  # type: ignore
             urllib.request.urlretrieve(u, p)
+
         fetch_fn = _default_fetch
 
     last_err: Exception | None = None
@@ -52,12 +55,14 @@ def download_with_retries(
 
 def safe_extract_zip(archive: Path, target_dir: Path) -> None:
     from solidlsp.util.zip import SafeZipExtractor
+
     extractor = SafeZipExtractor(archive_path=archive, extract_dir=target_dir, verbose=False)
     extractor.extract_all()
 
 
 def safe_extract_tar_gz(archive: Path, target_dir: Path) -> None:
     """Extract a .tar.gz safely (prevent path traversal)."""
+
     def is_within_directory(directory: Path, target: Path) -> bool:
         try:
             directory = directory.resolve()
@@ -66,7 +71,7 @@ def safe_extract_tar_gz(archive: Path, target_dir: Path) -> None:
         except Exception:  # pragma: no cover - defensive
             return False
 
-    with tarfile.open(archive, 'r:gz') as tf:
+    with tarfile.open(archive, "r:gz") as tf:
         for member in tf.getmembers():
             member_path = target_dir / member.name
             if not is_within_directory(target_dir, member_path):

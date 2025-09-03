@@ -446,7 +446,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         Raises:
             SolidLSPException: on adaptive timeout expiration or shutdown guard.
             NotImplementedError: if async request interface is unavailable.
-        
+
         """
         if getattr(self, "_blocking_shutdown", False):
             raise SolidLSPException(f"CSharpLanguageServer shutting down; refusing request {method}")
@@ -751,7 +751,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             # Extract the .nupkg (ZIP) file
             package_extract_dir = temp_dir / f"{package_name}.{package_version}"
             package_extract_dir.mkdir(exist_ok=True)
-            
+
             # Use SafeZipExtractor to handle long paths and skip errors
             safe_extract_zip(nupkg_file, package_extract_dir)
             try:
@@ -955,6 +955,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         if raw_extra and os.environ.get("CSHARP_LS_ENABLE_INIT_OPTIONS") == "1":
             try:
                 import json as _json
+
                 extra_obj = _json.loads(raw_extra)
                 if isinstance(extra_obj, dict):
                     replaced: list[str] = []
@@ -1457,13 +1458,15 @@ class CSharpLanguageServer(SolidLanguageServer):
                 for token, info in self.progress_operations.items():  # type: ignore[dict-item]
                     start = info.get("start_time")
                     last = info.get("last_update", start)
-                    snapshot.append({
-                        "token": token,
-                        "title": info.get("title"),
-                        "age_s": round(now - start, 2) if start else None,
-                        "since_update_s": round(now - last, 2) if last else None,
-                        "type": info.get("type"),
-                    })
+                    snapshot.append(
+                        {
+                            "token": token,
+                            "title": info.get("title"),
+                            "age_s": round(now - start, 2) if start else None,
+                            "since_update_s": round(now - last, 2) if last else None,
+                            "type": info.get("type"),
+                        }
+                    )
         except Exception:  # pragma: no cover
             self._safe_log_exception(
                 "format active progress operations",
@@ -1661,8 +1664,10 @@ def manual_create_runtime_config(server_dir: Path, dotnet_dir: Path, tfm: str = 
         if shared_root.exists():
             versions = [p.name for p in shared_root.iterdir() if p.is_dir()]
             if versions:
+
                 def _ver_key(s: str):
-                    return [int(x) if x.isdigit() else x for x in s.split('.')]
+                    return [int(x) if x.isdigit() else x for x in s.split(".")]
+
                 framework_version = sorted(versions, key=_ver_key)[-1]
             else:
                 framework_version = "9.0.0"
@@ -1687,7 +1692,7 @@ def manual_create_runtime_config(server_dir: Path, dotnet_dir: Path, tfm: str = 
 
 __all__ = [
     # existing public classes
-    'CSharpLanguageServer',
+    "CSharpLanguageServer",
     # manual helper (explicit export for discoverability in REPL)
-    'manual_create_runtime_config',
+    "manual_create_runtime_config",
 ]

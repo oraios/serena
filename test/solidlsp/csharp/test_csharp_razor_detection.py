@@ -35,8 +35,10 @@ def _write_basic_project(ws):
 
 
 def _build_server(mock_config, mock_logger, settings, ws):
-    with patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed") as m_ensure, \
-         patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._start_server"):
+    with (
+        patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed") as m_ensure,
+        patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._start_server"),
+    ):
         m_ensure.return_value = ("/usr/bin/dotnet", "/path/to/server.dll")
         return CSharpLanguageServer(mock_config, mock_logger, str(ws), settings)
 

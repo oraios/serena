@@ -14,7 +14,7 @@ from unittest.mock import patch
 import pytest
 
 from solidlsp.language_servers.csharp_language_server import CSharpLanguageServer
-from solidlsp.ls_config import LanguageServerConfig, Language
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.settings import SolidLSPSettings
 
@@ -42,12 +42,7 @@ def _make_fake_layout(tmp_path: Path):
     server_dll = server_dir / "Microsoft.CodeAnalysis.LanguageServer.dll"
     server_dll.write_text("stubdll")
     # Provide minimal deps file so TFM inference triggers
-    deps = {
-        "targets": {
-            "net9.0/win-x64": {
-            }
-        }
-    }
+    deps = {"targets": {"net9.0/win-x64": {}}}
     (server_dir / "Microsoft.CodeAnalysis.LanguageServer.deps.json").write_text(json.dumps(deps))
     return dotnet_exe, server_dll
 
