@@ -2,6 +2,7 @@
 Tests for C# Language Server improvements including heartbeat, progress tracking, and error handling.
 """
 
+import sys
 import threading
 import time
 from unittest.mock import Mock, patch
@@ -81,8 +82,7 @@ class TestCSharpLanguageServerImprovements:
                 assert hasattr(server, "dotnet_dir")
                 assert server.dotnet_dir.replace("\\", "/") == "/usr/bin"
 
-    # Removed: VSCode detection test (feature dropped).
-
+    @pytest.mark.skipif(sys.platform != "win32", reason="Windows-specific path length warning")
     def test_windows_path_length_warning(self, mock_logger, mock_config, mock_settings, temp_workspace):
         """Test Windows path length warning functionality."""
         with patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed") as mock_ensure:
