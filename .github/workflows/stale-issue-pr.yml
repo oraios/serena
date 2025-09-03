@@ -1,0 +1,38 @@
+name: Mark stale issues and pull requests
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+
+  workflow_dispatch:
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+          # ---- Issue settings ----
+          days-before-issue-stale: 30  # Issues become stale after 30 days inactive
+          days-before-issue-close: 60 # Close Issues 180 days after stale
+          stale-issue-message: |
+            This issue has been inactive for 30 days and is now marked as stale.
+            It will be automatically closed in 180 days if no further activity occurs.
+          close-issue-message: |
+            Since it has been a long time without updates, the issue has been automatically closed.
+            If you need to continue, please reopen or create a new issue.
+
+          # ---- PR settings ----
+          days-before-pr-stale: 7   # PRs become stale after 7 days inactive
+          days-before-pr-close: 30  # Close PRs 30 days after stale
+          stale-pr-message: |
+            This PR has been inactive for 7 days and is now marked as stale.
+            It will be automatically closed in 30 days if no further activity occurs.
+          close-pr-message: |
+            Since it has been a long time without updates, the PR has been automatically closed.
+            If you need to continue, please reopen or create a new PR.
+          exempt-pr-labels: |
+            pinned
+            WIP
