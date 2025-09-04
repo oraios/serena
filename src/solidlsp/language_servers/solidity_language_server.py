@@ -79,7 +79,7 @@ class SolidityLanguageServer(SolidLanguageServer):
                     "solc is not installed.\n"
                     "Install it with: pip3 install solc-select && solc-select install latest && solc-select use latest"
                 )
-            
+
             raise
 
     def __init__(
