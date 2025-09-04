@@ -270,6 +270,10 @@ class SolidLanguageServer(ABC):
 
             ls = ErlangLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
+        elif config.code_language == Language.SOLIDITY:
+            from solidlsp.language_servers.solidity_language_server import SolidityLanguageServer
+
+            ls = SolidityLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
         else:
             logger.log(f"Language {config.code_language} is not supported", logging.ERROR)
             raise SolidLSPException(f"Language {config.code_language} is not supported")
