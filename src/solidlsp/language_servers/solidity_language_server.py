@@ -74,13 +74,13 @@ class SolidityLanguageServer(SolidLanguageServer):
                     "nomicfoundation-solidity-language-server is not installed.\n"
                     "Install it with: npm install -g @nomicfoundation/solidity-language-server"
                 )
-            elif "solc" in str(e):
+            if "solc" in str(e):
                 raise RuntimeError(
                     "solc is not installed.\n"
                     "Install it with: pip3 install solc-select && solc-select install latest && solc-select use latest"
                 )
-            else:
-                raise
+            
+            raise
 
     def __init__(
         self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
