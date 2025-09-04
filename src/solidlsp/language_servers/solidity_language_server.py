@@ -26,15 +26,15 @@ class SolidityLanguageServer(SolidLanguageServer):
         # For Solidity projects, ignore common directories
         return super().is_ignored_dirname(dirname) or dirname in [
             "node_modules",  # Node.js dependencies
-            "artifacts",     # Hardhat compilation artifacts
-            "cache",         # Hardhat cache
-            "typechain",     # TypeScript type definitions
-            "coverage",      # Coverage reports
-            ".openzeppelin", # OpenZeppelin upgrades
-            "deployments",   # Hardhat deploy plugin
-            "out",          # Foundry build output
-            "lib",          # Foundry dependencies
-            "crytic-export", # Slither exports
+            "artifacts",  # Hardhat compilation artifacts
+            "cache",  # Hardhat cache
+            "typechain",  # TypeScript type definitions
+            "coverage",  # Coverage reports
+            ".openzeppelin",  # OpenZeppelin upgrades
+            "deployments",  # Hardhat deploy plugin
+            "out",  # Foundry build output
+            "lib",  # Foundry dependencies
+            "crytic-export",  # Slither exports
         ]
 
     @staticmethod
@@ -44,11 +44,11 @@ class SolidityLanguageServer(SolidLanguageServer):
             # Check nomicfoundation-solidity-language-server (it doesn't support --version)
             # Instead, check if the executable exists and can be run
             result = subprocess.run(
-                ["nomicfoundation-solidity-language-server", "--help"], 
-                capture_output=True, 
-                text=True, 
+                ["nomicfoundation-solidity-language-server", "--help"],
+                capture_output=True,
+                text=True,
                 check=False,
-                timeout=5  # Don't wait too long
+                timeout=5,  # Don't wait too long
             )
             # The language server will likely error without proper LSP setup, but if it's found, that's good enough
             if result.returncode == 127:  # Command not found on Unix/Linux
@@ -83,11 +83,7 @@ class SolidityLanguageServer(SolidLanguageServer):
                 raise
 
     def __init__(
-        self, 
-        config: LanguageServerConfig, 
-        logger: LanguageServerLogger, 
-        repository_root_path: str, 
-        solidlsp_settings: SolidLSPSettings
+        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
     ):
         # Check Solidity installation
         self._check_solidity_installation()
@@ -116,40 +112,18 @@ class SolidityLanguageServer(SolidLanguageServer):
                     "workspaceEdit": {
                         "documentChanges": True,
                         "resourceOperations": ["create", "rename", "delete"],
-                        "failureHandling": "textOnlyTransactional"
+                        "failureHandling": "textOnlyTransactional",
                     },
-                    "didChangeConfiguration": {
-                        "dynamicRegistration": True
-                    },
-                    "didChangeWatchedFiles": {
-                        "dynamicRegistration": True
-                    },
-                    "symbol": {
-                        "dynamicRegistration": True,
-                        "symbolKind": {
-                            "valueSet": list(range(1, 27))
-                        }
-                    },
-                    "executeCommand": {
-                        "dynamicRegistration": True
-                    },
+                    "didChangeConfiguration": {"dynamicRegistration": True},
+                    "didChangeWatchedFiles": {"dynamicRegistration": True},
+                    "symbol": {"dynamicRegistration": True, "symbolKind": {"valueSet": list(range(1, 27))}},
+                    "executeCommand": {"dynamicRegistration": True},
                     "configuration": True,
-                    "workspaceFolders": True
+                    "workspaceFolders": True,
                 },
                 "textDocument": {
-                    "publishDiagnostics": {
-                        "relatedInformation": True,
-                        "versionSupport": False,
-                        "tagSupport": {
-                            "valueSet": [1, 2]
-                        }
-                    },
-                    "synchronization": {
-                        "dynamicRegistration": True,
-                        "willSave": True,
-                        "willSaveWaitUntil": True,
-                        "didSave": True
-                    },
+                    "publishDiagnostics": {"relatedInformation": True, "versionSupport": False, "tagSupport": {"valueSet": [1, 2]}},
+                    "synchronization": {"dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True, "didSave": True},
                     "completion": {
                         "dynamicRegistration": True,
                         "contextSupport": True,
@@ -158,38 +132,24 @@ class SolidityLanguageServer(SolidLanguageServer):
                             "commitCharactersSupport": True,
                             "documentationFormat": ["markdown", "plaintext"],
                             "deprecatedSupport": True,
-                            "preselectSupport": True
-                        }
+                            "preselectSupport": True,
+                        },
                     },
-                    "hover": {
-                        "dynamicRegistration": True,
-                        "contentFormat": ["markdown", "plaintext"]
-                    },
+                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
                     "signatureHelp": {
                         "dynamicRegistration": True,
                         "signatureInformation": {
                             "documentationFormat": ["markdown", "plaintext"],
-                            "parameterInformation": {
-                                "labelOffsetSupport": True
-                            }
-                        }
+                            "parameterInformation": {"labelOffsetSupport": True},
+                        },
                     },
-                    "definition": {
-                        "dynamicRegistration": True,
-                        "linkSupport": True
-                    },
-                    "references": {
-                        "dynamicRegistration": True
-                    },
-                    "documentHighlight": {
-                        "dynamicRegistration": True
-                    },
+                    "definition": {"dynamicRegistration": True, "linkSupport": True},
+                    "references": {"dynamicRegistration": True},
+                    "documentHighlight": {"dynamicRegistration": True},
                     "documentSymbol": {
                         "dynamicRegistration": True,
-                        "symbolKind": {
-                            "valueSet": list(range(1, 27))
-                        },
-                        "hierarchicalDocumentSymbolSupport": True
+                        "symbolKind": {"valueSet": list(range(1, 27))},
+                        "hierarchicalDocumentSymbolSupport": True,
                     },
                     "codeAction": {
                         "dynamicRegistration": True,
@@ -203,29 +163,19 @@ class SolidityLanguageServer(SolidLanguageServer):
                                     "refactor.inline",
                                     "refactor.rewrite",
                                     "source",
-                                    "source.organizeImports"
+                                    "source.organizeImports",
                                 ]
                             }
-                        }
+                        },
                     },
-                    "formatting": {
-                        "dynamicRegistration": True
-                    },
-                    "rangeFormatting": {
-                        "dynamicRegistration": True
-                    },
-                    "rename": {
-                        "dynamicRegistration": True,
-                        "prepareSupport": True
-                    }
+                    "formatting": {"dynamicRegistration": True},
+                    "rangeFormatting": {"dynamicRegistration": True},
+                    "rename": {"dynamicRegistration": True, "prepareSupport": True},
                 },
-                "experimental": {}
+                "experimental": {},
             },
             "initializationOptions": {
-                "preferences": {
-                    "includeCompletionsForModuleExports": True,
-                    "includeAutomaticOptionalChainCompletions": True
-                }
+                "preferences": {"includeCompletionsForModuleExports": True, "includeAutomaticOptionalChainCompletions": True}
             },
             "workspaceFolders": [
                 {
