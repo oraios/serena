@@ -31,9 +31,5 @@ namespace TestProject.Models
             return calculator.Subtract(65, Age);
         }
 
-        public void CalculateAge()
-        {
-            var calc = new Calculator();
-            var result = calc.Subtract(2025, 1990); // This creates the reference the test needs
-        }
+
 }
