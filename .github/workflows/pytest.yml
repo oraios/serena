@@ -229,7 +229,7 @@ jobs:
           ghcup install ghc 9.12.2 --set
           ghcup install hls 2.11.0.0 --set
           # Refresh shell environment
-          source ~/.ghcup/env || true
+          [ -f "~/.ghcup/env" ] && source ~/.ghcup/env
           echo "$HOME/.ghcup/bin" >> $GITHUB_PATH
           # Verify installation
           which ghc && ghc --version
