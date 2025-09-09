@@ -18,7 +18,6 @@ prompt: |
 
 excluded_tools:
   - create_text_file
-  - read_file
   - execute_shell_command
   - prepare_for_new_conversation
   - replace_regex
