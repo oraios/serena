@@ -6,8 +6,6 @@ import logging
 import os
 import pathlib
 import threading
-import platform
-import shutil
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
@@ -53,6 +51,9 @@ class ClangdLanguageServer(SolidLanguageServer):
         """
         Setup runtime dependencies for ClangdLanguageServer and return the command to start the server.
         """
+        import platform
+        import shutil
+
         deps = RuntimeDependencyCollection(
             [
                 RuntimeDependency(
