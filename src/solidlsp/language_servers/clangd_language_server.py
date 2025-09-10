@@ -102,7 +102,7 @@ class ClangdLanguageServer(SolidLanguageServer):
 
         clangd_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "clangd")
         dep = deps.single_for_current_platform()
-        
+
         # Special handling for linux-arm64 which requires system-installed clangd
         if platform.machine() in ["aarch64", "arm64"] and platform.system() == "Linux":
             # Look for system-installed clangd
