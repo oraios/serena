@@ -858,16 +858,10 @@ class ALLanguageServer(SolidLanguageServer):
     @override
     def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> tuple[list[dict], list[dict]]:
         """
-        Override to handle AL's requirement of opening files before requesting symbols.
-        Uses direct LSP request to ensure exact URI matching.
+        Override to ensure AL server properly handles symbol requests.
 
-        The AL server requires an exact sequence:
-        1. Open the file with textDocument/didOpen
-        2. Wait for the server to process the file
-        3. Request symbols with textDocument/documentSymbol
-        4. Close the file with textDocument/didClose
-
-        URI matching must be exact - any mismatch will result in empty symbols.
+        The AL server works best with the parent class's file buffer management system,
+        so we use the standard approach but with additional logging for debugging.
 
         Args:
             relative_file_path: Relative path to the file within the repository
@@ -879,85 +873,15 @@ class ALLanguageServer(SolidLanguageServer):
         """
         self.logger.log(f"AL: Requesting document symbols for {relative_file_path}", level=5)
 
-        # Convert relative path to absolute, handling both forward and backslashes
-        relative_file_path = relative_file_path.replace("\\", "/")
-        abs_path = Path(self.repository_root_path) / relative_file_path
-
-        # Check if file exists
-        if not abs_path.exists():
-            self.logger.log(f"AL: File does not exist: {abs_path}", level=3)
-            return ([], [])
-
+        # Use the parent class implementation which properly manages file buffers
+        # This ensures files are opened/closed correctly through the context manager
         try:
-            # Read file content
-            with open(abs_path, encoding="utf-8") as f:
-                content = f.read()
-
-            # Create URI - ensure consistent format
-            # Use pathlib to get proper URI format
-            file_uri = pathlib.Path(abs_path).as_uri()
-
-            self.logger.log(f"AL: Opening file with URI: {file_uri}", level=5)
-
-            # Open the file first with exact URI we'll use for symbols
-            self.server.send_notification(
-                "textDocument/didOpen", {"textDocument": {"uri": file_uri, "languageId": "al", "version": 1, "text": content}}
-            )
-
-            self.logger.log("AL: File opened, requesting symbols immediately", level=5)
-
-            # Now request symbols using direct LSP request with exact same URI
-            self.logger.log(f"AL: Requesting symbols with URI: {file_uri}", level=5)
-
-            try:
-                # Direct LSP request to ensure URI matches exactly
-                response = self.server.send_request("textDocument/documentSymbol", {"textDocument": {"uri": file_uri}}, timeout=5)
-
-                self.logger.log(f"AL: Got symbol response: {response is not None}", level=5)
-
-                if response:
-                    # Process the response to match expected format
-                    all_symbols = []
-                    root_symbols = []
-
-                    if isinstance(response, list):
-                        # Response is a list of symbols
-                        for symbol in response:
-                            symbol_info = self._convert_lsp_symbol_to_solidlsp(symbol)
-                            all_symbols.append(symbol_info)
-                            root_symbols.append(symbol_info)
-
-                            # Process children if hierarchical
-                            if "children" in symbol:
-                                self._process_child_symbols(symbol["children"], all_symbols)
-
-                    self.logger.log(f"AL: Processed {len(all_symbols)} total symbols, {len(root_symbols)} root symbols", level=5)
-
-                    # Close the file
-                    try:
-                        self.server.send_notification("textDocument/didClose", {"textDocument": {"uri": file_uri}})
-                    except Exception:
-                        pass
-
-                    return (all_symbols, root_symbols)
-                else:
-                    self.logger.log("AL: No symbols returned from language server", level=3)
-
-            except Exception as e:
-                self.logger.log(f"AL: Error requesting symbols: {e}", level=3)
-
-            # Close file even if symbol request failed
-            try:
-                self.server.send_notification("textDocument/didClose", {"textDocument": {"uri": file_uri}})
-            except Exception:
-                pass
-
-            # If direct request failed, try parent method as fallback
-            self.logger.log("AL: Falling back to parent method", level=5)
-            return super().request_document_symbols(relative_file_path, include_body)
-
+            result = super().request_document_symbols(relative_file_path, include_body)
+            self.logger.log(f"AL: Successfully retrieved symbols for {relative_file_path}", level=5)
+            return result
         except Exception as e:
-            self.logger.log(f"AL: Error in request_document_symbols: {e}", level=3)
+            self.logger.log(f"AL: Error getting symbols for {relative_file_path}: {e}", level=3)
+            # Return empty result on error
             return ([], [])
 
     def _convert_lsp_symbol_to_solidlsp(self, lsp_symbol: dict) -> dict:
