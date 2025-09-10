@@ -6,6 +6,8 @@ import logging
 import os
 import pathlib
 import threading
+import platform
+import shutil
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
@@ -63,6 +65,15 @@ class ClangdLanguageServer(SolidLanguageServer):
                 ),
                 RuntimeDependency(
                     id="Clangd",
+                    description="Clangd for Linux (ARM64) - requires system installation",
+                    platform_id="linux-arm64",
+                    # No pre-built ARM64 Linux binary available from clangd releases
+                    # Linux doesn't support universal binaries like macOS
+                    # Users need to install via system package manager
+                    binary_name="clangd",
+                ),
+                RuntimeDependency(
+                    id="Clangd",
                     description="Clangd for Windows (x64)",
                     url="https://github.com/clangd/clangd/releases/download/19.1.2/clangd-windows-19.1.2.zip",
                     platform_id="win-x64",
@@ -90,20 +101,36 @@ class ClangdLanguageServer(SolidLanguageServer):
 
         clangd_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "clangd")
         dep = deps.single_for_current_platform()
-        clangd_executable_path = deps.binary_path(clangd_ls_dir)
-        if not os.path.exists(clangd_executable_path):
-            logger.log(
-                f"Clangd executable not found at {clangd_executable_path}. Downloading from {dep.url}",
-                logging.INFO,
-            )
-            deps.install(logger, clangd_ls_dir)
-        if not os.path.exists(clangd_executable_path):
-            raise FileNotFoundError(
-                f"Clangd executable not found at {clangd_executable_path}.\n"
-                "Make sure you have installed clangd. See https://clangd.llvm.org/installation"
-            )
-        os.chmod(clangd_executable_path, 0o755)
-
+        
+        # Special handling for linux-arm64 which requires system-installed clangd
+        if platform.machine() in ["aarch64", "arm64"] and platform.system() == "Linux":
+            # Look for system-installed clangd
+            clangd_executable_path = shutil.which("clangd")
+            if not clangd_executable_path:
+                raise FileNotFoundError(
+                    "Clangd is not installed on your Linux ARM64 system.\n"
+                    "Please install clangd using your system package manager:\n"
+                    "  Ubuntu/Debian: sudo apt-get install clangd\n"
+                    "  Fedora/RHEL: sudo dnf install clang-tools-extra\n"
+                    "  Arch Linux: sudo pacman -S clang\n"
+                    "See https://clangd.llvm.org/installation for more details."
+                )
+            logger.log(f"Using system-installed clangd at {clangd_executable_path}", logging.INFO)
+        else:
+            # Standard download and install for other platforms
+            clangd_executable_path = deps.binary_path(clangd_ls_dir)
+            if not os.path.exists(clangd_executable_path):
+                logger.log(
+                    f"Clangd executable not found at {clangd_executable_path}. Downloading from {dep.url}",
+                    logging.INFO,
+                )
+                deps.install(logger, clangd_ls_dir)
+            if not os.path.exists(clangd_executable_path):
+                raise FileNotFoundError(
+                    f"Clangd executable not found at {clangd_executable_path}.\n"
+                    "Make sure you have installed clangd. See https://clangd.llvm.org/installation"
+                )
+            os.chmod(clangd_executable_path, 0o755)
         return clangd_executable_path
 
     @staticmethod
