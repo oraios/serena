@@ -179,13 +179,13 @@ class EclipseJDTLS(SolidLanguageServer):
                     "relative_extraction_path": "vscode-java",
                 },
                 "osx-arm64": {
-                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-arm64-1.42.0-561.vsix",
+                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.45.0/java-darwin-arm64-1.45.0-679.vsix",
                     "archiveType": "zip",
                     "relative_extraction_path": "vscode-java",
-                    "jre_home_path": "extension/jre/21.0.7-macosx-aarch64",
-                    "jre_path": "extension/jre/21.0.7-macosx-aarch64/bin/java",
-                    "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
-                    "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                    "jre_home_path": "extension/jre/21.0.8-macosx-aarch64",
+                    "jre_path": "extension/jre/21.0.8-macosx-aarch64/bin/java",
+                    "lombok_jar_path": "extension/lombok/lombok-1.18.39-4050.jar",
+                    "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250519-0528.jar",
                     "jdtls_readonly_config_path": "extension/server/config_mac_arm",
                 },
                 "osx-x64": {
