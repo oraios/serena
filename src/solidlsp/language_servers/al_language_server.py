@@ -59,8 +59,13 @@ class ALLanguageServer(SolidLanguageServer):
         # This will download the AL extension if needed
         cmd = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
 
-        # Initialize flag for project load check support
-        self._project_load_check_supported = True
+        self._project_load_check_supported: bool = True
+        """Whether the AL server supports the project load status check request.
+        
+        Some AL server versions don't support the 'al/hasProjectClosureLoadedRequest'
+        custom LSP request. This flag starts as True and is set to False if the
+        request fails, preventing repeated unsuccessful attempts.
+        """
 
         super().__init__(
             config,
