@@ -60,7 +60,7 @@ class ALLanguageServer(SolidLanguageServer):
         cmd = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
 
         # Initialize flag for project load check support
-        self._project_load_check_unsupported = False
+        self._project_load_check_supported = True
 
         super().__init__(
             config,
@@ -879,7 +879,7 @@ class ALLanguageServer(SolidLanguageServer):
             return False
 
         # Check if we've already determined this request isn't supported
-        if self._project_load_check_unsupported:
+        if not self._project_load_check_supported:
             return True  # Assume loaded if check isn't supported
 
         try:
@@ -899,7 +899,7 @@ class ALLanguageServer(SolidLanguageServer):
                 return False
         except Exception as e:
             # Mark as unsupported to avoid repeated failed attempts
-            self._project_load_check_unsupported = True
+            self._project_load_check_supported = False
             self.logger.log(f"Project load check not supported by this AL server version: {e}", logging.DEBUG)
             # Assume loaded if we can't check
             return True
