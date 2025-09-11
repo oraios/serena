@@ -273,6 +273,7 @@ markers = [
   "dart: language server running for Dart",
   "erlang: language server running for Erlang",
   "al: language server running for AL (Microsoft Dynamics 365 Business Central)",
+  "android: language server running for Android (mixed Java/Kotlin projects)",
 ]
 
 [tool.codespell]
