@@ -59,6 +59,9 @@ class ALLanguageServer(SolidLanguageServer):
         # This will download the AL extension if needed
         cmd = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
 
+        # Initialize flag for project load check support
+        self._project_load_check_unsupported = False
+
         super().__init__(
             config,
             logger,
@@ -831,70 +834,6 @@ class ALLanguageServer(SolidLanguageServer):
             self.logger.log("AL: No symbols found in any files", logging.WARNING)
             return []
 
-    @override
-    def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> tuple[list[dict], list[dict]]:
-        """
-        Override to ensure AL server properly handles symbol requests.
-
-        The AL server works best with the parent class's file buffer management system,
-        so we use the standard approach but with additional logging for debugging.
-
-        Args:
-            relative_file_path: Relative path to the file within the repository
-            include_body: Whether to include the body of symbols
-
-        Returns:
-            Tuple of (all symbols including nested, root level symbols only)
-
-        """
-        self.logger.log(f"AL: Requesting document symbols for {relative_file_path}", logging.DEBUG)
-
-        # Use the parent class implementation which properly manages file buffers
-        # This ensures files are opened/closed correctly through the context manager
-        try:
-            result = super().request_document_symbols(relative_file_path, include_body)
-            self.logger.log(f"AL: Successfully retrieved symbols for {relative_file_path}", logging.DEBUG)
-            return result
-        except Exception as e:
-            self.logger.log(f"AL: Error getting symbols for {relative_file_path}: {e}", logging.WARNING)
-            # Return empty result on error
-            return ([], [])
-
-    def _convert_lsp_symbol_to_solidlsp(self, lsp_symbol: dict) -> dict:
-        """Convert standard LSP symbol format to SolidLSP internal format."""
-        # Extract basic info
-        name = lsp_symbol.get("name", "")
-        kind = lsp_symbol.get("kind", 0)
-
-        # Convert range/location
-        range_info = lsp_symbol.get("range", {})
-        location = lsp_symbol.get("location", {})
-
-        symbol_info = {
-            "name": name,
-            "kind": kind,
-            "location": location if location else {"range": range_info, "uri": ""},  # Will be filled by parent
-        }
-
-        # Add detail if present
-        if "detail" in lsp_symbol:
-            symbol_info["detail"] = lsp_symbol["detail"]
-
-        # Add children if present
-        if lsp_symbol.get("children"):
-            symbol_info["children"] = [self._convert_lsp_symbol_to_solidlsp(child) for child in lsp_symbol["children"]]
-
-        return symbol_info
-
-    def _process_child_symbols(self, children: list, all_symbols: list) -> None:
-        """Recursively process child symbols."""
-        for child in children:
-            child_info = self._convert_lsp_symbol_to_solidlsp(child)
-            all_symbols.append(child_info)
-
-            if "children" in child:
-                self._process_child_symbols(child["children"], all_symbols)
-
     # ===== Phase 1: Custom AL Command Implementations =====
 
     @override
@@ -940,7 +879,7 @@ class ALLanguageServer(SolidLanguageServer):
             return False
 
         # Check if we've already determined this request isn't supported
-        if hasattr(self, "_project_load_check_unsupported") and self._project_load_check_unsupported:
+        if self._project_load_check_unsupported:
             return True  # Assume loaded if check isn't supported
 
         try:
