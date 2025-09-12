@@ -59,6 +59,14 @@ class ALLanguageServer(SolidLanguageServer):
         # This will download the AL extension if needed
         cmd = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
 
+        self._project_load_check_supported: bool = True
+        """Whether the AL server supports the project load status check request.
+        
+        Some AL server versions don't support the 'al/hasProjectClosureLoadedRequest'
+        custom LSP request. This flag starts as True and is set to False if the
+        request fails, preventing repeated unsuccessful attempts.
+        """
+
         super().__init__(
             config,
             logger,
@@ -198,7 +206,7 @@ class ALLanguageServer(SolidLanguageServer):
         # Check environment variable
         env_path = os.environ.get("AL_EXTENSION_PATH")
         if env_path and os.path.exists(env_path):
-            logger.log(f"Found AL extension via AL_EXTENSION_PATH: {env_path}", level=5)
+            logger.log(f"Found AL extension via AL_EXTENSION_PATH: {env_path}", logging.DEBUG)
             return env_path
         elif env_path:
             logger.log(f"AL_EXTENSION_PATH set but directory not found: {env_path}", logging.WARNING)
@@ -206,16 +214,16 @@ class ALLanguageServer(SolidLanguageServer):
         # Check default download location
         default_path = os.path.join(cls.ls_resources_dir(solidlsp_settings), "al-extension", "extension")
         if os.path.exists(default_path):
-            logger.log(f"Found AL extension in default location: {default_path}", level=5)
+            logger.log(f"Found AL extension in default location: {default_path}", logging.DEBUG)
             return default_path
 
         # Search VS Code extensions
         vscode_path = cls._find_al_extension_in_vscode(logger)
         if vscode_path:
-            logger.log(f"Found AL extension in VS Code: {vscode_path}", level=5)
+            logger.log(f"Found AL extension in VS Code: {vscode_path}", logging.DEBUG)
             return vscode_path
 
-        logger.log("AL extension not found in any known location", level=10)
+        logger.log("AL extension not found in any known location", logging.DEBUG)
         return None
 
     @classmethod
@@ -287,9 +295,9 @@ class ALLanguageServer(SolidLanguageServer):
         if system in ["Linux", "Darwin"]:
             st = os.stat(executable_path)
             os.chmod(executable_path, st.st_mode | stat.S_IEXEC)
-            logger.log(f"Set execute permission on: {executable_path}", level=10)
+            logger.log(f"Set execute permission on: {executable_path}", logging.DEBUG)
 
-        logger.log(f"Using AL Language Server executable: {executable_path}", level=5)
+        logger.log(f"Using AL Language Server executable: {executable_path}", logging.INFO)
 
         # The AL Language Server uses stdio for LSP communication by default
         # Use the utility function to handle Windows path quoting
@@ -324,7 +332,7 @@ class ALLanguageServer(SolidLanguageServer):
 
             if potential_extension:
                 al_extension_path = str(potential_extension)
-                logger.log(f"Found AL extension in current directory: {al_extension_path}", level=5)
+                logger.log(f"Found AL extension in current directory: {al_extension_path}", logging.DEBUG)
             else:
                 # Try to find in common VS Code extension locations
                 al_extension_path = cls._find_al_extension_in_vscode(logger)
@@ -359,7 +367,7 @@ class ALLanguageServer(SolidLanguageServer):
             st = os.stat(executable)
             os.chmod(executable, st.st_mode | stat.S_IEXEC)
 
-        logger.log(f"Using AL Language Server executable: {executable}", level=5)
+        logger.log(f"Using AL Language Server executable: {executable}", logging.INFO)
 
         # The AL Language Server uses stdio for LSP communication (no --stdio flag needed)
         # Use the utility function to handle Windows path quoting
@@ -398,11 +406,11 @@ class ALLanguageServer(SolidLanguageServer):
 
         for base_path in possible_paths:
             if base_path.exists():
-                logger.log(f"Searching for AL extension in: {base_path}", level=10)
+                logger.log(f"Searching for AL extension in: {base_path}", logging.DEBUG)
                 # Look for AL extension directories
                 for item in base_path.iterdir():
                     if item.is_dir() and item.name.startswith("ms-dynamics-smb.al-"):
-                        logger.log(f"Found AL extension at: {item}", level=5)
+                        logger.log(f"Found AL extension at: {item}", logging.DEBUG)
                         return str(item)
 
         return None
@@ -554,16 +562,14 @@ class ALLanguageServer(SolidLanguageServer):
         Post-initialization setup for AL Language Server.
 
         The AL server requires additional setup after initialization:
-        1. Set the active workspace - tells AL which project to work with
-        2. Send workspace configuration - provides AL settings and paths
-        3. Open app.json to trigger project loading - AL uses app.json to identify project structure
-        4. Wait for project to be loaded - ensures symbols are indexed before operations
+        1. Send workspace configuration - provides AL settings and paths
+        2. Open app.json to trigger project loading - AL uses app.json to identify project structure
+        3. Optionally wait for project to be loaded if supported
 
         This special initialization sequence is unique to AL and necessary for proper
         symbol resolution and navigation features.
         """
-        # Give the server a moment to fully initialize
-        time.sleep(1)
+        # No sleep needed - server is already initialized
 
         # Send workspace configuration first
         # This tells AL about assembly paths, package caches, and code analysis settings
@@ -591,9 +597,9 @@ class ALLanguageServer(SolidLanguageServer):
                     }
                 },
             )
-            self.logger.log("Sent workspace configuration", level=5)
+            self.logger.log("Sent workspace configuration", logging.DEBUG)
         except Exception as e:
-            self.logger.log(f"Failed to send workspace config: {e}", level=3)
+            self.logger.log(f"Failed to send workspace config: {e}", logging.WARNING)
 
         # Check if app.json exists and open it
         # app.json is the AL project manifest file (similar to package.json for Node.js)
@@ -613,12 +619,12 @@ class ALLanguageServer(SolidLanguageServer):
                     {"textDocument": {"uri": app_json_uri, "languageId": "json", "version": 1, "text": app_json_content}},
                 )
 
-                self.logger.log(f"Opened app.json: {app_json_uri}", level=5)
+                self.logger.log(f"Opened app.json: {app_json_uri}", logging.DEBUG)
             except Exception as e:
-                self.logger.log(f"Failed to open app.json: {e}", level=3)
+                self.logger.log(f"Failed to open app.json: {e}", logging.WARNING)
 
         # Try to set active workspace (AL-specific custom LSP request)
-        # This is important when multiple AL projects are open
+        # This is optional and may not be supported by all AL server versions
         workspace_uri = Path(self.repository_root_path).resolve().as_uri()
         try:
             result = self.server.send_request(
@@ -627,42 +633,20 @@ class ALLanguageServer(SolidLanguageServer):
                     "currentWorkspaceFolderPath": {"uri": workspace_uri, "name": Path(self.repository_root_path).name, "index": 0},
                     "settings": {
                         "workspacePath": self.repository_root_path,
-                        "alResourceConfigurationSettings": {
-                            "assemblyProbingPaths": ["./.netpackages"],
-                            "codeAnalyzers": [],
-                            "enableCodeAnalysis": False,
-                            "backgroundCodeAnalysis": "Project",
-                            "packageCachePaths": ["./.alpackages"],
-                            "ruleSetPath": None,
-                            "enableCodeActions": True,
-                            "incrementalBuild": False,
-                            "outputAnalyzerStatistics": True,
-                            "enableExternalRulesets": True,
-                        },
                         "setActiveWorkspace": True,
-                        "expectedProjectReferenceDefinitions": [],
-                        "activeWorkspaceClosure": [self.repository_root_path],
                     },
                 },
-                timeout=10,
+                timeout=2,  # Quick timeout since this is optional
             )
-            self.logger.log(f"Set active workspace result: {result}", level=5)
+            self.logger.log(f"Set active workspace result: {result}", logging.DEBUG)
         except Exception as e:
-            # This is a custom AL request, might not be critical
-            self.logger.log(f"Failed to set active workspace: {e}", level=3)
+            # This is a custom AL request, not critical if it fails
+            self.logger.log(f"Failed to set active workspace (non-critical): {e}", logging.DEBUG)
 
-        # Wait for project to be loaded using AL's custom load check
-        # The AL server needs time to parse all AL files and build its symbol index
-        if not self._wait_for_project_load(timeout=30):
-            # Even if not confirmed loaded, give it extra time to index
-            # Some large projects may take longer to fully index
-            self.logger.log("Project load not confirmed, waiting additional time for AL workspace indexing", level=5)
-            time.sleep(5)
-        else:
-            # Even when loaded, give a bit more time for symbol indexing to complete
-            # This ensures all symbols are available for navigation
-            self.logger.log("Project loaded, waiting for symbol indexing", level=5)
-            time.sleep(2)
+        # Check if project supports load status check (optional)
+        # Many AL server versions don't support this, so we use a short timeout
+        # and continue regardless of the result
+        self._wait_for_project_load(timeout=3)
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -719,7 +703,7 @@ class ALLanguageServer(SolidLanguageServer):
             Full symbol tree with all AL symbols from opened files organized by directory
 
         """
-        self.logger.log("AL: Starting request_full_symbol_tree with file opening", level=5)
+        self.logger.log("AL: Starting request_full_symbol_tree with file opening", logging.DEBUG)
 
         # Determine the root path for scanning
         if within_relative_path is not None:
@@ -758,10 +742,10 @@ class ALLanguageServer(SolidLanguageServer):
                         # File is outside repository root, skip it
                         continue
 
-        self.logger.log(f"AL: Found {len(al_files)} AL files", level=5)
+        self.logger.log(f"AL: Found {len(al_files)} AL files", logging.DEBUG)
 
         if not al_files:
-            self.logger.log("AL: No AL files found in repository", level=3)
+            self.logger.log("AL: No AL files found in repository", logging.WARNING)
             return []
 
         # Collect all symbols from all files
@@ -770,7 +754,7 @@ class ALLanguageServer(SolidLanguageServer):
         for file_path, relative_path in al_files:
             try:
                 # Use our overridden request_document_symbols which handles opening
-                self.logger.log(f"AL: Getting symbols for {relative_path}", level=8)
+                self.logger.log(f"AL: Getting symbols for {relative_path}", logging.DEBUG)
                 all_syms, root_syms = self.request_document_symbols(relative_path, include_body=include_body)
 
                 if root_syms:
@@ -787,7 +771,7 @@ class ALLanguageServer(SolidLanguageServer):
                         },
                     }
                     all_file_symbols.append(file_symbol)
-                    self.logger.log(f"AL: Added {len(root_syms)} symbols from {relative_path}", level=8)
+                    self.logger.log(f"AL: Added {len(root_syms)} symbols from {relative_path}", logging.DEBUG)
                 elif all_syms:
                     # If we only got all_syms but not root, use all_syms
                     file_symbol = {
@@ -802,13 +786,13 @@ class ALLanguageServer(SolidLanguageServer):
                         },
                     }
                     all_file_symbols.append(file_symbol)
-                    self.logger.log(f"AL: Added {len(all_syms)} symbols from {relative_path}", level=8)
+                    self.logger.log(f"AL: Added {len(all_syms)} symbols from {relative_path}", logging.DEBUG)
 
             except Exception as e:
-                self.logger.log(f"AL: Failed to get symbols for {relative_path}: {e}", level=5)
+                self.logger.log(f"AL: Failed to get symbols for {relative_path}: {e}", logging.WARNING)
 
         if all_file_symbols:
-            self.logger.log(f"AL: Returning symbols from {len(all_file_symbols)} files", level=5)
+            self.logger.log(f"AL: Returning symbols from {len(all_file_symbols)} files", logging.DEBUG)
 
             # Group files by directory
             directory_structure = {}
@@ -852,148 +836,8 @@ class ALLanguageServer(SolidLanguageServer):
 
             return result
         else:
-            self.logger.log("AL: No symbols found in any files", level=3)
+            self.logger.log("AL: No symbols found in any files", logging.WARNING)
             return []
-
-    @override
-    def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> tuple[list[dict], list[dict]]:
-        """
-        Override to handle AL's requirement of opening files before requesting symbols.
-        Uses direct LSP request to ensure exact URI matching.
-
-        The AL server requires an exact sequence:
-        1. Open the file with textDocument/didOpen
-        2. Wait for the server to process the file
-        3. Request symbols with textDocument/documentSymbol
-        4. Close the file with textDocument/didClose
-
-        URI matching must be exact - any mismatch will result in empty symbols.
-
-        Args:
-            relative_file_path: Relative path to the file within the repository
-            include_body: Whether to include the body of symbols
-
-        Returns:
-            Tuple of (all symbols including nested, root level symbols only)
-
-        """
-        self.logger.log(f"AL: Requesting document symbols for {relative_file_path}", level=5)
-
-        # Convert relative path to absolute, handling both forward and backslashes
-        relative_file_path = relative_file_path.replace("\\", "/")
-        abs_path = Path(self.repository_root_path) / relative_file_path
-
-        # Check if file exists
-        if not abs_path.exists():
-            self.logger.log(f"AL: File does not exist: {abs_path}", level=3)
-            return ([], [])
-
-        try:
-            # Read file content
-            with open(abs_path, encoding="utf-8") as f:
-                content = f.read()
-
-            # Create URI - ensure consistent format
-            # Use pathlib to get proper URI format
-            file_uri = pathlib.Path(abs_path).as_uri()
-
-            self.logger.log(f"AL: Opening file with URI: {file_uri}", level=5)
-
-            # Open the file first with exact URI we'll use for symbols
-            self.server.send_notification(
-                "textDocument/didOpen", {"textDocument": {"uri": file_uri, "languageId": "al", "version": 1, "text": content}}
-            )
-
-            self.logger.log("AL: File opened, requesting symbols immediately", level=5)
-
-            # Now request symbols using direct LSP request with exact same URI
-            self.logger.log(f"AL: Requesting symbols with URI: {file_uri}", level=5)
-
-            try:
-                # Direct LSP request to ensure URI matches exactly
-                response = self.server.send_request("textDocument/documentSymbol", {"textDocument": {"uri": file_uri}}, timeout=5)
-
-                self.logger.log(f"AL: Got symbol response: {response is not None}", level=5)
-
-                if response:
-                    # Process the response to match expected format
-                    all_symbols = []
-                    root_symbols = []
-
-                    if isinstance(response, list):
-                        # Response is a list of symbols
-                        for symbol in response:
-                            symbol_info = self._convert_lsp_symbol_to_solidlsp(symbol)
-                            all_symbols.append(symbol_info)
-                            root_symbols.append(symbol_info)
-
-                            # Process children if hierarchical
-                            if "children" in symbol:
-                                self._process_child_symbols(symbol["children"], all_symbols)
-
-                    self.logger.log(f"AL: Processed {len(all_symbols)} total symbols, {len(root_symbols)} root symbols", level=5)
-
-                    # Close the file
-                    try:
-                        self.server.send_notification("textDocument/didClose", {"textDocument": {"uri": file_uri}})
-                    except Exception:
-                        pass
-
-                    return (all_symbols, root_symbols)
-                else:
-                    self.logger.log("AL: No symbols returned from language server", level=3)
-
-            except Exception as e:
-                self.logger.log(f"AL: Error requesting symbols: {e}", level=3)
-
-            # Close file even if symbol request failed
-            try:
-                self.server.send_notification("textDocument/didClose", {"textDocument": {"uri": file_uri}})
-            except Exception:
-                pass
-
-            # If direct request failed, try parent method as fallback
-            self.logger.log("AL: Falling back to parent method", level=5)
-            return super().request_document_symbols(relative_file_path, include_body)
-
-        except Exception as e:
-            self.logger.log(f"AL: Error in request_document_symbols: {e}", level=3)
-            return ([], [])
-
-    def _convert_lsp_symbol_to_solidlsp(self, lsp_symbol: dict) -> dict:
-        """Convert standard LSP symbol format to SolidLSP internal format."""
-        # Extract basic info
-        name = lsp_symbol.get("name", "")
-        kind = lsp_symbol.get("kind", 0)
-
-        # Convert range/location
-        range_info = lsp_symbol.get("range", {})
-        location = lsp_symbol.get("location", {})
-
-        symbol_info = {
-            "name": name,
-            "kind": kind,
-            "location": location if location else {"range": range_info, "uri": ""},  # Will be filled by parent
-        }
-
-        # Add detail if present
-        if "detail" in lsp_symbol:
-            symbol_info["detail"] = lsp_symbol["detail"]
-
-        # Add children if present
-        if lsp_symbol.get("children"):
-            symbol_info["children"] = [self._convert_lsp_symbol_to_solidlsp(child) for child in lsp_symbol["children"]]
-
-        return symbol_info
-
-    def _process_child_symbols(self, children: list, all_symbols: list) -> None:
-        """Recursively process child symbols."""
-        for child in children:
-            child_info = self._convert_lsp_symbol_to_solidlsp(child)
-            all_symbols.append(child_info)
-
-            if "children" in child:
-                self._process_child_symbols(child["children"], all_symbols)
 
     # ===== Phase 1: Custom AL Command Implementations =====
 
@@ -1039,42 +883,49 @@ class ALLanguageServer(SolidLanguageServer):
             self.logger.log("Cannot check project load - server not started", logging.DEBUG)
             return False
 
+        # Check if we've already determined this request isn't supported
+        if not self._project_load_check_supported:
+            return True  # Assume loaded if check isn't supported
+
         try:
-            response = self.server.send_request("al/hasProjectClosureLoadedRequest", {})
+            # Use a very short timeout since this is just a status check
+            response = self.server.send_request("al/hasProjectClosureLoadedRequest", {}, timeout=1)
             # Response can be boolean directly, dict with 'loaded' field, or None
             if isinstance(response, bool):
                 return response
             elif isinstance(response, dict):
                 return response.get("loaded", False)
             elif response is None:
-                # None typically means the project is still loading or the request isn't supported
-                self.logger.log("Project load check returned None - project likely still loading", logging.DEBUG)
+                # None typically means the project is still loading
+                self.logger.log("Project load check returned None", logging.DEBUG)
                 return False
             else:
-                self.logger.log(f"Unexpected response type for project load check: {type(response)}", logging.WARNING)
+                self.logger.log(f"Unexpected response type for project load check: {type(response)}", logging.DEBUG)
                 return False
         except Exception as e:
-            self.logger.log(f"Failed to check project load status: {e}", logging.WARNING)
+            # Mark as unsupported to avoid repeated failed attempts
+            self._project_load_check_supported = False
+            self.logger.log(f"Project load check not supported by this AL server version: {e}", logging.DEBUG)
             # Assume loaded if we can't check
             return True
 
-    def _wait_for_project_load(self, timeout: int = 30) -> bool:
+    def _wait_for_project_load(self, timeout: int = 3) -> bool:
         """
         Wait for project to be fully loaded.
 
-        Polls the AL server repeatedly to check if the project is loaded.
-        This is necessary because AL project loading is asynchronous and can
-        take significant time for large projects with many dependencies.
+        Polls the AL server to check if the project is loaded.
+        This is optional as not all AL server versions support this check.
+        We use a short timeout and continue regardless of the result.
 
         Args:
-            timeout: Maximum time to wait in seconds (default 30s)
+            timeout: Maximum time to wait in seconds (default 3s)
 
         Returns:
             bool: True if project loaded within timeout, False otherwise
 
         """
         start_time = time.time()
-        self.logger.log(f"Waiting for AL project to load (timeout: {timeout}s)...", logging.INFO)
+        self.logger.log(f"Checking AL project load status (timeout: {timeout}s)...", logging.DEBUG)
 
         while time.time() - start_time < timeout:
             if self.check_project_loaded():
@@ -1083,7 +934,7 @@ class ALLanguageServer(SolidLanguageServer):
                 return True
             time.sleep(0.5)
 
-        self.logger.log(f"Timeout waiting for AL project to load after {timeout}s", logging.WARNING)
+        self.logger.log(f"Project load check timed out after {timeout}s (non-critical)", logging.DEBUG)
         return False
 
     def set_active_workspace(self, workspace_uri: str | None = None) -> None:

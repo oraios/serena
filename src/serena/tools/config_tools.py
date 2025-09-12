@@ -71,7 +71,7 @@ class SwitchModesTool(Tool, ToolMarkerOptional):
         return result_str
 
 
-class GetCurrentConfigTool(Tool, ToolMarkerOptional):
+class GetCurrentConfigTool(Tool):
     """
     Prints the current configuration of the agent, including the active and available projects, tools, contexts, and modes.
     """
