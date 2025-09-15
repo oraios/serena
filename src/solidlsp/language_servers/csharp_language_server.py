@@ -174,6 +174,9 @@ class CSharpLanguageServer(SolidLanguageServer):
     """
     Provides C# specific instantiation of the LanguageServer class using Microsoft.CodeAnalysis.LanguageServer.
     This is the official Roslyn-based language server from Microsoft.
+
+    You can pass the following entries in ls_specific_settings["csharp"]:
+        - dotnet_runtime_url: will override the URL from RUNTIME_DEPENDENCIES
     """
 
     def __init__(
@@ -269,7 +272,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
     @classmethod
     def _ensure_dotnet_runtime(
-        cls, logger: LanguageServerLogger, runtime_dep: RuntimeDependency, solidlsp_settings: SolidLSPSettings
+        cls, logger: LanguageServerLogger, dotnet_runtime_dep: RuntimeDependency, solidlsp_settings: SolidLSPSettings
     ) -> str:
         """Ensure .NET runtime is available and return the dotnet executable path."""
         # Check if dotnet is already available on the system
@@ -285,7 +288,7 @@ class CSharpLanguageServer(SolidLanguageServer):
                 pass
 
         # Download .NET 9 runtime using config
-        return cls._ensure_dotnet_runtime_from_config(logger, runtime_dep, solidlsp_settings)
+        return cls._ensure_dotnet_runtime_from_config(logger, dotnet_runtime_dep, solidlsp_settings)
 
     @classmethod
     def _ensure_language_server(
@@ -404,7 +407,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
     @classmethod
     def _ensure_dotnet_runtime_from_config(
-        cls, logger: LanguageServerLogger, runtime_dep: RuntimeDependency, solidlsp_settings: SolidLSPSettings
+        cls, logger: LanguageServerLogger, dotnet_runtime_dep: RuntimeDependency, solidlsp_settings: SolidLSPSettings
     ) -> str:
         """
         Ensure .NET 9 runtime is available using runtime dependency configuration.
@@ -424,7 +427,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         # Download .NET 9 runtime using config
         dotnet_dir = Path(cls.ls_resources_dir(solidlsp_settings)) / "dotnet-runtime-9.0"
-        dotnet_exe = dotnet_dir / runtime_dep.binary_name
+        dotnet_exe = dotnet_dir / dotnet_runtime_dep.binary_name
 
         if dotnet_exe.exists():
             logger.log(f"Using cached .NET runtime from {dotnet_exe}", logging.INFO)
@@ -434,8 +437,16 @@ class CSharpLanguageServer(SolidLanguageServer):
         logger.log("Downloading .NET 9 runtime...", logging.INFO)
         dotnet_dir.mkdir(parents=True, exist_ok=True)
 
-        url = runtime_dep.url
-        archive_type = runtime_dep.archive_type
+        custom_dotnet_runtime_url = solidlsp_settings.ls_specific_settings.get(cls.get_language_enum_instance(), {}).get(
+            "dotnet_runtime_url"
+        )
+        if custom_dotnet_runtime_url is not None:
+            logger.log(f"Using custom .NET runtime url: {custom_dotnet_runtime_url}", logging.INFO)
+            url = custom_dotnet_runtime_url
+        else:
+            url = dotnet_runtime_dep.url
+
+        archive_type = dotnet_runtime_dep.archive_type
 
         # Download the runtime
         download_path = dotnet_dir / f"dotnet-runtime.{archive_type}"

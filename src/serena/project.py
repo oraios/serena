@@ -1,6 +1,7 @@
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 import pathspec
 
@@ -277,6 +278,7 @@ class Project:
         log_level: int = logging.INFO,
         ls_timeout: float | None = DEFAULT_TOOL_TIMEOUT - 5,
         trace_lsp_communication: bool = False,
+        ls_specific_settings: dict[Language, Any] | None = None,
     ) -> SolidLanguageServer:
         """
         Create a language server for a project. Note that you will have to start it
@@ -287,6 +289,8 @@ class Project:
         :param log_level: the log level for the language server
         :param ls_timeout: the timeout for the language server
         :param trace_lsp_communication: whether to trace LSP communication
+        :param ls_specific_settings: optional LS specific configuration of the language server,
+            see docstrings in the inits of subclasses of SolidLanguageServer to see what values may be passed.
         :return: the language server
         """
         ls_config = LanguageServerConfig(
@@ -302,5 +306,9 @@ class Project:
             ls_logger,
             self.project_root,
             timeout=ls_timeout,
-            solidlsp_settings=SolidLSPSettings(solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME, project_data_relative_path=SERENA_MANAGED_DIR_NAME),
+            solidlsp_settings=SolidLSPSettings(
+                solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME,
+                project_data_relative_path=SERENA_MANAGED_DIR_NAME,
+                ls_specific_settings=ls_specific_settings,
+            ),
         )

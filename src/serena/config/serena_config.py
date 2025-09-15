@@ -355,6 +355,8 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     Even though the value of the max_answer_chars can be changed when calling the tool, it may make sense to adjust this default 
     through the global configuration.
     """
+    ls_specific_settings: dict = field(default_factory=dict)
+    """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""
 
     CONFIG_FILE = "serena_config.yml"
     CONFIG_FILE_DOCKER = "serena_config.docker.yml"  # Docker-specific config file; auto-generated if missing, mounted via docker-compose for user customization
@@ -459,6 +461,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
             "token_count_estimator", RegisteredTokenCountEstimator.TIKTOKEN_GPT4O.name
         )
         instance.default_max_tool_answer_chars = loaded_commented_yaml.get("default_max_tool_answer_chars", 150_000)
+        instance.ls_specific_settings = loaded_commented_yaml.get("ls_specific_settings", {})
 
         # re-save the configuration file if any migrations were performed
         if num_project_migrations > 0:

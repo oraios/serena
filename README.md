@@ -132,9 +132,10 @@ Several videos and blog posts have talked about Serena:
 - [Quick Start](#quick-start)
   * [Running the Serena MCP Server](#running-the-serena-mcp-server)
     + [Usage](#usage)
-      - [Using uvx](#using-uvx)
-        * [Local Installation](#local-installation)
-      - [Using Docker (Experimental)](#using-docker-experimental)
+    + [Using uvx](#using-uvx)
+    + [Local Installation](#local-installation)
+    + [Using Docker (Experimental)](#using-docker-experimental)
+    + [Using Nix](#using-nix)
     + [SSE Mode](#sse-mode)
     + [Command-Line Arguments](#command-line-arguments)
   * [Configuration](#configuration)
@@ -158,16 +159,16 @@ Several videos and blog posts have talked about Serena:
     + [Start from a Clean State](#start-from-a-clean-state)
     + [Logging, Linting, and Automated Tests](#logging-linting-and-automated-tests)
   * [Prompting Strategies](#prompting-strategies)
-  * [Potential Issues in Code Editing](#potential-issues-in-code-editing)
   * [Running Out of Context](#running-out-of-context)
-  * [Combining Serena with Other MCP Servers](#combining-serena-with-other-mcp-servers)
   * [Serena's Logs: The Dashboard and GUI Tool](#serenas-logs-the-dashboard-and-gui-tool)
-  * [Troubleshooting](#troubleshooting)
 - [Comparison with Other Coding Agents](#comparison-with-other-coding-agents)
   * [Subscription-Based Coding Agents](#subscription-based-coding-agents)
   * [API-Based Coding Agents](#api-based-coding-agents)
   * [Other MCP-Based Coding Agents](#other-mcp-based-coding-agents)
 - [Acknowledgements](#acknowledgements)
+  * [Sponsors](#sponsors)
+  * [Community Contributions](#community-contributions)
+  * [Technologies](#technologies)
 - [Customizing and Extending Serena](#customizing-and-extending-serena)
 - [List of Tools](#list-of-tools)
 
@@ -184,7 +185,7 @@ Serena can be used in various ways, below you will find instructions for selecte
 * You can use Serena as a library for building your own applications. We try to keep the public API stable, but you should still
   expect breaking changes and pin Serena to a fixed version if you use it as a dependency.
 
-Serena is managed by `uv`, so you will need to [install it](https://docs.astral.sh/uv/getting-started/installation/)).
+Serena is managed by `uv`, so you will need to [install it](https://docs.astral.sh/uv/getting-started/installation/).
 
 ### Running the Serena MCP Server
 
@@ -202,7 +203,7 @@ Note that no matter how you run the MCP server, Serena will, by default, start a
 MCP server (since many clients fail to clean up processes correctly).
 This and other settings can be adjusted in the [configuration](#configuration) and/or by providing [command-line arguments](#command-line-arguments).
 
-##### Using uvx
+#### Using uvx
 
 `uvx` can be used to run the latest version of Serena directly from the repository, without an explicit local installation.
 
@@ -212,7 +213,7 @@ uvx --from git+https://github.com/oraios/serena serena start-mcp-server
 
 Explore the CLI to see some of the customization options that serena provides (more info on them below).
 
-###### Local Installation
+#### Local Installation
 
 1. Clone the repository and change into it.
 
@@ -240,7 +241,7 @@ Explore the CLI to see some of the customization options that serena provides (m
     uv run --directory /abs/path/to/serena serena start-mcp-server
    ```
 
-##### Using Docker (Experimental)
+#### Using Docker (Experimental)
 
 ⚠️ Docker support is currently experimental with several limitations. Please read the [Docker documentation](DOCKER.md) for important caveats before using it.
 
@@ -261,7 +262,7 @@ Alternatively, use docker compose with the `compose.yml` file provided in the re
 
 See the [Docker documentation](DOCKER.md) for detailed setup instructions, configuration options, and known limitations.
 
-##### Using Nix
+#### Using Nix
 
 If you are using Nix and [have enabled the `nix-command` and `flakes` features](https://nixos.wiki/wiki/flakes), you can run Serena using the following command:
 
@@ -528,12 +529,16 @@ autonomously.
 
 #### Shell Execution and Editing Tools
 
-However, it should be noted that the `execute_shell_command` tool allows for arbitrary code execution.
+Many clients have their own shell execution tool, and by default Serena's shell tool will be disabled in them
+(e.g., when using the `ide-assistant` or `codex` context). However, when using Serena through something like
+Claude Desktop or ChatGPT, it is recommended to enable Serena's `execute_shell_command` tool to allow
+agentic behavior.
+
+It should be noted that the `execute_shell_command` tool allows for arbitrary code execution.
 When using Serena as an MCP Server, clients will typically ask the user for permission
 before executing a tool, so as long as the user inspects execution parameters beforehand,
 this should not be a problem.
-However, if you have concerns, you can choose to disable certain commands in your project's
-.yml configuration file.
+However, if you have concerns, you can choose to disable certain commands in your project's configuration file.
 If you only want to use Serena purely for analyzing code and suggesting implementations
 without modifying the codebase, you can enable read-only mode by setting `read_only: true` in your project configuration file.
 This will automatically disable all editing tools and prevent any modifications to your codebase while still
@@ -673,18 +678,6 @@ better results and in increasing the feeling of control and staying in the loop.
 make a detailed plan in one session, where Serena may read a lot of your code to build up the context,
 and then continue with the implementation in another (potentially after creating suitable memories).
 
-### Potential Issues in Code Editing
-
-In our experience, LLMs are bad at counting, i.e. they have problems
-inserting blocks of code in the right place. Most editing operations can be performed
-at the symbolic level, allowing this problem is overcome. However, sometimes,
-line-level insertions are useful.
-
-Serena is instructed to double-check the line numbers and any code blocks that it will
-edit, but you may find it useful to explicitly tell it how to edit code if you run into
-problems.
-We are working on making Serena's editing capabilities more robust.
-
 ### Running Out of Context
 
 For long and complicated tasks, or tasks where Serena has read a lot of content, you
@@ -701,14 +694,6 @@ Moreover, Serena is instructed to be frugal with context
 (e.g., to not read bodies of code symbols unnecessarily),
 but we found that Claude is not always very good in being frugal (Gemini seemed better at it).
 You can explicitly instruct it to not read the bodies if you know that it's not needed.
-
-### Combining Serena with Other MCP Servers
-
-When using Serena through an MCP Client, you can use it together with other MCP servers.
-However, beware of tool name collisions! See info on that above.
-
-Currently, there is a collision with the popular Filesystem MCP Server. Since Serena also provides
-filesystem operations, there is likely no need to ever enable these two simultaneously.
 
 ### Serena's Logs: The Dashboard and GUI Tool
 
@@ -731,17 +716,6 @@ The web dashboard will display usage statistics of Serena's tools if you set  `r
 In addition to viewing logs, both tools allow to shut down the Serena agent.
 This function is provided, because clients like Claude Desktop may fail to terminate the MCP server subprocess
 when they themselves are closed.
-
-### Troubleshooting
-
-Support for MCP Servers in Claude Desktop and the various MCP Server SDKs are relatively new developments and may display instabilities.
-
-The working configuration of an MCP server may vary from platform to
-platform and from client to client. We recommend always using absolute paths, as relative paths may be sources of
-errors. The language server is running in a separate sub-process and is called with asyncio – sometimes
-a client may make it crash. If you have Serena's log window enabled, and it disappears, you'll know what happened.
-
-Some clients may not properly terminate MCP servers, look out for hanging python processes and terminate them manually, if needed.
 
 ## Comparison with Other Coding Agents
 
@@ -807,6 +781,30 @@ larger codebases.
 
 ## Acknowledgements
 
+### Sponsors
+
+We are very grateful to our [sponsors](https://github.com/sponsors/oraios) who help us drive Serena's development. The core team
+(the founders of [Oraios AI](https://oraios-ai.de/)) put in a lot of work in order to turn Serena into a useful open source project. 
+So far, there is no business model behind this project, and sponsors are our only source of income from it.
+
+Sponsors help us dedicating more time to the project, managing contributions, and working on larger features (like better tooling based on more advanced
+LSP features, VSCode integration, debugging via the DAP, and several others).
+If you find this project useful to your work, or would like to accelerate the development of Serena, consider becoming a sponsor.
+
+We are proud to announce that the Visual Studio Code team, together with Microsoft’s Open Source Programs Office and GitHub Open Source
+have decided to sponsor Serena with a one-time contribution!
+
+<p align="center">
+  <img src="resources/vscode_sponsor_logo.png" alt="Visual Studio Code sponsor logo" width="220">
+</p>
+
+### Community Contributions
+
+A significant part of Serena, especially support for various languages, was contributed by the open source community.
+We are very grateful for the many contributors who made this possible and who played an important role in making Serena
+what it is today.
+
+### Technologies
 We built Serena on top of multiple existing open-source technologies, the most important ones being:
 
 1. [multilspy](https://github.com/microsoft/multilspy).

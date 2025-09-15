@@ -106,6 +106,9 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           echo "=== Installing swiftly on Ubuntu ==="
+          # Install dependencies BEFORE Swift to avoid exit code 1
+          sudo apt-get update
+          sudo apt-get -y install libcurl4-openssl-dev
           curl -O https://download.swift.org/swiftly/linux/swiftly-$(uname -m).tar.gz && \
           tar zxf swiftly-$(uname -m).tar.gz && \
           ./swiftly init --quiet-shell-followup && \
@@ -113,7 +116,6 @@ jobs:
           hash -r
           swiftly install --use 6.1.2
           swiftly use 6.1.2
-          sudo apt-get -y install libcurl4-openssl-dev
           echo "=== Adding Swift toolchain to PATH ==="
           echo "$HOME/.local/share/swiftly/bin" >> $GITHUB_PATH
           echo "Swiftly installed successfully!"
