@@ -112,3 +112,26 @@ class RuntimeDependencyCollection:
             FileUtils.download_and_extract_archive(logger, dep.url, dest, dep.archive_type)
         else:
             FileUtils.download_and_extract_archive(logger, dep.url, target_dir, dep.archive_type or "zip")
+
+
+def quote_windows_path(path: str) -> str:
+    """
+    Quote a path for Windows command execution if needed.
+
+    On Windows, paths need to be quoted for proper command execution.
+    The function checks if the path is already quoted to avoid double-quoting.
+    On other platforms, the path is returned unchanged.
+
+    Args:
+        path: The file path to potentially quote
+
+    Returns:
+        The quoted path on Windows (if not already quoted), unchanged path on other platforms
+
+    """
+    if platform.system() == "Windows":
+        # Check if already quoted to avoid double-quoting
+        if path.startswith('"') and path.endswith('"'):
+            return path
+        return f'"{path}"'
+    return path

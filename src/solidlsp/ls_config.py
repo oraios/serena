@@ -6,7 +6,10 @@ import fnmatch
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Self
+from typing import TYPE_CHECKING, Self
+
+if TYPE_CHECKING:
+    from solidlsp import SolidLanguageServer
 
 
 class FilenameMatcher:
@@ -49,6 +52,7 @@ class Language(str, Enum):
     LUA = "lua"
     NIX = "nix"
     ERLANG = "erlang"
+    AL = "al"
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -130,8 +134,133 @@ class Language(str, Enum):
                 return FilenameMatcher("*.nix")
             case self.ERLANG:
                 return FilenameMatcher("*.erl", "*.hrl", "*.escript", "*.config", "*.app", "*.app.src")
+            case self.AL:
+                return FilenameMatcher("*.al", "*.dal")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
+
+    def get_ls_class(self) -> type["SolidLanguageServer"]:
+        match self:
+            case self.PYTHON:
+                from solidlsp.language_servers.pyright_server import PyrightServer
+
+                return PyrightServer
+            case self.PYTHON_JEDI:
+                from solidlsp.language_servers.jedi_server import JediServer
+
+                return JediServer
+            case self.JAVA:
+                from solidlsp.language_servers.eclipse_jdtls import EclipseJDTLS
+
+                return EclipseJDTLS
+            case self.KOTLIN:
+                from solidlsp.language_servers.kotlin_language_server import KotlinLanguageServer
+
+                return KotlinLanguageServer
+            case self.RUST:
+                from solidlsp.language_servers.rust_analyzer import RustAnalyzer
+
+                return RustAnalyzer
+            case self.CSHARP:
+                from solidlsp.language_servers.csharp_language_server import CSharpLanguageServer
+
+                return CSharpLanguageServer
+            case self.CSHARP_OMNISHARP:
+                from solidlsp.language_servers.omnisharp import OmniSharp
+
+                return OmniSharp
+            case self.TYPESCRIPT:
+                from solidlsp.language_servers.typescript_language_server import TypeScriptLanguageServer
+
+                return TypeScriptLanguageServer
+            case self.TYPESCRIPT_VTS:
+                from solidlsp.language_servers.vts_language_server import VtsLanguageServer
+
+                return VtsLanguageServer
+            case self.GO:
+                from solidlsp.language_servers.gopls import Gopls
+
+                return Gopls
+            case self.RUBY:
+                from solidlsp.language_servers.ruby_lsp import RubyLsp
+
+                return RubyLsp
+            case self.RUBY_SOLARGRAPH:
+                from solidlsp.language_servers.solargraph import Solargraph
+
+                return Solargraph
+            case self.DART:
+                from solidlsp.language_servers.dart_language_server import DartLanguageServer
+
+                return DartLanguageServer
+            case self.CPP:
+                from solidlsp.language_servers.clangd_language_server import ClangdLanguageServer
+
+                return ClangdLanguageServer
+            case self.PHP:
+                from solidlsp.language_servers.intelephense import Intelephense
+
+                return Intelephense
+            case self.CLOJURE:
+                from solidlsp.language_servers.clojure_lsp import ClojureLSP
+
+                return ClojureLSP
+            case self.ELIXIR:
+                from solidlsp.language_servers.elixir_tools.elixir_tools import ElixirTools
+
+                return ElixirTools
+            case self.TERRAFORM:
+                from solidlsp.language_servers.terraform_ls import TerraformLS
+
+                return TerraformLS
+            case self.SWIFT:
+                from solidlsp.language_servers.sourcekit_lsp import SourceKitLSP
+
+                return SourceKitLSP
+            case self.BASH:
+                from solidlsp.language_servers.bash_language_server import BashLanguageServer
+
+                return BashLanguageServer
+            case self.ZIG:
+                from solidlsp.language_servers.zls import ZigLanguageServer
+
+                return ZigLanguageServer
+            case self.NIX:
+                from solidlsp.language_servers.nixd_ls import NixLanguageServer
+
+                return NixLanguageServer
+            case self.LUA:
+                from solidlsp.language_servers.lua_ls import LuaLanguageServer
+
+                return LuaLanguageServer
+            case self.ERLANG:
+                from solidlsp.language_servers.erlang_language_server import ErlangLanguageServer
+
+                return ErlangLanguageServer
+            case self.AL:
+                from solidlsp.language_servers.al_language_server import ALLanguageServer
+
+                return ALLanguageServer
+            case self.R:
+                from solidlsp.language_servers.r_language_server import RLanguageServer
+
+                return RLanguageServer
+            case _:
+                raise ValueError(f"Unhandled language: {self}")
+
+    @classmethod
+    def from_ls_class(cls, ls_class: type["SolidLanguageServer"]) -> Self:
+        """
+        Get the Language enum value from a SolidLanguageServer class.
+
+        :param ls_class: The SolidLanguageServer class to find the corresponding Language for
+        :return: The Language enum value
+        :raises ValueError: If the language server class is not supported
+        """
+        for enum_instance in cls:
+            if enum_instance.get_ls_class() == ls_class:
+                return enum_instance
+        raise ValueError(f"Unhandled language server class: {ls_class}")
 
 
 @dataclass

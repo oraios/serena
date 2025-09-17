@@ -236,6 +236,9 @@ class CSharpLanguageServer(SolidLanguageServer):
     """
     Provides C# specific instantiation of the LanguageServer class using Microsoft.CodeAnalysis.LanguageServer.
     This is the official Roslyn-based language server from Microsoft.
+
+    You can pass the following entries in ls_specific_settings["csharp"]:
+        - dotnet_runtime_url: will override the URL from RUNTIME_DEPENDENCIES
     """
 
     def __init__(
@@ -559,7 +562,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
     @classmethod
     def _ensure_dotnet_runtime(
-        cls, logger: LanguageServerLogger, runtime_dep: RuntimeDependency, solidlsp_settings: SolidLSPSettings
+        cls, logger: LanguageServerLogger, dotnet_runtime_dep: RuntimeDependency, solidlsp_settings: SolidLSPSettings
     ) -> str:
         """Ensure .NET SDK (managed) is available and return the managed dotnet executable path.
 
@@ -576,6 +579,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             )
         # Always proceed with managed SDK ensure
         return cls._ensure_dotnet_sdk_from_config(logger, runtime_dep, solidlsp_settings)
+
 
     @classmethod
     def _ensure_language_server(
@@ -771,6 +775,7 @@ class CSharpLanguageServer(SolidLanguageServer):
     @classmethod
     def _ensure_dotnet_sdk_from_config(
         cls, logger: LanguageServerLogger, runtime_dep: RuntimeDependency, solidlsp_settings: SolidLSPSettings
+
     ) -> str:
         """
         Ensure managed .NET 9 SDK is available using runtime dependency configuration.
@@ -816,8 +821,21 @@ class CSharpLanguageServer(SolidLanguageServer):
         # Download .NET SDK (secure channel + optional hash)
         logger.log("Downloading managed .NET 9 SDK (deterministic environment, secure path)...", logging.INFO)
         dotnet_dir.mkdir(parents=True, exist_ok=True)
-        archive_type = runtime_dep.archive_type
-        download_path = dotnet_dir / f"dotnet-sdk.{archive_type}"
+
+        custom_dotnet_runtime_url = solidlsp_settings.ls_specific_settings.get(cls.get_language_enum_instance(), {}).get(
+            "dotnet_runtime_url"
+        )
+        if custom_dotnet_runtime_url is not None:
+            logger.log(f"Using custom .NET runtime url: {custom_dotnet_runtime_url}", logging.INFO)
+            url = custom_dotnet_runtime_url
+        else:
+            url = dotnet_runtime_dep.url
+
+        archive_type = dotnet_runtime_dep.archive_type
+
+        # Download the runtime
+        download_path = dotnet_dir / f"dotnet-runtime.{archive_type}"
+
         try:
             logger.log(f"Secure downloading from {url}", logging.DEBUG)
             download_with_retries(url, download_path, attempts=3)

@@ -1,5 +1,4 @@
 import os
-import platform
 import subprocess
 
 from pydantic import BaseModel
@@ -26,10 +25,9 @@ def execute_shell_command(command: str, cwd: str | None = None, capture_stderr: 
     if cwd is None:
         cwd = os.getcwd()
 
-    is_windows = platform.system() == "Windows"
     process = subprocess.Popen(
         command,
-        shell=not is_windows,
+        shell=True,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE if capture_stderr else None,

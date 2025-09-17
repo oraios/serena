@@ -2,6 +2,7 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * Language support:
+  * **Add support for AL (Application Language)** for Microsoft Dynamics 365 Business Central development. Requires VS Code AL extension (ms-dynamics-smb.al).
   * **Add support for R** via the R languageserver package with LSP integration, performance optimizations, and fallback symbol extraction
   * **Add support for Zig** via ZLS (cross-file references may not fully work on Windows)
   * **Add support for Lua** via lua-language-server
@@ -18,6 +19,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   * Various fixes related to indexing, special paths and determation of ignored paths
   * Decreased `TOOL_DEFAULT_MAX_ANSWER_LENGTH` to be in accordance with (below) typical max-tokens configurations
+  * Allow passing language server specific settings through `ls_specific_settings` field (in `serena_config.yml`)
 
 # 0.1.4
 

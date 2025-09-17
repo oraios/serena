@@ -2,7 +2,7 @@ import os
 import socket
 import threading
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from flask import Flask, Response, request, send_from_directory
 from pydantic import BaseModel
@@ -11,6 +11,9 @@ from sensai.util import logging
 from serena.analytics import ToolUsageStats
 from serena.constants import SERENA_DASHBOARD_DIR
 from serena.util.logging import MemoryLogHandler
+
+if TYPE_CHECKING:
+    from serena.agent import SerenaAgent
 
 log = logging.getLogger(__name__)
 
@@ -25,6 +28,7 @@ class RequestLog(BaseModel):
 class ResponseLog(BaseModel):
     messages: list[str]
     max_idx: int
+    active_project: str | None = None
 
 
 class ResponseToolNames(BaseModel):
@@ -42,11 +46,13 @@ class SerenaDashboardAPI:
         self,
         memory_log_handler: MemoryLogHandler,
         tool_names: list[str],
+        agent: "SerenaAgent",
         shutdown_callback: Callable[[], None] | None = None,
         tool_usage_stats: ToolUsageStats | None = None,
     ) -> None:
         self._memory_log_handler = memory_log_handler
         self._tool_names = tool_names
+        self._agent = agent
         self._shutdown_callback = shutdown_callback
         self._app = Flask(__name__)
         self._tool_usage_stats = tool_usage_stats
@@ -106,7 +112,9 @@ class SerenaDashboardAPI:
     def _get_log_messages(self, request_log: RequestLog) -> ResponseLog:
         all_messages = self._memory_log_handler.get_log_messages()
         requested_messages = all_messages[request_log.start_idx :] if request_log.start_idx <= len(all_messages) else []
-        return ResponseLog(messages=requested_messages, max_idx=len(all_messages) - 1)
+        project = self._agent.get_active_project()
+        project_name = project.project_name if project else None
+        return ResponseLog(messages=requested_messages, max_idx=len(all_messages) - 1, active_project=project_name)
 
     def _get_tool_names(self) -> ResponseToolNames:
         return ResponseToolNames(tool_names=self._tool_names)
