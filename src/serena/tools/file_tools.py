@@ -23,7 +23,13 @@ class ReadFileTool(Tool):
     Reads a file within the project directory.
     """
 
-    def apply(self, relative_path: str, start_line: int = 0, end_line: int | None = None, max_answer_chars: int = -1) -> str:
+    def apply(
+        self,
+        relative_path: str,
+        start_line: int | str = 0,
+        end_line: int | str | None = None,
+        max_answer_chars: int | str = -1,
+    ) -> str:
         """
         Reads the given file or a chunk of it. Generally, symbolic operations
         like find_symbol or find_referencing_symbols should be preferred if you know which symbols you are looking for.
@@ -36,13 +42,16 @@ class ReadFileTool(Tool):
             required for the task.
         :return: the full text of the file at the given relative path
         """
-        # --- begin: tolerate Cursor sending strings for start_line/end_line ---
+        # --- begin: tolerate Cursor sending strings for numeric params ---
         if isinstance(start_line, str):
             _s = start_line.strip().lower()
             start_line = 0 if _s in {"", "none", "null", "undefined"} else int(float(_s))
         if isinstance(end_line, str):
             _e = end_line.strip().lower()
             end_line = None if _e in {"", "none", "null", "undefined"} else int(float(_e))
+        if isinstance(max_answer_chars, str):
+            _m = max_answer_chars.strip().lower()
+            max_answer_chars = -1 if _m in {"", "none", "null", "undefined"} else int(float(_m))
         if start_line is None or start_line < 0:
             start_line = 0
         if end_line is not None and end_line < 0:
@@ -61,6 +70,8 @@ class ReadFileTool(Tool):
         result = "\n".join(result_lines)
 
         return self._limit_length(result, max_answer_chars)
+
+
 
 
 class CreateTextFileTool(Tool, ToolMarkerCanEdit):
