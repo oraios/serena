@@ -36,6 +36,19 @@ class ReadFileTool(Tool):
             required for the task.
         :return: the full text of the file at the given relative path
         """
+        # --- begin: tolerate Cursor sending strings for start_line/end_line ---
+        if isinstance(start_line, str):
+            _s = start_line.strip().lower()
+            start_line = 0 if _s in {"", "none", "null", "undefined"} else int(float(_s))
+        if isinstance(end_line, str):
+            _e = end_line.strip().lower()
+            end_line = None if _e in {"", "none", "null", "undefined"} else int(float(_e))
+        if start_line is None or start_line < 0:
+            start_line = 0
+        if end_line is not None and end_line < 0:
+            end_line = 0
+        # --- end: type coercion ---
+
         self.project.validate_relative_path(relative_path)
 
         result = self.project.read_file(relative_path)
