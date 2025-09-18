@@ -136,7 +136,7 @@ Several videos and blog posts have talked about Serena:
     + [Local Installation](#local-installation)
     + [Using Docker (Experimental)](#using-docker-experimental)
     + [Using Nix](#using-nix)
-    + [SSE Mode](#sse-mode)
+    + [Streamable HTTP Mode](#streamable-http-mode)
     + [Command-Line Arguments](#command-line-arguments)
   * [Configuration](#configuration)
   * [Project Activation & Indexing](#project-activation--indexing)
@@ -196,7 +196,7 @@ You have several options for running the MCP server, which are explained in the 
 The typical usage involves the client (Claude Code, Claude Desktop, etc.) running
 the MCP server as a subprocess (using stdio communication),
 so the client needs to be provided with the command to run the MCP server.
-(Alternatively, you can run the MCP server in SSE mode and tell your client
+(Alternatively, you can run the MCP server in Streamable HTTP or SSE mode and tell your client
 how to connect to it.)
 
 Note that no matter how you run the MCP server, Serena will, by default, start a small web-based dashboard on localhost that will display logs and allow shutting down the
@@ -272,29 +272,32 @@ nix run github:oraios/serena -- start-mcp-server --transport stdio
 
 You can also install Serena by referencing this repo (`github:oraios/serena`) and using it in your Nix flake. The package is exported as `serena`.
 
-#### SSE Mode
+#### Streamable HTTP Mode
 
 ℹ️ Note that MCP servers which use stdio as a protocol are somewhat unusual as far as client/server architectures go, as the server
 necessarily has to be started by the client in order for communication to take place via the server's standard input/output stream.
 In other words, you do not need to start the server yourself. The client application (e.g. Claude Desktop) takes care of this and
 therefore needs to be configured with a launch command.
 
-When using instead the SSE mode, which uses HTTP-based communication, you control the server lifecycle yourself,
+When using instead the *Streamable HTTP* mode, you control the server lifecycle yourself,
 i.e. you start the server and provide the client with the URL to connect to it.
 
-Simply provide `start-mcp-server` with the `--transport sse` option and optionally provide the port.
-For example, to run the Serena MCP server in SSE mode on port 9121 using a local installation,
+Simply provide `start-mcp-server` with the `--transport streamable-http` option and optionally provide the port.
+For example, to run the Serena MCP server in Streamable HTTP mode on port 9121 using a local installation,
 you would run this command from the Serena directory,
 
 ```shell
-uv run serena start-mcp-server --transport sse --port 9121
+uv run serena start-mcp-server --transport streamable-http --port 9121
 ```
 
-and then configure your client to connect to `http://localhost:9121/sse`.
+and then configure your client to connect to `http://localhost:9121/mcp`.
+
+ℹ️ Note that SSE transport is supported as well, but its use is discouraged. 
+Use Streamable HTTP instead.
 
 #### Command-Line Arguments
 
-The Serena MCP server supports a wide range of additional command-line options, including the option to run in SSE mode
+The Serena MCP server supports a wide range of additional command-line options, including the option to run in Streamable HTTP or SSE mode
 and to adapt Serena to various [contexts and modes of operation](#modes-and-contexts).
 
 Run with parameter `--help` to get a list of available options.
