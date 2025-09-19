@@ -119,7 +119,13 @@ class TopLevelCommands(AutoRegisteringGroup):
         show_default=True,
         help="Built-in mode names or paths to custom mode YAMLs.",
     )
-    @click.option("--transport", type=click.Choice(["stdio", "sse", "streamable-http"]), default="stdio", show_default=True, help="Transport protocol.")
+    @click.option(
+        "--transport",
+        type=click.Choice(["stdio", "sse", "streamable-http"]),
+        default="stdio",
+        show_default=True,
+        help="Transport protocol.",
+    )
     @click.option("--host", type=str, default="0.0.0.0", show_default=True)
     @click.option("--port", type=int, default=8000, show_default=True)
     @click.option("--enable-web-dashboard", type=bool, is_flag=False, default=None, help="Override dashboard setting in config.")
