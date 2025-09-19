@@ -108,6 +108,7 @@ class ElixirTools(SolidLanguageServer):
 
         valid_platforms = [
             PlatformId.LINUX_x64,
+            PlatformId.LINUX_arm64,
             PlatformId.OSX_x64,
             PlatformId.OSX_arm64,
         ]
@@ -115,20 +116,30 @@ class ElixirTools(SolidLanguageServer):
 
         next_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "next-ls")
 
+        NEXTLS_VERSION = "v0.23.4"
+
         # Define runtime dependencies inline
         runtime_deps = {
             PlatformId.LINUX_x64: RuntimeDependency(
                 id="next_ls_linux_amd64",
                 platform_id="linux-x64",
-                url="https://github.com/elixir-tools/next-ls/releases/download/v0.23.3/next_ls_linux_amd64",
+                url=f"https://github.com/elixir-tools/next-ls/releases/download/{NEXTLS_VERSION}/next_ls_linux_amd64",
                 archive_type="binary",
                 binary_name="next_ls_linux_amd64",
+                extract_path="next_ls",
+            ),
+            PlatformId.LINUX_arm64: RuntimeDependency(
+                id="next_ls_linux_arm64",
+                platform_id="linux-arm64",
+                url=f"https://github.com/elixir-tools/next-ls/releases/download/{NEXTLS_VERSION}/next_ls_linux_arm64",
+                archive_type="binary",
+                binary_name="next_ls_linux_arm64",
                 extract_path="next_ls",
             ),
             PlatformId.OSX_x64: RuntimeDependency(
                 id="next_ls_darwin_amd64",
                 platform_id="osx-x64",
-                url="https://github.com/elixir-tools/next-ls/releases/download/v0.23.3/next_ls_darwin_amd64",
+                url=f"https://github.com/elixir-tools/next-ls/releases/download/{NEXTLS_VERSION}/next_ls_darwin_amd64",
                 archive_type="binary",
                 binary_name="next_ls_darwin_amd64",
                 extract_path="next_ls",
@@ -136,7 +147,7 @@ class ElixirTools(SolidLanguageServer):
             PlatformId.OSX_arm64: RuntimeDependency(
                 id="next_ls_darwin_arm64",
                 platform_id="osx-arm64",
-                url="https://github.com/elixir-tools/next-ls/releases/download/v0.23.3/next_ls_darwin_arm64",
+                url=f"https://github.com/elixir-tools/next-ls/releases/download/{NEXTLS_VERSION}/next_ls_darwin_arm64",
                 archive_type="binary",
                 binary_name="next_ls_darwin_arm64",
                 extract_path="next_ls",

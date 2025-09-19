@@ -1,0 +1,11 @@
+# Nix specific
+result
+result-*
+.direnv/
+
+# Build artifacts
+*.drv
+
+# IDE
+.vscode/
+.idea/

@@ -1,0 +1,31 @@
+{
+  "id": "00000001-0000-0000-0000-000000000001",
+  "name": "Test AL Project",
+  "publisher": "Serena Test Publisher",
+  "version": "1.0.0.0",
+  "brief": "Test project for AL Language Server in Serena",
+  "description": "This project contains AL code samples for testing language server features",
+  "privacyStatement": "",
+  "EULA": "",
+  "help": "",
+  "url": "https://github.com/oraios/serena",
+  "logo": "",
+  "dependencies": [],
+  "screenshots": [],
+  "platform": "1.0.0.0",
+  "application": "26.0.0.0",
+  "idRanges": [
+    {
+      "from": 50000,
+      "to": 50100
+    }
+  ],
+  "resourceExposurePolicy": {
+    "allowDebugging": true,
+    "allowDownloadingSource": true,
+    "includeSourceInSymbolFile": true
+  },
+  "runtime": "15.0",
+  "features": ["NoImplicitWith"],
+  "target": "Cloud"
+}

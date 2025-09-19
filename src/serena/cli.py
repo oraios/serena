@@ -451,9 +451,10 @@ class ProjectCommands(AutoRegisteringGroup):
     def _index_project(project: str, log_level: str, timeout: float) -> None:
         lvl = logging.getLevelNamesMapping()[log_level.upper()]
         logging.configure(level=lvl)
+        serena_config = SerenaConfig.from_config_file()
         proj = Project.load(os.path.abspath(project))
         click.echo(f"Indexing symbols in project {project}…")
-        ls = proj.create_language_server(log_level=lvl, ls_timeout=timeout)
+        ls = proj.create_language_server(log_level=lvl, ls_timeout=timeout, ls_specific_settings=serena_config.ls_specific_settings)
         log_file = os.path.join(project, ".serena", "logs", "indexing.txt")
 
         collected_exceptions: list[Exception] = []
@@ -464,7 +465,7 @@ class ProjectCommands(AutoRegisteringGroup):
                 try:
                     ls.request_document_symbols(f, include_body=False)
                     ls.request_document_symbols(f, include_body=True)
-                except TimeoutError as e:
+                except Exception as e:
                     log.error(f"Failed to index {f}, continuing.")
                     collected_exceptions.append(e)
                     files_failed.append(f)

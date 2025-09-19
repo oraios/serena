@@ -1,0 +1,11 @@
+name: test_repo
+description: A test repository for Serena Dart language server testing
+version: 1.0.0
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  
+dev_dependencies:
+  lints: ^3.0.0

@@ -11,7 +11,6 @@ from typing import Any
 
 from serena.tools import (
     SUCCESS_RESULT,
-    TOOL_DEFAULT_MAX_ANSWER_LENGTH,
     Tool,
     ToolMarkerSymbolicEdit,
     ToolMarkerSymbolicRead,
@@ -52,7 +51,7 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
     Gets an overview of the top-level symbols defined in a given file.
     """
 
-    def apply(self, relative_path: str, max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH) -> str:
+    def apply(self, relative_path: str, max_answer_chars: int = -1) -> str:
         """
         Use this tool to get a high-level understanding of the code symbols in a file.
         This should be the first tool to call when you want to understand a new file, unless you already know
@@ -60,8 +59,8 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
 
         :param relative_path: the relative path to the file to get the overview of
         :param max_answer_chars: if the overview is longer than this number of characters,
-            no content will be returned. Don't adjust unless there is really no other way to get the content
-            required for the task.
+            no content will be returned. -1 means the default value from the config will be used.
+            Don't adjust unless there is really no other way to get the content required for the task.
         :return: a JSON object containing info about top-level symbols in the file
         """
         symbol_retriever = self.create_language_server_symbol_retriever()
@@ -92,7 +91,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         include_kinds: list[int] = [],  # noqa: B006
         exclude_kinds: list[int] = [],  # noqa: B006
         substring_matching: bool = False,
-        max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
+        max_answer_chars: int = -1,
     ) -> str:
         """
         Retrieves information on all symbols/code entities (classes, methods, etc.) based on the given `name_path`,
@@ -142,6 +141,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             If not provided, no kinds are excluded.
         :param substring_matching: If True, use substring matching for the last segment of `name`.
         :param max_answer_chars: Max characters for the JSON result. If exceeded, no content is returned.
+            -1 means the default value from the config will be used.
         :return: a list of symbols (with locations) matching the name.
         """
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
@@ -171,7 +171,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         relative_path: str,
         include_kinds: list[int] = [],  # noqa: B006
         exclude_kinds: list[int] = [],  # noqa: B006
-        max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
+        max_answer_chars: int = -1,
     ) -> str:
         """
         Finds references to the symbol at the given `name_path`. The result will contain metadata about the referencing symbols

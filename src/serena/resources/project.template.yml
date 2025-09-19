@@ -19,7 +19,6 @@ ignored_paths: []
 # Added on 2025-04-18
 read_only: false
 
-
 # list of tool names to exclude. We recommend not excluding any tools, see the readme for more details.
 # Below is the complete list of tools for convenience.
 # To make sure you have the latest list of tools, and to view their descriptions, 

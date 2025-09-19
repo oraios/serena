@@ -84,6 +84,14 @@ class TerraformLS(SolidLanguageServer):
                 ),
                 RuntimeDependency(
                     id="TerraformLS",
+                    description="terraform-ls for Linux (ARM64)",
+                    url="https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_linux_arm64.zip",
+                    platform_id="linux-arm64",
+                    archive_type="zip",
+                    binary_name="terraform-ls",
+                ),
+                RuntimeDependency(
+                    id="TerraformLS",
                     description="terraform-ls for Linux (x64)",
                     url="https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_linux_amd64.zip",
                     platform_id="linux-x64",

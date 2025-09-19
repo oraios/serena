@@ -1,6 +1,6 @@
 import json
 
-from serena.tools import TOOL_DEFAULT_MAX_ANSWER_LENGTH, Tool
+from serena.tools import Tool
 
 
 class WriteMemoryTool(Tool):
@@ -8,11 +8,13 @@ class WriteMemoryTool(Tool):
     Writes a named memory (for future reference) to Serena's project-specific memory store.
     """
 
-    def apply(self, memory_name: str, content: str, max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH) -> str:
+    def apply(self, memory_name: str, content: str, max_answer_chars: int = -1) -> str:
         """
         Write some information about this project that can be useful for future tasks to a memory in md format.
         The memory name should be meaningful.
         """
+        if max_answer_chars == -1:
+            max_answer_chars = self.agent.serena_config.default_max_tool_answer_chars
         if len(content) > max_answer_chars:
             raise ValueError(
                 f"Content for {memory_name} is too long. Max length is {max_answer_chars} characters. " + "Please make the content shorter."
@@ -26,7 +28,7 @@ class ReadMemoryTool(Tool):
     Reads the memory with the given name from Serena's project-specific memory store.
     """
 
-    def apply(self, memory_file_name: str, max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH) -> str:
+    def apply(self, memory_file_name: str, max_answer_chars: int = -1) -> str:
         """
         Read the content of a memory file. This tool should only be used if the information
         is relevant to the current task. You can infer whether the information

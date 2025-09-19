@@ -1,6 +1,7 @@
 import logging
 import os
 import shutil
+import sys
 import tempfile
 import time
 from abc import abstractmethod
@@ -442,4 +443,43 @@ class ReplaceBodyTest(EditingTest):
     ],
 )
 def test_replace_body(test_case: ReplaceBodyTest, snapshot):
+    test_case.run_test(content_after_ground_truth=snapshot)
+
+
+NIX_ATTR_REPLACEMENT = """c = 3;"""
+
+
+class NixAttrReplacementTest(EditingTest):
+    """Test for replacing individual attributes in Nix that should NOT result in double semicolons."""
+
+    def __init__(self, language: Language, rel_path: str, symbol_name: str, new_body: str):
+        super().__init__(language, rel_path)
+        self.symbol_name = symbol_name
+        self.new_body = new_body
+
+    def _apply_edit(self, code_editor: CodeEditor) -> None:
+        code_editor.replace_body(self.symbol_name, self.rel_path, self.new_body)
+
+
+@pytest.mark.nix
+@pytest.mark.skipif(sys.platform == "win32", reason="nixd language server doesn't run on Windows")
+def test_nix_symbol_replacement_no_double_semicolon(snapshot):
+    """
+    Test that replacing a Nix attribute does not result in double semicolons.
+
+    This test exercises the bug where:
+    - Original: users.users.example = { isSystemUser = true; group = "example"; description = "Example service user"; };
+    - Replacement: c = 3;
+    - Bug result would be: c = 3;; (double semicolon)
+    - Correct result should be: c = 3; (single semicolon)
+
+    The replacement body includes a semicolon, but the language server's range extension
+    logic should prevent double semicolons.
+    """
+    test_case = NixAttrReplacementTest(
+        Language.NIX,
+        "default.nix",
+        "testUser",  # Simple attrset with multiple key-value pairs
+        NIX_ATTR_REPLACEMENT,
+    )
     test_case.run_test(content_after_ground_truth=snapshot)

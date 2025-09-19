@@ -255,6 +255,7 @@ class TestCSharpSolutionProjectOpening:
             # Create CSharpLanguageServer instance
             mock_settings = Mock(spec=SolidLSPSettings)
             mock_settings.ls_resources_dir = "/tmp/test_ls_resources"
+            mock_settings.project_data_relative_path = "project_data"
             CSharpLanguageServer(mock_config, mock_logger, str(temp_path), mock_settings)
 
             # Verify that logger was called with solution file discovery
@@ -279,6 +280,7 @@ class TestCSharpSolutionProjectOpening:
             # Create CSharpLanguageServer instance
             mock_settings = Mock(spec=SolidLSPSettings)
             mock_settings.ls_resources_dir = "/tmp/test_ls_resources"
+            mock_settings.project_data_relative_path = "project_data"
             CSharpLanguageServer(mock_config, mock_logger, str(temp_path), mock_settings)
 
             # Verify that logger was called with warning about no solution/project files
