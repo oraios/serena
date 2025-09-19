@@ -339,10 +339,10 @@ class SearchForPatternTool(Tool):
         :param substring_pattern: Regular expression for a substring pattern to search for
         :param context_lines_before: Number of lines of context to include before each match
         :param context_lines_after: Number of lines of context to include after each match
-        :param paths_include_glob: optional glob pattern specifying files to include in the search.
+        :param paths_include_glob: optional glob pattern specifying files to include in the search. Only accept no comma-separated string.
             Matches against relative file paths from the project root (e.g., "*.py", "src/**/*.ts").
             Only matches files, not directories. If left empty, all non-ignored files will be included.
-        :param paths_exclude_glob: optional glob pattern specifying files to exclude from the search.
+        :param paths_exclude_glob: optional glob pattern specifying files to exclude from the search. Only accept no comma-separated string.
             Matches against relative file paths from the project root (e.g., "*test*", "**/*_generated.py").
             Takes precedence over paths_include_glob. Only matches files, not directories. If left empty, no files are excluded.
         :param relative_path: only subpaths of this path (relative to the repo root) will be analyzed. If a path to a single
