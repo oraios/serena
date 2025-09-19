@@ -102,6 +102,10 @@ jobs:
           swiftly use 6.1.2
           echo "~/.swiftly/bin" >> $GITHUB_PATH
           echo "Swiftly installed successfully"
+          # Verify sourcekit-lsp is working before proceeding
+          echo "=== Verifying sourcekit-lsp installation ==="
+          which sourcekit-lsp || echo "Warning: sourcekit-lsp not found in PATH"
+          sourcekit-lsp --help || echo "Warning: sourcekit-lsp not responding"
       - name: Install Swift with swiftly (Ubuntu)
         if: runner.os == 'Linux'
         run: |
@@ -119,6 +123,10 @@ jobs:
           echo "=== Adding Swift toolchain to PATH ==="
           echo "$HOME/.local/share/swiftly/bin" >> $GITHUB_PATH
           echo "Swiftly installed successfully!"
+          # Verify sourcekit-lsp is working before proceeding
+          echo "=== Verifying sourcekit-lsp installation ==="
+          which sourcekit-lsp || echo "Warning: sourcekit-lsp not found in PATH"
+          sourcekit-lsp --help || echo "Warning: sourcekit-lsp not responding"
       - name: Install Ruby
         uses: ruby/setup-ruby@v1
         with:

@@ -145,7 +145,7 @@ class FindFileTool(Tool):
             filename = os.path.basename(abs_path)
             return not fnmatch(filename, file_mask)
 
-        dirs, files = scan_directory(
+        _dirs, files = scan_directory(
             path=dir_to_scan,
             recursive=True,
             is_ignored_dir=self.project.is_ignored_path,
@@ -378,7 +378,7 @@ class SearchForPatternTool(Tool):
             if os.path.isfile(abs_path):
                 rel_paths_to_search = [relative_path]
             else:
-                dirs, rel_paths_to_search = scan_directory(
+                _dirs, rel_paths_to_search = scan_directory(
                     path=abs_path,
                     recursive=True,
                     is_ignored_dir=self.project.is_ignored_path,

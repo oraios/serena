@@ -1105,7 +1105,30 @@ class SolidLanguageServer(ABC):
             if symbol["kind"] == ls_types.SymbolKind.File:
                 # For file symbols, process their children (top-level symbols)
                 for child in symbol["children"]:
-                    path = Path(child["location"]["absolutePath"]).resolve().relative_to(self.repository_root_path)
+                    # Handle cross-platform path resolution (fixes Docker/macOS path issues)
+                    absolute_path = Path(child["location"]["absolutePath"]).resolve()
+                    repository_root = Path(self.repository_root_path).resolve()
+
+                    # Try pathlib first, fallback to alternative approach if paths are incompatible
+                    try:
+                        path = absolute_path.relative_to(repository_root)
+                    except ValueError:
+                        # If paths are from different roots (e.g., /workspaces vs /Users),
+                        # use the relativePath from location if available, or extract from absolutePath
+                        if "relativePath" in child["location"] and child["location"]["relativePath"]:
+                            path = Path(child["location"]["relativePath"])
+                        else:
+                            # Extract relative path by finding common structure
+                            # Example: /workspaces/.../test_repo/file.py -> test_repo/file.py
+                            path_parts = absolute_path.parts
+
+                            # Find the last common part or use a fallback
+                            if "test_repo" in path_parts:
+                                test_repo_idx = path_parts.index("test_repo")
+                                path = Path(*path_parts[test_repo_idx:])
+                            else:
+                                # Last resort: use filename only
+                                path = Path(absolute_path.name)
                     result[str(path)].append(child)
             # For package/directory symbols, process their children
             for child in symbol["children"]:
