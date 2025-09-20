@@ -578,8 +578,7 @@ class CSharpLanguageServer(SolidLanguageServer):
                 logging.DEBUG,
             )
         # Always proceed with managed SDK ensure
-        return cls._ensure_dotnet_sdk_from_config(logger, runtime_dep, solidlsp_settings)
-
+        return cls._ensure_dotnet_sdk_from_config(logger, dotnet_runtime_dep, solidlsp_settings)
 
     @classmethod
     def _ensure_language_server(
@@ -774,8 +773,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
     @classmethod
     def _ensure_dotnet_sdk_from_config(
-        cls, logger: LanguageServerLogger, runtime_dep: RuntimeDependency, solidlsp_settings: SolidLSPSettings
-
+        cls, logger: LanguageServerLogger, dotnet_runtime_dep: RuntimeDependency, solidlsp_settings: SolidLSPSettings
     ) -> str:
         """
         Ensure managed .NET 9 SDK is available using runtime dependency configuration.
@@ -798,7 +796,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             )
 
         # Choose install directory name dynamically (derive version from URL if possible)
-        url = runtime_dep.url  # may be used below as well
+        url = dotnet_runtime_dep.url  # may be used below as well
         assert url is not None, ".NET SDK URL missing"
         version_match = re.search(r"/Sdk/([0-9]+\.[0-9]+\.[0-9]+)/", url)
         if version_match:
@@ -809,8 +807,8 @@ class CSharpLanguageServer(SolidLanguageServer):
             sdk_version = file_match.group(1) if file_match else "9.0.x"
         base_dir_name = f"dotnet-sdk-{sdk_version}"
         dotnet_dir = Path(cls.ls_resources_dir(solidlsp_settings)) / base_dir_name
-        assert runtime_dep.binary_name is not None, ".NET SDK binary_name missing"
-        dotnet_exe = dotnet_dir / runtime_dep.binary_name
+        assert dotnet_runtime_dep.binary_name is not None, ".NET SDK binary_name missing"
+        dotnet_exe = dotnet_dir / dotnet_runtime_dep.binary_name
 
         if dotnet_exe.exists():
             logger.log(f"Using cached managed .NET SDK from {dotnet_exe}", logging.INFO)
