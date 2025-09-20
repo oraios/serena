@@ -133,9 +133,13 @@ class SolidLanguageServerHandler:
         self,
         process_launch_info: ProcessLaunchInfo,
         logger: Callable[[str, str, StringDict | str], None] | None = None,
-        start_independent_lsp_process=True,
+        start_independent_lsp_process: bool = True,
         request_timeout: float | None = None,
     ) -> None:
+        """Initialize handler state and threading primitives.
+
+        Note: Keep this method generic and free of language/server-specific heuristics.
+        """
         self.send = LanguageServerRequest(self)
         self.notify = LspNotification(self.send_notification)
 
@@ -159,6 +163,8 @@ class SolidLanguageServerHandler:
         self._request_id_lock = threading.Lock()
         self._response_handlers_lock = threading.Lock()
         self._tasks_lock = threading.Lock()
+
+    # Generic stderr logging only.
 
     def set_request_timeout(self, timeout: float | None) -> None:
         """
@@ -204,8 +210,13 @@ class SolidLanguageServerHandler:
         if self.process.returncode is not None:
             log.error("Language server has already terminated/could not be started")
             # Process has already terminated
-            stderr_data = self.process.stderr.read()
-            error_message = stderr_data.decode("utf-8", errors="replace")
+            stderr_data = b""
+            if self.process.stderr:  # type: ignore[truthy-function]
+                try:
+                    stderr_data = self.process.stderr.read()
+                except Exception:  # pragma: no cover - defensive
+                    pass
+            error_message = stderr_data.decode("utf-8", errors="replace") if stderr_data else "<no stderr captured>"
             raise RuntimeError(f"Process terminated immediately with code {self.process.returncode}. Error: {error_message}")
 
         # start threads to read stdout and stderr of the process
