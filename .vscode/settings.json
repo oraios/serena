@@ -11,4 +11,9 @@
         "sensai",
         "vibing"
     ],
+    "python.testing.pytestArgs": [
+        "test"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
 }
