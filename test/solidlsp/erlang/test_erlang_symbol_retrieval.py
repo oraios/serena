@@ -306,6 +306,7 @@ class TestErlangLanguageServerSymbols:
                 # We should find some references or none (both are valid outcomes)
                 assert isinstance(refs, list)
 
+    @pytest.mark.timeout(60)  # Add 60 second timeout
     @pytest.mark.xfail(
         reason="Known intermittent timeout issue in Erlang LS in CI environments. "
         "May pass locally but can timeout on slower CI systems.",
@@ -404,6 +405,7 @@ class TestErlangLanguageServerSymbols:
             expected_names = ["models", "create_user"]
             assert any(name in containing_symbol["name"] for name in expected_names)
 
+    @pytest.mark.timeout(60)  # Add 60 second timeout
     @pytest.mark.xfail(
         reason="Known intermittent timeout issue in Erlang LS in CI environments. "
         "May pass locally but can timeout on slower CI systems, especially macOS. "

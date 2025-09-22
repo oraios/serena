@@ -46,7 +46,8 @@ class ScalaLanguageServer(SolidLanguageServer):
         self.initialize_searcher_command_available = threading.Event()
         self._metals_refs_retry_event = threading.Event()
         self._metals_compiling = False
-        self._is_metals = False 
+        self._is_metals = False
+
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in [
@@ -201,7 +202,7 @@ class ScalaLanguageServer(SolidLanguageServer):
             self.logger.log("Metals compilation finished, re-requesting references.", logging.INFO)
             # Second request to get potentially more complete results
             more_references = super().request_references(relative_file_path, line, column)
-            
+
             # Combine and deduplicate references
             all_references = references + more_references
             unique_references = []
