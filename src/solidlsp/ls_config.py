@@ -248,6 +248,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.r_language_server import RLanguageServer
 
                 return RLanguageServer
+            case self.SCALA:
+                from solidlsp.language_servers.scala_language_server import ScalaLanguageServer
+
+                return ScalaLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

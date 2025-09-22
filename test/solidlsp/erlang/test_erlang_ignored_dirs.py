@@ -36,6 +36,7 @@ def ls_with_ignored_dirs() -> Generator[SolidLanguageServer, None, None]:
                 except:
                     pass
 
+
 @pytest.mark.timeout(60)  # Add 60 second timeout
 @pytest.mark.xfail(reason="Known timeout issue on Ubuntu CI with Erlang LS server startup", strict=False)
 @pytest.mark.parametrize("ls_with_ignored_dirs", [Language.ERLANG], indirect=True)
@@ -51,6 +52,7 @@ def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     assert len(found_expected) > 0, f"Expected some dirs from {expected_dirs} to be in {children_names}"
     assert "_build" not in children_names, f"_build should not be in {children_names}"
     assert "ignored_dir" not in children_names, f"ignored_dir should not be in {children_names}"
+
 
 @pytest.mark.timeout(60)  # Add 60 second timeout
 @pytest.mark.xfail(reason="Known timeout issue on Ubuntu CI with Erlang LS server startup", strict=False)
@@ -77,6 +79,7 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     # Assert that _build and ignored_dir do not appear in the references
     assert not any("_build" in ref["relativePath"] for ref in references), "_build should be ignored"
     assert not any("ignored_dir" in ref["relativePath"] for ref in references), "ignored_dir should be ignored"
+
 
 @pytest.mark.timeout(60)  # Add 60 second timeout
 @pytest.mark.xfail(reason="Known timeout issue on Ubuntu CI with Erlang LS server startup", strict=False)

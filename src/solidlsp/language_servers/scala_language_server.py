@@ -10,6 +10,7 @@ import subprocess
 
 from overrides import override
 
+from solidlsp import ls_types
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
@@ -42,11 +43,6 @@ class ScalaLanguageServer(SolidLanguageServer):
             config.code_language.value,
             solidlsp_settings,
         )
-        self.server_ready = threading.Event()
-        self.initialize_searcher_command_available = threading.Event()
-        self._metals_refs_retry_event = threading.Event()
-        self._metals_compiling = False
-        self._is_metals = False
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -70,7 +66,6 @@ class ScalaLanguageServer(SolidLanguageServer):
         metals_executable = os.path.join(metals_home, "metals")
         coursier_command_path = shutil.which("coursier")
         cs_command_path = shutil.which("cs")
-        bloop_command_path = shutil.which("bloop")
 
         if not os.path.exists(metals_executable):
             if not cs_command_path:
