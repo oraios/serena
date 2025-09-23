@@ -1,0 +1,28 @@
+# Haskell-specific build artifacts
+dist-newstyle/
+.stack-work/
+cabal-dev/
+
+# GHC generated files
+*.o
+*.hi
+*.dyn_o
+*.dyn_hi
+*.p_hi
+*.prof
+*.tix
+*.chi
+*.chs.h
+*.aux
+*.hp
+*.eventlog
+
+# Cabal sandbox
+.cabal-sandbox/
+cabal.sandbox.config
+
+# Stack
+stack.yaml.lock
+
+# HLint
+.hlint.yaml
