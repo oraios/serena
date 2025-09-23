@@ -97,7 +97,7 @@ With Serena, we provide direct, out-of-the-box support for:
   * Elixir (requires installation of NextLS and Elixir; **Windows not supported**)
   * Erlang (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls), experimental, might be slow or hang)
   * AL
-  * Nim (uses [nimlangserver](https://github.com/nim-lang/langserver), auto-installs via nimble or downloads pre-built binary)
+  * Nim (uses [nimlangserver](https://github.com/nim-lang/langserver), auto-installs via nimble if nim is available)
 
 Support for further languages can easily be added by providing a shallow adapter for a new language server implementation,
 see Serena's [memory on that](.serena/memories/adding_new_language_support_guide.md).
