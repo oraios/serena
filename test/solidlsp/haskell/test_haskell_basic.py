@@ -205,6 +205,9 @@ class TestHaskellLanguageServerSymbols:
         sel_start = user_symbol["selectionRange"]["start"]
         refs = language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
 
+        # HLS doesn't track references to data type declarations in this context
+        assert refs == [], f"Expected no referencing symbols for User data type, got: {refs}"
+
     @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
     def test_request_defining_symbol_function_usage(self, language_server: SolidLanguageServer) -> None:
         """Test request_defining_symbol by looking for function usage in Main.hs."""
@@ -247,7 +250,10 @@ class TestHaskellLanguageServerSymbols:
         refs = language_server.request_referencing_symbols(src_file, sel_start["line"], sel_start["character"])
 
         # Check for meaningful cross-file references - Main.hs should use add from Lib.hs
-        main_refs = [ref for ref in refs if hasattr(ref, "symbol") and 
-                     ref.symbol.get("location", {}).get("relativePath", "").endswith("Main.hs")]
-        
-        assert len(main_refs) > 0, f"Expected reference to 'add' in Main.hs. Found references in: {[ref.symbol.get('location', {}).get('relativePath', 'unknown') for ref in refs if hasattr(ref, 'symbol')]}"
+        main_refs = [
+            ref for ref in refs if hasattr(ref, "symbol") and ref.symbol.get("location", {}).get("relativePath", "").endswith("Main.hs")
+        ]
+
+        assert (
+            len(main_refs) > 0
+        ), f"Expected reference to 'add' in Main.hs. Found references in: {[ref.symbol.get('location', {}).get('relativePath', 'unknown') for ref in refs if hasattr(ref, 'symbol')]}"
