@@ -28,10 +28,6 @@ class TestHaskellLanguageServerSymbols:
         file_path = os.path.join("src", "Lib.hs")
 
         symbols = language_server.request_document_symbols(file_path)
-        assert symbols is not None, "Should receive symbols from HLS"
-        assert isinstance(symbols, tuple), f"Expected tuple, got {type(symbols)}"
-        assert len(symbols) == 2, f"Expected tuple of length 2, got {len(symbols)}"
-
         hierarchical_symbols, flat_symbols = symbols
 
         # Extract symbol names from hierarchical symbols (which should contain the actual functions)
@@ -45,11 +41,10 @@ class TestHaskellLanguageServerSymbols:
                         if isinstance(child, dict) and "name" in child:
                             symbol_names.append(child["name"])
 
-        # Verify we can find key Haskell functions and data types
+        # Verify we can find exact key Haskell functions and data types
         expected_symbols = ["add", "hello", "safeDiv", "Calculator", "User", "validateUser"]
-        found_symbols = [name for name in expected_symbols if name in symbol_names]
-
-        assert len(found_symbols) >= 3, f"Expected at least 3 key symbols, found: {found_symbols} from all symbols: {symbol_names[:10]}"
+        for expected_symbol in expected_symbols:
+            assert expected_symbol in symbol_names, f"Expected '{expected_symbol}' in symbols. Found: {symbol_names}"
 
     @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
     def test_document_symbols_main_exact_content(self, language_server: SolidLanguageServer) -> None:
@@ -57,9 +52,6 @@ class TestHaskellLanguageServerSymbols:
         file_path = os.path.join("app", "Main.hs")
 
         symbols = language_server.request_document_symbols(file_path)
-        assert symbols is not None, "Should receive symbols from Main.hs"
-        assert isinstance(symbols, tuple), f"Expected tuple, got {type(symbols)}"
-
         hierarchical_symbols, flat_symbols = symbols
 
         # Extract symbol names
@@ -80,9 +72,7 @@ class TestHaskellLanguageServerSymbols:
         """Test request_containing_symbol for a function by using document symbols first."""
         file_path = os.path.join("src", "Lib.hs")
 
-        # First get document symbols to understand the structure
         symbols = language_server.request_document_symbols(file_path)
-        assert symbols is not None
         hierarchical_symbols, flat_symbols = symbols
 
         # Find the add function symbol to get its exact location
@@ -126,9 +116,7 @@ class TestHaskellLanguageServerSymbols:
         """Test request_containing_symbol for data type by using document symbols first."""
         file_path = os.path.join("src", "Lib.hs")
 
-        # First get document symbols to find Calculator data type
         symbols = language_server.request_document_symbols(file_path)
-        assert symbols is not None
         hierarchical_symbols, flat_symbols = symbols
 
         # Find the Calculator data type symbol
@@ -163,9 +151,7 @@ class TestHaskellLanguageServerSymbols:
         """Test request_referencing_symbols for a function."""
         file_path = os.path.join("src", "Lib.hs")
 
-        # Get document symbols first
         symbols = language_server.request_document_symbols(file_path)
-        assert symbols is not None
         hierarchical_symbols, flat_symbols = symbols
 
         # Find add function with selectionRange
@@ -186,9 +172,6 @@ class TestHaskellLanguageServerSymbols:
         sel_start = add_symbol["selectionRange"]["start"]
         refs = language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
 
-        # refs should be a list of ReferenceWithSymbol objects or similar
-        assert isinstance(refs, list), f"Expected list of references, got {type(refs)}"
-
         # Verify structure if references exist
         for ref in refs:
             if hasattr(ref, "symbol"):
@@ -202,7 +185,6 @@ class TestHaskellLanguageServerSymbols:
         file_path = os.path.join("src", "Lib.hs")
 
         symbols = language_server.request_document_symbols(file_path)
-        assert symbols is not None
         hierarchical_symbols, flat_symbols = symbols
 
         # Find User data type
@@ -222,8 +204,6 @@ class TestHaskellLanguageServerSymbols:
 
         sel_start = user_symbol["selectionRange"]["start"]
         refs = language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
-
-        assert isinstance(refs, list), f"Expected list of references, got {type(refs)}"
 
     @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
     def test_request_defining_symbol_function_usage(self, language_server: SolidLanguageServer) -> None:
@@ -246,9 +226,7 @@ class TestHaskellLanguageServerSymbols:
         # The 'add' function is defined in src/Lib.hs and used in app/Main.hs
         src_file = os.path.join("src", "Lib.hs")
 
-        # Get add function location from document symbols
         symbols = language_server.request_document_symbols(src_file)
-        assert symbols is not None
         hierarchical_symbols, flat_symbols = symbols
 
         add_symbol = None
@@ -268,16 +246,8 @@ class TestHaskellLanguageServerSymbols:
         sel_start = add_symbol["selectionRange"]["start"]
         refs = language_server.request_referencing_symbols(src_file, sel_start["line"], sel_start["character"])
 
-        assert isinstance(refs, list), f"Expected list of references, got {type(refs)}"
-
-        # Check if any references are from different files (cross-file)
-        file_paths = set()
-        for ref in refs:
-            if hasattr(ref, "location") and "uri" in ref.location:
-                file_paths.add(ref.location["uri"])
-            elif hasattr(ref, "symbol") and "location" in ref.symbol and "uri" in ref.symbol["location"]:
-                file_paths.add(ref.symbol["location"]["uri"])
-
-        # We might find cross-file references or not, depending on HLS indexing
-        # This test mainly verifies the structure works
-        assert len(file_paths) >= 0, "Should not error when looking for cross-file references"
+        # Check for meaningful cross-file references - Main.hs should use add from Lib.hs
+        main_refs = [ref for ref in refs if hasattr(ref, "symbol") and 
+                     ref.symbol.get("location", {}).get("relativePath", "").endswith("Main.hs")]
+        
+        assert len(main_refs) > 0, f"Expected reference to 'add' in Main.hs. Found references in: {[ref.symbol.get('location', {}).get('relativePath', 'unknown') for ref in refs if hasattr(ref, 'symbol')]}"
