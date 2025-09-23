@@ -98,6 +98,51 @@ class RubyLsp(SolidLanguageServer):
             return shutil.which(executable_name)
 
     @staticmethod
+    def _get_rbenv_ruby_command(repository_root_path: str) -> list[str]:
+        """
+        Get the appropriate Ruby command considering rbenv configuration.
+        Returns the Ruby command that respects .ruby-version file if present.
+        """
+        # Check for .ruby-version file
+        ruby_version_file = os.path.join(repository_root_path, ".ruby-version")
+
+        if os.path.exists(ruby_version_file):
+            try:
+                with open(ruby_version_file) as f:
+                    f.read().strip()  # Verify file is readable
+
+                # Check if rbenv is available
+                try:
+                    rbenv_path = shutil.which("rbenv")
+                    if rbenv_path:
+                        # Use rbenv exec to run with specified version
+                        return ["rbenv", "exec", "ruby"]
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+        # Fallback to system ruby
+        return ["ruby"]
+
+    @staticmethod
+    def _get_rbenv_bundle_command(repository_root_path: str) -> list[str]:
+        """
+        Get the appropriate bundle command considering rbenv configuration.
+        """
+        ruby_version_file = os.path.join(repository_root_path, ".ruby-version")
+
+        if os.path.exists(ruby_version_file):
+            try:
+                rbenv_path = shutil.which("rbenv")
+                if rbenv_path:
+                    return ["rbenv", "exec", "bundle"]
+            except Exception:
+                pass
+
+        return ["bundle"]
+
+    @staticmethod
     def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig, repository_root_path: str) -> list[str]:
         """
         Setup runtime dependencies for ruby-lsp and return the command list to start the server.
@@ -105,7 +150,8 @@ class RubyLsp(SolidLanguageServer):
         """
         # Check if Ruby is installed
         try:
-            result = subprocess.run(["ruby", "--version"], check=True, capture_output=True, cwd=repository_root_path, text=True)
+            ruby_cmd = RubyLsp._get_rbenv_ruby_command(repository_root_path)
+            result = subprocess.run(ruby_cmd + ["--version"], check=True, capture_output=True, cwd=repository_root_path, text=True)
             ruby_version = result.stdout.strip()
             logger.log(f"Ruby version: {ruby_version}", logging.INFO)
 
@@ -141,7 +187,8 @@ class RubyLsp(SolidLanguageServer):
             logger.log("Detected Bundler project (Gemfile found)", logging.INFO)
 
             # Check if bundle command is available using Windows-compatible search
-            bundle_path = RubyLsp._find_executable_with_extensions("bundle")
+            bundle_cmd = RubyLsp._get_rbenv_bundle_command(repository_root_path)
+            bundle_path = RubyLsp._find_executable_with_extensions(bundle_cmd[0] if len(bundle_cmd) == 1 else "bundle")
             if not bundle_path:
                 # Try common bundle executables
                 for bundle_cmd in ["bin/bundle", "bundle"]:
@@ -171,7 +218,7 @@ class RubyLsp(SolidLanguageServer):
 
                 if ruby_lsp_in_bundle:
                     logger.log("Found ruby-lsp in Gemfile.lock", logging.INFO)
-                    return [bundle_path, "exec", "ruby-lsp"]
+                    return bundle_cmd + ["exec", "ruby-lsp"]
                 else:
                     logger.log(
                         "ruby-lsp not found in Gemfile.lock. Consider adding 'gem \"ruby-lsp\"' to your Gemfile for better compatibility.",
