@@ -53,6 +53,7 @@ class Language(str, Enum):
     NIX = "nix"
     ERLANG = "erlang"
     AL = "al"
+    NIM = "nim"
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -136,6 +137,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.erl", "*.hrl", "*.escript", "*.config", "*.app", "*.app.src")
             case self.AL:
                 return FilenameMatcher("*.al", "*.dal")
+            case self.NIM:
+                return FilenameMatcher("*.nim", "*.nims", "*.nimble")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -245,6 +248,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.r_language_server import RLanguageServer
 
                 return RLanguageServer
+            case self.NIM:
+                from solidlsp.language_servers.nim_language_server import NimLanguageServer
+
+                return NimLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
