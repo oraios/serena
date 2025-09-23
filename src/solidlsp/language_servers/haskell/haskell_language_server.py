@@ -72,6 +72,8 @@ class HaskellLanguageServer(SolidLanguageServer):
         ls_types.SymbolKind.Function,
         ls_types.SymbolKind.Method,
         ls_types.SymbolKind.Class,
+        ls_types.SymbolKind.Struct,      # Haskell data types
+        ls_types.SymbolKind.Constructor, # Haskell data constructors
     })
     _VARIABLE_KINDS = frozenset({ls_types.SymbolKind.Variable})
     _EXCLUDED_KINDS = frozenset({ls_types.SymbolKind.Module})  # Imports

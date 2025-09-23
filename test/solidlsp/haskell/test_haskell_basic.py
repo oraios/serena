@@ -142,7 +142,7 @@ class TestHaskellLanguageServerSymbols:
                         break
 
         if not calculator_symbol or "range" not in calculator_symbol:
-            pytest.skip("Calculator data type symbol not found or missing range")
+            assert False, f"Calculator data type symbol not found or missing range. Available symbols: {[s.get('name') for s in hierarchical_symbols if isinstance(s, dict)]}"
 
         calc_start = calculator_symbol["range"]["start"]
         test_line = calc_start["line"]
@@ -151,7 +151,7 @@ class TestHaskellLanguageServerSymbols:
         containing_symbol = language_server.request_containing_symbol(file_path, test_line, test_char)
 
         if containing_symbol is None:
-            pytest.skip("request_containing_symbol returned None for data type")
+            assert False, f"request_containing_symbol returned None for data type at line {test_line}, char {test_char}"
 
         assert containing_symbol["name"] == "Calculator", f"Expected 'Calculator', got '{containing_symbol.get('name')}'"
 
