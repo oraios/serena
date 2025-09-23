@@ -1165,9 +1165,12 @@ google = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "black" },
+    { name = "mypy" },
     { name = "poethepoet" },
     { name = "pytest" },
     { name = "pytest-xdist" },
+    { name = "ruff" },
     { name = "syrupy" },
 ]
 
@@ -1212,9 +1215,12 @@ provides-extras = ["dev", "agno", "google"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "black", specifier = ">=25.1.0" },
+    { name = "mypy", specifier = ">=1.17.0" },
     { name = "poethepoet", specifier = ">=0.36.0" },
     { name = "pytest", specifier = ">=8.4.1" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
+    { name = "ruff", specifier = ">=0.12.5" },
     { name = "syrupy", specifier = ">=4.9.1" },
 ]
 

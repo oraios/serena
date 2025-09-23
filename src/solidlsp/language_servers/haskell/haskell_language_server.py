@@ -6,6 +6,7 @@ import threading
 
 from overrides import override
 
+from solidlsp import ls_types
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
@@ -13,7 +14,6 @@ from solidlsp.ls_utils import PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
-from solidlsp import ls_types
 
 from ..common import RuntimeDependency, RuntimeDependencyCollection
 
@@ -68,13 +68,15 @@ class HaskellLanguageServer(SolidLanguageServer):
     Prefers haskell-language-server-wrapper if available, else falls back to haskell-language-server.
     """
 
-    _CONTAINER_KINDS = frozenset({
-        ls_types.SymbolKind.Function,
-        ls_types.SymbolKind.Method,
-        ls_types.SymbolKind.Class,
-        ls_types.SymbolKind.Struct,      # Haskell data types
-        ls_types.SymbolKind.Constructor, # Haskell data constructors
-    })
+    _CONTAINER_KINDS = frozenset(
+        {
+            ls_types.SymbolKind.Function,
+            ls_types.SymbolKind.Method,
+            ls_types.SymbolKind.Class,
+            ls_types.SymbolKind.Struct,  # Haskell data types
+            ls_types.SymbolKind.Constructor,  # Haskell data constructors
+        }
+    )
     _VARIABLE_KINDS = frozenset({ls_types.SymbolKind.Variable})
     _EXCLUDED_KINDS = frozenset({ls_types.SymbolKind.Module})  # Imports
     _LINE_WEIGHT = 1000
@@ -262,7 +264,7 @@ class HaskellLanguageServer(SolidLanguageServer):
         include_body: bool = False,
     ):
         """Allow one-line Haskell functions while excluding imports."""
-        
+
         def add_location_info(symbol):
             if "location" not in symbol:
                 symbol["location"] = {"range": symbol["range"]}
@@ -274,20 +276,19 @@ class HaskellLanguageServer(SolidLanguageServer):
 
         def position_is_in_range(target_line: int, range_d: ls_types.Range) -> bool:
             start, end = range_d["start"], range_d["end"]
-            
-            line_ok = (end["line"] >= target_line > start["line"] if strict 
-                      else end["line"] >= target_line >= start["line"])
-            
+
+            line_ok = end["line"] >= target_line > start["line"] if strict else end["line"] >= target_line >= start["line"]
+
             column_ok = True
             if column is not None and target_line == start["line"]:
-                column_ok = (column > start["character"] if strict 
-                           else column >= start["character"])
-            
+                column_ok = column > start["character"] if strict else column >= start["character"]
+
             return line_ok and column_ok
 
         def is_valid_container(symbol):
-            return ((symbol["kind"] in self._CONTAINER_KINDS or symbol["kind"] in self._VARIABLE_KINDS) 
-                    and symbol["kind"] not in self._EXCLUDED_KINDS)
+            return (symbol["kind"] in self._CONTAINER_KINDS or symbol["kind"] in self._VARIABLE_KINDS) and symbol[
+                "kind"
+            ] not in self._EXCLUDED_KINDS
 
         def contains_position(symbol):
             return position_is_in_range(line, symbol["location"]["range"])
@@ -299,7 +300,7 @@ class HaskellLanguageServer(SolidLanguageServer):
             return line_diff * self._LINE_WEIGHT + char_diff
 
         # Main logic
-        with self.open_file(relative_file_path) as file_data:
+        with self.open_file(relative_file_path):
             symbols = self.request_document_symbols(relative_file_path)
             if symbols is None:
                 return None
@@ -307,7 +308,7 @@ class HaskellLanguageServer(SolidLanguageServer):
             hierarchical_symbols, flat_symbols = symbols
             all_symbols = flat_symbols + hierarchical_symbols
             absolute_path = os.path.join(self.repository_root_path, relative_file_path)
-            
+
             enriched_symbols = list(map(add_location_info, all_symbols))
             candidates = list(filter(is_valid_container, enriched_symbols))
             containing = list(filter(contains_position, candidates))

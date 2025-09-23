@@ -97,12 +97,14 @@ class TestHaskellLanguageServerSymbols:
                         add_symbol = child
                         break
 
-        if not add_symbol:
-            assert False, f"add function symbol not found in document symbols. Available symbols: {[s.get('name') for s in hierarchical_symbols if isinstance(s, dict)]}"
+        assert (
+            add_symbol is not None
+        ), f"add function symbol not found in document symbols. Available symbols: {[s.get('name') for s in hierarchical_symbols if isinstance(s, dict)]}"
 
         # Get the range of the add function
-        if "range" not in add_symbol or "start" not in add_symbol["range"]:
-            assert False, f"add function symbol doesn't have range information. Symbol keys: {list(add_symbol.keys()) if add_symbol else 'None'}"
+        assert (
+            "range" in add_symbol and "start" in add_symbol["range"]
+        ), f"add function symbol doesn't have range information. Symbol keys: {list(add_symbol.keys()) if add_symbol else 'None'}"
 
         add_start = add_symbol["range"]["start"]
         test_line = add_start["line"]
@@ -141,8 +143,10 @@ class TestHaskellLanguageServerSymbols:
                         calculator_symbol = child
                         break
 
-        if not calculator_symbol or "range" not in calculator_symbol:
-            assert False, f"Calculator data type symbol not found or missing range. Available symbols: {[s.get('name') for s in hierarchical_symbols if isinstance(s, dict)]}"
+        assert (
+            calculator_symbol is not None
+        ), f"Calculator data type symbol not found. Available symbols: {[s.get('name') for s in hierarchical_symbols if isinstance(s, dict)]}"
+        assert "range" in calculator_symbol, f"Calculator symbol missing range information. Symbol keys: {list(calculator_symbol.keys())}"
 
         calc_start = calculator_symbol["range"]["start"]
         test_line = calc_start["line"]
@@ -150,8 +154,7 @@ class TestHaskellLanguageServerSymbols:
 
         containing_symbol = language_server.request_containing_symbol(file_path, test_line, test_char)
 
-        if containing_symbol is None:
-            assert False, f"request_containing_symbol returned None for data type at line {test_line}, char {test_char}"
+        assert containing_symbol is not None, f"request_containing_symbol returned None for data type at line {test_line}, char {test_char}"
 
         assert containing_symbol["name"] == "Calculator", f"Expected 'Calculator', got '{containing_symbol.get('name')}'"
 
@@ -231,8 +234,7 @@ class TestHaskellLanguageServerSymbols:
         # Position 10 should be on 'add'
         defining_symbol = language_server.request_defining_symbol(main_file, 8, 10)
 
-        if defining_symbol is None:
-            assert False, f"request_defining_symbol returned None - HLS may not support go-to-definition"
+        assert defining_symbol is not None, "request_defining_symbol returned None - HLS may not support go-to-definition"
 
         # Should find the definition of 'add' function
         assert "name" in defining_symbol, "Defining symbol should have name"
