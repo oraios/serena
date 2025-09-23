@@ -278,9 +278,10 @@ class HaskellLanguageServer(SolidLanguageServer):
             line_ok = (end["line"] >= target_line > start["line"] if strict 
                       else end["line"] >= target_line >= start["line"])
             
-            column_ok = (column > start["character"] 
-                       if column is not None and target_line == start["line"]
-                       else True)
+            column_ok = True
+            if column is not None and target_line == start["line"]:
+                column_ok = (column > start["character"] if strict 
+                           else column >= start["character"])
             
             return line_ok and column_ok
 

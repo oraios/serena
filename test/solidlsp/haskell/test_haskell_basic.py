@@ -227,12 +227,12 @@ class TestHaskellLanguageServerSymbols:
         """Test request_defining_symbol by looking for function usage in Main.hs."""
         main_file = os.path.join("app", "Main.hs")
 
-        # Look for the add function call in Main.hs (around line 9: print (add 2 3))
-        # We'll test position 9, 15 which should be on the 'add' call
-        defining_symbol = language_server.request_defining_symbol(main_file, 9, 15)
+        # Look for the add function call in Main.hs (line 9: print (add 2 3))
+        # Position 10 should be on 'add'
+        defining_symbol = language_server.request_defining_symbol(main_file, 8, 10)
 
         if defining_symbol is None:
-            pytest.skip("request_defining_symbol returned None - may not be supported yet")
+            assert False, f"request_defining_symbol returned None - HLS may not support go-to-definition"
 
         # Should find the definition of 'add' function
         assert "name" in defining_symbol, "Defining symbol should have name"
