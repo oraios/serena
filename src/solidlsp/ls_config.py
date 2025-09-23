@@ -224,6 +224,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.bash_language_server import BashLanguageServer
 
                 return BashLanguageServer
+            case self.HASKELL:
+                from solidlsp.language_servers.haskell.haskell_language_server import HaskellLanguageServer
+
+                return HaskellLanguageServer
             case self.ZIG:
                 from solidlsp.language_servers.zls import ZigLanguageServer
 

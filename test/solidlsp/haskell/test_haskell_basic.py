@@ -9,7 +9,6 @@ These tests focus on the following methods:
 """
 
 import os
-import time
 
 import pytest
 
@@ -27,9 +26,6 @@ class TestHaskellLanguageServerSymbols:
     def test_document_symbols_lib_exact_content(self, language_server: SolidLanguageServer) -> None:
         """Test document symbols for Lib.hs and verify exact symbol content."""
         file_path = os.path.join("src", "Lib.hs")
-
-        # Give HLS some time to fully analyze the file
-        time.sleep(2)
 
         symbols = language_server.request_document_symbols(file_path)
         assert symbols is not None, "Should receive symbols from HLS"
@@ -59,9 +55,6 @@ class TestHaskellLanguageServerSymbols:
     def test_document_symbols_main_exact_content(self, language_server: SolidLanguageServer) -> None:
         """Test document symbols for Main.hs."""
         file_path = os.path.join("app", "Main.hs")
-
-        # Give HLS some time to fully analyze the file
-        time.sleep(2)
 
         symbols = language_server.request_document_symbols(file_path)
         assert symbols is not None, "Should receive symbols from Main.hs"

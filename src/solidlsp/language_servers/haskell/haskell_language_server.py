@@ -3,7 +3,6 @@ import os
 import pathlib
 import shutil
 import threading
-import time
 
 from overrides import override
 
@@ -233,7 +232,11 @@ class HaskellLanguageServer(SolidLanguageServer):
         self.server.notify.initialized({})
         self.completions_available.set()
 
-        # HLS is typically ready after initialize; add short settling time for indexing
-        time.sleep(2.0)
+        # HLS is typically ready after initialize
         self.server_ready.set()
         self.server_ready.wait()
+
+    @override
+    def _get_wait_time_for_cross_file_referencing(self) -> float:
+        """HLS needs more time to fully index the project for cross-file references."""
+        return 3.0
