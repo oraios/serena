@@ -98,11 +98,11 @@ class TestHaskellLanguageServerSymbols:
                         break
 
         if not add_symbol:
-            pytest.skip("add function symbol not found in document symbols")
+            assert False, f"add function symbol not found in document symbols. Available symbols: {[s.get('name') for s in hierarchical_symbols if isinstance(s, dict)]}"
 
         # Get the range of the add function
         if "range" not in add_symbol or "start" not in add_symbol["range"]:
-            pytest.skip("add function symbol doesn't have range information")
+            assert False, f"add function symbol doesn't have range information. Symbol keys: {list(add_symbol.keys()) if add_symbol else 'None'}"
 
         add_start = add_symbol["range"]["start"]
         test_line = add_start["line"]
@@ -113,7 +113,7 @@ class TestHaskellLanguageServerSymbols:
 
         if containing_symbol is None:
             # HLS might not support containing symbol or need more time
-            pytest.skip("request_containing_symbol returned None - HLS may not support this feature yet")
+            assert False, "request_containing_symbol returned None - HLS may not support this feature yet"
 
         # Verify we found the correct symbol
         assert containing_symbol["name"] == "add", f"Expected 'add', got '{containing_symbol.get('name')}'"
