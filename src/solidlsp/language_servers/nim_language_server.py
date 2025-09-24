@@ -242,6 +242,11 @@ class NimLanguageServer(SolidLanguageServer):
                             f.write("--path:\"src\"\n")
                         if has_tests:
                             f.write("--path:\"tests\"\n")
+
+                        # If there's a public directory, ensure paths work from src/
+                        if has_public and has_src:
+                            f.write("# Enable finding resources from src/ directory\n")
+                            f.write("--path:\"..\"\n")  # Allow src/ files to find ../public/
                         f.write("\n")
 
                         f.write("# Common defines for better compatibility\n")
