@@ -234,3 +234,7 @@ tmp/
 # Swift
 /test/resources/repos/swift/test_repo/.build
 /test/resources/repos/swift/test_repo/.swiftpm
+
+# Nim - generated config files
+nimsuggest.cfg
+/test/resources/repos/nim/test_repo/nim.cfg

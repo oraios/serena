@@ -142,7 +142,8 @@ class NimLanguageServer(SolidLanguageServer):
 
         # Set environment variables to help nimsuggest work better
         env["NIM_SILENT"] = "true"  # Reduce nimsuggest verbosity
-        env["NIMSUGEST_RESTART_LIMIT"] = "5"  # Limit restart attempts
+        env["NIMSUGGEST_RESTART_LIMIT"] = "5"  # Limit restart attempts (fix typo)
+        env["NIMSUGGEST_SKIP_STATIC"] = "1"  # Custom env var projects can check
 
         # Initialize server_ready before parent class initialization
         self.server_ready = threading.Event()
@@ -190,22 +191,81 @@ class NimLanguageServer(SolidLanguageServer):
         )
 
     def _create_nim_config_if_needed(self):
-        """Create a basic nim.cfg file if it doesn't exist to help nimsuggest work better."""
+        """Create or supplement Nim configuration to help nimsuggest work better."""
         try:
             nim_cfg_path = os.path.join(self.repository_root_path, "nim.cfg")
+            nimsuggest_cfg_path = os.path.join(self.repository_root_path, "nimsuggest.cfg")
+
+            # Only create nimsuggest.cfg if it doesn't exist
+            # This is a separate file that won't interfere with existing nim.cfg
+            if not os.path.exists(nimsuggest_cfg_path):
+                with open(nimsuggest_cfg_path, "w") as f:
+                    f.write("# Auto-generated nimsuggest.cfg for language server stability\n")
+                    f.write("# This supplements the project's nim.cfg without overriding it\n\n")
+
+                    # Define flags that help with conditional compilation
+                    f.write("# Define nimsuggest flag for conditional compilation\n")
+                    f.write("# Projects can use: when not defined(nimsuggest)\n")
+                    f.write("-d:nimsuggest\n")
+                    f.write("-d:nimSuggestSkipStatic\n\n")
+
+                    # Limit error reporting to prevent overwhelming the server
+                    f.write("# Limit error reporting\n")
+                    f.write("--errorMax:100\n")
+                    f.write("--maxLoopIterationsVM:10000000\n\n")
+
+                    # Performance tuning for nimsuggest
+                    f.write("# Performance tuning\n")
+                    f.write("--skipProjCfg:off\n")  # Still read project's nim.cfg
+                    f.write("--skipUserCfg:on\n")   # Skip global user config
+                    f.write("--skipParentCfg:on\n") # Skip parent directory configs
+
+                self.logger.log("Created nimsuggest.cfg to improve stability", logging.INFO)
+
+            # Check if nim.cfg exists and if it needs suggestions
             if not os.path.exists(nim_cfg_path):
-                # Check if there's a .nimble file to determine project name
+                # Only create nim.cfg if this is clearly a Nim project (has .nimble file)
                 nimble_files = list(pathlib.Path(self.repository_root_path).glob("*.nimble"))
                 if nimble_files:
-                    # Create a minimal nim.cfg that helps nimsuggest
+                    # Check common project structures to determine paths
+                    has_src = os.path.exists(os.path.join(self.repository_root_path, "src"))
+                    has_tests = os.path.exists(os.path.join(self.repository_root_path, "tests"))
+                    has_public = os.path.exists(os.path.join(self.repository_root_path, "public"))
+
                     with open(nim_cfg_path, "w") as f:
-                        f.write("# Auto-generated nim.cfg for better nimsuggest support\n")
-                        f.write("--hints:off\n")  # Reduce verbosity
-                        f.write("--warnings:off\n")  # Focus on errors only
-                        f.write("--verbosity:0\n")  # Minimal output
-                    self.logger.log(f"Created nim.cfg to improve nimsuggest stability", logging.INFO)
+                        f.write("# Auto-generated nim.cfg for nimsuggest/nimlangserver\n")
+                        f.write("# Customize this file based on your project's needs\n\n")
+
+                        f.write("# Standard paths for module resolution\n")
+                        f.write("--path:\".\"\n")
+                        if has_src:
+                            f.write("--path:\"src\"\n")
+                        if has_tests:
+                            f.write("--path:\"tests\"\n")
+                        f.write("\n")
+
+                        f.write("# Common defines for better compatibility\n")
+                        f.write("--define:ssl  # Enable SSL support\n")
+                        f.write("--define:useStdLib  # Use standard library\n\n")
+
+                        f.write("# Suppress non-critical hints during development\n")
+                        f.write("--hint:XDeclaredButNotUsed:off\n")
+                        f.write("--hint:XCannotRaiseY:off\n")
+                        f.write("--hint:User:off\n\n")
+
+                        f.write("# For projects with static file reads, wrap them like:\n")
+                        f.write("#   when not defined(nimsuggest):\n")
+                        f.write("#     const data = staticRead(\"file.txt\")\n")
+                        f.write("#   else:\n")
+                        f.write("#     const data = \"\"\n")
+
+                    self.logger.log(f"Created nim.cfg with paths: . {('src ' if has_src else '')}{('tests ' if has_tests else '')}", logging.INFO)
+            else:
+                # Existing nim.cfg found - just log that we're respecting it
+                self.logger.log("Found existing nim.cfg, respecting project configuration", logging.DEBUG)
+
         except Exception as e:
-            self.logger.log(f"Could not create nim.cfg: {e}", logging.DEBUG)
+            self.logger.log(f"Could not create config files: {e}", logging.DEBUG)
 
     @classmethod
     def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, solidlsp_settings: SolidLSPSettings) -> str:
@@ -332,7 +392,10 @@ class NimLanguageServer(SolidLanguageServer):
                     "configuration": True,
                 },
             },
-            "initializationOptions": {},
+            "initializationOptions": {
+                # Let nimlangserver find nimsuggest automatically
+                # Don't override project-specific settings
+            },
             "workspaceFolders": [
                 {
                     "uri": root_uri,
