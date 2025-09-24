@@ -48,6 +48,7 @@ class Language(str, Enum):
     TERRAFORM = "terraform"
     SWIFT = "swift"
     BASH = "bash"
+    HASKELL = "haskell"
     ZIG = "zig"
     LUA = "lua"
     NIX = "nix"
@@ -126,6 +127,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.swift")
             case self.BASH:
                 return FilenameMatcher("*.sh", "*.bash")
+            case self.HASKELL:
+                return FilenameMatcher("*.hs", "*.lhs", "*.cabal")
             case self.ZIG:
                 return FilenameMatcher("*.zig", "*.zon")
             case self.LUA:
@@ -221,6 +224,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.bash_language_server import BashLanguageServer
 
                 return BashLanguageServer
+            case self.HASKELL:
+                from solidlsp.language_servers.haskell.haskell_language_server import HaskellLanguageServer
+
+                return HaskellLanguageServer
             case self.ZIG:
                 from solidlsp.language_servers.zls import ZigLanguageServer
 
