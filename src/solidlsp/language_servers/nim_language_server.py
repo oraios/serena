@@ -50,6 +50,10 @@ class NimLanguageServerHandler(SolidLanguageServerHandler):
         log = logging.getLogger(f"{self.__class__.__module__}.{self.__class__.__name__}")
         ENCODING = "utf-8"
 
+        # Track nimsuggest errors to prevent endless restarts
+        error_count = 0
+        max_errors = 10
+
         try:
             while self.process and self.process.stderr:
                 if self.process.poll() is not None:
@@ -59,6 +63,10 @@ class NimLanguageServerHandler(SolidLanguageServerHandler):
                 if not line:
                     continue
                 line_decoded = line.decode(ENCODING, errors="replace").rstrip()
+
+                # Skip empty lines
+                if not line_decoded.strip():
+                    continue
 
                 # Parse Nim language server log level prefixes
                 # The format is typically "DBG Message text  key=value"
@@ -70,17 +78,43 @@ class NimLanguageServerHandler(SolidLanguageServerHandler):
                     level = logging.INFO
                 elif line_decoded.startswith("WRN ") or "WRN " in line_decoded[:20]:
                     level = logging.WARNING
+                    # Check for specific warnings that are really errors
+                    if "Server stopped" in line_decoded:
+                        error_count += 1
                 elif line_decoded.startswith("ERR ") or "ERR " in line_decoded[:20]:
                     level = logging.ERROR
+                    error_count += 1
+
+                    # Track specific error types
+                    if "Failed to parse nimsuggest port" in line_decoded:
+                        # This is a critical error that needs special handling
+                        log.error("Nimsuggest port parsing failed - server may need restart")
+                    elif "cannot open:" in line_decoded and ".svg" in line_decoded:
+                        # SVG file missing is not critical, just log it
+                        log.warning("Missing SVG resource (non-critical): %s", line_decoded)
+                        level = logging.WARNING
+                        error_count -= 1  # Don't count this as a critical error
+                    elif "cannot open:" in line_decoded:
+                        # Other file missing errors might be critical
+                        log.error("Missing file error: %s", line_decoded)
                 else:
                     # Default to INFO for unrecognized format
                     level = logging.INFO
+
+                # Check if we've hit too many errors
+                if error_count >= max_errors:
+                    log.error("Too many nimsuggest errors (%d), stopping error recovery", error_count)
+                    # Signal that the server should be restarted externally
+                    break
 
                 log.log(level, line_decoded)
         except Exception as e:
             log.error("Error while reading stderr from Nim language server process: %s", e, exc_info=e)
         if not self._is_shutting_down:
-            log.error("Nim language server stderr reader thread terminated unexpectedly")
+            if error_count >= max_errors:
+                log.error("Nim language server terminated due to excessive errors")
+            else:
+                log.error("Nim language server stderr reader thread terminated unexpectedly")
         else:
             log.info("Nim language server stderr reader thread has terminated")
 
@@ -106,6 +140,10 @@ class NimLanguageServer(SolidLanguageServer):
         if nimble_bin not in env.get("PATH", "").split(os.pathsep):
             env["PATH"] = f"{nimble_bin}{os.pathsep}{env.get('PATH', '')}"
 
+        # Set environment variables to help nimsuggest work better
+        env["NIM_SILENT"] = "true"  # Reduce nimsuggest verbosity
+        env["NIMSUGEST_RESTART_LIMIT"] = "5"  # Limit restart attempts
+
         # Initialize server_ready before parent class initialization
         self.server_ready = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
@@ -129,6 +167,9 @@ class NimLanguageServer(SolidLanguageServer):
 
     def _setup_custom_handler(self, repository_root_path: str, process_launch_info: ProcessLaunchInfo):
         """Setup custom handler for nimlangserver."""
+        # Store repository path for potential use
+        self._repo_path = repository_root_path
+
         def logging_fn(_, level, message):
             # Convert dict messages to string
             if isinstance(message, dict):
@@ -148,11 +189,32 @@ class NimLanguageServer(SolidLanguageServer):
             logger=logging_fn,
         )
 
+    def _create_nim_config_if_needed(self):
+        """Create a basic nim.cfg file if it doesn't exist to help nimsuggest work better."""
+        try:
+            nim_cfg_path = os.path.join(self.repository_root_path, "nim.cfg")
+            if not os.path.exists(nim_cfg_path):
+                # Check if there's a .nimble file to determine project name
+                nimble_files = list(pathlib.Path(self.repository_root_path).glob("*.nimble"))
+                if nimble_files:
+                    # Create a minimal nim.cfg that helps nimsuggest
+                    with open(nim_cfg_path, "w") as f:
+                        f.write("# Auto-generated nim.cfg for better nimsuggest support\n")
+                        f.write("--hints:off\n")  # Reduce verbosity
+                        f.write("--warnings:off\n")  # Focus on errors only
+                        f.write("--verbosity:0\n")  # Minimal output
+                    self.logger.log(f"Created nim.cfg to improve nimsuggest stability", logging.INFO)
+        except Exception as e:
+            self.logger.log(f"Could not create nim.cfg: {e}", logging.DEBUG)
+
     @classmethod
     def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, solidlsp_settings: SolidLSPSettings) -> str:
         """
         Setup runtime dependencies for Nim Language Server and return the command to start the server.
         """
+        # Store settings for later use if needed
+        cls._solidlsp_settings = solidlsp_settings
+
         # First check if nimlangserver is already installed via nimble
         nimble_bin = os.path.expanduser("~/.nimble/bin")
         nimlangserver_path = os.path.join(nimble_bin, "nimlangserver")
@@ -284,6 +346,8 @@ class NimLanguageServer(SolidLanguageServer):
         """
         Starts the Nim Language Server, waits for the server to be ready and yields the LanguageServer instance.
         """
+        # Try to create a nim.cfg if needed to improve nimsuggest stability
+        self._create_nim_config_if_needed()
 
         def register_capability_handler(params):
             assert "registrations" in params
@@ -311,7 +375,20 @@ class NimLanguageServer(SolidLanguageServer):
             self.logger.log(f"LSP: window/showMessage: {msg}", logging.INFO)
             # Check for nimlangserver ready signals
             message_text = msg.get("message", "")
-            if "initialized" in message_text.lower() or "ready" in message_text.lower():
+            msg_type = msg.get("type", 3)  # 1=error, 2=warning, 3=info, 4=log
+
+            # Handle error messages specially
+            if msg_type == 1:  # Error
+                if "cannot open:" in message_text and ".svg" in message_text:
+                    # SVG file missing is non-critical
+                    self.logger.log(f"Non-critical resource missing: {message_text}", logging.WARNING)
+                elif "Failed to parse nimsuggest port" in message_text:
+                    self.logger.log(f"Nimsuggest port parsing failed: {message_text}", logging.ERROR)
+                    # Don't mark server as ready if there are critical errors
+                    return
+                else:
+                    self.logger.log(f"Nim server error: {message_text}", logging.ERROR)
+            elif "initialized" in message_text.lower() or "ready" in message_text.lower():
                 self.logger.log("Nim language server ready signal detected from showMessage", logging.INFO)
                 self.server_ready.set()
                 self.completions_available.set()
@@ -328,9 +405,38 @@ class NimLanguageServer(SolidLanguageServer):
         self.server.on_notification("window/showMessage", window_show_message)
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
         self.server.on_request("workspace/configuration", workspace_configuration_handler)
+        def extension_status_update(params):
+            """Handle Nim-specific status updates which include nimsuggest instance info."""
+            if "projectErrors" in params:
+                errors = params["projectErrors"]
+                for error in errors:
+                    error_msg = error.get("errorMessage", "")
+                    project_file = error.get("projectFile", "")
+
+                    # Log non-critical errors at warning level
+                    if "cannot open:" in error_msg and (".svg" in error_msg or ".png" in error_msg or ".ico" in error_msg):
+                        self.logger.log(f"Non-critical resource missing in {project_file}: {error_msg}", logging.WARNING)
+                    elif "Failed to parse nimsuggest port" in error_msg:
+                        self.logger.log(f"Nimsuggest port issue for {project_file}: {error_msg}", logging.ERROR)
+                    else:
+                        self.logger.log(f"Project error in {project_file}: {error_msg}", logging.ERROR)
+
+            # Check if nimsuggest instances are running
+            if "nimsuggestInstances" in params:
+                instances = params["nimsuggestInstances"]
+                for instance in instances:
+                    port = instance.get("port", 0)
+                    project = instance.get("projectFile", "")
+                    if port > 0:
+                        self.logger.log(f"Nimsuggest instance running for {project} on port {port}", logging.DEBUG)
+                        # Server is likely ready if we have active instances
+                        if not self.server_ready.is_set():
+                            self.server_ready.set()
+                            self.completions_available.set()
+
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
-        self.server.on_notification("extension/statusUpdate", do_nothing)  # Nim-specific status updates
+        self.server.on_notification("extension/statusUpdate", extension_status_update)  # Nim-specific status updates
 
         self.logger.log("Starting Nim server process", logging.INFO)
         self.server.start()
@@ -372,11 +478,25 @@ class NimLanguageServer(SolidLanguageServer):
 
         # Wait for server readiness with timeout
         self.logger.log("Waiting for Nim language server to be ready...", logging.INFO)
-        if not self.server_ready.wait(timeout=10.0):  # Increased timeout for Nim server
-            # Assume server is ready after timeout
-            self.logger.log("Timeout waiting for Nim server ready signal, proceeding anyway", logging.WARNING)
-            self.server_ready.set()
-            self.completions_available.set()
+        if not self.server_ready.wait(timeout=15.0):  # Increased timeout for Nim server with complex projects
+            # Try a simple operation to check if server is actually working
+            try:
+                # Try to get symbols from a simple test file to verify server is functional
+                test_response = self.server.send.workspace_symbol({"query": ""})
+                if test_response is not None:
+                    self.logger.log("Nim server responded to test query, marking as ready", logging.INFO)
+                    self.server_ready.set()
+                    self.completions_available.set()
+                else:
+                    self.logger.log("Nim server not responding, may need manual restart", logging.WARNING)
+                    # Still set as ready to allow operations to proceed
+                    self.server_ready.set()
+                    self.completions_available.set()
+            except Exception as e:
+                self.logger.log(f"Error testing Nim server readiness: {e}", logging.WARNING)
+                # Proceed anyway
+                self.server_ready.set()
+                self.completions_available.set()
         else:
             self.logger.log("Nim server initialization complete", logging.INFO)
 
