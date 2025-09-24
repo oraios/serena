@@ -207,18 +207,22 @@ class NimLanguageServer(SolidLanguageServer):
                     f.write("# Define nimsuggest flag for conditional compilation\n")
                     f.write("# Projects can use: when not defined(nimsuggest)\n")
                     f.write("-d:nimsuggest\n")
-                    f.write("-d:nimSuggestSkipStatic\n\n")
+                    f.write("-d:nimSuggestSkipStatic\n")
+                    f.write("-d:nimscript\n\n")  # Help with compile-time evaluation
 
                     # Limit error reporting to prevent overwhelming the server
                     f.write("# Limit error reporting\n")
                     f.write("--errorMax:100\n")
                     f.write("--maxLoopIterationsVM:10000000\n\n")
 
-                    # Performance tuning for nimsuggest
+                    # Performance and stability tuning for nimsuggest
                     f.write("# Performance tuning\n")
                     f.write("--skipProjCfg:off\n")  # Still read project's nim.cfg
                     f.write("--skipUserCfg:on\n")   # Skip global user config
                     f.write("--skipParentCfg:on\n") # Skip parent directory configs
+                    f.write("--verbosity:0\n")      # Minimal output
+                    f.write("--hints:off\n")        # No hints
+                    f.write("--notes:off\n")        # No notes
 
                 self.logger.log("Created nimsuggest.cfg to improve stability", logging.INFO)
 
@@ -398,8 +402,27 @@ class NimLanguageServer(SolidLanguageServer):
                 },
             },
             "initializationOptions": {
-                # Let nimlangserver find nimsuggest automatically
-                # Don't override project-specific settings
+                "nim": {
+                    # Increase timeout to handle complex projects
+                    "timeout": 120000,  # 2 minutes
+                    # Auto-restart on crash (but not endlessly)
+                    "autoRestart": True,
+                    # Set idle timeout to clean up unused nimsuggest instances
+                    "nimsuggestIdleTimeout": 300000,  # 5 minutes
+                    # Reduce notification noise
+                    "notificationVerbosity": "warning",
+                    # Working directory mapping can help with path resolution
+                    "workingDirectoryMapping": [
+                        {
+                            "projectFile": "*.nimble",
+                            "directory": "."
+                        },
+                        {
+                            "projectFile": "src/*.nim",
+                            "directory": "."
+                        }
+                    ]
+                }
             },
             "workspaceFolders": [
                 {
