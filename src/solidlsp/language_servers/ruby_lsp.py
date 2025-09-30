@@ -98,59 +98,48 @@ class RubyLsp(SolidLanguageServer):
             return shutil.which(executable_name)
 
     @staticmethod
-    def _get_rbenv_ruby_command(repository_root_path: str) -> list[str]:
-        """
-        Get the appropriate Ruby command considering rbenv configuration.
-        Returns the Ruby command that respects .ruby-version file if present.
-        """
-        # Check for .ruby-version file
-        ruby_version_file = os.path.join(repository_root_path, ".ruby-version")
-
-        if os.path.exists(ruby_version_file):
-            try:
-                with open(ruby_version_file) as f:
-                    f.read().strip()  # Verify file is readable
-
-                # Check if rbenv is available
-                try:
-                    rbenv_path = shutil.which("rbenv")
-                    if rbenv_path:
-                        # Use rbenv exec to run with specified version
-                        return ["rbenv", "exec", "ruby"]
-                except Exception:
-                    pass
-            except Exception:
-                pass
-
-        # Fallback to system ruby
-        return ["ruby"]
-
-    @staticmethod
-    def _get_rbenv_bundle_command(repository_root_path: str) -> list[str]:
-        """
-        Get the appropriate bundle command considering rbenv configuration.
-        """
-        ruby_version_file = os.path.join(repository_root_path, ".ruby-version")
-
-        if os.path.exists(ruby_version_file):
-            try:
-                rbenv_path = shutil.which("rbenv")
-                if rbenv_path:
-                    return ["rbenv", "exec", "bundle"]
-            except Exception:
-                pass
-
-        return ["bundle"]
-
-    @staticmethod
     def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig, repository_root_path: str) -> list[str]:
         """
         Setup runtime dependencies for ruby-lsp and return the command list to start the server.
         Installation strategy: Bundler project > global ruby-lsp > gem install ruby-lsp
         """
+        # Detect rbenv-managed Ruby environment
+        # When .ruby-version exists, it indicates the project uses rbenv for version management.
+        # rbenv automatically reads .ruby-version to determine which Ruby version to use.
+        # Using "rbenv exec" ensures commands run with the correct Ruby version and its gems.
+        #
+        # Why rbenv is preferred over system Ruby:
+        # - Respects project-specific Ruby versions
+        # - Avoids bundler version mismatches between system and project
+        # - Ensures consistent environment across developers
+        #
+        # Fallback behavior:
+        # If .ruby-version doesn't exist or rbenv isn't installed, we fall back to system Ruby.
+        # This may cause issues if:
+        # - System Ruby version differs from what the project expects
+        # - System bundler version is incompatible with Gemfile.lock
+        # - Project gems aren't installed in system Ruby
+        ruby_version_file = os.path.join(repository_root_path, ".ruby-version")
+        use_rbenv = os.path.exists(ruby_version_file) and shutil.which("rbenv") is not None
+
+        if use_rbenv:
+            ruby_cmd = ["rbenv", "exec", "ruby"]
+            bundle_cmd = ["rbenv", "exec", "bundle"]
+            logger.log(f"Using rbenv-managed Ruby (found {ruby_version_file})", logging.INFO)
+        else:
+            ruby_cmd = ["ruby"]
+            bundle_cmd = ["bundle"]
+            if os.path.exists(ruby_version_file):
+                logger.log(
+                    f"Found {ruby_version_file} but rbenv is not installed. "
+                    "Using system Ruby. Consider installing rbenv for better version management: https://github.com/rbenv/rbenv",
+                    logging.WARNING,
+                )
+            else:
+                logger.log("No .ruby-version file found, using system Ruby", logging.INFO)
+
         # Check if Ruby is installed
         try:
-            ruby_cmd = RubyLsp._get_rbenv_ruby_command(repository_root_path)
             result = subprocess.run(ruby_cmd + ["--version"], check=True, capture_output=True, cwd=repository_root_path, text=True)
             ruby_version = result.stdout.strip()
             logger.log(f"Ruby version: {ruby_version}", logging.INFO)
