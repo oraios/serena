@@ -35,25 +35,30 @@ safeDivEither :: Int -> Int -> Either String Int
 safeDivEither _ 0 = Left "Division by zero"
 safeDivEither x y = Right (x `div` y)
 
--- Data types and algebraic data types
+-- | A calculator with configurable precision.
+-- This data type represents a calculator instance with an identifier and precision setting.
 data Calculator = Calculator
-  { calcId :: String
-  , precision :: Int
+  { calcId :: String      -- ^ Unique identifier for the calculator
+  , precision :: Int      -- ^ Number of decimal places for calculations
   } deriving (Show, Eq)
 
+-- | Operations that can be performed by the calculator
 data Operation 
-  = Add Int Int
-  | Multiply Int Int
-  | Divide Int Int
+  = Add Int Int           -- ^ Addition operation
+  | Multiply Int Int      -- ^ Multiplication operation
+  | Divide Int Int        -- ^ Division operation
   deriving (Show, Eq)
 
--- User validation with Maybe
+-- | Represents a user in the system with validation support.
+-- Users must have valid IDs, names, and non-negative ages.
 data User = User
-  { userId :: String
-  , userName :: String  
-  , userAge :: Int
+  { userId :: String      -- ^ Unique user identifier
+  , userName :: String    -- ^ User's display name
+  , userAge :: Int        -- ^ User's age (must be non-negative)
   } deriving (Show, Eq)
 
+-- | Validates user data and returns a User if all fields are valid.
+-- Returns Nothing if any validation fails.
 validateUser :: String -> String -> Int -> Maybe User
 validateUser uid name age
   | null uid = Nothing

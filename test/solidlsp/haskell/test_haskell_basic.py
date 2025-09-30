@@ -65,10 +65,25 @@ class TestHaskellLanguageServerSymbols:
     """Test the Haskell language server's symbol-related functionality."""
 
     @pytest.mark.parametrize(
-        "file_path,expected_symbols,context",
+        "file_path,expected_symbols_and_kinds,context",
         [
-            (os.path.join("src", "Lib.hs"), ["add", "hello", "safeDiv", "Calculator", "User", "validateUser"], "Lib.hs document symbols"),
-            (os.path.join("app", "Main.hs"), ["main"], "Main.hs document symbols"),
+            (
+                os.path.join("src", "Lib.hs"),
+                [
+                    ("add", SymbolKind.Function.value),
+                    ("hello", SymbolKind.Function.value),
+                    ("safeDiv", SymbolKind.Function.value),
+                    ("Calculator", SymbolKind.Struct.value),
+                    ("User", SymbolKind.Struct.value),
+                    ("validateUser", SymbolKind.Function.value),
+                ],
+                "Lib.hs document symbols",
+            ),
+            (
+                os.path.join("app", "Main.hs"),
+                [("main", SymbolKind.Function.value)],
+                "Main.hs document symbols",
+            ),
         ],
     )
     @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
@@ -76,13 +91,27 @@ class TestHaskellLanguageServerSymbols:
         self,
         language_server: SolidLanguageServer,
         file_path: str,
-        expected_symbols: Sequence[str],
+        expected_symbols_and_kinds: Sequence[tuple[str, int]],
         context: str,
     ) -> None:
-        """Ensure each file presents the expected set of document symbols."""
+        """Ensure each file presents the expected set of document symbols with correct kinds.
+
+        Note: For Haskell, top-level symbols are children of the module symbol,
+        not in the flat symbols list which only contains the module itself.
+        """
+        expected_symbols = [name for name, _ in expected_symbols_and_kinds]
+
         hierarchical_symbols = document_symbol_tree(language_server, file_path)
         symbol_names = collect_symbol_names(hierarchical_symbols)
         expect_presence(symbol_names, expected_symbols, context)
+
+        # For Haskell, top-level declarations are children of the module symbol
+        top_level_symbols = hierarchical_symbols[0].get("children", [])
+
+        # Verify specific symbol kinds
+        symbol_kinds = {sym["name"]: sym["kind"] for sym in top_level_symbols}
+        for name, expected_kind in expected_symbols_and_kinds:
+            assert symbol_kinds.get(name) == expected_kind, f"Expected {name} to have kind {expected_kind}, got {symbol_kinds.get(name)}"
 
     @pytest.mark.parametrize(
         "target_name,offset,include_body,expected_kind",
@@ -152,3 +181,83 @@ class TestHaskellLanguageServerSymbols:
         assert any(
             symbol.get("name") == "main" and symbol.get("location", {}).get("relativePath") == "app/Main.hs" for symbol in refs_with_symbols
         ), "Expected reference to main in app/Main.hs"
+
+    @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
+    def test_request_hover_function(self, language_server: SolidLanguageServer) -> None:
+        """Test request_hover returns type signature for functions."""
+        file_path = os.path.join("src", "Lib.hs")
+        hierarchical_symbols = document_symbol_tree(language_server, file_path)
+
+        # Test hover on 'add' function
+        sel_start = selection_start_for_symbol(hierarchical_symbols, "add")
+        hover_info = language_server.request_hover(file_path, sel_start["line"], sel_start["character"])
+
+        hover_contents = str(hover_info["contents"])
+        assert "Int" in hover_contents, f"Expected 'Int' in hover contents, got: {hover_contents}"
+
+    @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
+    def test_request_hover_data_type(self, language_server: SolidLanguageServer) -> None:
+        """Test hover information on data types - hover on constructor name."""
+        file_path = os.path.join("src", "Lib.hs")
+        hierarchical_symbols = document_symbol_tree(language_server, file_path)
+
+        # Find Calculator and get its constructor child (nested within)
+        calc_symbol = require_symbol(hierarchical_symbols, "Calculator")
+        # The constructor is nested inside the struct, get its selectionRange
+        calc_constructor = calc_symbol.get("children", [{}])[0]
+        sel_start = calc_constructor.get("selectionRange", {}).get("start", {})
+
+        hover_info = language_server.request_hover(file_path, sel_start["line"], sel_start["character"])
+
+        hover_contents = str(hover_info["contents"])
+        assert "Calculator" in hover_contents, f"Expected 'Calculator' in hover, got: {hover_contents}"
+
+    @pytest.mark.parametrize(
+        "source_file,line,column,expected_file,description",
+        [
+            ("app/Main.hs", 8, 10, "src/Lib.hs", "function usage - 'add' in Main.hs"),  # Line 9: print (add 2 3)
+            ("app/Main.hs", 15, 14, "src/Lib.hs", "data type usage - 'Calculator' in Main.hs"),  # Line 16: let calc = Calculator "calc-1" 2
+        ],
+    )
+    @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
+    def test_request_definition_usage(
+        self,
+        language_server: SolidLanguageServer,
+        source_file: str,
+        line: int,
+        column: int,
+        expected_file: str,
+        description: str,
+    ) -> None:
+        """Test request_definition jumps from usage to definition for functions and data types."""
+        definitions = language_server.request_definition(source_file, line, column)
+        assert any(
+            defn["relativePath"] == expected_file for defn in definitions
+        ), f"Expected definition in {expected_file} for {description}, got: {definitions}"
+
+    @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
+    def test_request_references_cross_file(self, language_server: SolidLanguageServer) -> None:
+        """Test request_references finds both definition and usage locations."""
+        file_path = os.path.join("src", "Lib.hs")
+        hierarchical_symbols = document_symbol_tree(language_server, file_path)
+
+        # Get position of 'add' function definition
+        sel_start = selection_start_for_symbol(hierarchical_symbols, "add")
+        references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
+
+        reference_uris = [ref.get("uri", "") for ref in references]
+
+        assert any("Lib.hs" in uri for uri in reference_uris), f"Expected references in Lib.hs, found URIs: {reference_uris}"
+        assert any("Main.hs" in uri for uri in reference_uris), f"Expected references in Main.hs, found URIs: {reference_uris}"
+
+    @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
+    def test_request_workspace_symbol(self, language_server: SolidLanguageServer) -> None:
+        """Test request_workspace_symbol searches symbols across workspace."""
+        # Search for 'User' which appears in both data type and usage
+        results = language_server.request_workspace_symbol("User")
+
+        # Filter User's symbols in Lib.hs and get their kinds
+        symbol_kinds = {sym["kind"] for sym in results if "Lib.hs" in sym["location"]["uri"]}
+
+        assert SymbolKind.Constructor.value in symbol_kinds, f"Expected Constructor in symbol kinds, found: {symbol_kinds}"
+        assert SymbolKind.Struct.value in symbol_kinds, f"Expected Struct in symbol kinds, found: {symbol_kinds}"
