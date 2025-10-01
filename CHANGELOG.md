@@ -2,6 +2,7 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * Language support:
+  * **Add support for Haskell** via Haskell Language Server (HLS) with complete LSP integration, cross-platform support, and comprehensive test coverage. Includes PATH-first detection, managed fallback, and advanced Haskell features (Monads, Applicatives, custom data types).
   * **Add support for AL (Application Language)** for Microsoft Dynamics 365 Business Central development. Requires VS Code AL extension (ms-dynamics-smb.al).
   * **Add support for R** via the R languageserver package with LSP integration, performance optimizations, and fallback symbol extraction
   * **Add support for Zig** via ZLS (cross-file references may not fully work on Windows)
