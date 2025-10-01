@@ -273,6 +273,7 @@ markers = [
   "dart: language server running for Dart",
   "erlang: language server running for Erlang",
   "scala: language server running for Scala",
+  "scala: language server running for Scala",
   "al: language server running for AL (Microsoft Dynamics 365 Business Central)",
 ]
 
