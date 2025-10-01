@@ -87,12 +87,13 @@ class ListDirTool(Tool):
     Lists files and directories in the given directory (optionally with recursion).
     """
 
-    def apply(self, relative_path: str, recursive: bool, max_answer_chars: int = -1) -> str:
+    def apply(self, relative_path: str, recursive: bool, skip_ignored_files: bool = False, max_answer_chars: int = -1) -> str:
         """
         Lists all non-gitignored files and directories in the given directory (optionally with recursion).
 
         :param relative_path: the relative path to the directory to list; pass "." to scan the project root
         :param recursive: whether to scan subdirectories recursively
+        :param skip_ignored_files: whether to skip files and directories that are ignored
         :param max_answer_chars: if the output is longer than this number of characters,
             no content will be returned. -1 means the default value from the config will be used.
             Don't adjust unless there is really no other way to get the content required for the task.
@@ -113,8 +114,8 @@ class ListDirTool(Tool):
             os.path.join(self.get_project_root(), relative_path),
             relative_to=self.get_project_root(),
             recursive=recursive,
-            is_ignored_dir=self.project.is_ignored_path,
-            is_ignored_file=self.project.is_ignored_path,
+            is_ignored_dir=self.project.is_ignored_path if skip_ignored_files else None,
+            is_ignored_file=self.project.is_ignored_path if skip_ignored_files else None,
         )
 
         result = json.dumps({"dirs": dirs, "files": files})

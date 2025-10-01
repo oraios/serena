@@ -226,10 +226,14 @@ class ReplaceSymbolBodyTool(Tool, ToolMarkerSymbolicEdit):
         r"""
         Replaces the body of the symbol with the given `name_path`.
 
+        The tool shall be used to replace symbol bodies that have been previously retrieved
+        (e.g. via `find_symbol`), such that it is clear what constitutes the body of the symbol.
+
         :param name_path: for finding the symbol to replace, same logic as in the `find_symbol` tool.
         :param relative_path: the relative path to the file containing the symbol
-        :param body: the new symbol body. Important: Begin directly with the symbol definition and provide no
-            leading indentation for the first line (but do indent the rest of the body according to the context).
+        :param body: the new symbol body. Important: The symbol body is the full definition of a symbol
+            in the programming language, including e.g. the signature line for functions,
+            but it does NOT include any preceding comments or imports, in particular.
         """
         code_editor = self.create_code_editor()
         code_editor.replace_body(
