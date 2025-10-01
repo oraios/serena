@@ -99,7 +99,7 @@ class ToolSet:
             for excluded_tool in definition.excluded_tools:
                 if not registry.is_valid_tool_name(excluded_tool):
                     raise ValueError(f"Invalid tool name '{excluded_tool}' provided for exclusion")
-                if excluded_tool in self._tool_names:
+                if excluded_tool in tool_names:
                     tool_names.remove(excluded_tool)
                     excluded_tools.append(excluded_tool)
             if included_tools:

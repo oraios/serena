@@ -247,7 +247,7 @@ class Tool(Component):
                 if not isinstance(self, ToolMarkerDoesNotRequireActiveProject):
                     if self.agent._active_project is None:
                         return (
-                            "Error: No active project. Ask to user to select a project from this list: "
+                            "Error: No active project. Ask the user to provide the project path or to select a project from this list of known projects: "
                             + f"{self.agent.serena_config.project_names}"
                         )
                     if self.agent.is_using_language_server() and not self.agent.is_language_server_running():

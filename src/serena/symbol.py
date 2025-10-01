@@ -485,14 +485,14 @@ class LanguageServerSymbolRetriever:
         return symbols
 
     def get_document_symbols(self, relative_path: str) -> list[LanguageServerSymbol]:
-        symbol_dicts, roots = self._lang_server.request_document_symbols(relative_path, include_body=False)
+        symbol_dicts, _roots = self._lang_server.request_document_symbols(relative_path, include_body=False)
         symbols = [LanguageServerSymbol(s) for s in symbol_dicts]
         return symbols
 
     def find_by_location(self, location: LanguageServerSymbolLocation) -> LanguageServerSymbol | None:
         if location.relative_path is None:
             return None
-        symbol_dicts, roots = self._lang_server.request_document_symbols(location.relative_path, include_body=False)
+        symbol_dicts, _roots = self._lang_server.request_document_symbols(location.relative_path, include_body=False)
         for symbol_dict in symbol_dicts:
             symbol = LanguageServerSymbol(symbol_dict)
             if symbol.location == location:

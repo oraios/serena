@@ -89,7 +89,7 @@ class ClangdLanguageServer(SolidLanguageServer):
         )
 
         clangd_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "clangd")
-        dep = deps.single_for_current_platform()
+        dep = deps.get_single_dep_for_current_platform()
         clangd_executable_path = deps.binary_path(clangd_ls_dir)
         if not os.path.exists(clangd_executable_path):
             logger.log(
