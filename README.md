@@ -214,7 +214,7 @@ uvx --from git+https://github.com/oraios/serena serena start-mcp-server
 By default, Serena automatically opens the web dashboard at startup. To disable this behavior, launch it with the following command.
 
 ```shell
-uvx --from git+https://github.com/oraios/serena serena-mcp-server --enable-web-dashboard false start-mcp-server
+uvx --from git+https://github.com/oraios/serena serena --enable-web-dashboard false start-mcp-server
 ```
 
 Explore the CLI to see some of the customization options that serena provides (more info on them below).
