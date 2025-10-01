@@ -176,17 +176,16 @@ class RubyLsp(SolidLanguageServer):
             logger.log("Detected Bundler project (Gemfile found)", logging.INFO)
 
             # Check if bundle command is available using Windows-compatible search
-            bundle_cmd = RubyLsp._get_rbenv_bundle_command(repository_root_path)
             bundle_path = RubyLsp._find_executable_with_extensions(bundle_cmd[0] if len(bundle_cmd) == 1 else "bundle")
             if not bundle_path:
                 # Try common bundle executables
-                for bundle_cmd in ["bin/bundle", "bundle"]:
-                    if bundle_cmd.startswith("bin/"):
-                        bundle_full_path = os.path.join(repository_root_path, bundle_cmd)
+                for bundle_executable in ["bin/bundle", "bundle"]:
+                    if bundle_executable.startswith("bin/"):
+                        bundle_full_path = os.path.join(repository_root_path, bundle_executable)
                     else:
-                        bundle_full_path = RubyLsp._find_executable_with_extensions(bundle_cmd)
+                        bundle_full_path = RubyLsp._find_executable_with_extensions(bundle_executable)
                     if bundle_full_path and os.path.exists(bundle_full_path):
-                        bundle_path = bundle_full_path if bundle_cmd.startswith("bin/") else bundle_cmd
+                        bundle_path = bundle_full_path if bundle_executable.startswith("bin/") else bundle_executable
                         break
 
             if not bundle_path:
