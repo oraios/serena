@@ -103,9 +103,44 @@ class RubyLsp(SolidLanguageServer):
         Setup runtime dependencies for ruby-lsp and return the command list to start the server.
         Installation strategy: Bundler project > global ruby-lsp > gem install ruby-lsp
         """
+        # Detect rbenv-managed Ruby environment
+        # When .ruby-version exists, it indicates the project uses rbenv for version management.
+        # rbenv automatically reads .ruby-version to determine which Ruby version to use.
+        # Using "rbenv exec" ensures commands run with the correct Ruby version and its gems.
+        #
+        # Why rbenv is preferred over system Ruby:
+        # - Respects project-specific Ruby versions
+        # - Avoids bundler version mismatches between system and project
+        # - Ensures consistent environment across developers
+        #
+        # Fallback behavior:
+        # If .ruby-version doesn't exist or rbenv isn't installed, we fall back to system Ruby.
+        # This may cause issues if:
+        # - System Ruby version differs from what the project expects
+        # - System bundler version is incompatible with Gemfile.lock
+        # - Project gems aren't installed in system Ruby
+        ruby_version_file = os.path.join(repository_root_path, ".ruby-version")
+        use_rbenv = os.path.exists(ruby_version_file) and shutil.which("rbenv") is not None
+
+        if use_rbenv:
+            ruby_cmd = ["rbenv", "exec", "ruby"]
+            bundle_cmd = ["rbenv", "exec", "bundle"]
+            logger.log(f"Using rbenv-managed Ruby (found {ruby_version_file})", logging.INFO)
+        else:
+            ruby_cmd = ["ruby"]
+            bundle_cmd = ["bundle"]
+            if os.path.exists(ruby_version_file):
+                logger.log(
+                    f"Found {ruby_version_file} but rbenv is not installed. "
+                    "Using system Ruby. Consider installing rbenv for better version management: https://github.com/rbenv/rbenv",
+                    logging.WARNING,
+                )
+            else:
+                logger.log("No .ruby-version file found, using system Ruby", logging.INFO)
+
         # Check if Ruby is installed
         try:
-            result = subprocess.run(["ruby", "--version"], check=True, capture_output=True, cwd=repository_root_path, text=True)
+            result = subprocess.run(ruby_cmd + ["--version"], check=True, capture_output=True, cwd=repository_root_path, text=True)
             ruby_version = result.stdout.strip()
             logger.log(f"Ruby version: {ruby_version}", logging.INFO)
 
@@ -141,16 +176,16 @@ class RubyLsp(SolidLanguageServer):
             logger.log("Detected Bundler project (Gemfile found)", logging.INFO)
 
             # Check if bundle command is available using Windows-compatible search
-            bundle_path = RubyLsp._find_executable_with_extensions("bundle")
+            bundle_path = RubyLsp._find_executable_with_extensions(bundle_cmd[0] if len(bundle_cmd) == 1 else "bundle")
             if not bundle_path:
                 # Try common bundle executables
-                for bundle_cmd in ["bin/bundle", "bundle"]:
-                    if bundle_cmd.startswith("bin/"):
-                        bundle_full_path = os.path.join(repository_root_path, bundle_cmd)
+                for bundle_executable in ["bin/bundle", "bundle"]:
+                    if bundle_executable.startswith("bin/"):
+                        bundle_full_path = os.path.join(repository_root_path, bundle_executable)
                     else:
-                        bundle_full_path = RubyLsp._find_executable_with_extensions(bundle_cmd)
+                        bundle_full_path = RubyLsp._find_executable_with_extensions(bundle_executable)
                     if bundle_full_path and os.path.exists(bundle_full_path):
-                        bundle_path = bundle_full_path if bundle_cmd.startswith("bin/") else bundle_cmd
+                        bundle_path = bundle_full_path if bundle_executable.startswith("bin/") else bundle_executable
                         break
 
             if not bundle_path:
@@ -171,7 +206,7 @@ class RubyLsp(SolidLanguageServer):
 
                 if ruby_lsp_in_bundle:
                     logger.log("Found ruby-lsp in Gemfile.lock", logging.INFO)
-                    return [bundle_path, "exec", "ruby-lsp"]
+                    return bundle_cmd + ["exec", "ruby-lsp"]
                 else:
                     logger.log(
                         "ruby-lsp not found in Gemfile.lock. Consider adding 'gem \"ruby-lsp\"' to your Gemfile for better compatibility.",
