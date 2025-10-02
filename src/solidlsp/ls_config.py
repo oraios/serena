@@ -159,8 +159,6 @@ class Language(str, Enum):
                 return FilenameMatcher("*.scala", "*.sbt")
             case self.JULIA:
                 return FilenameMatcher("*.jl")
-            case self.HASKELL:
-                return FilenameMatcher("*.hs", "*.lhs")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
