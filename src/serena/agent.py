@@ -659,11 +659,13 @@ class SerenaAgent:
         Routes to correct LSP based on file extension when using LSPManager.
 
         FIX #3 (WARNING): Caches manager reference to prevent race condition.
+        FIX (AI Panel): Uses synchronous wrapper for async LSP retrieval.
         """
         # FIX #3: Cache manager reference to prevent race condition
         manager = self.lsp_manager
         if manager is not None:
-            return manager.get_language_server_for_file(file_path)
+            # FIX (AI Panel): Use synchronous wrapper to handle async lazy initialization
+            return manager.get_language_server_for_file_sync(file_path)
         return self._language_server
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:

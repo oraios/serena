@@ -258,7 +258,7 @@ class LSPManager:
 
     async def get_language_server_for_file(self, file_path: str) -> Optional[SolidLanguageServer]:
         """
-        Get the language server for a specific file.
+        Get the language server for a specific file (async version).
 
         This method implements lazy initialization: if the LSP hasn't been started yet,
         it will be started on first use.
@@ -288,6 +288,38 @@ class LSPManager:
         # Lazy initialization: start LSP on first use
         log.debug(f"Lazy-starting {language.value} LSP for file: {file_path}")
         return await self._start_language_server(language)
+
+    def get_language_server_for_file_sync(self, file_path: str) -> Optional[SolidLanguageServer]:
+        """
+        Synchronous wrapper for get_language_server_for_file() - for use in non-async contexts.
+
+        FIX: Addresses async/sync mismatch identified by AI Panel.
+        This allows synchronous MCP tools to get LSPs with lazy initialization.
+
+        Args:
+            file_path: Path to the file (relative or absolute)
+
+        Returns:
+            The language server for the file, or None if not available
+
+        Example:
+            >>> lsp = manager.get_language_server_for_file_sync("src/main.rs")
+            >>> if lsp:
+            ...     symbols = lsp.request_document_symbols("src/main.rs")
+        """
+        try:
+            return asyncio.run(self.get_language_server_for_file(file_path))
+        except RuntimeError as e:
+            # Handle case where event loop is already running
+            if "asyncio.run() cannot be called from a running event loop" in str(e):
+                log.warning("Event loop already running, creating new loop for LSP retrieval")
+                loop = asyncio.new_event_loop()
+                try:
+                    return loop.run_until_complete(self.get_language_server_for_file(file_path))
+                finally:
+                    loop.close()
+            else:
+                raise
 
     def get_all_working_language_servers(self) -> list[SolidLanguageServer]:
         """
