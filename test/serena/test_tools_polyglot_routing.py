@@ -290,3 +290,81 @@ class TestToolsBaseFileRouting:
 
         with pytest.raises(Exception, match="not in language server mode"):
             component.create_language_server_symbol_retriever()
+
+
+class TestSymbolToolsFileRouting:
+    """Test symbol_tools.py integration with file routing."""
+
+    def test_get_symbols_overview_passes_file_path_to_retriever(self):
+        """Test that GetSymbolsOverviewTool passes relative_path to create_retriever."""
+        from serena.tools.symbol_tools import GetSymbolsOverviewTool
+
+        agent = MagicMock()
+        tool = GetSymbolsOverviewTool(agent=agent)
+
+        # Mock the project and file system
+        agent.get_active_project_or_raise.return_value = MagicMock(project_root="/project")
+        agent.serena_config.default_max_tool_answer_chars = 10000
+
+        # Mock create_language_server_symbol_retriever to track calls
+        mock_retriever = MagicMock()
+        mock_retriever.get_symbol_overview.return_value = {"src/main.py": []}
+
+        with patch.object(tool, "create_language_server_symbol_retriever", return_value=mock_retriever) as mock_create:
+            with patch("os.path.exists", return_value=True):
+                with patch("os.path.isdir", return_value=False):
+                    tool.apply(relative_path="src/main.py")
+
+        # Verify file_path was passed to create_retriever
+        mock_create.assert_called_once_with(file_path="src/main.py")
+
+    def test_find_symbol_with_relative_path_passes_file_path(self):
+        """Test that FindSymbolTool passes relative_path to create_retriever when provided."""
+        from serena.tools.symbol_tools import FindSymbolTool
+
+        agent = MagicMock()
+        tool = FindSymbolTool(agent=agent)
+        agent.serena_config.default_max_tool_answer_chars = 10000
+
+        mock_retriever = MagicMock()
+        mock_retriever.find_by_name.return_value = []
+
+        with patch.object(tool, "create_language_server_symbol_retriever", return_value=mock_retriever) as mock_create:
+            tool.apply(name_path="MyClass", relative_path="src/main.py")
+
+        # Verify file_path was passed when relative_path provided
+        mock_create.assert_called_once_with(file_path="src/main.py")
+
+    def test_find_symbol_without_relative_path_uses_none(self):
+        """Test that FindSymbolTool passes None when no relative_path (cross-language search)."""
+        from serena.tools.symbol_tools import FindSymbolTool
+
+        agent = MagicMock()
+        tool = FindSymbolTool(agent=agent)
+        agent.serena_config.default_max_tool_answer_chars = 10000
+
+        mock_retriever = MagicMock()
+        mock_retriever.find_by_name.return_value = []
+
+        with patch.object(tool, "create_language_server_symbol_retriever", return_value=mock_retriever) as mock_create:
+            tool.apply(name_path="MyClass", relative_path="")
+
+        # Verify file_path=None when no relative_path (enables cross-language search)
+        mock_create.assert_called_once_with(file_path=None)
+
+    def test_find_referencing_symbols_passes_file_path(self):
+        """Test that FindReferencingSymbolsTool passes relative_path to create_retriever."""
+        from serena.tools.symbol_tools import FindReferencingSymbolsTool
+
+        agent = MagicMock()
+        tool = FindReferencingSymbolsTool(agent=agent)
+        agent.serena_config.default_max_tool_answer_chars = 10000
+
+        mock_retriever = MagicMock()
+        mock_retriever.find_referencing_symbols.return_value = []
+
+        with patch.object(tool, "create_language_server_symbol_retriever", return_value=mock_retriever) as mock_create:
+            tool.apply(name_path="MyClass", relative_path="src/main.py")
+
+        # Verify file_path was passed
+        mock_create.assert_called_once_with(file_path="src/main.py")

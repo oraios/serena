@@ -9,12 +9,7 @@ from collections.abc import Sequence
 from copy import copy
 from typing import Any
 
-from serena.tools import (
-    SUCCESS_RESULT,
-    Tool,
-    ToolMarkerSymbolicEdit,
-    ToolMarkerSymbolicRead,
-)
+from serena.tools import SUCCESS_RESULT, Tool, ToolMarkerSymbolicEdit, ToolMarkerSymbolicRead
 from serena.tools.tools_base import ToolMarkerOptional
 from solidlsp.ls_types import SymbolKind
 
@@ -63,7 +58,8 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
             Don't adjust unless there is really no other way to get the content required for the task.
         :return: a JSON object containing info about top-level symbols in the file
         """
-        symbol_retriever = self.create_language_server_symbol_retriever()
+        # Route to correct LSP for polyglot projects
+        symbol_retriever = self.create_language_server_symbol_retriever(file_path=relative_path)
         file_path = os.path.join(self.project.project_root, relative_path)
 
         # The symbol overview is capable of working with both files and directories,
@@ -147,7 +143,8 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         """
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
-        symbol_retriever = self.create_language_server_symbol_retriever()
+        # Route to correct LSP for polyglot projects (or None for cross-language search)
+        symbol_retriever = self.create_language_server_symbol_retriever(file_path=relative_path if relative_path else None)
         symbols = symbol_retriever.find_by_name(
             name_path,
             include_body=include_body,
@@ -190,7 +187,8 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         include_body = False  # It is probably never a good idea to include the body of the referencing symbols
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
-        symbol_retriever = self.create_language_server_symbol_retriever()
+        # Route to correct LSP for polyglot projects
+        symbol_retriever = self.create_language_server_symbol_retriever(file_path=relative_path)
         references_in_symbols = symbol_retriever.find_referencing_symbols(
             name_path,
             relative_file_path=relative_path,
