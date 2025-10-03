@@ -358,7 +358,6 @@ class LSPManager:
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         """Async context manager exit - ensures cleanup happens."""
         await self.shutdown_all()
-        return None
 
     def __repr__(self) -> str:
         """String representation of LSPManager."""
