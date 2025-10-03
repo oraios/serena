@@ -343,6 +343,32 @@ class LSPManager:
         except Exception as e:
             log.error(f"Error shutting down {language.value} LSP: {e}", exc_info=True)
 
+    def shutdown_all_sync(self) -> None:
+        """
+        Synchronous wrapper for shutdown_all() - for use in non-async contexts.
+
+        FIX #1 (CRITICAL): Addresses async/sync mismatch identified by AI Panel.
+        This allows SerenaAgent (which is synchronous) to properly shutdown LSPManager.
+
+        Example:
+            >>> manager.shutdown_all_sync()
+        """
+        try:
+            asyncio.run(self.shutdown_all())
+        except RuntimeError as e:
+            # Handle case where event loop is already running
+            if "asyncio.run() cannot be called from a running event loop" in str(e):
+                log.warning("Event loop already running, creating new loop for shutdown")
+                import asyncio
+
+                loop = asyncio.new_event_loop()
+                try:
+                    loop.run_until_complete(self.shutdown_all())
+                finally:
+                    loop.close()
+            else:
+                raise
+
     # FIX #3: Implement async context manager pattern for proper resource management
     async def __aenter__(self) -> "LSPManager":
         """

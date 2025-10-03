@@ -30,6 +30,7 @@ from solidlsp import SolidLanguageServer
 
 if TYPE_CHECKING:
     from serena.gui_log_viewer import GuiLogViewer
+    from serena.lsp_manager import LSPManager  # FIX #5: Proper forward reference
 
 log = logging.getLogger(__name__)
 TTool = TypeVar("TTool", bound="Tool")
@@ -85,6 +86,7 @@ class SerenaAgent:
 
         # project-specific instances, which will be initialized upon project activation
         self._active_project: Project | None = None
+        # FIX #5: Use proper TYPE_CHECKING import instead of string literal
         self.lsp_manager: "LSPManager | None" = None  # NEW: Polyglot support
         self._language_server: SolidLanguageServer | None = None  # DEPRECATED: Use lsp_manager
         self.memories_manager: MemoriesManager | None = None
@@ -516,57 +518,110 @@ class SerenaAgent:
         """
         Backward compatibility property: returns first working LSP from manager.
         DEPRECATED: Use lsp_manager for polyglot support.
+
+        FIX #3 (WARNING): Caches manager reference to prevent race condition.
         """
-        if self.lsp_manager is not None:
-            working_lsps = self.lsp_manager.get_all_working_language_servers()
+        # FIX #3: Cache manager reference to prevent race condition
+        manager = self.lsp_manager
+        if manager is not None:
+            working_lsps = manager.get_all_working_language_servers()
             if working_lsps:
                 return working_lsps[0]
         return self._language_server
 
     def is_language_server_running(self) -> bool:
         """Check if any language server is running (checks LSPManager if available)."""
-        if self.lsp_manager is not None:
-            working_lsps = self.lsp_manager.get_all_working_language_servers()
+        # FIX #3: Cache lsp_manager reference to prevent race condition
+        manager = self.lsp_manager
+        if manager is not None:
+            working_lsps = manager.get_all_working_language_servers()
             return len(working_lsps) > 0
         return self._language_server is not None and self._language_server.is_running()
+
+    def _calculate_ls_timeout(self) -> float | None:
+        """
+        Calculate language server timeout from tool timeout.
+
+        FIX #4 (WARNING): Extracted shared timeout calculation logic to eliminate DRY violation.
+
+        Returns:
+            Timeout in seconds (tool_timeout - 5), or None if no timeout configured
+
+        Raises:
+            ValueError: If tool timeout is less than 10 seconds
+        """
+        tool_timeout = self.serena_config.tool_timeout
+        if tool_timeout is None or tool_timeout < 0:
+            return None
+
+        if tool_timeout < 10:
+            raise ValueError(f"Tool timeout must be at least 10 seconds, but is {tool_timeout} seconds")
+
+        # LSP timeout should be smaller than tool timeout to allow for overhead
+        return tool_timeout - 5
 
     def reset_lsp_manager(self) -> None:
         """
         Starts/resets the LSPManager for the current project (polyglot support).
+
+        FIX #1 (CRITICAL): Uses synchronous shutdown wrapper for proper resource cleanup.
+        FIX #2 (ERROR): Adds comprehensive error handling with validation and rollback.
+        FIX #3 (WARNING): Caches manager reference to prevent race conditions.
+        FIX #4 (WARNING): Uses extracted _calculate_ls_timeout() method.
         """
         from serena.lsp_manager import LSPManager
 
-        tool_timeout = self.serena_config.tool_timeout
-        if tool_timeout is None or tool_timeout < 0:
-            ls_timeout = None
-        else:
-            if tool_timeout < 10:
-                raise ValueError(f"Tool timeout must be at least 10 seconds, but is {tool_timeout} seconds")
-            ls_timeout = tool_timeout - 5
+        # FIX #4: Use extracted timeout calculation method
+        ls_timeout = self._calculate_ls_timeout()
 
-        # Stop existing LSPManager if running
-        if self.lsp_manager is not None:
+        # FIX #1 & #3: Properly shutdown existing LSPManager with cached reference
+        old_manager = self.lsp_manager
+        if old_manager is not None:
             log.info("Stopping existing LSPManager...")
-            # Note: LSPManager shutdown is async, but we're in sync context
-            # For now, just set to None (proper async shutdown would require refactoring)
-            self.lsp_manager = None
+            try:
+                # FIX #1: Use synchronous shutdown wrapper instead of just setting to None
+                old_manager.shutdown_all_sync()
+                log.info("Existing LSPManager stopped successfully")
+            except Exception as e:
+                log.error(f"Error shutting down existing LSPManager: {e}", exc_info=True)
+                # Continue anyway - we'll create a new manager
+            finally:
+                self.lsp_manager = None
 
-        # Create new LSPManager
+        # FIX #2: Add comprehensive error handling for LSPManager creation
         assert self._active_project is not None
-        self.lsp_manager = self._active_project.create_lsp_manager(
-            log_level=self.serena_config.log_level,
-            ls_timeout=ls_timeout,
-            trace_lsp_communication=self.serena_config.trace_lsp_communication,
-            ls_specific_settings=self.serena_config.ls_specific_settings,
-        )
-        log.info(
-            f"Created LSPManager for {len(self._active_project.languages)} languages: {[lang.value for lang in self._active_project.languages]}"
-        )
+        try:
+            new_manager = self._active_project.create_lsp_manager(
+                log_level=self.serena_config.log_level,
+                ls_timeout=ls_timeout,
+                trace_lsp_communication=self.serena_config.trace_lsp_communication,
+                ls_specific_settings=self.serena_config.ls_specific_settings,
+            )
+
+            # FIX #2: Validate that LSPManager was created successfully
+            if new_manager is None:
+                raise RuntimeError("create_lsp_manager() returned None")
+
+            self.lsp_manager = new_manager
+            log.info(
+                f"Created LSPManager for {len(self._active_project.languages)} languages: "
+                f"{[lang.value for lang in self._active_project.languages]}"
+            )
+
+        except Exception as e:
+            # FIX #2: Rollback on failure - restore old manager if possible
+            log.error(f"Failed to create LSPManager: {e}", exc_info=True)
+            if old_manager is not None:
+                log.warning("Attempting to restore previous LSPManager...")
+                self.lsp_manager = old_manager
+            raise RuntimeError(f"Failed to create LSPManager for {self._active_project.project_name}: {e}") from e
 
     def reset_language_server(self) -> None:
         """
         Starts/resets the language server for the current project.
         DEPRECATED: Use reset_lsp_manager() for polyglot support.
+
+        FIX #4 (WARNING): Uses extracted _calculate_ls_timeout() method.
         """
         # Delegate to new method for polyglot projects
         if self._active_project and len(self._active_project.languages) > 1:
@@ -574,14 +629,8 @@ class SerenaAgent:
             self.reset_lsp_manager()
             return
 
-        # Legacy single-language path
-        tool_timeout = self.serena_config.tool_timeout
-        if tool_timeout is None or tool_timeout < 0:
-            ls_timeout = None
-        else:
-            if tool_timeout < 10:
-                raise ValueError(f"Tool timeout must be at least 10 seconds, but is {tool_timeout} seconds")
-            ls_timeout = tool_timeout - 5
+        # FIX #4: Use extracted timeout calculation method
+        ls_timeout = self._calculate_ls_timeout()
 
         # stop the language server if it is running
         if self._language_server is not None and self._language_server.is_running():
@@ -608,9 +657,13 @@ class SerenaAgent:
         """
         Get the appropriate language server for a given file path.
         Routes to correct LSP based on file extension when using LSPManager.
+
+        FIX #3 (WARNING): Caches manager reference to prevent race condition.
         """
-        if self.lsp_manager is not None:
-            return self.lsp_manager.get_language_server_for_file(file_path)
+        # FIX #3: Cache manager reference to prevent race condition
+        manager = self.lsp_manager
+        if manager is not None:
+            return manager.get_language_server_for_file(file_path)
         return self._language_server
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
