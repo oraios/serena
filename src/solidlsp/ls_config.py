@@ -204,6 +204,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.intelephense import Intelephense
 
                 return Intelephense
+            case self.PERL:
+                from solidlsp.language_servers.perl_language_server import PerlLanguageServer
+
+                return PerlLanguageServer
             case self.CLOJURE:
                 from solidlsp.language_servers.clojure_lsp import ClojureLSP
 
