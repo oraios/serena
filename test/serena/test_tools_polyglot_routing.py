@@ -231,3 +231,62 @@ class TestErrorHandling:
         with pytest.raises(RuntimeError, match="LSP crashed"):
             agent.get_language_server_for_file("src/main.py")
 
+
+class TestToolsBaseFileRouting:
+    """Test tools_base.py create_language_server_symbol_retriever with file routing."""
+
+    def test_create_retriever_with_file_path_routes_to_correct_lsp(self):
+        """Test that create_retriever with file_path routes to correct LSP."""
+        from serena.tools.tools_base import Component
+
+        agent = MagicMock()
+        component = Component(agent=agent)
+
+        mock_python_lsp = MagicMock()
+        agent.is_using_language_server.return_value = True
+        agent.get_language_server_for_file.return_value = mock_python_lsp
+
+        retriever = component.create_language_server_symbol_retriever(file_path="src/main.py")
+
+        assert retriever.get_language_server() == mock_python_lsp
+        agent.get_language_server_for_file.assert_called_once_with("src/main.py")
+
+    def test_create_retriever_without_file_path_uses_default_lsp(self):
+        """Test that create_retriever without file_path uses agent.language_server."""
+        from serena.tools.tools_base import Component
+
+        agent = MagicMock()
+        component = Component(agent=agent)
+
+        mock_lsp = MagicMock()
+        agent.is_using_language_server.return_value = True
+        agent.language_server = mock_lsp
+
+        retriever = component.create_language_server_symbol_retriever()
+
+        assert retriever.get_language_server() == mock_lsp
+
+    def test_create_retriever_with_unknown_file_raises_error(self):
+        """Test that create_retriever with unknown file raises clear error."""
+        from serena.tools.tools_base import Component
+
+        agent = MagicMock()
+        component = Component(agent=agent)
+
+        agent.is_using_language_server.return_value = True
+        agent.get_language_server_for_file.return_value = None
+
+        with pytest.raises(Exception, match="no language server found for this file type"):
+            component.create_language_server_symbol_retriever(file_path="README.md")
+
+    def test_create_retriever_without_lsp_mode_raises_error(self):
+        """Test that create_retriever without LSP mode raises error."""
+        from serena.tools.tools_base import Component
+
+        agent = MagicMock()
+        component = Component(agent=agent)
+
+        agent.is_using_language_server.return_value = False
+
+        with pytest.raises(Exception, match="not in language server mode"):
+            component.create_language_server_symbol_retriever()

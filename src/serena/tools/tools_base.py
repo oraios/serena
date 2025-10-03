@@ -44,11 +44,36 @@ class Component(ABC):
     def memories_manager(self) -> "MemoriesManager":
         return self.project.memories_manager
 
-    def create_language_server_symbol_retriever(self) -> LanguageServerSymbolRetriever:
+    def create_language_server_symbol_retriever(self, file_path: str | None = None) -> LanguageServerSymbolRetriever:
+        """
+        Create a LanguageServerSymbolRetriever for symbol operations.
+
+        Args:
+            file_path: Optional file path for routing to correct LSP in polyglot projects.
+                      If None, uses agent.language_server (backward compatibility).
+
+        Returns:
+            LanguageServerSymbolRetriever configured for the appropriate LSP
+
+        Raises:
+            Exception: If agent is not in language server mode
+            Exception: If file_path provided but no LSP found for that file
+        """
         if not self.agent.is_using_language_server():
             raise Exception("Cannot create LanguageServerSymbolRetriever; agent is not in language server mode.")
-        language_server = self.agent.language_server
-        assert language_server is not None
+
+        # Route to correct LSP based on file_path (polyglot support)
+        if file_path is not None:
+            language_server = self.agent.get_language_server_for_file(file_path)
+            if language_server is None:
+                raise Exception(
+                    f"Cannot create LanguageServerSymbolRetriever for file '{file_path}': " f"no language server found for this file type."
+                )
+        else:
+            # Backward compatibility: use default language_server
+            language_server = self.agent.language_server
+            assert language_server is not None
+
         return LanguageServerSymbolRetriever(language_server, agent=self.agent)
 
     @property
