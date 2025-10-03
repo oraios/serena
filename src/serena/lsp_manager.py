@@ -238,17 +238,17 @@ class LSPManager:
             >>> manager.get_language_for_file("README.md")
             None
         """
-        # FIX #5: Use cached extension mapping for O(1) lookup instead of O(n) linear search
+        # FIX #5 (OPTIMIZED): Use os.path.splitext() for true O(1) lookup
         import os
 
         filename = os.path.basename(file_path)
+        _, ext = os.path.splitext(filename)
 
-        # Try cache first (fast path for common extensions like .py, .rs, .hs)
-        for ext, language in self._extension_to_language.items():
-            if filename.endswith(ext):
-                return language
+        # Try cache first (O(1) dict lookup)
+        if ext in self._extension_to_language:
+            return self._extension_to_language[ext]
 
-        # Fallback to full pattern matching for complex patterns (e.g., .test.ts, .spec.js)
+        # Fallback to full pattern matching for complex patterns (e.g., exact filenames like 'Makefile')
         for language in self.languages:
             matcher = language.get_source_fn_matcher()
             if matcher.is_relevant_filename(filename):
@@ -316,9 +316,13 @@ class LSPManager:
         """
         log.info(f"Shutting down {len(self._language_servers)} language servers...")
 
+        # FIX: Create snapshot to prevent race condition during concurrent access
+        # (avoid concurrent modification of dict during iteration)
+        items = list(self._language_servers.items())
+
         # Shutdown all LSPs concurrently for faster cleanup
         shutdown_tasks = []
-        for language, lsp in self._language_servers.items():
+        for language, lsp in items:
             if lsp is not None:
                 shutdown_tasks.append(self._shutdown_single_lsp(language, lsp))
 
