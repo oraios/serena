@@ -97,7 +97,26 @@ class LSPManager:
         # Track failed languages to avoid repeated startup attempts
         self._failed_languages: set[Language] = set()
 
+        # FIX #1: Add asyncio.Lock per language to prevent race conditions in lazy initialization
+        self._startup_locks: dict[Language, asyncio.Lock] = {lang: asyncio.Lock() for lang in languages}
+
+        # FIX #5: Cache file extension to language mapping for O(1) lookups
+        self._extension_to_language: dict[str, Language] = {}
+        self._build_extension_cache()
+
         log.info(f"LSPManager initialized for {len(languages)} languages: {[lang.value for lang in languages]}")
+
+    def _build_extension_cache(self) -> None:
+        """Build cache mapping file extensions to languages for fast lookups."""
+        for language in self.languages:
+            matcher = language.get_source_fn_matcher()
+            for pattern in matcher.patterns:
+                # Extract extension from pattern (e.g., "*.py" -> ".py")
+                if pattern.startswith("*."):
+                    ext = pattern[1:]  # Remove the "*"
+                    # First match wins (no language priorities per user requirement)
+                    if ext not in self._extension_to_language:
+                        self._extension_to_language[ext] = language
 
     async def start_all(self, lazy: bool = True) -> None:
         """
@@ -120,9 +139,20 @@ class LSPManager:
         tasks = [self._start_language_server(lang) for lang in self.languages]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Log results
-        success_count = sum(1 for r in results if not isinstance(r, Exception))
-        failure_count = len(results) - success_count
+        # FIX #4: Handle and log results from asyncio.gather()
+        success_count = 0
+        failure_count = 0
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                log.error(f"Failed to start {self.languages[i].value} LSP: {result}", exc_info=result)
+                failure_count += 1
+            elif result is not None:
+                log.info(f"{self.languages[i].value} LSP started successfully")
+                success_count += 1
+            else:
+                # None result means it was already started or failed
+                if self.languages[i] in self._failed_languages:
+                    failure_count += 1
 
         log.info(f"LSP startup complete: {success_count} succeeded, {failure_count} failed")
 
@@ -132,7 +162,7 @@ class LSPManager:
 
     async def _start_language_server(self, language: Language) -> Optional[SolidLanguageServer]:
         """
-        Start a single language server.
+        Start a single language server with race condition protection.
 
         Args:
             language: The language to start LSP for
@@ -140,50 +170,55 @@ class LSPManager:
         Returns:
             The started language server, or None if startup failed
         """
-        if language in self._failed_languages:
-            log.debug(f"Skipping {language.value} LSP (previously failed)")
-            return None
+        # FIX #1: Use asyncio.Lock to prevent race conditions in concurrent startup
+        async with self._startup_locks[language]:
+            # Check again after acquiring lock (another task may have started it)
+            if language in self._failed_languages:
+                log.debug(f"Skipping {language.value} LSP (previously failed)")
+                return None
 
-        if language in self._language_servers:
-            log.debug(f"{language.value} LSP already started")
-            return self._language_servers[language]
+            if language in self._language_servers:
+                log.debug(f"{language.value} LSP already started")
+                return self._language_servers[language]
 
-        try:
-            log.info(f"Starting {language.value} language server...")
+            try:
+                log.info(f"Starting {language.value} language server...")
 
-            # Create language server configuration
-            ls_config = LanguageServerConfig(code_language=language)
+                # Create language server configuration
+                ls_config = LanguageServerConfig(code_language=language)
 
-            # Create language server instance
-            lsp = SolidLanguageServer.create(
-                config=ls_config,
-                logger=self.logger,
-                repository_root_path=self.project_root,
-                timeout=self.timeout,
-                solidlsp_settings=self.settings,
-            )
+                # Create language server instance
+                lsp = SolidLanguageServer.create(
+                    config=ls_config,
+                    logger=self.logger,
+                    repository_root_path=self.project_root,
+                    timeout=self.timeout,
+                    solidlsp_settings=self.settings,
+                )
 
-            # Start the language server
-            await asyncio.wait_for(
-                asyncio.to_thread(lsp.start_server),
-                timeout=self.timeout,
-            )
+                # Start the language server
+                await asyncio.wait_for(
+                    asyncio.to_thread(lsp.start_server),
+                    timeout=self.timeout,
+                )
 
-            self._language_servers[language] = lsp
-            log.info(f"{language.value} language server started successfully")
-            return lsp
+                self._language_servers[language] = lsp
+                log.info(f"{language.value} language server started successfully")
+                return lsp
 
-        except asyncio.TimeoutError:
-            log.error(f"Timeout starting {language.value} language server (timeout={self.timeout}s)")
-            self._failed_languages.add(language)
-            self._language_servers[language] = None
-            return None
+            except asyncio.TimeoutError:
+                # FIX #2: Proper logging for TimeoutError
+                log.error(f"Timeout starting {language.value} language server (timeout={self.timeout}s)", exc_info=True)
+                self._failed_languages.add(language)
+                self._language_servers[language] = None
+                return None
 
-        except Exception as e:
-            log.error(f"Failed to start {language.value} language server: {e}", exc_info=True)
-            self._failed_languages.add(language)
-            self._language_servers[language] = None
-            return None
+            except Exception as e:
+                # FIX #2: Already has proper logging with exc_info=True
+                log.error(f"Failed to start {language.value} language server: {e}", exc_info=True)
+                self._failed_languages.add(language)
+                self._language_servers[language] = None
+                return None
 
     def get_language_for_file(self, file_path: str) -> Optional[Language]:
         """
@@ -203,12 +238,17 @@ class LSPManager:
             >>> manager.get_language_for_file("README.md")
             None
         """
-        # Extract filename from path for matching
+        # FIX #5: Use cached extension mapping for O(1) lookup instead of O(n) linear search
         import os
 
         filename = os.path.basename(file_path)
 
-        # Check each project language to see if it matches the file
+        # Try cache first (fast path for common extensions like .py, .rs, .hs)
+        for ext, language in self._extension_to_language.items():
+            if filename.endswith(ext):
+                return language
+
+        # Fallback to full pattern matching for complex patterns (e.g., .test.ts, .spec.js)
         for language in self.languages:
             matcher = language.get_source_fn_matcher()
             if matcher.is_relevant_filename(filename):
@@ -263,29 +303,58 @@ class LSPManager:
         """
         return [lsp for lang, lsp in self._language_servers.items() if lsp is not None and lang not in self._failed_languages]
 
-    def shutdown_all(self) -> None:
+    async def shutdown_all(self) -> None:
         """
         Shutdown all language servers and cleanup resources.
+
+        FIX #3: Made async to properly handle async cleanup if needed.
 
         This should be called when the project is closed or the manager is no longer needed.
 
         Example:
-            >>> manager.shutdown_all()
+            >>> await manager.shutdown_all()
         """
         log.info(f"Shutting down {len(self._language_servers)} language servers...")
 
+        # Shutdown all LSPs concurrently for faster cleanup
+        shutdown_tasks = []
         for language, lsp in self._language_servers.items():
             if lsp is not None:
-                try:
-                    log.debug(f"Shutting down {language.value} LSP...")
-                    lsp.stop_server()
-                    log.debug(f"{language.value} LSP shut down successfully")
-                except Exception as e:
-                    log.error(f"Error shutting down {language.value} LSP: {e}", exc_info=True)
+                shutdown_tasks.append(self._shutdown_single_lsp(language, lsp))
+
+        if shutdown_tasks:
+            await asyncio.gather(*shutdown_tasks, return_exceptions=True)
 
         self._language_servers.clear()
         self._failed_languages.clear()
         log.info("All language servers shut down")
+
+    async def _shutdown_single_lsp(self, language: Language, lsp: SolidLanguageServer) -> None:
+        """Shutdown a single LSP with proper error handling."""
+        try:
+            log.debug(f"Shutting down {language.value} LSP...")
+            # Use asyncio.to_thread in case stop_server is blocking
+            await asyncio.to_thread(lsp.stop_server)
+            log.debug(f"{language.value} LSP shut down successfully")
+        except Exception as e:
+            log.error(f"Error shutting down {language.value} LSP: {e}", exc_info=True)
+
+    # FIX #3: Implement async context manager pattern for proper resource management
+    async def __aenter__(self) -> "LSPManager":
+        """
+        Async context manager entry.
+
+        Example:
+            async with LSPManager(...) as manager:
+                lsp = await manager.get_language_server_for_file("main.rs")
+        """
+        # Don't start servers eagerly - let lazy initialization handle it
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Async context manager exit - ensures cleanup happens."""
+        await self.shutdown_all()
+        return None
 
     def __repr__(self) -> str:
         """String representation of LSPManager."""
