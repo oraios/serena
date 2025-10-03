@@ -13,10 +13,9 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from logging import Logger
 from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
+from interprompt.jinja_template import JinjaTemplate
 from sensai.util import logging
 from sensai.util.logging import LogTime
-
-from interprompt.jinja_template import JinjaTemplate
 from serena import serena_version
 from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
 from serena.config.context_mode import RegisteredContext, SerenaAgentContext, SerenaAgentMode
@@ -86,7 +85,10 @@ class SerenaAgent:
 
         # project-specific instances, which will be initialized upon project activation
         self._active_project: Project | None = None
-        self.language_server: SolidLanguageServer | None = None
+        self.lsp_manager: "LSPManager | None" = None  # NEW: Polyglot support
+        self._language_server: SolidLanguageServer | None = None  # DEPRECATED: Use lsp_manager
+        self.memories_manager: MemoriesManager | None = None
+        self.lines_read: LinesRead | None = None
 
         # adjust log level
         serena_log_level = self.serena_config.log_level
@@ -509,42 +511,107 @@ class SerenaAgent:
 
         return result_str
 
-    def is_language_server_running(self) -> bool:
-        return self.language_server is not None and self.language_server.is_running()
+    @property
+    def language_server(self) -> SolidLanguageServer | None:
+        """
+        Backward compatibility property: returns first working LSP from manager.
+        DEPRECATED: Use lsp_manager for polyglot support.
+        """
+        if self.lsp_manager is not None:
+            working_lsps = self.lsp_manager.get_all_working_language_servers()
+            if working_lsps:
+                return working_lsps[0]
+        return self._language_server
 
-    def reset_language_server(self) -> None:
+    def is_language_server_running(self) -> bool:
+        """Check if any language server is running (checks LSPManager if available)."""
+        if self.lsp_manager is not None:
+            working_lsps = self.lsp_manager.get_all_working_language_servers()
+            return len(working_lsps) > 0
+        return self._language_server is not None and self._language_server.is_running()
+
+    def reset_lsp_manager(self) -> None:
         """
-        Starts/resets the language server for the current project
+        Starts/resets the LSPManager for the current project (polyglot support).
         """
+        from serena.lsp_manager import LSPManager
+
         tool_timeout = self.serena_config.tool_timeout
         if tool_timeout is None or tool_timeout < 0:
             ls_timeout = None
         else:
             if tool_timeout < 10:
                 raise ValueError(f"Tool timeout must be at least 10 seconds, but is {tool_timeout} seconds")
-            ls_timeout = tool_timeout - 5  # the LS timeout is for a single call, it should be smaller than the tool timeout
+            ls_timeout = tool_timeout - 5
+
+        # Stop existing LSPManager if running
+        if self.lsp_manager is not None:
+            log.info("Stopping existing LSPManager...")
+            # Note: LSPManager shutdown is async, but we're in sync context
+            # For now, just set to None (proper async shutdown would require refactoring)
+            self.lsp_manager = None
+
+        # Create new LSPManager
+        assert self._active_project is not None
+        self.lsp_manager = self._active_project.create_lsp_manager(
+            log_level=self.serena_config.log_level,
+            ls_timeout=ls_timeout,
+            trace_lsp_communication=self.serena_config.trace_lsp_communication,
+            ls_specific_settings=self.serena_config.ls_specific_settings,
+        )
+        log.info(
+            f"Created LSPManager for {len(self._active_project.languages)} languages: {[lang.value for lang in self._active_project.languages]}"
+        )
+
+    def reset_language_server(self) -> None:
+        """
+        Starts/resets the language server for the current project.
+        DEPRECATED: Use reset_lsp_manager() for polyglot support.
+        """
+        # Delegate to new method for polyglot projects
+        if self._active_project and len(self._active_project.languages) > 1:
+            log.info("Polyglot project detected, using LSPManager instead of single LSP")
+            self.reset_lsp_manager()
+            return
+
+        # Legacy single-language path
+        tool_timeout = self.serena_config.tool_timeout
+        if tool_timeout is None or tool_timeout < 0:
+            ls_timeout = None
+        else:
+            if tool_timeout < 10:
+                raise ValueError(f"Tool timeout must be at least 10 seconds, but is {tool_timeout} seconds")
+            ls_timeout = tool_timeout - 5
 
         # stop the language server if it is running
-        if self.is_language_server_running():
-            assert self.language_server is not None
-            log.info(f"Stopping the current language server at {self.language_server.repository_root_path} ...")
-            self.language_server.stop()
-            self.language_server = None
+        if self._language_server is not None and self._language_server.is_running():
+            log.info(f"Stopping the current language server at {self._language_server.repository_root_path} ...")
+            self._language_server.stop()
+            self._language_server = None
 
         # instantiate and start the language server
         assert self._active_project is not None
-        self.language_server = self._active_project.create_language_server(
+        self._language_server = self._active_project.create_language_server(
             log_level=self.serena_config.log_level,
             ls_timeout=ls_timeout,
             trace_lsp_communication=self.serena_config.trace_lsp_communication,
             ls_specific_settings=self.serena_config.ls_specific_settings,
         )
         log.info(f"Starting the language server for {self._active_project.project_name}")
-        self.language_server.start()
-        if not self.language_server.is_running():
+        self._language_server.start()
+        if not self._language_server.is_running():
             raise RuntimeError(
                 f"Failed to start the language server for {self._active_project.project_name} at {self._active_project.project_root}"
             )
+
+    def get_language_server_for_file(self, file_path: str) -> SolidLanguageServer | None:
+        """
+        Get the appropriate language server for a given file path.
+        Routes to correct LSP based on file extension when using LSPManager.
+        """
+        if self.lsp_manager is not None:
+            return self.lsp_manager.get_language_server_for_file(file_path)
+        return self._language_server
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self._all_tools[tool_class]  # type: ignore
