@@ -1,13 +1,13 @@
-import glob
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
 
 import pathspec
 from pathspec import PathSpec
+from sensai.util.logging import LogTime
 
 log = logging.getLogger(__name__)
 
@@ -23,8 +23,8 @@ def scan_directory(
     path: str,
     recursive: bool = False,
     relative_to: str | None = None,
-    is_ignored_dir: Callable[[str], bool] = lambda x: False,
-    is_ignored_file: Callable[[str], bool] = lambda x: False,
+    is_ignored_dir: Callable[[str], bool] | None = None,
+    is_ignored_file: Callable[[str], bool] | None = None,
 ) -> ScanResult:
     """
     :param path: the path to scan
@@ -34,6 +34,11 @@ def scan_directory(
     :param is_ignored_file: a function with which to determine whether the given file (abs. path) shall be ignored
     :return: the list of directories and files
     """
+    if is_ignored_file is None:
+        is_ignored_file = lambda x: False
+    if is_ignored_dir is None:
+        is_ignored_dir = lambda x: False
+
     files = []
     directories = []
 
@@ -138,21 +143,36 @@ class GitignoreParser:
 
     def _load_gitignore_files(self) -> None:
         """Load all gitignore files from the repository."""
-        gitignore_files = self._find_gitignore_files()
+        with LogTime("Loading of .gitignore files", logger=log):
+            for gitignore_path in self._iter_gitignore_files():
+                log.info("Processing .gitignore file: %s", gitignore_path)
+                spec = self._create_ignore_spec(gitignore_path)
+                if spec.patterns:  # Only add non-empty specs
+                    self.ignore_specs.append(spec)
 
-        for gitignore_file in gitignore_files:
-            spec = self._create_ignore_spec(gitignore_file)
-            if spec.patterns:  # Only add non-empty specs
-                self.ignore_specs.append(spec)
-
-    def _find_gitignore_files(self) -> list[str]:
+    def _iter_gitignore_files(self, follow_symlinks: bool = False) -> Iterator[str]:
         """
-        Find all .gitignore files in the repository.
+        Iteratively discover .gitignore files in a top-down fashion, starting from the repository root.
+        Directory paths are skipped if they match any already loaded ignore patterns.
 
-        :return: List of absolute paths to .gitignore files
+        :return: an iterator yielding paths to .gitignore files (top-down)
         """
-        relative_paths = glob.glob("**/.gitignore", root_dir=self.repo_root, recursive=True)
-        return [os.path.join(self.repo_root, rel_path) for rel_path in relative_paths]
+        queue: list[str] = [self.repo_root]
+
+        def scan(abs_path: str | None) -> Iterator[str]:
+            for entry in os.scandir(abs_path):
+                if entry.is_dir(follow_symlinks=follow_symlinks):
+                    queue.append(entry.path)
+                elif entry.is_file(follow_symlinks=follow_symlinks) and entry.name == ".gitignore":
+                    yield entry.path
+
+        while queue:
+            next_abs_path = queue.pop(0)
+            if next_abs_path != self.repo_root:
+                rel_path = os.path.relpath(next_abs_path, self.repo_root)
+                if self.should_ignore(rel_path):
+                    continue
+            yield from scan(next_abs_path)
 
     def _create_ignore_spec(self, gitignore_file_path: str) -> GitignoreSpec:
         """

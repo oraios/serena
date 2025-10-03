@@ -99,7 +99,7 @@ class ToolSet:
             for excluded_tool in definition.excluded_tools:
                 if not registry.is_valid_tool_name(excluded_tool):
                     raise ValueError(f"Invalid tool name '{excluded_tool}' provided for exclusion")
-                if excluded_tool in self._tool_names:
+                if excluded_tool in tool_names:
                     tool_names.remove(excluded_tool)
                     excluded_tools.append(excluded_tool)
             if included_tools:
@@ -198,12 +198,12 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                     raise ValueError(
                         f"No source files found in {project_root}\n\n"
                         f"To use Serena with this project, you need to either:\n"
-                        f"1. Add source files in one of the supported languages (Python, JavaScript/TypeScript, Java, C#, Rust, Go, Ruby, C++, PHP)\n"
+                        f"1. Add source files in one of the supported languages (Python, JavaScript/TypeScript, Java, C#, Rust, Go, Ruby, C++, PHP, Swift, Elixir, Terraform, Bash)\n"
                         f"2. Create a project configuration file manually at:\n"
                         f"   {os.path.join(project_root, cls.rel_path_to_project_yml())}\n\n"
                         f"Example project.yml:\n"
                         f"  project_name: {project_name}\n"
-                        f"  language: python  # or typescript, java, csharp, rust, go, ruby, cpp, php\n"
+                        f"  language: python  # or typescript, java, csharp, rust, go, ruby, cpp, php, swift, elixir, terraform, bash\n"
                     )
                 # find the language with the highest percentage
                 dominant_language = max(language_composition.keys(), key=lambda lang: language_composition[lang])
@@ -350,6 +350,13 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     on the first run, which can take some time and require internet access. Others, like the Anthropic ones, may require an API key
     and rate limits may apply.
     """
+    default_max_tool_answer_chars: int = 150_000
+    """Used as default for tools where the apply method has a default maximal answer length.
+    Even though the value of the max_answer_chars can be changed when calling the tool, it may make sense to adjust this default 
+    through the global configuration.
+    """
+    ls_specific_settings: dict = field(default_factory=dict)
+    """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""
 
     CONFIG_FILE = "serena_config.yml"
     CONFIG_FILE_DOCKER = "serena_config.docker.yml"  # Docker-specific config file; auto-generated if missing, mounted via docker-compose for user customization
@@ -453,6 +460,8 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         instance.token_count_estimator = loaded_commented_yaml.get(
             "token_count_estimator", RegisteredTokenCountEstimator.TIKTOKEN_GPT4O.name
         )
+        instance.default_max_tool_answer_chars = loaded_commented_yaml.get("default_max_tool_answer_chars", 150_000)
+        instance.ls_specific_settings = loaded_commented_yaml.get("ls_specific_settings", {})
 
         # re-save the configuration file if any migrations were performed
         if num_project_migrations > 0:

@@ -33,6 +33,14 @@ trace_lsp_communication: False
 # whether to trace the communication between Serena and the language servers.
 # This is useful for debugging language server issues.
 
+ls_specific_settings: {}
+# Added on 23.08.2025
+# Advanced configuration option allowing to configure language server implementation specific options. Maps the language
+# (same entry as in project.yml) to the options.
+# Have a look at the docstring of the constructors of the LS implementations within solidlsp (e.g., for C# or PHP) to see which options are available.
+# No documentation on options means no options are available.
+#
+
 tool_timeout: 240
 # timeout, in seconds, after which tool executions are terminated
 
@@ -47,6 +55,11 @@ jetbrains: False
 # instead of language server-based tools
 # NOTE: The plugin is yet unreleased. This is for Serena developers only.
 
+
+default_max_tool_answer_chars: 150000
+# Used as default for tools where the apply method has a default maximal answer length.
+# Even though the value of the max_answer_chars can be changed when calling the tool, it may make sense to adjust this default
+# through the global configuration.
 
 record_tool_usage_stats:  False
 # whether to record tool usage statistics, they will be shown in the web dashboard if recording is active.

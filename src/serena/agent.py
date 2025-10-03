@@ -26,7 +26,7 @@ from serena.config.serena_config import SerenaConfig, ToolInclusionDefinition, T
 from serena.dashboard import SerenaDashboardAPI
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
-from serena.tools import ActivateProjectTool, Tool, ToolMarker, ToolRegistry
+from serena.tools import ActivateProjectTool, GetCurrentConfigTool, Tool, ToolMarker, ToolRegistry
 from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
 from solidlsp import SolidLanguageServer
@@ -135,6 +135,12 @@ class SerenaAgent:
         # obtain serena configuration using the decoupled factory function
         self.serena_config = serena_config or SerenaConfig.from_config_file()
 
+        # project-specific instances, which will be initialized upon project activation
+        self._active_project: Project | None = None
+        self.language_server: SolidLanguageServer | None = None
+        self.memories_manager: MemoriesManager | None = None
+        self.lines_read: LinesRead | None = None
+
         # adjust log level
         serena_log_level = self.serena_config.log_level
         if Logger.root.level > serena_log_level:
@@ -183,7 +189,7 @@ class SerenaAgent:
         # start the dashboard (web frontend), registering its log handler
         if self.serena_config.web_dashboard:
             self._dashboard_thread, port = SerenaDashboardAPI(
-                get_memory_log_handler(), tool_names, tool_usage_stats=self._tool_usage_stats
+                get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats
             ).run_in_thread()
             dashboard_url = f"http://127.0.0.1:{port}/dashboard/index.html"
             log.info("Serena web dashboard started at %s", dashboard_url)
@@ -206,7 +212,7 @@ class SerenaAgent:
         # limited by the Serena config, the context (which is fixed for the session) and JetBrains mode
         tool_inclusion_definitions: list[ToolInclusionDefinition] = [self.serena_config, self._context]
         if self._context.name == RegisteredContext.IDE_ASSISTANT.value:
-            tool_inclusion_definitions.extend(self._ide_context_tool_inclusion_definitions(project))
+            tool_inclusion_definitions.extend(self._ide_assistant_context_tool_inclusion_definitions(project))
         if self.serena_config.jetbrains:
             tool_inclusion_definitions.append(SerenaAgentMode.from_name_internal("jetbrains"))
 
@@ -223,13 +229,6 @@ class SerenaAgent:
         # Initialize the prompt factory
         self.prompt_factory = SerenaPromptFactory()
         self._project_activation_callback = project_activation_callback
-
-        # project-specific instances, which will be initialized upon project activation
-        self._active_project: Project | None = None
-        self._active_project_root: str | None = None
-        self.language_server: SolidLanguageServer | None = None
-        self.memories_manager: MemoriesManager | None = None
-        self.lines_read: LinesRead | None = None
 
         # set the active modes
         if modes is None:
@@ -262,11 +261,12 @@ class SerenaAgent:
                 os.environ["COMSPEC"] = ""  # force use of default shell
                 log.info("Adjusting COMSPEC environment variable to use the default shell instead of '%s'", comspec)
 
-    def _ide_context_tool_inclusion_definitions(self, project_root_or_name: str | None) -> list[ToolInclusionDefinition]:
+    def _ide_assistant_context_tool_inclusion_definitions(self, project_root_or_name: str | None) -> list[ToolInclusionDefinition]:
         """
         In the IDE assistant context, the agent is assumed to work on a single project, and we thus
         want to apply that project's tool exclusions/inclusions from the get-go, limiting the set
         of tools that will be exposed to the client.
+        Furthermore, we disable tools that are only relevant for project activation.
         So if the project exists, we apply all the aforementioned exclusions.
 
         :param project_root_or_name: the project root path or project name
@@ -279,7 +279,11 @@ class SerenaAgent:
             #   and provide responses to the client immediately.
             project = self.load_project_from_path_or_name(project_root_or_name, autogenerate=False)
             if project is not None:
-                tool_inclusion_definitions.append(ToolInclusionDefinition(excluded_tools=[ActivateProjectTool.get_name_from_cls()]))
+                tool_inclusion_definitions.append(
+                    ToolInclusionDefinition(
+                        excluded_tools=[ActivateProjectTool.get_name_from_cls(), GetCurrentConfigTool.get_name_from_cls()]
+                    )
+                )
                 tool_inclusion_definitions.append(project.project_config)
         return tool_inclusion_definitions
 
@@ -585,6 +589,7 @@ class SerenaAgent:
             log_level=self.serena_config.log_level,
             ls_timeout=ls_timeout,
             trace_lsp_communication=self.serena_config.trace_lsp_communication,
+            ls_specific_settings=self.serena_config.ls_specific_settings,
         )
         log.info(f"Starting the language server for {self._active_project.project_name}")
         self.language_server.start()

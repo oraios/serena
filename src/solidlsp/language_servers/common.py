@@ -4,8 +4,9 @@ import logging
 import os
 import platform
 import subprocess
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, replace
+from typing import Any, cast
 
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
@@ -33,23 +34,47 @@ class RuntimeDependency:
 class RuntimeDependencyCollection:
     """Utility to handle installation of runtime dependencies."""
 
-    def __init__(self, dependencies: Sequence[RuntimeDependency]):
-        self._dependencies = list(dependencies)
+    def __init__(self, dependencies: Sequence[RuntimeDependency], overrides: Iterable[Mapping[str, Any]] = ()) -> None:
+        """Initialize the collection with a list of dependencies and optional overrides.
 
-    def for_platform(self, platform_id: str) -> list[RuntimeDependency]:
-        return [d for d in self._dependencies if d.platform_id in (platform_id, "any", "platform-agnostic", None)]
+        :param dependencies: List of base RuntimeDependency instances. The combination of 'id' and 'platform_id' must be unique.
+        :param overrides: List of dictionaries which represent overrides or additions to the base dependencies.
+            Each entry must contain at least the 'id' key, and optionally 'platform_id' to uniquely identify the dependency to override.
+        """
+        self._id_and_platform_id_to_dep: dict[tuple[str, str | None], RuntimeDependency] = {}
+        for dep in dependencies:
+            dep_key = (dep.id, dep.platform_id)
+            if dep_key in self._id_and_platform_id_to_dep:
+                raise ValueError(f"Duplicate runtime dependency with id '{dep.id}' and platform_id '{dep.platform_id}':\n{dep}")
+            self._id_and_platform_id_to_dep[dep_key] = dep
 
-    def for_current_platform(self) -> list[RuntimeDependency]:
-        return self.for_platform(PlatformUtils.get_platform_id().value)
+        for dep_values_override in overrides:
+            override_key = cast(tuple[str, str | None], (dep_values_override["id"], dep_values_override.get("platform_id")))
+            base_dep = self._id_and_platform_id_to_dep.get(override_key)
+            if base_dep is None:
+                new_runtime_dep = RuntimeDependency(**dep_values_override)
+                self._id_and_platform_id_to_dep[override_key] = new_runtime_dep
+            else:
+                self._id_and_platform_id_to_dep[override_key] = replace(base_dep, **dep_values_override)
 
-    def single_for_current_platform(self) -> RuntimeDependency:
-        deps = self.for_current_platform()
+    def get_dependencies_for_platform(self, platform_id: str) -> list[RuntimeDependency]:
+        return [d for d in self._id_and_platform_id_to_dep.values() if d.platform_id in (platform_id, "any", "platform-agnostic", None)]
+
+    def get_dependencies_for_current_platform(self) -> list[RuntimeDependency]:
+        return self.get_dependencies_for_platform(PlatformUtils.get_platform_id().value)
+
+    def get_single_dep_for_current_platform(self, dependency_id: str | None = None) -> RuntimeDependency:
+        deps = self.get_dependencies_for_current_platform()
+        if dependency_id is not None:
+            deps = [d for d in deps if d.id == dependency_id]
         if len(deps) != 1:
-            raise RuntimeError(f"Expected exactly one runtime dependency for {PlatformUtils.get_platform_id().value}, found {len(deps)}")
+            raise RuntimeError(
+                f"Expected exactly one runtime dependency for platform-{PlatformUtils.get_platform_id().value} and {dependency_id=}, found {len(deps)}"
+            )
         return deps[0]
 
     def binary_path(self, target_dir: str) -> str:
-        dep = self.single_for_current_platform()
+        dep = self.get_single_dep_for_current_platform()
         if not dep.binary_name:
             return target_dir
         return os.path.join(target_dir, dep.binary_name)
@@ -61,7 +86,7 @@ class RuntimeDependencyCollection:
         """
         os.makedirs(target_dir, exist_ok=True)
         results: dict[str, str] = {}
-        for dep in self.for_current_platform():
+        for dep in self.get_dependencies_for_current_platform():
             if dep.url:
                 self._install_from_url(dep, logger, target_dir)
             if dep.command:
@@ -107,8 +132,32 @@ class RuntimeDependencyCollection:
 
     @staticmethod
     def _install_from_url(dep: RuntimeDependency, logger: LanguageServerLogger, target_dir: str) -> None:
+        assert dep.url is not None
         if dep.archive_type == "gz" and dep.binary_name:
             dest = os.path.join(target_dir, dep.binary_name)
             FileUtils.download_and_extract_archive(logger, dep.url, dest, dep.archive_type)
         else:
             FileUtils.download_and_extract_archive(logger, dep.url, target_dir, dep.archive_type or "zip")
+
+
+def quote_windows_path(path: str) -> str:
+    """
+    Quote a path for Windows command execution if needed.
+
+    On Windows, paths need to be quoted for proper command execution.
+    The function checks if the path is already quoted to avoid double-quoting.
+    On other platforms, the path is returned unchanged.
+
+    Args:
+        path: The file path to potentially quote
+
+    Returns:
+        The quoted path on Windows (if not already quoted), unchanged path on other platforms
+
+    """
+    if platform.system() == "Windows":
+        # Check if already quoted to avoid double-quoting
+        if path.startswith('"') and path.endswith('"'):
+            return path
+        return f'"{path}"'
+    return path

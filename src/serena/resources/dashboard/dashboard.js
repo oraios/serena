@@ -107,6 +107,10 @@ class Dashboard {
         });
     }
 
+    updateTitle(activeProject) {
+        document.title = activeProject ? `${activeProject} – Serena Dashboard` : 'Serena Dashboard';
+    }
+
     loadLogs() {
         console.log("Loading logs");
         let self = this;
@@ -142,6 +146,8 @@ class Dashboard {
                 } else {
                     $('#log-container').html('<div class="loading">No log messages found.</div>');
                 }
+
+                self.updateTitle(response.active_project);
 
                 // Start periodic polling for new logs
                 self.startPeriodicPolling();
@@ -196,6 +202,9 @@ class Dashboard {
                     // Update max_idx even if no new messages
                     self.currentMaxIdx = response.max_idx || self.currentMaxIdx;
                 }
+
+                // Update window title with active project
+                self.updateTitle(response.active_project);
             },
             error: function(xhr, status, error) {
                 console.error('Error polling for new logs:', error);

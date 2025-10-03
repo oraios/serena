@@ -14,7 +14,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 from serena.text_utils import search_files
-from serena.tools import SUCCESS_RESULT, TOOL_DEFAULT_MAX_ANSWER_LENGTH, EditedFileContext, Tool, ToolMarkerCanEdit, ToolMarkerOptional
+from serena.tools import SUCCESS_RESULT, EditedFileContext, Tool, ToolMarkerCanEdit, ToolMarkerOptional
 from serena.util.file_system import scan_directory
 
 
@@ -23,9 +23,7 @@ class ReadFileTool(Tool):
     Reads a file within the project directory.
     """
 
-    def apply(
-        self, relative_path: str, start_line: int = 0, end_line: int | None = None, max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH
-    ) -> str:
+    def apply(self, relative_path: str, start_line: int = 0, end_line: int | None = None, max_answer_chars: int = -1) -> str:
         """
         Reads the given file or a chunk of it. Generally, symbolic operations
         like find_symbol or find_referencing_symbols should be preferred if you know which symbols you are looking for.
@@ -89,15 +87,16 @@ class ListDirTool(Tool):
     Lists files and directories in the given directory (optionally with recursion).
     """
 
-    def apply(self, relative_path: str, recursive: bool, max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH) -> str:
+    def apply(self, relative_path: str, recursive: bool, skip_ignored_files: bool = False, max_answer_chars: int = -1) -> str:
         """
         Lists all non-gitignored files and directories in the given directory (optionally with recursion).
 
         :param relative_path: the relative path to the directory to list; pass "." to scan the project root
         :param recursive: whether to scan subdirectories recursively
+        :param skip_ignored_files: whether to skip files and directories that are ignored
         :param max_answer_chars: if the output is longer than this number of characters,
-            no content will be returned. Don't adjust unless there is really no other way to get the content
-            required for the task.
+            no content will be returned. -1 means the default value from the config will be used.
+            Don't adjust unless there is really no other way to get the content required for the task.
         :return: a JSON object with the names of directories and files within the given directory
         """
         # Check if the directory exists before validation
@@ -115,8 +114,8 @@ class ListDirTool(Tool):
             os.path.join(self.get_project_root(), relative_path),
             relative_to=self.get_project_root(),
             recursive=recursive,
-            is_ignored_dir=self.project.is_ignored_path,
-            is_ignored_file=self.project.is_ignored_path,
+            is_ignored_dir=self.project.is_ignored_path if skip_ignored_files else None,
+            is_ignored_file=self.project.is_ignored_path if skip_ignored_files else None,
         )
 
         result = json.dumps({"dirs": dirs, "files": files})
@@ -147,7 +146,7 @@ class FindFileTool(Tool):
             filename = os.path.basename(abs_path)
             return not fnmatch(filename, file_mask)
 
-        dirs, files = scan_directory(
+        _dirs, files = scan_directory(
             path=dir_to_scan,
             recursive=True,
             is_ignored_dir=self.project.is_ignored_path,
@@ -180,14 +179,15 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
         Always try to use wildcards to avoid specifying the exact content of the code to be replaced,
         especially if it spans several lines.
 
-        IMPORTANT: REMEMBER TO USE WILDCARDS WHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE LONG REGEXES WITHOUT USING WILDCARDS INSTEAD!
+        IMPORTANT: REMEMBER TO USE WILDCARDS WHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE UNNECESSARILY LONG REGEXES WITHOUT USING WILDCARDS!
 
         :param relative_path: the relative path to the file
         :param regex: a Python-style regular expression, matches of which will be replaced.
             Dot matches all characters, multi-line matching is enabled.
         :param repl: the string to replace the matched content with, which may contain
             backreferences like \1, \2, etc.
-            Make sure to escape special characters appropriately, e.g., use `\\n` for a literal `\n`.
+            IMPORTANT: Make sure to escape special characters appropriately!
+                Use "\n" to insert a newline, but use "\\n" to insert the string "\n" within a string literal.
         :param allow_multiple_occurrences: if True, the regex may match multiple occurrences in the file
             and all of them will be replaced.
             If this is set to False and the regex matches multiple occurrences, an error will be returned
@@ -309,7 +309,7 @@ class SearchForPatternTool(Tool):
         paths_exclude_glob: str = "",
         relative_path: str = "",
         restrict_search_to_code_files: bool = False,
-        max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
+        max_answer_chars: int = -1,
     ) -> str:
         """
         Offers a flexible search for arbitrary patterns in the codebase, including the
@@ -350,7 +350,9 @@ class SearchForPatternTool(Tool):
         :param relative_path: only subpaths of this path (relative to the repo root) will be analyzed. If a path to a single
             file is passed, only that will be searched. The path must exist, otherwise a `FileNotFoundError` is raised.
         :param max_answer_chars: if the output is longer than this number of characters,
-            no content will be returned. Don't adjust unless there is really no other way to get the content
+            no content will be returned.
+            -1 means the default value from the config will be used.
+            Don't adjust unless there is really no other way to get the content
             required for the task. Instead, if the output is too long, you should
             make a stricter query.
         :param restrict_search_to_code_files: whether to restrict the search to only those files where
@@ -378,7 +380,7 @@ class SearchForPatternTool(Tool):
             if os.path.isfile(abs_path):
                 rel_paths_to_search = [relative_path]
             else:
-                dirs, rel_paths_to_search = scan_directory(
+                _dirs, rel_paths_to_search = scan_directory(
                     path=abs_path,
                     recursive=True,
                     is_ignored_dir=self.project.is_ignored_path,

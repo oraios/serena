@@ -1,11 +1,12 @@
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 import pathspec
 
 from serena.config.serena_config import DEFAULT_TOOL_TIMEOUT, ProjectConfig
-from serena.constants import SERENA_MANAGED_DIR_IN_HOME
+from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
 from serena.text_utils import MatchedConsecutiveLines, search_files
 from serena.util.file_system import GitignoreParser, match_path
 from solidlsp import SolidLanguageServer
@@ -22,15 +23,21 @@ class Project:
         self.project_config = project_config
         self.is_newly_created = is_newly_created
 
+        # create .gitignore file in the project's Serena data folder if not yet present
+        serena_data_gitignore_path = os.path.join(self.path_to_serena_data_folder(), ".gitignore")
+        if not os.path.exists(serena_data_gitignore_path):
+            os.makedirs(os.path.dirname(serena_data_gitignore_path), exist_ok=True)
+            log.info(f"Creating .gitignore file in {serena_data_gitignore_path}")
+            with open(serena_data_gitignore_path, "w", encoding="utf-8") as f:
+                f.write(f"/{SolidLanguageServer.CACHE_FOLDER_NAME}\n")
+
         # gather ignored paths from the project configuration and gitignore files
         ignored_patterns = project_config.ignored_paths
         if len(ignored_patterns) > 0:
             log.info(f"Using {len(ignored_patterns)} ignored paths from the explicit project configuration.")
             log.debug(f"Ignored paths: {ignored_patterns}")
         if project_config.ignore_all_files_in_gitignore:
-            log.info(f"Parsing all gitignore files in {self.project_root}")
             gitignore_parser = GitignoreParser(self.project_root)
-            log.info(f"Found {len(gitignore_parser.get_ignore_specs())} gitignore files.")
             for spec in gitignore_parser.get_ignore_specs():
                 log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
                 ignored_patterns.extend(spec.patterns)
@@ -62,6 +69,9 @@ class Project:
         project_config = ProjectConfig.load(project_root, autogenerate=autogenerate)
         return Project(project_root=str(project_root), project_config=project_config)
 
+    def path_to_serena_data_folder(self) -> str:
+        return os.path.join(self.project_root, SERENA_MANAGED_DIR_NAME)
+
     def path_to_project_yml(self) -> str:
         return os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
 
@@ -83,9 +93,6 @@ class Project:
             either explicitly or implicitly through .gitignore files.
         """
         return self._ignore_spec
-
-    def _is_ignored_dirname(self, dirname: str) -> bool:
-        return dirname.startswith(".")
 
     def _is_ignored_relative_path(self, relative_path: str | Path, ignore_non_source_files: bool = True) -> bool:
         """
@@ -116,16 +123,6 @@ class Project:
         if len(rel_path.parts) > 0 and rel_path.parts[0] == ".git":
             return True
 
-        # Check each part of the path against always fulfilled ignore conditions
-        dir_parts = rel_path.parts
-        if is_file:
-            dir_parts = dir_parts[:-1]
-        for part in dir_parts:
-            if not part:  # Skip empty parts (e.g., from leading '/')
-                continue
-            if self._is_ignored_dirname(part):
-                return True
-
         return match_path(str(relative_path), self.get_ignore_spec(), root_path=self.project_root)
 
     def is_ignored_path(self, path: str | Path, ignore_non_source_files: bool = False) -> bool:
@@ -138,7 +135,13 @@ class Project:
         """
         path = Path(path)
         if path.is_absolute():
-            relative_path = path.relative_to(self.project_root)
+            try:
+                relative_path = path.relative_to(self.project_root)
+            except ValueError:
+                # If the path is not relative to the project root, we consider it as an absolute path outside the project
+                # (which we ignore)
+                log.warning(f"Path {path} is not relative to the project root {self.project_root} and was therefore ignored")
+                return True
         else:
             relative_path = path
 
@@ -193,15 +196,27 @@ class Project:
             return [relative_path]
         else:
             for root, dirs, files in os.walk(start_path, followlinks=True):
-                dirs[:] = [d for d in dirs if not self._is_ignored_relative_path(os.path.join(root, d))]
+                # prevent recursion into ignored directories
+                dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d))]
+
+                # collect non-ignored files
                 for file in files:
-                    rel_file_path = os.path.relpath(os.path.join(root, file), start=self.project_root)
+                    abs_file_path = os.path.join(root, file)
                     try:
-                        if not self._is_ignored_relative_path(rel_file_path):
+                        if not self.is_ignored_path(abs_file_path, ignore_non_source_files=True):
+                            try:
+                                rel_file_path = os.path.relpath(abs_file_path, start=self.project_root)
+                            except Exception:
+                                log.warning(
+                                    "Ignoring path '%s' because it appears to be outside of the project root (%s)",
+                                    abs_file_path,
+                                    self.project_root,
+                                )
+                                continue
                             rel_file_paths.append(rel_file_path)
                     except FileNotFoundError:
                         log.warning(
-                            f"File {rel_file_path} not found (possibly due it being a symlink), skipping it in request_parsed_files",
+                            f"File {abs_file_path} not found (possibly due it being a symlink), skipping it in request_parsed_files",
                         )
             return rel_file_paths
 
@@ -263,6 +278,7 @@ class Project:
         log_level: int = logging.INFO,
         ls_timeout: float | None = DEFAULT_TOOL_TIMEOUT - 5,
         trace_lsp_communication: bool = False,
+        ls_specific_settings: dict[Language, Any] | None = None,
     ) -> SolidLanguageServer:
         """
         Create a language server for a project. Note that you will have to start it
@@ -273,6 +289,8 @@ class Project:
         :param log_level: the log level for the language server
         :param ls_timeout: the timeout for the language server
         :param trace_lsp_communication: whether to trace LSP communication
+        :param ls_specific_settings: optional LS specific configuration of the language server,
+            see docstrings in the inits of subclasses of SolidLanguageServer to see what values may be passed.
         :return: the language server
         """
         ls_config = LanguageServerConfig(
@@ -288,5 +306,9 @@ class Project:
             ls_logger,
             self.project_root,
             timeout=ls_timeout,
-            solidlsp_settings=SolidLSPSettings(solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME),
+            solidlsp_settings=SolidLSPSettings(
+                solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME,
+                project_data_relative_path=SERENA_MANAGED_DIR_NAME,
+                ls_specific_settings=ls_specific_settings or {},
+            ),
         )

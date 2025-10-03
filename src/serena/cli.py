@@ -119,7 +119,13 @@ class TopLevelCommands(AutoRegisteringGroup):
         show_default=True,
         help="Built-in mode names or paths to custom mode YAMLs.",
     )
-    @click.option("--transport", type=click.Choice(["stdio", "sse"]), default="stdio", show_default=True, help="Transport protocol.")
+    @click.option(
+        "--transport",
+        type=click.Choice(["stdio", "sse", "streamable-http"]),
+        default="stdio",
+        show_default=True,
+        help="Transport protocol.",
+    )
     @click.option("--host", type=str, default="0.0.0.0", show_default=True)
     @click.option("--port", type=int, default=8000, show_default=True)
     @click.option("--enable-web-dashboard", type=bool, is_flag=False, default=None, help="Override dashboard setting in config.")
@@ -137,7 +143,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         project_file_arg: str | None,
         context: str,
         modes: tuple[str, ...],
-        transport: Literal["stdio", "sse"],
+        transport: Literal["stdio", "sse", "streamable-http"],
         host: str,
         port: int,
         enable_web_dashboard: bool | None,
@@ -451,9 +457,10 @@ class ProjectCommands(AutoRegisteringGroup):
     def _index_project(project: str, log_level: str, timeout: float) -> None:
         lvl = logging.getLevelNamesMapping()[log_level.upper()]
         logging.configure(level=lvl)
+        serena_config = SerenaConfig.from_config_file()
         proj = Project.load(os.path.abspath(project))
         click.echo(f"Indexing symbols in project {project}…")
-        ls = proj.create_language_server(log_level=lvl, ls_timeout=timeout)
+        ls = proj.create_language_server(log_level=lvl, ls_timeout=timeout, ls_specific_settings=serena_config.ls_specific_settings)
         log_file = os.path.join(project, ".serena", "logs", "indexing.txt")
 
         collected_exceptions: list[Exception] = []
@@ -464,7 +471,7 @@ class ProjectCommands(AutoRegisteringGroup):
                 try:
                     ls.request_document_symbols(f, include_body=False)
                     ls.request_document_symbols(f, include_body=True)
-                except TimeoutError as e:
+                except Exception as e:
                     log.error(f"Failed to index {f}, continuing.")
                     collected_exceptions.append(e)
                     files_failed.append(f)

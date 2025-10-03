@@ -8,44 +8,8 @@
 * :wrench: Serena provides essential **semantic code retrieval and editing tools** that are akin to an IDE's capabilities, extracting code entities at the symbol level and exploiting relational structure. When combined with an existing coding agent, these tools greatly enhance (token) efficiency.
 * :free: Serena is **free & open-source**, enhancing the capabilities of LLMs you already have access to free of charge.
 
-You can think of Serena as an IDE for a coding agent. With it, the agent no longer needs to read entire
+You can think of Serena as providing IDE-like tools to your LLM/coding agent. With it, the agent no longer needs to read entire
 files, perform grep-like searches or string replacements to find and edit the right code. Instead, it can use code centered tools like `find_symbol`, `find_referencing_symbols` and `insert_after_symbol`.
-
-### Users' Feedback
-
-Most users report that Serena has strong positive effects on the results of their coding agents, even when used within
-very capable agents like Claude Code. Serena is often described to be a [game changer](https://www.reddit.com/r/ClaudeAI/comments/1lfsdll/try_out_serena_mcp_thank_me_later/), or an enormous [productivity boost](https://www.reddit.com/r/ClaudeCode/comments/1mguoia/absolutely_insane_improvement_of_claude_code).
-
-However, in very small projects or in tasks that involve only one file (tasks which do not require reading/editing only subsets of files),
-you may not benefit from including Serena. For example, for creating code from scratch, Serena will not provide much value.
-You also might want to adjust Serena to your needs and workflows using its extensive configuration options.
-
-Several videos and blog posts have been written about Serena by now:
-
-#### On YouTube
-
-* [AI Labs](https://www.youtube.com/watch?v=wYWyJNs1HVk&t=1s)
-* [Yo Van Eyck](https://www.youtube.com/watch?v=UqfxuQKuMo8&t=45s)
-* [JeredBlu](https://www.youtube.com/watch?v=fzPnM3ySmjE&t=32s)
-
-#### On Blogs
-
-* [Serena's Design Principles](https://medium.com/@souradip1000/deconstructing-serenas-mcp-powered-semantic-code-understanding-architecture-75802515d116)
-* [Serena with Claude Code (in Japanese)](https://blog.lai.so/serena/)
-* [Turning Claude Code into a Development Powerhouse](https://robertmarshall.dev/blog/turning-claude-code-into-a-development-powerhouse/)
-
-### Demonstration 1 - Efficient Operation in Claude Code
-
-A demonstration of Serena efficiently retrieving and editing code within Claude Code, thereby saving tokens and time. Efficient operations are not only useful for saving costs, but also for generally improving the generated code's quality. This effect may be less pronounced in very small projects, but often becomes of crucial importance in larger ones.
-
-https://github.com/user-attachments/assets/ab78ebe0-f77d-43cc-879a-cc399efefd87
-
-### Demonstration 2 - Serena in Claude Desktop
-
-A demonstration of Serena implementing a small feature for itself (a better log GUI) with Claude Desktop.
-Note how Serena's tools enable Claude to find and edit the right symbols.
-
-https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
 
 <p align="center">
   <em>Serena is under active development! See the latest updates, upcoming features, and lessons learned to stay up to date.</em>
@@ -70,18 +34,33 @@ orchestrating tool use.
 
 For example, **supercharge the performance of Claude Code** with a [one-line shell command](#claude-code).
 
-Serena can be integrated with an LLM in several ways:
+In general, Serena can be integrated with an LLM in several ways:
 
-* by using the **model context protocol (MCP)**.  
-   Serena provides an MCP server which integrates with
-  * Claude Code and Claude Desktop,
-  * Terminal-based clients like Codex, Gemini-CLI, Qwen3-Coder, rovodev, OpenHands CLI and others,
-  * IDEs like VSCode, Cursor or IntelliJ,
-  * Extensions like Cline or Roo Code
-  * Local clients like [OpenWebUI](https://docs.openwebui.com/openapi-servers/mcp), [Jan](https://jan.ai/docs/mcp-examples/browser/browserbase#enable-mcp), [Agno](https://docs.agno.com/introduction/playground) and others
-* by using [mcpo to connect it to ChatGPT](docs/serena_on_chatgpt.md) or other clients that don't support MCP but do support tool calling.
-* by incorporating Serena's tools into an agent framework of your choice, as illustrated [here](docs/custom_agent.md).  
-   Serena's tool implementation is decoupled from the framework-specific code and can thus easily be adapted to any agent framework.
+* by using the **model context protocol (MCP)**.
+  Serena provides an MCP server which integrates with
+    * Claude Code and Claude Desktop,
+    * Terminal-based clients like Codex, Gemini-CLI, Qwen3-Coder, rovodev, OpenHands CLI and others,
+    * IDEs like VSCode, Cursor or IntelliJ,
+    * Extensions like Cline or Roo Code
+    * Local clients like [OpenWebUI](https://docs.openwebui.com/openapi-servers/mcp), [Jan](https://jan.ai/docs/mcp-examples/browser/browserbase#enable-mcp), [Agno](https://docs.agno.com/introduction/playground) and others
+* by using [mcpo to connect it to ChatGPT](docs/serena_on_chatgpt.md) or other clients that don't support MCP but do support tool calling via OpenAPI.
+* by incorporating Serena's tools into an agent framework of your choice, as illustrated [here](docs/custom_agent.md).
+  Serena's tool implementation is decoupled from the framework-specific code and can thus easily be adapted to any agent framework.
+
+### Serena in Action
+
+#### Demonstration 1: Efficient Operation in Claude Code
+
+A demonstration of Serena efficiently retrieving and editing code within Claude Code, thereby saving tokens and time. Efficient operations are not only useful for saving costs, but also for generally improving the generated code's quality. This effect may be less pronounced in very small projects, but often becomes of crucial importance in larger ones.
+
+https://github.com/user-attachments/assets/ab78ebe0-f77d-43cc-879a-cc399efefd87
+
+#### Demonstration 2: Serena in Claude Desktop
+
+A demonstration of Serena implementing a small feature for itself (a better log GUI) with Claude Desktop.
+Note how Serena's tools enable Claude to find and edit the right symbols.
+
+https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
 
 ### Programming Language Support & Semantic Analysis Capabilities
 
@@ -95,31 +74,53 @@ complex projects! So not only is it free and open-source, it frequently achieves
 than existing solutions that charge a premium.
 
 Language servers provide support for a wide range of programming languages.
-With Serena, we provide
+With Serena, we provide direct, out-of-the-box support for:
 
-* direct, out-of-the-box support for:
   * Python
   * TypeScript/Javascript
   * PHP (uses Intelephense LSP; set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features)
   * Go (requires installation of gopls)
-  * Rust
+  * R (requires installation of the `languageserver` R package)
+  * Rust (requires [rustup](https://rustup.rs/) - uses rust-analyzer from your toolchain)
+  * C/C++ (you may experience issues with finding references, we are working on it)
+  * Zig (requires installation of ZLS - Zig Language Server)
   * C#
-  * Ruby
+  * Ruby (by default, uses [ruby-lsp](https://github.com/Shopify/ruby-lsp), specify ruby_solargraph as your language to use the previous solargraph based implementation)
   * Swift
+  * Kotlin (uses the pre-alpha [official kotlin LS](https://github.com/Kotlin/kotlin-lsp), some issues may appear)
   * Java (_Note_: startup is slow, initial startup especially so. There may be issues with java on macos and linux, we are working on it.)
-  * Elixir (Requires NextLS and Elixir install; **Windows not supported**)
   * Clojure
+  * Dart
   * Bash
-  * C/C++ (You may experience issues with finding references, we are working on it)
-* indirect support (may require some code changes/manual installation) for:
-  * Kotlin (untested)
-  * Dart (untested)
+  * Lua (automatically downloads lua-language-server if not installed)
+  * Nix (requires nixd installation)
+  * Elixir (requires installation of NextLS and Elixir; **Windows not supported**)
+  * Erlang (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls), experimental, might be slow or hang)
+  * AL
 
-   These languages are supported by the language server library, but
-   we did not explicitly test whether the support for these languages actually works flawlessly.
+Support for further languages can easily be added by providing a shallow adapter for a new language server implementation,
+see Serena's [memory on that](.serena/memories/adding_new_language_support_guide.md).
 
-Further languages can, in principle, easily be supported by providing a shallow adapter for a new language server
-implementation.
+### Community Feedback
+
+Most users report that Serena has strong positive effects on the results of their coding agents, even when used within
+very capable agents like Claude Code. Serena is often described to be a [game changer](https://www.reddit.com/r/ClaudeAI/comments/1lfsdll/try_out_serena_mcp_thank_me_later/), providing an enormous [productivity boost](https://www.reddit.com/r/ClaudeCode/comments/1mguoia/absolutely_insane_improvement_of_claude_code).
+
+Serena excels at navigating and manipulating complex codebases, providing tools that support precise code retrieval and editing in the presence of large, strongly structured codebases.
+However, when dealing with tasks that involve only very few/small files, you may not benefit from including Serena on top of your existing coding agent. 
+In particular, when writing code from scratch, Serena will not provide much value initially, as the more complex structures that Serena handles more gracefully than simplistic, file-based approaches are yet to be created.
+
+Several videos and blog posts have talked about Serena:
+
+* YouTube:
+    * [AI Labs](https://www.youtube.com/watch?v=wYWyJNs1HVk&t=1s)
+    * [Yo Van Eyck](https://www.youtube.com/watch?v=UqfxuQKuMo8&t=45s)
+    * [JeredBlu](https://www.youtube.com/watch?v=fzPnM3ySmjE&t=32s)
+
+* Blog posts:
+    * [Serena's Design Principles](https://medium.com/@souradip1000/deconstructing-serenas-mcp-powered-semantic-code-understanding-architecture-75802515d116)
+    * [Serena with Claude Code (in Japanese)](https://blog.lai.so/serena/)
+    * [Turning Claude Code into a Development Powerhouse](https://robertmarshall.dev/blog/turning-claude-code-into-a-development-powerhouse/)
 
 ## Table of Contents
 
@@ -131,10 +132,11 @@ implementation.
 - [Quick Start](#quick-start)
   * [Running the Serena MCP Server](#running-the-serena-mcp-server)
     + [Usage](#usage)
-      - [Using uvx](#using-uvx)
-        * [Local Installation](#local-installation)
-      - [Using Docker (Experimental)](#using-docker-experimental)
-    + [SSE Mode](#sse-mode)
+    + [Using uvx](#using-uvx)
+    + [Local Installation](#local-installation)
+    + [Using Docker (Experimental)](#using-docker-experimental)
+    + [Using Nix](#using-nix)
+    + [Streamable HTTP Mode](#streamable-http-mode)
     + [Command-Line Arguments](#command-line-arguments)
   * [Configuration](#configuration)
   * [Project Activation & Indexing](#project-activation--indexing)
@@ -157,16 +159,16 @@ implementation.
     + [Start from a Clean State](#start-from-a-clean-state)
     + [Logging, Linting, and Automated Tests](#logging-linting-and-automated-tests)
   * [Prompting Strategies](#prompting-strategies)
-  * [Potential Issues in Code Editing](#potential-issues-in-code-editing)
   * [Running Out of Context](#running-out-of-context)
-  * [Combining Serena with Other MCP Servers](#combining-serena-with-other-mcp-servers)
   * [Serena's Logs: The Dashboard and GUI Tool](#serenas-logs-the-dashboard-and-gui-tool)
-  * [Troubleshooting](#troubleshooting)
 - [Comparison with Other Coding Agents](#comparison-with-other-coding-agents)
   * [Subscription-Based Coding Agents](#subscription-based-coding-agents)
   * [API-Based Coding Agents](#api-based-coding-agents)
   * [Other MCP-Based Coding Agents](#other-mcp-based-coding-agents)
 - [Acknowledgements](#acknowledgements)
+  * [Sponsors](#sponsors)
+  * [Community Contributions](#community-contributions)
+  * [Technologies](#technologies)
 - [Customizing and Extending Serena](#customizing-and-extending-serena)
 - [List of Tools](#list-of-tools)
 
@@ -183,7 +185,7 @@ Serena can be used in various ways, below you will find instructions for selecte
 * You can use Serena as a library for building your own applications. We try to keep the public API stable, but you should still
   expect breaking changes and pin Serena to a fixed version if you use it as a dependency.
 
-Serena is managed by `uv`, so you will need to [install it](https://docs.astral.sh/uv/getting-started/installation/)).
+Serena is managed by `uv`, so you will need to [install it](https://docs.astral.sh/uv/getting-started/installation/).
 
 ### Running the Serena MCP Server
 
@@ -194,14 +196,14 @@ You have several options for running the MCP server, which are explained in the 
 The typical usage involves the client (Claude Code, Claude Desktop, etc.) running
 the MCP server as a subprocess (using stdio communication),
 so the client needs to be provided with the command to run the MCP server.
-(Alternatively, you can run the MCP server in SSE mode and tell your client
+(Alternatively, you can run the MCP server in Streamable HTTP or SSE mode and tell your client
 how to connect to it.)
 
 Note that no matter how you run the MCP server, Serena will, by default, start a small web-based dashboard on localhost that will display logs and allow shutting down the
 MCP server (since many clients fail to clean up processes correctly).
 This and other settings can be adjusted in the [configuration](#configuration) and/or by providing [command-line arguments](#command-line-arguments).
 
-##### Using uvx
+#### Using uvx
 
 `uvx` can be used to run the latest version of Serena directly from the repository, without an explicit local installation.
 
@@ -211,7 +213,7 @@ uvx --from git+https://github.com/oraios/serena serena start-mcp-server
 
 Explore the CLI to see some of the customization options that serena provides (more info on them below).
 
-###### Local Installation
+#### Local Installation
 
 1. Clone the repository and change into it.
 
@@ -239,7 +241,7 @@ Explore the CLI to see some of the customization options that serena provides (m
     uv run --directory /abs/path/to/serena serena start-mcp-server
    ```
 
-##### Using Docker (Experimental)
+#### Using Docker (Experimental)
 
 ⚠️ Docker support is currently experimental with several limitations. Please read the [Docker documentation](DOCKER.md) for important caveats before using it.
 
@@ -260,29 +262,42 @@ Alternatively, use docker compose with the `compose.yml` file provided in the re
 
 See the [Docker documentation](DOCKER.md) for detailed setup instructions, configuration options, and known limitations.
 
-#### SSE Mode
+#### Using Nix
+
+If you are using Nix and [have enabled the `nix-command` and `flakes` features](https://nixos.wiki/wiki/flakes), you can run Serena using the following command:
+
+```bash
+nix run github:oraios/serena -- start-mcp-server --transport stdio
+```
+
+You can also install Serena by referencing this repo (`github:oraios/serena`) and using it in your Nix flake. The package is exported as `serena`.
+
+#### Streamable HTTP Mode
 
 ℹ️ Note that MCP servers which use stdio as a protocol are somewhat unusual as far as client/server architectures go, as the server
 necessarily has to be started by the client in order for communication to take place via the server's standard input/output stream.
 In other words, you do not need to start the server yourself. The client application (e.g. Claude Desktop) takes care of this and
 therefore needs to be configured with a launch command.
 
-When using instead the SSE mode, which uses HTTP-based communication, you control the server lifecycle yourself,
+When using instead the *Streamable HTTP* mode, you control the server lifecycle yourself,
 i.e. you start the server and provide the client with the URL to connect to it.
 
-Simply provide `start-mcp-server` with the `--transport sse` option and optionally provide the port.
-For example, to run the Serena MCP server in SSE mode on port 9121 using a local installation,
+Simply provide `start-mcp-server` with the `--transport streamable-http` option and optionally provide the port.
+For example, to run the Serena MCP server in Streamable HTTP mode on port 9121 using a local installation,
 you would run this command from the Serena directory,
 
 ```shell
-uv run serena start-mcp-server --transport sse --port 9121
+uv run serena start-mcp-server --transport streamable-http --port 9121
 ```
 
-and then configure your client to connect to `http://localhost:9121/sse`.
+and then configure your client to connect to `http://localhost:9121/mcp`.
+
+ℹ️ Note that SSE transport is supported as well, but its use is discouraged. 
+Use Streamable HTTP instead.
 
 #### Command-Line Arguments
 
-The Serena MCP server supports a wide range of additional command-line options, including the option to run in SSE mode
+The Serena MCP server supports a wide range of additional command-line options, including the option to run in Streamable HTTP or SSE mode
 and to adapt Serena to various [contexts and modes of operation](#modes-and-contexts).
 
 Run with parameter `--help` to get a list of available options.
@@ -396,7 +411,7 @@ After codex has started, you need to activate the project, which you can do by s
 
 That's it! Have a look at `~/.codex/log/codex-tui.log` to see if any errors occurred.
 
-The Serena dashboard will run if you have not disabled it in the configuration, but due to Codex's sandboxing the webbrowser 
+The Serena dashboard will run if you have not disabled it in the configuration, but due to Codex's sandboxing the webbrowser
 may not open automatically. You can open it manually by going to `http://localhost:24282/dashboard/index.html` (or a higher port, if
 that was already taken).
 
@@ -468,7 +483,7 @@ That's it! Save the config and then restart Claude Desktop. You are ready for ac
 Note: on Windows and macOS there are official Claude Desktop applications by Anthropic, for Linux there is an [open-source
 community version](https://github.com/aaddrick/claude-desktop-debian).
 
-⚠️ Be sure to fully quit the Claude Desktop application, as closing Claude will just minimize it to the system tray – at least on Windows.  
+⚠️ Be sure to fully quit the Claude Desktop application, as closing Claude will just minimize it to the system tray – at least on Windows.
 
 ⚠️ Some clients may leave behind zombie processes. You will have to find and terminate them manually then.
     With Serena, you can activate the [dashboard](#serenas-logs-the-dashboard-and-gui-tool) to prevent unnoted processes and also use the dashboard
@@ -517,12 +532,16 @@ autonomously.
 
 #### Shell Execution and Editing Tools
 
-However, it should be noted that the `execute_shell_command` tool allows for arbitrary code execution.
+Many clients have their own shell execution tool, and by default Serena's shell tool will be disabled in them
+(e.g., when using the `ide-assistant` or `codex` context). However, when using Serena through something like
+Claude Desktop or ChatGPT, it is recommended to enable Serena's `execute_shell_command` tool to allow
+agentic behavior.
+
+It should be noted that the `execute_shell_command` tool allows for arbitrary code execution.
 When using Serena as an MCP Server, clients will typically ask the user for permission
 before executing a tool, so as long as the user inspects execution parameters beforehand,
 this should not be a problem.
-However, if you have concerns, you can choose to disable certain commands in your project's
-.yml configuration file.
+However, if you have concerns, you can choose to disable certain commands in your project's configuration file.
 If you only want to use Serena purely for analyzing code and suggesting implementations
 without modifying the codebase, you can enable read-only mode by setting `read_only: true` in your project configuration file.
 This will automatically disable all editing tools and prevent any modifications to your codebase while still
@@ -549,8 +568,10 @@ Serena comes with pre-defined contexts:
 * `ide-assistant`: Optimized for integration into IDEs like VSCode, Cursor, or Cline, focusing on in-editor coding assistance.
 Choose the context that best matches the type of integration you are using.
 
-When launching Serena, specify the context using `--context <context-name>`.  
+When launching Serena, specify the context using `--context <context-name>`.
 Note that for cases where parameter lists are specified (e.g. Claude Desktop), you must add two parameters to the list.
+
+If you are using a local server (such as Llama.cpp) which requires you to use OpenAI-compatible tool descriptions, use context `oaicompat-agent` instead of `agent`.
 
 #### Modes
 
@@ -621,7 +642,7 @@ We found that memories can significantly improve the user experience with Serena
 
 Serena uses the code structure for finding, reading and editing code. This means that it will
 work well with well-structured code but may perform poorly on fully unstructured one (like a "God class"
-with enormous, non-modular functions).  
+with enormous, non-modular functions).
 Furthermore, for languages that are not statically typed, type annotations are highly beneficial.
 
 #### Start from a Clean State
@@ -660,18 +681,6 @@ better results and in increasing the feeling of control and staying in the loop.
 make a detailed plan in one session, where Serena may read a lot of your code to build up the context,
 and then continue with the implementation in another (potentially after creating suitable memories).
 
-### Potential Issues in Code Editing
-
-In our experience, LLMs are bad at counting, i.e. they have problems
-inserting blocks of code in the right place. Most editing operations can be performed
-at the symbolic level, allowing this problem is overcome. However, sometimes,
-line-level insertions are useful.
-
-Serena is instructed to double-check the line numbers and any code blocks that it will
-edit, but you may find it useful to explicitly tell it how to edit code if you run into
-problems.  
-We are working on making Serena's editing capabilities more robust.
-
 ### Running Out of Context
 
 For long and complicated tasks, or tasks where Serena has read a lot of content, you
@@ -688,14 +697,6 @@ Moreover, Serena is instructed to be frugal with context
 (e.g., to not read bodies of code symbols unnecessarily),
 but we found that Claude is not always very good in being frugal (Gemini seemed better at it).
 You can explicitly instruct it to not read the bodies if you know that it's not needed.
-
-### Combining Serena with Other MCP Servers
-
-When using Serena through an MCP Client, you can use it together with other MCP servers.
-However, beware of tool name collisions! See info on that above.
-
-Currently, there is a collision with the popular Filesystem MCP Server. Since Serena also provides
-filesystem operations, there is likely no need to ever enable these two simultaneously.
 
 ### Serena's Logs: The Dashboard and GUI Tool
 
@@ -718,17 +719,6 @@ The web dashboard will display usage statistics of Serena's tools if you set  `r
 In addition to viewing logs, both tools allow to shut down the Serena agent.
 This function is provided, because clients like Claude Desktop may fail to terminate the MCP server subprocess
 when they themselves are closed.
-
-### Troubleshooting
-
-Support for MCP Servers in Claude Desktop and the various MCP Server SDKs are relatively new developments and may display instabilities.
-
-The working configuration of an MCP server may vary from platform to
-platform and from client to client. We recommend always using absolute paths, as relative paths may be sources of
-errors. The language server is running in a separate sub-process and is called with asyncio – sometimes
-a client may make it crash. If you have Serena's log window enabled, and it disappears, you'll know what happened.
-
-Some clients may not properly terminate MCP servers, look out for hanging python processes and terminate them manually, if needed.
 
 ## Comparison with Other Coding Agents
 
@@ -794,6 +784,30 @@ larger codebases.
 
 ## Acknowledgements
 
+### Sponsors
+
+We are very grateful to our [sponsors](https://github.com/sponsors/oraios) who help us drive Serena's development. The core team
+(the founders of [Oraios AI](https://oraios-ai.de/)) put in a lot of work in order to turn Serena into a useful open source project. 
+So far, there is no business model behind this project, and sponsors are our only source of income from it.
+
+Sponsors help us dedicating more time to the project, managing contributions, and working on larger features (like better tooling based on more advanced
+LSP features, VSCode integration, debugging via the DAP, and several others).
+If you find this project useful to your work, or would like to accelerate the development of Serena, consider becoming a sponsor.
+
+We are proud to announce that the Visual Studio Code team, together with Microsoft’s Open Source Programs Office and GitHub Open Source
+have decided to sponsor Serena with a one-time contribution!
+
+<p align="center">
+  <img src="resources/vscode_sponsor_logo.png" alt="Visual Studio Code sponsor logo" width="220">
+</p>
+
+### Community Contributions
+
+A significant part of Serena, especially support for various languages, was contributed by the open source community.
+We are very grateful for the many contributors who made this possible and who played an important role in making Serena
+what it is today.
+
+### Technologies
 We built Serena on top of multiple existing open-source technologies, the most important ones being:
 
 1. [multilspy](https://github.com/microsoft/multilspy).

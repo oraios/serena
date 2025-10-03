@@ -71,6 +71,14 @@ class ClangdLanguageServer(SolidLanguageServer):
                 ),
                 RuntimeDependency(
                     id="Clangd",
+                    description="Clangd for macOS (x64)",
+                    url="https://github.com/clangd/clangd/releases/download/19.1.2/clangd-mac-19.1.2.zip",
+                    platform_id="osx-x64",
+                    archive_type="zip",
+                    binary_name="clangd_19.1.2/bin/clangd",
+                ),
+                RuntimeDependency(
+                    id="Clangd",
                     description="Clangd for macOS (Arm64)",
                     url="https://github.com/clangd/clangd/releases/download/19.1.2/clangd-mac-19.1.2.zip",
                     platform_id="osx-arm64",
@@ -81,7 +89,7 @@ class ClangdLanguageServer(SolidLanguageServer):
         )
 
         clangd_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "clangd")
-        dep = deps.single_for_current_platform()
+        dep = deps.get_single_dep_for_current_platform()
         clangd_executable_path = deps.binary_path(clangd_ls_dir)
         if not os.path.exists(clangd_executable_path):
             logger.log(
