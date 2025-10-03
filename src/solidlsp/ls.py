@@ -213,6 +213,11 @@ class SolidLanguageServer(ABC):
 
             ls = Intelephense(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
+        elif config.code_language == Language.PERL:
+            from solidlsp.language_servers.perl_language_server import PerlLanguageServer
+
+            ls = PerlLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
+
         elif config.code_language == Language.CLOJURE:
             from solidlsp.language_servers.clojure_lsp import ClojureLSP
 

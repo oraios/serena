@@ -257,6 +257,7 @@ markers = [
   "rust: language server running for Rust",
   "typescript: language server running for TypeScript",
   "php: language server running for PHP",
+  "perl: language server running for Perl",
   "csharp: language server running for C#",
   "elixir: language server running for Elixir",
   "terraform: language server running for Terraform",
