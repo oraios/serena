@@ -17,7 +17,6 @@ from ruamel.yaml.comments import CommentedMap
 from sensai.util import logging
 from sensai.util.logging import LogTime, datetime_tag
 from sensai.util.string import ToStringMixin
-
 from serena.constants import (
     DEFAULT_SOURCE_FILE_ENCODING,
     PROJECT_TEMPLATE_FILE,
@@ -162,7 +161,7 @@ def is_running_in_docker() -> bool:
 @dataclass(kw_only=True)
 class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
     project_name: str
-    language: Language
+    languages: list[Language]
     ignored_paths: list[str] = field(default_factory=list)
     read_only: bool = False
     ignore_all_files_in_gitignore: bool = True
@@ -173,6 +172,17 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
 
     def _tostring_includes(self) -> list[str]:
         return ["project_name"]
+
+    @property
+    def language(self) -> Language:
+        """
+        Backward compatibility property: returns the first language.
+        For single-language projects, this is the only language.
+        For multi-language projects, this is the primary language.
+        """
+        if not self.languages:
+            raise ValueError("Project has no languages configured")
+        return self.languages[0]
 
     @classmethod
     def autogenerate(
@@ -224,21 +234,82 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
     @classmethod
     def _from_dict(cls, data: dict[str, Any]) -> Self:
         """
-        Create a ProjectConfig instance from a configuration dictionary
+        Create a ProjectConfig instance from a configuration dictionary.
+
+        Supports both single language (backward compatibility) and multiple languages:
+        - language: rust  # Single language (old format)
+        - languages: [rust, haskell, python]  # Multiple languages (new format)
         """
-        language_str = data["language"].lower()
         project_name = data["project_name"]
-        # backwards compatibility
-        if language_str == "javascript":
-            log.warning(f"Found deprecated project language `javascript` in project {project_name}, please change to `typescript`")
-            language_str = "typescript"
-        try:
-            language = Language(language_str)
-        except ValueError as e:
-            raise ValueError(f"Invalid language: {data['language']}.\nValid languages are: {[l.value for l in Language]}") from e
+
+        # Check for both 'language' and 'languages' specified (error)
+        has_language = "language" in data
+        has_languages = "languages" in data
+
+        if has_language and has_languages:
+            raise ValueError(
+                f"Project '{project_name}' specifies both 'language' and 'languages'. "
+                f"Please use only one:\n"
+                f"  - For single language: language: rust\n"
+                f"  - For multiple languages: languages: [rust, haskell, python]"
+            )
+
+        if not has_language and not has_languages:
+            raise ValueError(
+                f"Project '{project_name}' must specify either 'language' or 'languages'.\n"
+                f"Examples:\n"
+                f"  - Single language: language: rust\n"
+                f"  - Multiple languages: languages: [rust, haskell, python]"
+            )
+
+        # Parse languages
+        languages: list[Language] = []
+
+        if has_language:
+            # Single language (backward compatibility)
+            language_str = data["language"].lower()
+            # Backward compatibility for deprecated 'javascript'
+            if language_str == "javascript":
+                log.warning(f"Found deprecated project language `javascript` in project {project_name}, please change to `typescript`")
+                language_str = "typescript"
+            try:
+                language = Language(language_str)
+                languages = [language]
+            except ValueError as e:
+                raise ValueError(f"Invalid language: {data['language']}.\nValid languages are: {[l.value for l in Language]}") from e
+        else:
+            # Multiple languages (new format)
+            languages_data = data["languages"]
+            if not isinstance(languages_data, list):
+                raise ValueError(f"Project '{project_name}': 'languages' must be a list, got {type(languages_data).__name__}")
+
+            if len(languages_data) == 0:
+                raise ValueError(f"Project '{project_name}': 'languages' list must contain at least one language")
+
+            # Parse and validate each language
+            seen_languages = set()
+            for lang_str in languages_data:
+                lang_str_lower = str(lang_str).lower()
+                # Backward compatibility for deprecated 'javascript'
+                if lang_str_lower == "javascript":
+                    log.warning(f"Found deprecated language `javascript` in project {project_name}, converting to `typescript`")
+                    lang_str_lower = "typescript"
+
+                try:
+                    language = Language(lang_str_lower)
+                    # Remove duplicates (keep first occurrence)
+                    if language not in seen_languages:
+                        languages.append(language)
+                        seen_languages.add(language)
+                except ValueError as e:
+                    raise ValueError(
+                        f"Invalid language '{lang_str}' in project '{project_name}'.\n"
+                        f"Valid languages are: {[l.value for l in Language]}"
+                    ) from e
+
         return cls(
             project_name=project_name,
-            language=language,
+            languages=languages,
             ignored_paths=data.get("ignored_paths", []),
             excluded_tools=data.get("excluded_tools", []),
             included_optional_tools=data.get("included_optional_tools", []),
