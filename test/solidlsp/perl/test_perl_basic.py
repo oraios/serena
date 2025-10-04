@@ -28,7 +28,6 @@ class TestPerlLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.PERL], indirect=True)
     def test_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test that document symbols are correctly identified."""
-
         # Request document symbols
         all_symbols, _ = language_server.request_document_symbols("main.pl", include_body=False)
 
@@ -52,15 +51,13 @@ class TestPerlLanguageServer:
     # @pytest.mark.skip(reason="Perl::LanguageServer cross-file definition tracking needs configuration")
     @pytest.mark.parametrize("language_server", [Language.PERL], indirect=True)
     def test_find_definition_across_files(self, language_server: SolidLanguageServer) -> None:
-        definition_location_list = language_server.request_definition(
-            "main.pl", 17, 0
-        )
+        definition_location_list = language_server.request_definition("main.pl", 17, 0)
 
         assert len(definition_location_list) == 1
         definition_location = definition_location_list[0]
         print(f"Found definition: {definition_location}")
         assert definition_location["uri"].endswith("helper.pl")
-        assert definition_location["range"]["start"]["line"] == 4 # add method on line 2 (0-indexed 1)
+        assert definition_location["range"]["start"]["line"] == 4  # add method on line 2 (0-indexed 1)
 
     @pytest.mark.parametrize("language_server", [Language.PERL], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:

@@ -95,9 +95,7 @@ class PerlLanguageServer(SolidLanguageServer):
                     ) from e
 
         except FileNotFoundError as e:
-            raise RuntimeError(
-                "Perl is not installed or not found in PATH. Please install Perl and try again."
-            ) from e
+            raise RuntimeError("Perl is not installed or not found in PATH. Please install Perl and try again.") from e
 
         # Return the command to run Perl::LanguageServer with logging options
         # Use -- to separate Perl options from program arguments (which go into @ARGV)
