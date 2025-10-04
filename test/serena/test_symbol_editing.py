@@ -408,6 +408,11 @@ TYPESCRIPT_REPLACED_BODY = """function printValue() {
     }
 """
 
+REGO_REPLACED_BODY = """is_admin(user) {
+	user.role == "admin"
+	user.active == true
+}"""
+
 
 class ReplaceBodyTest(EditingTest):
     def __init__(self, language: Language, rel_path: str, symbol_name: str, new_body: str):
@@ -439,6 +444,15 @@ class ReplaceBodyTest(EditingTest):
                 TYPESCRIPT_REPLACED_BODY,
             ),
             marks=pytest.mark.typescript,
+        ),
+        pytest.param(
+            ReplaceBodyTest(
+                Language.REGO,
+                os.path.join("policies", "authz.rego"),
+                "is_admin",
+                REGO_REPLACED_BODY,
+            ),
+            marks=pytest.mark.rego,
         ),
     ],
 )
