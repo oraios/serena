@@ -358,6 +358,72 @@ class TestSearchFiles:
                 assert result.matched_lines[0].line_content == "This line contains a match."
                 assert result.matched_lines[0].match_type == LineType.MATCH
 
+    @pytest.mark.parametrize(
+        "file_paths, pattern, paths_include_glob, paths_exclude_glob, expected_matched_files, description",
+        [
+            # Brace expansion in include glob
+            (
+                ["a.py", "b.js", "c.txt"],
+                "match",
+                "*.{py,js}",
+                None,
+                ["a.py", "b.js"],
+                "Brace expansion in include glob",
+            ),
+            # Brace expansion in exclude glob
+            (
+                ["a.py", "b.log", "c.txt"],
+                "match",
+                "*.{py,log,txt}",
+                "*.{log,txt}",
+                ["a.py"],
+                "Brace expansion in exclude glob",
+            ),
+            # Brace expansion in both include and exclude
+            (
+                ["src/a.ts", "src/b.js", "test/a.ts", "test/b.js"],
+                "match",
+                "**/*.{ts,js}",
+                "test/**/*.{ts,js}",
+                ["src/a.ts", "src/b.js"],
+                "Brace expansion in both include and exclude",
+            ),
+            # No matching files with brace expansion
+            (
+                ["a.py", "b.js"],
+                "match",
+                "*.{c,h}",
+                None,
+                [],
+                "Brace expansion with no matching files",
+            ),
+            # Multiple brace expansions
+            (
+                ["src/a/a.py", "src/b/b.py", "lib/a/a.py", "lib/b/b.py"],
+                "match",
+                "{src,lib}/{a,b}/*.py",
+                "lib/b/*.py",
+                ["src/a/a.py", "src/b/b.py", "lib/a/a.py"],
+                "Multiple brace expansions in include/exclude",
+            ),
+        ],
+        ids=lambda x: x if isinstance(x, str) else "",
+    )
+    def test_search_files_with_brace_expansion(
+        self, file_paths, pattern, paths_include_glob, paths_exclude_glob, expected_matched_files, description
+    ):
+        """Test search_files with glob patterns containing brace expansions."""
+        results = search_files(
+            relative_file_paths=file_paths,
+            pattern=pattern,
+            file_reader=mock_reader_always_match,
+            paths_include_glob=paths_include_glob,
+            paths_exclude_glob=paths_exclude_glob,
+        )
+
+        actual_matched_files = sorted([result.source_file_path for result in results if result.source_file_path])
+        assert actual_matched_files == sorted(expected_matched_files), f"Test failed: {description}"
+
     def test_search_files_no_pattern_match_in_content(self):
         """Test that no results are returned if the pattern doesn't match the file content, even if files pass filters."""
         file_paths = ["a.py", "b.txt"]
@@ -482,3 +548,29 @@ class TestGlobMatch:
         from src.serena.text_utils import glob_match
 
         assert glob_match(pattern, path) == expected
+
+class TestExpandBraces:
+    """Test the expand_braces function."""
+
+    @pytest.mark.parametrize(
+        "pattern, expected",
+        [
+            # Basic case
+            ("src/*.{js,ts}", ["src/*.js", "src/*.ts"]),
+            # No braces
+            ("src/*.py", ["src/*.py"]),
+            # Multiple brace sets
+            ("src/{a,b}/{c,d}.py", ["src/a/c.py", "src/a/d.py", "src/b/c.py", "src/b/d.py"]),
+            # Empty string
+            ("", [""]),
+            # Braces with empty elements
+            ("src/{a,,b}.py", ["src/a.py", "src/.py", "src/b.py"]),
+            # No commas
+            ("src/{a}.py", ["src/a.py"]),
+        ],
+    )
+    def test_expand_braces(self, pattern, expected):
+        """Test brace expansion for glob patterns."""
+        from serena.text_utils import expand_braces
+
+        assert sorted(expand_braces(pattern)) == sorted(expected)
