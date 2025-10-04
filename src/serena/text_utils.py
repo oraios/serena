@@ -253,8 +253,8 @@ def expand_braces(pattern: str) -> list[str]:
         for p in patterns:
             match = re.search(r"\{([^{}]+)\}", p)
             if match:
-                prefix = p[:match.start()]
-                suffix = p[match.end():]
+                prefix = p[: match.start()]
+                suffix = p[match.end() :]
                 options = match.group(1).split(",")
                 for option in options:
                     new_patterns.append(f"{prefix}{option}{suffix}")

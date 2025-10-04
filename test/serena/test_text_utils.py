@@ -549,6 +549,7 @@ class TestGlobMatch:
 
         assert glob_match(pattern, path) == expected
 
+
 class TestExpandBraces:
     """Test the expand_braces function."""
 
