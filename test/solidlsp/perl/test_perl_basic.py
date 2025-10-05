@@ -1,3 +1,4 @@
+import platform
 from pathlib import Path
 
 import pytest
@@ -7,6 +8,7 @@ from solidlsp.ls_config import Language
 
 
 @pytest.mark.perl
+@pytest.mark.skipif(platform.system() == "Windows", reason="Perl::LanguageServer does not support native Windows operation")
 class TestPerlLanguageServer:
     """
     Tests for Perl::LanguageServer integration.
