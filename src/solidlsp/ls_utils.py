@@ -233,6 +233,10 @@ class FileUtils:
             elif archive_type == "gz":
                 with gzip.open(tmp_file_name, "rb") as f_in, open(target_path, "wb") as f_out:
                     shutil.copyfileobj(f_in, f_out)
+            elif archive_type == "none":
+                # Direct binary download - just copy the file
+                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                shutil.copy2(tmp_file_name, target_path)
             else:
                 logger.log(f"Unknown archive type '{archive_type}' for extraction", logging.ERROR)
                 raise SolidLSPException(f"Unknown archive type '{archive_type}'")
