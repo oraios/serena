@@ -238,6 +238,15 @@ jobs:
           # Install Perl::LanguageServer and its dependencies
           # Use --notest to speed up installation and avoid test failures
           # Set PERL_MM_USE_DEFAULT=1 to auto-answer prompts
+
+          # IO::AIO and AnyEvent::AIO are optional dependencies that provide async I/O
+          # If they fail to install (common on Windows), Perl::LanguageServer will
+          # fall back to synchronous pure-perl implementation
+          PERL_MM_USE_DEFAULT=1 cpanm --notest IO::AIO AnyEvent::AIO || {
+            echo "IO::AIO/AnyEvent::AIO installation failed, using fallback implementation"
+          }
+
+          # Install Perl::LanguageServer
           PERL_MM_USE_DEFAULT=1 cpanm --notest Perl::LanguageServer || {
             echo "Warning: Perl::LanguageServer installation had issues, but may still work"
           }
