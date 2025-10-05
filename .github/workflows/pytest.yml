@@ -213,6 +213,34 @@ jobs:
             echo "$LUA_LS_DIR/bin" >> $GITHUB_PATH
             rm lua-ls.zip
           fi
+      - name: Install Perl and cpanm
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            # Perl is usually pre-installed on Ubuntu, but ensure cpanm is available
+            sudo apt-get update
+            sudo apt-get install -y cpanminus libdb-dev build-essential
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            # Perl is pre-installed on macOS, install cpanm
+            brew install cpanminus berkeley-db
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            # Install Strawberry Perl which includes cpanm and build tools
+            choco install strawberryperl -y
+            # Add Perl to PATH for current and subsequent steps
+            echo "C:\Strawberry\perl\bin" >> $GITHUB_PATH
+            echo "C:\Strawberry\c\bin" >> $GITHUB_PATH
+            # Refresh PATH in current shell
+            export PATH="/c/Strawberry/perl/bin:/c/Strawberry/c/bin:$PATH"
+          fi
+      - name: Install Perl::LanguageServer
+        shell: bash
+        run: |
+          # Install Perl::LanguageServer and its dependencies
+          # Use --notest to speed up installation and avoid test failures
+          # Set PERL_MM_USE_DEFAULT=1 to auto-answer prompts
+          PERL_MM_USE_DEFAULT=1 cpanm --notest Perl::LanguageServer || {
+            echo "Warning: Perl::LanguageServer installation had issues, but may still work"
+          }
       - name: Install Nix
         if: runner.os != 'Windows'  # Nix doesn't support Windows natively
         uses: cachix/install-nix-action@v30
