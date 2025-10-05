@@ -238,18 +238,24 @@ jobs:
           # Install Perl::LanguageServer and its dependencies
           # Use --notest to speed up installation and avoid test failures
           # Set PERL_MM_USE_DEFAULT=1 to auto-answer prompts
+          # Set PERL_CANARY_STABILITY_NOPROMPT=1 to skip IO::AIO's Canary::Stability prompts
 
           # IO::AIO and AnyEvent::AIO are optional dependencies that provide async I/O
           # If they fail to install (common on Windows), Perl::LanguageServer will
           # fall back to synchronous pure-perl implementation
-          PERL_MM_USE_DEFAULT=1 cpanm --notest IO::AIO AnyEvent::AIO || {
-            echo "IO::AIO/AnyEvent::AIO installation failed, using fallback implementation"
-          }
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            # On Windows, IO::AIO has fundamental compatibility issues and fails to build
+            # Skip IO::AIO installation and let Perl::LanguageServer use pure-perl fallback
+            echo "Skipping IO::AIO installation on Windows due to known compatibility issues"
+          else
+            PERL_MM_USE_DEFAULT=1 PERL_CANARY_STABILITY_NOPROMPT=1 cpanm --notest IO::AIO AnyEvent::AIO || {
+              echo "IO::AIO/AnyEvent::AIO installation failed, using fallback implementation"
+            }
+          fi
 
-          # Install Perl::LanguageServer
-          PERL_MM_USE_DEFAULT=1 cpanm --notest Perl::LanguageServer || {
-            echo "Warning: Perl::LanguageServer installation had issues, but may still work"
-          }
+          # Install Perl::LanguageServer with --force to bypass optional dependency failures
+          # IO::AIO and AnyEvent::AIO are marked as dependencies but are actually optional
+          PERL_MM_USE_DEFAULT=1 PERL_CANARY_STABILITY_NOPROMPT=1 cpanm --notest --force Perl::LanguageServer
       - name: Install Nix
         if: runner.os != 'Windows'  # Nix doesn't support Windows natively
         uses: cachix/install-nix-action@v30
