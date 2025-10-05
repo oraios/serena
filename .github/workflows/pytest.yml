@@ -227,9 +227,9 @@ jobs:
             echo "IO::AIO installation failed, using fallback implementation"
           }
           PERL_MM_USE_DEFAULT=1 PERL_CANARY_STABILITY_NOPROMPT=1 cpanm --notest AnyEvent || {
-            echo "AnyEvent::AIO installation failed, using fallback implementation"
+            echo "AnyEvent installation failed, using fallback implementation"
           }
-          PERL_MM_USE_DEFAULT=1 PERL_CANARY_STABILITY_NOPROMPT=1 cpanm --notest Perl::LanguageServer
+          PERL_MM_USE_DEFAULT=1 PERL_CANARY_STABILITY_NOPROMPT=1 cpanm --notest --force Perl::LanguageServer
       - name: Install Nix
         if: runner.os != 'Windows'  # Nix doesn't support Windows natively
         uses: cachix/install-nix-action@v30
