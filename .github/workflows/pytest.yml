@@ -224,14 +224,41 @@ jobs:
         run: |
           # Install nixd using nix
           nix profile install github:nix-community/nixd
-          
+
           # Verify nixd is installed and working
           if ! command -v nixd &> /dev/null; then
             echo "nixd installation failed or not in PATH"
             exit 1
           fi
-          
+
           echo "$HOME/.nix-profile/bin" >> $GITHUB_PATH
+      - name: Install Regal (Rego Language Server)
+        shell: bash
+        run: |
+          REGAL_VERSION="0.36.1"
+
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            if [[ "$(uname -m)" == "x86_64" ]]; then
+              curl -L -o regal https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Linux_x86_64
+            else
+              curl -L -o regal https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Linux_arm64
+            fi
+            chmod +x regal
+            sudo mv regal /usr/local/bin/
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            if [[ "$(uname -m)" == "x86_64" ]]; then
+              curl -L -o regal https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Darwin_x86_64
+            else
+              curl -L -o regal https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Darwin_arm64
+            fi
+            chmod +x regal
+            sudo mv regal /usr/local/bin/
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            curl -L -o regal.exe https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Windows_x86_64.exe
+            mkdir -p "$HOME/bin"
+            mv regal.exe "$HOME/bin/"
+            echo "$HOME/bin" >> $GITHUB_PATH
+          fi
       - name: Install uv
         shell: bash
         run: curl -LsSf https://astral.sh/uv/install.sh | sh

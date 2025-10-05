@@ -10,12 +10,10 @@ from overrides import override
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
-from solidlsp.ls_utils import PathUtils, PlatformUtils
+from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
-
-from .common import RuntimeDependency, RuntimeDependencyCollection
 
 
 class RegalLanguageServer(SolidLanguageServer):
@@ -30,84 +28,6 @@ class RegalLanguageServer(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in [".regal", ".opa"]
 
-    @classmethod
-    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, solidlsp_settings: SolidLSPSettings) -> str:
-        """
-        Setup runtime dependencies for Regal language server.
-
-        Downloads and installs Regal if not already present on the system.
-
-        :param logger: Logger instance for logging messages
-        :param solidlsp_settings: Settings for solidlsp
-        :return: Path to the Regal executable
-        """
-        # Check if regal is already installed on the system
-        system_regal = shutil.which("regal")
-        if system_regal:
-            logger.log(f"Found system-installed Regal at: {system_regal}", logging.INFO)
-            return system_regal
-
-        # If not found, download and install Regal
-        platform_id = PlatformUtils.get_platform_id()
-        deps = RuntimeDependencyCollection(
-            [
-                RuntimeDependency(
-                    id="Regal",
-                    description="Regal language server for macOS (ARM64)",
-                    url="https://github.com/StyraInc/regal/releases/download/v0.36.1/regal_Darwin_arm64",
-                    platform_id="osx-arm64",
-                    archive_type="none",
-                    binary_name="regal",
-                ),
-                RuntimeDependency(
-                    id="Regal",
-                    description="Regal language server for macOS (x64)",
-                    url="https://github.com/StyraInc/regal/releases/download/v0.36.1/regal_Darwin_x86_64",
-                    platform_id="osx-x64",
-                    archive_type="none",
-                    binary_name="regal",
-                ),
-                RuntimeDependency(
-                    id="Regal",
-                    description="Regal language server for Linux (ARM64)",
-                    url="https://github.com/StyraInc/regal/releases/download/v0.36.1/regal_Linux_arm64",
-                    platform_id="linux-arm64",
-                    archive_type="none",
-                    binary_name="regal",
-                ),
-                RuntimeDependency(
-                    id="Regal",
-                    description="Regal language server for Linux (x64)",
-                    url="https://github.com/StyraInc/regal/releases/download/v0.36.1/regal_Linux_x86_64",
-                    platform_id="linux-x64",
-                    archive_type="none",
-                    binary_name="regal",
-                ),
-                RuntimeDependency(
-                    id="Regal",
-                    description="Regal language server for Windows (x64)",
-                    url="https://github.com/StyraInc/regal/releases/download/v0.36.1/regal_Windows_x86_64.exe",
-                    platform_id="win-x64",
-                    archive_type="none",
-                    binary_name="regal.exe",
-                ),
-            ]
-        )
-        dependency = deps.get_single_dep_for_current_platform()
-
-        regal_executable_path = deps.binary_path(cls.ls_resources_dir(solidlsp_settings))
-        if not os.path.exists(regal_executable_path):
-            logger.log(f"Downloading Regal from {dependency.url}", logging.INFO)
-            deps.install(logger, cls.ls_resources_dir(solidlsp_settings))
-
-        assert os.path.exists(regal_executable_path), f"Regal executable not found at {regal_executable_path}"
-
-        # Make the executable file executable on Unix-like systems
-        if platform_id.value != "win-x64":
-            os.chmod(regal_executable_path, 0o755)
-
-        return regal_executable_path
-
     def __init__(
         self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
     ):
@@ -121,7 +41,12 @@ class RegalLanguageServer(SolidLanguageServer):
         :param repository_root_path: Path to the repository root
         :param solidlsp_settings: Settings for solidlsp
         """
-        regal_executable_path = self._setup_runtime_dependencies(logger, solidlsp_settings)
+        # Regal should be installed system-wide (via CI or user installation)
+        regal_executable_path = shutil.which("regal")
+        if not regal_executable_path:
+            raise RuntimeError(
+                "Regal language server not found. Please install it from https://github.com/StyraInc/regal or via your package manager."
+            )
 
         super().__init__(
             config,
