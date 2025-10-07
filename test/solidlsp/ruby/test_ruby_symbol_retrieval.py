@@ -89,7 +89,7 @@ class TestRubyLanguageServerSymbols:
         """Test request_containing_symbol for a module context."""
         # Test that we can find the Services module in document symbols
         file_path = os.path.join("services.rb")
-        symbols, _roots = language_server.request_document_symbols(file_path)
+        symbols, roots = language_server.request_document_symbols(file_path)
 
         # Verify Services module appears in document symbols
         services_module = None
@@ -141,7 +141,7 @@ class TestRubyLanguageServerSymbols:
         # Test referencing symbols for create_user method
         file_path = os.path.join("services.rb")
         # Line containing the create_user method definition
-        symbols, _roots = language_server.request_document_symbols(file_path)
+        symbols, roots = language_server.request_document_symbols(file_path)
         create_user_symbol = None
 
         # Find create_user method in the document symbols (Ruby returns flat list)
@@ -169,7 +169,7 @@ class TestRubyLanguageServerSymbols:
         # Test referencing symbols for User class
         file_path = os.path.join("models.rb")
         # Find User class in document symbols
-        symbols, _roots = language_server.request_document_symbols(file_path)
+        symbols, roots = language_server.request_document_symbols(file_path)
         user_symbol = None
 
         for symbol in symbols:
@@ -363,7 +363,7 @@ class TestRubyLanguageServerSymbols:
         # Test referencing symbols for a method parameter in get_user method
         file_path = os.path.join("services.rb")
         # Find get_user method and test parameter references
-        symbols, _roots = language_server.request_document_symbols(file_path)
+        symbols, roots = language_server.request_document_symbols(file_path)
         get_user_symbol = None
 
         for symbol in symbols:

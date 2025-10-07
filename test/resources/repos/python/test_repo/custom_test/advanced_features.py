@@ -458,7 +458,7 @@ def main() -> None:
             processor.process(task.name)
 
     # Use advanced search
-    _results, _total = advanced_search(query="test", filters={"status": Status.PENDING}, sort_by="priority", page=1, include_metadata=True)
+    results, total = advanced_search(query="test", filters={"status": Status.PENDING}, sort_by="priority", page=1, include_metadata=True)
 
     # Create a tree
     root = TreeNode("root")

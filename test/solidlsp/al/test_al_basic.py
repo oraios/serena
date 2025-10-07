@@ -47,7 +47,7 @@ class TestALLanguageServer:
 
         # AL tables should have their fields as child symbols
         customer_table = None
-        _all_symbols, root_symbols = symbols
+        all_symbols, root_symbols = symbols
         for sym in root_symbols:
             if "TEST Customer" in sym.get("name", ""):
                 customer_table = sym
@@ -80,7 +80,7 @@ class TestALLanguageServer:
 
         # Find the codeunit symbol - AL returns 'Codeunit 50000 CustomerMgt'
         codeunit_symbol = None
-        _all_symbols, root_symbols = symbols
+        all_symbols, root_symbols = symbols
         for sym in root_symbols:
             if "CustomerMgt" in sym.get("name", ""):
                 codeunit_symbol = sym
@@ -104,7 +104,7 @@ class TestALLanguageServer:
 
         # Find the Customer table symbol
         customer_symbol = None
-        _all_symbols, root_symbols = symbols
+        all_symbols, root_symbols = symbols
         for sym in root_symbols:
             if "TEST Customer" in sym.get("name", ""):
                 customer_symbol = sym
