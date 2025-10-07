@@ -327,7 +327,7 @@ class NimLanguageServer(SolidLanguageServer):
             deps.install(logger, nimble_bin)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to install nimlangserver via nimble: {e}\n" f"Please try installing manually with: nimble install nimlangserver"
+                f"Failed to install nimlangserver via nimble: {e}\nPlease try installing manually with: nimble install nimlangserver"
             )
 
         # Check if nimlangserver was successfully installed
