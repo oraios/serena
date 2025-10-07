@@ -494,7 +494,7 @@ class SolidLanguageServerHandler:
         with self._stdin_lock:
             try:
                 # Combine all parts and write as a single operation for better compatibility
-                full_message = b''.join(msg)
+                full_message = b"".join(msg)
                 self.process.stdin.write(full_message)
                 self.process.stdin.flush()
             except (BrokenPipeError, ConnectionResetError, OSError) as e:

@@ -12,8 +12,8 @@ import threading
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_handler import SolidLanguageServerHandler
+from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -30,8 +30,9 @@ class NimLanguageServerHandler(SolidLanguageServerHandler):
 
         # Create simplified message for nimlangserver (only Content-Length header)
         import json
+
         body = json.dumps(payload, check_circular=False, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-        header = f"Content-Length: {len(body)}\r\n\r\n".encode("utf-8")
+        header = f"Content-Length: {len(body)}\r\n\r\n".encode()
 
         # Use lock to prevent concurrent writes
         with self._stdin_lock:
@@ -47,6 +48,7 @@ class NimLanguageServerHandler(SolidLanguageServerHandler):
     def _read_ls_process_stderr(self) -> None:
         """Override stderr reader to properly parse Nim language server log levels."""
         import logging
+
         log = logging.getLogger(f"{self.__class__.__module__}.{self.__class__.__name__}")
         ENCODING = "utf-8"
 
@@ -160,21 +162,20 @@ class NimLanguageServer(SolidLanguageServer):
 
         # Override with custom handler for nimlangserver after parent initialization
         # First stop the default handler if it's already running
-        if hasattr(self, 'server') and self.server and hasattr(self.server, 'process'):
+        if hasattr(self, "server") and self.server and hasattr(self.server, "process"):
             if self.server.process and self.server.process.poll() is None:
                 self.server.stop()
 
-        self._setup_custom_handler(repository_root_path, ProcessLaunchInfo(cmd=nim_lsp_executable_path, cwd=repository_root_path, env=env))
+        self._setup_custom_handler(ProcessLaunchInfo(cmd=nim_lsp_executable_path, cwd=repository_root_path, env=env))
 
-    def _setup_custom_handler(self, repository_root_path: str, process_launch_info: ProcessLaunchInfo):
+    def _setup_custom_handler(self, process_launch_info: ProcessLaunchInfo):
         """Setup custom handler for nimlangserver."""
-        # Store repository path for potential use
-        self._repo_path = repository_root_path
 
         def logging_fn(_, level, message):
             # Convert dict messages to string
             if isinstance(message, dict):
                 import json
+
                 message = json.dumps(message, indent=2)
             # Map the log level
             if level == "logger":
@@ -218,11 +219,11 @@ class NimLanguageServer(SolidLanguageServer):
                     # Performance and stability tuning for nimsuggest
                     f.write("# Performance tuning\n")
                     f.write("--skipProjCfg:off\n")  # Still read project's nim.cfg
-                    f.write("--skipUserCfg:on\n")   # Skip global user config
-                    f.write("--skipParentCfg:on\n") # Skip parent directory configs
-                    f.write("--verbosity:0\n")      # Minimal output
-                    f.write("--hints:off\n")        # No hints
-                    f.write("--notes:off\n")        # No notes
+                    f.write("--skipUserCfg:on\n")  # Skip global user config
+                    f.write("--skipParentCfg:on\n")  # Skip parent directory configs
+                    f.write("--verbosity:0\n")  # Minimal output
+                    f.write("--hints:off\n")  # No hints
+                    f.write("--notes:off\n")  # No notes
 
                 self.logger.log("Created nimsuggest.cfg to improve stability", logging.INFO)
 
@@ -234,23 +235,16 @@ class NimLanguageServer(SolidLanguageServer):
                     # Check common project structures to determine paths
                     has_src = os.path.exists(os.path.join(self.repository_root_path, "src"))
                     has_tests = os.path.exists(os.path.join(self.repository_root_path, "tests"))
-                    has_public = os.path.exists(os.path.join(self.repository_root_path, "public"))
-
                     with open(nim_cfg_path, "w") as f:
                         f.write("# Auto-generated nim.cfg for nimsuggest/nimlangserver\n")
                         f.write("# Customize this file based on your project's needs\n\n")
 
                         f.write("# Standard paths for module resolution\n")
-                        f.write("--path:\".\"\n")
+                        f.write('--path:"."\n')
                         if has_src:
-                            f.write("--path:\"src\"\n")
+                            f.write('--path:"src"\n')
                         if has_tests:
-                            f.write("--path:\"tests\"\n")
-
-                        # If there's a public directory, ensure paths work from src/
-                        if has_public and has_src:
-                            f.write("# Enable finding resources from src/ directory\n")
-                            f.write("--path:\"..\"\n")  # Allow src/ files to find ../public/
+                            f.write('--path:"tests"\n')
                         f.write("\n")
 
                         f.write("# Common defines for better compatibility\n")
@@ -264,11 +258,13 @@ class NimLanguageServer(SolidLanguageServer):
 
                         f.write("# For projects with static file reads, wrap them like:\n")
                         f.write("#   when not defined(nimsuggest):\n")
-                        f.write("#     const data = staticRead(\"file.txt\")\n")
+                        f.write('#     const data = staticRead("file.txt")\n')
                         f.write("#   else:\n")
-                        f.write("#     const data = \"\"\n")
+                        f.write('#     const data = ""\n')
 
-                    self.logger.log(f"Created nim.cfg with paths: . {('src ' if has_src else '')}{('tests ' if has_tests else '')}", logging.INFO)
+                    self.logger.log(
+                        f"Created nim.cfg with paths: . {('src ' if has_src else '')}{('tests ' if has_tests else '')}", logging.INFO
+                    )
             else:
                 # Existing nim.cfg found - just log that we're respecting it
                 self.logger.log("Found existing nim.cfg, respecting project configuration", logging.DEBUG)
@@ -331,8 +327,7 @@ class NimLanguageServer(SolidLanguageServer):
             deps.install(logger, nimble_bin)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to install nimlangserver via nimble: {e}\n"
-                "Please try installing manually with: nimble install nimlangserver"
+                f"Failed to install nimlangserver via nimble: {e}\n" f"Please try installing manually with: nimble install nimlangserver"
             )
 
         # Check if nimlangserver was successfully installed
@@ -413,15 +408,9 @@ class NimLanguageServer(SolidLanguageServer):
                     "notificationVerbosity": "warning",
                     # Working directory mapping can help with path resolution
                     "workingDirectoryMapping": [
-                        {
-                            "projectFile": "*.nimble",
-                            "directory": "."
-                        },
-                        {
-                            "projectFile": "src/*.nim",
-                            "directory": "."
-                        }
-                    ]
+                        {"projectFile": "*.nimble", "directory": "."},
+                        {"projectFile": "src/*.nim", "directory": "."},
+                    ],
                 }
             },
             "workspaceFolders": [
@@ -496,6 +485,7 @@ class NimLanguageServer(SolidLanguageServer):
         self.server.on_notification("window/showMessage", window_show_message)
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
         self.server.on_request("workspace/configuration", workspace_configuration_handler)
+
         def extension_status_update(params):
             """Handle Nim-specific status updates which include nimsuggest instance info."""
             if "projectErrors" in params:
