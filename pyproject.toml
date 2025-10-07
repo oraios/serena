@@ -264,6 +264,7 @@ markers = [
   "terraform: language server running for Terraform",
   "swift: language server running for Swift",
   "bash: language server running for Bash",
+  "haskell: language server running for Haskell",
   "r: language server running for R",
   "snapshot: snapshot tests for symbolic editing operations",
   "ruby: language server running for Ruby (uses ruby-lsp)",
@@ -279,5 +280,16 @@ markers = [
 # Ref: https://github.com/codespell-project/codespell#using-a-config-file
 skip = '.git*,*.svg,*.lock,*.min.*'
 check-hidden = true
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+    "mypy>=1.17.0",
+    "poethepoet>=0.36.0",
+    "pytest>=8.4.1",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.12.5",
+    "syrupy>=4.9.1",
+]
 # ignore-regex = ''
 # ignore-words-list = ''

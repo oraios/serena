@@ -1,0 +1,6 @@
+cradle:
+  cabal:
+    - path: "."
+      component: "lib:hls-demo"
+    - path: "."
+      component: "exe:hls-demo-exe"
