@@ -53,6 +53,7 @@ class Language(str, Enum):
     NIX = "nix"
     ERLANG = "erlang"
     AL = "al"
+    MARKDOWN = "markdown"
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -136,6 +137,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.erl", "*.hrl", "*.escript", "*.config", "*.app", "*.app.src")
             case self.AL:
                 return FilenameMatcher("*.al", "*.dal")
+            case self.MARKDOWN:
+                return FilenameMatcher("*.md", "*.markdown")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -241,6 +244,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.al_language_server import ALLanguageServer
 
                 return ALLanguageServer
+            case self.MARKDOWN:
+                from solidlsp.language_servers.marksman import Marksman
+
+                return Marksman
             case self.R:
                 from solidlsp.language_servers.r_language_server import RLanguageServer
 
