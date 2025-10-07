@@ -281,3 +281,10 @@ jobs:
       - name: Test with pytest
         shell: bash
         run: uv run poe test
+      - name: Upload language server logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: language-server-logs-${{ matrix.os }}
+          path: ~/.serena/logs/
+          if-no-files-found: ignore
