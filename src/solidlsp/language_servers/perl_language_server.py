@@ -1,12 +1,12 @@
 """
 Provides Perl specific instantiation of the LanguageServer class using Perl::LanguageServer.
-Perl::LanguageServer: https://github.com/richterger/Perl-LanguageServer
+
+Note: Windows is not supported as Nix itself doesn't support Windows natively.
 """
 
 import logging
 import os
 import pathlib
-import shutil
 import subprocess
 import time
 
@@ -24,8 +24,34 @@ from solidlsp.settings import SolidLSPSettings
 class PerlLanguageServer(SolidLanguageServer):
     """
     Provides Perl specific instantiation of the LanguageServer class using Perl::LanguageServer.
-    Perl::LanguageServer supports Go to definition, Find references, Document symbols, and more.
     """
+
+    @staticmethod
+    def _get_perl_version():
+        """Get the installed Perl version or None if not found."""
+        try:
+            result = subprocess.run(["perl", "-v"], capture_output=True, text=True, check=False)
+            if result.returncode == 0:
+                return result.stdout.strip()
+        except FileNotFoundError:
+            return None
+        return None
+
+    @staticmethod
+    def _get_perl_language_server_version():
+        """Get the installed Perl::LanguageServer version or None if not found."""
+        try:
+            result = subprocess.run(
+                ["perl", "-MPerl::LanguageServer", "-e", "print $Perl::LanguageServer::VERSION"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode == 0:
+                return result.stdout.strip()
+        except FileNotFoundError:
+            return None
+        return None
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -38,11 +64,10 @@ class PerlLanguageServer(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in ["blib", "local", ".carton", "vendor", "_build", "cover_db"]
 
     @classmethod
-    def _setup_runtime_dependencies(
-        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> str:
+    def _setup_runtime_dependencies(cls) -> str:
         """
-        Setup runtime dependencies for Perl::LanguageServer and return the command to start the server.
+        Check if required Perl runtime dependencies are available.
+        Raises RuntimeError with helpful message if dependencies are missing.
         """
         platform_id = PlatformUtils.get_platform_id()
 
@@ -52,50 +77,26 @@ class PerlLanguageServer(SolidLanguageServer):
             PlatformId.OSX,
             PlatformId.OSX_x64,
             PlatformId.OSX_arm64,
-            PlatformId.WIN_x64,
-            PlatformId.WIN_arm64,
         ]
-        assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for Perl at the moment"
+        if platform_id not in valid_platforms:
+            raise RuntimeError(f"Platform {platform_id} is not supported for Perl at the moment")
 
-        # Verify perl is installed
-        is_perl_installed = shutil.which("perl") is not None
-        assert is_perl_installed, "perl is not installed or isn't in PATH. Please install Perl and try again."
-
-        # Check if Perl::LanguageServer is already installed
-        try:
-            result = subprocess.run(
-                ["perl", "-MPerl::LanguageServer", "-e", "1"],
-                check=False,
-                capture_output=True,
-                text=True,
+        # Verify Perl is installed
+        perl_version = cls._get_perl_version()
+        if not perl_version:
+            raise RuntimeError(
+                "Perl is not installed. Please install Perl from https://www.perl.org/get.html "
+                "and make sure it is added to your PATH."
             )
-            if result.returncode == 0:
-                logger.log("Perl::LanguageServer is already installed", logging.INFO)
-            else:
-                # Install Perl::LanguageServer using cpanm if available, otherwise cpan
-                logger.log("Installing Perl::LanguageServer...", logging.INFO)
 
-                # Check if cpanm is available (faster and more user-friendly)
-                cpanm_available = shutil.which("cpanm") is not None
-
-                if cpanm_available:
-                    install_cmd = ["cpanm", "--notest", "Perl::LanguageServer"]
-                else:
-                    # Fall back to cpan (requires CPAN to be configured)
-                    install_cmd = ["cpan", "Perl::LanguageServer"]
-
-                try:
-                    subprocess.run(install_cmd, check=True, capture_output=True, text=True)
-                    logger.log("Perl::LanguageServer installed successfully", logging.INFO)
-                except subprocess.CalledProcessError as e:
-                    error_msg = e.stderr if e.stderr else str(e)
-                    raise RuntimeError(
-                        f"Failed to install Perl::LanguageServer: {error_msg}\n"
-                        "Please try installing manually: cpanm Perl::LanguageServer"
-                    ) from e
-
-        except FileNotFoundError as e:
-            raise RuntimeError("Perl is not installed or not found in PATH. Please install Perl and try again.") from e
+        # Verify Perl::LanguageServer is installed
+        perl_ls_version = cls._get_perl_language_server_version()
+        if not perl_ls_version:
+            raise RuntimeError(
+                "Found a Perl version but Perl::LanguageServer is not installed.\n"
+                "Please install Perl::LanguageServer: cpanm Perl::LanguageServer\n"
+                "See: https://metacpan.org/pod/Perl::LanguageServer"
+            )
 
         # Return the command to run Perl::LanguageServer with logging options
         # Use -- to separate Perl options from program arguments (which go into @ARGV)
@@ -105,7 +106,7 @@ class PerlLanguageServer(SolidLanguageServer):
         self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
     ):
         # Setup runtime dependencies before initializing
-        perl_ls_cmd = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
+        perl_ls_cmd = self._setup_runtime_dependencies()
 
         super().__init__(
             config,
