@@ -35,7 +35,7 @@ class Marksman(SolidLanguageServer):
         marksman_cmd = shutil.which("marksman")
         if marksman_cmd is None:
             raise RuntimeError(
-                "marksman executable not found in PATH. " "Please install marksman from https://github.com/artempyanykh/marksman"
+                "marksman executable not found in PATH. Please install marksman from https://github.com/artempyanykh/marksman"
             )
 
         logger.log(f"Found marksman at: {marksman_cmd}", logging.DEBUG)
