@@ -232,6 +232,34 @@ jobs:
           fi
           
           echo "$HOME/.nix-profile/bin" >> $GITHUB_PATH
+      - name: Install marksman (Markdown Language Server)
+        shell: bash
+        run: |
+          MARKSMAN_VERSION="2024-11-19"
+
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            wget https://github.com/artempyanykh/marksman/releases/download/${MARKSMAN_VERSION}/marksman-linux-x64
+            chmod +x marksman-linux-x64
+            sudo mv marksman-linux-x64 /usr/local/bin/marksman
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            if [[ "$(uname -m)" == "x86_64" ]]; then
+              wget https://github.com/artempyanykh/marksman/releases/download/${MARKSMAN_VERSION}/marksman-macos-x64
+              chmod +x marksman-macos-x64
+              sudo mv marksman-macos-x64 /usr/local/bin/marksman
+            else
+              wget https://github.com/artempyanykh/marksman/releases/download/${MARKSMAN_VERSION}/marksman-macos-arm64
+              chmod +x marksman-macos-arm64
+              sudo mv marksman-macos-arm64 /usr/local/bin/marksman
+            fi
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            curl -L -o marksman.exe https://github.com/artempyanykh/marksman/releases/download/${MARKSMAN_VERSION}/marksman-windows-x64.exe
+            mkdir -p "$HOME/bin"
+            mv marksman.exe "$HOME/bin/"
+            echo "$HOME/bin" >> $GITHUB_PATH
+          fi
+
+          # Verify marksman is installed
+          marksman --version || echo "marksman installation completed"
       - name: Install uv
         shell: bash
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
