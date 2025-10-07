@@ -179,14 +179,15 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
         Always try to use wildcards to avoid specifying the exact content of the code to be replaced,
         especially if it spans several lines.
 
-        IMPORTANT: REMEMBER TO USE WILDCARDS WHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE LONG REGEXES WITHOUT USING WILDCARDS INSTEAD!
+        IMPORTANT: REMEMBER TO USE WILDCARDS WHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE UNNECESSARILY LONG REGEXES WITHOUT USING WILDCARDS!
 
         :param relative_path: the relative path to the file
         :param regex: a Python-style regular expression, matches of which will be replaced.
             Dot matches all characters, multi-line matching is enabled.
         :param repl: the string to replace the matched content with, which may contain
             backreferences like \1, \2, etc.
-            Make sure to escape special characters appropriately, e.g., use `\\n` for a literal `\n`.
+            IMPORTANT: Make sure to escape special characters appropriately!
+                Use "\n" to insert a newline, but use "\\n" to insert the string "\n" within a string literal.
         :param allow_multiple_occurrences: if True, the regex may match multiple occurrences in the file
             and all of them will be replaced.
             If this is set to False and the regex matches multiple occurrences, an error will be returned

@@ -22,7 +22,10 @@ class ExecuteShellCommandTool(Tool, ToolMarkerCanEdit):
     ) -> str:
         """
         Execute a shell command and return its output. If there is a memory about suggested commands, read that first.
-        Never execute unsafe shell commands like `rm -rf /` or similar!
+        Never execute unsafe shell commands!
+        IMPORTANT: Do not use this tool to start
+          * long-running processes (e.g. servers) that are not intended to terminate quickly,
+          * processes that require user interaction.
 
         :param command: the shell command to execute
         :param cwd: the working directory to execute the command in. If None, the project root will be used.

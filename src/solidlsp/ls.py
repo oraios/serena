@@ -1022,7 +1022,20 @@ class SolidLanguageServer(ABC):
 
             for contained_dir_or_file_name in contained_dir_or_file_names:
                 contained_dir_or_file_abs_path = os.path.join(abs_dir_path, contained_dir_or_file_name)
-                contained_dir_or_file_rel_path = str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path))
+
+                # obtain relative path
+                try:
+                    contained_dir_or_file_rel_path = str(
+                        Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path)
+                    )
+                except ValueError as e:
+                    # Typically happens when the path is not under the repository root (e.g., symlink pointing outside)
+                    self.logger.log(
+                        f"Skipping path {contained_dir_or_file_abs_path}; likely outside of the repository root {self.repository_root_path} [cause: {e}]",
+                        logging.WARNING,
+                    )
+                    continue
+
                 if self.is_ignored_path(contained_dir_or_file_rel_path):
                     self.logger.log(f"Skipping item: {contained_dir_or_file_rel_path}\n(because it should be ignored)", logging.DEBUG)
                     continue
