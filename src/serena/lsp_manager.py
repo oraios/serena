@@ -170,8 +170,12 @@ class LSPManager:
         Returns:
             The started language server, or None if startup failed
         """
+        log.debug(f"Starting language server for: {language.value}")
+
         # FIX #1: Use asyncio.Lock to prevent race conditions in concurrent startup
         async with self._startup_locks[language]:
+            log.debug(f"Acquired startup lock for: {language.value}")
+
             # Check again after acquiring lock (another task may have started it)
             if language in self._failed_languages:
                 log.debug(f"Skipping {language.value} LSP (previously failed)")
@@ -186,6 +190,7 @@ class LSPManager:
 
                 # Create language server configuration
                 ls_config = LanguageServerConfig(code_language=language)
+                log.debug(f"Created LSP config for: {language.value}")
 
                 # Create language server instance
                 lsp = SolidLanguageServer.create(
@@ -195,12 +200,20 @@ class LSPManager:
                     timeout=self.timeout,
                     solidlsp_settings=self.settings,
                 )
+                log.debug(f"Created LSP instance for: {language.value}")
 
-                # Start the language server
+                # FIX: Use lsp.start() instead of lsp.start_server() (which is a context manager)
+                log.debug(f"Calling lsp.start() for: {language.value}")
                 await asyncio.wait_for(
-                    asyncio.to_thread(lsp.start_server),
+                    asyncio.to_thread(lsp.start),
                     timeout=self.timeout,
                 )
+                log.debug(f"lsp.start() completed for: {language.value}")
+
+                # Verify LSP is actually running
+                if not lsp.is_running():
+                    raise RuntimeError(f"{language.value} LSP start() completed but is_running() returned False")
+                log.debug(f"Verified {language.value} LSP is running")
 
                 self._language_servers[language] = lsp
                 log.info(f"{language.value} language server started successfully")
@@ -277,17 +290,24 @@ class LSPManager:
             >>> if lsp:
             ...     symbols = lsp.request_document_symbols("src/main.rs")
         """
+        log.debug(f"Getting language server for file: {file_path}")
         language = self.get_language_for_file(file_path)
+        log.debug(f"Detected language: {language.value if language else 'None'} for file: {file_path}")
+
         if language is None:
+            log.warning(f"No language detected for file: {file_path}")
             return None
 
         # Check if LSP is already started
         if language in self._language_servers:
+            log.debug(f"Using existing {language.value} LSP (already started)")
             return self._language_servers[language]
 
         # Lazy initialization: start LSP on first use
-        log.debug(f"Lazy-starting {language.value} LSP for file: {file_path}")
-        return await self._start_language_server(language)
+        log.info(f"Lazy-starting {language.value} LSP for file: {file_path}")
+        lsp = await self._start_language_server(language)
+        log.debug(f"Lazy-start result for {language.value}: {lsp is not None}")
+        return lsp
 
     def get_language_server_for_file_sync(self, file_path: str) -> Optional[SolidLanguageServer]:
         """
@@ -307,19 +327,32 @@ class LSPManager:
             >>> if lsp:
             ...     symbols = lsp.request_document_symbols("src/main.rs")
         """
+        log.debug(f"Synchronous get_language_server_for_file called for: {file_path}")
         try:
-            return asyncio.run(self.get_language_server_for_file(file_path))
+            log.debug(f"Attempting asyncio.run() for: {file_path}")
+            result = asyncio.run(self.get_language_server_for_file(file_path))
+            log.debug(f"asyncio.run() succeeded, result: {result is not None}")
+            return result
         except RuntimeError as e:
             # Handle case where event loop is already running
             if "asyncio.run() cannot be called from a running event loop" in str(e):
-                log.warning("Event loop already running, creating new loop for LSP retrieval")
+                log.warning(f"Event loop already running, creating new loop for: {file_path}")
                 loop = asyncio.new_event_loop()
                 try:
-                    return loop.run_until_complete(self.get_language_server_for_file(file_path))
+                    result = loop.run_until_complete(self.get_language_server_for_file(file_path))
+                    log.debug(f"New event loop succeeded, result: {result is not None}")
+                    return result
+                except Exception as inner_e:
+                    log.error(f"New event loop failed: {inner_e}", exc_info=True)
+                    raise
                 finally:
                     loop.close()
             else:
+                log.error(f"Unexpected RuntimeError: {e}", exc_info=True)
                 raise
+        except Exception as e:
+            log.error(f"Unexpected exception in get_language_server_for_file_sync: {e}", exc_info=True)
+            raise
 
     def get_all_working_language_servers(self) -> list[SolidLanguageServer]:
         """
