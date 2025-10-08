@@ -2,6 +2,10 @@ __version__ = "0.1.4"
 
 import logging
 
+# Import patches to install import hooks for patched dependencies
+# This must happen before any other imports that might use patched packages
+import serena.patches  # noqa: F401
+
 log = logging.getLogger(__name__)
 
 
