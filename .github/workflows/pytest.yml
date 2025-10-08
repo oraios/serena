@@ -134,6 +134,25 @@ jobs:
       - name: Install Ruby language server
         shell: bash
         run: gem install ruby-lsp
+      - name: Install Nim
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            # Windows: Download prebuilt binaries
+            curl -L -o nim.zip https://nim-lang.org/download/nim-2.2.0_x64.zip
+            unzip nim.zip
+            echo "$PWD/nim-2.2.0/bin" >> $GITHUB_PATH
+          else
+            # Unix-like: Use choosenim installer
+            curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y
+            echo "$HOME/.nimble/bin" >> $GITHUB_PATH
+          fi
+      - name: Install Nim language server
+        shell: bash
+        run: |
+          # Give PATH time to update, then install nimlangserver
+          export PATH="$HOME/.nimble/bin:$PATH"
+          nimble install -y nimlangserver
       - name: Install R
         uses: r-lib/actions/setup-r@v2
         with:
