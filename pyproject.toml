@@ -18,6 +18,12 @@ dependencies = [
   "pyright>=1.1.396,<2",
   "overrides>=7.7.0,<8",
   "python-dotenv>=1.0.0, <2",
+  # MCP SDK: External dependency with hybrid patch approach
+  # - External package: mcp==1.12.3 (installed via pip/uv)
+  # - Patched file: src/serena/patches/mcp/server/streamable_http_manager.py
+  # - Import hook: src/serena/patches/__init__.py redirects imports to patched version
+  # - Why: Graceful session handling for clients that cache session IDs across server restarts
+  # - See: PATCH-NOTES.md for technical details, DEPLOYMENT-GUIDE.md for deployment
   "mcp==1.12.3",
   "flask>=3.0.0",
   "sensai-utils>=1.5.0",
