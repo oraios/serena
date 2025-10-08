@@ -1,6 +1,6 @@
 # Type definitions module
 
-import std/[strformat, tables, options]
+import std/[strformat, tables, options, math]
 
 type
   Point* = object

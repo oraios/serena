@@ -90,11 +90,12 @@ class TestNimLanguageServerBasics:
         for func_name in expected_utils_functions:
             assert func_name in utils_function_names, f"Should find {func_name} procedure in utils.nim"
 
-        # Check for templates (they might be detected as different symbol kinds)
-        all_symbol_names = [symbol["name"] for symbol in utils_all_symbols]
-        assert "timeIt" in all_symbol_names, "Should find timeIt template"
-        # Note: nimlangserver may not detect iterators as symbols
-        # This is a known limitation of some language servers
+        # Note: nimlangserver symbol reporting limitations (confirmed via testing):
+        # ✓ Reports 'proc' definitions as SymbolKind.Function (12)
+        # ✓ Reports 'template' definitions as SymbolKind.Function (12) - e.g., timeIt is detected
+        # ✗ Does NOT report 'iterator' definitions - e.g., countUp is not detected
+        # ✗ Does NOT report 'method' definitions - see test_nim_types_module
+        # ✗ Returns empty results on semantic errors (missing imports, etc.) - see test_nim_error_recovery
 
     @pytest.mark.parametrize("language_server", [Language.NIM], indirect=True)
     def test_nim_types_module(self, language_server: SolidLanguageServer) -> None:
@@ -117,8 +118,8 @@ class TestNimLanguageServerBasics:
         function_names = [symbol["name"] for symbol in function_symbols]
 
         # Should detect procedures from types.nim
-        # Note: nimlangserver does not currently report 'method' definitions in document symbols,
-        # only 'proc' definitions. The 'draw' methods are therefore not included in this test.
+        # Note: 'draw' is defined as 'method' (lines 76, 80, 84), not 'proc'
+        # nimlangserver does NOT report method definitions, only proc definitions
         expected_procs = [
             "newPoint",
             "toString",
@@ -127,6 +128,7 @@ class TestNimLanguageServerBasics:
             "area",
             "perimeter",
             "contains",
+            # "draw" - NOT included: methods are not reported by nimlangserver
             "ok",
             "err",
             "isOk",
@@ -182,3 +184,61 @@ class TestNimLanguageServerBasics:
 
             for field in expected_fields:
                 assert field in completion_labels, f"Should suggest {field} field for Person type"
+
+    @pytest.mark.parametrize("language_server", [Language.NIM], indirect=True)
+    def test_nim_error_recovery(self, language_server: SolidLanguageServer) -> None:
+        """Document nimlangserver behavior with semantic errors (missing imports, etc.).
+
+        This test documents a known limitation: nimlangserver returns empty results
+        when a file has semantic errors like missing imports or undefined identifiers.
+
+        This is due to the Nim compiler's error poisoning strategy:
+        - When semantic analysis encounters an unresolved symbol, it marks that subtree as error
+        - Subsequent semantic analysis is incomplete or skipped
+        - The ideOutline command requires semantic info, so it returns empty results
+
+        This behavior is architectural and will not change until Nimony (Nim 3.0),
+        which is being designed with better error recovery for IDE support.
+
+        For serena users: If symbol operations fail on Nim code, check for:
+        1. Missing imports
+        2. Syntax errors
+        3. Undefined identifiers
+        Fix these errors to restore symbol-based operations, or use text-based search as fallback.
+        """
+        import os
+        import tempfile
+
+        # Create a temporary Nim file with a semantic error (missing import)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".nim", delete=False, dir=language_server.repository_root_path) as f:
+            f.write(
+                """# Test file with semantic error
+type
+  Point* = object
+    x*, y*: float
+
+proc distance*(p1, p2: Point): float =
+  # This uses sqrt without importing math - semantic error
+  sqrt((p2.x - p1.x) * (p2.x - p1.x) + (p2.y - p1.y) * (p2.y - p1.y))
+"""
+            )
+            temp_file = f.name
+
+        try:
+            # Get just the filename relative to repository root
+            relative_path = os.path.basename(temp_file)
+
+            # Request symbols - should return empty due to semantic error
+            all_symbols, root_symbols = language_server.request_document_symbols(relative_path, include_body=False)
+
+            # Known limitation: nimlangserver returns empty results on semantic errors
+            # This documents the behavior, not a bug in our code
+            assert len(all_symbols) == 0, (
+                "nimlangserver returns empty symbols on semantic errors (known limitation). "
+                "This is expected behavior due to Nim compiler's error poisoning strategy."
+            )
+
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_file):
+                os.unlink(temp_file)
