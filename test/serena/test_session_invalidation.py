@@ -9,30 +9,61 @@ server restarts, causing 400 Bad Request errors when the cached session ID is no
 longer valid.
 """
 
+import importlib
+import os
+from typing import Any
+
 import pytest
+
+
+# Fixtures for common setup
+@pytest.fixture
+def patched_manager():
+    """Import and return the patched streamable_http_manager module."""
+    import mcp.server.streamable_http_manager as manager
+
+    return manager
+
+
+@pytest.fixture
+def import_hook():
+    """Return a new instance of the patch import hook."""
+    from serena.patches import _PatchImportHook
+
+    return _PatchImportHook()
+
+
+@pytest.fixture
+def patch_loader():
+    """Return a new instance of the patch loader."""
+    from serena.patches import _PatchLoader
+
+    return _PatchLoader()
+
+
+@pytest.fixture
+def serena_root():
+    """Return the Serena project root directory."""
+    test_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.dirname(os.path.dirname(test_dir))
 
 
 class TestSessionInvalidationPatch:
     """Test suite for session invalidation patch."""
 
-    def test_patch_is_loaded(self):
+    def test_patch_is_loaded(self, patched_manager):
         """Verify that the patched module is loaded instead of the original."""
-        import mcp.server.streamable_http_manager as manager
+        assert (
+            "serena/patches" in patched_manager.__file__
+        ), f"Patched module should be loaded from serena/patches, got {patched_manager.__file__}"
 
-        # Check that we're loading the patched version
-        assert "serena/patches" in manager.__file__, f"Expected patched module from serena/patches, got {manager.__file__}"
+        assert patched_manager.__doc__ is not None, "Module docstring should not be None"
+        assert "SERENA PATCH" in patched_manager.__doc__, "Module should have SERENA PATCH marker in docstring"
 
-        # Check for SERENA PATCH marker in docstring
-        assert manager.__doc__ is not None, "Module docstring should not be None"
-        assert "SERENA PATCH" in manager.__doc__, "Module should have SERENA PATCH marker in docstring"
-
-    def test_version_compatibility_check_present(self):
+    def test_version_compatibility_check_present(self, patched_manager):
         """Verify that version compatibility check is present."""
-        import mcp.server.streamable_http_manager as manager
-
-        # Check that EXPECTED_MCP_VERSION constant exists
-        assert hasattr(manager, "EXPECTED_MCP_VERSION"), "Patched module should have EXPECTED_MCP_VERSION constant"
-        assert manager.EXPECTED_MCP_VERSION == "1.12.3", f"Expected MCP version 1.12.3, got {manager.EXPECTED_MCP_VERSION}"
+        assert hasattr(patched_manager, "EXPECTED_MCP_VERSION"), "Patched module should have EXPECTED_MCP_VERSION constant"
+        assert patched_manager.EXPECTED_MCP_VERSION == "1.12.3", f"Expected MCP version 1.12.3, got {patched_manager.EXPECTED_MCP_VERSION}"
 
     def test_import_hook_installed(self):
         """Verify that the import hook is installed in sys.meta_path."""
@@ -40,7 +71,6 @@ class TestSessionInvalidationPatch:
 
         from serena.patches import _PatchImportHook
 
-        # Check that our import hook is in sys.meta_path
         hook_found = any(isinstance(h, _PatchImportHook) for h in sys.meta_path)
         assert hook_found, "Import hook should be installed in sys.meta_path"
 
@@ -50,19 +80,14 @@ class TestSessionInvalidationPatch:
         assert hook_index is not None, "Import hook should be in first 5 meta_path entries"
         assert hook_index == 0, f"Import hook should be first, but is at index {hook_index}"
 
-    def test_patch_survives_reimport(self):
+    def test_patch_survives_reimport(self, patched_manager, monkeypatch):
         """Verify that the patch survives module reimport."""
-        import importlib
         import sys
 
-        # Import the module
-        import mcp.server.streamable_http_manager as manager1
+        file1 = patched_manager.__file__
 
-        file1 = manager1.__file__
-
-        # Remove from sys.modules and reimport
-        if "mcp.server.streamable_http_manager" in sys.modules:
-            del sys.modules["mcp.server.streamable_http_manager"]
+        # Remove from sys.modules and reimport (using monkeypatch for cleanup)
+        monkeypatch.delitem(sys.modules, "mcp.server.streamable_http_manager", raising=False)
 
         import mcp.server.streamable_http_manager as manager2
 
@@ -73,30 +98,35 @@ class TestSessionInvalidationPatch:
         assert "serena/patches" in file2, f"Second import should be patched: {file2}"
         assert file1 == file2, "Both imports should load the same patched file"
 
-    def test_other_mcp_modules_not_patched(self):
-        """Verify that other mcp modules are not affected by the patch."""
-        # Import other mcp modules
-        import mcp.server.session
-        import mcp.types
+    @pytest.mark.parametrize(
+        "module_name,should_be_patched",
+        [
+            ("mcp.types", False),
+            ("mcp.server.session", False),
+            ("mcp.server.streamable_http_manager", True),
+        ],
+    )
+    def test_module_patch_status(self, module_name, should_be_patched):
+        """Verify that only the target module is patched."""
+        module = importlib.import_module(module_name)
+        is_patched = "serena/patches" in module.__file__
 
-        # These should NOT be from serena/patches
-        assert "serena/patches" not in mcp.types.__file__, f"mcp.types should not be patched: {mcp.types.__file__}"
-        assert (
-            "serena/patches" not in mcp.server.session.__file__
-        ), f"mcp.server.session should not be patched: {mcp.server.session.__file__}"
+        assert is_patched == should_be_patched, (
+            f"Module {module_name} patch status incorrect: "
+            f"expected {'patched' if should_be_patched else 'not patched'}, "
+            f"got {'patched' if is_patched else 'not patched'} (file: {module.__file__})"
+        )
 
-        # They should be from the external mcp package
-        assert "site-packages/mcp" in mcp.types.__file__, f"mcp.types should be from site-packages: {mcp.types.__file__}"
+        # Non-patched modules should be from site-packages
+        if not should_be_patched:
+            assert (
+                "site-packages/mcp" in module.__file__
+            ), f"Non-patched module {module_name} should be from site-packages, got {module.__file__}"
 
-    def test_streamable_http_manager_class_exists(self):
+    def test_streamable_http_manager_class_exists(self, patched_manager):
         """Verify that StreamableHTTPSessionManager class exists in patched module."""
-        import mcp.server.streamable_http_manager as manager
-
-        # Check that the main class exists
-        assert hasattr(manager, "StreamableHTTPSessionManager"), "Patched module should have StreamableHTTPSessionManager class"
-
-        # Check that it's a class
-        assert isinstance(manager.StreamableHTTPSessionManager, type), "StreamableHTTPSessionManager should be a class"
+        assert hasattr(patched_manager, "StreamableHTTPSessionManager"), "Patched module should have StreamableHTTPSessionManager class"
+        assert isinstance(patched_manager.StreamableHTTPSessionManager, type), "StreamableHTTPSessionManager should be a class"
 
     def test_patch_logging_configured(self):
         """Verify that patch logging is configured."""
@@ -104,7 +134,6 @@ class TestSessionInvalidationPatch:
 
         from serena.patches import logger
 
-        # Check that logger exists
         assert logger is not None, "Patch module should have a logger"
         assert isinstance(logger, logging.Logger), "logger should be a Logger instance"
         assert logger.name == "serena.patches", f"Logger name should be 'serena.patches', got {logger.name}"
@@ -113,71 +142,52 @@ class TestSessionInvalidationPatch:
 class TestCacheInvalidationSurvival:
     """Test that patch survives cache invalidation scenarios."""
 
-    def test_patch_in_source_tree(self):
+    def test_patch_in_source_tree(self, patched_manager):
         """Verify that patched file is in source tree, not in cache."""
-        import mcp.server.streamable_http_manager as manager
-
-        # The patched file should be in the source tree
         assert (
-            "serena/src/serena/patches" in manager.__file__ or "serena/patches" in manager.__file__
-        ), f"Patched file should be in source tree: {manager.__file__}"
+            "serena/patches" in patched_manager.__file__
+        ), f"Patched file should be in source tree (serena/patches), got {patched_manager.__file__}"
 
-        # It should NOT be in .venv or cache directories
-        assert ".venv" not in manager.__file__, f"Patched file should not be in .venv: {manager.__file__}"
-        assert ".cache" not in manager.__file__, f"Patched file should not be in cache: {manager.__file__}"
+        assert ".venv" not in patched_manager.__file__, f"Patched file should not be in .venv, got {patched_manager.__file__}"
+        assert ".cache" not in patched_manager.__file__, f"Patched file should not be in cache, got {patched_manager.__file__}"
 
-    def test_external_mcp_package_still_installed(self):
-        """Verify that external mcp package is still installed and accessible."""
-        import mcp
+    @pytest.mark.parametrize("module_name", ["mcp.types", "mcp.server.session"])
+    def test_external_mcp_modules_accessible(self, module_name):
+        """Verify that external mcp package modules are still accessible."""
+        module = importlib.import_module(module_name)
 
-        # Check that we can import other mcp modules normally
-        import mcp.server.session
-        import mcp.types
-
-        assert mcp.types is not None
-        assert mcp.server.session is not None
-
-        # Verify they're from the external package
-        assert "site-packages/mcp" in mcp.types.__file__
+        assert module is not None, f"Module {module_name} should be importable"
+        assert (
+            "site-packages/mcp" in module.__file__
+        ), f"Module {module_name} should be from external package (site-packages), got {module.__file__}"
 
 
 class TestImportHookRobustness:
     """Test import hook robustness and edge cases."""
 
-    def test_import_hook_handles_nonexistent_module(self):
-        """Verify that import hook doesn't interfere with nonexistent modules."""
-        from serena.patches import _PatchImportHook
+    @pytest.mark.parametrize(
+        "module_name,should_return_spec",
+        [
+            ("nonexistent.module", False),
+            ("mcp.server.other_module", False),
+            ("mcp.types", False),
+            ("mcp.server.session", False),
+            ("mcp.client.session", False),
+            ("mcp.server.streamable_http_manager", True),
+        ],
+    )
+    def test_import_hook_selectivity(self, import_hook, module_name, should_return_spec):
+        """Verify that import hook only returns spec for the target module."""
+        spec = import_hook.find_spec(module_name, None)
 
-        hook = _PatchImportHook()
+        if should_return_spec:
+            assert spec is not None, f"Import hook should return spec for {module_name}"
+            assert spec.name == module_name, f"Spec name should match module name: {module_name}"
+        else:
+            assert spec is None, f"Import hook should return None for {module_name}"
 
-        # Should return None for modules we don't patch
-        spec = hook.find_spec("nonexistent.module", None)
-        assert spec is None, "Import hook should return None for nonexistent modules"
-
-        spec = hook.find_spec("mcp.server.other_module", None)
-        assert spec is None, "Import hook should return None for other mcp modules"
-
-    def test_import_hook_only_patches_specific_module(self):
-        """Verify that import hook only patches the specific module."""
-        from serena.patches import _PatchImportHook
-
-        hook = _PatchImportHook()
-
-        # Should return spec for our patched module
-        spec = hook.find_spec("mcp.server.streamable_http_manager", None)
-        assert spec is not None, "Import hook should return spec for patched module"
-        assert spec.name == "mcp.server.streamable_http_manager"
-
-        # Should return None for other modules
-        assert hook.find_spec("mcp.types", None) is None
-        assert hook.find_spec("mcp.server.session", None) is None
-        assert hook.find_spec("mcp.client.session", None) is None
-
-    def test_import_hook_error_handling(self):
+    def test_import_hook_error_handling(self, patch_loader):
         """Verify that import hook has proper error handling."""
-        from serena.patches import _PatchLoader
-
-        loader = _PatchLoader()
 
         # Create a mock module object
         class MockModule:
@@ -187,43 +197,39 @@ class TestImportHookRobustness:
 
         # This should work without raising exceptions
         try:
-            loader.exec_module(module)
-            # Check that module was populated
-            assert len(module.__dict__) > 0, "Module should be populated"
+            patch_loader.exec_module(module)
+            assert len(module.__dict__) > 0, "Module should be populated after exec_module"
         except Exception as e:
-            pytest.fail(f"Import hook should not raise exceptions: {e}")
+            pytest.fail(f"Import hook should not raise exceptions during normal operation: {e}")
 
 
 class TestPatchDocumentation:
     """Test that patch is properly documented."""
 
-    def test_patch_has_documentation(self):
-        """Verify that patched module has proper documentation."""
-        import mcp.server.streamable_http_manager as manager
+    @pytest.mark.parametrize(
+        "doc_element",
+        ["SERENA PATCH", "mcp-python-sdk", "session"],
+    )
+    def test_patch_has_required_documentation(self, patched_manager, doc_element):
+        """Verify that patched module has required documentation elements."""
+        assert patched_manager.__doc__ is not None, "Module should have docstring"
+        assert len(patched_manager.__doc__) > 100, "Docstring should be substantial (>100 chars)"
 
-        # Check docstring
-        assert manager.__doc__ is not None
-        assert len(manager.__doc__) > 100, "Docstring should be substantial"
+        # Check for specific documentation element (case-insensitive for 'session')
+        if doc_element.lower() == "session":
+            assert doc_element in patched_manager.__doc__.lower(), f"Docstring should mention '{doc_element}' (case-insensitive)"
+        else:
+            assert doc_element in patched_manager.__doc__, f"Docstring should contain '{doc_element}'"
 
-        # Check for key documentation elements
-        assert "SERENA PATCH" in manager.__doc__
-        assert "mcp-python-sdk" in manager.__doc__
-        assert "session" in manager.__doc__.lower()
-
-    def test_patch_notes_exist(self):
-        """Verify that IMPLEMENTATION-PLAN exists."""
-        import os
-
-        # Find the plan file relative to this test file
-        test_dir = os.path.dirname(os.path.abspath(__file__))
-        serena_root = os.path.dirname(os.path.dirname(test_dir))
+    def test_implementation_plan_exists(self, serena_root):
+        """Verify that IMPLEMENTATION-PLAN exists and is substantial."""
         plan_path = os.path.join(serena_root, "IMPLEMENTATION-PLAN-hybrid-mcp-patch.md")
 
         assert os.path.exists(plan_path), f"Implementation plan should exist at {plan_path}"
 
-        # Check that it's not empty
         with open(plan_path, "r") as f:
             content = f.read()
-            assert len(content) > 1000, "Implementation plan should be substantial"
-            assert "Phase 2" in content, "Plan should document Phase 2"
-            assert "session" in content.lower(), "Plan should mention session handling"
+
+        assert len(content) > 1000, "Implementation plan should be substantial (>1000 chars)"
+        assert "Phase 2" in content, "Plan should document Phase 2"
+        assert "session" in content.lower(), "Plan should mention session handling"
