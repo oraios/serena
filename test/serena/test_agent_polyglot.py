@@ -82,12 +82,12 @@ class TestAgentPolyglotIntegration:
         # Mock LSPManager
         agent.lsp_manager = MagicMock()
         mock_lsp = MagicMock()
-        agent.lsp_manager.get_language_server_for_file.return_value = mock_lsp
+        agent.lsp_manager.get_language_server_for_file_sync.return_value = mock_lsp
 
         lsp = agent.get_language_server_for_file("src/main.py")
 
         assert lsp == mock_lsp
-        agent.lsp_manager.get_language_server_for_file.assert_called_once_with("src/main.py")
+        agent.lsp_manager.get_language_server_for_file_sync.assert_called_once_with("src/main.py")
 
     def test_backward_compatibility_language_server_property(self):
         """Test that language_server property still works for backward compatibility."""
