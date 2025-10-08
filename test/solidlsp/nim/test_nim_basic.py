@@ -117,6 +117,8 @@ class TestNimLanguageServerBasics:
         function_names = [symbol["name"] for symbol in function_symbols]
 
         # Should detect procedures from types.nim
+        # Note: nimlangserver does not currently report 'method' definitions in document symbols,
+        # only 'proc' definitions. The 'draw' methods are therefore not included in this test.
         expected_procs = [
             "newPoint",
             "toString",
@@ -125,7 +127,6 @@ class TestNimLanguageServerBasics:
             "area",
             "perimeter",
             "contains",
-            "draw",
             "ok",
             "err",
             "isOk",
@@ -143,7 +144,7 @@ class TestNimLanguageServerBasics:
     def test_nim_goto_definition(self, language_server: SolidLanguageServer) -> None:
         """Test goto definition functionality for Nim."""
         # Test goto definition from main.nim to utils module
-        definition = language_server.request_goto_definition("main.nim", 58, 8)  # formatNumber call
+        definition = language_server.request_definition("main.nim", 58, 8)  # formatNumber call
 
         if definition:
             assert isinstance(definition, list), "Definition should be a list"
