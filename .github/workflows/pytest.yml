@@ -246,7 +246,7 @@ jobs:
             chmod +x marksman-macos
             sudo mv marksman-macos /usr/local/bin/marksman
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
-            curl -L -o marksman.exe https://github.com/artempyanykh/marksman/releases/download/${MARKSMAN_VERSION}/marksman-windows-x64.exe
+            curl -L -o marksman.exe https://github.com/artempyanykh/marksman/releases/download/${MARKSMAN_VERSION}/marksman.exe
             mkdir -p "$HOME/bin"
             mv marksman.exe "$HOME/bin/"
             echo "$HOME/bin" >> $GITHUB_PATH
