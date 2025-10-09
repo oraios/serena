@@ -1635,81 +1635,77 @@ class SolidLanguageServer(ABC):
     ) -> "ls_types.WorkspaceEdit | None":
         """
         Rename a symbol at the given position to a new name.
-        
+
         :param relative_file_path: The relative path to the file containing the symbol
         :param line: The 0-indexed line number of the symbol
-        :param column: The 0-indexed column number of the symbol  
+        :param column: The 0-indexed column number of the symbol
         :param new_name: The new name for the symbol
         :return: A WorkspaceEdit containing the changes needed to rename the symbol, or None if rename is not supported
         """
         from . import ls_types
-        
+
         params = ls_types.RenameParams(
             textDocument=ls_types.TextDocumentIdentifier(
                 uri=pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()
             ),
             position=ls_types.Position(line=line, character=column),
-            newName=new_name
+            newName=new_name,
         )
-        
+
         return self.server.send.rename(params)
 
     def apply_workspace_edit(self, workspace_edit: "ls_types.WorkspaceEdit") -> None:
         """
         Apply a WorkspaceEdit by making the changes to files.
-        
+
         :param workspace_edit: The WorkspaceEdit containing the changes to apply
         """
-        if hasattr(workspace_edit, 'changes') and workspace_edit.changes:
+        if hasattr(workspace_edit, "changes") and workspace_edit.changes:
             # Handle the 'changes' format (URI -> list of TextEdits)
             for uri, edits in workspace_edit.changes.items():
                 # Convert URI to file path
-                if uri.startswith('file://'):
+                if uri.startswith("file://"):
                     file_path = uri[7:]  # Remove 'file://' prefix
                 else:
                     file_path = uri
-                
+
                 # Get relative path
                 relative_path = os.path.relpath(file_path, self.repository_root_path)
-                
+
                 # Apply edits to the file
                 with self.open_file(relative_path) as file_buffer:
                     # Sort edits by position (latest first) to avoid position shifts
-                    sorted_edits = sorted(edits, key=lambda e: (e['range']['start']['line'], e['range']['start']['character']), reverse=True)
-                    
+                    sorted_edits = sorted(
+                        edits, key=lambda e: (e["range"]["start"]["line"], e["range"]["start"]["character"]), reverse=True
+                    )
+
                     for edit in sorted_edits:
-                        start_pos = ls_types.Position(
-                            line=edit['range']['start']['line'],
-                            character=edit['range']['start']['character']
-                        )
-                        end_pos = ls_types.Position(
-                            line=edit['range']['end']['line'], 
-                            character=edit['range']['end']['character']
-                        )
-                        
+                        start_pos = ls_types.Position(line=edit["range"]["start"]["line"], character=edit["range"]["start"]["character"])
+                        end_pos = ls_types.Position(line=edit["range"]["end"]["line"], character=edit["range"]["end"]["character"])
+
                         # Delete the old text and insert the new text
                         self.delete_text_between_positions(relative_path, start_pos, end_pos)
-                        if edit.get('newText'):
-                            self.insert_text_at_position(relative_path, start_pos.line, start_pos.character, edit['newText'])
-        
-        elif hasattr(workspace_edit, 'documentChanges') and workspace_edit.documentChanges:
+                        if edit.get("newText"):
+                            self.insert_text_at_position(relative_path, start_pos.line, start_pos.character, edit["newText"])
+
+        elif hasattr(workspace_edit, "documentChanges") and workspace_edit.documentChanges:
             # Handle the 'documentChanges' format (more complex, includes creates/renames/deletes)
             for change in workspace_edit.documentChanges:
-                if hasattr(change, 'textDocument') and hasattr(change, 'edits'):
+                if hasattr(change, "textDocument") and hasattr(change, "edits"):
                     # This is a TextDocumentEdit
                     uri = change.textDocument.uri
-                    if uri.startswith('file://'):
+                    if uri.startswith("file://"):
                         file_path = uri[7:]
                     else:
                         file_path = uri
-                    
+
                     relative_path = os.path.relpath(file_path, self.repository_root_path)
-                    
+
                     # Apply the edits
                     with self.open_file(relative_path) as file_buffer:
                         # Sort edits by position (latest first)
                         sorted_edits = sorted(change.edits, key=lambda e: (e.range.start.line, e.range.start.character), reverse=True)
-                        
+
                         for edit in sorted_edits:
                             # Delete the old text and insert the new text
                             self.delete_text_between_positions(relative_path, edit.range.start, edit.range.end)
