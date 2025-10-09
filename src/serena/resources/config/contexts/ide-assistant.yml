@@ -22,6 +22,7 @@ excluded_tools:
   - execute_shell_command
   - prepare_for_new_conversation
   - replace_regex
+  - search_for_pattern
 
 tool_description_overrides: {}
 
