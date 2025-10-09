@@ -293,3 +293,86 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerSymbolicEdit):
         code_editor = self.create_code_editor()
         code_editor.insert_before_symbol(name_path, relative_file_path=relative_path, body=body)
         return SUCCESS_RESULT
+
+
+class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
+    """
+    Renames a symbol throughout the codebase using language server refactoring capabilities.
+    """
+
+    def apply(
+        self,
+        name_path: str,
+        relative_path: str,
+        new_name: str,
+    ) -> str:
+        """
+        Renames the symbol with the given `name_path` to `new_name` throughout the entire codebase.
+        This uses the language server's rename functionality to update all references to the symbol.
+        
+        :param name_path: name path of the symbol to rename (definitions in the `find_symbol` tool apply)
+        :param relative_path: the relative path to the file containing the symbol to rename
+        :param new_name: the new name for the symbol
+        :return: result summary indicating success or failure
+        """
+        symbol_retriever = self.create_language_server_symbol_retriever()
+        language_server = symbol_retriever.get_language_server()
+        
+        # Find the symbol first to get its location
+        symbols = symbol_retriever.find_by_name(name_path, within_relative_path=relative_path)
+        if len(symbols) == 0:
+            raise ValueError(f"No symbol with name '{name_path}' found in file '{relative_path}'")
+        if len(symbols) > 1:
+            raise ValueError(f"Found {len(symbols)} symbols with name '{name_path}' in file '{relative_path}'. Rename requires a unique symbol.")
+        
+        symbol = symbols[0]
+        if not symbol.location.has_position_in_file():
+            raise ValueError(f"Symbol '{name_path}' does not have a valid position in file for renaming")
+        
+        # Use language server rename capabilities
+        rename_result = language_server.rename_symbol(
+            relative_file_path=relative_path,
+            line=symbol.location.line,
+            column=symbol.location.column,
+            new_name=new_name
+        )
+        
+        if rename_result is None:
+            raise ValueError(f"Language server returned no rename edits for symbol '{name_path}'. The symbol might not support renaming.")
+        
+        # Apply the workspace edit through the language server
+        language_server.apply_workspace_edit(rename_result)
+        
+        # Mark all modified files for the agent
+        modified_files = set()
+        if hasattr(rename_result, 'changes') and rename_result.changes:
+            for uri, edits in rename_result.changes.items():
+                # Convert URI to relative path and notify agent
+                import pathlib
+                if uri.startswith('file://'):
+                    file_path = uri[7:]  # Remove 'file://' prefix
+                else:
+                    file_path = uri
+                rel_path = os.path.relpath(file_path, self.project.project_root)
+                modified_files.add(rel_path)
+                if self.agent is not None:
+                    self.agent.mark_file_modified(rel_path)
+        
+        elif hasattr(rename_result, 'documentChanges') and rename_result.documentChanges:
+            for change in rename_result.documentChanges:
+                if hasattr(change, 'textDocument'):
+                    uri = change.textDocument.uri
+                    if uri.startswith('file://'):
+                        file_path = uri[7:]
+                    else:
+                        file_path = uri
+                    rel_path = os.path.relpath(file_path, self.project.project_root)
+                    modified_files.add(rel_path)
+                    if self.agent is not None:
+                        self.agent.mark_file_modified(rel_path)
+        
+        files_changed = len(modified_files)
+        if files_changed > 0:
+            return f"Successfully renamed '{name_path}' to '{new_name}' across {files_changed} file(s): {', '.join(sorted(modified_files))}"
+        
+        return f"Successfully renamed '{name_path}' to '{new_name}'"
