@@ -1,8 +1,5 @@
 """Integration tests for RenameSymbolTool using Go language server."""
 
-import os
-import tempfile
-from typing import Any, Dict
 from unittest.mock import MagicMock
 
 import pytest
@@ -23,23 +20,23 @@ class TestRenameSymbolGoIntegration:
         # Create a mock agent with the project
         mock_agent = MagicMock(spec=SerenaAgent)
         mock_agent.get_active_project_or_raise.return_value = project
-        
+
         # Create the tool
         tool = RenameSymbolTool(mock_agent)
-        
+
         # Create symbol retriever with the language server
         symbol_retriever = LanguageServerSymbolRetriever(language_server)
-        
+
         # Mock the create_language_server_symbol_retriever method to return our symbol retriever
         tool.create_language_server_symbol_retriever = MagicMock(return_value=symbol_retriever)
-        
+
         # Test renaming the Helper function
         result = tool.apply(
             name_path="Helper",  # Function name to rename
             relative_path="main.go",  # File containing the function
-            new_name="HelperRenamed"  # New name
+            new_name="HelperRenamed",  # New name
         )
-        
+
         # Verify the result indicates success
         assert isinstance(result, str), f"Expected string result, got: {type(result)}"
         result_lower = result.lower()
@@ -52,23 +49,23 @@ class TestRenameSymbolGoIntegration:
         # Create a mock agent with the project
         mock_agent = MagicMock(spec=SerenaAgent)
         mock_agent.get_active_project_or_raise.return_value = project
-        
+
         # Create the tool
         tool = RenameSymbolTool(mock_agent)
-        
+
         # Create symbol retriever with the language server
         symbol_retriever = LanguageServerSymbolRetriever(language_server)
-        
+
         # Mock the create_language_server_symbol_retriever method to return our symbol retriever
         tool.create_language_server_symbol_retriever = MagicMock(return_value=symbol_retriever)
-        
+
         # Test renaming the DemoStruct
         result = tool.apply(
             name_path="DemoStruct",  # Struct name to rename
             relative_path="main.go",  # File containing the struct
-            new_name="RenamedStruct"  # New name
+            new_name="RenamedStruct",  # New name
         )
-        
+
         # Verify the result indicates success
         assert isinstance(result, str), f"Expected string result, got: {type(result)}"
         result_lower = result.lower()
@@ -81,24 +78,20 @@ class TestRenameSymbolGoIntegration:
         # Create a mock agent with the project
         mock_agent = MagicMock(spec=SerenaAgent)
         mock_agent.get_active_project_or_raise.return_value = project
-        
+
         # Create the tool
         tool = RenameSymbolTool(mock_agent)
-        
+
         # Create symbol retriever with the language server
         symbol_retriever = LanguageServerSymbolRetriever(language_server)
-        
+
         # Mock the create_language_server_symbol_retriever method to return our symbol retriever
         tool.create_language_server_symbol_retriever = MagicMock(return_value=symbol_retriever)
-        
+
         # Test renaming an invalid/nonexistent symbol - this should raise an exception
         with pytest.raises(ValueError) as exc_info:
-            tool.apply(
-                name_path="NonExistentFunction",  # Function that doesn't exist
-                relative_path="main.go",
-                new_name="InvalidRename"
-            )
-        
+            tool.apply(name_path="NonExistentFunction", relative_path="main.go", new_name="InvalidRename")  # Function that doesn't exist
+
         # Verify the exception message indicates the symbol wasn't found
         error_message = str(exc_info.value).lower()
         assert "not found" in error_message or "no symbol" in error_message
@@ -109,24 +102,20 @@ class TestRenameSymbolGoIntegration:
         # Create a mock agent with the project
         mock_agent = MagicMock(spec=SerenaAgent)
         mock_agent.get_active_project_or_raise.return_value = project
-        
+
         # Create the tool
         tool = RenameSymbolTool(mock_agent)
-        
+
         # Create symbol retriever with the language server
         symbol_retriever = LanguageServerSymbolRetriever(language_server)
-        
+
         # Mock the create_language_server_symbol_retriever method to return our symbol retriever
         tool.create_language_server_symbol_retriever = MagicMock(return_value=symbol_retriever)
-        
+
         # Test renaming in a nonexistent file - this should raise an exception
         with pytest.raises((ValueError, FileNotFoundError)) as exc_info:
-            tool.apply(
-                name_path="SomeFunction",
-                relative_path="nonexistent.go",  # File that doesn't exist
-                new_name="SomeRename"
-            )
-        
+            tool.apply(name_path="SomeFunction", relative_path="nonexistent.go", new_name="SomeRename")  # File that doesn't exist
+
         # Verify the exception indicates the symbol/file wasn't found
         error_message = str(exc_info.value).lower()
         assert "not found" in error_message or "no symbol" in error_message
@@ -137,27 +126,23 @@ class TestRenameSymbolGoIntegration:
         # Create a mock agent with the project
         mock_agent = MagicMock(spec=SerenaAgent)
         mock_agent.get_active_project_or_raise.return_value = project
-        
+
         # Create the tool
         tool = RenameSymbolTool(mock_agent)
-        
+
         # Create symbol retriever with the language server
         symbol_retriever = LanguageServerSymbolRetriever(language_server)
-        
+
         # Mock the create_language_server_symbol_retriever method to return our symbol retriever
         tool.create_language_server_symbol_retriever = MagicMock(return_value=symbol_retriever)
-        
+
         # Test renaming Helper function which is used in UsingHelper function
-        result = tool.apply(
-            name_path="Helper",  # Function that has references
-            relative_path="main.go",
-            new_name="NewHelperName"
-        )
-        
+        result = tool.apply(name_path="Helper", relative_path="main.go", new_name="NewHelperName")  # Function that has references
+
         # Verify the result indicates success and that multiple locations would be renamed
         assert isinstance(result, str), f"Expected string result, got: {type(result)}"
         result_lower = result.lower()
         assert "success" in result_lower or "renamed" in result_lower, f"Rename operation failed: {result}"
-        
+
         # The result should indicate that references were found and would be updated
         assert "newhelpername" in result_lower or "helper" in result_lower

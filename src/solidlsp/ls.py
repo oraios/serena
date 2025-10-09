@@ -1673,7 +1673,7 @@ class SolidLanguageServer(ABC):
                 relative_path = os.path.relpath(file_path, self.repository_root_path)
 
                 # Apply edits to the file
-                with self.open_file(relative_path) as file_buffer:
+                with self.open_file(relative_path):
                     # Sort edits by position (latest first) to avoid position shifts
                     sorted_edits = sorted(
                         edits, key=lambda e: (e["range"]["start"]["line"], e["range"]["start"]["character"]), reverse=True
@@ -1702,7 +1702,7 @@ class SolidLanguageServer(ABC):
                     relative_path = os.path.relpath(file_path, self.repository_root_path)
 
                     # Apply the edits
-                    with self.open_file(relative_path) as file_buffer:
+                    with self.open_file(relative_path):
                         # Sort edits by position (latest first)
                         sorted_edits = sorted(change.edits, key=lambda e: (e.range.start.line, e.range.start.character), reverse=True)
 

@@ -347,8 +347,6 @@ class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
         if hasattr(rename_result, "changes") and rename_result.changes:
             for uri, edits in rename_result.changes.items():
                 # Convert URI to relative path and notify agent
-                import pathlib
-
                 if uri.startswith("file://"):
                     file_path = uri[7:]  # Remove 'file://' prefix
                 else:

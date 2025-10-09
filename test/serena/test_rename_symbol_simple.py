@@ -2,19 +2,18 @@
 Simple integration test for rename functionality (without actual language server)
 """
 
-import tempfile
 import shutil
+import tempfile
 from pathlib import Path
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 import pytest
 
-from src.serena.tools.symbol_tools import RenameSymbolTool
-from src.serena.symbol import LanguageServerSymbolRetriever, LanguageServerSymbol, LanguageServerSymbolLocation
+from solidlsp import SolidLanguageServer
 from src.serena.agent import SerenaAgent
 from src.serena.project import Project
-from solidlsp import SolidLanguageServer
-from solidlsp import ls_types
+from src.serena.symbol import LanguageServerSymbol, LanguageServerSymbolLocation, LanguageServerSymbolRetriever
+from src.serena.tools.symbol_tools import RenameSymbolTool
 
 
 class TestRenameSymbolSimple:

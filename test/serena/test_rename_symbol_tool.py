@@ -2,14 +2,15 @@
 Tests for the RenameSymbolTool
 """
 
+from unittest.mock import Mock
+
 import pytest
-from unittest.mock import Mock, MagicMock
-from serena.tools.symbol_tools import RenameSymbolTool
+
 from serena.agent import SerenaAgent
 from serena.project import Project
 from serena.symbol import LanguageServerSymbol, LanguageServerSymbolLocation, LanguageServerSymbolRetriever
+from serena.tools.symbol_tools import RenameSymbolTool
 from solidlsp.ls import SolidLanguageServer
-from solidlsp import ls_types
 
 
 class TestRenameSymbolTool:
@@ -84,7 +85,7 @@ class TestRenameSymbolTool:
         tool.create_language_server_symbol_retriever = Mock(return_value=mock_symbol_retriever)
 
         # Test that it raises ValueError
-        with pytest.raises(ValueError, match="No symbol with name 'nonexistent' found in file 'file.py'"):
+        with pytest.raises(ValueError, match=r"No symbol with name 'nonexistent' found in file 'file\.py'"):
             tool.apply(name_path="nonexistent", relative_path="file.py", new_name="new_name")
 
     def test_rename_symbol_multiple_matches(self):
@@ -105,7 +106,7 @@ class TestRenameSymbolTool:
         tool.create_language_server_symbol_retriever = Mock(return_value=mock_symbol_retriever)
 
         # Test that it raises ValueError
-        with pytest.raises(ValueError, match="Found 2 symbols with name 'ambiguous' in file 'file.py'"):
+        with pytest.raises(ValueError, match=r"Found 2 symbols with name 'ambiguous' in file 'file\.py'"):
             tool.apply(name_path="ambiguous", relative_path="file.py", new_name="new_name")
 
     def test_rename_symbol_invalid_position(self):
