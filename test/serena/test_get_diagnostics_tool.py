@@ -214,14 +214,16 @@ class TestGetDiagnosticsTool:
     def test_path_construction(self):
         """Test that file paths are constructed correctly."""
         relative_path = "src/module/file.py"
-        
-        with patch('os.path.exists', return_value=True), \
-             patch('os.path.isdir', return_value=False), \
-             patch.object(self.tool, '_limit_length', side_effect=lambda x, _: x):
-            
+
+        with (
+            patch("os.path.exists", return_value=True),
+            patch("os.path.isdir", return_value=False),
+            patch.object(self.tool, "_limit_length", side_effect=lambda x, _: x),
+        ):
+
             self.mock_language_server.request_text_document_diagnostics.return_value = []
             self.tool.apply(relative_path)
-            
+
             # Verify os.path.join was called with correct arguments
             # The actual path checking happens in the method, we verify the LS call
             self.mock_language_server.request_text_document_diagnostics.assert_called_once_with(relative_path)
