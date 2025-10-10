@@ -1,6 +1,7 @@
 """Tests for Rego language server (Regal) functionality."""
 
 import os
+import sys
 
 import pytest
 
@@ -10,6 +11,7 @@ from solidlsp.ls_utils import SymbolUtils
 
 
 @pytest.mark.rego
+@pytest.mark.skipif(sys.platform == "win32", reason="Regal v0.36.1 has Windows path handling issues")
 class TestRegoLanguageServer:
     """Test Regal language server functionality for Rego."""
 

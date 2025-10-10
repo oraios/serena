@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import sys
 import time
 
 import pytest
@@ -81,7 +82,16 @@ class TestSerenaAgent:
                 marks=[pytest.mark.clojure, pytest.mark.skipif(clj.CLI_FAIL, reason=f"Clojure CLI not available: {clj.CLI_FAIL}")],
             ),
             pytest.param(Language.CSHARP, "Calculator", "Class", "Program.cs", marks=pytest.mark.csharp),
-            pytest.param(Language.REGO, "is_admin", "Function", os.path.join("policies", "authz.rego"), marks=pytest.mark.rego),
+            pytest.param(
+                Language.REGO,
+                "is_admin",
+                "Function",
+                os.path.join("policies", "authz.rego"),
+                marks=[
+                    pytest.mark.rego,
+                    pytest.mark.skipif(sys.platform == "win32", reason="Regal v0.36.1 has Windows path handling issues"),
+                ],
+            ),
         ],
         indirect=["serena_agent"],
     )
