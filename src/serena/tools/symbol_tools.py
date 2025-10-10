@@ -317,24 +317,24 @@ class GetDiagnosticsTool(Tool, ToolMarkerSymbolicRead):
         """
         if not self.agent.is_using_language_server():
             raise Exception("Cannot get diagnostics; agent is not in language server mode.")
-        
+
         file_path = os.path.join(self.project.project_root, relative_path)
-        
+
         # Validate that the file exists
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File {relative_path} does not exist in the project.")
         if os.path.isdir(file_path):
             raise ValueError(f"Expected a file path, but got a directory path: {relative_path}.")
-        
+
         # Get the language server and request diagnostics
         language_server = self.agent.language_server
         assert language_server is not None
-        
+
         try:
             diagnostics = language_server.request_text_document_diagnostics(relative_path)
         except Exception as e:
             raise RuntimeError(f"Failed to retrieve diagnostics for {relative_path}: {e}")
-        
+
         # Convert diagnostics to a more readable format
         result_list = []
         for diag in diagnostics:
@@ -347,27 +347,22 @@ class GetDiagnosticsTool(Tool, ToolMarkerSymbolicRead):
                 "range": {
                     "start": {
                         "line": diag.get("range", {}).get("start", {}).get("line", 0),
-                        "character": diag.get("range", {}).get("start", {}).get("character", 0)
+                        "character": diag.get("range", {}).get("start", {}).get("character", 0),
                     },
                     "end": {
                         "line": diag.get("range", {}).get("end", {}).get("line", 0),
-                        "character": diag.get("range", {}).get("end", {}).get("character", 0)
-                    }
-                }
+                        "character": diag.get("range", {}).get("end", {}).get("character", 0),
+                    },
+                },
             }
             result_list.append(diagnostic_dict)
-        
+
         result_json_str = json.dumps(result_list, indent=2)
         return self._limit_length(result_json_str, max_answer_chars)
-    
+
     def _get_severity_name(self, severity: int | None) -> str:
         """Convert numeric severity to human-readable name."""
         if severity is None:
             return "unknown"
-        severity_names = {
-            1: "error",
-            2: "warning", 
-            3: "information",
-            4: "hint"
-        }
+        severity_names = {1: "error", 2: "warning", 3: "information", 4: "hint"}
         return severity_names.get(severity, f"unknown({severity})")
