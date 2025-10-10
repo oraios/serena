@@ -1,14 +1,13 @@
 """Tests for the GetDiagnosticsTool."""
 
 import json
-import os
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
-from src.serena.tools.symbol_tools import GetDiagnosticsTool
+import pytest
+
 from src.serena.agent import SerenaAgent
 from src.serena.project import Project
-from solidlsp.ls_types import Diagnostic
+from src.serena.tools.symbol_tools import GetDiagnosticsTool
 
 
 class TestGetDiagnosticsTool:
@@ -127,7 +126,7 @@ class TestGetDiagnosticsTool:
         """Test error when file does not exist."""
         mock_exists.return_value = False
 
-        with pytest.raises(FileNotFoundError, match="File test_file.py does not exist in the project"):
+        with pytest.raises(FileNotFoundError, match=r"File test_file.py does not exist in the project"):
             self.tool.apply("test_file.py")
 
     @patch("os.path.exists")
@@ -150,7 +149,7 @@ class TestGetDiagnosticsTool:
         # Mock language server to raise an exception
         self.mock_language_server.request_text_document_diagnostics.side_effect = Exception("Language server failed")
 
-        with pytest.raises(RuntimeError, match="Failed to retrieve diagnostics for test_file.py: Language server failed"):
+        with pytest.raises(RuntimeError, match=r"Failed to retrieve diagnostics for test_file.py: Language server failed"):
             self.tool.apply("test_file.py")
 
     @patch("os.path.exists")
@@ -215,17 +214,14 @@ class TestGetDiagnosticsTool:
     def test_path_construction(self):
         """Test that file paths are constructed correctly."""
         relative_path = "src/module/file.py"
-        expected_full_path = "/test/project/src/module/file.py"
-
-        with (
-            patch("os.path.exists", return_value=True),
-            patch("os.path.isdir", return_value=False),
-            patch.object(self.tool, "_limit_length", side_effect=lambda x, _: x),
-        ):
-
+        
+        with patch('os.path.exists', return_value=True), \
+             patch('os.path.isdir', return_value=False), \
+             patch.object(self.tool, '_limit_length', side_effect=lambda x, _: x):
+            
             self.mock_language_server.request_text_document_diagnostics.return_value = []
             self.tool.apply(relative_path)
-
+            
             # Verify os.path.join was called with correct arguments
             # The actual path checking happens in the method, we verify the LS call
             self.mock_language_server.request_text_document_diagnostics.assert_called_once_with(relative_path)

@@ -2,13 +2,14 @@
 
 import json
 import os
-import pytest
 from unittest.mock import Mock
 
-from src.serena.tools.symbol_tools import GetDiagnosticsTool
+import pytest
+
+from solidlsp.ls_config import Language
 from src.serena.agent import SerenaAgent
 from src.serena.project import Project
-from solidlsp.ls_config import Language
+from src.serena.tools.symbol_tools import GetDiagnosticsTool
 from test.conftest import create_ls
 
 
@@ -153,7 +154,7 @@ func PrintMessage() {
 
     def test_get_diagnostics_nonexistent_file(self):
         """Test GetDiagnosticsTool error handling with nonexistent file."""
-        with pytest.raises(FileNotFoundError, match="File nonexistent.go does not exist in the project"):
+        with pytest.raises(FileNotFoundError, match=r"File nonexistent.go does not exist in the project"):
             self.tool.apply("nonexistent.go")
 
     def test_get_diagnostics_directory_path(self):
