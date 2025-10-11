@@ -43,6 +43,7 @@ class Language(str, Enum):
     CPP = "cpp"
     PHP = "php"
     R = "r"
+    PERL = "perl"
     CLOJURE = "clojure"
     ELIXIR = "elixir"
     TERRAFORM = "terraform"
@@ -116,6 +117,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.php")
             case self.R:
                 return FilenameMatcher("*.R", "*.r", "*.Rmd", "*.Rnw")
+            case self.PERL:
+                return FilenameMatcher("*.pl", "*.pm", "*.t")
             case self.CLOJURE:
                 return FilenameMatcher("*.clj", "*.cljs", "*.cljc", "*.edn")  # codespell:ignore edn
             case self.ELIXIR:
@@ -201,6 +204,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.intelephense import Intelephense
 
                 return Intelephense
+            case self.PERL:
+                from solidlsp.language_servers.perl_language_server import PerlLanguageServer
+
+                return PerlLanguageServer
             case self.CLOJURE:
                 from solidlsp.language_servers.clojure_lsp import ClojureLSP
 
