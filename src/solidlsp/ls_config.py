@@ -66,6 +66,11 @@ class Language(str, Enum):
     """Solargraph language server for Ruby (legacy, experimental).
     Use Language.RUBY (ruby-lsp) for better performance and modern LSP features.
     """
+    MARKDOWN = "markdown"
+    """Marksman language server for Markdown (experimental).
+    Must be explicitly specified as the main language, not auto-detected.
+    This is an edge case primarily useful when working on documentation-heavy projects.
+    """
 
     @classmethod
     def iter_all(cls, include_experimental: bool = False) -> Iterable[Self]:
@@ -77,7 +82,7 @@ class Language(str, Enum):
         """
         Check if the language server is experimental or deprecated.
         """
-        return self in {self.TYPESCRIPT_VTS, self.PYTHON_JEDI, self.CSHARP_OMNISHARP, self.RUBY_SOLARGRAPH}
+        return self in {self.TYPESCRIPT_VTS, self.PYTHON_JEDI, self.CSHARP_OMNISHARP, self.RUBY_SOLARGRAPH, self.MARKDOWN}
 
     def __str__(self) -> str:
         return self.value
@@ -136,6 +141,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.erl", "*.hrl", "*.escript", "*.config", "*.app", "*.app.src")
             case self.AL:
                 return FilenameMatcher("*.al", "*.dal")
+            case self.MARKDOWN:
+                return FilenameMatcher("*.md", "*.markdown")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -241,6 +248,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.al_language_server import ALLanguageServer
 
                 return ALLanguageServer
+            case self.MARKDOWN:
+                from solidlsp.language_servers.marksman import Marksman
+
+                return Marksman
             case self.R:
                 from solidlsp.language_servers.r_language_server import RLanguageServer
 
