@@ -93,11 +93,11 @@ With Serena, we provide direct, out-of-the-box support for:
   * Dart
   * Bash
   * Lua (automatically downloads lua-language-server if not installed)
-  * Markdown (requires marksman installation)
   * Nix (requires nixd installation)
   * Elixir (requires installation of NextLS and Elixir; **Windows not supported**)
   * Erlang (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls), experimental, might be slow or hang)
   * AL
+  * Markdown (automatically downloads marksman if not installed, experimental, must be explicitly specified via `--language markdown` when generating project config - primarily useful for documentation-heavy projects)
 
 Support for further languages can easily be added by providing a shallow adapter for a new language server implementation,
 see Serena's [memory on that](.serena/memories/adding_new_language_support_guide.md).

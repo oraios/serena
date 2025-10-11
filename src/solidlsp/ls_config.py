@@ -53,7 +53,6 @@ class Language(str, Enum):
     NIX = "nix"
     ERLANG = "erlang"
     AL = "al"
-    MARKDOWN = "markdown"
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -67,6 +66,11 @@ class Language(str, Enum):
     """Solargraph language server for Ruby (legacy, experimental).
     Use Language.RUBY (ruby-lsp) for better performance and modern LSP features.
     """
+    MARKDOWN = "markdown"
+    """Marksman language server for Markdown (experimental).
+    Must be explicitly specified as the main language, not auto-detected.
+    This is an edge case primarily useful when working on documentation-heavy projects.
+    """
 
     @classmethod
     def iter_all(cls, include_experimental: bool = False) -> Iterable[Self]:
@@ -78,7 +82,7 @@ class Language(str, Enum):
         """
         Check if the language server is experimental or deprecated.
         """
-        return self in {self.TYPESCRIPT_VTS, self.PYTHON_JEDI, self.CSHARP_OMNISHARP, self.RUBY_SOLARGRAPH}
+        return self in {self.TYPESCRIPT_VTS, self.PYTHON_JEDI, self.CSHARP_OMNISHARP, self.RUBY_SOLARGRAPH, self.MARKDOWN}
 
     def __str__(self) -> str:
         return self.value

@@ -6,9 +6,12 @@ Contains various configurations and settings specific to Markdown.
 import logging
 import os
 import pathlib
+import platform
 import shutil
 import threading
+from pathlib import Path
 
+import requests
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
@@ -24,22 +27,97 @@ class Marksman(SolidLanguageServer):
     Provides Markdown specific instantiation of the LanguageServer class using marksman.
     """
 
-    @classmethod
-    def _ensure_marksman_available(cls, logger: LanguageServerLogger) -> str:
-        """
-        Verify that marksman is installed and available in PATH.
-        Returns the path to the marksman executable.
-        """
-        logger.log("Checking for marksman installation...", logging.DEBUG)
+    @staticmethod
+    def _get_marksman_path():
+        """Get the path to marksman executable."""
+        # First check if it's in PATH
+        marksman = shutil.which("marksman")
+        if marksman:
+            return marksman
 
-        marksman_cmd = shutil.which("marksman")
-        if marksman_cmd is None:
-            raise RuntimeError(
-                "marksman executable not found in PATH. Please install marksman from https://github.com/artempyanykh/marksman"
+        # Check common installation locations
+        home = Path.home()
+        possible_paths = [
+            home / ".local" / "bin" / "marksman",
+            home / ".serena" / "language_servers" / "marksman" / "marksman",
+            Path("/usr/local/bin/marksman"),
+        ]
+
+        # Add Windows-specific paths
+        if platform.system() == "Windows":
+            possible_paths.extend(
+                [
+                    home / "AppData" / "Local" / "marksman" / "marksman.exe",
+                    home / ".serena" / "language_servers" / "marksman" / "marksman.exe",
+                ]
             )
 
-        logger.log(f"Found marksman at: {marksman_cmd}", logging.DEBUG)
-        return marksman_cmd
+        for path in possible_paths:
+            if path.exists():
+                return str(path)
+
+        return None
+
+    @staticmethod
+    def _download_marksman():
+        """Download and install marksman if not present."""
+        system = platform.system()
+        marksman_version = "2024-12-18"
+
+        # Map platform to download URL and filename
+        if system == "Linux":
+            download_name = "marksman-linux-x64"
+            download_url = f"https://github.com/artempyanykh/marksman/releases/download/{marksman_version}/{download_name}"
+        elif system == "Darwin":
+            # Use universal binary for macOS
+            download_name = "marksman"
+            download_url = f"https://github.com/artempyanykh/marksman/releases/download/{marksman_version}/{download_name}"
+        elif system == "Windows":
+            download_name = "marksman.exe"
+            download_url = f"https://github.com/artempyanykh/marksman/releases/download/{marksman_version}/{download_name}"
+        else:
+            raise RuntimeError(f"Unsupported operating system: {system}")
+
+        # Create installation directory
+        install_dir = Path.home() / ".serena" / "language_servers" / "marksman"
+        install_dir.mkdir(parents=True, exist_ok=True)
+
+        # Download the file
+        print(f"Downloading marksman from {download_url}...")
+        response = requests.get(download_url, stream=True)
+        response.raise_for_status()
+
+        # Save the binary
+        if system == "Windows":
+            marksman_path = install_dir / "marksman.exe"
+        else:
+            marksman_path = install_dir / "marksman"
+
+        with open(marksman_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+        # Make executable on Unix systems
+        if system != "Windows":
+            marksman_path.chmod(0o755)
+
+        print(f"marksman installed at: {marksman_path}")
+        return str(marksman_path)
+
+    @staticmethod
+    def _setup_runtime_dependency():
+        """
+        Check if marksman is available.
+        Downloads marksman if not present.
+        """
+        marksman_path = Marksman._get_marksman_path()
+
+        if not marksman_path:
+            print("marksman not found. Downloading...")
+            marksman_path = Marksman._download_marksman()
+            print(f"marksman installed at: {marksman_path}")
+
+        return marksman_path
 
     def __init__(
         self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
@@ -48,7 +126,7 @@ class Marksman(SolidLanguageServer):
         Creates a Marksman instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        marksman_path = self._ensure_marksman_available(logger)
+        marksman_path = self._setup_runtime_dependency()
 
         super().__init__(
             config,
