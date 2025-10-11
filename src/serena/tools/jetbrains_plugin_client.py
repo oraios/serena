@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Optional, Self, TypeVar
 
 import requests
+from requests import Response
 from sensai.util.string import ToStringMixin
 
 from serena.project import Project
@@ -78,6 +79,7 @@ class JetBrainsPluginClient(ToStringMixin):
     def _make_request(self, method: str, endpoint: str, data: Optional[dict] = None) -> dict[str, Any]:
         url = f"{self.base_url}{endpoint}"
 
+        response: Response | None = None
         try:
             if method.upper() == "GET":
                 response = self.session.get(url, timeout=self.timeout)
@@ -100,8 +102,10 @@ class JetBrainsPluginClient(ToStringMixin):
             raise ConnectionError(f"Failed to connect to Serena service at {url}: {e}")
         except requests.exceptions.Timeout as e:
             raise ConnectionError(f"Request to {url} timed out: {e}")
-        except requests.exceptions.HTTPError:
-            raise APIError(f"API request failed with status {response.status_code}: {response.text}")
+        except requests.exceptions.HTTPError as e:
+            if response is not None:
+                raise APIError(f"API request failed with status {response.status_code}: {response.text}")
+            raise APIError(f"API request failed with HTTP error: {e}")
         except requests.exceptions.RequestException as e:
             raise SerenaClientError(f"Request failed: {e}")
 
@@ -170,8 +174,8 @@ class JetBrainsPluginClient(ToStringMixin):
 
     def is_service_available(self) -> bool:
         try:
-            response = self.heartbeat()
-            return response.get("status") == "OK"
+            self.project_root()
+            return True
         except (ConnectionError, APIError):
             return False
 
