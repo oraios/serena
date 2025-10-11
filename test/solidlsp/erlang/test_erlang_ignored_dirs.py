@@ -81,7 +81,7 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     assert not any("ignored_dir" in ref["relativePath"] for ref in references), "ignored_dir should be ignored"
 
 
-@pytest.mark.timeout(90)  # Longer timeout for this complex test
+@pytest.mark.timeout(60)  # Add 60 second timeout
 @pytest.mark.xfail(reason="Known timeout issue on Ubuntu CI with Erlang LS server startup", strict=False)
 @pytest.mark.parametrize("repo_path", [Language.ERLANG], indirect=True)
 def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
