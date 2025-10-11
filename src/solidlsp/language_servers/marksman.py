@@ -69,8 +69,7 @@ class Marksman(SolidLanguageServer):
             download_name = "marksman-linux-x64"
             download_url = f"https://github.com/artempyanykh/marksman/releases/download/{marksman_version}/{download_name}"
         elif system == "Darwin":
-            # Use universal binary for macOS
-            download_name = "marksman"
+            download_name = "marksman-macos"
             download_url = f"https://github.com/artempyanykh/marksman/releases/download/{marksman_version}/{download_name}"
         elif system == "Windows":
             download_name = "marksman.exe"
