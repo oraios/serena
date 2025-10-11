@@ -4,8 +4,15 @@ Tools supporting the general workflow of the agent
 
 import json
 import platform
+from typing import Any, List
 
 from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional
+
+# Import Context for type annotation - needed for FastMCP dependency injection
+try:
+    from fastmcp import Context
+except ImportError:
+    Context = Any  # Fallback if fastmcp is not installed
 
 
 class CheckOnboardingPerformedTool(Tool):

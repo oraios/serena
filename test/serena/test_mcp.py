@@ -1,7 +1,7 @@
 """Tests for the mcp.py module in serena."""
 
 import pytest
-from mcp.server.fastmcp.tools.base import Tool as MCPTool
+# MCPTool no longer used with FastMCP 2.0
 
 from serena.agent import Tool, ToolRegistry
 from serena.config.context_mode import SerenaAgentContext

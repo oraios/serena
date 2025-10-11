@@ -11,9 +11,8 @@ from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 import docstring_parser
-from mcp.server.fastmcp import server
-from mcp.server.fastmcp.server import FastMCP, Settings
-from mcp.server.fastmcp.tools.base import Tool as MCPTool
+from fastmcp import FastMCP, Context
+from fastmcp.settings import Settings
 from pydantic_settings import SettingsConfigDict
 from sensai.util import logging
 
@@ -35,10 +34,6 @@ def configure_logging(*args, **kwargs) -> None:  # type: ignore
     # Normally, logging is configured in the MCP server startup script.
     if not logging.is_enabled():
         logging.basicConfig(level=logging.INFO, stream=sys.stderr, format=SERENA_LOG_FORMAT)
-
-
-# patch the logging configuration function in fastmcp, because it's hard-coded and broken
-server.configure_logging = configure_logging  # type: ignore
 
 
 @dataclass
@@ -165,21 +160,19 @@ class SerenaMCPFactory:
         return walk(s)
 
     @staticmethod
-    def make_mcp_tool(tool: Tool, openai_tool_compatible: bool = True) -> MCPTool:
+    def register_mcp_tool(mcp: FastMCP, tool: Tool, openai_tool_compatible: bool = True) -> None:
         """
-        Create an MCP tool from a Serena Tool instance.
+        Register a Serena Tool with a FastMCP server using FastMCP 2.0's decorator API.
 
-        :param tool: The Serena Tool instance to convert.
+        :param mcp: The FastMCP server instance.
+        :param tool: The Serena Tool instance to register.
         :param openai_tool_compatible: whether to process the tool schema to be compatible with OpenAI tools
             (doesn't accept integer, needs number instead, etc.). This allows using Serena MCP within codex.
         """
+        import inspect
+
         func_name = tool.get_name()
         func_doc = tool.get_apply_docstring() or ""
-        func_arg_metadata = tool.get_apply_fn_metadata()
-        is_async = False
-        parameters = func_arg_metadata.arg_model.model_json_schema()
-        if openai_tool_compatible:
-            parameters = SerenaMCPFactory._sanitize_for_openai_tools(parameters)
 
         docstring = docstring_parser.parse(func_doc)
 
@@ -201,43 +194,97 @@ class SerenaMCPFactory:
             prefix = " " if func_doc else ""
             func_doc = f"{func_doc}{prefix}Returns {docstring_returns_descr.strip().strip('.')}."
 
-        # Parse the parameter descriptions from the docstring and add pass its description
-        # to the parameter schema.
-        docstring_params = {param.arg_name: param for param in docstring.params}
-        parameters_properties: dict[str, dict[str, Any]] = parameters["properties"]
-        for parameter, properties in parameters_properties.items():
-            if (param_doc := docstring_params.get(parameter)) and param_doc.description:
-                param_desc = f"{param_doc.description.strip().strip('.') + '.'}"
-                properties["description"] = param_desc[0].upper() + param_desc[1:]
+        # Get the apply method and check if it's async and needs context
+        apply_method = tool.get_apply_fn()
+        is_async = inspect.iscoroutinefunction(apply_method)
 
-        def execute_fn(**kwargs) -> str:  # type: ignore
+        # Debug: Verify the tool instance is properly initialized
+        log.debug(f"Registering tool {func_name}: tool.agent={tool.agent}, bound_method.__self__={apply_method.__self__}")
+
+        # Get the signature from the CLASS method (not the bound method) for proper introspection
+        class_method = tool.__class__.apply
+        class_sig = inspect.signature(class_method)
+
+        # Build exclude_args list for FastMCP
+        # We need to exclude parameters that are FastMCP dependencies (like Context)
+        # FastMCP will inject these automatically but they shouldn't be exposed to clients
+        exclude_args = []
+
+        # Detect Context-annotated parameters for dependency injection
+        try:
+            from typing import get_type_hints, get_origin, get_args, Union
+            type_hints = get_type_hints(class_method)
+            for param_name, param_hint in type_hints.items():
+                if param_name == 'self' or param_name == 'return':
+                    continue
+                # Check if the type hint is Context or a Union containing Context
+                if param_hint is Context:
+                    exclude_args.append(param_name)
+                    log.debug(f"Tool {tool.get_name()}: excluding '{param_name}' (type: Context)")
+                elif get_origin(param_hint) is Union:
+                    # Check if Context is in the Union args
+                    args = get_args(param_hint)
+                    if Context in args:
+                        exclude_args.append(param_name)
+                        log.debug(f"Tool {tool.get_name()}: excluding '{param_name}' (type: Union with Context)")
+        except Exception as e:
+            log.warning(f"Failed to detect Context parameters for tool {tool.get_name()}: {e}")
+
+        # Instead of using exec, use tool.apply_ex which properly handles the tool instance
+        # This method is specifically designed to call tools correctly
+        def sync_wrapper(**kwargs):  # type: ignore
             return tool.apply_ex(log_call=True, catch_exceptions=True, **kwargs)
 
-        return MCPTool(
-            fn=execute_fn,
+        async def async_wrapper(**kwargs):  # type: ignore
+            # For async tools, call apply directly since apply_ex doesn't support async
+            # FastMCP will inject 'context' parameter automatically via dependency injection
+            return await apply_method(**kwargs)
+
+        # Choose the appropriate wrapper
+        wrapper = async_wrapper if is_async else sync_wrapper
+
+        # Set metadata on the wrapper
+        wrapper.__name__ = func_name
+
+        # Create a signature without 'self' for FastMCP to introspect
+        params = [p for name, p in class_sig.parameters.items() if name != 'self']
+        wrapper.__signature__ = inspect.Signature(parameters=params)  # type: ignore
+
+        # Copy type annotations from the class method
+        # FastMCP needs these to detect Context parameters for dependency injection
+        try:
+            from typing import get_type_hints
+            # Get type hints with globalns from the tool's module to resolve imports
+            type_hints = get_type_hints(class_method, globalns=tool.__class__.__module__.__dict__ if hasattr(tool.__class__.__module__, '__dict__') else None)
+            # Remove 'self' from annotations
+            wrapper.__annotations__ = {k: v for k, v in type_hints.items() if k != 'self'}
+            log.debug(f"Tool {func_name} annotations: {wrapper.__annotations__}")
+        except Exception as e:
+            log.warning(f"Failed to copy type hints for tool {func_name}: {e}")
+            # Fall back to copying raw annotations
+            wrapper.__annotations__ = {k: v for k, v in class_method.__annotations__.items() if k != 'self'}
+
+        # Register using FastMCP 2.0's decorator API
+        mcp.tool(
+            wrapper,
             name=func_name,
             description=func_doc,
-            parameters=parameters,
-            fn_metadata=func_arg_metadata,
-            is_async=is_async,
-            context_kwarg=None,
-            annotations=None,
-            title=None,
+            exclude_args=exclude_args
         )
 
     @abstractmethod
     def _iter_tools(self) -> Iterator[Tool]:
         pass
 
-    # noinspection PyProtectedMember
     def _set_mcp_tools(self, mcp: FastMCP, openai_tool_compatible: bool = False) -> None:
-        """Update the tools in the MCP server"""
+        """Register all Serena tools with the MCP server using FastMCP 2.0 API"""
         if mcp is not None:
-            mcp._tool_manager._tools = {}
+            tool_names = []
             for tool in self._iter_tools():
-                mcp_tool = self.make_mcp_tool(tool, openai_tool_compatible=openai_tool_compatible)
-                mcp._tool_manager._tools[tool.get_name()] = mcp_tool
-            log.info(f"Starting MCP server with {len(mcp._tool_manager._tools)} tools: {list(mcp._tool_manager._tools.keys())}")
+                log.debug(f"Registering tool {tool.get_name()}: tool={tool}, tool.agent={getattr(tool, 'agent', None)}")
+                self.register_mcp_tool(mcp, tool, openai_tool_compatible=openai_tool_compatible)
+                tool_names.append(tool.get_name())
+            log.info(f"Starting MCP server with {len(tool_names)} tools: {tool_names}")
 
     @abstractmethod
     def _instantiate_agent(self, serena_config: SerenaConfig, modes: list[SerenaAgentMode]) -> None:

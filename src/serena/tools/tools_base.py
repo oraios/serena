@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Protocol, Self, TypeVar
 
-from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metadata
+from serena.util.func_metadata import FuncMetadata, func_metadata
 from sensai.util import logging
 from sensai.util.string import dict_string
 
