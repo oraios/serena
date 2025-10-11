@@ -326,6 +326,42 @@ class DiagnosticsSeverity(IntEnum):
     HINT = 4
 
 
+class TextDocumentIdentifier(TypedDict):
+    """A literal to identify a text document in the client."""
+
+    uri: DocumentUri
+    """ The text document's uri. """
+
+
+class TextEdit(TypedDict):
+    """A textual edit applicable to a text document."""
+
+    range: Range
+    """ The range of the text document to be manipulated. """
+    newText: str
+    """ The string to be inserted. For delete operations use an empty string. """
+
+
+class WorkspaceEdit(TypedDict):
+    """A workspace edit represents changes to many resources managed in the workspace."""
+
+    changes: NotRequired[dict[DocumentUri, list[TextEdit]]]
+    """ Holds changes to existing resources. """
+    documentChanges: NotRequired[list]
+    """ Document changes array for versioned edits. """
+
+
+class RenameParams(TypedDict):
+    """The parameters of a RenameRequest."""
+
+    textDocument: TextDocumentIdentifier
+    """ The document to rename. """
+    position: Position
+    """ The position at which this request was sent. """
+    newName: str
+    """ The new name of the symbol. """
+
+
 class Diagnostic(TypedDict):
     """Diagnostic information for a text document."""
 
