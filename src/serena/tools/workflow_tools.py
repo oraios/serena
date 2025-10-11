@@ -32,8 +32,8 @@ class CheckOnboardingPerformedTool(Tool):
         memories = json.loads(list_memories_tool.apply())
         if len(memories) == 0:
             return (
-                "Onboarding not performed yet (no memories available). "
-                + "You should perform onboarding by calling the `onboarding` tool before proceeding with the task."
+                    "Onboarding not performed yet (no memories available). "
+                    + "You should perform onboarding by calling the `onboarding` tool before proceeding with the task."
             )
         else:
             return f"""The onboarding was already performed, below is the list of available memories.
@@ -127,6 +127,73 @@ class PrepareForNewConversationTool(Tool):
         Instructions for preparing for a new conversation. This tool should only be called on explicit user request.
         """
         return self.prompt_factory.create_prepare_for_new_conversation()
+
+
+class AskUserTool(Tool, ToolMarkerDoesNotRequireActiveProject):
+    """
+    Asks the user to make a decision when the agent is uncertain which option to select.
+    Uses MCP's elicitation feature to interactively request user input.
+    """
+
+    async def apply(self, question: str, options: List[str], ctx: Context | None = None) -> str:
+        """
+        Ask the user to choose between multiple options when you are uncertain which path to take.
+        Use this tool when you need user input to make a decision and continue processing.
+
+        :param question: The question to ask the user, providing context about the decision.
+        :param options: A list of options (at least 2) for the user to choose from. Each option should be a clear, concise description.
+        :param ctx: MCP context for elicitation (automatically injected by MCP server).
+        :return: The user's selected option or an error message.
+        """
+        if len(options) < 2:
+            return "Error: You must provide at least 2 options for the user to choose from."
+
+        # Format the options for display
+        formatted_options = "\n".join([f"- {option}" for option in options])
+
+        # If no context is provided (non-MCP execution), return formatted question
+        if ctx is None:
+            return f"""
+                    **Decision Required:**
+                    {question}
+                    **Available Options:**
+                    {formatted_options}
+                    Please respond with your selected option or provide additional guidance.
+                    """
+
+        # Use MCP elicitation for interactive user input
+        try:
+            # First, get the user's choice from the constrained options
+            result = await ctx.elicit(question, response_type=options)
+
+            # Handle the elicitation result
+            if result.action == "accept" and result.data:
+                # The data contains the selected option directly
+                user_selected = result.data
+                response = f"User selected option: {user_selected}"
+
+                # Optionally ask for additional guidance as a follow-up
+                guidance_result = await ctx.elicit(
+                    "Would you like to provide any additional guidance for this choice?",
+                    response_type=str
+                )
+                if guidance_result.action == "accept" and guidance_result.data:
+                    response += f"\n\nAdditional guidance: {guidance_result.data}"
+
+                return response
+            elif result.action == "decline":
+                return "User declined to make a selection. Please proceed with your best judgment or ask for clarification in a different way."
+            else:  # cancelled
+                return "User cancelled the decision request. The task may need to be reconsidered or abandoned."
+
+        except Exception as e:
+            return f"""
+                    **Decision Required (Elicitation unavailable: {e}):**\n
+                    {question}\n
+                    **Available Options:**\n
+                    {formatted_options}\n
+                    Please respond with your selected option or provide additional guidance.
+                    """
 
 
 class InitialInstructionsTool(Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional):

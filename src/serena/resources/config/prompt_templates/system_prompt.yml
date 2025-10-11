@@ -54,6 +54,18 @@ prompts:
     the memory names and descriptions.
     {% endif %}
 
+    {% if 'ask_user' in available_tools %}
+    When you encounter ambiguity or uncertainty about which approach to take, you can use the `ask_user` tool to present
+    the user with clear options and request their input. This is particularly useful when:
+    - Multiple valid implementation approaches exist and you're uncertain which the user prefers
+    - You need clarification on requirements or specifications
+    - There are trade-offs between different solutions that require user judgment
+    - You've identified potential risks or side effects that the user should be aware of before proceeding
+    
+    When using this tool, provide a clear, concise question and at least 2 well-defined options. The user will respond
+    with their choice, allowing you to proceed confidently with the task.
+    {% endif %}
+
     The context and modes of operation are described below. From them you can infer how to interact with your user
     and which tasks and kinds of interactions are expected of you.
 
