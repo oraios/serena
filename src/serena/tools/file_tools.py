@@ -336,24 +336,24 @@ class SearchForPatternTool(Tool):
             The globs are matched against relative file paths from the project root (not to the `relative_path` parameter that
             is used to further restrict the search).
 
-            Glob Patterns with Brace Expansion:
-                Both `paths_include_glob` and `paths_exclude_glob` support brace expansion for matching
-                multiple file types or paths in a single pattern. Use braces {} with comma-separated alternatives.
+            Supported Glob Pattern Syntax:
+                Both `paths_include_glob` and `paths_exclude_glob` support the following pattern types:
 
-                Common examples:
-                - "**/*.{py,ts}" - Match all Python and TypeScript files
-                - "**/*.{js,jsx,ts,tsx}" - Match all JavaScript and TypeScript files (common for React/web projects)
-                - "src/**/*.{py,pyi}" - Match Python source and stub files in src/
-                - "test/{unit,integration}/**/*.py" - Match Python files in either test/unit/ or test/integration/
-                - "{src,lib}/**/*.{c,cpp,h}" - Match C/C++ files in either src/ or lib/ directories
+                Standard glob patterns (via Python's fnmatch):
+                  *           - Matches zero or more characters (e.g., "*.py" matches "test.py" in root)
+                  ?           - Matches exactly one character (e.g., "src/?.py" matches "src/a.py")
+                  [seq]       - Matches any character in seq (e.g., "**/[abc]*.py" matches paths with a, b, or c)
+                  [!seq]      - Matches any character not in seq (e.g., "**/*[!_]*.py" excludes paths with underscores)
+                  **          - Matches zero or more directories (e.g., "src/**/*.py" matches all .py files under src/)
 
-                Brace expansion is particularly useful when:
-                - Searching across multiple related file extensions (e.g., .js/.ts, .py/.pyi)
-                - Targeting multiple specific directories (e.g., test/unit and test/integration)
-                - Combining multiple patterns without multiple tool calls
+                Brace expansion (Serena extension):
+                  {a,b,c}     - Expands to multiple patterns (e.g., "*.{py,ts}" → "*.py" and "*.ts")
+                  Nesting     - Multiple brace sets are supported (e.g., "{src,lib}/**/*.{c,h}")
 
-                Braces can be nested and combined with standard glob patterns (*, **, ?, etc.).
-                The expansion happens before glob matching, so "{a,b}/*.py" becomes "a/*.py" and "b/*.py".
+                Unsupported patterns:
+                  Extended globs like !(pattern), ?(pattern), +(pattern), *(pattern), @(pattern) are NOT supported.
+                  These are bash extended glob features that are not available in Python's fnmatch.
+                  Use brace expansion or multiple tool calls instead.
 
             Smartly combining the various restrictions allows you to perform very targeted searches.
 
@@ -363,11 +363,13 @@ class SearchForPatternTool(Tool):
         :param context_lines_after: Number of lines of context to include after each match
         :param paths_include_glob: optional glob pattern specifying files to include in the search.
             Matches against relative file paths from the project root (e.g., "*.py", "src/**/*.ts").
-            Supports brace expansion to match multiple file types: "**/*.{py,ts}" matches both .py and .ts files.
+            Supports standard glob patterns (*, ?, [seq], **, etc.) and brace expansion {a,b,c}.
+            See "Supported Glob Pattern Syntax" above for complete reference.
             Only matches files, not directories. If left empty, all non-ignored files will be included.
         :param paths_exclude_glob: optional glob pattern specifying files to exclude from the search.
             Matches against relative file paths from the project root (e.g., "*test*", "**/*_generated.py").
-            Supports brace expansion to exclude multiple patterns: "**/*.{min,bundle}.js" excludes minified and bundled JS.
+            Supports standard glob patterns (*, ?, [seq], **, etc.) and brace expansion {a,b,c}.
+            See "Supported Glob Pattern Syntax" above for complete reference.
             Takes precedence over paths_include_glob. Only matches files, not directories. If left empty, no files are excluded.
         :param relative_path: only subpaths of this path (relative to the repo root) will be analyzed. If a path to a single
             file is passed, only that will be searched. The path must exist, otherwise a `FileNotFoundError` is raised.
