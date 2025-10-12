@@ -274,6 +274,13 @@ def glob_match(pattern: str, path: str) -> bool:
     - ? matches a single character except /
     - [seq] matches any character in seq
 
+    Supports brace expansion:
+    - {a,b,c} expands to multiple patterns (including nesting)
+
+    Unsupported patterns:
+    - Bash extended glob features are unavailable in Python's fnmatch
+    - Extended globs like !(), ?(), +(), *(), @() are not supported
+
     :param pattern: Glob pattern (e.g., 'src/**/*.py', '**agent.py')
     :param path: File path to match against
     :return: True if path matches pattern
