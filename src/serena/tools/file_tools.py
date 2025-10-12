@@ -43,7 +43,6 @@ class ReadFileTool(Tool):
         if end_line is None:
             result_lines = result_lines[start_line:]
         else:
-            self.lines_read.add_lines_read(relative_path, (start_line, end_line))
             result_lines = result_lines[start_line : end_line + 1]
         result = "\n".join(result_lines)
 
@@ -228,9 +227,6 @@ class DeleteLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
         :param start_line: the 0-based index of the first line to be deleted
         :param end_line: the 0-based index of the last line to be deleted
         """
-        if not self.lines_read.were_lines_read(relative_path, (start_line, end_line)):
-            read_lines_tool = self.agent.get_tool(ReadFileTool)
-            return f"Error: Must call `{read_lines_tool.get_name_from_cls()}` first to read exactly the affected lines."
         code_editor = self.create_code_editor()
         code_editor.delete_lines(relative_path, start_line, end_line)
         return SUCCESS_RESULT

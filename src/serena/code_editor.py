@@ -60,9 +60,6 @@ class CodeEditor(Generic[TSymbol], ABC):
             abs_path = os.path.join(self.project_root, relative_path)
             with open(abs_path, "w", encoding="utf-8") as f:
                 f.write(edited_file.get_contents())
-            # notify agent (if provided)
-            if self.agent is not None:
-                self.agent.mark_file_modified(relative_path)
 
     @abstractmethod
     def _find_unique_symbol(self, name_path: str, relative_file_path: str) -> TSymbol:
