@@ -523,7 +523,7 @@ class SolidLanguageServerHandler:
             if request is None and isinstance(response_id, str) and response_id.isdigit():
                 request = self._pending_requests.pop(int(response_id), None)
 
-            if request is None: # need to convert response_id to the right type
+            if request is None:  # need to convert response_id to the right type
                 log.debug("Request interrupted by user or not found for ID %s", response_id)
                 return
 
