@@ -262,6 +262,7 @@ markers = [
   "perl: language server running for Perl",
   "csharp: language server running for C#",
   "elixir: language server running for Elixir",
+  "elm: language server running for Elm",
   "terraform: language server running for Terraform",
   "swift: language server running for Swift",
   "bash: language server running for Bash",

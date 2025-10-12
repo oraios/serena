@@ -230,6 +230,26 @@ jobs:
           echo "PERL_MB_OPT=--install_base \"$HOME/perl5\"" >> $GITHUB_ENV
           echo "PERL_MM_OPT=INSTALL_BASE=$HOME/perl5" >> $GITHUB_ENV
           echo "$HOME/perl5/bin" >> $GITHUB_PATH
+      - name: Install Elm
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            curl -L -o elm.gz https://github.com/elm/compiler/releases/download/0.19.1/binary-for-linux-64-bit.gz
+            gunzip elm.gz
+            chmod +x elm
+            sudo mv elm /usr/local/bin/
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            curl -L -o elm.gz https://github.com/elm/compiler/releases/download/0.19.1/binary-for-mac-64-bit.gz
+            gunzip elm.gz
+            chmod +x elm
+            sudo mv elm /usr/local/bin/
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            curl -L -o elm.zip https://github.com/elm/compiler/releases/download/0.19.1/binary-for-windows-64-bit.zip
+            unzip -o elm.zip
+            mkdir -p "$HOME/bin"
+            mv elm.exe "$HOME/bin/"
+            echo "$HOME/bin" >> $GITHUB_PATH
+          fi
       - name: Install Nix
         if: runner.os != 'Windows'  # Nix doesn't support Windows natively
         uses: cachix/install-nix-action@v30

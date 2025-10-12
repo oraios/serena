@@ -95,6 +95,7 @@ With Serena, we provide direct, out-of-the-box support for:
   * Lua (automatically downloads lua-language-server if not installed)
   * Nix (requires nixd installation)
   * Elixir (requires installation of NextLS and Elixir; **Windows not supported**)
+  * Elm (automatically downloads elm-language-server if not installed; requires Elm compiler)
   * Erlang (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls), experimental, might be slow or hang)
   * Perl (requires installation of Perl::LanguageServer)
   * AL

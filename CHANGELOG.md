@@ -2,6 +2,7 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * Language support:
+  * **Add support for Elm** via @elm-tooling/elm-language-server (automatically downloads if not installed; requires Elm compiler)
   * **Add support for Perl** via Perl::LanguageServer with LSP integration for .pl, .pm, and .t files
   * **Add support for AL (Application Language)** for Microsoft Dynamics 365 Business Central development. Requires VS Code AL extension (ms-dynamics-smb.al).
   * **Add support for R** via the R languageserver package with LSP integration, performance optimizations, and fallback symbol extraction

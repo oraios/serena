@@ -46,6 +46,7 @@ class Language(str, Enum):
     PERL = "perl"
     CLOJURE = "clojure"
     ELIXIR = "elixir"
+    ELM = "elm"
     TERRAFORM = "terraform"
     SWIFT = "swift"
     BASH = "bash"
@@ -128,6 +129,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.clj", "*.cljs", "*.cljc", "*.edn")  # codespell:ignore edn
             case self.ELIXIR:
                 return FilenameMatcher("*.ex", "*.exs")
+            case self.ELM:
+                return FilenameMatcher("*.elm")
             case self.TERRAFORM:
                 return FilenameMatcher("*.tf", "*.tfvars", "*.tfstate")
             case self.SWIFT:
@@ -223,6 +226,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.elixir_tools.elixir_tools import ElixirTools
 
                 return ElixirTools
+            case self.ELM:
+                from solidlsp.language_servers.elm_language_server import ElmLanguageServer
+
+                return ElmLanguageServer
             case self.TERRAFORM:
                 from solidlsp.language_servers.terraform_ls import TerraformLS
 
