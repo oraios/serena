@@ -90,7 +90,7 @@ class ElmLanguageServer(SolidLanguageServer):
                 RuntimeDependency(
                     id="elm-language-server",
                     description="@elm-tooling/elm-language-server package",
-                    command=["npm", "install", "--prefix", "./", "@elm-tooling/elm-language-server@2.8.1"],
+                    command=["npm", "install", "--prefix", "./", "@elm-tooling/elm-language-server@2.8.0"],
                     platform_id="any",
                 ),
             ]

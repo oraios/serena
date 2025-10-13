@@ -28,6 +28,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ">=1.17.0"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
       - name: Ensure cached directory exist before calling cache-related actions
         shell: bash
         run: |
@@ -232,24 +236,7 @@ jobs:
           echo "$HOME/perl5/bin" >> $GITHUB_PATH
       - name: Install Elm
         shell: bash
-        run: |
-          if [[ "${{ runner.os }}" == "Linux" ]]; then
-            curl -L -o elm.gz https://github.com/elm/compiler/releases/download/0.19.1/binary-for-linux-64-bit.gz
-            gunzip elm.gz
-            chmod +x elm
-            sudo mv elm /usr/local/bin/
-          elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            curl -L -o elm.gz https://github.com/elm/compiler/releases/download/0.19.1/binary-for-mac-64-bit.gz
-            gunzip elm.gz
-            chmod +x elm
-            sudo mv elm /usr/local/bin/
-          elif [[ "${{ runner.os }}" == "Windows" ]]; then
-            curl -L -o elm.zip https://github.com/elm/compiler/releases/download/0.19.1/binary-for-windows-64-bit.zip
-            unzip -o elm.zip
-            mkdir -p "$HOME/bin"
-            mv elm.exe "$HOME/bin/"
-            echo "$HOME/bin" >> $GITHUB_PATH
-          fi
+        run: npm install -g elm@0.19.1-6
       - name: Install Nix
         if: runner.os != 'Windows'  # Nix doesn't support Windows natively
         uses: cachix/install-nix-action@v30
