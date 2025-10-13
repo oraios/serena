@@ -29,6 +29,4 @@ class TestElmLanguageServer:
         assert greet_symbol is not None, "Could not find 'greet' symbol in Main.elm"
         sel_start = greet_symbol["selectionRange"]["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
-        assert any(
-            "Main.elm" in ref.get("relativePath", "") for ref in refs
-        ), "Main.elm should reference greet function"
+        assert any("Main.elm" in ref.get("relativePath", "") for ref in refs), "Main.elm should reference greet function"
