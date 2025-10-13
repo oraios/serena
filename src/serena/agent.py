@@ -21,8 +21,7 @@ from interprompt.jinja_template import JinjaTemplate
 from serena import serena_version
 from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
 from serena.config.context_mode import RegisteredContext, SerenaAgentContext, SerenaAgentMode
-from serena.config.serena_config import SerenaConfig, ToolInclusionDefinition, ToolSet, \
-    get_serena_managed_in_project_dir
+from serena.config.serena_config import SerenaConfig, ToolInclusionDefinition, ToolSet, get_serena_managed_in_project_dir
 from serena.dashboard import SerenaDashboardAPI
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory

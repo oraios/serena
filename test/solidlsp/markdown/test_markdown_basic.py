@@ -25,7 +25,7 @@ class TestMarkdownLanguageServerBasics:
     def test_markdown_request_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test request_document_symbols for markdown files."""
         # Test getting symbols from README.md
-        all_symbols, root_symbols = language_server.request_document_symbols("README.md", include_body=False)
+        all_symbols, _root_symbols = language_server.request_document_symbols("README.md", include_body=False)
 
         # Extract heading symbols (LSP Symbol Kind 15 is String, but marksman uses kind 15 for headings)
         # Note: Different markdown LSPs may use different symbol kinds for headings
@@ -38,7 +38,7 @@ class TestMarkdownLanguageServerBasics:
     @pytest.mark.parametrize("language_server", [Language.MARKDOWN], indirect=True)
     def test_markdown_request_symbols_from_guide(self, language_server: SolidLanguageServer) -> None:
         """Test symbol detection in guide.md file."""
-        all_symbols, root_symbols = language_server.request_document_symbols("guide.md", include_body=False)
+        all_symbols, _root_symbols = language_server.request_document_symbols("guide.md", include_body=False)
 
         # At least some headings should be found
         assert len(all_symbols) > 0, f"Should find headings in guide.md, found {len(all_symbols)}"
@@ -46,7 +46,7 @@ class TestMarkdownLanguageServerBasics:
     @pytest.mark.parametrize("language_server", [Language.MARKDOWN], indirect=True)
     def test_markdown_request_symbols_from_api(self, language_server: SolidLanguageServer) -> None:
         """Test symbol detection in api.md file."""
-        all_symbols, root_symbols = language_server.request_document_symbols("api.md", include_body=False)
+        all_symbols, _root_symbols = language_server.request_document_symbols("api.md", include_body=False)
 
         # Should detect headings from api.md
         assert len(all_symbols) > 0, f"Should find headings in api.md, found {len(all_symbols)}"
@@ -55,7 +55,7 @@ class TestMarkdownLanguageServerBasics:
     def test_markdown_request_document_symbols_with_body(self, language_server: SolidLanguageServer) -> None:
         """Test request_document_symbols with body extraction."""
         # Test with include_body=True
-        all_symbols, root_symbols = language_server.request_document_symbols("README.md", include_body=True)
+        all_symbols, _root_symbols = language_server.request_document_symbols("README.md", include_body=True)
 
         # Should have found some symbols
         assert len(all_symbols) > 0, "Should find symbols in README.md"
