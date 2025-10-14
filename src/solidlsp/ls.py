@@ -1632,7 +1632,7 @@ class SolidLanguageServer(ABC):
         line: int,
         column: int,
         new_name: str,
-    ) -> "ls_types.WorkspaceEdit | None":
+    ) -> ls_types.WorkspaceEdit | None:
         """
         Rename a symbol at the given position to a new name.
 
@@ -1642,8 +1642,6 @@ class SolidLanguageServer(ABC):
         :param new_name: The new name for the symbol
         :return: A WorkspaceEdit containing the changes needed to rename the symbol, or None if rename is not supported
         """
-        from . import ls_types
-
         params = ls_types.RenameParams(
             textDocument=ls_types.TextDocumentIdentifier(
                 uri=pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()
