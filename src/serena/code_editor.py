@@ -303,13 +303,16 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         assert symbol.location.line is not None
         assert symbol.location.column is not None
 
-        rename_result = self._lang_server.request_rename_symbol_edit(
-            relative_file_path=relative_file_path, line=symbol.location.line, column=symbol.location.column, new_name=new_name
-        )
-        if rename_result is None:
-            raise ValueError(
-                f"Language server for {self._lang_server.language_id} returned no rename edits for symbol '{name_path}'. "
-                f"The symbol might not support renaming."
+        try:
+            rename_result = self._lang_server.request_rename_symbol_edit(
+                relative_file_path=relative_file_path, line=symbol.location.line, column=symbol.location.column, new_name=new_name
+            )
+        except Exception as e:
+            raise Exception(f"The current language server {self._lang_server.__class__} might not support renaming.") from e
+        if not rename_result:
+            raise Exception(
+                f"Failed to retrieve rename edits for symbol '{name_path}'. "
+                f"The current language server {self._lang_server.__class__} might not support renaming."
             )
         return self._apply_workspace_edit(rename_result)
 
