@@ -8,7 +8,6 @@ import platform
 import sys
 import threading
 import webbrowser
-from collections import defaultdict
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from logging import Logger
@@ -42,22 +41,6 @@ SUCCESS_RESULT = "OK"
 
 class ProjectNotFoundError(Exception):
     pass
-
-
-class LinesRead:
-    def __init__(self) -> None:
-        self.files: dict[str, set[tuple[int, int]]] = defaultdict(lambda: set())
-
-    def add_lines_read(self, relative_path: str, lines: tuple[int, int]) -> None:
-        self.files[relative_path].add(lines)
-
-    def were_lines_read(self, relative_path: str, lines: tuple[int, int]) -> bool:
-        lines_read_in_file = self.files[relative_path]
-        return lines in lines_read_in_file
-
-    def invalidate_lines_read(self, relative_path: str) -> None:
-        if relative_path in self.files:
-            del self.files[relative_path]
 
 
 class MemoriesManager:
@@ -139,7 +122,6 @@ class SerenaAgent:
         self._active_project: Project | None = None
         self.language_server: SolidLanguageServer | None = None
         self.memories_manager: MemoriesManager | None = None
-        self.lines_read: LinesRead | None = None
 
         # adjust log level
         serena_log_level = self.serena_config.log_level
@@ -444,7 +426,6 @@ class SerenaAgent:
 
         # initialize project-specific instances which do not depend on the language server
         self.memories_manager = MemoriesManager(project.project_root)
-        self.lines_read = LinesRead()
 
         def init_language_server() -> None:
             # start the language server
@@ -603,10 +584,6 @@ class SerenaAgent:
 
     def print_tool_overview(self) -> None:
         ToolRegistry().print_tool_overview(self._active_tools.values())
-
-    def mark_file_modified(self, relative_path: str) -> None:
-        assert self.lines_read is not None
-        self.lines_read.invalidate_lines_read(relative_path)
 
     def __del__(self) -> None:
         """

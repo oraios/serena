@@ -517,8 +517,15 @@ class SolidLanguageServerHandler:
         """
         Handle the response received from the server for a request, using the id to determine the request
         """
+        response_id = response["id"]
         with self._response_handlers_lock:
-            request = self._pending_requests.pop(response["id"])
+            request = self._pending_requests.pop(response_id, None)
+            if request is None and isinstance(response_id, str) and response_id.isdigit():
+                request = self._pending_requests.pop(int(response_id), None)
+
+            if request is None:  # need to convert response_id to the right type
+                log.debug("Request interrupted by user or not found for ID %s", response_id)
+                return
 
         if "result" in response and "error" not in response:
             request.on_result(response["result"])
