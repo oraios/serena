@@ -1142,6 +1142,6 @@
   	allowed_actions := ["read", "write", "delete"]
   	allowed_actions[_] == action
   }
-
+  
   '''
 # ---
