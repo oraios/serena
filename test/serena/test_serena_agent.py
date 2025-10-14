@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import sys
 import time
 
 import pytest
@@ -86,7 +87,10 @@ class TestSerenaAgent:
                 "is_admin",
                 "Function",
                 os.path.join("policies", "authz.rego"),
-                marks=pytest.mark.rego,
+                marks=[
+                    pytest.mark.rego,
+                    pytest.mark.skipif(sys.platform == "win32", reason="Regal LSP has Windows path handling bug - see https://github.com/StyraInc/regal/issues/1683"),
+                ],
             ),
         ],
         indirect=["serena_agent"],

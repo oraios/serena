@@ -452,7 +452,7 @@ class ReplaceBodyTest(EditingTest):
                 "is_admin",
                 REGO_REPLACED_BODY,
             ),
-            marks=pytest.mark.rego,
+            marks=[pytest.mark.rego, pytest.mark.skipif(sys.platform == "win32", reason="Regal LSP has Windows path handling bug - see https://github.com/StyraInc/regal/issues/1683")],
         ),
     ],
 )
