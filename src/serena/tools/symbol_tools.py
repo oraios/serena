@@ -82,6 +82,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
     Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
     """
 
+    # noinspection PyDefaultArgument
     def apply(
         self,
         name_path: str,
@@ -165,6 +166,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
     Finds symbols that reference the symbol at the given location (optionally filtered by type).
     """
 
+    # noinspection PyDefaultArgument
     def apply(
         self,
         name_path: str,
