@@ -318,31 +318,6 @@ class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
         :param new_name: the new name for the symbol
         :return: result summary indicating success or failure
         """
-        symbol_retriever = self.create_language_server_symbol_retriever()
-        language_server = symbol_retriever.get_language_server()
-
-        # Find the symbol first to get its location
-        symbols = symbol_retriever.find_by_name(name_path, within_relative_path=relative_path)
-        if len(symbols) == 0:
-            raise ValueError(f"No symbol with name '{name_path}' found in file '{relative_path}'")
-        if len(symbols) > 1:
-            raise ValueError(
-                f"Found {len(symbols)} symbols with name '{name_path}' in file '{relative_path}'. Rename requires a unique symbol."
-            )
-
-        symbol = symbols[0]
-        if not symbol.location.has_position_in_file():
-            raise ValueError(f"Symbol '{name_path}' does not have a valid position in file for renaming")
-
-        rename_result = language_server.rename_symbol(
-            relative_file_path=relative_path, line=symbol.location.line, column=symbol.location.column, new_name=new_name
-        )
-        if rename_result is None:
-            raise ValueError(
-                f"Language server for {language_server.language_id} returned no rename edits for symbol '{name_path}'. "
-                f"The symbol might not support renaming."
-            )
-
-        # Apply the workspace edit through the language server
-        language_server.apply_workspace_edit(rename_result)
-        return f"Successfully renamed '{name_path}' to '{new_name}'"
+        code_editor = self.create_code_editor()
+        modified_files = code_editor.rename_symbol(name_path, relative_file_path=relative_path, new_name=new_name)
+        return f"Successfully renamed '{name_path}' to '{new_name}' in {len(modified_files)} file(s)"
