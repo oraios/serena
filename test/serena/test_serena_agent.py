@@ -87,10 +87,7 @@ class TestSerenaAgent:
                 "is_admin",
                 "Function",
                 os.path.join("policies", "authz.rego"),
-                marks=[
-                    pytest.mark.rego,
-                    pytest.mark.skipif(sys.platform == "win32", reason="Regal v0.36.1 has Windows path handling issues"),
-                ],
+                marks=pytest.mark.rego,
             ),
         ],
         indirect=["serena_agent"],
