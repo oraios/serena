@@ -1,7 +1,6 @@
 """Tests for Rego language server (Regal) functionality."""
 
 import os
-import sys
 
 import pytest
 
