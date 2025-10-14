@@ -852,6 +852,7 @@ Here is the list of Serena's default tools with a short description (output of `
 * `find_file`: Finds files in the given relative paths
 * `find_referencing_symbols`: Finds symbols that reference the symbol at the given location (optionally filtered by type).
 * `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
+* `get_current_config`: Prints the current configuration of the agent, including the active and available projects, tools, contexts, and modes.
 * `get_symbols_overview`: Gets an overview of the top-level symbols defined in a given file.
 * `insert_after_symbol`: Inserts content after the end of the definition of a given symbol.
 * `insert_before_symbol`: Inserts content before the beginning of the definition of a given symbol.
@@ -861,6 +862,7 @@ Here is the list of Serena's default tools with a short description (output of `
 * `prepare_for_new_conversation`: Provides instructions for preparing for a new conversation (in order to continue with the necessary context).
 * `read_file`: Reads a file within the project directory.
 * `read_memory`: Reads the memory with the given name from Serena's project-specific memory store.
+* `rename_symbol`: Renames a symbol throughout the codebase using language server refactoring capabilities.
 * `replace_regex`: Replaces content in a file by using regular expressions.
 * `replace_symbol_body`: Replaces the full definition of a symbol.
 * `search_for_pattern`: Performs a search for a pattern in the project.
