@@ -14,7 +14,6 @@ from sensai.util.logging import LogTime
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
-from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -60,19 +59,6 @@ class ElmLanguageServer(SolidLanguageServer):
         """
         Setup runtime dependencies for Elm Language Server and return the command to start the server.
         """
-        platform_id = PlatformUtils.get_platform_id()
-
-        valid_platforms = [
-            PlatformId.LINUX_x64,
-            PlatformId.LINUX_arm64,
-            PlatformId.OSX,
-            PlatformId.OSX_x64,
-            PlatformId.OSX_arm64,
-            PlatformId.WIN_x64,
-            PlatformId.WIN_arm64,
-        ]
-        assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for Elm language server at the moment"
-
         # Check if elm-language-server is already installed globally
         system_elm_ls = shutil.which("elm-language-server")
         if system_elm_ls:
