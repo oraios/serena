@@ -1684,7 +1684,7 @@ class SolidLanguageServer(ABC):
                         # Delete the old text and insert the new text
                         self.delete_text_between_positions(relative_path, start_pos, end_pos)
                         if edit.get("newText"):
-                            self.insert_text_at_position(relative_path, start_pos.line, start_pos.character, edit["newText"])
+                            self.insert_text_at_position(relative_path, start_pos["line"], start_pos["character"], edit["newText"])
 
         elif hasattr(workspace_edit, "documentChanges") and workspace_edit.documentChanges:
             # Handle the 'documentChanges' format (more complex, includes creates/renames/deletes)
