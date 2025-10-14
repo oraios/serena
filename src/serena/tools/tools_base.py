@@ -18,7 +18,7 @@ from serena.util.inspection import iter_subclasses
 from solidlsp.ls_exceptions import SolidLSPException
 
 if TYPE_CHECKING:
-    from serena.agent import LinesRead, MemoriesManager, SerenaAgent
+    from serena.agent import MemoriesManager, SerenaAgent
     from serena.code_editor import CodeEditor
 
 log = logging.getLogger(__name__)
@@ -63,11 +63,6 @@ class Component(ABC):
             return LanguageServerCodeEditor(self.create_language_server_symbol_retriever(), agent=self.agent)
         else:
             return JetBrainsCodeEditor(project=self.project, agent=self.agent)
-
-    @property
-    def lines_read(self) -> "LinesRead":
-        assert self.agent.lines_read is not None
-        return self.agent.lines_read
 
 
 class ToolMarker:
