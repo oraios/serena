@@ -1,4 +1,4 @@
-package utils.helpers
+package utils
 
 # User validation
 is_valid_user(user) {

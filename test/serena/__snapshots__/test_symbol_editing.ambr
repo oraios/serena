@@ -1108,17 +1108,17 @@
 # ---
 # name: test_replace_body[test_case2]
   '''
-  package authz
-  
-  import data.utils.helpers
-  
+  package policies
+
+  import data.utils
+
   # Default deny
   default allow := false
-  
+
   # Admin access rule
   allow {
   	input.user.role == "admin"
-  	helpers.is_valid_user(input.user)
+  	utils.is_valid_user(input.user)
   }
   
   # Read access for authenticated users

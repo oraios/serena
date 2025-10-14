@@ -1,6 +1,6 @@
-package authz
+package policies
 
-import data.utils.helpers
+import data.utils
 
 # Default deny
 default allow := false
@@ -8,7 +8,7 @@ default allow := false
 # Admin access rule
 allow {
 	input.user.role == "admin"
-	helpers.is_valid_user(input.user)
+	utils.is_valid_user(input.user)
 }
 
 # Read access for authenticated users
