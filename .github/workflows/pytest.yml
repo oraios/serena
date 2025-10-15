@@ -256,6 +256,12 @@ jobs:
           fi
 
           echo "$HOME/.nix-profile/bin" >> $GITHUB_PATH
+      - name: Verify Nix package build
+        if: runner.os != 'Windows'  # Nix only supported on Linux/macOS
+        shell: bash
+        run: |
+          # Verify the flake builds successfully
+          nix build --no-link
       - name: Install Regal (Rego Language Server)
         shell: bash
         run: |
