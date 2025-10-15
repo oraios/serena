@@ -65,29 +65,61 @@ class TestRegoLanguageServer:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "is_admin"), "is_admin function not found in symbol tree"
 
     @pytest.mark.parametrize("language_server", [Language.REGO], indirect=True)
-    def test_request_definition(self, language_server: SolidLanguageServer) -> None:
-        """Test go-to-definition for Rego symbols."""
-        # In authz.rego, the allow rule references helpers.is_valid_user
+    def test_request_definition_within_file(self, language_server: SolidLanguageServer) -> None:
+        """Test go-to-definition for symbols within the same file."""
+        # In authz.rego, check_permission references admin_roles
         file_path = os.path.join("policies", "authz.rego")
 
-        # Get document symbols to find a good position to test
+        # Get document symbols
         symbols = language_server.request_document_symbols(file_path)
         symbol_list = symbols[0] if isinstance(symbols, tuple) else symbols
 
-        # Find the allow symbol (should reference helpers.is_valid_user)
+        # Find the is_admin symbol which references admin_roles
+        is_admin_symbol = next((s for s in symbol_list if s.get("name") == "is_admin"), None)
+        assert is_admin_symbol is not None, "is_admin symbol should always be found in authz.rego"
+        assert "range" in is_admin_symbol, "is_admin symbol should have a range"
+
+        # Request definition from within is_admin (line 25, which references admin_roles at line 21)
+        # Line 25 is: admin_roles[_] == user.role
+        line = is_admin_symbol["range"]["start"]["line"] + 1
+        char = 4  # Position at "admin_roles"
+
+        definitions = language_server.request_definition(file_path, line, char)
+        assert definitions is not None and len(definitions) > 0, "Should find definition for admin_roles"
+
+        # Verify the definition points to admin_roles in the same file
+        assert any(
+            "authz.rego" in defn.get("relativePath", "") for defn in definitions
+        ), "Definition should be in authz.rego"
+
+    @pytest.mark.parametrize("language_server", [Language.REGO], indirect=True)
+    def test_request_definition_across_files(self, language_server: SolidLanguageServer) -> None:
+        """Test go-to-definition for symbols across files (cross-file references)."""
+        # In authz.rego line 11, the allow rule calls utils.is_valid_user
+        # This function is defined in utils/helpers.rego
+        file_path = os.path.join("policies", "authz.rego")
+
+        # Get document symbols
+        symbols = language_server.request_document_symbols(file_path)
+        symbol_list = symbols[0] if isinstance(symbols, tuple) else symbols
+
+        # Find the allow symbol
         allow_symbol = next((s for s in symbol_list if s.get("name") == "allow"), None)
+        assert allow_symbol is not None, "allow symbol should always be found in authz.rego"
+        assert "range" in allow_symbol, "allow symbol should have a range"
 
-        if allow_symbol and "range" in allow_symbol:
-            # Try to get definition from within the allow rule
-            # Position should be somewhere in the rule body
-            line = allow_symbol["range"]["start"]["line"] + 1  # Move into the rule body
-            char = 0
+        # Request definition from line 11 where utils.is_valid_user is called
+        # Line 11: utils.is_valid_user(input.user)
+        line = 10  # 0-indexed, so line 11 in file is line 10 in LSP
+        char = 7   # Position at "is_valid_user" in "utils.is_valid_user"
 
-            definitions = language_server.request_definition(file_path, line, char)
+        definitions = language_server.request_definition(file_path, line, char)
+        assert definitions is not None and len(definitions) > 0, "Should find cross-file definition for is_valid_user"
 
-            # Some LSPs may not support cross-file definitions well
-            # So we just check that the call doesn't error
-            assert definitions is not None, "request_definition should return a result (even if empty)"
+        # Verify the definition points to helpers.rego (cross-file)
+        assert any(
+            "helpers.rego" in defn.get("relativePath", "") for defn in definitions
+        ), "Definition should be in utils/helpers.rego (cross-file reference)"
 
     @pytest.mark.parametrize("language_server", [Language.REGO], indirect=True)
     def test_find_symbols_validation(self, language_server: SolidLanguageServer) -> None:
