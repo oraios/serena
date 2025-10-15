@@ -701,11 +701,14 @@ class SolidLanguageServer(ABC):
         for item in response["items"]:
             new_item: ls_types.Diagnostic = {
                 "uri": pathlib.Path(str(PurePath(self.repository_root_path, relative_file_path))).as_uri(),
-                "severity": item["severity"],
-                "message": item["message"],
-                "range": item["range"],
-                "code": item["code"],
+                "severity": item.get("severity"),
+                "message": item.get("message", ""),
+                "range": item.get("range", {}),
+                "code": item.get("code", ""),
             }
+            # Add source field if present
+            if "source" in item:
+                new_item["source"] = item["source"]
             ret.append(ls_types.Diagnostic(new_item))
 
         return ret
