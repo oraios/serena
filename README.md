@@ -725,7 +725,7 @@ This function is provided, because clients like Claude Desktop may fail to termi
 when they themselves are closed.
 
 ### Serena and GIT worktrees
-[git-worktree](https://git-scm.com/docs/git-worktree) can be an excellent way to parallize your work. More on this in [Anthropic: Run parallel Claude Code sessions with Git worktrees](https://docs.claude.com/en/docs/claude-code/common-workflows#run-parallel-claude-code-sessions-with-git-worktrees).
+[git-worktree](https://git-scm.com/docs/git-worktree) can be an excellent way to parallelize your work. More on this in [Anthropic: Run parallel Claude Code sessions with Git worktrees](https://docs.claude.com/en/docs/claude-code/common-workflows#run-parallel-claude-code-sessions-with-git-worktrees).
 
 When it comes to serena AND git-worktree AND larger projects (that take longer to index), the recommended way is to COPY your `$ORIG_PROJECT/.serena/cache` to `$GIT_WORKTREE/.serena/cache`. After you have performed pre-indexing of your project described in [Project Activation & Indexing](#project-activation--indexing) section. To avoid having to re-index per each git work tree that you create. 
 
