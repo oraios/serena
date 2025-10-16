@@ -375,14 +375,14 @@ Serena is a great way to make Claude Code both cheaper and more powerful!
 From your project directory, add serena with a command like this,
 
 ```shell
-claude mcp add serena -- <serena-mcp-server> --context ide-assistant --project $(pwd)
+claude mcp add serena -- <serena-mcp-server> --context ide-assistant --project "$(pwd)"
 ```
 
 where `<serena-mcp-server>` is your way of [running the Serena MCP server](#running-the-serena-mcp-server).
 For example, when using `uvx`, you would run
 
 ```shell
-claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context ide-assistant --project $(pwd)
+claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context ide-assistant --project "$(pwd)"
 ```
 
 ℹ️ Serena comes with an instruction text, and Claude needs to read it to properly use Serena's tools.
