@@ -150,7 +150,6 @@ class Project:
                 return True
         else:
             relative_path = path
-
         return self._is_ignored_relative_path(str(relative_path), ignore_non_source_files=ignore_non_source_files)
 
     def is_path_in_project(self, path: str | Path) -> bool:
@@ -176,22 +175,21 @@ class Project:
         abs_path = Path(self.project_root) / relative_path
         return abs_path.exists()
 
-    def validate_relative_path(self, relative_path: str, require_not_ignored: bool = False) -> None:
+    def validate_path_is_available_for_serena(self, relative_path: str, allow_ignored: bool = True) -> None:
         """
         Validates that the given relative path to an existing file/dir is safe to read or edit,
-        meaning it's inside the project directory.
+        meaning it's inside the project directory and not ignored (unless allow_ignored is False).
 
         Passing a path to a non-existing file will lead to a `FileNotFoundError`.
 
         :param relative_path: the path to validate, relative to the project root
-        :param require_not_ignored: if True, the path must not be ignored according to the project's ignore settings
+        :param allow_ignored: whether to allow ignored paths (validation will fail if the path is ignored and this is False)
         """
         if not self.is_path_in_project(relative_path):
             raise ValueError(f"{relative_path=} points to path outside of the repository root; cannot access for safety reasons")
 
-        if require_not_ignored:
-            if self.is_ignored_path(relative_path):
-                raise ValueError(f"Path {relative_path} is ignored; cannot access for safety reasons")
+        if not allow_ignored and self.is_ignored_path(relative_path):
+            raise ValueError(f"Path {relative_path} is ignored; cannot access for safety reasons")
 
     def gather_source_files(self, relative_path: str = "") -> list[str]:
         """Retrieves relative paths of all source files, optionally limited to the given path

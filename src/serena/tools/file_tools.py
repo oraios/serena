@@ -36,7 +36,7 @@ class ReadFileTool(Tool):
             required for the task.
         :return: the full text of the file at the given relative path
         """
-        self.project.validate_relative_path(relative_path, require_not_ignored=True)
+        self.project.validate_path_is_available_for_serena(relative_path, allow_ignored=False)
 
         result = self.project.read_file(relative_path)
         result_lines = result.splitlines()
@@ -67,7 +67,7 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
         will_overwrite_existing = abs_path.exists()
 
         if will_overwrite_existing:
-            self.project.validate_relative_path(relative_path, require_not_ignored=True)
+            self.project.validate_path_is_available_for_serena(relative_path, allow_ignored=False)
         else:
             assert abs_path.is_relative_to(
                 self.get_project_root()
@@ -107,7 +107,7 @@ class ListDirTool(Tool):
             }
             return json.dumps(error_info)
 
-        self.project.validate_relative_path(relative_path, require_not_ignored=skip_ignored_files)
+        self.project.validate_path_is_available_for_serena(relative_path, allow_ignored=not skip_ignored_files)
 
         dirs, files = scan_directory(
             os.path.join(self.get_project_root(), relative_path),
@@ -134,7 +134,7 @@ class FindFileTool(Tool):
         :param relative_path: the relative path to the directory to search in; pass "." to scan the project root
         :return: a JSON object with the list of matching files
         """
-        self.project.validate_relative_path(relative_path, require_not_ignored=True)
+        self.project.validate_path_is_available_for_serena(relative_path, allow_ignored=False)
 
         dir_to_scan = os.path.join(self.get_project_root(), relative_path)
 
@@ -192,7 +192,7 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
             If this is set to False and the regex matches multiple occurrences, an error will be returned
             (and you may retry with a revised, more specific regex).
         """
-        self.project.validate_relative_path(relative_path, require_not_ignored=True)
+        self.project.validate_path_is_available_for_serena(relative_path, allow_ignored=False)
         with EditedFileContext(relative_path, self.agent) as context:
             original_content = context.get_original_content()
             updated_content, n = re.subn(regex, repl, original_content, flags=re.DOTALL | re.MULTILINE)
