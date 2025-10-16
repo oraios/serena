@@ -164,6 +164,7 @@ Several videos and blog posts have talked about Serena:
   * [Prompting Strategies](#prompting-strategies)
   * [Running Out of Context](#running-out-of-context)
   * [Serena's Logs: The Dashboard and GUI Tool](#serenas-logs-the-dashboard-and-gui-tool)
+  * [Serena and GIT worktrees](#serena-and-git-worktrees)
 - [Comparison with Other Coding Agents](#comparison-with-other-coding-agents)
   * [Subscription-Based Coding Agents](#subscription-based-coding-agents)
   * [API-Based Coding Agents](#api-based-coding-agents)
@@ -722,6 +723,12 @@ The web dashboard will display usage statistics of Serena's tools if you set  `r
 In addition to viewing logs, both tools allow to shut down the Serena agent.
 This function is provided, because clients like Claude Desktop may fail to terminate the MCP server subprocess
 when they themselves are closed.
+
+### Serena and GIT worktrees
+[git-worktree](https://git-scm.com/docs/git-worktree) can be an excellent way to parallize your work. More on this in [Anthropic: Run parallel Claude Code sessions with Git worktrees](https://docs.claude.com/en/docs/claude-code/common-workflows#run-parallel-claude-code-sessions-with-git-worktrees).
+
+When it comes to serena AND git-worktree AND larger projects (that take longer to index), the recommended way is to COPY your `$ORIG_PROJECT/.serena/cache` to `$GIT_WORKTREE/.serena/cache`. After you have performed pre-indexing of your project described in [Project Activation & Indexing](#project-activation--indexing) section. To avoid having to re-index per each git work tree that you create. 
+
 
 ## Comparison with Other Coding Agents
 
