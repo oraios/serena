@@ -105,6 +105,12 @@ class Project:
 
         :return: whether the path should be ignored
         """
+        # special case, never ignore the project root itself
+        # If the user ignores hidden files, "." might match against the corresponding PathSpec pattern.
+        # The empty string also points to the project root and should never be ignored.
+        if str(relative_path) in [".", ""]:
+            return False
+
         abs_path = os.path.join(self.project_root, relative_path)
         if not os.path.exists(abs_path):
             raise FileNotFoundError(f"File {abs_path} not found, the ignore check cannot be performed")
