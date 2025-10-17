@@ -85,6 +85,7 @@ With Serena, we provide direct, out-of-the-box support for:
   * C/C++ (you may experience issues with finding references, we are working on it)
   * Zig (requires installation of ZLS - Zig Language Server)
   * C#
+  * F# (requires .NET SDK 8.0+ and uses FsAutoComplete/Ionide LSP server)
   * Ruby (by default, uses [ruby-lsp](https://github.com/Shopify/ruby-lsp), specify ruby_solargraph as your language to use the previous solargraph based implementation)
   * Swift
   * Kotlin (uses the pre-alpha [official kotlin LS](https://github.com/Kotlin/kotlin-lsp), some issues may appear)
