@@ -14,6 +14,7 @@ from enum import Enum
 from pathlib import Path, PurePath
 
 import requests
+from charset_normalizer import from_path
 
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_logger import LanguageServerLogger
@@ -173,8 +174,15 @@ class FileUtils:
             logger.log(f"File read '{file_path}' failed: File does not exist.", logging.ERROR)
             raise SolidLSPException(f"File read '{file_path}' failed: File does not exist.")
         try:
-            with open(file_path, encoding=encoding) as inp_file:
-                return inp_file.read()
+            try:
+                with open(file_path, encoding=encoding) as inp_file:
+                    return inp_file.read()
+            except UnicodeDecodeError as ude:
+                results = from_path(file_path)
+                match = results.best()
+                if match:
+                    return match.raw.decode(match.encoding)
+                raise ude
         except Exception as exc:
             logger.log(f"File read '{file_path}' failed to read with encoding '{encoding}': {exc}", logging.ERROR)
             raise SolidLSPException("File read failed.") from None
