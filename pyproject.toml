@@ -167,6 +167,7 @@ ignore = [
   "PLC0415",
   "RUF002",
   "RUF005",
+  "RUF059",
   "SIM118",
   "SIM108",
   "E501",
@@ -259,8 +260,10 @@ markers = [
   "rust: language server running for Rust",
   "typescript: language server running for TypeScript",
   "php: language server running for PHP",
+  "perl: language server running for Perl",
   "csharp: language server running for C#",
   "elixir: language server running for Elixir",
+  "elm: language server running for Elm",
   "terraform: language server running for Terraform",
   "swift: language server running for Swift",
   "bash: language server running for Bash",
@@ -275,6 +278,8 @@ markers = [
   "scala: language server running for Scala",
   "scala: language server running for Scala",
   "al: language server running for AL (Microsoft Dynamics 365 Business Central)",
+  "rego: language server running for Rego",
+  "markdown: language server running for Markdown",
 ]
 
 [tool.codespell]

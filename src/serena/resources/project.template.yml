@@ -5,6 +5,10 @@
 #  * csharp: Requires the presence of a .sln file in the project folder.
 language: python
 
+# the encoding used by text files in the project
+# For a list of possible encodings, see https://docs.python.org/3.11/library/codecs.html#standard-encodings
+encoding: "utf-8"
+
 # whether to use the project's gitignore file to ignore files
 # Added on 2025-04-07
 ignore_all_files_in_gitignore: true

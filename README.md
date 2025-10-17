@@ -95,8 +95,11 @@ With Serena, we provide direct, out-of-the-box support for:
   * Lua (automatically downloads lua-language-server if not installed)
   * Nix (requires nixd installation)
   * Elixir (requires installation of NextLS and Elixir; **Windows not supported**)
+  * Elm (automatically downloads elm-language-server if not installed; requires Elm compiler)
   * Erlang (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls), experimental, might be slow or hang)
+  * Perl (requires installation of Perl::LanguageServer)
   * AL
+  * Markdown (automatically downloads marksman if not installed, experimental, must be explicitly specified via `--language markdown` when generating project config - primarily useful for documentation-heavy projects)
 
 Support for further languages can easily be added by providing a shallow adapter for a new language server implementation,
 see Serena's [memory on that](.serena/memories/adding_new_language_support_guide.md).
@@ -161,6 +164,7 @@ Several videos and blog posts have talked about Serena:
   * [Prompting Strategies](#prompting-strategies)
   * [Running Out of Context](#running-out-of-context)
   * [Serena's Logs: The Dashboard and GUI Tool](#serenas-logs-the-dashboard-and-gui-tool)
+  * [Serena and GIT worktrees](#serena-and-git-worktrees)
 - [Comparison with Other Coding Agents](#comparison-with-other-coding-agents)
   * [Subscription-Based Coding Agents](#subscription-based-coding-agents)
   * [API-Based Coding Agents](#api-based-coding-agents)
@@ -372,14 +376,14 @@ Serena is a great way to make Claude Code both cheaper and more powerful!
 From your project directory, add serena with a command like this,
 
 ```shell
-claude mcp add serena -- <serena-mcp-server> --context ide-assistant --project $(pwd)
+claude mcp add serena -- <serena-mcp-server> --context ide-assistant --project "$(pwd)"
 ```
 
 where `<serena-mcp-server>` is your way of [running the Serena MCP server](#running-the-serena-mcp-server).
 For example, when using `uvx`, you would run
 
 ```shell
-claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context ide-assistant --project $(pwd)
+claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context ide-assistant --project "$(pwd)"
 ```
 
 ℹ️ Serena comes with an instruction text, and Claude needs to read it to properly use Serena's tools.
@@ -719,6 +723,12 @@ The web dashboard will display usage statistics of Serena's tools if you set  `r
 In addition to viewing logs, both tools allow to shut down the Serena agent.
 This function is provided, because clients like Claude Desktop may fail to terminate the MCP server subprocess
 when they themselves are closed.
+
+### Serena and GIT worktrees
+[git-worktree](https://git-scm.com/docs/git-worktree) can be an excellent way to parallelize your work. More on this in [Anthropic: Run parallel Claude Code sessions with Git worktrees](https://docs.claude.com/en/docs/claude-code/common-workflows#run-parallel-claude-code-sessions-with-git-worktrees).
+
+When it comes to serena AND git-worktree AND larger projects (that take longer to index), the recommended way is to COPY your `$ORIG_PROJECT/.serena/cache` to `$GIT_WORKTREE/.serena/cache`. After you have performed pre-indexing of your project described in [Project Activation & Indexing](#project-activation--indexing) section. To avoid having to re-index per each git work tree that you create. 
+
 
 ## Comparison with Other Coding Agents
 

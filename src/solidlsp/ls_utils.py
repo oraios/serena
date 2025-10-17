@@ -165,7 +165,7 @@ class FileUtils:
     """
 
     @staticmethod
-    def read_file(logger: LanguageServerLogger, file_path: str) -> str:
+    def read_file(logger: LanguageServerLogger, file_path: str, encoding: str) -> str:
         """
         Reads the file at the given path and returns the contents as a string.
         """
@@ -173,10 +173,10 @@ class FileUtils:
             logger.log(f"File read '{file_path}' failed: File does not exist.", logging.ERROR)
             raise SolidLSPException(f"File read '{file_path}' failed: File does not exist.")
         try:
-            with open(file_path, encoding="utf-8") as inp_file:
+            with open(file_path, encoding=encoding) as inp_file:
                 return inp_file.read()
         except Exception as exc:
-            logger.log(f"File read '{file_path}' failed to read with encoding 'utf-8': {exc}", logging.ERROR)
+            logger.log(f"File read '{file_path}' failed to read with encoding '{encoding}': {exc}", logging.ERROR)
             raise SolidLSPException("File read failed.") from None
 
     @staticmethod
@@ -233,6 +233,9 @@ class FileUtils:
             elif archive_type == "gz":
                 with gzip.open(tmp_file_name, "rb") as f_in, open(target_path, "wb") as f_out:
                     shutil.copyfileobj(f_in, f_out)
+            elif archive_type == "binary":
+                # For single binary files, just move to target without extraction
+                shutil.move(tmp_file_name, target_path)
             else:
                 logger.log(f"Unknown archive type '{archive_type}' for extraction", logging.ERROR)
                 raise SolidLSPException(f"Unknown archive type '{archive_type}'")

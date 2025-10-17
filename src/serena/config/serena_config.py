@@ -19,10 +19,11 @@ from sensai.util.logging import LogTime, datetime_tag
 from sensai.util.string import ToStringMixin
 
 from serena.constants import (
-    DEFAULT_ENCODING,
+    DEFAULT_SOURCE_FILE_ENCODING,
     PROJECT_TEMPLATE_FILE,
     REPO_ROOT,
     SERENA_CONFIG_TEMPLATE_FILE,
+    SERENA_FILE_ENCODING,
     SERENA_MANAGED_DIR_IN_HOME,
     SERENA_MANAGED_DIR_NAME,
 )
@@ -166,7 +167,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
     read_only: bool = False
     ignore_all_files_in_gitignore: bool = True
     initial_prompt: str = ""
-    encoding: str = DEFAULT_ENCODING
+    encoding: str = DEFAULT_SOURCE_FILE_ENCODING
 
     SERENA_DEFAULT_PROJECT_FILE = "project.yml"
 
@@ -244,7 +245,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
             read_only=data.get("read_only", False),
             ignore_all_files_in_gitignore=data.get("ignore_all_files_in_gitignore", True),
             initial_prompt=data.get("initial_prompt", ""),
-            encoding=data.get("encoding", DEFAULT_ENCODING),
+            encoding=data.get("encoding", DEFAULT_SOURCE_FILE_ENCODING),
         )
 
     @classmethod
@@ -259,7 +260,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                 return cls.autogenerate(project_root)
             else:
                 raise FileNotFoundError(f"Project configuration file not found: {yaml_path}")
-        with open(yaml_path, encoding="utf-8") as f:
+        with open(yaml_path, encoding=SERENA_FILE_ENCODING) as f:
             yaml_data = yaml.safe_load(f)
         if "project_name" not in yaml_data:
             yaml_data["project_name"] = project_root.name
@@ -483,11 +484,11 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         """
         log.info(f"Found legacy project configuration file {path}, migrating to in-project configuration.")
         try:
-            with open(path, encoding="utf-8") as f:
+            with open(path, encoding=SERENA_FILE_ENCODING) as f:
                 project_config_data = yaml.safe_load(f)
             if "project_name" not in project_config_data:
                 project_name = path.stem
-                with open(path, "a", encoding="utf-8") as f:
+                with open(path, "a", encoding=SERENA_FILE_ENCODING) as f:
                     f.write(f"\nproject_name: {project_name}")
             project_root = project_config_data["project_root"]
             shutil.move(str(path), str(Path(project_root) / ProjectConfig.rel_path_to_project_yml()))

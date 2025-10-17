@@ -39,9 +39,7 @@ class Intelephense(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in ["node_modules", "vendor", "cache"]
 
     @classmethod
-    def _setup_runtime_dependencies(
-        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> str:
+    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, solidlsp_settings: SolidLSPSettings) -> list[str]:
         """
         Setup runtime dependencies for Intelephense and return the command to start the server.
         """
@@ -84,13 +82,13 @@ class Intelephense(SolidLanguageServer):
             intelephense_executable_path
         ), f"intelephense executable not found at {intelephense_executable_path}, something went wrong."
 
-        return f"{intelephense_executable_path} --stdio"
+        return [intelephense_executable_path, "--stdio"]
 
     def __init__(
         self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
     ):
         # Setup runtime dependencies before initializing
-        intelephense_cmd = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
+        intelephense_cmd = self._setup_runtime_dependencies(logger, solidlsp_settings)
 
         super().__init__(
             config,

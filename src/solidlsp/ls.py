@@ -176,6 +176,7 @@ class SolidLanguageServer(ABC):
                     as opposed to HTTP, TCP modes supported by some language servers.
         """
         self._solidlsp_settings = solidlsp_settings
+        self._encoding = config.encoding
         self.logger = logger
         self.repository_root_path: str = repository_root_path
         self.logger.log(
@@ -391,7 +392,7 @@ class SolidLanguageServer(ABC):
             yield self.open_file_buffers[uri]
             self.open_file_buffers[uri].ref_count -= 1
         else:
-            contents = FileUtils.read_file(self.logger, absolute_file_path)
+            contents = FileUtils.read_file(self.logger, absolute_file_path, self._encoding)
 
             version = 0
             self.open_file_buffers[uri] = LSPFileBuffer(uri, contents, version, self.language_id, 1)
@@ -1022,7 +1023,20 @@ class SolidLanguageServer(ABC):
 
             for contained_dir_or_file_name in contained_dir_or_file_names:
                 contained_dir_or_file_abs_path = os.path.join(abs_dir_path, contained_dir_or_file_name)
-                contained_dir_or_file_rel_path = str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path))
+
+                # obtain relative path
+                try:
+                    contained_dir_or_file_rel_path = str(
+                        Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path)
+                    )
+                except ValueError as e:
+                    # Typically happens when the path is not under the repository root (e.g., symlink pointing outside)
+                    self.logger.log(
+                        f"Skipping path {contained_dir_or_file_abs_path}; likely outside of the repository root {self.repository_root_path} [cause: {e}]",
+                        logging.WARNING,
+                    )
+                    continue
+
                 if self.is_ignored_path(contained_dir_or_file_rel_path):
                     self.logger.log(f"Skipping item: {contained_dir_or_file_rel_path}\n(because it should be ignored)", logging.DEBUG)
                     continue
@@ -1395,7 +1409,7 @@ class SolidLanguageServer(ABC):
         # checking if the line is empty, unfortunately ugly and duplicating code, but I don't want to refactor
         with self.open_file(relative_file_path):
             absolute_file_path = str(PurePath(self.repository_root_path, relative_file_path))
-            content = FileUtils.read_file(self.logger, absolute_file_path)
+            content = FileUtils.read_file(self.logger, absolute_file_path, self._encoding)
             if content.split("\n")[line].strip() == "":
                 self.logger.log(
                     f"Passing empty lines to request_container_symbol is currently not supported, {relative_file_path=}, {line=}",
@@ -1612,6 +1626,52 @@ class SolidLanguageServer(ABC):
             ret.append(ls_types.UnifiedSymbolInformation(**item))
 
         return ret
+
+    def request_rename_symbol_edit(
+        self,
+        relative_file_path: str,
+        line: int,
+        column: int,
+        new_name: str,
+    ) -> ls_types.WorkspaceEdit | None:
+        """
+        Retrieve a WorkspaceEdit for renaming the symbol at the given location to the new name.
+        Does not apply the edit, just retrieves it. In order to actually rename the symbol, call apply_workspace_edit.
+
+        :param relative_file_path: The relative path to the file containing the symbol
+        :param line: The 0-indexed line number of the symbol
+        :param column: The 0-indexed column number of the symbol
+        :param new_name: The new name for the symbol
+        :return: A WorkspaceEdit containing the changes needed to rename the symbol, or None if rename is not supported
+        """
+        params = ls_types.RenameParams(
+            textDocument=ls_types.TextDocumentIdentifier(
+                uri=pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()
+            ),
+            position=ls_types.Position(line=line, character=column),
+            newName=new_name,
+        )
+
+        return self.server.send.rename(params)
+
+    def apply_text_edits_to_file(self, relative_path: str, edits: list[ls_types.TextEdit]) -> None:
+        """
+        Apply a list of text edits to a file.
+
+        :param relative_path: The relative path of the file to edit
+        :param edits: List of TextEdit dictionaries to apply
+        """
+        with self.open_file(relative_path):
+            # Sort edits by position (latest first) to avoid position shifts
+            sorted_edits = sorted(edits, key=lambda e: (e["range"]["start"]["line"], e["range"]["start"]["character"]), reverse=True)
+
+            for edit in sorted_edits:
+                start_pos = ls_types.Position(line=edit["range"]["start"]["line"], character=edit["range"]["start"]["character"])
+                end_pos = ls_types.Position(line=edit["range"]["end"]["line"], character=edit["range"]["end"]["character"])
+
+                # Delete the old text and insert the new text
+                self.delete_text_between_positions(relative_path, start_pos, end_pos)
+                self.insert_text_at_position(relative_path, start_pos["line"], start_pos["character"], edit["newText"])
 
     def start(self) -> "SolidLanguageServer":
         """

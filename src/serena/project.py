@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from pathlib import Path
@@ -5,8 +6,8 @@ from typing import Any
 
 import pathspec
 
-from serena.config.serena_config import DEFAULT_TOOL_TIMEOUT, ProjectConfig
-from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
+from serena.config.serena_config import DEFAULT_TOOL_TIMEOUT, ProjectConfig, get_serena_managed_in_project_dir
+from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
 from serena.text_utils import MatchedConsecutiveLines, search_files
 from serena.util.file_system import GitignoreParser, match_path
 from solidlsp import SolidLanguageServer
@@ -17,11 +18,46 @@ from solidlsp.settings import SolidLSPSettings
 log = logging.getLogger(__name__)
 
 
+class MemoriesManager:
+    def __init__(self, project_root: str):
+        self._memory_dir = Path(get_serena_managed_in_project_dir(project_root)) / "memories"
+        self._memory_dir.mkdir(parents=True, exist_ok=True)
+        self._encoding = SERENA_FILE_ENCODING
+
+    def _get_memory_file_path(self, name: str) -> Path:
+        # strip all .md from the name. Models tend to get confused, sometimes passing the .md extension and sometimes not.
+        name = name.replace(".md", "")
+        filename = f"{name}.md"
+        return self._memory_dir / filename
+
+    def load_memory(self, name: str) -> str:
+        memory_file_path = self._get_memory_file_path(name)
+        if not memory_file_path.exists():
+            return f"Memory file {name} not found, consider creating it with the `write_memory` tool if you need it."
+        with open(memory_file_path, encoding=self._encoding) as f:
+            return f.read()
+
+    def save_memory(self, name: str, content: str) -> str:
+        memory_file_path = self._get_memory_file_path(name)
+        with open(memory_file_path, "w", encoding=self._encoding) as f:
+            f.write(content)
+        return f"Memory {name} written."
+
+    def list_memories(self) -> list[str]:
+        return [f.name.replace(".md", "") for f in self._memory_dir.iterdir() if f.is_file()]
+
+    def delete_memory(self, name: str) -> str:
+        memory_file_path = self._get_memory_file_path(name)
+        memory_file_path.unlink()
+        return f"Memory {name} deleted."
+
+
 class Project:
     def __init__(self, project_root: str, project_config: ProjectConfig, is_newly_created: bool = False):
         self.project_root = project_root
         self.project_config = project_config
-        self.is_newly_created = is_newly_created
+        self.memories_manager = MemoriesManager(project_root)
+        self._is_newly_created = is_newly_created
 
         # create .gitignore file in the project's Serena data folder if not yet present
         serena_data_gitignore_path = os.path.join(self.path_to_serena_data_folder(), ".gitignore")
@@ -75,6 +111,25 @@ class Project:
     def path_to_project_yml(self) -> str:
         return os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
 
+    def get_activation_message(self) -> str:
+        """
+        :return: a message providing information about the project upon activation (e.g. programming language, memories, initial prompt)
+        """
+        if self._is_newly_created:
+            msg = f"Created and activated a new project with name '{self.project_name}' at {self.project_root}. "
+        else:
+            msg = f"The project with name '{self.project_name}' at {self.project_root} is activated."
+        msg += f"\nProgramming language: {self.project_config.language.value}; file encoding: {self.project_config.encoding}"
+        memories = self.memories_manager.list_memories()
+        if memories:
+            msg += (
+                f"\nAvailable project memories: {json.dumps(memories)}\n"
+                + "Use the `read_memory` tool to read these memories later if they are relevant to the task."
+            )
+        if self.project_config.initial_prompt:
+            msg += f"\nAdditional project-specific instructions:\n {self.project_config.initial_prompt}"
+        return msg
+
     def read_file(self, relative_path: str) -> str:
         """
         Reads a file relative to the project root.
@@ -105,6 +160,12 @@ class Project:
 
         :return: whether the path should be ignored
         """
+        # special case, never ignore the project root itself
+        # If the user ignores hidden files, "." might match against the corresponding PathSpec pattern.
+        # The empty string also points to the project root and should never be ignored.
+        if str(relative_path) in [".", ""]:
+            return False
+
         abs_path = os.path.join(self.project_root, relative_path)
         if not os.path.exists(abs_path):
             raise FileNotFoundError(f"File {abs_path} not found, the ignore check cannot be performed")
@@ -170,18 +231,22 @@ class Project:
         abs_path = Path(self.project_root) / relative_path
         return abs_path.exists()
 
-    def validate_relative_path(self, relative_path: str) -> None:
+    def validate_relative_path(self, relative_path: str, require_not_ignored: bool = False) -> None:
         """
         Validates that the given relative path to an existing file/dir is safe to read or edit,
-        meaning it's inside the project directory and is not ignored by git.
+        meaning it's inside the project directory.
 
         Passing a path to a non-existing file will lead to a `FileNotFoundError`.
+
+        :param relative_path: the path to validate, relative to the project root
+        :param require_not_ignored: if True, the path must not be ignored according to the project's ignore settings
         """
         if not self.is_path_in_project(relative_path):
             raise ValueError(f"{relative_path=} points to path outside of the repository root; cannot access for safety reasons")
 
-        if self.is_ignored_path(relative_path):
-            raise ValueError(f"Path {relative_path} is ignored; cannot access for safety reasons")
+        if require_not_ignored:
+            if self.is_ignored_path(relative_path):
+                raise ValueError(f"Path {relative_path} is ignored; cannot access for safety reasons")
 
     def gather_source_files(self, relative_path: str = "") -> list[str]:
         """Retrieves relative paths of all source files, optionally limited to the given path
@@ -245,6 +310,7 @@ class Project:
             relative_file_paths,
             pattern,
             root_path=self.project_root,
+            file_reader=self.read_file,
             context_lines_before=context_lines_before,
             context_lines_after=context_lines_after,
             paths_include_glob=paths_include_glob,
@@ -297,6 +363,7 @@ class Project:
             code_language=self.language,
             ignored_paths=self._ignored_patterns,
             trace_lsp_communication=trace_lsp_communication,
+            encoding=self.project_config.encoding,
         )
         ls_logger = LanguageServerLogger(log_level=log_level)
 

@@ -235,6 +235,10 @@ tmp/
 /test/resources/repos/swift/test_repo/.build
 /test/resources/repos/swift/test_repo/.swiftpm
 
+# Elm
+/test/resources/repos/elm/test_repo/.elm/
+/test/resources/repos/elm/test_repo/elm-stuff/
+
 # Scala
 .metals/
 .bsp/

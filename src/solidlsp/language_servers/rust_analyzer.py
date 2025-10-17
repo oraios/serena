@@ -406,7 +406,7 @@ class RustAnalyzer(SolidLanguageServer):
                         "overrideCommand": None,
                         "useRustcWrapper": True,
                     },
-                    "cfgs": {},
+                    "cfgs": [],
                     "extraArgs": [],
                     "extraEnv": {},
                     "features": [],

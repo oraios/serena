@@ -28,6 +28,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ">=1.17.0"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
       - name: Ensure cached directory exist before calling cache-related actions
         shell: bash
         run: |
@@ -213,6 +217,26 @@ jobs:
             echo "$LUA_LS_DIR/bin" >> $GITHUB_PATH
             rm lua-ls.zip
           fi
+      - name: Install Perl::LanguageServer
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y cpanminus build-essential libanyevent-perl libio-aio-perl
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            brew install cpanminus
+          fi
+          PERL_MM_USE_DEFAULT=1 cpanm --notest --force Perl::LanguageServer
+          # Set up Perl local::lib environment for subsequent steps
+          echo "PERL5LIB=$HOME/perl5/lib/perl5${PERL5LIB:+:${PERL5LIB}}" >> $GITHUB_ENV
+          echo "PERL_LOCAL_LIB_ROOT=$HOME/perl5${PERL_LOCAL_LIB_ROOT:+:${PERL_LOCAL_LIB_ROOT}}" >> $GITHUB_ENV
+          echo "PERL_MB_OPT=--install_base \"$HOME/perl5\"" >> $GITHUB_ENV
+          echo "PERL_MM_OPT=INSTALL_BASE=$HOME/perl5" >> $GITHUB_ENV
+          echo "$HOME/perl5/bin" >> $GITHUB_PATH
+      - name: Install Elm
+        shell: bash
+        run: npm install -g elm@0.19.1-6
       - name: Install Nix
         if: runner.os != 'Windows'  # Nix doesn't support Windows natively
         uses: cachix/install-nix-action@v30
@@ -224,14 +248,47 @@ jobs:
         run: |
           # Install nixd using nix
           nix profile install github:nix-community/nixd
-          
+
           # Verify nixd is installed and working
           if ! command -v nixd &> /dev/null; then
             echo "nixd installation failed or not in PATH"
             exit 1
           fi
-          
+
           echo "$HOME/.nix-profile/bin" >> $GITHUB_PATH
+      - name: Verify Nix package build
+        if: runner.os != 'Windows'  # Nix only supported on Linux/macOS
+        shell: bash
+        run: |
+          # Verify the flake builds successfully
+          nix build --no-link
+      - name: Install Regal (Rego Language Server)
+        shell: bash
+        run: |
+          REGAL_VERSION="0.36.1"
+
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            if [[ "$(uname -m)" == "x86_64" ]]; then
+              curl -L -o regal https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Linux_x86_64
+            else
+              curl -L -o regal https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Linux_arm64
+            fi
+            chmod +x regal
+            sudo mv regal /usr/local/bin/
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            if [[ "$(uname -m)" == "x86_64" ]]; then
+              curl -L -o regal https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Darwin_x86_64
+            else
+              curl -L -o regal https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Darwin_arm64
+            fi
+            chmod +x regal
+            sudo mv regal /usr/local/bin/
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            curl -L -o regal.exe https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Windows_x86_64.exe
+            mkdir -p "$HOME/bin"
+            mv regal.exe "$HOME/bin/"
+            echo "$HOME/bin" >> $GITHUB_PATH
+          fi
       - name: Install uv
         shell: bash
         run: curl -LsSf https://astral.sh/uv/install.sh | sh

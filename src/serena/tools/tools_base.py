@@ -10,7 +10,7 @@ from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metada
 from sensai.util import logging
 from sensai.util.string import dict_string
 
-from serena.project import Project
+from serena.project import MemoriesManager, Project
 from serena.prompt_factory import PromptFactory
 from serena.symbol import LanguageServerSymbolRetriever
 from serena.util.class_decorators import singleton
@@ -18,7 +18,7 @@ from serena.util.inspection import iter_subclasses
 from solidlsp.ls_exceptions import SolidLSPException
 
 if TYPE_CHECKING:
-    from serena.agent import LinesRead, MemoriesManager, SerenaAgent
+    from serena.agent import SerenaAgent
     from serena.code_editor import CodeEditor
 
 log = logging.getLogger(__name__)
@@ -42,8 +42,7 @@ class Component(ABC):
 
     @property
     def memories_manager(self) -> "MemoriesManager":
-        assert self.agent.memories_manager is not None
-        return self.agent.memories_manager
+        return self.project.memories_manager
 
     def create_language_server_symbol_retriever(self) -> LanguageServerSymbolRetriever:
         if not self.agent.is_using_language_server():
@@ -63,11 +62,6 @@ class Component(ABC):
             return LanguageServerCodeEditor(self.create_language_server_symbol_retriever(), agent=self.agent)
         else:
             return JetBrainsCodeEditor(project=self.project, agent=self.agent)
-
-    @property
-    def lines_read(self) -> "LinesRead":
-        assert self.agent.lines_read is not None
-        return self.agent.lines_read
 
 
 class ToolMarker:
@@ -247,7 +241,7 @@ class Tool(Component):
                 if not isinstance(self, ToolMarkerDoesNotRequireActiveProject):
                     if self.agent._active_project is None:
                         return (
-                            "Error: No active project. Ask to user to select a project from this list: "
+                            "Error: No active project. Ask the user to provide the project path or to select a project from this list of known projects: "
                             + f"{self.agent.serena_config.project_names}"
                         )
                     if self.agent.is_using_language_server() and not self.agent.is_language_server_running():
