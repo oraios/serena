@@ -238,3 +238,11 @@ tmp/
 # Elm
 /test/resources/repos/elm/test_repo/.elm/
 /test/resources/repos/elm/test_repo/elm-stuff/
+
+# Scala
+.metals/
+.bsp/
+.scala-build/
+.bloop/
+bootstrap
+test/resources/repos/scala/.bloop/
