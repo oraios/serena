@@ -8,7 +8,7 @@ from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.settings import SolidLSPSettings
 
-# pytest.skip("Scala must be compiled for these tests to run through, which is a huge hassle", allow_module_level=True)
+pytest.skip("Scala must be compiled for these tests to run through, which is a huge hassle", allow_module_level=True)
 
 MAIN_FILE_PATH = "src/main/scala/com/example/Main.scala"
 

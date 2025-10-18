@@ -154,7 +154,7 @@ class Language(str, Enum):
             case self.MARKDOWN:
                 return FilenameMatcher("*.md", "*.markdown")
             case self.SCALA:
-                return FilenameMatcher("*.scala", "*.sbt")                
+                return FilenameMatcher("*.scala", "*.sbt")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
