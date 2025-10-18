@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import pathspec
+from charset_normalizer import from_path
 
 from serena.config.serena_config import DEFAULT_TOOL_TIMEOUT, ProjectConfig, get_serena_managed_in_project_dir
 from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
@@ -140,7 +141,14 @@ class Project:
         abs_path = Path(self.project_root) / relative_path
         if not abs_path.exists():
             raise FileNotFoundError(f"File not found: {abs_path}")
-        return abs_path.read_text(encoding=self.project_config.encoding)
+        try:
+            return abs_path.read_text(encoding=self.project_config.encoding)
+        except UnicodeDecodeError as ude:
+            results = from_path(abs_path)
+            match = results.best()
+            if match:
+                return match.raw.decode(match.encoding)
+            raise ude
 
     def get_ignore_spec(self) -> pathspec.PathSpec:
         """
