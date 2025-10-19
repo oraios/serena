@@ -10,7 +10,7 @@ from solidlsp.settings import SolidLSPSettings
 
 pytest.skip("Scala must be compiled for these tests to run through, which is a huge hassle", allow_module_level=True)
 
-MAIN_FILE_PATH = "src/main/scala/com/example/Main.scala"
+MAIN_FILE_PATH = os.path.join("src", "main", "scala", "com", "example", "Main.scala")
 
 pytestmark = pytest.mark.scala
 
