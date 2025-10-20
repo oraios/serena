@@ -181,7 +181,7 @@ class FileUtils:
                 results = charset_normalizer.from_path(file_path)
                 match = results.best()
                 if match:
-                    log.warning(f"Could not decode {file_path} with encoding='{encoding}'; using best match '{match.encoding}' instead") 
+                    logger.log(f"Could not decode {file_path} with encoding='{encoding}'; using best match '{match.encoding}' instead", logging.WARNING)
                     return match.raw.decode(match.encoding)
                 raise ude
         except Exception as exc:

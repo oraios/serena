@@ -139,7 +139,8 @@ class Project:
         :return: the content of the file
         """
         abs_path = Path(self.project_root) / relative_path
-        return FileUtils.read_file(log, str(abs_path), self.project_config.encoding)
+        ls_logger = LanguageServerLogger(log_level=log.level)
+        return FileUtils.read_file(ls_logger, str(abs_path), self.project_config.encoding)
 
     def get_ignore_spec(self) -> pathspec.PathSpec:
         """
