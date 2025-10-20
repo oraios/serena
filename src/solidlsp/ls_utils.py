@@ -13,8 +13,8 @@ import zipfile
 from enum import Enum
 from pathlib import Path, PurePath
 
-import requests
 import charset_normalizer
+import requests
 
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_logger import LanguageServerLogger
@@ -181,7 +181,10 @@ class FileUtils:
                 results = charset_normalizer.from_path(file_path)
                 match = results.best()
                 if match:
-                    logger.log(f"Could not decode {file_path} with encoding='{encoding}'; using best match '{match.encoding}' instead", logging.WARNING)
+                    logger.log(
+                        f"Could not decode {file_path} with encoding='{encoding}'; using best match '{match.encoding}' instead",
+                        logging.WARNING,
+                    )
                     return match.raw.decode(match.encoding)
                 raise ude
         except Exception as exc:
