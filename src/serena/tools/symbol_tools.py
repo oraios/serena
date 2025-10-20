@@ -319,5 +319,5 @@ class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
         :return: result summary indicating success or failure
         """
         code_editor = self.create_code_editor()
-        modified_files = code_editor.rename_symbol(name_path, relative_file_path=relative_path, new_name=new_name)
-        return f"Successfully renamed '{name_path}' to '{new_name}' in {len(modified_files)} file(s)"
+        status_message = code_editor.rename_symbol(name_path, relative_file_path=relative_path, new_name=new_name)
+        return status_message

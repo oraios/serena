@@ -10,7 +10,7 @@ from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metada
 from sensai.util import logging
 from sensai.util.string import dict_string
 
-from serena.project import Project
+from serena.project import MemoriesManager, Project
 from serena.prompt_factory import PromptFactory
 from serena.symbol import LanguageServerSymbolRetriever
 from serena.util.class_decorators import singleton
@@ -18,7 +18,7 @@ from serena.util.inspection import iter_subclasses
 from solidlsp.ls_exceptions import SolidLSPException
 
 if TYPE_CHECKING:
-    from serena.agent import MemoriesManager, SerenaAgent
+    from serena.agent import SerenaAgent
     from serena.code_editor import CodeEditor
 
 log = logging.getLogger(__name__)
@@ -42,8 +42,7 @@ class Component(ABC):
 
     @property
     def memories_manager(self) -> "MemoriesManager":
-        assert self.agent.memories_manager is not None
-        return self.agent.memories_manager
+        return self.project.memories_manager
 
     def create_language_server_symbol_retriever(self) -> LanguageServerSymbolRetriever:
         if not self.agent.is_using_language_server():

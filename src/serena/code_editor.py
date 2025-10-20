@@ -34,7 +34,7 @@ class CodeEditor(Generic[TSymbol], ABC):
         if agent is not None:
             project = agent.get_active_project()
             if project is not None:
-                encoding = agent.get_active_project().project_config.encoding
+                encoding = project.project_config.encoding
         self.encoding = encoding
 
     class EditedFile(ABC):
@@ -218,14 +218,14 @@ class CodeEditor(Generic[TSymbol], ABC):
             edited_file.delete_text_between_positions(start_pos, end_pos)
 
     @abstractmethod
-    def rename_symbol(self, name_path: str, relative_file_path: str, new_name: str) -> list[str]:
+    def rename_symbol(self, name_path: str, relative_file_path: str, new_name: str) -> str:
         """
         Renames the symbol with the given name throughout the codebase.
 
         :param name_path: the name path of the symbol to rename
         :param relative_file_path: the relative path of the file containing the symbol
         :param new_name: the new name for the symbol
-        :return: list of files that were modified
+        :return: a status message
         """
 
 
@@ -292,18 +292,11 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
             relative_path = os.path.relpath(file_path, self._lang_server.repository_root_path)
             modified_relative_paths.append(relative_path)
             with self._edited_file_context(relative_path) as edited_file:
-                edited_file = cast(self.EditedFile, edited_file)
+                edited_file = cast(LanguageServerCodeEditor.EditedFile, edited_file)
                 edited_file.apply_text_edits(edits)
         return modified_relative_paths
 
-    def rename_symbol(self, name_path: str, relative_file_path: str, new_name: str) -> list[str]:
-        """
-        Renames the symbol with the given name throughout the codebase.
-        :param name_path:
-        :param relative_file_path:
-        :param new_name:
-        :return: list of files that were modified
-        """
+    def rename_symbol(self, name_path: str, relative_file_path: str, new_name: str) -> str:
         symbol = self._find_unique_symbol(name_path, relative_file_path)
         if not symbol.location.has_position_in_file():
             raise ValueError(f"Symbol '{name_path}' does not have a valid position in file for renaming")
@@ -320,7 +313,9 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
                 f"Language server for {self._lang_server.language_id} returned no rename edits for symbol '{name_path}'. "
                 f"The symbol might not support renaming."
             )
-        return self._apply_workspace_edit(rename_result)
+        modified_files = self._apply_workspace_edit(rename_result)
+        msg = f"Successfully renamed '{name_path}' to '{new_name}' in {len(modified_files)} file(s)"
+        return msg
 
 
 class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
@@ -363,9 +358,13 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
                 )
             return JetBrainsSymbol(symbols[0], self._project)
 
-    def rename_symbol(self, name_path: str, relative_file_path: str, new_name: str) -> list[str]:
-        """
-        Renames the symbol with the given name throughout the codebase.
-        Not yet implemented for JetBrains code editor.
-        """
-        raise NotImplementedError("Symbol renaming is not yet supported for JetBrains code editor")
+    def rename_symbol(self, name_path: str, relative_file_path: str, new_name: str) -> str:
+        with JetBrainsPluginClient.from_project(self._project) as client:
+            client.rename_symbol(
+                name_path=name_path,
+                relative_path=relative_file_path,
+                new_name=new_name,
+                rename_in_comments=False,
+                rename_in_text_occurrences=False,
+            )
+            return "Success"

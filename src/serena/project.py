@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from pathlib import Path
@@ -6,8 +7,8 @@ from typing import Any
 import pathspec
 from charset_normalizer import from_path
 
-from serena.config.serena_config import DEFAULT_TOOL_TIMEOUT, ProjectConfig
-from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
+from serena.config.serena_config import DEFAULT_TOOL_TIMEOUT, ProjectConfig, get_serena_managed_in_project_dir
+from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
 from serena.text_utils import MatchedConsecutiveLines, search_files
 from serena.util.file_system import GitignoreParser, match_path
 from solidlsp import SolidLanguageServer
@@ -18,11 +19,46 @@ from solidlsp.settings import SolidLSPSettings
 log = logging.getLogger(__name__)
 
 
+class MemoriesManager:
+    def __init__(self, project_root: str):
+        self._memory_dir = Path(get_serena_managed_in_project_dir(project_root)) / "memories"
+        self._memory_dir.mkdir(parents=True, exist_ok=True)
+        self._encoding = SERENA_FILE_ENCODING
+
+    def _get_memory_file_path(self, name: str) -> Path:
+        # strip all .md from the name. Models tend to get confused, sometimes passing the .md extension and sometimes not.
+        name = name.replace(".md", "")
+        filename = f"{name}.md"
+        return self._memory_dir / filename
+
+    def load_memory(self, name: str) -> str:
+        memory_file_path = self._get_memory_file_path(name)
+        if not memory_file_path.exists():
+            return f"Memory file {name} not found, consider creating it with the `write_memory` tool if you need it."
+        with open(memory_file_path, encoding=self._encoding) as f:
+            return f.read()
+
+    def save_memory(self, name: str, content: str) -> str:
+        memory_file_path = self._get_memory_file_path(name)
+        with open(memory_file_path, "w", encoding=self._encoding) as f:
+            f.write(content)
+        return f"Memory {name} written."
+
+    def list_memories(self) -> list[str]:
+        return [f.name.replace(".md", "") for f in self._memory_dir.iterdir() if f.is_file()]
+
+    def delete_memory(self, name: str) -> str:
+        memory_file_path = self._get_memory_file_path(name)
+        memory_file_path.unlink()
+        return f"Memory {name} deleted."
+
+
 class Project:
     def __init__(self, project_root: str, project_config: ProjectConfig, is_newly_created: bool = False):
         self.project_root = project_root
         self.project_config = project_config
-        self.is_newly_created = is_newly_created
+        self.memories_manager = MemoriesManager(project_root)
+        self._is_newly_created = is_newly_created
 
         # create .gitignore file in the project's Serena data folder if not yet present
         serena_data_gitignore_path = os.path.join(self.path_to_serena_data_folder(), ".gitignore")
@@ -75,6 +111,25 @@ class Project:
 
     def path_to_project_yml(self) -> str:
         return os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
+
+    def get_activation_message(self) -> str:
+        """
+        :return: a message providing information about the project upon activation (e.g. programming language, memories, initial prompt)
+        """
+        if self._is_newly_created:
+            msg = f"Created and activated a new project with name '{self.project_name}' at {self.project_root}. "
+        else:
+            msg = f"The project with name '{self.project_name}' at {self.project_root} is activated."
+        msg += f"\nProgramming language: {self.project_config.language.value}; file encoding: {self.project_config.encoding}"
+        memories = self.memories_manager.list_memories()
+        if memories:
+            msg += (
+                f"\nAvailable project memories: {json.dumps(memories)}\n"
+                + "Use the `read_memory` tool to read these memories later if they are relevant to the task."
+            )
+        if self.project_config.initial_prompt:
+            msg += f"\nAdditional project-specific instructions:\n {self.project_config.initial_prompt}"
+        return msg
 
     def read_file(self, relative_path: str) -> str:
         """

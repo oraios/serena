@@ -136,7 +136,7 @@ class JetBrainsPluginClient(ToStringMixin):
         self, name_path: str, relative_path: str | None = None, include_body: bool = False, depth: int = 0, include_location: bool = False
     ) -> dict[str, Any]:
         """
-        Find symbols by name.
+        Finds symbols by name.
 
         :param name_path: the name path to match
         :param relative_path: the relative path to which to restrict the search
@@ -156,7 +156,7 @@ class JetBrainsPluginClient(ToStringMixin):
 
     def find_references(self, name_path: str, relative_path: str) -> dict[str, Any]:
         """
-        Find references to a symbol.
+        Finds references to a symbol.
 
         :param name_path: the name path of the symbol
         :param relative_path: the relative path
@@ -171,6 +171,27 @@ class JetBrainsPluginClient(ToStringMixin):
         """
         request_data = {"relativePath": relative_path}
         return self._make_request("POST", "/getSymbolsOverview", request_data)
+
+    def rename_symbol(
+        self, name_path: str, relative_path: str, new_name: str, rename_in_comments: bool, rename_in_text_occurrences: bool
+    ) -> None:
+        """
+        Renames a symbol.
+
+        :param name_path: the name path of the symbol
+        :param relative_path: the relative path
+        :param new_name: the new name for the symbol
+        :param rename_in_comments: whether to rename in comments
+        :param rename_in_text_occurrences: whether to rename in text occurrences
+        """
+        request_data = {
+            "namePath": name_path,
+            "relativePath": relative_path,
+            "newName": new_name,
+            "renameInComments": rename_in_comments,
+            "renameInTextOccurrences": rename_in_text_occurrences,
+        }
+        self._make_request("POST", "/renameSymbol", request_data)
 
     def is_service_available(self) -> bool:
         try:

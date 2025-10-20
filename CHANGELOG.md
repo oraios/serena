@@ -1,7 +1,11 @@
 # latest
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Tools:
+  * Added `RenameSymbolTool` for renaming symbols across the codebase (if LS supports this operation).
+
 * Language support:
+  * **Add support for Scala** via Metals language server (requires some [manual setup](docs/scala_setup_guide_for_serena.md))
   * **Add support for Elm** via @elm-tooling/elm-language-server (automatically downloads if not installed; requires Elm compiler)
   * **Add support for Perl** via Perl::LanguageServer with LSP integration for .pl, .pm, and .t files
   * **Add support for AL (Application Language)** for Microsoft Dynamics 365 Business Central development. Requires VS Code AL extension (ms-dynamics-smb.al).
