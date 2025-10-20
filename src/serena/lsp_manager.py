@@ -418,13 +418,13 @@ class LSPManager:
         Example:
             >>> manager.shutdown_all_sync()
         """
+        import asyncio
         try:
             asyncio.run(self.shutdown_all())
         except RuntimeError as e:
             # Handle case where event loop is already running
             if "asyncio.run() cannot be called from a running event loop" in str(e):
                 log.warning("Event loop already running, creating new loop for shutdown")
-                import asyncio
 
                 loop = asyncio.new_event_loop()
                 try:
