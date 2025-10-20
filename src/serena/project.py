@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 import pathspec
-from charset_normalizer import from_path
 
 from serena.config.serena_config import DEFAULT_TOOL_TIMEOUT, ProjectConfig, get_serena_managed_in_project_dir
 from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
@@ -14,6 +13,7 @@ from serena.util.file_system import GitignoreParser, match_path
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_utils import FileUtils
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -139,16 +139,7 @@ class Project:
         :return: the content of the file
         """
         abs_path = Path(self.project_root) / relative_path
-        if not abs_path.exists():
-            raise FileNotFoundError(f"File not found: {abs_path}")
-        try:
-            return abs_path.read_text(encoding=self.project_config.encoding)
-        except UnicodeDecodeError as ude:
-            results = from_path(abs_path)
-            match = results.best()
-            if match:
-                return match.raw.decode(match.encoding)
-            raise ude
+        return FileUtils.read_file(log, str(abs_path), self.project_config.encoding)
 
     def get_ignore_spec(self) -> pathspec.PathSpec:
         """

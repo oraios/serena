@@ -14,7 +14,7 @@ from enum import Enum
 from pathlib import Path, PurePath
 
 import requests
-from charset_normalizer import from_path
+import charset_normalizer
 
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_logger import LanguageServerLogger
@@ -178,9 +178,10 @@ class FileUtils:
                 with open(file_path, encoding=encoding) as inp_file:
                     return inp_file.read()
             except UnicodeDecodeError as ude:
-                results = from_path(file_path)
+                results = charset_normalizer.from_path(file_path)
                 match = results.best()
                 if match:
+                    log.warning(f"Could not decode {file_path} with encoding='{encoding}'; using best match '{match.encoding}' instead") 
                     return match.raw.decode(match.encoding)
                 raise ude
         except Exception as exc:
