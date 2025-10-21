@@ -89,12 +89,7 @@ class JuliaLanguageServer(SolidLanguageServer):
         # Check if LanguageServer.jl is installed
         check_cmd = [julia_path, "-e", "using LanguageServer"]
         try:
-            result = subprocess.run(
-                check_cmd,
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
+            result = subprocess.run(check_cmd, check=False, capture_output=True, text=True, timeout=10)
             if result.returncode != 0:
                 # LanguageServer.jl not found, install it
                 JuliaLanguageServer._install_language_server(julia_path, logger)
@@ -107,34 +102,20 @@ class JuliaLanguageServer(SolidLanguageServer):
     @staticmethod
     def _install_language_server(julia_path: str, logger: LanguageServerLogger) -> None:
         """Install LanguageServer.jl package."""
-        logger.log(
-            "LanguageServer.jl not found. Installing... (this may take a minute)",
-            logging.INFO
-        )
-        
-        install_cmd = [julia_path, "-e", "using Pkg; Pkg.add(\"LanguageServer\")"]
-        
+        logger.log("LanguageServer.jl not found. Installing... (this may take a minute)", logging.INFO)
+
+        install_cmd = [julia_path, "-e", 'using Pkg; Pkg.add("LanguageServer")']
+
         try:
-            result = subprocess.run(
-                install_cmd,
-                capture_output=True,
-                text=True,
-                timeout=300  # 5 minutes for installation
-            )
-            
+            result = subprocess.run(install_cmd, check=False, capture_output=True, text=True, timeout=300)  # 5 minutes for installation
+
             if result.returncode == 0:
-                logger.log(
-                    "LanguageServer.jl installed successfully!",
-                    logging.INFO
-                )
+                logger.log("LanguageServer.jl installed successfully!", logging.INFO)
             else:
-                raise RuntimeError(
-                    f"Failed to install LanguageServer.jl: {result.stderr}"
-                )
+                raise RuntimeError(f"Failed to install LanguageServer.jl: {result.stderr}")
         except subprocess.TimeoutExpired:
             raise RuntimeError(
-                "LanguageServer.jl installation timed out. "
-                "Please install manually: julia -e 'using Pkg; Pkg.add(\"LanguageServer\")'"
+                "LanguageServer.jl installation timed out. " "Please install manually: julia -e 'using Pkg; Pkg.add(\"LanguageServer\")'"
             )
 
     @override
