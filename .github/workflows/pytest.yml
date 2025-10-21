@@ -147,6 +147,13 @@ jobs:
         shell: bash
         run: |
           Rscript -e "install.packages('languageserver', repos='https://cloud.r-project.org')"
+      - name: Set up Julia
+        uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.10'
+      - name: Install Julia LanguageServer
+        shell: bash
+        run: julia -e 'using Pkg; Pkg.add("LanguageServer")'
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
