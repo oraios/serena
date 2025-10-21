@@ -3,6 +3,7 @@ import os
 import pathlib
 import shlex
 import shutil
+import platform
 
 from overrides import override
 
@@ -20,34 +21,43 @@ class JuliaLanguageServer(SolidLanguageServer):
     """
 
     def __init__(
-        self,
-        config: LanguageServerConfig,
-        logger: LanguageServerLogger,
-        repository_root_path: str,
-        solidlsp_settings: SolidLSPSettings,
-    ):
-        # 1. Check for dependencies first and get the full path
-        julia_executable = self._setup_runtime_dependency()
-
-        # 2. Build command as STRING (not list) to avoid shell=True issues
-        # Use shlex.quote to properly escape arguments for shell
+    self,
+    config: LanguageServerConfig,
+    logger: LanguageServerLogger,
+    repository_root_path: str,
+    solidlsp_settings: SolidLSPSettings,
+):
+        julia_executable = self._setup_runtime_dependency()        
         julia_code = "using LanguageServer; runserver()"
-        julia_ls_cmd = (
-            f"{shlex.quote(julia_executable)} "
-            f"--startup-file=no "
-            f"--history-file=no "
-            f"-e {shlex.quote(julia_code)} "
-            f"{shlex.quote(repository_root_path)}"
-        )
+        
+        if platform.system() == "Windows":
+            # On Windows, pass as list (Serena handles shell=True differently)
+            julia_ls_cmd = [
+                julia_executable,
+                "--startup-file=no",
+                "--history-file=no",
+                "-e",
+                julia_code,
+                repository_root_path
+            ]
+        else:
+            # On Linux/macOS, build shell-escaped string
+            import shlex
+            julia_ls_cmd = (
+                f"{shlex.quote(julia_executable)} "
+                f"--startup-file=no "
+                f"--history-file=no "
+                f"-e {shlex.quote(julia_code)} "
+                f"{shlex.quote(repository_root_path)}"
+            )
 
         logger.log(f"[JULIA DEBUG] Command: {julia_ls_cmd}", logging.INFO)
 
-        # 3. Initialize the parent class
         super().__init__(
             config,
             logger,
             repository_root_path,
-            ProcessLaunchInfo(cmd=julia_ls_cmd, cwd=repository_root_path),  # Pass as string
+            ProcessLaunchInfo(cmd=julia_ls_cmd, cwd=repository_root_path),
             "julia",
             solidlsp_settings,
         )
