@@ -3,6 +3,7 @@ import os
 import pathlib
 import platform
 import shutil
+import subprocess
 
 from overrides import override
 
@@ -26,7 +27,7 @@ class JuliaLanguageServer(SolidLanguageServer):
         repository_root_path: str,
         solidlsp_settings: SolidLSPSettings,
     ):
-        julia_executable = self._setup_runtime_dependency()
+        julia_executable = self._setup_runtime_dependency(logger)  # PASS LOGGER
         julia_code = "using LanguageServer; runserver()"
 
         if platform.system() == "Windows":
@@ -56,7 +57,7 @@ class JuliaLanguageServer(SolidLanguageServer):
         )
 
     @staticmethod
-    def _setup_runtime_dependency() -> str:
+    def _setup_runtime_dependency(logger: LanguageServerLogger) -> str:
         """
         Check if the Julia runtime is available and return its full path.
         Raises RuntimeError with a helpful message if the dependency is missing.
@@ -85,7 +86,56 @@ class JuliaLanguageServer(SolidLanguageServer):
                 f"Checked locations: {common_locations}"
             )
 
+        # Check if LanguageServer.jl is installed
+        check_cmd = [julia_path, "-e", "using LanguageServer"]
+        try:
+            result = subprocess.run(
+                check_cmd,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode != 0:
+                # LanguageServer.jl not found, install it
+                JuliaLanguageServer._install_language_server(julia_path, logger)
+        except subprocess.TimeoutExpired:
+            # Assume it needs installation
+            JuliaLanguageServer._install_language_server(julia_path, logger)
+
         return julia_path
+
+    @staticmethod
+    def _install_language_server(julia_path: str, logger: LanguageServerLogger) -> None:
+        """Install LanguageServer.jl package."""
+        logger.log(
+            "LanguageServer.jl not found. Installing... (this may take a minute)",
+            logging.INFO
+        )
+        
+        install_cmd = [julia_path, "-e", "using Pkg; Pkg.add(\"LanguageServer\")"]
+        
+        try:
+            result = subprocess.run(
+                install_cmd,
+                capture_output=True,
+                text=True,
+                timeout=300  # 5 minutes for installation
+            )
+            
+            if result.returncode == 0:
+                logger.log(
+                    "LanguageServer.jl installed successfully!",
+                    logging.INFO
+                )
+            else:
+                raise RuntimeError(
+                    f"Failed to install LanguageServer.jl: {result.stderr}"
+                )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(
+                "LanguageServer.jl installation timed out. "
+                "Please install manually: julia -e 'using Pkg; Pkg.add(\"LanguageServer\")'"
+            )
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
