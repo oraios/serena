@@ -115,7 +115,7 @@ class JuliaLanguageServer(SolidLanguageServer):
                 raise RuntimeError(f"Failed to install LanguageServer.jl: {result.stderr}")
         except subprocess.TimeoutExpired:
             raise RuntimeError(
-                "LanguageServer.jl installation timed out. " "Please install manually: julia -e 'using Pkg; Pkg.add(\"LanguageServer\")'"
+                "LanguageServer.jl installation timed out. Please install manually: julia -e 'using Pkg; Pkg.add(\"LanguageServer\")'"
             )
 
     @override
