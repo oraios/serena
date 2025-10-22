@@ -3,16 +3,30 @@ Tools supporting the execution of (external) commands
 """
 
 import os.path
+import shlex
 
 from serena.tools import Tool, ToolMarkerCanEdit
-from serena.util.shell import execute_shell_command
+from serena.util.shell import execute_shell_command, safe_execute_shell_command
 
 
 class ExecuteShellCommandTool(Tool, ToolMarkerCanEdit):
     """
     Executes a shell command.
     """
+    def _validate_path_containment(self, path: str, base_dir: str):
 
+        real_base_dir = os.path.realpath(base_dir)
+        
+        if not os.path.isabs(path):
+            path = os.path.join(real_base_dir, path)
+            
+        real_path = os.path.realpath(path)
+        common_path = os.path.commonpath([real_base_dir, real_path])
+        if common_path != real_base_dir:
+            raise PermissionError(
+                f"Path traversal attempt blocked. The path '{path}' is outside the allowed directory '{base_dir}'."
+            )
+        
     def apply(
         self,
         command: str,
@@ -47,6 +61,22 @@ class ExecuteShellCommandTool(Tool, ToolMarkerCanEdit):
                         f"Specified a relative working directory ({cwd}), but the resulting path is not a directory: {_cwd}"
                     )
 
-        result = execute_shell_command(command, cwd=_cwd, capture_stderr=capture_stderr)
+        try:
+            parts = shlex.split(command)
+            for part in parts:
+                if '/' in part or part.startswith('.') or part.startswith('-'):
+                    potential_path = os.path.join(_cwd, part)
+                    if os.path.exists(os.path.dirname(potential_path)):
+                         self._validate_path_containment(part, _cwd)
+
+        except PermissionError:
+            raise
+        except Exception as e:
+            return f'{{"error": "Failed to parse or validate command: {e}"}}'
+
+        # If you want Command Chain, Use line 78 instead of 79
+        #result = execute_shell_command(command, cwd=_cwd, capture_stderr=capture_stderr)
+        result = safe_execute_shell_command(command, cwd=_cwd, capture_stderr=capture_stderr)
+
         result = result.json()
         return self._limit_length(result, max_answer_chars)
