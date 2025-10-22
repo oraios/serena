@@ -1,6 +1,6 @@
 import os
-import subprocess
 import shlex
+import subprocess
 
 from pydantic import BaseModel
 
@@ -42,6 +42,7 @@ def execute_shell_command(command: str, cwd: str | None = None, capture_stderr: 
     stdout, stderr = process.communicate()
     return ShellCommandResult(stdout=stdout, stderr=stderr, return_code=process.returncode, cwd=cwd)
 
+
 def safe_execute_shell_command(command: str, cwd: str | None = None, capture_stderr: bool = False) -> ShellCommandResult:
     """
     Execute a shell command and return the output.
@@ -72,6 +73,7 @@ def safe_execute_shell_command(command: str, cwd: str | None = None, capture_std
 
     stdout, stderr = process.communicate()
     return ShellCommandResult(stdout=stdout, stderr=stderr, return_code=process.returncode, cwd=cwd)
+
 
 def subprocess_check_output(args: list[str], encoding: str = "utf-8", strip: bool = True, timeout: float | None = None) -> str:
     output = subprocess.check_output(args, stdin=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=timeout, env=os.environ.copy(), **subprocess_kwargs()).decode(encoding)  # type: ignore
