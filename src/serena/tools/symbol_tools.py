@@ -63,8 +63,8 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
             Don't adjust unless there is really no other way to get the content required for the task.
         :return: a JSON object containing info about top-level symbols in the file
         """
-        symbol_retriever = self.create_language_server_symbol_retriever()
         file_path = os.path.join(self.project.project_root, relative_path)
+        symbol_retriever = self.create_language_server_symbol_retriever(file_path=relative_path)
 
         # The symbol overview is capable of working with both files and directories,
         # but we want to ensure that the user provides a file path.
@@ -147,7 +147,12 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         """
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
-        symbol_retriever = self.create_language_server_symbol_retriever()
+        # For find_symbol, we pass relative_path if it's a file (not a directory)
+        # This allows LSPManager to switch to the appropriate LSP for that file
+        file_path_for_lsp = (
+            relative_path if relative_path and not os.path.isdir(os.path.join(self.project.project_root, relative_path)) else None
+        )
+        symbol_retriever = self.create_language_server_symbol_retriever(file_path=file_path_for_lsp)
         symbols = symbol_retriever.find_by_name(
             name_path,
             include_body=include_body,
@@ -190,7 +195,8 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         include_body = False  # It is probably never a good idea to include the body of the referencing symbols
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
-        symbol_retriever = self.create_language_server_symbol_retriever()
+        # Pass the file path to switch to the appropriate LSP
+        symbol_retriever = self.create_language_server_symbol_retriever(file_path=relative_path)
         references_in_symbols = symbol_retriever.find_referencing_symbols(
             name_path,
             relative_file_path=relative_path,
@@ -238,7 +244,7 @@ class ReplaceSymbolBodyTool(Tool, ToolMarkerSymbolicEdit):
             in the programming language, including e.g. the signature line for functions.
             IMPORTANT: The body does NOT include any preceding docstrings/comments or imports, in particular.
         """
-        code_editor = self.create_code_editor()
+        code_editor = self.create_code_editor(file_path=relative_path)
         code_editor.replace_body(
             name_path,
             relative_file_path=relative_path,
@@ -267,7 +273,7 @@ class InsertAfterSymbolTool(Tool, ToolMarkerSymbolicEdit):
         :param body: the body/content to be inserted. The inserted code shall begin with the next line after
             the symbol.
         """
-        code_editor = self.create_code_editor()
+        code_editor = self.create_code_editor(file_path=relative_path)
         code_editor.insert_after_symbol(name_path, relative_file_path=relative_path, body=body)
         return SUCCESS_RESULT
 
@@ -292,7 +298,7 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerSymbolicEdit):
         :param relative_path: the relative path to the file containing the symbol
         :param body: the body/content to be inserted before the line in which the referenced symbol is defined
         """
-        code_editor = self.create_code_editor()
+        code_editor = self.create_code_editor(file_path=relative_path)
         code_editor.insert_before_symbol(name_path, relative_file_path=relative_path, body=body)
         return SUCCESS_RESULT
 
@@ -318,6 +324,6 @@ class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
         :param new_name: the new name for the symbol
         :return: result summary indicating success or failure
         """
-        code_editor = self.create_code_editor()
+        code_editor = self.create_code_editor(file_path=relative_path)
         status_message = code_editor.rename_symbol(name_path, relative_file_path=relative_path, new_name=new_name)
         return status_message

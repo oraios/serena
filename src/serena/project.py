@@ -78,6 +78,7 @@ class Project:
             for spec in gitignore_parser.get_ignore_specs():
                 log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
                 ignored_patterns.extend(spec.patterns)
+
         self._ignored_patterns = ignored_patterns
 
         # Set up the pathspec matcher for the ignored paths

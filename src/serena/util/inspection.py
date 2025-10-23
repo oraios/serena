@@ -19,18 +19,37 @@ def iter_subclasses(cls: type[T], recursive: bool = True) -> Generator[type[T], 
             yield from iter_subclasses(subclass, recursive)
 
 
-def determine_programming_language_composition(repo_path: str) -> dict[str, float]:
+def detect_language_from_file(file_path: str) -> Language | None:
+    """
+    Detect the programming language of a file based on its extension.
+
+    :param file_path: Path to the file
+    :return: Language enum if detected, None otherwise
+    """
+    filename = os.path.basename(file_path)
+
+    for language in Language.iter_all(include_experimental=True):
+        matcher = language.get_source_fn_matcher()
+        if matcher.is_relevant_filename(filename):
+            return language
+
+    return None
+
+
+def determine_programming_language_composition(repo_path: str) -> tuple[dict[str, float], int]:
     """
     Determine the programming language composition of a repository.
 
     :param repo_path: Path to the repository to analyze
 
-    :return: Dictionary mapping language names to percentages of files matching each language
+    :return: Tuple of (language_percentages, total_file_count)
+        - language_percentages: Dictionary mapping language names to percentages
+        - total_file_count: Total number of non-ignored files found
     """
     all_files = find_all_non_ignored_files(repo_path)
 
     if not all_files:
-        return {}
+        return {}, 0
 
     # Count files for each language
     language_counts: dict[str, int] = {}
@@ -55,4 +74,4 @@ def determine_programming_language_composition(repo_path: str) -> dict[str, floa
         percentage = (count / total_files) * 100
         language_percentages[language_name] = round(percentage, 2)
 
-    return language_percentages
+    return language_percentages, total_files

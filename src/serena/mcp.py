@@ -253,6 +253,7 @@ class SerenaMCPFactory:
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
         trace_lsp_communication: bool | None = None,
         tool_timeout: float | None = None,
+        lsp_memory_budget: int | None = None,
     ) -> FastMCP:
         """
         Create an MCP server with process-isolated SerenaAgent to prevent asyncio contamination.
@@ -283,6 +284,8 @@ class SerenaMCPFactory:
                 config.trace_lsp_communication = trace_lsp_communication
             if tool_timeout is not None:
                 config.tool_timeout = tool_timeout
+            if lsp_memory_budget is not None:
+                config.lsp_memory_budget_mb = lsp_memory_budget
 
             modes_instances = [SerenaAgentMode.load(mode) for mode in modes]
             self._instantiate_agent(config, modes_instances)

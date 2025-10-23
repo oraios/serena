@@ -22,6 +22,7 @@ from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
 from serena.config.context_mode import RegisteredContext, SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import SerenaConfig, ToolInclusionDefinition, ToolSet
 from serena.dashboard import SerenaDashboardAPI
+from serena.lsp_manager import LSPManager
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.tools import ActivateProjectTool, GetCurrentConfigTool, Tool, ToolMarker, ToolRegistry
@@ -86,7 +87,7 @@ class SerenaAgent:
 
         # project-specific instances, which will be initialized upon project activation
         self._active_project: Project | None = None
-        self.language_server: SolidLanguageServer | None = None
+        self.lsp_manager: "LSPManager | None" = None
 
         # adjust log level
         serena_log_level = self.serena_config.log_level
@@ -197,6 +198,18 @@ class SerenaAgent:
 
     def get_tool_description_override(self, tool_name: str) -> str | None:
         return self._context.tool_description_overrides.get(tool_name, None)
+
+    @property
+    def language_server(self) -> SolidLanguageServer | None:
+        """
+        Get the currently active language server.
+
+        Delegates to the LSPManager to get the most recently used LSP.
+        Returns the active language server if one is running, None otherwise.
+        """
+        if self.lsp_manager is not None:
+            return self.lsp_manager.get_active_language_server()
+        return None
 
     def _check_shell_settings(self) -> None:
         # On Windows, Claude Code sets COMSPEC to Git-Bash (often even with a path containing spaces),
@@ -510,11 +523,16 @@ class SerenaAgent:
         return result_str
 
     def is_language_server_running(self) -> bool:
-        return self.language_server is not None and self.language_server.is_running()
+        if self.lsp_manager is not None:
+            return self.lsp_manager.is_running()
+        return False
 
     def reset_language_server(self) -> None:
         """
-        Starts/resets the language server for the current project
+        Starts/resets the language server manager for the current project.
+
+        For multi-language projects, this initializes the LSPManager which will
+        handle switching between language servers as needed.
         """
         tool_timeout = self.serena_config.tool_timeout
         if tool_timeout is None or tool_timeout < 0:
@@ -524,27 +542,37 @@ class SerenaAgent:
                 raise ValueError(f"Tool timeout must be at least 10 seconds, but is {tool_timeout} seconds")
             ls_timeout = tool_timeout - 5  # the LS timeout is for a single call, it should be smaller than the tool timeout
 
-        # stop the language server if it is running
-        if self.is_language_server_running():
-            assert self.language_server is not None
-            log.info(f"Stopping the current language server at {self.language_server.repository_root_path} ...")
-            self.language_server.stop()
-            self.language_server = None
+        # stop the LSP manager if it is running
+        if self.lsp_manager is not None:
+            log.info("Stopping the current LSP manager...")
+            self.lsp_manager.stop_all()
+            self.lsp_manager = None
 
-        # instantiate and start the language server
+        # instantiate the LSP manager
         assert self._active_project is not None
-        self.language_server = self._active_project.create_language_server(
+        log.info(f"Creating LSP manager for project: {self._active_project.project_name}")
+        log.info(f"Project config language: {self._active_project.project_config.language}")
+        log.info(f"Project languages_composition: {self._active_project.project_config.languages_composition}")
+
+        self.lsp_manager = LSPManager(
+            project=self._active_project,
+            memory_budget_mb=self.serena_config.lsp_memory_budget_mb,
             log_level=self.serena_config.log_level,
             ls_timeout=ls_timeout,
             trace_lsp_communication=self.serena_config.trace_lsp_communication,
             ls_specific_settings=self.serena_config.ls_specific_settings,
         )
-        log.info(f"Starting the language server for {self._active_project.project_name}")
-        self.language_server.start()
-        if not self.language_server.is_running():
+
+        # Start the LSP for the primary language
+        primary_language = self._active_project.project_config.language
+        log.info(f"Starting LSP manager for {self._active_project.project_name} with primary language {primary_language}")
+        try:
+            self.lsp_manager.get_lsp_for_language(primary_language)
+        except Exception as e:
+            log.error(f"Failed to start primary language server: {e}")
             raise RuntimeError(
                 f"Failed to start the language server for {self._active_project.project_name} at {self._active_project.project_root}"
-            )
+            ) from e
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self._all_tools[tool_class]  # type: ignore
@@ -559,11 +587,15 @@ class SerenaAgent:
         if not hasattr(self, "_is_initialized"):
             return
         log.info("SerenaAgent is shutting down ...")
-        if self.is_language_server_running():
-            log.info("Stopping the language server ...")
-            assert self.language_server is not None
-            self.language_server.save_cache()
-            self.language_server.stop()
+        if self.lsp_manager is not None:
+            log.info("Stopping the LSP manager ...")
+            # Save cache for all active LSPs before stopping
+            for lsp_info in self.lsp_manager.active_lsps.values():
+                try:
+                    lsp_info.lsp.save_cache()
+                except Exception as e:
+                    log.error(f"Error saving LSP cache: {e}")
+            self.lsp_manager.stop_all()
         if self._gui_log_viewer:
             log.info("Stopping the GUI log window ...")
             self._gui_log_viewer.stop()

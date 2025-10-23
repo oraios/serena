@@ -138,6 +138,7 @@ class TopLevelCommands(AutoRegisteringGroup):
     )
     @click.option("--trace-lsp-communication", type=bool, is_flag=False, default=None, help="Whether to trace LSP communication.")
     @click.option("--tool-timeout", type=float, default=None, help="Override tool execution timeout in config.")
+    @click.option("--lsp-memory-budget", type=int, default=None, help="Memory budget in MB for language servers (default: 2048).")
     def start_mcp_server(
         project: str | None,
         project_file_arg: str | None,
@@ -151,6 +152,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None,
         trace_lsp_communication: bool | None,
         tool_timeout: float | None,
+        lsp_memory_budget: int | None,
     ) -> None:
         # initialize logging, using INFO level initially (will later be adjusted by SerenaAgent according to the config)
         #   * memory log handler (for use by GUI/Dashboard)
@@ -182,6 +184,7 @@ class TopLevelCommands(AutoRegisteringGroup):
             log_level=log_level,
             trace_lsp_communication=trace_lsp_communication,
             tool_timeout=tool_timeout,
+            lsp_memory_budget=lsp_memory_budget,
         )
         if project_file_arg:
             log.warning(

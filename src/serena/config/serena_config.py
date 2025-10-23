@@ -163,6 +163,12 @@ def is_running_in_docker() -> bool:
 class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
     project_name: str
     language: Language
+    languages_composition: dict[Language, float] = field(default_factory=dict)
+    """Dictionary mapping Language to percentage of files in that language.
+    Used for multi-language project support."""
+    repo_size_category: str = "medium"
+    """Repository size category: 'small' (<1k files), 'medium' (1k-10k), 'large' (>10k).
+    Used to select appropriate LSP memory estimates."""
     ignored_paths: list[str] = field(default_factory=list)
     read_only: bool = False
     ignore_all_files_in_gitignore: bool = True
@@ -194,7 +200,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         with LogTime("Project configuration auto-generation", logger=log):
             project_name = project_name or project_root.name
             if project_language is None:
-                language_composition = determine_programming_language_composition(str(project_root))
+                language_composition, total_file_count = determine_programming_language_composition(str(project_root))
                 if len(language_composition) == 0:
                     raise ValueError(
                         f"No source files found in {project_root}\n\n"
@@ -208,11 +214,27 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                     )
                 # find the language with the highest percentage
                 dominant_language = max(language_composition.keys(), key=lambda lang: language_composition[lang])
+                # Convert language_composition to use Language enums
+                languages_comp_enum = {Language(lang_str): pct for lang_str, pct in language_composition.items()}
+                # Determine repo size from the total file count
+                if total_file_count < 1000:
+                    repo_size = "small"
+                elif total_file_count < 10000:
+                    repo_size = "medium"
+                else:
+                    repo_size = "large"
+                log.info(f"Detected {total_file_count} files, categorized as '{repo_size}' repository")
             else:
                 dominant_language = project_language.value
+                languages_comp_enum = {project_language: 100.0}
+                repo_size = "medium"  # Default if not auto-detected
             config_with_comments = load_yaml(PROJECT_TEMPLATE_FILE, preserve_comments=True)
             config_with_comments["project_name"] = project_name
             config_with_comments["language"] = dominant_language
+            # Store all detected languages for multi-language support
+            if languages_comp_enum:
+                config_with_comments["languages_composition"] = {lang.value: pct for lang, pct in languages_comp_enum.items()}
+            config_with_comments["repo_size_category"] = repo_size
             if save_to_disk:
                 save_yaml(str(project_root / cls.rel_path_to_project_yml()), config_with_comments, preserve_comments=True)
             return cls._from_dict(config_with_comments)
@@ -236,9 +258,21 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
             language = Language(language_str)
         except ValueError as e:
             raise ValueError(f"Invalid language: {data['language']}.\nValid languages are: {[l.value for l in Language]}") from e
+
+        # Parse languages_composition if present
+        languages_comp = {}
+        if "languages_composition" in data:
+            for lang_str, pct in data["languages_composition"].items():
+                try:
+                    languages_comp[Language(lang_str)] = pct
+                except ValueError:
+                    log.warning(f"Ignoring unknown language in composition: {lang_str}")
+
         return cls(
             project_name=project_name,
             language=language,
+            languages_composition=languages_comp,
+            repo_size_category=data.get("repo_size_category", "medium"),
             ignored_paths=data.get("ignored_paths", []),
             excluded_tools=data.get("excluded_tools", []),
             included_optional_tools=data.get("included_optional_tools", []),
@@ -353,8 +387,14 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     """
     default_max_tool_answer_chars: int = 150_000
     """Used as default for tools where the apply method has a default maximal answer length.
-    Even though the value of the max_answer_chars can be changed when calling the tool, it may make sense to adjust this default 
+    Even though the value of the max_answer_chars can be changed when calling the tool, it may make sense to adjust this default
     through the global configuration.
+    """
+    lsp_memory_budget_mb: int = 2048
+    """Memory budget in MB for language servers. Multiple LSPs can run simultaneously up to this limit.
+    Default: 2048 MB (2 GB) - allows 3-5 language servers
+    Low: 512 MB - 1-2 small LSPs
+    High: 4096 MB (4 GB) - 6-8 LSPs
     """
     ls_specific_settings: dict = field(default_factory=dict)
     """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""

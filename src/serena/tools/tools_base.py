@@ -15,6 +15,7 @@ from serena.prompt_factory import PromptFactory
 from serena.symbol import LanguageServerSymbolRetriever
 from serena.util.class_decorators import singleton
 from serena.util.inspection import iter_subclasses
+from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_exceptions import SolidLSPException
 
 if TYPE_CHECKING:
@@ -44,10 +45,24 @@ class Component(ABC):
     def memories_manager(self) -> "MemoriesManager":
         return self.project.memories_manager
 
-    def create_language_server_symbol_retriever(self) -> LanguageServerSymbolRetriever:
+    def create_language_server_symbol_retriever(self, file_path: str | None = None) -> LanguageServerSymbolRetriever:
+        """
+        Create a language server symbol retriever.
+
+        For multi-language projects, if a file_path is provided, this will automatically
+        switch to the appropriate LSP for that file.
+        """
         if not self.agent.is_using_language_server():
             raise Exception("Cannot create LanguageServerSymbolRetriever; agent is not in language server mode.")
-        language_server = self.agent.language_server
+
+        # If LSPManager is available and file_path is provided, switch to appropriate LSP
+        language_server: SolidLanguageServer | None
+        if self.agent.lsp_manager is not None and file_path is not None:
+            abs_path = os.path.join(self.project.project_root, file_path)
+            language_server = self.agent.lsp_manager.get_lsp_for_file(abs_path)
+        else:
+            language_server = self.agent.language_server
+
         assert language_server is not None
         return LanguageServerSymbolRetriever(language_server, agent=self.agent)
 
@@ -55,11 +70,11 @@ class Component(ABC):
     def project(self) -> Project:
         return self.agent.get_active_project_or_raise()
 
-    def create_code_editor(self) -> "CodeEditor":
+    def create_code_editor(self, file_path: str | None = None) -> "CodeEditor":
         from ..code_editor import JetBrainsCodeEditor, LanguageServerCodeEditor
 
         if self.agent.is_using_language_server():
-            return LanguageServerCodeEditor(self.create_language_server_symbol_retriever(), agent=self.agent)
+            return LanguageServerCodeEditor(self.create_language_server_symbol_retriever(file_path=file_path), agent=self.agent)
         else:
             return JetBrainsCodeEditor(project=self.project, agent=self.agent)
 
