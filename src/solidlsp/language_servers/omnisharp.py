@@ -21,7 +21,7 @@ from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 
-def breadth_first_file_scan(root) -> Iterable[str]:
+def breadth_first_file_scan(root: str) -> Iterable[str]:
     """
     This function was obtained from https://stackoverflow.com/questions/49654234/is-there-a-breadth-first-search-option-available-in-os-walk-or-equivalent-py
     It traverses the directory tree in breadth first order.
@@ -47,7 +47,7 @@ def breadth_first_file_scan(root) -> Iterable[str]:
         dirs = next_dirs
 
 
-def find_least_depth_sln_file(root_dir) -> str | None:
+def find_least_depth_sln_file(root_dir: str) -> str | None:
     for filename in breadth_first_file_scan(root_dir):
         if filename.endswith(".sln"):
             return filename
@@ -204,12 +204,12 @@ class OmniSharp(SolidLanguageServer):
 
         return omnisharp_executable_path, razor_omnisharp_dll_path
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Omnisharp Language Server
         """
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "textDocument/definition":
@@ -219,7 +219,7 @@ class OmniSharp(SolidLanguageServer):
                 if registration["method"] == "textDocument/completion":
                     self.completions_available.set()
 
-        def lang_status_handler(params):
+        def lang_status_handler(params: dict) -> None:
             # TODO: Should we wait for
             # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
             # Before proceeding?
@@ -227,17 +227,17 @@ class OmniSharp(SolidLanguageServer):
             #     self.service_ready_event.set()
             pass
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: dict) -> list:
             return []
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def check_experimental_status(params):
+        def check_experimental_status(params: dict) -> None:
             if params["quiescent"] is True:
                 self.server_ready.set()
 
-        def workspace_configuration_handler(params):
+        def workspace_configuration_handler(params: dict) -> list[dict]:
             # TODO: We do not know the appropriate way to handle this request. Should ideally contact the OmniSharp dev team
             return [
                 {

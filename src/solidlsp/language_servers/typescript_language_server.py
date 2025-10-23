@@ -7,6 +7,8 @@ import os
 import pathlib
 import shutil
 import threading
+from time import sleep
+from typing import Any, cast
 
 from overrides import override
 from sensai.util.logging import LogTime
@@ -19,6 +21,7 @@ from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
+from ..lsp_protocol_handler import lsp_types
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
 # Platform-specific imports
@@ -26,9 +29,9 @@ if os.name != "nt":  # Unix-like systems
     import pwd
 else:
     # Dummy pwd module for Windows
-    class pwd:
+    class pwd:  # type: ignore
         @staticmethod
-        def getpwuid(uid):
+        def getpwuid(uid: Any) -> Any:
             return type("obj", (), {"pw_name": os.environ.get("USERNAME", "unknown")})()
 
 
@@ -171,9 +174,9 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the TypeScript Language Server, waits for the server to be ready and yields the LanguageServer instance.
 
@@ -187,7 +190,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         # LanguageServer has been shutdown
         """
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "workspace/executeCommand":
@@ -197,16 +200,16 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                     # self.resolve_main_method_available.set()
             return
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: dict) -> list:
             return []
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
-        def check_experimental_status(params):
+        def check_experimental_status(params: dict) -> None:
             """
             Also listen for experimental/serverStatus as a backup signal
             """

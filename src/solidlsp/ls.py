@@ -74,7 +74,7 @@ class LSPFileBuffer:
 
     content_hash: str = ""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.content_hash = hashlib.md5(self.contents.encode("utf-8")).hexdigest()
 
 
@@ -205,7 +205,7 @@ class SolidLanguageServer(ABC):
                 self.logger.log(f"LSP: {source} -> {target}: {msg!s}", self.logger.logger.level)
 
         else:
-            logging_fn = None
+            logging_fn = None  # type: ignore
 
         # cmd is obtained from the child classes, which provide the language specific command to start the language server
         # LanguageServerHandler provides the functionality to start the language server and communicate with it
@@ -230,7 +230,6 @@ class SolidLanguageServer(ABC):
         # Create a pathspec matcher from the processed patterns
         self._ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
 
-        self._server_context = None
         self._request_timeout: float | None = None
 
         self._has_waited_for_cross_file_references = False
@@ -297,7 +296,7 @@ class SolidLanguageServer(ABC):
 
         return match_path(relative_path, self.get_ignore_spec(), root_path=self.repository_root_path)
 
-    def _shutdown(self, timeout: float = 5.0):
+    def _shutdown(self, timeout: float = 5.0) -> None:
         """
         A robust shutdown process designed to terminate cleanly on all platforms, including Windows,
         by explicitly closing all I/O pipes.
@@ -308,6 +307,9 @@ class SolidLanguageServer(ABC):
 
         self.logger.log(f"Initiating final robust shutdown with a {timeout}s timeout...", logging.INFO)
         process = self.server.process
+        if process is None:
+            self.logger.log("Server process is None, cannot shutdown.", logging.DEBUG)
+            return
 
         # --- Main Shutdown Logic ---
         # Stage 1: Graceful Termination Request
@@ -325,7 +327,7 @@ class SolidLanguageServer(ABC):
             else:
                 self.logger.log("LSP shutdown request completed.", logging.DEBUG)
 
-            if process.stdin and not process.stdin.is_closing():
+            if process.stdin and not process.stdin.closed:
                 process.stdin.close()
             self.logger.log("Stage 1 shutdown complete.", logging.DEBUG)
         except Exception as e:
@@ -364,7 +366,7 @@ class SolidLanguageServer(ABC):
         self._start_server()
 
     @abstractmethod
-    def _start_server(self):
+    def _start_server(self) -> None:
         pass
 
     @contextmanager
@@ -399,7 +401,7 @@ class SolidLanguageServer(ABC):
 
             self.server.notify.did_open_text_document(
                 {
-                    LSPConstants.TEXT_DOCUMENT: {
+                    LSPConstants.TEXT_DOCUMENT: {  # type: ignore
                         LSPConstants.URI: uri,
                         LSPConstants.LANGUAGE_ID: self.language_id,
                         LSPConstants.VERSION: 0,
@@ -413,7 +415,7 @@ class SolidLanguageServer(ABC):
         if self.open_file_buffers[uri].ref_count == 0:
             self.server.notify.did_close_text_document(
                 {
-                    LSPConstants.TEXT_DOCUMENT: {
+                    LSPConstants.TEXT_DOCUMENT: {  # type: ignore
                         LSPConstants.URI: uri,
                     }
                 }
@@ -450,7 +452,7 @@ class SolidLanguageServer(ABC):
         file_buffer.contents = new_contents
         self.server.notify.did_change_text_document(
             {
-                LSPConstants.TEXT_DOCUMENT: {
+                LSPConstants.TEXT_DOCUMENT: {  # type: ignore
                     LSPConstants.VERSION: file_buffer.version,
                     LSPConstants.URI: file_buffer.uri,
                 },
@@ -497,7 +499,7 @@ class SolidLanguageServer(ABC):
         file_buffer.contents = new_contents
         self.server.notify.did_change_text_document(
             {
-                LSPConstants.TEXT_DOCUMENT: {
+                LSPConstants.TEXT_DOCUMENT: {  # type: ignore
                     LSPConstants.VERSION: file_buffer.version,
                     LSPConstants.URI: file_buffer.uri,
                 },
@@ -555,7 +557,7 @@ class SolidLanguageServer(ABC):
             for item in response:
                 assert isinstance(item, dict)
                 if LSPConstants.URI in item and LSPConstants.RANGE in item:
-                    new_item: ls_types.Location = {}
+                    new_item: dict = {}
                     new_item.update(item)
                     new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
                     new_item["relativePath"] = PathUtils.get_relative_path(new_item["absolutePath"], self.repository_root_path)
@@ -565,8 +567,8 @@ class SolidLanguageServer(ABC):
                     new_item["uri"] = item[LSPConstants.TARGET_URI]
                     new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
                     new_item["relativePath"] = PathUtils.get_relative_path(new_item["absolutePath"], self.repository_root_path)
-                    new_item["range"] = item[LSPConstants.TARGET_SELECTION_RANGE]
-                    ret.append(ls_types.Location(**new_item))
+                    new_item["range"] = item[LSPConstants.TARGET_SELECTION_RANGE]  # type: ignore
+                    ret.append(ls_types.Location(**new_item))  # type: ignore
                 else:
                     assert False, f"Unexpected response from Language Server: {item}"
         elif isinstance(response, dict):
@@ -574,11 +576,11 @@ class SolidLanguageServer(ABC):
             assert LSPConstants.URI in response
             assert LSPConstants.RANGE in response
 
-            new_item: ls_types.Location = {}
+            new_item = {}
             new_item.update(response)
             new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
             new_item["relativePath"] = PathUtils.get_relative_path(new_item["absolutePath"], self.repository_root_path)
-            ret.append(ls_types.Location(**new_item))
+            ret.append(ls_types.Location(**new_item))  # type: ignore
         elif response is None:
             # Some language servers return None when they cannot find a definition
             # This is expected for certain symbol types like generics or types with incomplete information
@@ -647,7 +649,7 @@ class SolidLanguageServer(ABC):
             assert LSPConstants.URI in item
             assert LSPConstants.RANGE in item
 
-            abs_path = PathUtils.uri_to_path(item[LSPConstants.URI])
+            abs_path = PathUtils.uri_to_path(item[LSPConstants.URI])  # type: ignore
             if not Path(abs_path).is_relative_to(self.repository_root_path):
                 self.logger.log(
                     "Found a reference in a path outside the repository, probably the LS is parsing things in installed packages or in the standardlib! "
@@ -661,11 +663,11 @@ class SolidLanguageServer(ABC):
                 self.logger.log(f"Ignoring reference in {rel_path} since it should be ignored", logging.DEBUG)
                 continue
 
-            new_item: ls_types.Location = {}
+            new_item: dict = {}
             new_item.update(item)
             new_item["absolutePath"] = str(abs_path)
             new_item["relativePath"] = str(rel_path)
-            ret.append(ls_types.Location(**new_item))
+            ret.append(ls_types.Location(**new_item))  # type: ignore
 
         return ret
 
@@ -766,19 +768,19 @@ class SolidLanguageServer(ABC):
             response: list[LSPTypes.CompletionItem] | LSPTypes.CompletionList | None = None
 
             num_retries = 0
-            while response is None or (response["isIncomplete"] and num_retries < 30):
+            while response is None or (response["isIncomplete"] and num_retries < 30):  # type: ignore
                 self.completions_available.wait()
-                response: list[LSPTypes.CompletionItem] | LSPTypes.CompletionList | None = self.server.send.completion(completion_params)
+                response = self.server.send.completion(completion_params)
                 if isinstance(response, list):
                     response = {"items": response, "isIncomplete": False}
                 num_retries += 1
 
             # TODO: Understand how to appropriately handle `isIncomplete`
-            if response is None or (response["isIncomplete"] and not (allow_incomplete)):
+            if response is None or (response["isIncomplete"] and not allow_incomplete):  # type: ignore
                 return []
 
             if "items" in response:
-                response = response["items"]
+                response = response["items"]  # type: ignore
 
             response = cast(list[LSPTypes.CompletionItem], response)
 
@@ -796,8 +798,8 @@ class SolidLanguageServer(ABC):
 
                 if "label" in item:
                     completion_item["completionText"] = item["label"]
-                    completion_item["kind"] = item["kind"]
-                elif "insertText" in item:
+                    completion_item["kind"] = item["kind"]  # type: ignore
+                elif "insertText" in item:  # type: ignore
                     completion_item["completionText"] = item["insertText"]
                     completion_item["kind"] = item["kind"]
                 elif "textEdit" in item and "newText" in item["textEdit"]:
@@ -824,7 +826,7 @@ class SolidLanguageServer(ABC):
                 else:
                     assert False
 
-                completion_item = ls_types.CompletionItem(**completion_item)
+                completion_item = ls_types.CompletionItem(**completion_item)  # type: ignore
                 completions_list.append(completion_item)
 
             return [json.loads(json_repr) for json_repr in set(json.dumps(item, sort_keys=True) for item in completions_list)]
@@ -879,7 +881,7 @@ class SolidLanguageServer(ABC):
                 logging.DEBUG,
             )
 
-        def turn_item_into_symbol_with_children(item: GenericDocumentSymbol):
+        def turn_item_into_symbol_with_children(item: GenericDocumentSymbol) -> None:
             item = cast(ls_types.UnifiedSymbolInformation, item)
             absolute_path = os.path.join(self.repository_root_path, relative_file_path)
 
@@ -896,9 +898,9 @@ class SolidLanguageServer(ABC):
                 item["location"] = tree_location
             location = item["location"]
             if "absolutePath" not in location:
-                location["absolutePath"] = absolute_path
+                location["absolutePath"] = absolute_path  # type: ignore
             if "relativePath" not in location:
-                location["relativePath"] = relative_file_path
+                location["relativePath"] = relative_file_path  # type: ignore
             if include_body:
                 item["body"] = self.retrieve_symbol_body(item)
             # handle missing selectionRange
@@ -907,16 +909,16 @@ class SolidLanguageServer(ABC):
                     item["selectionRange"] = item["range"]
                 else:
                     item["selectionRange"] = item["location"]["range"]
-            children = item.get(LSPConstants.CHILDREN, [])
-            for child in children:
+            children = item.get(LSPConstants.CHILDREN, [])  # type: ignore
+            for child in children:  # type: ignore
                 child["parent"] = item
-            item[LSPConstants.CHILDREN] = children
+            item[LSPConstants.CHILDREN] = children  # type: ignore
 
         flat_all_symbol_list: list[ls_types.UnifiedSymbolInformation] = []
         root_nodes: list[ls_types.UnifiedSymbolInformation] = []
         for root_item in response:
             if "range" not in root_item and "location" not in root_item:
-                if root_item["kind"] in [SymbolKind.File, SymbolKind.Module]:
+                if root_item["kind"] in [SymbolKind.File, SymbolKind.Module]:  # type: ignore
                     ...
 
             # mutation is more convenient than creating a new dict,
@@ -939,7 +941,7 @@ class SolidLanguageServer(ABC):
                     l: list[ls_types.UnifiedSymbolInformation] = []
                     turn_item_into_symbol_with_children(node)
                     assert LSPConstants.CHILDREN in node
-                    children = node[LSPConstants.CHILDREN]
+                    children = node[LSPConstants.CHILDREN]  # type: ignore
                     l.append(node)
                     for child in children:
                         l.extend(visit_tree_nodes_and_build_tree_repr(child))
@@ -1075,10 +1077,10 @@ class SolidLanguageServer(ABC):
                     package_symbol["children"].append(file_symbol)
 
                     # TODO: Not sure if this is actually still needed given recent changes to relative path handling
-                    def fix_relative_path(nodes: list[ls_types.UnifiedSymbolInformation]):
+                    def fix_relative_path(nodes: list[ls_types.UnifiedSymbolInformation]) -> None:
                         for node in nodes:
                             if "location" in node and "relativePath" in node["location"]:
-                                path = Path(node["location"]["relativePath"])
+                                path = Path(node["location"]["relativePath"])  # type: ignore
                                 if path.is_absolute():
                                     try:
                                         path = path.relative_to(self.repository_root_path)
@@ -1115,7 +1117,7 @@ class SolidLanguageServer(ABC):
         result: dict[str, list[UnifiedSymbolInformation]] = defaultdict(list)
 
         # Helper function to process a symbol and its children
-        def process_symbol(symbol: ls_types.UnifiedSymbolInformation):
+        def process_symbol(symbol: ls_types.UnifiedSymbolInformation) -> None:
             if symbol["kind"] == ls_types.SymbolKind.File:
                 # For file symbols, process their children (top-level symbols)
                 for child in symbol["children"]:
@@ -1204,7 +1206,7 @@ class SolidLanguageServer(ABC):
 
         assert isinstance(response, dict)
 
-        return ls_types.Hover(**response)
+        return ls_types.Hover(**response)  # type: ignore
 
     def retrieve_symbol_body(self, symbol: ls_types.UnifiedSymbolInformation | LSPTypes.DocumentSymbol | LSPTypes.SymbolInformation) -> str:
         """
@@ -1212,18 +1214,18 @@ class SolidLanguageServer(ABC):
         """
         existing_body = symbol.get("body", None)
         if existing_body:
-            return existing_body
+            return str(existing_body)
 
         assert "location" in symbol
-        symbol_start_line = symbol["location"]["range"]["start"]["line"]
-        symbol_end_line = symbol["location"]["range"]["end"]["line"]
-        assert "relativePath" in symbol["location"]
-        symbol_file = self.retrieve_full_file_content(symbol["location"]["relativePath"])
+        symbol_start_line = symbol["location"]["range"]["start"]["line"]  # type: ignore
+        symbol_end_line = symbol["location"]["range"]["end"]["line"]  # type: ignore
+        assert "relativePath" in symbol["location"]  # type: ignore
+        symbol_file = self.retrieve_full_file_content(symbol["location"]["relativePath"])  # type: ignore
         symbol_lines = symbol_file.split("\n")
         symbol_body = "\n".join(symbol_lines[symbol_start_line : symbol_end_line + 1])
 
         # remove leading indentation
-        symbol_start_column = symbol["location"]["range"]["start"]["character"]
+        symbol_start_column = symbol["location"]["range"]["start"]["character"]  # type: ignore
         symbol_body = symbol_body[symbol_start_column:]
         return symbol_body
 
@@ -1272,6 +1274,7 @@ class SolidLanguageServer(ABC):
         incoming_symbol = None
         for ref in references:
             ref_path = ref["relativePath"]
+            assert ref_path is not None
             ref_line = ref["range"]["start"]["line"]
             ref_col = ref["range"]["start"]["character"]
 
@@ -1295,6 +1298,7 @@ class SolidLanguageServer(ABC):
                     ref_text = file_data.contents.split("\n")[ref_line]
                     if "." in ref_text:
                         containing_symbol_name = ref_text.split(".")[0]
+                        assert ref_path is not None
                         all_symbols, _ = self.request_document_symbols(ref_path)
                         for symbol in all_symbols:
                             if symbol["name"] == containing_symbol_name and symbol["kind"] == ls_types.SymbolKind.Variable:
@@ -1501,7 +1505,7 @@ class SolidLanguageServer(ABC):
             return symbol["parent"]
         assert "location" in symbol, f"Symbol {symbol} has no location and no parent attribute"
         return self.request_containing_symbol(
-            symbol["location"]["relativePath"],
+            symbol["location"]["relativePath"],  # type: ignore
             symbol["location"]["range"]["start"]["line"],
             symbol["location"]["range"]["start"]["character"],
             strict=True,
@@ -1542,6 +1546,7 @@ class SolidLanguageServer(ABC):
         # Use the first definition location
         definition = definitions[0]
         def_path = definition["relativePath"]
+        assert def_path is not None
         def_line = definition["range"]["start"]["line"]
         def_col = definition["range"]["start"]["character"]
 
@@ -1563,7 +1568,7 @@ class SolidLanguageServer(ABC):
             / "document_symbols_cache_v23-06-25.pkl"
         )
 
-    def save_cache(self):
+    def save_cache(self) -> None:
         with self._cache_lock:
             if not self._cache_has_changed:
                 self.logger.log("No changes to document symbols cache, skipping save", logging.DEBUG)
@@ -1582,7 +1587,7 @@ class SolidLanguageServer(ABC):
                     logging.ERROR,
                 )
 
-    def load_cache(self):
+    def load_cache(self) -> None:
         if not self.cache_path.exists():
             return
 
@@ -1623,7 +1628,7 @@ class SolidLanguageServer(ABC):
             assert LSPConstants.KIND in item
             assert LSPConstants.LOCATION in item
 
-            ret.append(ls_types.UnifiedSymbolInformation(**item))
+            ret.append(ls_types.UnifiedSymbolInformation(**item))  # type: ignore
 
         return ret
 
@@ -1683,7 +1688,7 @@ class SolidLanguageServer(ABC):
             f"Starting language server with language {self.language_server.language} for {self.language_server.repository_root_path}",
             logging.INFO,
         )
-        self._server_context = self._start_server_process()
+        self._start_server_process()
         return self
 
     def stop(self, shutdown_timeout: float = 2.0) -> None:

@@ -324,7 +324,7 @@ class LanguageServerConfig:
     """File encoding to use when reading source files"""
 
     @classmethod
-    def from_dict(cls, env: dict):
+    def from_dict(cls, env: dict) -> Self:
         """
         Create a MultilspyConfig instance from a dictionary
         """

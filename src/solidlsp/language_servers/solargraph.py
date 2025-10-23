@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import threading
+from typing import cast
 
 from overrides import override
 
@@ -303,14 +304,14 @@ class Solargraph(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Solargraph Language Server for Ruby
         """
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "workspace/executeCommand":
@@ -325,13 +326,13 @@ class Solargraph(SolidLanguageServer):
                 self.analysis_complete.set()
                 self.completions_available.set()
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: dict) -> list:
             return []
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
         self.server.on_request("client/registerCapability", register_capability_handler)
