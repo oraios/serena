@@ -309,25 +309,30 @@ class StreamableHTTPSessionManager:
                 self._server_instances[new_session_id] = http_transport
 
                 async def run_server(*, task_status: TaskStatus[None] = anyio.TASK_STATUS_IGNORED) -> None:
-                    """Run the MCP server for this session."""
-                    try:
+                    async with http_transport.connect() as streams:
+                        read_stream, write_stream = streams
                         task_status.started()
-                        await self._server_factory(http_transport)
-                    except Exception as e:
-                        if not http_transport.is_terminated:
+                        try:
+                            await self.app.run(
+                                read_stream,
+                                write_stream,
+                                self.app.create_initialization_options(),
+                                stateless=False,  # Stateful mode
+                            )
+                        except Exception as e:
                             logger.error(
                                 f"Session {http_transport.mcp_session_id} crashed: {e}",
                                 exc_info=True,
                             )
-                    finally:
-                        # Only remove from instances if not terminated
-                        if (
-                            http_transport.mcp_session_id
-                            and http_transport.mcp_session_id in self._server_instances
-                            and not http_transport.is_terminated
-                        ):
-                            logger.info("Cleaning up crashed session " f"{http_transport.mcp_session_id} from " "active instances.")
-                            del self._server_instances[http_transport.mcp_session_id]
+                        finally:
+                            # Only remove from instances if not terminated
+                            if (
+                                http_transport.mcp_session_id
+                                and http_transport.mcp_session_id in self._server_instances
+                                and not http_transport.is_terminated
+                            ):
+                                logger.info("Cleaning up crashed session " f"{http_transport.mcp_session_id} from " "active instances.")
+                                del self._server_instances[http_transport.mcp_session_id]
 
                 # Assert task group is not None for type checking
                 assert self._task_group is not None
