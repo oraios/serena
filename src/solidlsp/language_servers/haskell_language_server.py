@@ -7,7 +7,6 @@ import os
 import pathlib
 import shutil
 import subprocess
-import threading
 import time
 
 from overrides import override
@@ -27,22 +26,6 @@ class HaskellLanguageServer(SolidLanguageServer):
     """
 
     @staticmethod
-    def _get_hls_version():
-        """Get installed HLS version or None if not found."""
-        try:
-            result = subprocess.run(["haskell-language-server-wrapper", "--version"], capture_output=True, text=True, check=False)
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except FileNotFoundError:
-            return None
-        return None
-
-    @staticmethod
-    def _get_hls_path():
-        """Get haskell-language-server-wrapper path from system PATH."""
-        return shutil.which("haskell-language-server-wrapper")
-
-    @staticmethod
     def _ensure_hls_installed():
         """Ensure haskell-language-server-wrapper is available."""
         # Try common locations
@@ -58,13 +41,21 @@ class HaskellLanguageServer(SolidLanguageServer):
         # Check Stack programs directory
         stack_programs = os.path.expanduser("~/.local/share/stack/programs")
         if os.path.exists(stack_programs):
-            for arch_dir in os.listdir(stack_programs):
-                arch_path = os.path.join(stack_programs, arch_dir)
-                if os.path.isdir(arch_path):
-                    for ghc_dir in os.listdir(arch_path):
-                        hls_path = os.path.join(arch_path, ghc_dir, "bin", "haskell-language-server-wrapper")
-                        if os.path.isfile(hls_path) and os.access(hls_path, os.X_OK):
-                            common_paths.append(hls_path)
+            try:
+                for arch_dir in os.listdir(stack_programs):
+                    arch_path = os.path.join(stack_programs, arch_dir)
+                    if os.path.isdir(arch_path):
+                        try:
+                            for ghc_dir in os.listdir(arch_path):
+                                hls_path = os.path.join(arch_path, ghc_dir, "bin", "haskell-language-server-wrapper")
+                                if os.path.isfile(hls_path) and os.access(hls_path, os.X_OK):
+                                    common_paths.append(hls_path)
+                        except (PermissionError, OSError):
+                            # Skip directories we can't read
+                            continue
+            except (PermissionError, OSError):
+                # Stack programs directory not accessible
+                pass
 
         for path in common_paths:
             if path and os.path.isfile(path) and os.access(path, os.X_OK):
@@ -103,7 +94,7 @@ class HaskellLanguageServer(SolidLanguageServer):
         env = dict(os.environ)
         ghcup_bin = os.path.expanduser("~/.ghcup/bin")
         if ghcup_bin not in env.get("PATH", ""):
-            env["PATH"] = f"{ghcup_bin}:{env.get('PATH', '')}"
+            env["PATH"] = f"{ghcup_bin}{os.pathsep}{env.get('PATH', '')}"
 
         super().__init__(
             config,
@@ -113,7 +104,6 @@ class HaskellLanguageServer(SolidLanguageServer):
             "haskell",
             solidlsp_settings,
         )
-        self.server_ready = threading.Event()
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -395,5 +385,4 @@ class HaskellLanguageServer(SolidLanguageServer):
         self.logger.log("Waiting for HLS to index project...", logging.INFO)
         time.sleep(2)
 
-        self.server_ready.set()
         self.logger.log("Haskell Language Server initialized successfully", logging.INFO)
