@@ -3,8 +3,10 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    rust-overlay.url = "github:oxalica/rust-overlay";
-    flake-utils.url = "github:numtide/flake-utils";
+
+    flake-utils = {
+      url = "github:numtide/flake-utils";
+    };
 
     pyproject-nix = {
       url = "github:pyproject-nix/pyproject.nix";
@@ -30,9 +32,7 @@
   };
 
   outputs = {
-    self, # self is needed for the outputs function
     nixpkgs,
-    rust-overlay,
     uv2nix,
     pyproject-nix,
     pyproject-build-systems,
@@ -40,27 +40,18 @@
     ...
   }:
     flake-utils.lib.eachDefaultSystem (system: let
-      # 1. Apply the rust-overlay to pkgs
-      pkgs = import nixpkgs {
-        inherit system;
-        overlays = [ rust-overlay.overlays.default ];
-      };
+      pkgs = import nixpkgs {inherit system;};
 
-      # 2. Define the Rust toolchain
-      rustToolchain = pkgs.rust-bin.stable.latest.default.override {
-        extensions = [ "rust-src" "rust-analyzer" ];
-      };
-
-      # --- YOUR ORIGINAL PYTHON SETUP (RESTORED) ---
       inherit (pkgs) lib;
 
       workspace = uv2nix.lib.workspace.loadWorkspace {workspaceRoot = ./.;};
 
       overlay = workspace.mkPyprojectOverlay {
-        sourcePreference = "wheel";
+        sourcePreference = "wheel"; # or sourcePreference = "sdist";
       };
 
       pyprojectOverrides = final: prev: {
+        # Add setuptools for packages that need it during build
         ruamel-yaml-clib = prev.ruamel-yaml-clib.overrideAttrs (old: {
           nativeBuildInputs = (old.nativeBuildInputs or []) ++ [
             final.setuptools
@@ -81,8 +72,6 @@
             pyprojectOverrides
           ]
         );
-      # --- END OF YOUR ORIGINAL PYTHON SETUP ---
-
     in rec {
       formatter = pkgs.alejandra;
 
@@ -96,26 +85,28 @@
         program = "${packages.default}/bin/serena";
       };
 
-      # This devShell is now correct and complete
       devShells = {
         default = pkgs.mkShell {
           packages = [
             python
             pkgs.uv
+            pkgs.rust-analyzer
           ];
-          nativeBuildInputs = [
-            rustToolchain # From the 'let' block above
+        nativeBuildInputs = [
             pkgs.openssl
             pkgs.pkg-config
+            pkgs.clang
+            pkgs.lld
+            pkgs.rustup
           ];
-          env = {
-            OPENSSL_DIR = "${pkgs.openssl.dev}";
-            SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
-            UV_PYTHON_DOWNLOADS = "never";
-            UV_PYTHON = python.interpreter;
-          } // lib.optionalAttrs pkgs.stdenv.isLinux {
-            LD_LIBRARY_PATH = lib.makeLibraryPath pkgs.pythonManylinuxPackages.manylinux1;
-          };
+          env =
+            {
+              UV_PYTHON_DOWNLOADS = "never";
+              UV_PYTHON = python.interpreter;
+            }
+            // lib.optionalAttrs pkgs.stdenv.isLinux {
+              LD_LIBRARY_PATH = lib.makeLibraryPath pkgs.pythonManylinuxPackages.manylinux1;
+            };
           shellHook = ''
             unset PYTHONPATH
           '';
