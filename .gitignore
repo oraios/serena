@@ -249,3 +249,11 @@ tmp/
 .bloop/
 bootstrap
 test/resources/repos/scala/.bloop/
+
+# Haskell
+.stack-work/
+*.cabal
+stack.yaml.lock
+dist-newstyle/
+cabal.project.local*
+.ghc.environment.*
