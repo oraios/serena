@@ -99,6 +99,7 @@ With Serena, we provide direct, out-of-the-box support for:
   * Scala (requires some [manual setup](docs/scala_setup_guide_for_serena.md); uses Metals LSP)
   * Erlang (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls), experimental, might be slow or hang)
   * Perl (requires installation of Perl::LanguageServer)
+  * Haskell (automatically locates HLS via ghcup, stack, or system PATH; supports Stack and Cabal projects)
   * AL
   * Markdown (must be explicitly specified via `--language markdown` when generating project config, primarily useful for documentation-heavy projects)
 

@@ -154,6 +154,25 @@ jobs:
       - name: Install Julia LanguageServer
         shell: bash
         run: julia -e 'using Pkg; Pkg.add("LanguageServer")'
+      - name: Set up Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6.4'
+          enable-stack: true
+          stack-version: 'latest'
+      - name: Install Haskell Language Server
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            echo "Skipping HLS installation on Windows (using ghcup fallback in test)"
+          else
+            # Install HLS via ghcup (recommended method)
+            if ! command -v ghcup &> /dev/null; then
+              curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
+              export PATH="$HOME/.ghcup/bin:$PATH"
+            fi
+            ghcup install hls --set recommended
+          fi
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
