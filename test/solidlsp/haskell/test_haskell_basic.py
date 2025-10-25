@@ -7,6 +7,8 @@ Tests cover:
 - Cross-file references across modules
 """
 
+import sys
+
 import pytest
 
 from solidlsp.ls import SolidLanguageServer
@@ -14,6 +16,7 @@ from solidlsp.ls_config import Language
 
 
 @pytest.mark.haskell
+@pytest.mark.skipif(sys.platform == "win32", reason="HLS not installed on Windows CI")
 class TestHaskellLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
     def test_haskell_symbols(self, language_server: SolidLanguageServer):
