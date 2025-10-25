@@ -2,53 +2,101 @@
   description = "A powerful coding agent toolkit providing semantic retrieval and editing capabilities (MCP server & Agno integration)";
 
   inputs = {
-    nixpkgs.url = "github:NOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
     flake-utils.url = "github:numtide/flake-utils";
-    # ... other inputs are correct
+
+    pyproject-nix = {
+      url = "github:pyproject-nix/pyproject.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    uv2nix = {
+      url = "github:pyproject-nix/uv2nix";
+      inputs = {
+        pyproject-nix.follows = "pyproject-nix";
+        nixpkgs.follows = "nixpkgs";
+      };
+    };
+
+    pyproject-build-systems = {
+      url = "github:pyproject-nix/build-system-pkgs";
+      inputs = {
+        pyproject-nix.follows = "pyproject-nix";
+        uv2nix.follows = "uv2nix";
+        nixpkgs.follows = "nixpkgs";
+      };
+    };
   };
 
   outputs = {
+    self, # self is needed for the outputs function
     nixpkgs,
-    rust-overlay, # This is correctly passed in
-    # ... other outputs are correct
+    rust-overlay,
+    uv2nix,
+    pyproject-nix,
+    pyproject-build-systems,
+    flake-utils,
+    ...
   }:
     flake-utils.lib.eachDefaultSystem (system: let
-      # --- CHANGE #1: Apply the rust-overlay here ---
+      # 1. Apply the rust-overlay to pkgs
       pkgs = import nixpkgs {
         inherit system;
-        # This line tells pkgs to include the Rust toolchains
         overlays = [ rust-overlay.overlays.default ];
       };
 
-      # --- CHANGE #2: Define the rustToolchain variable here ---
+      # 2. Define the Rust toolchain
       rustToolchain = pkgs.rust-bin.stable.latest.default.override {
-        # This gives you rust-analyzer and the Rust source for Go-to-Definition
         extensions = [ "rust-src" "rust-analyzer" ];
       };
 
-      # --- The rest of your `let` block is correct ---
+      # --- YOUR ORIGINAL PYTHON SETUP (RESTORED) ---
       inherit (pkgs) lib;
+
       workspace = uv2nix.lib.workspace.loadWorkspace {workspaceRoot = ./.;};
+
       overlay = workspace.mkPyprojectOverlay {
-        sourcePreference = "wheel"; # or sourcePreference = "sdist";
-      };
-      pyprojectOverrides = final: prev: {
-        # ... this section is correct
-      };
-      python = pkgs.python311;
-      pythonSet = # ... this section is correct
-        ;
-    in rec {
-      formatter = pkgs.alejandra;
-      packages = {
-        # ... this section is correct
-      };
-      apps.default = {
-        # ... this section is correct
+        sourcePreference = "wheel";
       };
 
-      # This devShells block is now correct because rustToolchain is defined above
+      pyprojectOverrides = final: prev: {
+        ruamel-yaml-clib = prev.ruamel-yaml-clib.overrideAttrs (old: {
+          nativeBuildInputs = (old.nativeBuildInputs or []) ++ [
+            final.setuptools
+          ];
+        });
+      };
+
+      python = pkgs.python311;
+
+      pythonSet =
+        (pkgs.callPackage pyproject-nix.build.packages {
+          inherit python;
+        }).overrideScope
+        (
+          lib.composeManyExtensions [
+            pyproject-build-systems.overlays.default
+            overlay
+            pyprojectOverrides
+          ]
+        );
+      # --- END OF YOUR ORIGINAL PYTHON SETUP ---
+
+    in rec {
+      formatter = pkgs.alejandra;
+
+      packages = {
+        serena = pythonSet.mkVirtualEnv "serena" workspace.deps.default;
+        default = packages.serena;
+      };
+
+      apps.default = {
+        type = "app";
+        program = "${packages.default}/bin/serena";
+      };
+
+      # This devShell is now correct and complete
       devShells = {
         default = pkgs.mkShell {
           packages = [
@@ -56,20 +104,18 @@
             pkgs.uv
           ];
           nativeBuildInputs = [
-            rustToolchain # This will now work
+            rustToolchain # From the 'let' block above
             pkgs.openssl
             pkgs.pkg-config
           ];
-          env =
-            {
-              OPENSSL_DIR = "${pkgs.openssl.dev}";
-              SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
-              UV_PYTHON_DOWNLOADS = "never";
-              UV_PYTHON = python.interpreter;
-            }
-            // lib.optionalAttrs pkgs.stdenv.isLinux {
-              LD_LIBRARY_PATH = lib.makeLibraryPath pkgs.pythonManylinuxPackages.manylinux1;
-            };
+          env = {
+            OPENSSL_DIR = "${pkgs.openssl.dev}";
+            SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+            UV_PYTHON_DOWNLOADS = "never";
+            UV_PYTHON = python.interpreter;
+          } // lib.optionalAttrs pkgs.stdenv.isLinux {
+            LD_LIBRARY_PATH = lib.makeLibraryPath pkgs.pythonManylinuxPackages.manylinux1;
+          };
           shellHook = ''
             unset PYTHONPATH
           '';
