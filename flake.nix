@@ -122,12 +122,16 @@
                   pkgs.stdenv.cc.cc.lib
                   pkgs.libclang.lib
                 ]}" \
+                --prefix PKG_CONFIG_PATH : "${pkgs.openssl.dev}/lib/pkgconfig" \
                 --set SSL_CERT_FILE "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt" \
                 --set OPENSSL_DIR "${pkgs.openssl.dev}" \
+                --set OPENSSL_LIB_DIR "${pkgs.openssl.out}/lib" \
+                --set OPENSSL_INCLUDE_DIR "${pkgs.openssl.dev}/include" \
+                --set OPENSSL_NO_VENDOR "1" \
                 --set RUST_SRC_PATH "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}" \
                 --set CC "${pkgs.clang}/bin/clang" \
                 --set CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER "${pkgs.clang}/bin/clang" \
-                --set RUSTFLAGS "-C link-arg=-fuse-ld=lld"
+                --set RUSTFLAGS "-C link-arg=-fuse-ld=lld -L ${pkgs.openssl.out}/lib"
             '';
           };
         default = packages.serena;
@@ -155,6 +159,8 @@
               UV_PYTHON_DOWNLOADS = "never";
               UV_PYTHON = python.interpreter;
               OPENSSL_DIR = "${pkgs.openssl.dev}";
+              OPENSSL_LIB_DIR = "${pkgs.openssl.out}/lib";
+              OPENSSL_INCLUDE_DIR = "${pkgs.openssl.dev}/include";
               PKG_CONFIG_PATH = "${pkgs.openssl.dev}/lib/pkgconfig";
             }
             // lib.optionalAttrs pkgs.stdenv.isLinux {
