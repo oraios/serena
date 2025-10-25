@@ -13,7 +13,7 @@ main = do
     putStrLn $ "5 + 3 = " ++ show result1
 
     -- Test subtract (uses validateNumber from Helper)
-    let result2 = subtract 10 4
+    let result2 = Calculator.subtract 10 4
     putStrLn $ "10 - 4 = " ++ show result2
 
     -- Test calculate function

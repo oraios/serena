@@ -1,3 +1,5 @@
-resolver: lts-22.7  # GHC 9.6.4
+resolver: ghc-9.8.4
+system-ghc: true
+install-ghc: false
 packages:
   - .

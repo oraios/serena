@@ -52,10 +52,9 @@ class TestHaskellLanguageServer:
         """
         Test finding references to a function defined in another file.
         """
-        # The 'validateNumber' function is defined in Helper.hs (line 8)
+        # The 'validateNumber' function is defined in Helper.hs (line 9 in file, line 8 0-indexed)
         # and used in Calculator.hs (in add and subtract functions)
-        # LSP uses 0-based indexing, so line 8 is index 7
-        references = language_server.request_references("src/Helper.hs", line=7, column=0)
+        references = language_server.request_references("src/Helper.hs", line=8, column=0)
 
         # Should find at least the definition and usages
         assert len(references) >= 1, f"Expected at least 1 reference to validateNumber, got {len(references)}"
