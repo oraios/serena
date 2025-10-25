@@ -97,6 +97,7 @@
           ];
           env =
             {
+              SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
               UV_PYTHON_DOWNLOADS = "never";
               UV_PYTHON = python.interpreter;
             }
