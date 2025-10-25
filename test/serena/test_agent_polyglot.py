@@ -26,6 +26,13 @@ from serena.project import Project
 from solidlsp.ls_config import Language
 
 
+@pytest.fixture(autouse=True)
+def _mock_tiktoken():
+    """Mock tiktoken to prevent network download during tests."""
+    with patch('serena.agent.RegisteredTokenCountEstimator'):
+        yield
+
+
 class TestAgentPolyglotIntegration:
     """Test Agent class integration with LSPManager."""
 
@@ -127,8 +134,7 @@ class TestAgentThreadSafety:
     AI Panel Finding: HIGH severity - Race conditions with concurrent access.
     """
 
-    @patch('serena.agent.RegisteredTokenCountEstimator')
-    def test_concurrent_reset_lsp_manager_is_thread_safe(self, mock_estimator):
+    def test_concurrent_reset_lsp_manager_is_thread_safe(self):
         """
         Test that concurrent calls to reset_lsp_manager() don't create race conditions.
 
@@ -178,8 +184,7 @@ class TestAgentThreadSafety:
         for manager in created_managers[:-1]:
             manager.shutdown_all_sync.assert_called_once()
 
-    @patch('serena.agent.RegisteredTokenCountEstimator')
-    def test_get_language_server_during_reset_is_safe(self, mock_estimator):
+    def test_get_language_server_during_reset_is_safe(self):
         """
         Test that get_language_server_for_file() is safe during concurrent reset.
 
@@ -237,8 +242,7 @@ class TestAgentRollbackValidation:
     AI Panel Finding: HIGH severity - Incomplete rollback logic.
     """
 
-    @patch('serena.agent.RegisteredTokenCountEstimator')
-    def test_rollback_validates_old_manager_is_functional(self, mock_estimator):
+    def test_rollback_validates_old_manager_is_functional(self):
         """
         Test that rollback validates old manager is still functional before restoring.
 
@@ -275,8 +279,7 @@ class TestAgentRollbackValidation:
             lsps = agent.lsp_manager.get_all_working_language_servers()
             assert len(lsps) > 0
 
-    @patch('serena.agent.RegisteredTokenCountEstimator')
-    def test_rollback_handles_old_manager_already_shut_down(self, mock_estimator):
+    def test_rollback_handles_old_manager_already_shut_down(self):
         """
         Test rollback when old manager was already shut down.
 
@@ -315,8 +318,7 @@ class TestAgentBackwardCompatibilityDeprecation:
     AI Panel Finding: HIGH severity - No deprecation warning for language_server property.
     """
 
-    @patch('serena.agent.RegisteredTokenCountEstimator')
-    def test_language_server_property_emits_deprecation_warning(self, mock_estimator):
+    def test_language_server_property_emits_deprecation_warning(self):
         """
         Test that accessing language_server property emits deprecation warning.
 
@@ -341,8 +343,7 @@ class TestAgentBackwardCompatibilityDeprecation:
             assert any("deprecated" in str(warning.message).lower() for warning in w)
             assert any("lsp_manager" in str(warning.message).lower() for warning in w)
 
-    @patch('serena.agent.RegisteredTokenCountEstimator')
-    def test_language_server_deprecation_message_includes_migration_path(self, mock_estimator):
+    def test_language_server_deprecation_message_includes_migration_path(self):
         """
         Test that deprecation warning includes clear migration instructions.
 
