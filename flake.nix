@@ -90,6 +90,8 @@
           packages = [
             python
             pkgs.uv
+          ];
+          nativeBuildInputs = [
             pkgs.openssl
             pkgs.pkg-config
           ];
