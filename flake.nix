@@ -90,14 +90,13 @@
           packages = [
             python
             pkgs.uv
-            pkgs.rust-analyzer
+            pkgs.rustup
           ];
         nativeBuildInputs = [
             pkgs.openssl
             pkgs.pkg-config
             pkgs.clang
             pkgs.lld
-            pkgs.rustup
           ];
           env =
             {
