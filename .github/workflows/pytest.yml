@@ -171,7 +171,18 @@ jobs:
               curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
               export PATH="$HOME/.ghcup/bin:$PATH"
             fi
+
+            # Install HLS compatible with GHC 9.6.4
+            # Using 'recommended' ensures compatibility with installed GHC
             ghcup install hls --set recommended
+
+            # Verify HLS installation
+            which haskell-language-server-wrapper || echo "Warning: HLS wrapper not found in PATH"
+
+            # Pre-build the test project to speed up HLS initialization
+            cd test/resources/repos/haskell/test_repo
+            stack build --only-dependencies 2>/dev/null || echo "Stack build skipped (dependencies may build during tests)"
+            cd -
           fi
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@v2

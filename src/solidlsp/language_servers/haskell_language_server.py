@@ -380,8 +380,9 @@ class HaskellLanguageServer(SolidLanguageServer):
         self.server.notify.initialized({})
         self.completions_available.set()
 
-        # Give HLS a moment to index the project
+        # Give HLS time to index the project
+        # HLS can be slow to index, especially on first run
         self.logger.log("Waiting for HLS to index project...", logging.INFO)
-        time.sleep(2)
+        time.sleep(5)
 
         self.logger.log("Haskell Language Server initialized successfully", logging.INFO)
