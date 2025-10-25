@@ -50,13 +50,18 @@ class ProcessLaunchInfo:
     """
 
     # The command to launch the process
-    cmd: str | list[str]
+    cmd: str | list[str] | None = None
 
     # The environment variables to set for the process
     env: dict[str, str] = dataclasses.field(default_factory=dict)
 
     # The working directory for the process
     cwd: str = os.getcwd()
+
+    # Optional TCP connection details for language servers that expose a socket transport
+    tcp_host: str | None = None
+    tcp_port: int | None = None
+    tcp_connection_timeout: float = 30.0
 
 
 class LSPError(Exception):
@@ -95,13 +100,13 @@ class StopLoopException(Exception):
     pass
 
 
-def create_message(payload: PayloadLike):
+def create_message(payload: PayloadLike, include_content_type: bool = True):
     body = json.dumps(payload, check_circular=False, ensure_ascii=False, separators=(",", ":")).encode(ENCODING)
-    return (
-        f"Content-Length: {len(body)}\r\n".encode(ENCODING),
-        "Content-Type: application/vscode-jsonrpc; charset=utf-8\r\n\r\n".encode(ENCODING),
-        body,
-    )
+    headers = [f"Content-Length: {len(body)}\r\n".encode(ENCODING)]
+    if include_content_type:
+        headers.append("Content-Type: application/vscode-jsonrpc; charset=utf-8\r\n".encode(ENCODING))
+    headers.append(b"\r\n")
+    return (*headers, body)
 
 
 class MessageType:

@@ -90,6 +90,7 @@ With Serena, we provide direct, out-of-the-box support for:
   * Kotlin (uses the pre-alpha [official kotlin LS](https://github.com/Kotlin/kotlin-lsp), some issues may appear)
   * Java (_Note_: startup is slow, initial startup especially so. There may be issues with java on macos and linux, we are working on it.)
   * Clojure
+  * Gdscript (uses tcp, automatically downloads godot if not installed)
   * Dart
   * Bash
   * Lua (automatically downloads lua-language-server if not installed)

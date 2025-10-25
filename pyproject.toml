@@ -281,6 +281,7 @@ markers = [
   "rego: language server running for Rego",
   "markdown: language server running for Markdown",
   "julia: Julia language server tests",
+  "gdscript: language server running for GDScript",
 ]
 
 [tool.codespell]

@@ -31,6 +31,7 @@ class Language(str, Enum):
     Possible languages with Multilspy.
     """
 
+    GDSCRIPT = "gdscript"
     CSHARP = "csharp"
     PYTHON = "python"
     RUST = "rust"
@@ -158,6 +159,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.scala", "*.sbt")
             case self.JULIA:
                 return FilenameMatcher("*.jl")
+            case self.GDSCRIPT:
+                return FilenameMatcher("*.gd")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -291,6 +294,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.julia_server import JuliaLanguageServer
 
                 return JuliaLanguageServer
+            case self.GDSCRIPT:
+                from solidlsp.language_servers.gdscript_language_server import GDScriptLanguageServer
+
+                return GDScriptLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
