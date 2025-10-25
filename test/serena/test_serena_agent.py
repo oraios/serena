@@ -37,7 +37,7 @@ def serena_config():
                 project_root=str(repo_path),
                 project_config=ProjectConfig(
                     project_name=project_name,
-                    language=language,
+                    languages=[language],
                     ignored_paths=[],
                     excluded_tools=set(),
                     read_only=False,
