@@ -135,8 +135,23 @@ class SerenaAgent:
 
         # start the dashboard (web frontend), registering its log handler
         if self.serena_config.web_dashboard:
+            # Create a shutdown callback to ensure proper cleanup before exiting
+            def shutdown_callback():
+                log.info("Dashboard shutdown callback called, stopping language server...")
+                if self.is_language_server_running():
+                    log.info("Stopping the language server ...")
+                    assert self.language_server is not None
+                    self.language_server.save_cache()
+                    self.language_server.stop()
+                if self._gui_log_viewer:
+                    log.info("Stopping the GUI log window ...")
+                    self._gui_log_viewer.stop()
+                # noinspection PyProtectedMember
+                # noinspection PyUnresolvedReferences
+                os._exit(0)
+
             self._dashboard_thread, port = SerenaDashboardAPI(
-                get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats
+                get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats, shutdown_callback=shutdown_callback
             ).run_in_thread()
             dashboard_url = f"http://127.0.0.1:{port}/dashboard/index.html"
             log.info("Serena web dashboard started at %s", dashboard_url)

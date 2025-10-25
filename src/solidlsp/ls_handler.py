@@ -3,9 +3,11 @@ import json
 import logging
 import os
 import platform
+import socket
 import subprocess
 import threading
 import time
+import select
 from collections.abc import Callable
 from dataclasses import dataclass
 from queue import Empty, Queue
@@ -153,6 +155,10 @@ class SolidLanguageServerHandler:
         self.loop = None
         self.start_independent_lsp_process = start_independent_lsp_process
         self._request_timeout = request_timeout
+        self._tcp_socket: socket.socket | None = None
+        self._stdout_stream = None
+        self._stdin_stream = None
+        self._transport_is_tcp = False
 
         # Add thread locks for shared resources to prevent race conditions
         self._stdin_lock = threading.Lock()
@@ -166,10 +172,18 @@ class SolidLanguageServerHandler:
         """
         self._request_timeout = timeout
 
+    def get_request_timeout(self) -> float | None:
+        """
+        :return: the currently configured request timeout in seconds, or None if unlimited.
+        """
+        return self._request_timeout
+
     def is_running(self) -> bool:
         """
         Checks if the language server process is currently running.
         """
+        if self._transport_is_tcp:
+            return self._tcp_socket is not None
         return self.process is not None and self.process.returncode is None
 
     def start(self) -> None:
@@ -181,44 +195,107 @@ class SolidLanguageServerHandler:
         child_proc_env.update(self.process_launch_info.env)
 
         cmd = self.process_launch_info.cmd
-        is_windows = platform.system() == "Windows"
-        if not isinstance(cmd, str) and not is_windows:
-            # Since we are using the shell, we need to convert the command list to a single string
-            # on Linux/macOS
-            cmd = " ".join(cmd)
-        log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
-        kwargs = subprocess_kwargs()
-        kwargs["start_new_session"] = self.start_independent_lsp_process
-        self.process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stdin=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=child_proc_env,
-            cwd=self.process_launch_info.cwd,
-            shell=True,
-            **kwargs,
-        )
+        use_tcp_transport = bool(self.process_launch_info.tcp_host and self.process_launch_info.tcp_port is not None)
+        if cmd:
+            is_windows = platform.system() == "Windows"
+            if not isinstance(cmd, str) and not is_windows:
+                # Since we are using the shell, we need to convert the command list to a single string
+                # on Linux/macOS
+                cmd_to_run = " ".join(cmd)
+            else:
+                cmd_to_run = cmd
+            log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
+            kwargs = subprocess_kwargs()
+            kwargs["start_new_session"] = self.start_independent_lsp_process
 
-        # Check if process terminated immediately
-        if self.process.returncode is not None:
-            log.error("Language server has already terminated/could not be started")
-            # Process has already terminated
-            stderr_data = self.process.stderr.read()
-            error_message = stderr_data.decode("utf-8", errors="replace")
-            raise RuntimeError(f"Process terminated immediately with code {self.process.returncode}. Error: {error_message}")
+            stdout_sink = subprocess.PIPE
+            stdin_sink = subprocess.PIPE
+            stderr_sink = subprocess.PIPE
+            if use_tcp_transport:
+                stdout_sink = subprocess.DEVNULL
+                stdin_sink = subprocess.DEVNULL
+                stderr_sink = subprocess.DEVNULL
+
+            self.process = subprocess.Popen(
+                cmd_to_run,
+                stdout=stdout_sink,
+                stdin=stdin_sink,
+                stderr=stderr_sink,
+                env=child_proc_env,
+                cwd=self.process_launch_info.cwd,
+                shell=True,
+                **kwargs,
+            )
+
+            # Check if process terminated immediately
+            if self.process.returncode is not None:
+                log.error("Language server has already terminated/could not be started")
+                # Process has already terminated
+                stderr_data = self.process.stderr.read()
+                error_message = stderr_data.decode("utf-8", errors="replace")
+                raise RuntimeError(
+                    f"Process terminated immediately with code {self.process.returncode}. Error: {error_message}"
+                )
+        else:
+            log.info("Skipping language server process launch because no command was provided.")
+            self.process = None
+
+        self._setup_transport_streams()
 
         # start threads to read stdout and stderr of the process
-        threading.Thread(
-            target=self._read_ls_process_stdout,
-            name="LSP-stdout-reader",
-            daemon=True,
-        ).start()
-        threading.Thread(
-            target=self._read_ls_process_stderr,
-            name="LSP-stderr-reader",
-            daemon=True,
-        ).start()
+        if self._stdout_stream is not None:
+            threading.Thread(
+                target=self._read_ls_process_stdout,
+                name="LSP-stdout-reader",
+                daemon=True,
+            ).start()
+        if self.process and self.process.stderr is not None:
+            threading.Thread(
+                target=self._read_ls_process_stderr,
+                name="LSP-stderr-reader",
+                daemon=True,
+            ).start()
+
+    def _setup_transport_streams(self) -> None:
+        """Configure the reader/writer streams used to communicate with the language server."""
+        self._transport_is_tcp = False
+        self._tcp_socket = None
+        self._stdout_stream = self.process.stdout if self.process else None
+        self._stdin_stream = self.process.stdin if self.process else None
+
+        tcp_host = self.process_launch_info.tcp_host
+        tcp_port = self.process_launch_info.tcp_port
+        if tcp_host and tcp_port is not None:
+            connection_deadline = time.time() + max(self.process_launch_info.tcp_connection_timeout, 0)
+            last_error: Exception | None = None
+            while time.time() < connection_deadline:
+                if self.process and self.process.poll() is not None:
+                    raise RuntimeError("Language server process terminated before TCP transport became ready")
+                try:
+                    self._tcp_socket = socket.create_connection((tcp_host, tcp_port), timeout=1.0)
+                    break
+                except OSError as exc:
+                    last_error = exc
+                    time.sleep(0.1)
+            if not self._tcp_socket:
+                raise RuntimeError(
+                    f"Timed out connecting to language server TCP endpoint at {tcp_host}:{tcp_port}"
+                ) from last_error
+
+            try:
+                self._tcp_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            except OSError:
+                pass
+
+            try:
+                self._tcp_socket.settimeout(None)
+            except OSError:
+                pass
+
+            self._stdout_stream = self._tcp_socket  # use raw socket for reading
+            self._stdin_stream = self._tcp_socket.makefile("wb")
+            self._transport_is_tcp = True
+            log.info("Connected to language server TCP endpoint at %s:%s", tcp_host, tcp_port)
 
     def stop(self) -> None:
         """
@@ -226,6 +303,7 @@ class SolidLanguageServerHandler:
         """
         process = self.process
         self.process = None
+        self._close_transport_streams()
         if process:
             self._cleanup_process(process)
 
@@ -253,6 +331,25 @@ class SolidLanguageServerHandler:
                 pipe.close()
             except Exception:
                 pass
+
+    def _close_transport_streams(self) -> None:
+        """Close any non-stdio transport resources that were created."""
+        if self._transport_is_tcp:
+            for stream in (self._stdin_stream, self._stdout_stream):
+                if stream:
+                    try:
+                        stream.close()
+                    except Exception:
+                        pass
+            if self._tcp_socket:
+                try:
+                    self._tcp_socket.close()
+                except Exception:
+                    pass
+        self._tcp_socket = None
+        self._stdin_stream = None
+        self._stdout_stream = None
+        self._transport_is_tcp = False
 
     def _terminate_or_kill_process(self, process):
         """Try to terminate the process gracefully, then forcefully if necessary."""
@@ -317,7 +414,7 @@ class SolidLanguageServerHandler:
         while len(data) < num_bytes:
             chunk = stream.read(num_bytes - len(data))
             if not chunk:
-                if process.poll() is not None:
+                if process is not None and process.poll() is not None:
                     raise LanguageServerTerminatedException(
                         f"Process terminated while trying to read response (read {num_bytes} of {len(data)} bytes before termination)"
                     )
@@ -333,26 +430,70 @@ class SolidLanguageServerHandler:
         invoking the registered response and notification handlers
         """
         exception: Exception | None = None
+        stream = self._stdout_stream
         try:
-            while self.process and self.process.stdout:
-                if self.process.poll() is not None:  # process has terminated
-                    break
-                line = self.process.stdout.readline()
-                if not line:
-                    continue
-                try:
-                    num_bytes = content_length(line)
-                except ValueError:
-                    continue
-                if num_bytes is None:
-                    continue
-                while line and line.strip():
-                    line = self.process.stdout.readline()
-                if not line:
-                    continue
-                body = self._read_bytes_from_process(self.process, self.process.stdout, num_bytes)
+            if self._transport_is_tcp:
+                sock = self._tcp_socket
+                buffer = b""
+                while sock:
+                    try:
+                        ready, _, _ = select.select([sock], [], [], 1.0)
+                        if not ready:
+                            continue
+                        chunk = sock.recv(4096)
+                    except socket.timeout:
+                        continue
+                    except OSError as exc:
+                        break
+                    if not chunk:
+                        time.sleep(0.01)
+                        continue
+                    buffer += chunk
+                    while True:
+                        header_end = buffer.find(b"\r\n\r\n")
+                        if header_end == -1:
+                            break
+                        header_blob = buffer[:header_end].split(b"\r\n")
+                        buffer = buffer[header_end + 4 :]
+                        try:
+                            num_bytes_val = None
+                            for line_bytes in header_blob:
+                                num_bytes_val = content_length(line_bytes + b"\r\n")
+                                if num_bytes_val is not None:
+                                    break
+                        except ValueError:
+                            num_bytes_val = None
+                        if num_bytes_val is None:
+                            continue
+                        while len(buffer) < num_bytes_val:
+                            chunk = sock.recv(num_bytes_val - len(buffer))
+                            if not chunk:
+                                time.sleep(0.01)
+                                continue
+                            buffer += chunk
+                        body = buffer[:num_bytes_val]
+                        buffer = buffer[num_bytes_val:]
+                        self._handle_body(body)
+            else:
+                while stream:
+                    if self.process is not None and self.process.poll() is not None:  # process has terminated
+                        break
+                    line = stream.readline()
+                    if not line:
+                        continue
+                    try:
+                        num_bytes = content_length(line)
+                    except ValueError:
+                        continue
+                    if num_bytes is None:
+                        continue
+                    while line and line.strip():
+                        line = stream.readline()
+                    if not line:
+                        continue
+                    body = self._read_bytes_from_process(self.process, stream, num_bytes)
 
-                self._handle_body(body)
+                    self._handle_body(body)
         except LanguageServerTerminatedException as e:
             exception = e
         except (BrokenPipeError, ConnectionResetError) as e:
@@ -409,6 +550,22 @@ class SolidLanguageServerHandler:
         """
         Determine if the payload received from server is for a request, response, or notification and invoke the appropriate handler
         """
+        payload_type = "unknown"
+        method = payload.get("method")
+        payload_id = payload.get("id")
+        if method is not None:
+            payload_type = "request" if payload_id is not None else "notification"
+        elif payload_id is not None:
+            payload_type = "response"
+
+        log.debug(
+            "LSP inbound payload type=%s method=%s id=%s keys=%s",
+            payload_type,
+            method,
+            payload_id,
+            list(payload.keys()),
+        )
+
         if self.logger:
             self.logger("server", "client", payload)
         try:
@@ -485,7 +642,19 @@ class SolidLanguageServerHandler:
         """
         Send the payload to the server by writing to its stdin asynchronously.
         """
-        if not self.process or not self.process.stdin:
+        if self._transport_is_tcp and self._tcp_socket:
+            data = b"".join(create_message(payload, include_content_type=False))
+            self._log(payload)
+            with self._stdin_lock:
+                try:
+                    self._tcp_socket.sendall(data)
+                except (BrokenPipeError, ConnectionResetError, OSError) as e:
+                    if self.logger:
+                        self.logger("client", "logger", f"Failed to write to tcp socket: {e}")
+            return
+
+        stream = self._stdin_stream
+        if stream is None:
             return
         self._log(payload)
         msg = create_message(payload)
@@ -493,8 +662,8 @@ class SolidLanguageServerHandler:
         # Use lock to prevent concurrent writes to stdin that cause buffer corruption
         with self._stdin_lock:
             try:
-                self.process.stdin.writelines(msg)
-                self.process.stdin.flush()
+                stream.writelines(msg)
+                stream.flush()
             except (BrokenPipeError, ConnectionResetError, OSError) as e:
                 # Log the error but don't raise to prevent cascading failures
                 if self.logger:
