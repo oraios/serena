@@ -49,7 +49,6 @@
         });
         
         # Add build dependencies for packages that need native compilation
-        # This ensures clang/lld are available during the build
         cryptography = prev.cryptography.overrideAttrs (old: {
           nativeBuildInputs = (old.nativeBuildInputs or []) ++ [
             pkgs.clang
@@ -97,8 +96,14 @@
             phases = ["installPhase"];
             
             installPhase = ''
+              # Create output directory
               mkdir -p $out
+              
+              # Copy all files from the venv
               cp -r ${venv}/* $out/
+              
+              # Make the bin directory writable so we can wrap the program
+              chmod -R u+w $out/bin
               
               # Wrap the binary with necessary runtime dependencies
               wrapProgram $out/bin/serena \
