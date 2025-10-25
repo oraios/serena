@@ -90,6 +90,8 @@
           packages = [
             python
             pkgs.uv
+            pkgs.openssl
+            pkgs.pkg-config
           ];
           env =
             {
