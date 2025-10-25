@@ -111,13 +111,23 @@
                   pkgs.rust-analyzer
                   pkgs.rustc
                   pkgs.cargo
+                  pkgs.clang
+                  pkgs.lld
+                  pkgs.gcc
+                  pkgs.binutils
+                  pkgs.pkg-config
                 ]}" \
                 --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath [
                   pkgs.openssl
                   pkgs.stdenv.cc.cc.lib
+                  pkgs.libclang.lib
                 ]}" \
                 --set SSL_CERT_FILE "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt" \
-                --set OPENSSL_DIR "${pkgs.openssl.dev}"
+                --set OPENSSL_DIR "${pkgs.openssl.dev}" \
+                --set RUST_SRC_PATH "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}" \
+                --set CC "${pkgs.clang}/bin/clang" \
+                --set CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER "${pkgs.clang}/bin/clang" \
+                --set RUSTFLAGS "-C link-arg=-fuse-ld=lld"
             '';
           };
         default = packages.serena;
