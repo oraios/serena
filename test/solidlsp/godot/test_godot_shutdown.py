@@ -2,16 +2,18 @@
 Tests for GDScript language server shutdown functionality.
 These tests validate that the Godot process is properly terminated when Serena shuts down.
 """
+
 import os
-import pytest
 from unittest.mock import Mock, patch
 
+import pytest
+
 import solidlsp.language_servers.gdscript_language_server as gdscript_module
+from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
 from solidlsp.language_servers.gdscript_language_server import GDScriptLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.settings import SolidLSPSettings
-from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
 
 
 @pytest.mark.gdscript
@@ -23,9 +25,11 @@ class TestGDScriptShutdown:
         fake_psutil = Mock()
         fake_psutil.process_iter = Mock(return_value=[])
 
-        with patch('solidlsp.language_servers.gdscript_language_server.GDScriptLanguageServer._setup_runtime_dependencies') as mock_setup, \
-            patch('solidlsp.language_servers.gdscript_language_server.time.sleep', return_value=None), \
-            patch.object(gdscript_module, "psutil", fake_psutil, create=True):
+        with (
+            patch("solidlsp.language_servers.gdscript_language_server.GDScriptLanguageServer._setup_runtime_dependencies") as mock_setup,
+            patch("solidlsp.language_servers.gdscript_language_server.time.sleep", return_value=None),
+            patch.object(gdscript_module, "psutil", fake_psutil, create=True),
+        ):
 
             mock_setup.return_value = "fake-godot"
 
@@ -109,17 +113,12 @@ class TestGDScriptShutdown:
         os.makedirs(repo_path, exist_ok=True)
 
         # Create a simple ProcessLaunchInfo with a mock command
-        mock_launch_info = ProcessLaunchInfo(
-            cmd="echo 'mock godot process'",
-            cwd=repo_path,
-            env={}
-        )
+        mock_launch_info = ProcessLaunchInfo(cmd="echo 'mock godot process'", cwd=repo_path, env={})
 
         # Create the server directly with the launch info
         server = GDScriptLanguageServer.__new__(GDScriptLanguageServer)
         server._solidlsp_settings = SolidLSPSettings(
-            solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME,
-            project_data_relative_path=SERENA_MANAGED_DIR_NAME
+            solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME, project_data_relative_path=SERENA_MANAGED_DIR_NAME
         )
         server._encoding = config.encoding
         server.logger = logger
@@ -138,6 +137,7 @@ class TestGDScriptShutdown:
 
         # Create the server handler with the mock launch info
         from solidlsp.ls_handler import SolidLanguageServerHandler
+
         server.server = SolidLanguageServerHandler(
             mock_launch_info,
             logger=None,
@@ -158,7 +158,7 @@ class TestGDScriptShutdown:
             server.stop()
             # If we get here, the stop method executed without error
             assert True
-        except Exception as e:
+        except Exception:
             # The mock command might not actually start a process, some errors are expected
             # The important thing is that the stop method doesn't crash
             assert True

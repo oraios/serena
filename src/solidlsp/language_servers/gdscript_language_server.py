@@ -8,15 +8,14 @@ import logging
 import os
 import pathlib
 import shutil
+import signal
 import socket
 import stat
 import subprocess
 import tempfile
 import threading
 import time
-import signal
 from typing import Optional
-import concurrent.futures
 
 from overrides import override
 
@@ -201,17 +200,21 @@ class GDScriptLanguageServer(SolidLanguageServer):
 
         # Add platform-specific paths
         if os.name == "nt":  # Windows
-            possible_paths.extend([
-                pathlib.Path("C:/Program Files/Godot/godot.exe"),
-                pathlib.Path("C:/Godot/godot.exe"),
-            ])
+            possible_paths.extend(
+                [
+                    pathlib.Path("C:/Program Files/Godot/godot.exe"),
+                    pathlib.Path("C:/Godot/godot.exe"),
+                ]
+            )
         else:
             # Add common Unix-like paths that might have Godot
-            possible_paths.extend([
-                pathlib.Path("/usr/bin/godot"),
-                pathlib.Path("/opt/Godot/Godot"),
-                pathlib.Path("/Applications/Godot.app/Contents/MacOS/Godot"),  # macOS
-            ])
+            possible_paths.extend(
+                [
+                    pathlib.Path("/usr/bin/godot"),
+                    pathlib.Path("/opt/Godot/Godot"),
+                    pathlib.Path("/Applications/Godot.app/Contents/MacOS/Godot"),  # macOS
+                ]
+            )
 
         for path in possible_paths:
             if path.exists():
@@ -432,86 +435,87 @@ class GDScriptLanguageServer(SolidLanguageServer):
         self.set_request_timeout(600.0)  # Allow up to 10 minutes for Godot initialization and requests in large projects
 
     def stop(self, shutdown_timeout: float = 2.0) -> None:
-       """
-       Stop the GDScript language server and ensure the Godot process is properly terminated.
-       """
-       self.logger.log("Stopping GDScript Language Server and Godot process...", logging.INFO)
+        """
+        Stop the GDScript language server and ensure the Godot process is properly terminated.
+        """
+        self.logger.log("Stopping GDScript Language Server and Godot process...", logging.INFO)
 
-       # First perform the standard shutdown sequence
-       super().stop(shutdown_timeout)
+        # First perform the standard shutdown sequence
+        super().stop(shutdown_timeout)
 
-       # Additional Godot-specific cleanup: ensure all Godot processes are terminated
-       # This addresses potential orphaned Godot processes that might not be caught by the base class
-       if not getattr(self, "_external_lsp", False):
-           self._terminate_godot_processes()
+        # Additional Godot-specific cleanup: ensure all Godot processes are terminated
+        # This addresses potential orphaned Godot processes that might not be caught by the base class
+        if not getattr(self, "_external_lsp", False):
+            self._terminate_godot_processes()
 
-       # Clean up temporary directory used for LSP process
-       if hasattr(self, '_temp_dir') and self._temp_dir:
-           try:
-               import shutil
-               shutil.rmtree(self._temp_dir, ignore_errors=True)
-               self.logger.log(f"Cleaned up temporary directory: {self._temp_dir}", logging.DEBUG)
-           except Exception as e:
-               self.logger.log(f"Error cleaning up temporary directory {self._temp_dir}: {e}", logging.WARNING)
-           finally:
-               self._temp_dir = None
+        # Clean up temporary directory used for LSP process
+        if hasattr(self, "_temp_dir") and self._temp_dir:
+            try:
+                import shutil
 
-       self.logger.log("GDScript Language Server stopped", logging.INFO)
+                shutil.rmtree(self._temp_dir, ignore_errors=True)
+                self.logger.log(f"Cleaned up temporary directory: {self._temp_dir}", logging.DEBUG)
+            except Exception as e:
+                self.logger.log(f"Error cleaning up temporary directory {self._temp_dir}: {e}", logging.WARNING)
+            finally:
+                self._temp_dir = None
+
+        self.logger.log("GDScript Language Server stopped", logging.INFO)
 
     def _terminate_godot_processes(self):
-       """
-       Additional cleanup to terminate any remaining Godot processes that might have been spawned.
-       This helps prevent orphaned Godot processes after Serena shutdown.
-       """
-       tracked_pids = list(self._tracked_godot_pids)
-       for pid in tracked_pids:
-           self.__class__._terminate_pid_tree(pid, self.logger)
-           self._untrack_godot_pid(pid)
+        """
+        Additional cleanup to terminate any remaining Godot processes that might have been spawned.
+        This helps prevent orphaned Godot processes after Serena shutdown.
+        """
+        tracked_pids = list(self._tracked_godot_pids)
+        for pid in tracked_pids:
+            self.__class__._terminate_pid_tree(pid, self.logger)
+            self._untrack_godot_pid(pid)
 
-       try:
-           import psutil  # type: ignore[import-not-found]
-       except ImportError:
-           if tracked_pids:
-               self._tracked_godot_pids.clear()
-               return
-           self.logger.log("psutil not available, skipping additional Godot process cleanup", logging.DEBUG)
-           self._tracked_godot_pids.clear()
-           return
+        try:
+            import psutil  # type: ignore[import-not-found]
+        except ImportError:
+            if tracked_pids:
+                self._tracked_godot_pids.clear()
+                return
+            self.logger.log("psutil not available, skipping additional Godot process cleanup", logging.DEBUG)
+            self._tracked_godot_pids.clear()
+            return
 
-       current_pid = os.getpid()
-       try:
-           for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'ppid']):
-               try:
-                   pid = proc.info.get('pid')
-                   if not pid:
-                       continue
-                   if pid in self._tracked_godot_pids:
-                       self.__class__._terminate_pid_tree(pid, self.logger)
-                       self._untrack_godot_pid(pid)
-                       continue
-                   name = proc.info.get('name') or ''
-                   if 'godot' not in name.lower():
-                       continue
-                   cmdline_list = proc.info.get('cmdline') or []
-                   cmdline = ' '.join(cmdline_list)
-                   is_our_process = False
-                   if proc.info.get('ppid') == current_pid:
-                       is_our_process = True
-                   elif self.repository_root_path and self.repository_root_path in cmdline and '--lsp' in cmdline:
-                       is_our_process = True
-                   elif pid in self.__class__._global_tracked_godot_pids:
-                       is_our_process = True
-                   if not is_our_process:
-                       continue
-                   self.logger.log(f"Terminating orphaned Godot process {pid}", logging.INFO)
-                   self.__class__._terminate_pid_tree(pid, self.logger)
-                   self._untrack_godot_pid(pid)
-               except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                   continue
-       except Exception as e:
-           self.logger.log(f"Error during additional Godot process cleanup: {e}", logging.WARNING)
-       finally:
-           self._tracked_godot_pids.clear()
+        current_pid = os.getpid()
+        try:
+            for proc in psutil.process_iter(["pid", "name", "cmdline", "ppid"]):
+                try:
+                    pid = proc.info.get("pid")
+                    if not pid:
+                        continue
+                    if pid in self._tracked_godot_pids:
+                        self.__class__._terminate_pid_tree(pid, self.logger)
+                        self._untrack_godot_pid(pid)
+                        continue
+                    name = proc.info.get("name") or ""
+                    if "godot" not in name.lower():
+                        continue
+                    cmdline_list = proc.info.get("cmdline") or []
+                    cmdline = " ".join(cmdline_list)
+                    is_our_process = False
+                    if (
+                        proc.info.get("ppid") == current_pid
+                        or (self.repository_root_path and self.repository_root_path in cmdline and "--lsp" in cmdline)
+                        or pid in self.__class__._global_tracked_godot_pids
+                    ):
+                        is_our_process = True
+                    if not is_our_process:
+                        continue
+                    self.logger.log(f"Terminating orphaned Godot process {pid}", logging.INFO)
+                    self.__class__._terminate_pid_tree(pid, self.logger)
+                    self._untrack_godot_pid(pid)
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    continue
+        except Exception as e:
+            self.logger.log(f"Error during additional Godot process cleanup: {e}", logging.WARNING)
+        finally:
+            self._tracked_godot_pids.clear()
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
@@ -602,7 +606,7 @@ class GDScriptLanguageServer(SolidLanguageServer):
                     self.logger.log(f"Acknowledging workspace change request for {requested_path}", logging.DEBUG)
             else:
                 self.logger.log("Received workspace change request without a path", logging.DEBUG)
-            return None
+            return
 
         def window_log_message(msg):
             """Handle window/logMessage notifications from Godot LSP"""

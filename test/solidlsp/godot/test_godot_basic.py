@@ -2,7 +2,9 @@
 Basic integration tests for the GDScript language server functionality.
 These tests validate the functionality of the GDScript language server APIs.
 """
+
 import os
+
 import pytest
 
 from serena.project import Project
@@ -17,10 +19,6 @@ class TestGDScriptLanguageServerBasics:
     def test_gdscript_language_server_class_exists(self) -> None:
         """Test that the GDScript language server class exists and can be imported."""
         from solidlsp.language_servers.gdscript_language_server import GDScriptLanguageServer
-        from solidlsp.ls_config import LanguageServerConfig
-        from solidlsp.ls_logger import LanguageServerLogger
-        from solidlsp.settings import SolidLSPSettings
-        from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
 
         # Test that the GDScript language server class exists
         assert GDScriptLanguageServer is not None
@@ -32,11 +30,11 @@ class TestGDScriptLanguageServerBasics:
 
     def test_gdscript_language_server_creation_with_godot(self) -> None:
         """Test that GDScript language server can be created when Godot is available."""
+        from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
         from solidlsp.language_servers.gdscript_language_server import GDScriptLanguageServer
         from solidlsp.ls_config import LanguageServerConfig
         from solidlsp.ls_logger import LanguageServerLogger
         from solidlsp.settings import SolidLSPSettings
-        from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
 
         config = LanguageServerConfig(code_language=Language.GDSCRIPT)
         logger = LanguageServerLogger()
@@ -51,7 +49,7 @@ class TestGDScriptLanguageServerBasics:
                 config,
                 logger,
                 repo_path,
-                SolidLSPSettings(solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME, project_data_relative_path=SERENA_MANAGED_DIR_NAME)
+                SolidLSPSettings(solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME, project_data_relative_path=SERENA_MANAGED_DIR_NAME),
             )
 
             # If we get here, Godot is available - verify basic properties
@@ -60,9 +58,9 @@ class TestGDScriptLanguageServerBasics:
             assert isinstance(server, SolidLanguageServer)
 
             # Verify that LSP communication methods exist
-            assert hasattr(server, 'request_document_symbols')
-            assert hasattr(server, 'request_definition')
-            assert hasattr(server, 'request_references')
+            assert hasattr(server, "request_document_symbols")
+            assert hasattr(server, "request_definition")
+            assert hasattr(server, "request_references")
 
         except Exception as e:
             # This might happen if Godot is not properly configured, but the test should still pass
@@ -74,15 +72,16 @@ class TestGDScriptLanguageServerBasics:
 
             # Even if initialization fails, we can still verify the class was set up properly
             from solidlsp.language_servers.gdscript_language_server import GDScriptLanguageServer
+
             assert GDScriptLanguageServer is not None
 
     def test_gdscript_language_server_with_custom_godot_path_setting(self) -> None:
         """Test that GDScript language server can use a custom Godot path from settings."""
+        from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
         from solidlsp.language_servers.gdscript_language_server import GDScriptLanguageServer
         from solidlsp.ls_config import LanguageServerConfig
         from solidlsp.ls_logger import LanguageServerLogger
         from solidlsp.settings import SolidLSPSettings
-        from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
 
         config = LanguageServerConfig(code_language=Language.GDSCRIPT)
         logger = LanguageServerLogger()
@@ -94,7 +93,7 @@ class TestGDScriptLanguageServerBasics:
         custom_settings = SolidLSPSettings(
             solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME,
             project_data_relative_path=SERENA_MANAGED_DIR_NAME,
-            ls_specific_settings={Language.GDSCRIPT: {"godot_path": "/fake/path/to/godot"}}
+            ls_specific_settings={Language.GDSCRIPT: {"godot_path": "/fake/path/to/godot"}},
         )
 
         # The server should still try to initialize but will eventually fail due to missing Godot
@@ -109,15 +108,16 @@ class TestGDScriptLanguageServerBasics:
             error_str = str(e).lower()
             assert any(keyword in error_str for keyword in ["godot", "executable", "not found", "failed to setup"])
             from solidlsp.language_servers.gdscript_language_server import GDScriptLanguageServer
+
             assert GDScriptLanguageServer is not None
 
     def test_gdscript_language_server_with_godot_env_var(self) -> None:
         """Test that GDScript language server respects GODOT_PATH environment variable."""
+        from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
         from solidlsp.language_servers.gdscript_language_server import GDScriptLanguageServer
         from solidlsp.ls_config import LanguageServerConfig
         from solidlsp.ls_logger import LanguageServerLogger
         from solidlsp.settings import SolidLSPSettings
-        from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
 
         config = LanguageServerConfig(code_language=Language.GDSCRIPT)
         logger = LanguageServerLogger()
@@ -130,10 +130,7 @@ class TestGDScriptLanguageServerBasics:
 
         try:
             # Create server with the environment variable set
-            custom_settings = SolidLSPSettings(
-                solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME,
-                project_data_relative_path=SERENA_MANAGED_DIR_NAME
-            )
+            custom_settings = SolidLSPSettings(solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME, project_data_relative_path=SERENA_MANAGED_DIR_NAME)
 
             try:
                 server = GDScriptLanguageServer(config, logger, repo_path, custom_settings)
@@ -145,6 +142,7 @@ class TestGDScriptLanguageServerBasics:
                 error_str = str(e).lower()
                 assert any(keyword in error_str for keyword in ["godot", "executable", "not found", "failed to setup"])
                 from solidlsp.language_servers.gdscript_language_server import GDScriptLanguageServer
+
                 assert GDScriptLanguageServer is not None
         finally:
             # Restore original environment variable
@@ -161,11 +159,13 @@ class TestGDScriptProjectBasics:
         """Test that a GDScript project can be created."""
         # Create a mock GDScript project with a simple GDScript file
         import tempfile
+
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create a GDScript file
             gdscript_file = os.path.join(temp_dir, "test_node.gd")
-            with open(gdscript_file, 'w') as f:
-                f.write('''extends Node
+            with open(gdscript_file, "w") as f:
+                f.write(
+                    """extends Node
 
 # A simple GDScript test file
 var test_variable: int = 42
@@ -175,10 +175,11 @@ func _ready() -> void:
 
 func test_function() -> void:
     print("This is a test function")
-''')
+"""
+                )
 
             # Create a basic project
             project = Project.load(temp_dir)
             assert project is not None
-            assert hasattr(project, 'read_file')
-            assert hasattr(project, 'search_source_files_for_pattern')
+            assert hasattr(project, "read_file")
+            assert hasattr(project, "search_source_files_for_pattern")

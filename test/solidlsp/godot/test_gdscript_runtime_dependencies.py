@@ -14,7 +14,6 @@ from solidlsp.settings import SolidLSPSettings
 
 def test_setup_runtime_dependencies_extracts_zip_on_macos(monkeypatch, tmp_path):
     """Ensure macOS runtime extraction uses archive unpacking and fallback copy if symlinks fail."""
-
     # Force environment to simulate macOS and no pre-installed Godot.
     monkeypatch.setattr(GDScriptLanguageServer, "_get_gdscript_lsp_path", staticmethod(lambda: None))
     monkeypatch.setattr(PlatformUtils, "get_platform_id", lambda: PlatformId.OSX_x64)
@@ -42,9 +41,7 @@ def test_setup_runtime_dependencies_extracts_zip_on_macos(monkeypatch, tmp_path)
     config = LanguageServerConfig(code_language=Language.GDSCRIPT)
     logger = LanguageServerLogger()
 
-    resolved_path = pathlib.Path(
-        GDScriptLanguageServer._setup_runtime_dependencies(logger, config, settings)  # type: ignore[arg-type]
-    )
+    resolved_path = pathlib.Path(GDScriptLanguageServer._setup_runtime_dependencies(logger, config, settings))  # type: ignore[arg-type]
 
     expected_godot_dir = pathlib.Path(settings.ls_resources_dir) / "GDScriptLanguageServer" / "godot"
     expected_binary_path = expected_godot_dir / "Godot.app" / "Contents" / "MacOS" / "Godot"

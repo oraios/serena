@@ -3,11 +3,11 @@ import json
 import logging
 import os
 import platform
+import select
 import socket
 import subprocess
 import threading
 import time
-import select
 from collections.abc import Callable
 from dataclasses import dataclass
 from queue import Empty, Queue
@@ -233,9 +233,7 @@ class SolidLanguageServerHandler:
                 # Process has already terminated
                 stderr_data = self.process.stderr.read()
                 error_message = stderr_data.decode("utf-8", errors="replace")
-                raise RuntimeError(
-                    f"Process terminated immediately with code {self.process.returncode}. Error: {error_message}"
-                )
+                raise RuntimeError(f"Process terminated immediately with code {self.process.returncode}. Error: {error_message}")
         else:
             log.info("Skipping language server process launch because no command was provided.")
             self.process = None
@@ -278,9 +276,7 @@ class SolidLanguageServerHandler:
                     last_error = exc
                     time.sleep(0.1)
             if not self._tcp_socket:
-                raise RuntimeError(
-                    f"Timed out connecting to language server TCP endpoint at {tcp_host}:{tcp_port}"
-                ) from last_error
+                raise RuntimeError(f"Timed out connecting to language server TCP endpoint at {tcp_host}:{tcp_port}") from last_error
 
             try:
                 self._tcp_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -441,9 +437,9 @@ class SolidLanguageServerHandler:
                         if not ready:
                             continue
                         chunk = sock.recv(4096)
-                    except socket.timeout:
+                    except TimeoutError:
                         continue
-                    except OSError as exc:
+                    except OSError:
                         break
                     if not chunk:
                         time.sleep(0.01)

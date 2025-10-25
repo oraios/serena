@@ -151,7 +151,11 @@ class SerenaAgent:
                 os._exit(0)
 
             self._dashboard_thread, port = SerenaDashboardAPI(
-                get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats, shutdown_callback=shutdown_callback
+                get_memory_log_handler(),
+                tool_names,
+                agent=self,
+                tool_usage_stats=self._tool_usage_stats,
+                shutdown_callback=shutdown_callback,
             ).run_in_thread()
             dashboard_url = f"http://127.0.0.1:{port}/dashboard/index.html"
             log.info("Serena web dashboard started at %s", dashboard_url)

@@ -3,9 +3,7 @@ Tests covering TCP transport setup for the GDScript language server handler.
 """
 
 import io
-import socket
 import subprocess
-import threading
 
 from solidlsp.ls_handler import SolidLanguageServerHandler
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -66,7 +64,6 @@ class _DummyProcess:
 
 def test_tcp_transport_uses_socket(monkeypatch):
     """Ensure TCP transport bypasses stdio pipes and connects via socket."""
-
     captured: dict[str, object] = {}
 
     dummy_process = _DummyProcess()
