@@ -154,36 +154,31 @@ jobs:
       - name: Install Julia LanguageServer
         shell: bash
         run: julia -e 'using Pkg; Pkg.add("LanguageServer")'
-      - name: Set up Haskell
-        uses: haskell-actions/setup@v2
-        with:
-          ghc-version: '9.6.4'
-          enable-stack: true
-          stack-version: 'latest'
-      - name: Install Haskell Language Server
-        shell: bash
+      - name: Setup Haskell toolchain
+        if: runner.os != 'Windows'
+        uses: haskell/ghcup-setup@v1
+      - name: Install GHC and HLS
+        if: runner.os != 'Windows'
         run: |
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            echo "Skipping HLS installation on Windows (HLS must be pre-installed or Windows HLS testing is unsupported)"
-          else
-            # Install HLS via ghcup (recommended method)
-            if ! command -v ghcup &> /dev/null; then
-              curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
-              export PATH="$HOME/.ghcup/bin:$PATH"
-            fi
-
-            # Install HLS compatible with GHC 9.6.4
-            # Using 'recommended' ensures compatibility with installed GHC
-            ghcup install hls --set recommended
-
-            # Verify HLS installation
-            which haskell-language-server-wrapper || echo "Warning: HLS wrapper not found in PATH"
-
-            # Pre-build the test project to speed up HLS initialization
-            cd test/resources/repos/haskell/test_repo
-            stack build --only-dependencies 2>/dev/null || echo "Stack build skipped (dependencies may build during tests)"
-            cd -
-          fi
+          ghcup install ghc 9.12.2 --set
+          ghcup install hls 2.11.0.0 --set
+          export PATH="$HOME/.ghcup/bin:$PATH"
+          echo "$HOME/.ghcup/bin" >> $GITHUB_PATH
+          which ghc && ghc --version
+          which haskell-language-server-wrapper || which haskell-language-server
+          haskell-language-server-wrapper --version || haskell-language-server --version
+        shell: bash
+      - name: Pre-build Haskell test project for HLS
+        if: runner.os != 'Windows'
+        run: |
+          export PATH="$HOME/.ghcup/bin:$PATH"
+          cd test/resources/repos/haskell/test_repo
+          hpack
+          cabal update
+          cabal build --only-dependencies
+          cabal build
+          echo "Haskell test project built successfully"
+        shell: bash
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
