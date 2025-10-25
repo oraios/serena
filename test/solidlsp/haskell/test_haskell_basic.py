@@ -36,9 +36,9 @@ class TestHaskellLanguageServer:
         Test finding references to a function within the same file.
         """
         # Find references to 'multiply' function in Calculator.hs
-        # multiply is defined around line 33 and used in calculate function
-        # LSP uses 0-based indexing, so line 33 is index 32
-        references = language_server.request_references("src/Calculator.hs", line=32, column=0)
+        # multiply is defined on line 29 (0-indexed: 28) and used in calculate function
+        # LSP uses 0-based indexing, so line 29 is index 28
+        references = language_server.request_references("src/Calculator.hs", line=28, column=0)
 
         # Should find at least the definition and usage in calculate
         assert len(references) >= 1, f"Expected at least 1 reference to multiply, got {len(references)}"

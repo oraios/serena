@@ -164,7 +164,7 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            echo "Skipping HLS installation on Windows (using ghcup fallback in test)"
+            echo "Skipping HLS installation on Windows (HLS must be pre-installed or Windows HLS testing is unsupported)"
           else
             # Install HLS via ghcup (recommended method)
             if ! command -v ghcup &> /dev/null; then
