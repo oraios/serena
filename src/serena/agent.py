@@ -92,6 +92,10 @@ class SerenaAgent:
         self.memories_manager: MemoriesManager | None = None
         self.lines_read: LinesRead | None = None
 
+        # FIX (AI Panel P1): Thread-safety for LSPManager operations
+        # Use RLock (reentrant) to allow reset_lsp_manager to call itself if needed
+        self._lsp_manager_lock = threading.RLock()
+
         # adjust log level
         serena_log_level = self.serena_config.log_level
         if Logger.root.level != serena_log_level:
@@ -517,10 +521,25 @@ class SerenaAgent:
     def language_server(self) -> SolidLanguageServer | None:
         """
         Backward compatibility property: returns first working LSP from manager.
-        DEPRECATED: Use lsp_manager for polyglot support.
+
+        .. deprecated:: 0.1.5
+            Use :attr:`lsp_manager` for polyglot support or
+            :meth:`get_language_server_for_file` for file-specific LSP routing.
 
         FIX #3 (WARNING): Caches manager reference to prevent race condition.
+        FIX (AI Panel P1): Emits deprecation warning to guide users to new API.
         """
+        import warnings
+
+        # AI Panel P1: Emit deprecation warning with migration guidance
+        warnings.warn(
+            "The 'language_server' property is deprecated and will be removed in a future version. "
+            "For polyglot projects, use 'lsp_manager' directly. "
+            "For file-specific LSP routing, use 'get_language_server_for_file(path)'.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+
         # FIX #3: Cache manager reference to prevent race condition
         manager = self.lsp_manager
         if manager is not None:
@@ -568,53 +587,66 @@ class SerenaAgent:
         FIX #2 (ERROR): Adds comprehensive error handling with validation and rollback.
         FIX #3 (WARNING): Caches manager reference to prevent race conditions.
         FIX #4 (WARNING): Uses extracted _calculate_ls_timeout() method.
+        FIX (AI Panel P1): Thread-safe manager replacement using RLock.
         """
         from serena.lsp_manager import LSPManager
 
-        # FIX #4: Use extracted timeout calculation method
-        ls_timeout = self._calculate_ls_timeout()
+        # FIX (AI Panel P1): Acquire lock for thread-safe manager replacement
+        with self._lsp_manager_lock:
+            # FIX #4: Use extracted timeout calculation method
+            ls_timeout = self._calculate_ls_timeout()
 
-        # FIX #1 & #3: Properly shutdown existing LSPManager with cached reference
-        old_manager = self.lsp_manager
-        if old_manager is not None:
-            log.info("Stopping existing LSPManager...")
-            try:
-                # FIX #1: Use synchronous shutdown wrapper instead of just setting to None
-                old_manager.shutdown_all_sync()
-                log.info("Existing LSPManager stopped successfully")
-            except Exception as e:
-                log.error(f"Error shutting down existing LSPManager: {e}", exc_info=True)
-                # Continue anyway - we'll create a new manager
-            finally:
-                self.lsp_manager = None
-
-        # FIX #2: Add comprehensive error handling for LSPManager creation
-        assert self._active_project is not None
-        try:
-            new_manager = self._active_project.create_lsp_manager(
-                log_level=self.serena_config.log_level,
-                ls_timeout=ls_timeout,
-                trace_lsp_communication=self.serena_config.trace_lsp_communication,
-                ls_specific_settings=self.serena_config.ls_specific_settings,
-            )
-
-            # FIX #2: Validate that LSPManager was created successfully
-            if new_manager is None:
-                raise RuntimeError("create_lsp_manager() returned None")
-
-            self.lsp_manager = new_manager
-            log.info(
-                f"Created LSPManager for {len(self._active_project.languages)} languages: "
-                f"{[lang.value for lang in self._active_project.languages]}"
-            )
-
-        except Exception as e:
-            # FIX #2: Rollback on failure - restore old manager if possible
-            log.error(f"Failed to create LSPManager: {e}", exc_info=True)
+            # FIX #1 & #3: Properly shutdown existing LSPManager with cached reference
+            old_manager = self.lsp_manager
             if old_manager is not None:
-                log.warning("Attempting to restore previous LSPManager...")
-                self.lsp_manager = old_manager
-            raise RuntimeError(f"Failed to create LSPManager for {self._active_project.project_name}: {e}") from e
+                log.info("Stopping existing LSPManager...")
+                try:
+                    # FIX #1: Use synchronous shutdown wrapper instead of just setting to None
+                    old_manager.shutdown_all_sync()
+                    log.info("Existing LSPManager stopped successfully")
+                except Exception as e:
+                    log.error(f"Error shutting down existing LSPManager: {e}", exc_info=True)
+                    # Continue anyway - we'll create a new manager
+                finally:
+                    self.lsp_manager = None
+
+            # FIX #2: Add comprehensive error handling for LSPManager creation
+            assert self._active_project is not None
+            try:
+                new_manager = self._active_project.create_lsp_manager(
+                    log_level=self.serena_config.log_level,
+                    ls_timeout=ls_timeout,
+                    trace_lsp_communication=self.serena_config.trace_lsp_communication,
+                    ls_specific_settings=self.serena_config.ls_specific_settings,
+                )
+
+                # FIX #2: Validate that LSPManager was created successfully
+                if new_manager is None:
+                    raise RuntimeError("create_lsp_manager() returned None")
+
+                self.lsp_manager = new_manager
+                log.info(
+                    f"Created LSPManager for {len(self._active_project.languages)} languages: "
+                    f"{[lang.value for lang in self._active_project.languages]}"
+                )
+
+            except Exception as e:
+                # FIX #2 + AI Panel P1: Rollback with validation
+                log.error(f"Failed to create LSPManager: {e}", exc_info=True)
+
+                # AI Panel P1: Validate old manager is functional before restoring
+                if old_manager is not None:
+                    working_lsps = old_manager.get_all_working_language_servers()
+                    if len(working_lsps) > 0:
+                        log.warning(f"Restoring previous functional LSPManager with {len(working_lsps)} working LSPs")
+                        self.lsp_manager = old_manager
+                    else:
+                        log.warning("Previous LSPManager has no working LSPs, setting to None")
+                        self.lsp_manager = None
+                else:
+                    self.lsp_manager = None
+
+                raise RuntimeError(f"Failed to create LSPManager for {self._active_project.project_name}: {e}") from e
 
     def reset_language_server(self) -> None:
         """
