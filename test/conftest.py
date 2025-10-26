@@ -1,8 +1,12 @@
 import logging
+import warnings
 from pathlib import Path
 
 import pytest
 from sensai.util.logging import configure
+
+# Some environments emit a one-off PyCharm integration warning; ignore it to keep test output clean.
+warnings.filterwarnings("ignore", message="Failed to patch PyCharm's diff tools.*", category=UserWarning)
 
 from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
 from serena.project import Project

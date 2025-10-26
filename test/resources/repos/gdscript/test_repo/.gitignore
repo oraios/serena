@@ -1,0 +1,10 @@
+# Godot import and cache directories
+.godot/
+.import/
+
+# Godot unique id metadata
+*.uid
+# /**/uid_cache.bin
+
+# External dependencies are recreated as needed
+node_modules/

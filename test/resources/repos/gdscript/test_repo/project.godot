@@ -1,0 +1,3 @@
+[application]
+config/name="Serena GDScript Test"
+run/main_scene="res://main.gd"

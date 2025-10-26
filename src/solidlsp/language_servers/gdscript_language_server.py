@@ -15,7 +15,7 @@ import subprocess
 import tempfile
 import threading
 import time
-from typing import Optional
+from typing import Any, Optional
 
 from overrides import override
 
@@ -28,6 +28,14 @@ from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency
+
+DEFAULT_GODOT_VERSION = "4.5.1-stable"
+AUTO_INSTALLABLE_PLATFORMS = {
+    PlatformId.LINUX_x64,
+    PlatformId.LINUX_arm64,
+    PlatformId.OSX_x64,
+    PlatformId.OSX_arm64,
+}
 
 
 class GDScriptLanguageServer(SolidLanguageServer):
@@ -138,6 +146,120 @@ class GDScriptLanguageServer(SolidLanguageServer):
             self.__class__._global_tracked_godot_pids.discard(pid)
 
     @staticmethod
+    def _language_settings(solidlsp_settings: SolidLSPSettings) -> dict[str, Any]:
+        settings_map = solidlsp_settings.ls_specific_settings or {}
+        for key in (Language.GDSCRIPT, "gdscript", "GDSCRIPT"):
+            value = settings_map.get(key)
+            if isinstance(value, dict):
+                return value
+        return {}
+
+    @classmethod
+    def _resolve_existing_godot(cls, settings: dict[str, Any], logger: LanguageServerLogger) -> Optional[str]:
+        custom_path = settings.get("godot_path")
+        if isinstance(custom_path, str):
+            endpoint = cls._parse_external_endpoint(custom_path)
+            if endpoint:
+                logger.log(f"Using external Godot LSP endpoint from settings: {custom_path}", logging.INFO)
+                return custom_path
+            candidate = pathlib.Path(custom_path)
+            if candidate.exists():
+                logger.log(f"Using custom Godot path from settings: {candidate}", logging.INFO)
+                return str(candidate)
+            logger.log(f"Configured Godot path does not exist: {candidate}", logging.WARNING)
+
+        detected_path = cls._get_gdscript_lsp_path()
+        if detected_path:
+            version = cls._get_godot_version(detected_path)
+            logger.log(f"Found Godot at {detected_path} with version: {version}", logging.INFO)
+            return detected_path
+
+        return None
+
+    @staticmethod
+    def _select_godot_version(settings: dict[str, Any], logger: LanguageServerLogger) -> str:
+        version = settings.get("godot_version")
+        if isinstance(version, str) and version.strip():
+            cleaned = version.strip()
+            if cleaned != DEFAULT_GODOT_VERSION:
+                logger.log(f"Using custom Godot version from settings: {cleaned}", logging.INFO)
+                logger.log(
+                    f"Attempting to download Godot version {cleaned} (default is {DEFAULT_GODOT_VERSION})",
+                    logging.DEBUG,
+                )
+            return cleaned
+        return DEFAULT_GODOT_VERSION
+
+    @staticmethod
+    def _runtime_dependency_for(platform_id: PlatformId, version: str) -> RuntimeDependency:
+        base_url = f"https://github.com/godotengine/godot/releases/download/{version}/Godot_v{version}"
+        binaries = {
+            PlatformId.LINUX_x64: ("linux.x86_64", "binary", "godot_linux.x86_64"),
+            PlatformId.LINUX_arm64: ("linux.arm64", "binary", "godot_linux.arm64"),
+            PlatformId.OSX_x64: ("macos.universal.zip", "zip", "Godot.app/Contents/MacOS/Godot"),
+            PlatformId.OSX_arm64: ("macos.universal.zip", "zip", "Godot.app/Contents/MacOS/Godot"),
+        }
+        file_suffix, archive_type, binary_name = binaries[platform_id]
+        return RuntimeDependency(
+            id=f"godot_{platform_id.value}",
+            platform_id=platform_id.value,
+            url=f"{base_url}_{file_suffix}",
+            archive_type=archive_type,
+            binary_name=binary_name,
+            extract_path="godot",
+        )
+
+    @classmethod
+    def _ensure_downloaded_godot(
+        cls,
+        version: str,
+        platform_id: PlatformId,
+        logger: LanguageServerLogger,
+        solidlsp_settings: SolidLSPSettings,
+    ) -> pathlib.Path:
+        if platform_id.is_windows():
+            raise RuntimeError(
+                "Automatic Godot installation is not yet supported on Windows. "
+                "Please install Godot manually from https://godotengine.org/download and ensure it is on your PATH."
+            )
+        if platform_id not in AUTO_INSTALLABLE_PLATFORMS:
+            raise RuntimeError(f"Platform {platform_id} is not supported for automatic Godot installation.")
+
+        godot_root = pathlib.Path(cls.ls_resources_dir(solidlsp_settings)) / "godot"
+        godot_root.mkdir(parents=True, exist_ok=True)
+
+        dependency = cls._runtime_dependency_for(platform_id, version)
+        binary_path = godot_root / dependency.binary_name  # type: ignore[operator]
+        executable_name = "godot.exe" if platform_id.is_windows() else "godot"
+        executable_path = godot_root / executable_name
+
+        if not binary_path.exists():
+            logger.log(f"Downloading Godot binary from {dependency.url}", logging.INFO)
+            archive_target = str(binary_path if dependency.archive_type == "binary" else godot_root)
+            FileUtils.download_and_extract_archive(logger, dependency.url, archive_target, dependency.archive_type or "binary")
+
+        if not binary_path.exists():
+            raise FileNotFoundError(f"Godot executable not found at {binary_path}")
+
+        if not platform_id.is_windows():
+            binary_path.chmod(stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+
+        if binary_path != executable_path:
+            if executable_path.exists() or executable_path.is_symlink():
+                executable_path.unlink()
+            relative_target = os.path.relpath(binary_path, executable_path.parent)
+            try:
+                os.symlink(relative_target, executable_path)
+            except OSError as exc:
+                logger.log(f"Failed to create symlink for Godot binary ({exc}), copying instead.", logging.DEBUG)
+                shutil.copy2(binary_path, executable_path)
+                if not platform_id.is_windows():
+                    executable_path.chmod(stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+
+        logger.log(f"Godot binary ready at: {executable_path}", logging.INFO)
+        return executable_path
+
+    @staticmethod
     def _parse_external_endpoint(value: str | None) -> tuple[str, int] | None:
         if not value or not isinstance(value, str):
             return None
@@ -230,142 +352,15 @@ class GDScriptLanguageServer(SolidLanguageServer):
         Setup runtime dependencies for GDScript Language Server.
         Downloads the Godot binary for the current platform if not found locally and returns the path to the executable.
         """
-        # First check for a custom Godot path in language-specific settings
-        godot_path = None
-        settings_map = solidlsp_settings.ls_specific_settings or {}
-        gdscript_settings = None
-        if Language.GDSCRIPT in settings_map:
-            gdscript_settings = settings_map[Language.GDSCRIPT]
-        else:
-            for key in ("gdscript", "GDSCRIPT"):
-                if key in settings_map:
-                    gdscript_settings = settings_map[key]
-                    break
-        if isinstance(gdscript_settings, dict) and "godot_path" in gdscript_settings:
-            custom_path = gdscript_settings["godot_path"]
-            external_endpoint = cls._parse_external_endpoint(custom_path if isinstance(custom_path, str) else None)
-            if external_endpoint:
-                logger.log(f"Using external Godot LSP endpoint from settings: {custom_path}", logging.INFO)
-                return custom_path
-            if custom_path and pathlib.Path(custom_path).exists():
-                godot_path = custom_path
-                logger.log(f"Using custom Godot path from settings: {godot_path}", logging.INFO)
+        settings = cls._language_settings(solidlsp_settings)
 
-        # If no custom path is set, use the default path resolution
-        if not godot_path:
-            godot_path = cls._get_gdscript_lsp_path()
+        existing_path = cls._resolve_existing_godot(settings, logger)
+        if existing_path:
+            return existing_path
 
-        if godot_path:
-            version = cls._get_godot_version(godot_path)
-            logger.log(f"Found Godot at {godot_path} with version: {version}", logging.INFO)
-            return godot_path
-
-        # If not found, download Godot binary
+        version = cls._select_godot_version(settings, logger)
         platform_id = PlatformUtils.get_platform_id()
-
-        # Check for Windows and provide a helpful error message for now
-        # In a full implementation, we would download the Windows binary
-        if platform_id.value.startswith("win"):
-            raise RuntimeError(
-                "Automatic Godot installation is not yet supported on Windows. "
-                "Please install Godot manually from https://godotengine.org/download and make sure it is added to your PATH."
-            )
-
-        valid_platforms = [
-            PlatformId.LINUX_x64,
-            PlatformId.LINUX_arm64,
-            PlatformId.OSX_x64,
-            PlatformId.OSX_arm64,
-        ]
-        if platform_id not in valid_platforms:
-            raise RuntimeError(f"Platform {platform_id} is not supported for GDScript at the moment")
-
-        godot_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "godot")
-
-        default_godot_version = "4.5.1-stable"
-        godot_version = default_godot_version
-        if isinstance(gdscript_settings, dict):
-            custom_version = gdscript_settings.get("godot_version")
-            if isinstance(custom_version, str) and custom_version.strip():
-                godot_version = custom_version.strip()
-                logger.log(f"Using custom Godot version from settings: {godot_version}", logging.INFO)
-
-        if godot_version != default_godot_version:
-            logger.log(f"Attempting to download Godot version {godot_version} (default is {default_godot_version})", logging.DEBUG)
-
-        # Define runtime dependencies inline
-        runtime_deps = {
-            PlatformId.LINUX_x64: RuntimeDependency(
-                id="godot_linux_x64",
-                platform_id="linux-x64",
-                url=f"https://github.com/godotengine/godot/releases/download/{godot_version}/Godot_v{godot_version}_linux.x86_64",
-                archive_type="binary",
-                binary_name="godot_linux.x86_64",
-                extract_path="godot",
-            ),
-            PlatformId.LINUX_arm64: RuntimeDependency(
-                id="godot_linux_arm64",
-                platform_id="linux-arm64",
-                url=f"https://github.com/godotengine/godot/releases/download/{godot_version}/Godot_v{godot_version}_linux.arm64",
-                archive_type="binary",
-                binary_name="godot_linux.arm64",
-                extract_path="godot",
-            ),
-            PlatformId.OSX_x64: RuntimeDependency(
-                id="godot_osx_x64",
-                platform_id="osx-x64",
-                url=f"https://github.com/godotengine/godot/releases/download/{godot_version}/Godot_v{godot_version}_macos.universal.zip",
-                archive_type="zip",
-                binary_name="Godot.app/Contents/MacOS/Godot",
-                extract_path="godot",
-            ),
-            PlatformId.OSX_arm64: RuntimeDependency(
-                id="godot_osx_arm64",
-                platform_id="osx-arm64",
-                url=f"https://github.com/godotengine/godot/releases/download/{godot_version}/Godot_v{godot_version}_macos.universal.zip",
-                archive_type="zip",
-                binary_name="Godot.app/Contents/MacOS/Godot",
-                extract_path="godot",
-            ),
-        }
-
-        dependency = runtime_deps[platform_id]
-        godot_dir_path = pathlib.Path(godot_dir)
-        godot_dir_path.mkdir(parents=True, exist_ok=True)
-
-        binary_path = godot_dir_path / dependency.binary_name
-        executable_name = "godot.exe" if platform_id.value.startswith("win") else "godot"
-        executable_path = godot_dir_path / executable_name
-
-        if not binary_path.exists():
-            logger.log(f"Downloading Godot binary from {dependency.url}", logging.INFO)
-            archive_type = dependency.archive_type or "binary"
-            if archive_type == "binary":
-                FileUtils.download_and_extract_archive(logger, dependency.url, str(binary_path), archive_type)
-            else:
-                FileUtils.download_and_extract_archive(logger, dependency.url, str(godot_dir_path), archive_type)
-
-        if not binary_path.exists():
-            raise FileNotFoundError(f"Godot executable not found at {binary_path}")
-
-        # Make the binary executable on Unix-like systems
-        if not platform_id.value.startswith("win"):
-            os.chmod(binary_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
-
-        if binary_path != executable_path:
-            if executable_path.exists() or executable_path.is_symlink():
-                executable_path.unlink()
-            relative_target = os.path.relpath(binary_path, executable_path.parent)
-            try:
-                os.symlink(relative_target, executable_path)
-            except OSError as exc:
-                logger.log(f"Failed to create symlink for Godot binary ({exc}), copying instead.", logging.DEBUG)
-                shutil.copy2(binary_path, executable_path)
-                # Ensure copied executable retains execute permissions
-                if not platform_id.value.startswith("win"):
-                    executable_path.chmod(stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
-
-        logger.log(f"Godot binary ready at: {executable_path}", logging.INFO)
+        executable_path = cls._ensure_downloaded_godot(version, platform_id, logger, solidlsp_settings)
         return str(executable_path)
 
     def __init__(
