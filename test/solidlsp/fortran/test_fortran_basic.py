@@ -88,13 +88,12 @@ def test_find_program_symbol(fortran_ls):
 
 def test_cross_file_module_usage(fortran_ls):
     """Test that the language server can detect cross-file module usage."""
-    # Open both files to ensure they're indexed
-    fortran_ls.open_file("main.f90")
-    fortran_ls.open_file("modules/math_utils.f90")
-
-    # Get symbols from main.f90
-    all_symbols, root_symbols = fortran_ls.request_document_symbols("main.f90")
-
-    # The main program should be detected
-    program_names = [s.get("name") for s in all_symbols]
+    # Get symbols from main.f90 which uses the math_utils module
+    main_symbols, main_root = fortran_ls.request_document_symbols("main.f90")
+    program_names = [s.get("name") for s in main_symbols]
     assert "test_program" in program_names, f"Program not found in main.f90. Found: {program_names}"
+
+    # Get symbols from modules/math_utils.f90 to verify the module is also indexed
+    module_symbols, module_root = fortran_ls.request_document_symbols("modules/math_utils.f90")
+    module_names = [s.get("name") for s in module_symbols if s.get("kind") == 2]  # Kind 2 is Module
+    assert "math_utils" in module_names, f"Module 'math_utils' not found. Found: {module_names}"
