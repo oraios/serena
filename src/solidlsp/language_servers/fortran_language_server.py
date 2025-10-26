@@ -45,10 +45,7 @@ class FortranLanguageServer(SolidLanguageServer):
         """Check if fortls is available."""
         fortls_path = shutil.which("fortls")
         if fortls_path is None:
-            raise RuntimeError(
-                "fortls is not installed or not in PATH.\n"
-                "Install it with: pip install fortls"
-            )
+            raise RuntimeError("fortls is not installed or not in PATH.\nInstall it with: pip install fortls")
         return fortls_path
 
     def __init__(
@@ -174,4 +171,3 @@ class FortranLanguageServer(SolidLanguageServer):
         # Fortran Language Server is ready after initialization
         self.server_ready.set()
         self.logger.log("Fortran Language Server initialization complete", logging.INFO)
-

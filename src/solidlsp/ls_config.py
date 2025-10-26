@@ -160,7 +160,9 @@ class Language(str, Enum):
             case self.JULIA:
                 return FilenameMatcher("*.jl")
             case self.FORTRAN:
-                return FilenameMatcher("*.f90", "*.F90", "*.f95", "*.F95", "*.f03", "*.F03", "*.f08", "*.F08", "*.f", "*.F", "*.for", "*.FOR", "*.fpp", "*.FPP")
+                return FilenameMatcher(
+                    "*.f90", "*.F90", "*.f95", "*.F95", "*.f03", "*.F03", "*.f08", "*.F08", "*.f", "*.F", "*.for", "*.FOR", "*.fpp", "*.FPP"
+                )
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

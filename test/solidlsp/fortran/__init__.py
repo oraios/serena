@@ -1,2 +1,1 @@
 # Fortran language server tests
-
