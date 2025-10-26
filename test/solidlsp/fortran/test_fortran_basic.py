@@ -47,7 +47,7 @@ def test_fortran_ls_initialization(fortran_ls):
 
 def test_find_module_symbol(fortran_ls):
     """Test finding a module symbol in Fortran code."""
-    all_symbols, root_symbols = fortran_ls.request_document_symbols("lib/math_utils.f90")
+    all_symbols, root_symbols = fortran_ls.request_document_symbols("modules/math_utils.f90")
 
     # Find module symbols (LSP kind 2 is Module)
     module_names = [s.get("name") for s in all_symbols if s.get("kind") == 2]
@@ -57,7 +57,7 @@ def test_find_module_symbol(fortran_ls):
 
 def test_find_function_symbols(fortran_ls):
     """Test finding function symbols in Fortran code."""
-    all_symbols, root_symbols = fortran_ls.request_document_symbols("lib/math_utils.f90")
+    all_symbols, root_symbols = fortran_ls.request_document_symbols("modules/math_utils.f90")
 
     # Find function symbols (LSP kind 12 is Function)
     function_names = [s.get("name") for s in all_symbols if s.get("kind") == 12]
@@ -68,7 +68,7 @@ def test_find_function_symbols(fortran_ls):
 
 def test_find_subroutine_symbols(fortran_ls):
     """Test finding subroutine symbols in Fortran code."""
-    all_symbols, root_symbols = fortran_ls.request_document_symbols("lib/math_utils.f90")
+    all_symbols, root_symbols = fortran_ls.request_document_symbols("modules/math_utils.f90")
 
     # Find function symbols (subroutines are also kind 12 in LSP)
     symbol_names = [s.get("name") for s in all_symbols if s.get("kind") == 12]
@@ -90,7 +90,7 @@ def test_cross_file_module_usage(fortran_ls):
     """Test that the language server can detect cross-file module usage."""
     # Open both files to ensure they're indexed
     fortran_ls.open_file("main.f90")
-    fortran_ls.open_file("lib/math_utils.f90")
+    fortran_ls.open_file("modules/math_utils.f90")
 
     # Get symbols from main.f90
     all_symbols, root_symbols = fortran_ls.request_document_symbols("main.f90")
