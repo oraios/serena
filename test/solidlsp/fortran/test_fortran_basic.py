@@ -1,11 +1,16 @@
 """
 Basic tests for Fortran language server integration.
+
+Note: These tests require fortls to be installed: pip install fortls
 """
 import os
 import pytest
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.settings import SolidLSPSettings
+
+# Mark all tests in this module as fortran tests
+pytestmark = pytest.mark.fortran
 
 
 @pytest.fixture
