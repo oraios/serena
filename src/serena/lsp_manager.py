@@ -322,37 +322,43 @@ class LSPManager:
         Returns:
             The language server for the file, or None if not available
 
+        Raises:
+            RuntimeError: If called from async context (use async version instead)
+
         Example:
             >>> lsp = manager.get_language_server_for_file_sync("src/main.rs")
             >>> if lsp:
             ...     symbols = lsp.request_document_symbols("src/main.rs")
         """
         log.debug(f"Synchronous get_language_server_for_file called for: {file_path}")
+        
+        # Check if we're in async context - this is a bug
         try:
-            log.debug(f"Attempting asyncio.run() for: {file_path}")
-            result = asyncio.run(self.get_language_server_for_file(file_path))
-            log.debug(f"asyncio.run() succeeded, result: {result is not None}")
-            return result
+            asyncio.get_running_loop()
+            # If we reach here, there's a running loop - this shouldn't happen
+            raise RuntimeError(
+                "Cannot call get_language_server_for_file_sync() from async context. "
+                "Use get_language_server_for_file() instead."
+            )
         except RuntimeError as e:
-            # Handle case where event loop is already running
-            if "asyncio.run() cannot be called from a running event loop" in str(e):
-                log.warning(f"Event loop already running, creating new loop for: {file_path}")
-                loop = asyncio.new_event_loop()
-                try:
-                    result = loop.run_until_complete(self.get_language_server_for_file(file_path))
-                    log.debug(f"New event loop succeeded, result: {result is not None}")
-                    return result
-                except Exception as inner_e:
-                    log.error(f"New event loop failed: {inner_e}", exc_info=True)
-                    raise
-                finally:
-                    loop.close()
-            else:
-                log.error(f"Unexpected RuntimeError: {e}", exc_info=True)
+            # Check if it's our error message or the "no running loop" error
+            if "Cannot call get_language_server_for_file_sync" in str(e):
+                # Re-raise our error
                 raise
+            # Otherwise it's "There is no current event loop" - this is expected
+            log.debug("No running event loop detected, safe to create new loop")
+        
+        # Safe to create new event loop
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(self.get_language_server_for_file(file_path))
+            log.debug(f"New event loop succeeded, result: {result is not None}")
+            return result
         except Exception as e:
-            log.error(f"Unexpected exception in get_language_server_for_file_sync: {e}", exc_info=True)
+            log.error(f"Error in get_language_server_for_file_sync: {e}", exc_info=True)
             raise
+        finally:
+            loop.close()
 
     def get_all_working_language_servers(self) -> list[SolidLanguageServer]:
         """
@@ -415,24 +421,37 @@ class LSPManager:
         FIX #1 (CRITICAL): Addresses async/sync mismatch identified by AI Panel.
         This allows SerenaAgent (which is synchronous) to properly shutdown LSPManager.
 
+        Raises:
+            RuntimeError: If called from async context (use async version instead)
+
         Example:
             >>> manager.shutdown_all_sync()
         """
-        import asyncio
+        # Check if we're in async context - this is a bug
         try:
-            asyncio.run(self.shutdown_all())
+            asyncio.get_running_loop()
+            # If we reach here, there's a running loop - this shouldn't happen
+            raise RuntimeError(
+                "Cannot call shutdown_all_sync() from async context. "
+                "Use shutdown_all() instead."
+            )
         except RuntimeError as e:
-            # Handle case where event loop is already running
-            if "asyncio.run() cannot be called from a running event loop" in str(e):
-                log.warning("Event loop already running, creating new loop for shutdown")
-
-                loop = asyncio.new_event_loop()
-                try:
-                    loop.run_until_complete(self.shutdown_all())
-                finally:
-                    loop.close()
-            else:
+            # Check if it's our error message or the "no running loop" error
+            if "Cannot call shutdown_all_sync" in str(e):
+                # Re-raise our error
                 raise
+            # Otherwise it's "There is no current event loop" - this is expected
+            log.debug("No running event loop detected, safe to create new loop")
+        
+        # Safe to create new event loop
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(self.shutdown_all())
+        except Exception as e:
+            log.error(f"Error in shutdown_all_sync: {e}", exc_info=True)
+            raise
+        finally:
+            loop.close()
 
     # FIX #3: Implement async context manager pattern for proper resource management
     async def __aenter__(self) -> "LSPManager":
