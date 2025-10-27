@@ -16,6 +16,7 @@ classifiers = [
 dependencies = [
   "requests>=2.32.3,<3",
   "pyright>=1.1.396,<2",
+  "fortls>=3.2.2",
   "overrides>=7.7.0,<8",
   "python-dotenv>=1.0.0, <2",
   "mcp==1.12.3",

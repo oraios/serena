@@ -275,9 +275,6 @@ jobs:
           echo "PERL_MB_OPT=--install_base \"$HOME/perl5\"" >> $GITHUB_ENV
           echo "PERL_MM_OPT=INSTALL_BASE=$HOME/perl5" >> $GITHUB_ENV
           echo "$HOME/perl5/bin" >> $GITHUB_PATH
-      - name: Install Fortran Language Server
-        shell: bash
-        run: pip install fortls
       - name: Install Elm
         shell: bash
         run: npm install -g elm@0.19.1-6
