@@ -16,6 +16,7 @@ classifiers = [
 dependencies = [
   "requests>=2.32.3,<3",
   "pyright>=1.1.396,<2",
+  "fortls>=3.2.2",
   "overrides>=7.7.0,<8",
   "python-dotenv>=1.0.0, <2",
   # MCP SDK: External dependency with hybrid patch approach
@@ -71,7 +72,7 @@ dev = [
   "syrupy>=4.9.1",
   "types-requests>=2.32.4.20241230",
 ]
-agno = ["agno>=1.2.6", "sqlalchemy>=2.0.40"]
+agno = ["agno>=2.2.1", "sqlalchemy>=2.0.40"]
 google = ["google-genai>=1.8.0"]
 
 [project.urls]
@@ -287,6 +288,7 @@ markers = [
   "rego: language server running for Rego",
   "markdown: language server running for Markdown",
   "julia: Julia language server tests",
+  "fortran: language server running for Fortran",
   "haskell: Haskell language server tests",
   "polyglot: marks tests requiring multiple language servers",
 ]

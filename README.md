@@ -99,6 +99,7 @@ With Serena, we provide direct, out-of-the-box support for:
   * Scala (requires some [manual setup](docs/scala_setup_guide_for_serena.md); uses Metals LSP)
   * Erlang (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls), experimental, might be slow or hang)
   * Perl (requires installation of Perl::LanguageServer)
+  * Fortran (requires installation of fortls: `pip install fortls`)
   * Haskell (automatically locates HLS via ghcup, stack, or system PATH; supports Stack and Cabal projects)
   * Julia
   * AL

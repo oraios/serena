@@ -58,6 +58,7 @@ class Language(str, Enum):
     REGO = "rego"
     SCALA = "scala"
     JULIA = "julia"
+    FORTRAN = "fortran"
     HASKELL = "haskell"
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
@@ -161,6 +162,10 @@ class Language(str, Enum):
                 return FilenameMatcher("*.scala", "*.sbt")
             case self.JULIA:
                 return FilenameMatcher("*.jl")
+            case self.FORTRAN:
+                return FilenameMatcher(
+                    "*.f90", "*.F90", "*.f95", "*.F95", "*.f03", "*.F03", "*.f08", "*.F08", "*.f", "*.F", "*.for", "*.FOR", "*.fpp", "*.FPP"
+                )
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -294,6 +299,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.julia_server import JuliaLanguageServer
 
                 return JuliaLanguageServer
+            case self.FORTRAN:
+                from solidlsp.language_servers.fortran_language_server import FortranLanguageServer
+
+                return FortranLanguageServer
             case self.HASKELL:
                 from solidlsp.language_servers.haskell_language_server import HaskellLanguageServer
 
