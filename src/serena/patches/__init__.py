@@ -14,7 +14,8 @@ import importlib.abc
 import importlib.util
 import logging
 import sys
-from typing import Any, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ class _PatchLoader(importlib.abc.Loader):
 
         Args:
             module: The module object to populate
+
         """
         try:
             # Load our patched version
@@ -42,7 +44,7 @@ class _PatchLoader(importlib.abc.Loader):
 
             logger.debug("Successfully loaded patched mcp.server.streamable_http_manager")
         except Exception as e:
-            logger.error(f"Failed to load patched module: {e}", exc_info=True)
+            logger.exception(f"Failed to load patched module: {e}")
             raise
 
 
@@ -72,6 +74,7 @@ class _PatchImportHook(importlib.abc.MetaPathFinder):
 
         Returns:
             ModuleSpec for patched module, or None if not patched
+
         """
         if fullname == "mcp.server.streamable_http_manager":
             logger.debug(f"Intercepting import of {fullname}, redirecting to patched version")

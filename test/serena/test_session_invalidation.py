@@ -11,7 +11,6 @@ longer valid.
 
 import importlib
 import os
-from typing import Any
 
 import pytest
 
@@ -227,7 +226,7 @@ class TestPatchDocumentation:
 
         assert os.path.exists(plan_path), f"Implementation plan should exist at {plan_path}"
 
-        with open(plan_path, "r") as f:
+        with open(plan_path) as f:
             content = f.read()
 
         assert len(content) > 1000, "Implementation plan should be substantial (>1000 chars)"

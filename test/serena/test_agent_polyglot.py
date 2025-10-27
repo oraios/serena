@@ -20,6 +20,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+
 from serena.agent import SerenaAgent
 from serena.config.serena_config import ProjectConfig
 from serena.project import Project
@@ -29,7 +30,7 @@ from solidlsp.ls_config import Language
 @pytest.fixture(autouse=True)
 def _mock_tiktoken():
     """Mock tiktoken to prevent network download during tests."""
-    with patch('serena.agent.RegisteredTokenCountEstimator'):
+    with patch("serena.agent.RegisteredTokenCountEstimator"):
         yield
 
 

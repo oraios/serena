@@ -9,9 +9,10 @@ import asyncio
 import shutil
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
+
 from serena.config.serena_config import ProjectConfig
 from serena.lsp_manager import LSPManager
 from solidlsp.ls_config import Language

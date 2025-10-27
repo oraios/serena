@@ -19,9 +19,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from serena.agent import SerenaAgent
 from serena.config.serena_config import ProjectConfig
-from serena.lsp_manager import LSPManager
 from serena.project import Project
 from solidlsp.ls_config import Language
 

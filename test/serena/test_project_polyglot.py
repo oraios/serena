@@ -9,7 +9,6 @@ import shutil
 import tempfile
 from pathlib import Path
 
-import pytest
 from serena.config.serena_config import ProjectConfig
 from serena.project import Project
 from solidlsp.ls_config import Language
@@ -112,4 +111,3 @@ class TestProjectPolyglotIntegration:
 
         assert hasattr(project, "languages")
         assert project.languages == [Language.PYTHON, Language.RUST, Language.HASKELL]
-

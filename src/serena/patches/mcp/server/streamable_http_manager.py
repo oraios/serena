@@ -16,7 +16,6 @@ import contextlib
 import logging
 import warnings
 from collections.abc import AsyncIterator
-from http import HTTPStatus
 from typing import Any
 from uuid import uuid4
 
@@ -26,7 +25,6 @@ from mcp.server.lowlevel.server import Server as MCPServer
 from mcp.server.streamable_http import MCP_SESSION_ID_HEADER, EventStore, StreamableHTTPServerTransport
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.requests import Request
-from starlette.responses import Response
 from starlette.types import Receive, Scope, Send
 
 # SERENA PATCH: Version compatibility check
@@ -72,6 +70,7 @@ class StreamableHTTPSessionManager:
         json_response: Whether to use JSON responses instead of SSE streams
         stateless: If True, creates a completely fresh transport for each request
                    with no session tracking or state persistence between requests.
+
     """
 
     def __init__(
@@ -154,6 +153,7 @@ class StreamableHTTPSessionManager:
             scope: ASGI scope
             receive: ASGI receive function
             send: ASGI send function
+
         """
         if self._task_group is None:
             raise RuntimeError("Task group is not initialized. Make sure to use run().")
@@ -177,6 +177,7 @@ class StreamableHTTPSessionManager:
             scope: ASGI scope
             receive: ASGI receive function
             send: ASGI send function
+
         """
         logger.debug("Stateless mode: Creating new transport for this request")
         # No session ID needed in stateless mode
@@ -226,6 +227,7 @@ class StreamableHTTPSessionManager:
             scope: ASGI scope
             receive: ASGI receive function
             send: ASGI send function
+
         """
         request = Request(scope, receive)
         request_mcp_session_id = request.headers.get(MCP_SESSION_ID_HEADER)
@@ -266,10 +268,7 @@ class StreamableHTTPSessionManager:
                                 stateless=False,  # Stateful mode
                             )
                         except Exception as e:
-                            logger.error(
-                                f"Session {http_transport.mcp_session_id} crashed: {e}",
-                                exc_info=True,
-                            )
+                            logger.exception(f"Session {http_transport.mcp_session_id} crashed: {e}")
                         finally:
                             # Only remove from instances if not terminated
                             if (
@@ -277,7 +276,7 @@ class StreamableHTTPSessionManager:
                                 and http_transport.mcp_session_id in self._server_instances
                                 and not http_transport.is_terminated
                             ):
-                                logger.info("Cleaning up crashed session " f"{http_transport.mcp_session_id} from " "active instances.")
+                                logger.info(f"Cleaning up crashed session {http_transport.mcp_session_id} from active instances.")
                                 del self._server_instances[http_transport.mcp_session_id]
 
                 # Assert task group is not None for type checking
@@ -320,10 +319,7 @@ class StreamableHTTPSessionManager:
                                 stateless=False,  # Stateful mode
                             )
                         except Exception as e:
-                            logger.error(
-                                f"Session {http_transport.mcp_session_id} crashed: {e}",
-                                exc_info=True,
-                            )
+                            logger.exception(f"Session {http_transport.mcp_session_id} crashed: {e}")
                         finally:
                             # Only remove from instances if not terminated
                             if (
@@ -331,7 +327,7 @@ class StreamableHTTPSessionManager:
                                 and http_transport.mcp_session_id in self._server_instances
                                 and not http_transport.is_terminated
                             ):
-                                logger.info("Cleaning up crashed session " f"{http_transport.mcp_session_id} from " "active instances.")
+                                logger.info(f"Cleaning up crashed session {http_transport.mcp_session_id} from active instances.")
                                 del self._server_instances[http_transport.mcp_session_id]
 
                 # Assert task group is not None for type checking

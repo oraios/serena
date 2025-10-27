@@ -58,6 +58,7 @@ class Component(ABC):
         Raises:
             Exception: If agent is not in language server mode
             Exception: If file_path provided but no LSP found for that file
+
         """
         if not self.agent.is_using_language_server():
             raise Exception("Cannot create LanguageServerSymbolRetriever; agent is not in language server mode.")
@@ -67,7 +68,7 @@ class Component(ABC):
             language_server = self.agent.get_language_server_for_file(file_path)
             if language_server is None:
                 raise Exception(
-                    f"Cannot create LanguageServerSymbolRetriever for file '{file_path}': " f"no language server found for this file type."
+                    f"Cannot create LanguageServerSymbolRetriever for file '{file_path}': no language server found for this file type."
                 )
         else:
             # Backward compatibility: use default language_server

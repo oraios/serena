@@ -17,6 +17,7 @@ from ruamel.yaml.comments import CommentedMap
 from sensai.util import logging
 from sensai.util.logging import LogTime, datetime_tag
 from sensai.util.string import ToStringMixin
+
 from serena.constants import (
     DEFAULT_SOURCE_FILE_ENCODING,
     PROJECT_TEMPLATE_FILE,

@@ -13,9 +13,10 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from logging import Logger
 from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
-from interprompt.jinja_template import JinjaTemplate
 from sensai.util import logging
 from sensai.util.logging import LogTime
+
+from interprompt.jinja_template import JinjaTemplate
 from serena import serena_version
 from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
 from serena.config.context_mode import RegisteredContext, SerenaAgentContext, SerenaAgentMode
@@ -31,6 +32,10 @@ from solidlsp import SolidLanguageServer
 if TYPE_CHECKING:
     from serena.gui_log_viewer import GuiLogViewer
     from serena.lsp_manager import LSPManager  # FIX #5: Proper forward reference
+    from serena.project import MemoriesManager
+
+# Type alias for lines read tracking (file_path -> set of line numbers)
+LinesRead = dict[str, set[int]]
 
 log = logging.getLogger(__name__)
 TTool = TypeVar("TTool", bound="Tool")
@@ -537,7 +542,7 @@ class SerenaAgent:
             "For polyglot projects, use 'lsp_manager' directly. "
             "For file-specific LSP routing, use 'get_language_server_for_file(path)'.",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
 
         # FIX #3: Cache manager reference to prevent race condition
@@ -568,6 +573,7 @@ class SerenaAgent:
 
         Raises:
             ValueError: If tool timeout is less than 10 seconds
+
         """
         tool_timeout = self.serena_config.tool_timeout
         if tool_timeout is None or tool_timeout < 0:
@@ -589,8 +595,6 @@ class SerenaAgent:
         FIX #4 (WARNING): Uses extracted _calculate_ls_timeout() method.
         FIX (AI Panel P1): Thread-safe manager replacement using RLock.
         """
-        from serena.lsp_manager import LSPManager
-
         # FIX (AI Panel P1): Acquire lock for thread-safe manager replacement
         with self._lsp_manager_lock:
             # FIX #4: Use extracted timeout calculation method
@@ -605,7 +609,7 @@ class SerenaAgent:
                     old_manager.shutdown_all_sync()
                     log.info("Existing LSPManager stopped successfully")
                 except Exception as e:
-                    log.error(f"Error shutting down existing LSPManager: {e}", exc_info=True)
+                    log.exception(f"Error shutting down existing LSPManager: {e}")
                     # Continue anyway - we'll create a new manager
                 finally:
                     self.lsp_manager = None
@@ -632,7 +636,7 @@ class SerenaAgent:
 
             except Exception as e:
                 # FIX #2 + AI Panel P1: Rollback with validation
-                log.error(f"Failed to create LSPManager: {e}", exc_info=True)
+                log.exception(f"Failed to create LSPManager: {e}")
 
                 # AI Panel P1: Validate old manager is functional before restoring
                 if old_manager is not None:

@@ -37,11 +37,7 @@ class TestProjectConfigPolyglot:
         serena_dir = self.project_path / ".serena"
         serena_dir.mkdir()
         project_yml = serena_dir / "project.yml"
-        project_yml.write_text(
-            "project_name: test_project\n"
-            "language: rust\n"
-            "root: .\n"
-        )
+        project_yml.write_text("project_name: test_project\nlanguage: rust\nroot: .\n")
 
         # Load config
         config = ProjectConfig.load(self.project_path)
@@ -57,11 +53,7 @@ class TestProjectConfigPolyglot:
         serena_dir = self.project_path / ".serena"
         serena_dir.mkdir()
         project_yml = serena_dir / "project.yml"
-        project_yml.write_text(
-            "project_name: test_project\n"
-            "language: python\n"
-            "root: .\n"
-        )
+        project_yml.write_text("project_name: test_project\nlanguage: python\nroot: .\n")
 
         config = ProjectConfig.load(self.project_path)
 
@@ -79,14 +71,7 @@ class TestProjectConfigPolyglot:
         serena_dir = self.project_path / ".serena"
         serena_dir.mkdir()
         project_yml = serena_dir / "project.yml"
-        project_yml.write_text(
-            "project_name: polyglot_project\n"
-            "languages:\n"
-            "  - rust\n"
-            "  - haskell\n"
-            "  - python\n"
-            "root: .\n"
-        )
+        project_yml.write_text("project_name: polyglot_project\nlanguages:\n  - rust\n  - haskell\n  - python\nroot: .\n")
 
         config = ProjectConfig.load(self.project_path)
 
@@ -101,14 +86,7 @@ class TestProjectConfigPolyglot:
         serena_dir = self.project_path / ".serena"
         serena_dir.mkdir()
         project_yml = serena_dir / "project.yml"
-        project_yml.write_text(
-            "project_name: test_project\n"
-            "languages:\n"
-            "  - haskell\n"
-            "  - rust\n"
-            "  - python\n"
-            "root: .\n"
-        )
+        project_yml.write_text("project_name: test_project\nlanguages:\n  - haskell\n  - rust\n  - python\nroot: .\n")
 
         config = ProjectConfig.load(self.project_path)
 
@@ -122,14 +100,7 @@ class TestProjectConfigPolyglot:
         serena_dir = self.project_path / ".serena"
         serena_dir.mkdir()
         project_yml = serena_dir / "project.yml"
-        project_yml.write_text(
-            "project_name: test_project\n"
-            "languages:\n"
-            "  - rust\n"
-            "  - invalid_language\n"
-            "  - python\n"
-            "root: .\n"
-        )
+        project_yml.write_text("project_name: test_project\nlanguages:\n  - rust\n  - invalid_language\n  - python\nroot: .\n")
 
         with pytest.raises(ValueError) as exc_info:
             ProjectConfig.load(self.project_path)
@@ -143,11 +114,7 @@ class TestProjectConfigPolyglot:
         serena_dir = self.project_path / ".serena"
         serena_dir.mkdir()
         project_yml = serena_dir / "project.yml"
-        project_yml.write_text(
-            "project_name: test_project\n"
-            "languages: []\n"
-            "root: .\n"
-        )
+        project_yml.write_text("project_name: test_project\nlanguages: []\nroot: .\n")
 
         with pytest.raises(ValueError) as exc_info:
             ProjectConfig.load(self.project_path)
@@ -186,14 +153,7 @@ class TestProjectConfigPolyglot:
         serena_dir = self.project_path / ".serena"
         serena_dir.mkdir()
         project_yml = serena_dir / "project.yml"
-        project_yml.write_text(
-            "project_name: test_project\n"
-            "languages:\n"
-            "  - rust\n"
-            "  - haskell\n"
-            "  - python\n"
-            "root: .\n"
-        )
+        project_yml.write_text("project_name: test_project\nlanguages:\n  - rust\n  - haskell\n  - python\nroot: .\n")
 
         config = ProjectConfig.load(self.project_path)
 
@@ -206,11 +166,7 @@ class TestProjectConfigPolyglot:
         serena_dir = self.project_path / ".serena"
         serena_dir.mkdir()
         project_yml = serena_dir / "project.yml"
-        project_yml.write_text(
-            "project_name: test_project\n"
-            "language: python\n"
-            "root: .\n"
-        )
+        project_yml.write_text("project_name: test_project\nlanguage: python\nroot: .\n")
 
         config = ProjectConfig.load(self.project_path)
 
@@ -227,7 +183,7 @@ class TestProjectConfigPolyglot:
         # Create files in multiple languages
         (self.project_path / "main.rs").write_text("fn main() {}")
         (self.project_path / "script.py").write_text("print('hello')")
-        (self.project_path / "Main.hs").write_text("main = putStrLn \"hello\"")
+        (self.project_path / "Main.hs").write_text('main = putStrLn "hello"')
 
         config = ProjectConfig.autogenerate(self.project_path, save_to_disk=False)
 
@@ -245,14 +201,7 @@ class TestProjectConfigPolyglot:
         serena_dir = self.project_path / ".serena"
         serena_dir.mkdir()
         project_yml = serena_dir / "project.yml"
-        project_yml.write_text(
-            "project_name: test_project\n"
-            "language: rust\n"
-            "languages:\n"
-            "  - python\n"
-            "  - haskell\n"
-            "root: .\n"
-        )
+        project_yml.write_text("project_name: test_project\nlanguage: rust\nlanguages:\n  - python\n  - haskell\nroot: .\n")
 
         with pytest.raises(ValueError) as exc_info:
             ProjectConfig.load(self.project_path)
@@ -265,14 +214,10 @@ class TestProjectConfigPolyglot:
         serena_dir = self.project_path / ".serena"
         serena_dir.mkdir()
         project_yml = serena_dir / "project.yml"
-        project_yml.write_text(
-            "project_name: test_project\n"
-            "root: .\n"
-        )
+        project_yml.write_text("project_name: test_project\nroot: .\n")
 
         with pytest.raises(ValueError) as exc_info:
             ProjectConfig.load(self.project_path)
 
         error_message = str(exc_info.value)
         assert "must specify either 'language' or 'languages'" in error_message.lower()
-

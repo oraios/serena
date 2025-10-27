@@ -111,7 +111,7 @@ class LSPManager:
     def _build_extension_cache(self) -> None:
         """
         Build cache mapping file extensions to languages for fast lookups.
-        
+
         Note: Extension conflict detection (AI Panel M2) was intentionally not implemented
         based on Turn 2 feedback: low value for current use cases, existing O(1) lookup
         with "first match wins" is sufficient for practical scenarios.
@@ -153,7 +153,7 @@ class LSPManager:
         failure_count = 0
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                log.error(f"Failed to start {self.languages[i].value} LSP: {result}", exc_info=result)
+                log.exception(f"Failed to start {self.languages[i].value} LSP: {result}")
                 failure_count += 1
             elif result is not None:
                 log.info(f"{self.languages[i].value} LSP started successfully")
@@ -231,14 +231,14 @@ class LSPManager:
 
             except TimeoutError:
                 # FIX #2: Proper logging for TimeoutError
-                log.error(f"Timeout starting {language.value} language server (timeout={self.timeout}s)", exc_info=True)
+                log.exception(f"Timeout starting {language.value} language server (timeout={self.timeout}s)")
                 self._failed_languages.add(language)
                 self._language_servers[language] = None
                 return None
 
             except Exception as e:
                 # FIX #2: Already has proper logging with exc_info=True
-                log.error(f"Failed to start {language.value} language server: {e}", exc_info=True)
+                log.exception(f"Failed to start {language.value} language server: {e}")
                 self._failed_languages.add(language)
                 self._language_servers[language] = None
                 return None
@@ -352,14 +352,13 @@ class LSPManager:
 
         """
         log.debug(f"Synchronous get_language_server_for_file called for: {file_path}")
-        
+
         # Check if we're in async context - this is a bug
         try:
             asyncio.get_running_loop()
             # If we reach here, there's a running loop - this shouldn't happen
             raise RuntimeError(
-                "Cannot call get_language_server_for_file_sync() from async context. "
-                "Use get_language_server_for_file() instead."
+                "Cannot call get_language_server_for_file_sync() from async context. Use get_language_server_for_file() instead."
             )
         except RuntimeError as e:
             # Check if it's "no current event loop" (expected) vs our error (propagate)
@@ -370,7 +369,7 @@ class LSPManager:
             else:
                 # Not the expected asyncio error - re-raise (likely our custom error)
                 raise
-        
+
         # Safe to create new event loop
         loop = asyncio.new_event_loop()
         try:
@@ -378,7 +377,7 @@ class LSPManager:
             log.debug(f"New event loop succeeded, result: {result is not None}")
             return result
         except Exception as e:
-            log.error(f"Error in get_language_server_for_file_sync: {e}", exc_info=True)
+            log.exception(f"Error in get_language_server_for_file_sync: {e}")
             raise
         finally:
             loop.close()
@@ -432,17 +431,17 @@ class LSPManager:
     async def _shutdown_single_lsp(self, language: Language, lsp: SolidLanguageServer) -> None:
         """
         Shutdown a single LSP with proper error handling and timeout.
-        
+
         FIX (M1 from AI Panel): Add configurable timeout to prevent hanging during
         shutdown if LSP is unresponsive.
-        
+
         **Graceful Degradation**: If timeout occurs, the method logs an error but does NOT
         raise an exception, allowing other LSPs to shut down cleanly. However, timeout may
         leave orphaned language server processes that require manual cleanup (e.g., pkill).
-        
+
         **Timeout Configuration**: Uses LSPManager.timeout (default 30s). Adjust via constructor
         if your LSPs require longer shutdown times.
-        
+
         Args:
             language: The language of the LSP being shut down
             lsp: The SolidLanguageServer instance to shutdown
@@ -451,19 +450,12 @@ class LSPManager:
         try:
             log.debug(f"Shutting down {language.value} LSP...")
             # Use asyncio.to_thread in case stop() is blocking, with timeout
-            await asyncio.wait_for(
-                asyncio.to_thread(lsp.stop),
-                timeout=self.timeout
-            )
+            await asyncio.wait_for(asyncio.to_thread(lsp.stop), timeout=self.timeout)
             log.debug(f"{language.value} LSP shut down successfully")
         except TimeoutError:
-            log.error(
-                f"Timeout shutting down {language.value} LSP after {self.timeout}s. "
-                f"LSP may be unresponsive or hanging.",
-                exc_info=True
-            )
+            log.exception(f"Timeout shutting down {language.value} LSP after {self.timeout}s. LSP may be unresponsive or hanging.")
         except Exception as e:
-            log.error(f"Error shutting down {language.value} LSP: {e}", exc_info=True)
+            log.exception(f"Error shutting down {language.value} LSP: {e}")
 
     def shutdown_all_sync(self) -> None:
         """
@@ -495,10 +487,7 @@ class LSPManager:
         try:
             asyncio.get_running_loop()
             # If we reach here, there's a running loop - this shouldn't happen
-            raise RuntimeError(
-                "Cannot call shutdown_all_sync() from async context. "
-                "Use shutdown_all() instead."
-            )
+            raise RuntimeError("Cannot call shutdown_all_sync() from async context. Use shutdown_all() instead.")
         except RuntimeError as e:
             # Check if it's "no current event loop" (expected) vs our error (propagate)
             error_msg = str(e).lower()
@@ -508,13 +497,13 @@ class LSPManager:
             else:
                 # Not the expected asyncio error - re-raise (likely our custom error)
                 raise
-        
+
         # Safe to create new event loop
         loop = asyncio.new_event_loop()
         try:
             loop.run_until_complete(self.shutdown_all())
         except Exception as e:
-            log.error(f"Error in shutdown_all_sync: {e}", exc_info=True)
+            log.exception(f"Error in shutdown_all_sync: {e}")
             raise
         finally:
             loop.close()
