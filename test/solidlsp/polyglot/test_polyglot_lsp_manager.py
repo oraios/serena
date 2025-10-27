@@ -185,3 +185,114 @@ class TestSyncWrapperEventLoopSafety:
         # Run it and expect RuntimeError
         with pytest.raises(RuntimeError, match="Cannot call shutdown_all_sync.*from async context"):
             asyncio.run(call_shutdown_sync_from_async())
+
+
+@pytest.mark.polyglot
+@pytest.mark.skipif(sys.platform == "win32", reason="Multi-LSP not fully tested on Windows")
+class TestShutdownTimeout:
+    """
+    Test shutdown timeout functionality (M1 from AI Panel).
+    
+    Per AI Panel Turn 1 feedback: _shutdown_single_lsp should have configurable
+    timeout to prevent hanging during shutdown if LSP is unresponsive.
+    """
+
+    def test_shutdown_completes_within_timeout(
+        self, polyglot_test_repo, project_config, lsp_logger, lsp_settings
+    ):
+        """Shutdown should complete successfully within timeout for responsive LSP."""
+        import asyncio
+        
+        manager = LSPManager(
+            languages=[Language.PYTHON],
+            project_root=str(polyglot_test_repo),
+            config=project_config,
+            logger=lsp_logger,
+            settings=lsp_settings,
+            timeout=30.0,  # 30 second timeout
+        )
+        
+        async def test_shutdown():
+            # Start LSP
+            lsp = await manager.get_language_server_for_file("python/calculator.py")
+            assert lsp is not None
+            
+            # Shutdown should complete without timeout
+            await manager.shutdown_all()
+        
+        # Should complete successfully
+        asyncio.run(test_shutdown())
+
+    def test_shutdown_times_out_for_hanging_lsp(
+        self, polyglot_test_repo, project_config, lsp_logger, lsp_settings
+    ):
+        """Shutdown should timeout and log error if LSP hangs during stop_server."""
+        import asyncio
+        from unittest.mock import Mock, patch
+        
+        manager = LSPManager(
+            languages=[Language.PYTHON],
+            project_root=str(polyglot_test_repo),
+            config=project_config,
+            logger=lsp_logger,
+            settings=lsp_settings,
+            timeout=1.0,  # 1 second timeout for faster test
+        )
+        
+        async def test_shutdown_timeout():
+            # Start LSP
+            lsp = await manager.get_language_server_for_file("python/calculator.py")
+            assert lsp is not None
+            
+            # Mock stop to hang indefinitely
+            def hanging_stop():
+                import time
+                time.sleep(10)  # Hang for 10 seconds (longer than timeout)
+            
+            lsp.stop = hanging_stop
+            
+            # Shutdown should timeout but not raise exception (graceful degradation)
+            # The timeout should be logged as an error
+            await manager.shutdown_all()
+        
+        # Should complete (with timeout logged) without raising exception
+        asyncio.run(test_shutdown_timeout())
+
+    def test_shutdown_uses_manager_timeout(
+        self, polyglot_test_repo, project_config, lsp_logger, lsp_settings
+    ):
+        """_shutdown_single_lsp should respect the LSPManager's timeout setting."""
+        import asyncio
+        
+        # Create manager with short timeout
+        manager = LSPManager(
+            languages=[Language.PYTHON],
+            project_root=str(polyglot_test_repo),
+            config=project_config,
+            logger=lsp_logger,
+            settings=lsp_settings,
+            timeout=0.5,  # Very short timeout
+        )
+        
+        async def test_timeout_respected():
+            # Start LSP
+            lsp = await manager.get_language_server_for_file("python/calculator.py")
+            assert lsp is not None
+            
+            # Mock stop to take longer than timeout
+            def slow_stop():
+                import time
+                time.sleep(2)  # Takes 2 seconds (longer than 0.5s timeout)
+            
+            lsp.stop = slow_stop
+            
+            # Should timeout quickly (within 1 second, not 2)
+            import time
+            start = time.time()
+            await manager.shutdown_all()
+            duration = time.time() - start
+            
+            # Should complete in ~0.5s (timeout), not 2s (slow_stop_server duration)
+            assert duration < 1.5, f"Shutdown took {duration}s, expected <1.5s (timeout not working)"
+        
+        asyncio.run(test_timeout_respected())

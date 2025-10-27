@@ -407,12 +407,26 @@ class LSPManager:
         log.info("All language servers shut down")
 
     async def _shutdown_single_lsp(self, language: Language, lsp: SolidLanguageServer) -> None:
-        """Shutdown a single LSP with proper error handling."""
+        """
+        Shutdown a single LSP with proper error handling and timeout.
+        
+        FIX (M1 from AI Panel): Add configurable timeout to prevent hanging during
+        shutdown if LSP is unresponsive.
+        """
         try:
             log.debug(f"Shutting down {language.value} LSP...")
-            # Use asyncio.to_thread in case stop_server is blocking
-            await asyncio.to_thread(lsp.stop_server)
+            # Use asyncio.to_thread in case stop() is blocking, with timeout
+            await asyncio.wait_for(
+                asyncio.to_thread(lsp.stop),
+                timeout=self.timeout
+            )
             log.debug(f"{language.value} LSP shut down successfully")
+        except asyncio.TimeoutError:
+            log.error(
+                f"Timeout shutting down {language.value} LSP after {self.timeout}s. "
+                f"LSP may be unresponsive or hanging.",
+                exc_info=True
+            )
         except Exception as e:
             log.error(f"Error shutting down {language.value} LSP: {e}", exc_info=True)
 
