@@ -341,12 +341,14 @@ class LSPManager:
                 "Use get_language_server_for_file() instead."
             )
         except RuntimeError as e:
-            # Check if it's our error message or the "no running loop" error
-            if "Cannot call get_language_server_for_file_sync" in str(e):
-                # Re-raise our error
+            # Check if it's "no current event loop" (expected) vs our error (propagate)
+            error_msg = str(e).lower()
+            if "no current event loop" in error_msg or "no running event loop" in error_msg:
+                # Expected asyncio error - safe to proceed
+                log.debug("No running event loop detected, safe to create new loop")
+            else:
+                # Not the expected asyncio error - re-raise (likely our custom error)
                 raise
-            # Otherwise it's "There is no current event loop" - this is expected
-            log.debug("No running event loop detected, safe to create new loop")
         
         # Safe to create new event loop
         loop = asyncio.new_event_loop()
@@ -436,12 +438,14 @@ class LSPManager:
                 "Use shutdown_all() instead."
             )
         except RuntimeError as e:
-            # Check if it's our error message or the "no running loop" error
-            if "Cannot call shutdown_all_sync" in str(e):
-                # Re-raise our error
+            # Check if it's "no current event loop" (expected) vs our error (propagate)
+            error_msg = str(e).lower()
+            if "no current event loop" in error_msg or "no running event loop" in error_msg:
+                # Expected asyncio error - safe to proceed
+                log.debug("No running event loop detected, safe to create new loop")
+            else:
+                # Not the expected asyncio error - re-raise (likely our custom error)
                 raise
-            # Otherwise it's "There is no current event loop" - this is expected
-            log.debug("No running event loop detected, safe to create new loop")
         
         # Safe to create new event loop
         loop = asyncio.new_event_loop()
