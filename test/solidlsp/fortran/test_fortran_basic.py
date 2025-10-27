@@ -71,14 +71,12 @@ class TestFortranLanguageServer:
 
         assert add_numbers_symbol is not None, "Could not find 'add_numbers' function symbol in math_utils.f90"
 
-        # WORKAROUND: fortls bug - selectionRange.start is at character 0 (line start),
-        # but references only work when queried from the function name (character 13).
-        # Line 5 (0-indexed: 4) is: "    function add_numbers(a, b) result(sum)"
-        #                                      ^13 characters from start
+        # Use selectionRange to query for references
+        # Note: FortranLanguageServer automatically fixes fortls's incorrect selectionRange
         sel_start = add_numbers_symbol["selectionRange"]["start"]
 
-        # Use character 13 to query from the function name, not the "function" keyword
-        refs = language_server.request_references(file_path, sel_start["line"], 13)
+        # Query from the function name position using corrected selectionRange
+        refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
 
         # Should find references (usage in main.f90 + definition in math_utils.f90)
         assert len(refs) > 0, "Should find references to add_numbers function"
@@ -123,8 +121,7 @@ class TestFortranLanguageServer:
         the containing symbols that have the references. This is different from
         test_find_references_cross_file which only returns locations.
 
-        NOTE: This test works around a fortls bug where selectionRange points to the start
-        of the line instead of the function name.
+        Note: FortranLanguageServer automatically fixes fortls's incorrect selectionRange.
         """
         # Get the add_numbers function symbol from math_utils.f90
         file_path = "modules/math_utils.f90"
@@ -139,11 +136,10 @@ class TestFortranLanguageServer:
 
         assert add_numbers_symbol is not None, "Could not find 'add_numbers' function symbol"
 
-        # WORKAROUND: fortls bug - selectionRange.start is at character 0 (line start),
-        # but references only work when queried from the function name (character 13).
+        # Use selectionRange to query for referencing symbols
+        # FortranLanguageServer automatically corrects fortls's incorrect selectionRange
         sel_start = add_numbers_symbol["selectionRange"]["start"]
-        # Use character 13 to query from the function name, not the "function" keyword
-        referencing_symbols = language_server.request_referencing_symbols(file_path, sel_start["line"], 13)
+        referencing_symbols = language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
 
         # Should find referencing symbols (not just locations, but symbols containing the references)
         assert len(referencing_symbols) > 0, "Should find referencing symbols when querying from function name position"
@@ -220,3 +216,59 @@ class TestFortranLanguageServer:
         location = containing_symbol["location"]
         assert "range" in location, "Location should contain range information"
         assert "start" in location["range"] and "end" in location["range"], "Range should have start and end positions"
+
+    @pytest.mark.parametrize("language_server", [Language.FORTRAN], indirect=True)
+    def test_type_and_interface_symbols(self, language_server: SolidLanguageServer) -> None:
+        """Test that type definitions and interfaces are properly recognized with corrected selectionRange.
+
+        This verifies that the regex pattern correctly handles:
+        - Simple type definitions (type Name)
+        - Type with double colon (type :: Name)
+        - Type with extends (type, extends(Base) :: Derived)
+        - Named interfaces
+
+        fortls returns these as SymbolKind.Class (11) for types and SymbolKind.Interface (5) for interfaces.
+        """
+        file_path = "modules/geometry.f90"
+        symbols, _ = language_server.request_document_symbols(file_path)
+
+        # Find type and interface symbols
+        type_names = []
+        interface_names = []
+        for sym in symbols:
+            if sym.get("kind") == SymbolKind.Class.value:  # Type definitions
+                type_names.append(sym.get("name"))
+            elif sym.get("kind") == SymbolKind.Interface.value:  # Interfaces
+                interface_names.append(sym.get("name"))
+
+        # Verify type definitions are found
+        assert "Point2D" in type_names, f"Simple type 'Point2D' not found. Found types: {type_names}"
+        assert "Circle" in type_names, f"Type with :: syntax 'Circle' not found. Found types: {type_names}"
+        assert "Point3D" in type_names, f"Type with extends 'Point3D' not found. Found types: {type_names}"
+
+        # Verify interface is found
+        assert "distance" in interface_names, f"Interface 'distance' not found. Found interfaces: {interface_names}"
+
+        # Verify selectionRange is corrected for a type symbol
+        point3d_symbol = None
+        for sym in symbols:
+            if sym.get("name") == "Point3D":
+                point3d_symbol = sym
+                break
+
+        assert point3d_symbol is not None, "Could not find 'Point3D' type symbol"
+
+        # Use corrected selectionRange to find references
+        # This tests that the fix works for types (not just functions)
+        sel_start = point3d_symbol["selectionRange"]["start"]
+
+        # Verify selectionRange points to identifier name, not line start
+        # Line for "type, extends(Point2D) :: Point3D" has Point3D at position > 0
+        assert (
+            sel_start["character"] > 0
+        ), f"selectionRange should point to identifier, not line start. Got character: {sel_start['character']}"
+
+        # Test that we can find references using the corrected position
+        _refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
+        # refs might be empty if Point3D isn't used elsewhere, but the call should not fail
+        # The important thing is that it doesn't error due to wrong character position
