@@ -56,6 +56,7 @@ class LSPManager:
 
         # Shutdown all LSPs
         manager.shutdown_all()
+
     """
 
     def __init__(
@@ -80,6 +81,7 @@ class LSPManager:
 
         Raises:
             ValueError: If languages list is empty
+
         """
         if not languages:
             raise ValueError("LSPManager requires at least one language")
@@ -107,7 +109,13 @@ class LSPManager:
         log.info(f"LSPManager initialized for {len(languages)} languages: {[lang.value for lang in languages]}")
 
     def _build_extension_cache(self) -> None:
-        """Build cache mapping file extensions to languages for fast lookups."""
+        """
+        Build cache mapping file extensions to languages for fast lookups.
+        
+        Note: Extension conflict detection (AI Panel M2) was intentionally not implemented
+        based on Turn 2 feedback: low value for current use cases, existing O(1) lookup
+        with "first match wins" is sufficient for practical scenarios.
+        """
         for language in self.languages:
             matcher = language.get_source_fn_matcher()
             for pattern in matcher.patterns:
@@ -128,6 +136,7 @@ class LSPManager:
 
         Note:
             Failures are logged but don't raise exceptions (graceful degradation).
+
         """
         if lazy:
             log.info("LSPManager configured for lazy initialization (LSPs will start on first use)")
@@ -169,6 +178,7 @@ class LSPManager:
 
         Returns:
             The started language server, or None if startup failed
+
         """
         log.debug(f"Starting language server for: {language.value}")
 
@@ -219,7 +229,7 @@ class LSPManager:
                 log.info(f"{language.value} language server started successfully")
                 return lsp
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # FIX #2: Proper logging for TimeoutError
                 log.error(f"Timeout starting {language.value} language server (timeout={self.timeout}s)", exc_info=True)
                 self._failed_languages.add(language)
@@ -250,6 +260,7 @@ class LSPManager:
             Language.RUST
             >>> manager.get_language_for_file("README.md")
             None
+
         """
         # FIX #5 (OPTIMIZED): Use os.path.splitext() for true O(1) lookup
         import os
@@ -289,6 +300,7 @@ class LSPManager:
             >>> lsp = await manager.get_language_server_for_file("src/main.rs")
             >>> if lsp:
             ...     symbols = lsp.request_document_symbols("src/main.rs")
+
         """
         log.debug(f"Getting language server for file: {file_path}")
         language = self.get_language_for_file(file_path)
@@ -316,6 +328,14 @@ class LSPManager:
         FIX: Addresses async/sync mismatch identified by AI Panel.
         This allows synchronous MCP tools to get LSPs with lazy initialization.
 
+        **IMPORTANT SAFETY**: This method MUST only be called from synchronous contexts.
+        It detects running event loops and raises RuntimeError to prevent nested event loop
+        bugs. If you need to call from async code, use: await get_language_server_for_file()
+
+        **Migration Note**: Code upgrading from versions without event loop detection should
+        ensure sync wrappers are only called from synchronous contexts. RuntimeError indicates
+        incorrect usage from async context.
+
         Args:
             file_path: Path to the file (relative or absolute)
 
@@ -329,6 +349,7 @@ class LSPManager:
             >>> lsp = manager.get_language_server_for_file_sync("src/main.rs")
             >>> if lsp:
             ...     symbols = lsp.request_document_symbols("src/main.rs")
+
         """
         log.debug(f"Synchronous get_language_server_for_file called for: {file_path}")
         
@@ -373,6 +394,7 @@ class LSPManager:
             >>> working_lsps = manager.get_all_working_language_servers()
             >>> for lsp in working_lsps:
             ...     print(f"Working LSP: {lsp.language.value}")
+
         """
         return [lsp for lang, lsp in self._language_servers.items() if lsp is not None and lang not in self._failed_languages]
 
@@ -386,6 +408,7 @@ class LSPManager:
 
         Example:
             >>> await manager.shutdown_all()
+
         """
         log.info(f"Shutting down {len(self._language_servers)} language servers...")
 
@@ -412,6 +435,18 @@ class LSPManager:
         
         FIX (M1 from AI Panel): Add configurable timeout to prevent hanging during
         shutdown if LSP is unresponsive.
+        
+        **Graceful Degradation**: If timeout occurs, the method logs an error but does NOT
+        raise an exception, allowing other LSPs to shut down cleanly. However, timeout may
+        leave orphaned language server processes that require manual cleanup (e.g., pkill).
+        
+        **Timeout Configuration**: Uses LSPManager.timeout (default 30s). Adjust via constructor
+        if your LSPs require longer shutdown times.
+        
+        Args:
+            language: The language of the LSP being shut down
+            lsp: The SolidLanguageServer instance to shutdown
+
         """
         try:
             log.debug(f"Shutting down {language.value} LSP...")
@@ -421,7 +456,7 @@ class LSPManager:
                 timeout=self.timeout
             )
             log.debug(f"{language.value} LSP shut down successfully")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             log.error(
                 f"Timeout shutting down {language.value} LSP after {self.timeout}s. "
                 f"LSP may be unresponsive or hanging.",
@@ -437,11 +472,24 @@ class LSPManager:
         FIX #1 (CRITICAL): Addresses async/sync mismatch identified by AI Panel.
         This allows SerenaAgent (which is synchronous) to properly shutdown LSPManager.
 
+        **IMPORTANT SAFETY**: This method MUST only be called from synchronous contexts.
+        It detects running event loops and raises RuntimeError to prevent nested event loop
+        bugs. If you need to call from async code, use: await shutdown_all()
+
+        **Migration Note**: Code upgrading from versions without event loop detection should
+        ensure sync wrappers are only called from synchronous contexts. RuntimeError indicates
+        incorrect usage from async context.
+
+        **Timeout Risk**: Individual LSP shutdowns use configurable timeout (default 30s).
+        If an LSP hangs during shutdown, it will timeout gracefully without blocking other
+        LSPs, but may leave orphaned processes. Check logs for timeout warnings.
+
         Raises:
             RuntimeError: If called from async context (use async version instead)
 
         Example:
             >>> manager.shutdown_all_sync()
+
         """
         # Check if we're in async context - this is a bug
         try:
@@ -479,6 +527,7 @@ class LSPManager:
         Example:
             async with LSPManager(...) as manager:
                 lsp = await manager.get_language_server_for_file("main.rs")
+
         """
         # Don't start servers eagerly - let lazy initialization handle it
         return self
