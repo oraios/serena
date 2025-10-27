@@ -282,6 +282,7 @@ markers = [
   "markdown: language server running for Markdown",
   "julia: Julia language server tests",
   "fortran: language server running for Fortran",
+  "haskell: Haskell language server tests",
 ]
 
 [tool.codespell]

@@ -4,7 +4,7 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import asdict, dataclass
-from typing import TYPE_CHECKING, Any, Self, Union
+from typing import TYPE_CHECKING, Any, NotRequired, Self, TypedDict, Union
 
 from sensai.util.string import ToStringMixin
 
@@ -77,7 +77,7 @@ class PositionInFile:
         return Position(line=self.line, character=self.col)
 
 
-class Symbol(ABC):
+class Symbol(ToStringMixin, ABC):
     @abstractmethod
     def get_body_start_position(self) -> PositionInFile | None:
         pass
@@ -599,7 +599,15 @@ class LanguageServerSymbolRetriever:
 
 
 class JetBrainsSymbol(Symbol):
-    def __init__(self, symbol_dict: dict, project: Project) -> None:
+    class SymbolDict(TypedDict):
+        name_path: str
+        relative_path: str
+        type: str
+        text_range: NotRequired[dict]
+        body: NotRequired[str]
+        children: NotRequired[list["JetBrainsSymbol.SymbolDict"]]
+
+    def __init__(self, symbol_dict: SymbolDict, project: Project) -> None:
         """
         :param symbol_dict: dictionary as returned by the JetBrains plugin client.
         """
@@ -608,6 +616,15 @@ class JetBrainsSymbol(Symbol):
         self._cached_file_content: str | None = None
         self._cached_body_start_position: PositionInFile | None = None
         self._cached_body_end_position: PositionInFile | None = None
+
+    def _tostring_includes(self) -> list[str]:
+        return []
+
+    def _tostring_additional_entries(self) -> dict[str, Any]:
+        return dict(name_path=self.get_name_path(), relative_path=self.get_relative_path(), type=self._dict["type"])
+
+    def get_name_path(self) -> str:
+        return self._dict["name_path"]
 
     def get_relative_path(self) -> str:
         return self._dict["relative_path"]

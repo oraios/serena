@@ -171,6 +171,8 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
     ) -> str:
         r"""
         Replaces one or more occurrences of the given regular expression.
+        Works exactly like Python's re.subn function with flags DOTALL and MULTILINE enabled.
+
         This is the preferred way to replace content in a file whenever the symbol-level
         tools are not appropriate.
         Even large sections of code can be replaced by providing a concise regular expression of
@@ -183,10 +185,11 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
         :param relative_path: the relative path to the file
         :param regex: a Python-style regular expression, matches of which will be replaced.
             Dot matches all characters, multi-line matching is enabled.
+            Apply the usual escaping as needed for reserved characters in Python-style regex.
         :param repl: the string to replace the matched content with, which may contain
-            backreferences like \1, \2, etc.
-            IMPORTANT: Make sure to escape special characters appropriately!
-                Use "\n" to insert a newline, but use "\\n" to insert the string "\n" within a string literal.
+            backreferences like \1, \2, etc. for groups matched by the regex.
+            Insert new content verbatim, except for backslashes, which have to be escaped.
+            IMPORTANT: When inserting a quoted string with newlines encoded as backslash followed by n, don't forget to insert double backslashes (i.e., \\n).
         :param allow_multiple_occurrences: if True, the regex may match multiple occurrences in the file
             and all of them will be replaced.
             If this is set to False and the regex matches multiple occurrences, an error will be returned

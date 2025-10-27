@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import pathspec
+from sensai.util.string import ToStringMixin
 
 from serena.config.serena_config import DEFAULT_TOOL_TIMEOUT, ProjectConfig, get_serena_managed_in_project_dir
 from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
@@ -53,7 +54,7 @@ class MemoriesManager:
         return f"Memory {name} deleted."
 
 
-class Project:
+class Project(ToStringMixin):
     def __init__(self, project_root: str, project_config: ProjectConfig, is_newly_created: bool = False):
         self.project_root = project_root
         self.project_config = project_config
@@ -89,6 +90,12 @@ class Project:
             processed_patterns.append(pattern)
         log.debug(f"Processing {len(processed_patterns)} ignored paths")
         self._ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
+
+    def _tostring_includes(self) -> list[str]:
+        return []
+
+    def _tostring_additional_entries(self) -> dict[str, Any]:
+        return {"root": self.project_root, "name": self.project_name}
 
     @property
     def project_name(self) -> str:

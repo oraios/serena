@@ -100,6 +100,8 @@ With Serena, we provide direct, out-of-the-box support for:
   * Erlang (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls), experimental, might be slow or hang)
   * Perl (requires installation of Perl::LanguageServer)
   * Fortran (requires installation of fortls: `pip install fortls`)
+  * Haskell (automatically locates HLS via ghcup, stack, or system PATH; supports Stack and Cabal projects)
+  * Julia
   * AL
   * Markdown (must be explicitly specified via `--language markdown` when generating project config, primarily useful for documentation-heavy projects)
 
