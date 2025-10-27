@@ -113,7 +113,7 @@ class TestSyncWrapperEventLoopSafety:
             return manager.get_language_server_for_file_sync("python/calculator.py")
         
         # Run it and expect RuntimeError
-        with pytest.raises(RuntimeError, match="Cannot call get_language_server_for_file_sync.*from async context"):
+        with pytest.raises(RuntimeError, match=r"Cannot call get_language_server_for_file_sync.*from async context"):
             asyncio.run(call_sync_from_async())
 
     def test_sync_wrapper_error_message_guides_to_async_api(
@@ -183,7 +183,7 @@ class TestSyncWrapperEventLoopSafety:
             manager.shutdown_all_sync()
         
         # Run it and expect RuntimeError
-        with pytest.raises(RuntimeError, match="Cannot call shutdown_all_sync.*from async context"):
+        with pytest.raises(RuntimeError, match=r"Cannot call shutdown_all_sync.*from async context"):
             asyncio.run(call_shutdown_sync_from_async())
 
 
@@ -228,7 +228,6 @@ class TestShutdownTimeout:
     ):
         """Shutdown should timeout and log error if LSP hangs during stop_server."""
         import asyncio
-        from unittest.mock import Mock, patch
         
         manager = LSPManager(
             languages=[Language.PYTHON],
