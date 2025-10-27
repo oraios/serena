@@ -1,0 +1,4 @@
+resolver: lts-22.39
+
+packages:
+  - .
