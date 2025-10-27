@@ -5,11 +5,13 @@ Fortran Language Server implementation using fortls.
 import logging
 import os
 import pathlib
+import re
 import shutil
 import threading
 
 from overrides import override
 
+from solidlsp import ls_types
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
@@ -39,6 +41,142 @@ class FortranLanguageServer(SolidLanguageServer):
             ".cmake",
             "CMakeFiles",
         ]
+
+    def _fix_fortls_selection_range(
+        self, symbol: ls_types.UnifiedSymbolInformation, file_content: str
+    ) -> ls_types.UnifiedSymbolInformation:
+        """
+        Fix fortls's incorrect selectionRange that points to line start instead of identifier name.
+
+        fortls bug: selectionRange.start.character is 0 (line start) but should point to the
+        function/subroutine/module/program name position. This breaks MCP server features that
+        rely on the exact identifier position for finding references.
+
+        Args:
+            symbol: The symbol with potentially incorrect selectionRange
+            file_content: Full file content to parse the line
+
+        Returns:
+            Symbol with corrected selectionRange pointing to the identifier name
+
+        """
+        if "selectionRange" not in symbol:
+            return symbol
+
+        sel_range = symbol["selectionRange"]
+        start_line = sel_range["start"]["line"]
+        start_char = sel_range["start"]["character"]
+
+        # Split file content into lines
+        lines = file_content.split("\n")
+        if start_line >= len(lines):
+            return symbol
+
+        line = lines[start_line]
+
+        # Fortran keywords that define named constructs
+        # Match patterns:
+        # Standard keywords: <keyword> <whitespace> <identifier_name>
+        #   "    function add_numbers(a, b) result(sum)"  -> keyword="function", name="add_numbers"
+        #   "subroutine print_result(value)"             -> keyword="subroutine", name="print_result"
+        #   "module math_utils"                          -> keyword="module", name="math_utils"
+        #   "program test_program"                       -> keyword="program", name="test_program"
+        #   "interface distance"                         -> keyword="interface", name="distance"
+        #
+        # Type definitions (can have :: syntax):
+        #   "type point"                                 -> keyword="type", name="point"
+        #   "type :: point"                              -> keyword="type", name="point"
+        #   "type, extends(base) :: derived"             -> keyword="type", name="derived"
+        #
+        # Submodules (have parent module in parentheses):
+        #   "submodule (parent_mod) child_mod"           -> keyword="submodule", name="child_mod"
+
+        # Try type pattern first (has complex syntax with optional comma and ::)
+        type_pattern = r"^\s*type\s*(?:,.*?)?\s*(?:::)?\s*([a-zA-Z_]\w*)"
+        match = re.match(type_pattern, line, re.IGNORECASE)
+
+        if match:
+            # For type pattern, identifier is in group 1
+            identifier_name = match.group(1)
+            identifier_start = match.start(1)
+        else:
+            # Try standard keywords pattern
+            standard_pattern = r"^\s*(function|subroutine|module|program|interface)\s+([a-zA-Z_]\w*)"
+            match = re.match(standard_pattern, line, re.IGNORECASE)
+
+            if not match:
+                # Try submodule pattern
+                submodule_pattern = r"^\s*submodule\s*\([^)]+\)\s+([a-zA-Z_]\w*)"
+                match = re.match(submodule_pattern, line, re.IGNORECASE)
+
+                if match:
+                    identifier_name = match.group(1)
+                    identifier_start = match.start(1)
+            else:
+                identifier_name = match.group(2)
+                identifier_start = match.start(2)
+
+        if match:
+            # Create corrected selectionRange
+            new_sel_range = {
+                "start": {"line": start_line, "character": identifier_start},
+                "end": {"line": start_line, "character": identifier_start + len(identifier_name)},
+            }
+
+            # Create modified symbol with corrected selectionRange
+            corrected_symbol = symbol.copy()
+            corrected_symbol["selectionRange"] = new_sel_range
+
+            self.logger.log(
+                f"Fixed fortls selectionRange for {identifier_name}: char {start_char} -> {identifier_start}",
+                logging.DEBUG,
+            )
+
+            return corrected_symbol
+
+        # If no match, return symbol unchanged (e.g., for variables, which don't have this pattern)
+        return symbol
+
+    @override
+    def request_document_symbols(
+        self, relative_file_path: str, include_body: bool = False
+    ) -> tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]:
+        """
+        Override to fix fortls's incorrect selectionRange bug.
+
+        fortls returns selectionRange pointing to line start (character 0) instead of the
+        identifier name position. This breaks MCP server features that rely on exact positions.
+
+        This override:
+        1. Gets symbols from fortls via parent implementation
+        2. Parses each symbol's line to find the correct identifier position
+        3. Fixes selectionRange for all symbols recursively
+        4. Returns corrected symbols
+
+        """
+        # Get symbols from fortls (with incorrect selectionRange)
+        all_symbols, root_symbols = super().request_document_symbols(relative_file_path, include_body)
+
+        # Get file content for parsing
+        with self.open_file(relative_file_path) as file_data:
+            file_content = file_data.contents
+
+        # Fix selectionRange recursively for all symbols
+        def fix_symbol_and_children(symbol: ls_types.UnifiedSymbolInformation) -> ls_types.UnifiedSymbolInformation:
+            # Fix this symbol's selectionRange
+            fixed = self._fix_fortls_selection_range(symbol, file_content)
+
+            # Fix children recursively
+            if fixed.get("children"):
+                fixed["children"] = [fix_symbol_and_children(child) for child in fixed["children"]]
+
+            return fixed
+
+        # Apply fix to all symbols
+        fixed_all_symbols = [fix_symbol_and_children(sym) for sym in all_symbols]
+        fixed_root_symbols = [fix_symbol_and_children(sym) for sym in root_symbols]
+
+        return fixed_all_symbols, fixed_root_symbols
 
     @staticmethod
     def _check_fortls_installation():
