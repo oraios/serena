@@ -288,6 +288,7 @@ markers = [
   "markdown: language server running for Markdown",
   "julia: Julia language server tests",
   "haskell: Haskell language server tests",
+  "polyglot: marks tests requiring multiple language servers",
 ]
 
 [tool.codespell]
