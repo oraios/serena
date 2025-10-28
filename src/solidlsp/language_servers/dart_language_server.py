@@ -1,12 +1,15 @@
 import logging
 import os
 import pathlib
+from typing import cast
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
+from ..ls_config import LanguageServerConfig
+from ..lsp_protocol_handler.lsp_types import InitializeParams
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
 
@@ -15,7 +18,9 @@ class DartLanguageServer(SolidLanguageServer):
     Provides Dart specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Dart.
     """
 
-    def __init__(self, config, logger, repository_root_path, solidlsp_settings: SolidLSPSettings):
+    def __init__(
+        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ) -> None:
         """
         Creates a DartServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
@@ -88,7 +93,7 @@ class DartLanguageServer(SolidLanguageServer):
         return f"{dart_executable_path} language-server --client-id multilspy.dart --client-version 1.2"
 
     @staticmethod
-    def _get_initialize_params(repository_absolute_path: str):
+    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the Dart Language Server.
         """
@@ -114,23 +119,23 @@ class DartLanguageServer(SolidLanguageServer):
             ],
         }
 
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Start the language server and yield when the server is ready.
         """
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: dict) -> list:
             return []
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def check_experimental_status(params):
+        def check_experimental_status(params: dict) -> None:
             pass
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
         self.server.on_request("client/registerCapability", do_nothing)
@@ -149,7 +154,7 @@ class DartLanguageServer(SolidLanguageServer):
             "Sending initialize request to dart-language-server",
             logging.DEBUG,
         )
-        init_response = self.server.send_request("initialize", initialize_params)
+        init_response = self.server.send_request("initialize", initialize_params)  # type: ignore
         self.logger.log(
             f"Received initialize response from dart-language-server: {init_response}",
             logging.INFO,

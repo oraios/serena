@@ -8,6 +8,7 @@ import pathlib
 import shutil
 import subprocess
 import threading
+from typing import cast
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
@@ -25,7 +26,7 @@ def run_command(cmd: list, capture_output: bool = True) -> subprocess.CompletedP
     )
 
 
-def verify_clojure_cli():
+def verify_clojure_cli() -> None:
     install_msg = "Please install the official Clojure CLI from:\n  https://clojure.org/guides/getting_started"
     if shutil.which("clojure") is None:
         raise FileNotFoundError("`clojure` not found.\n" + install_msg)
@@ -131,7 +132,7 @@ class ClojureLSP(SolidLanguageServer):
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """Returns the init params for clojure-lsp."""
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
-        return {  # type: ignore
+        result = {  # type: ignore
             "processId": os.getpid(),
             "rootPath": repository_absolute_path,
             "rootUri": root_uri,
@@ -159,9 +160,10 @@ class ClojureLSP(SolidLanguageServer):
             "trace": "off",
             "workspaceFolders": [{"uri": root_uri, "name": os.path.basename(repository_absolute_path)}],
         }
+        return cast(InitializeParams, result)
 
-    def _start_server(self):
-        def register_capability_handler(params):
+    def _start_server(self) -> None:
+        def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "workspace/executeCommand":
@@ -169,24 +171,24 @@ class ClojureLSP(SolidLanguageServer):
                     self.resolve_main_method_available.set()
             return
 
-        def lang_status_handler(params):
+        def lang_status_handler(params: dict) -> None:
             # TODO: Should we wait for
             # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
             # Before proceeding?
             if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
                 self.service_ready_event.set()
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: dict) -> list:
             return []
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def check_experimental_status(params):
-            if params["quiescent"] == True:
+        def check_experimental_status(params: dict) -> None:
+            if params["quiescent"] is True:
                 self.server_ready.set()
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
         self.server.on_request("client/registerCapability", register_capability_handler)
@@ -208,11 +210,11 @@ class ClojureLSP(SolidLanguageServer):
             logging.INFO,
         )
         init_response = self.server.send.initialize(initialize_params)
-        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2
+        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2  # type: ignore
         assert "completionProvider" in init_response["capabilities"]
         # Clojure-lsp completion provider capabilities are more flexible than other servers'
         completion_provider = init_response["capabilities"]["completionProvider"]
-        assert completion_provider["resolveProvider"] == True
+        assert completion_provider["resolveProvider"] is True
         assert "triggerCharacters" in completion_provider
         self.server.notify.initialized({})
         # after initialize, Clojure-lsp is ready to serve

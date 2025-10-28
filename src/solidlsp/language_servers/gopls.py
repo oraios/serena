@@ -3,6 +3,7 @@ import os
 import pathlib
 import subprocess
 import threading
+from typing import cast
 
 from overrides import override
 
@@ -28,7 +29,7 @@ class Gopls(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in ["vendor", "node_modules", "dist", "build"]
 
     @staticmethod
-    def _get_go_version():
+    def _get_go_version() -> str | None:
         """Get the installed Go version or None if not found."""
         try:
             result = subprocess.run(["go", "version"], capture_output=True, text=True, check=False)
@@ -39,7 +40,7 @@ class Gopls(SolidLanguageServer):
         return None
 
     @staticmethod
-    def _get_gopls_version():
+    def _get_gopls_version() -> str | None:
         """Get the installed gopls version or None if not found."""
         try:
             result = subprocess.run(["gopls", "version"], capture_output=True, text=True, check=False)
@@ -50,7 +51,7 @@ class Gopls(SolidLanguageServer):
         return None
 
     @staticmethod
-    def _setup_runtime_dependency():
+    def _setup_runtime_dependency() -> bool:
         """
         Check if required Go runtime dependencies are available.
         Raises RuntimeError with helpful message if dependencies are missing.
@@ -117,18 +118,18 @@ class Gopls(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """Start gopls server process"""
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             return
 
-        def window_log_message(msg):
+        def window_log_message(msg: dict) -> None:
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)
