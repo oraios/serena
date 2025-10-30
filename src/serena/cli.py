@@ -415,12 +415,12 @@ class ProjectCommands(AutoRegisteringGroup):
 
     @staticmethod
     @click.command(
-        "download-language-dps",
-        help="Pré-baixa dependências runtime para linguagens (passar nomes ou --all).",
+        "download-language-deps",
+        help="Download runtime dependencies for languages (pass names or --all).",
     )
-    @click.option("--language", "-l", "languages", multiple=True, help="Nome da linguagem (use enum Language names).")
-    @click.option("--all", "download_all", is_flag=True, help="Baixar deps para todos os language servers conhecidos.")
-    def download_language_dps(languages: Tuple[str, ...], download_all: bool = True) -> None:
+    @click.option("--language", "-l", "languages", multiple=True, help="Language server name (use enum Language names ex. allanguageserver).")
+    @click.option("--all", "download_all", is_flag=True, help="Download dependencies for all languages.")
+    def download_language_deps(languages: Tuple[str, ...], download_all: bool = True) -> None:
         import importlib
         import inspect
         import logging
@@ -430,7 +430,6 @@ class ProjectCommands(AutoRegisteringGroup):
 
         from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
         from solidlsp.ls import SolidLanguageServer
-        from solidlsp.ls_config import LanguageServerConfig
         from solidlsp.ls_logger import LanguageServerLogger
         from solidlsp.settings import SolidLSPSettings
 
@@ -446,7 +445,7 @@ class ProjectCommands(AutoRegisteringGroup):
         try:
             pkg = importlib.import_module("solidlsp.language_servers")
         except Exception as e:
-            click.echo(f"Erro ao importar pacote solidlsp.language_servers: {e}")
+            click.echo(f"Error importing package solidlsp.language_servers: {e}")
             return
 
         for finder, mod_name, ispkg in pkgutil.iter_modules(pkg.__path__):
@@ -454,7 +453,7 @@ class ProjectCommands(AutoRegisteringGroup):
             try:
                 mod = importlib.import_module(full_name)
             except Exception as e:
-                logger.log(f"Falha ao importar {full_name}: {e}", logging.WARNING)
+                logger.log(f"Import failed {full_name}: {e}", logging.WARNING)
                 continue
 
             for _, cls in inspect.getmembers(mod, inspect.isclass):
@@ -466,7 +465,6 @@ class ProjectCommands(AutoRegisteringGroup):
 
                 if not download_all and requested and lang_name not in requested:
                     skipped += 1
-                    details.append((lang_name, "⊘ skip", "não solicitado"))
                     continue
 
                 try:
@@ -477,26 +475,23 @@ class ProjectCommands(AutoRegisteringGroup):
 
                     if result:
                         success += 1
-                        status = "✓ ok"
-                        details.append((lang_name, status, log))
+                        details.append((lang_name, 'ok', log))
 
                     else:
                         failed += 1
-                        status = "✗ falha"
-                        details.append((lang_name, status, log))
+                        details.append((lang_name, 'failed', log))
 
                 except Exception as e:
                     failed += 1
-                    logger.log(f"Falha ao preparar deps para {cls.__name__}: {e}", logging.WARNING)
-                    status = "✗ erro"
-                    error_msg = str(e)[:100]
-                    details.append((lang_name, status, error_msg))
+                    logger.log(f"Exception in {cls.__name__}: {e}", logging.WARNING)
+                    error_msg = str(e)
+                    details.append((lang_name, 'error', error_msg))
 
         # Print summary
         click.echo("\n" + "=" * 80)
-        click.echo(f"RESUMO: Total={total} | ✓ Sucesso={success} | ✗ Falha={failed} | ⊘ Pulados={skipped}")
+        click.echo(f"Summary: Total={total} | success={success} | failed={failed} | skipped={skipped}")
         click.echo("=" * 80)
-        click.echo(f"{'Linguagem':<20} {'Status':<15} {'Mensagem':<45}")
+        click.echo(f"{'language':<20} {'Status':<15} {'message':<45}")
         click.echo("-" * 80)
         for lang, status, msg in details:
             click.echo(f"{lang:<20} {status:<15} {msg:<45}")
