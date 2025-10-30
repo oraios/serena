@@ -51,7 +51,6 @@ class ClangdLanguageServer(SolidLanguageServer):
         """
         Setup runtime dependencies for ClangdLanguageServer and return the command to start the server.
         """
-        import platform
         import shutil
 
         deps = RuntimeDependencyCollection(
