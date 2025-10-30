@@ -147,7 +147,7 @@ class LanguageServerManager:
         if self._language_server_factory is None:
             raise ValueError(f"No language server factory available to create language server for {language}")
         language_server = self._language_server_factory.create_language_server(language)
-        self._language_servers[language].start()
+        language_server.start()
         self._language_servers[language] = language_server
         return language_server
 
@@ -175,6 +175,25 @@ class LanguageServerManager:
             raise ValueError(f"Language server for language {language.value} already present")
         return self._create_and_start_language_server(language)
 
+    def remove_language_server(self, language: Language, save_cache: bool = False) -> None:
+        """
+        Removes the language server for the given language, stopping it if it is running.
+
+        :param language: the language
+        """
+        if language not in self._language_servers:
+            raise ValueError(f"No language server for language {language.value} present; cannot remove")
+        ls = self._language_servers.pop(language)
+        self._stop_language_server(ls, save_cache=save_cache)
+
+    @staticmethod
+    def _stop_language_server(ls: SolidLanguageServer, save_cache: bool = False) -> None:
+        if ls.is_running():
+            if save_cache:
+                ls.save_cache()
+            log.info(f"Stopping language server for language {ls.language} ...")
+            ls.stop()
+
     def iter_language_servers(self) -> Iterator[SolidLanguageServer]:
         for ls in self._language_servers.values():
             yield self._ensure_functional_ls(ls)
@@ -186,11 +205,7 @@ class LanguageServerManager:
         :param save_cache: whether to save the cache before stopping
         """
         for ls in self.iter_language_servers():
-            if ls.is_running():
-                if save_cache:
-                    ls.save_cache()
-                log.info(f"Stopping language server for language {ls.language} ...")
-                ls.stop()
+            self._stop_language_server(ls, save_cache=save_cache)
 
     def save_all_caches(self) -> None:
         """

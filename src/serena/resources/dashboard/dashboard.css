@@ -1,3 +1,7 @@
+html {
+    scrollbar-gutter: stable; /* Prevent layout shift when scrollbar appears */
+}
+
 :root {
     /* Light theme variables */
     --bg-primary: #f5f5f5;
@@ -43,15 +47,16 @@
 body {
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
     margin: 0;
-    padding: 20px;
-    padding-top: 130px;
     background-color: var(--bg-primary);
     color: var(--text-primary);
     transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+.main {
+    padding: 20px;
+}
+
 .header {
-    position: fixed;
     top: 0;
     left: 0;
     right: 0;
@@ -72,7 +77,7 @@ body {
 }
 
 .logo-container img {
-    max-width: 300px;
+    max-width: 250px;
     height: auto;
     display: block;
 }
@@ -617,4 +622,213 @@ body {
     .stat-tool-name {
         min-width: 100%;
     }
+}
+
+/* Modal Styles */
+.modal {
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    background-color: var(--bg-primary);
+    margin: 10% auto;
+    padding: 25px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    position: relative;
+}
+
+.modal-close {
+    color: var(--text-muted);
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    line-height: 20px;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.modal-close:hover,
+.modal-close:focus {
+    color: var(--text-primary);
+}
+
+.modal h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: var(--text-primary);
+}
+
+/* Language Badge Styles */
+.languages-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.language-badge {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.language-badge.removable {
+    padding-right: 28px;
+}
+
+.language-remove {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 68, 68, 0.1);
+    border-radius: 3px;
+    cursor: pointer;
+    color: #ff4444;
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 1;
+    transition: all 0.2s;
+}
+
+.language-remove:hover {
+    background: rgba(255, 68, 68, 0.2);
+    transform: scale(1.1);
+}
+
+.language-add-btn {
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+    border: 1px dashed var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.language-add-btn:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--btn-primary);
+    color: var(--btn-primary);
+}
+
+.language-spinner {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+}
+
+.spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--btn-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Memory Editor Styles */
+.modal-content-large {
+    max-width: 800px;
+    width: 90%;
+}
+
+.memory-editor {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    tab-size: 4;
+    -moz-tab-size: 4;
+}
+
+.memory-editor:focus {
+    outline: 2px solid var(--btn-primary);
+    outline-offset: -1px;
+}
+
+/* Memory Item Styles */
+.memory-item {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 12px;
+    margin: 5px;
+    border-radius: 4px;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    transition: background-color 0.2s ease;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.memory-item:hover {
+    background-color: var(--border-color);
+    text-decoration: underline;
+}
+
+.memory-item.removable {
+    padding-right: 28px;
+}
+
+.memory-remove {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 68, 68, 0.1);
+    border-radius: 3px;
+    cursor: pointer;
+    color: #ff4444;
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 1;
+    transition: all 0.2s;
+}
+
+.memory-remove:hover {
+    background: rgba(255, 68, 68, 0.2);
+    transform: scale(1.1);
+    text-decoration: none;
+}
+
+.memories-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
 }

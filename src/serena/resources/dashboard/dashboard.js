@@ -52,6 +52,14 @@ class Dashboard {
         // Page state
         this.currentPage = 'overview';
         this.configData = null;
+        this.jetbrainsMode = false;
+        this.activeProjectName = null;
+        this.languageToRemove = null;
+        this.currentMemoryName = null;
+        this.originalMemoryContent = null;
+        this.memoryContentDirty = false;
+        this.memoryToDelete = null;
+        this.isAddingLanguage = false;
 
         // Tool names and stats
         this.toolNames = [];
@@ -80,6 +88,28 @@ class Dashboard {
         this.$availableToolsDisplay = $('#available-tools-display');
         this.$availableModesDisplay = $('#available-modes-display');
         this.$availableContextsDisplay = $('#available-contexts-display');
+        this.$addLanguageModal = $('#add-language-modal');
+        this.$modalLanguageSelect = $('#modal-language-select');
+        this.$modalProjectName = $('#modal-project-name');
+        this.$modalAddBtn = $('#modal-add-btn');
+        this.$modalCancelBtn = $('#modal-cancel-btn');
+        this.$modalClose = $('.modal-close');
+        this.$removeLanguageModal = $('#remove-language-modal');
+        this.$removeLanguageName = $('#remove-language-name');
+        this.$removeModalOkBtn = $('#remove-modal-ok-btn');
+        this.$removeModalCancelBtn = $('#remove-modal-cancel-btn');
+        this.$modalCloseRemove = $('.modal-close-remove');
+        this.$editMemoryModal = $('#edit-memory-modal');
+        this.$editMemoryName = $('#edit-memory-name');
+        this.$editMemoryContent = $('#edit-memory-content');
+        this.$editMemorySaveBtn = $('#edit-memory-save-btn');
+        this.$editMemoryCancelBtn = $('#edit-memory-cancel-btn');
+        this.$modalCloseEditMemory = $('.modal-close-edit-memory');
+        this.$deleteMemoryModal = $('#delete-memory-modal');
+        this.$deleteMemoryName = $('#delete-memory-name');
+        this.$deleteMemoryOkBtn = $('#delete-memory-ok-btn');
+        this.$deleteMemoryCancelBtn = $('#delete-memory-cancel-btn');
+        this.$modalCloseDeleteMemory = $('.modal-close-delete-memory');
 
         // Chart references
         this.countChart = null;
@@ -97,6 +127,19 @@ class Dashboard {
         this.$themeToggle.click(this.toggleTheme.bind(this));
         this.$refreshStats.click(this.loadStats.bind(this));
         this.$clearStats.click(this.clearStats.bind(this));
+        this.$modalAddBtn.click(this.addLanguageFromModal.bind(this));
+        this.$modalCancelBtn.click(this.closeLanguageModal.bind(this));
+        this.$modalClose.click(this.closeLanguageModal.bind(this));
+        this.$removeModalOkBtn.click(this.confirmRemoveLanguageOk.bind(this));
+        this.$removeModalCancelBtn.click(this.closeRemoveLanguageModal.bind(this));
+        this.$modalCloseRemove.click(this.closeRemoveLanguageModal.bind(this));
+        this.$editMemorySaveBtn.click(this.saveMemoryFromModal.bind(this));
+        this.$editMemoryCancelBtn.click(this.closeEditMemoryModal.bind(this));
+        this.$modalCloseEditMemory.click(this.closeEditMemoryModal.bind(this));
+        this.$editMemoryContent.on('input', this.trackMemoryChanges.bind(this));
+        this.$deleteMemoryOkBtn.click(this.confirmDeleteMemoryOk.bind(this));
+        this.$deleteMemoryCancelBtn.click(this.closeDeleteMemoryModal.bind(this));
+        this.$modalCloseDeleteMemory.click(this.closeDeleteMemoryModal.bind(this));
 
         // Page navigation
         $('[data-page]').click(function(e) {
@@ -112,6 +155,31 @@ class Dashboard {
             }
         });
 
+        // Close modals when clicking outside
+        this.$addLanguageModal.click(function(e) {
+            if ($(e.target).hasClass('modal')) {
+                self.closeLanguageModal();
+            }
+        });
+
+        this.$removeLanguageModal.click(function(e) {
+            if ($(e.target).hasClass('modal')) {
+                self.closeRemoveLanguageModal();
+            }
+        });
+
+        this.$editMemoryModal.click(function(e) {
+            if ($(e.target).hasClass('modal')) {
+                self.closeEditMemoryModal();
+            }
+        });
+
+        this.$deleteMemoryModal.click(function(e) {
+            if ($(e.target).hasClass('modal')) {
+                self.closeDeleteMemoryModal();
+            }
+        });
+
         // Collapsible sections
         $('.collapsible-header').click(function() {
             const $header = $(this);
@@ -124,6 +192,21 @@ class Dashboard {
 
         // Initialize theme
         this.initializeTheme();
+
+        // Add ESC key handler for closing modals
+        $(document).keydown(function(e) {
+            if (e.key === 'Escape' || e.keyCode === 27) {
+                if (self.$addLanguageModal.is(':visible')) {
+                    self.closeLanguageModal();
+                } else if (self.$removeLanguageModal.is(':visible')) {
+                    self.closeRemoveLanguageModal();
+                } else if (self.$editMemoryModal.is(':visible')) {
+                    self.closeEditMemoryModal();
+                } else if (self.$deleteMemoryModal.is(':visible')) {
+                    self.closeDeleteMemoryModal();
+                }
+            }
+        });
 
         // Initialize the application
         this.loadToolNames().then(function() {
@@ -187,8 +270,11 @@ class Dashboard {
             url: '/get_config_overview',
             type: 'GET',
             success: function(response) {
+                console.log('Config overview response:', response);
                 self.failureCount = 0;
                 self.configData = response;
+                self.jetbrainsMode = response.jetbrains_mode;
+                self.activeProjectName = response.active_project.name;
                 self.displayConfig(response);
                 self.displayBasicStats(response.tool_stats_summary);
                 self.displayProjects(response.registered_projects);
@@ -219,13 +305,14 @@ class Dashboard {
     }
 
     displayConfig(config) {
-        // Check if tools and memories sections are currently expanded
-        const $existingToolsContent = $('#tools-content');
-        const $existingMemoriesContent = $('#memories-content');
-        const wasToolsExpanded = $existingToolsContent.is(':visible');
-        const wasMemoriesExpanded = $existingMemoriesContent.is(':visible');
+        try {
+            // Check if tools and memories sections are currently expanded
+            const $existingToolsContent = $('#tools-content');
+            const $existingMemoriesContent = $('#memories-content');
+            const wasToolsExpanded = $existingToolsContent.is(':visible');
+            const wasMemoriesExpanded = $existingMemoriesContent.is(':visible');
 
-        let html = '<div class="config-grid">';
+            let html = '<div class="config-grid">';
 
         // Project info
         html += '<div class="config-label">Active Project:</div>';
@@ -236,8 +323,40 @@ class Dashboard {
             html += '<div class="config-value">' + (config.active_project.name || 'None') + '</div>';
         }
 
-        html += '<div class="config-label">Language:</div>';
-        html += '<div class="config-value">' + (config.active_project.language || 'N/A') + '</div>';
+        html += '<div class="config-label">Languages:</div>';
+        if (this.jetbrainsMode) {
+            html += '<div class="config-value">Using JetBrains backend</div>';
+        } else {
+            html += '<div class="config-value">';
+            if (config.languages && config.languages.length > 0) {
+                html += '<div class="languages-container">';
+                config.languages.forEach(function(language, index) {
+                    const isRemovable = config.languages.length > 1;
+                    html += '<div class="language-badge' + (isRemovable ? ' removable' : '') + '">';
+                    html += language;
+                    if (isRemovable) {
+                        html += '<span class="language-remove" data-language="' + language + '">&times;</span>';
+                    }
+                    html += '</div>';
+                });
+                // Add the "Add Language" button inline with language badges (only if active project exists)
+                if (config.active_project && config.active_project.name) {
+                    // TODO: address after refactoring, it's not awesome to keep depending on state
+                    if (this.isAddingLanguage) {
+                        html += '<div id="add-language-spinner" class="language-spinner">';
+                    } else {
+                        html += '<button id="add-language-btn" class="btn language-add-btn">+ Add Language</button>';
+                        html += '<div id="add-language-spinner" class="language-spinner" style="display:none;">';
+                    }
+                    html += '<div class="spinner"></div>';
+                    html += '</div>';
+                }
+                html += '</div>';
+            } else {
+                html += 'N/A';
+            }
+            html += '</div>';
+        }
 
         // Context info
         html += '<div class="config-label">Context:</div>';
@@ -256,12 +375,10 @@ class Dashboard {
         }
         html += '</div>';
 
-        html += '</div>';
+        // File Encoding info
+        html += '<div class="config-label">File Encoding:</div>';
+        html += '<div class="config-value">' + (config.encoding || 'N/A') + '</div>';
 
-        // Configuration help link
-        html += '<div style="margin-top: 15px; padding: 10px; background: var(--bg-secondary); border-radius: 4px; font-size: 13px; border: 1px solid var(--border-color);">';
-        html += '<span style="color: var(--text-muted);">📖</span>';
-        html += '<a href="https://github.com/oraios/serena#configuration" target="_blank" rel="noopener noreferrer" style="color: var(--btn-primary); text-decoration: none; font-weight: 500;">View Configuration Guide</a>';
         html += '</div>';
 
         // Active tools - collapsible
@@ -284,15 +401,51 @@ class Dashboard {
             html += '<span>Available Memories (' + config.available_memories.length + ')</span>';
             html += '<span class="toggle-icon' + (wasMemoriesExpanded ? ' expanded' : '') + '">▼</span>';
             html += '</h3>';
-            html += '<div class="collapsible-content tools-grid" id="memories-content" style="' + (wasMemoriesExpanded ? '' : 'display:none;') + ' margin-top: 10px;">';
+            html += '<div class="collapsible-content memories-container" id="memories-content" style="' + (wasMemoriesExpanded ? '' : 'display:none;') + ' margin-top: 10px;">';
             config.available_memories.forEach(function(memory) {
-                html += '<div class="tool-item" title="' + memory + '">' + memory + '</div>';
+                html += '<div class="memory-item removable" data-memory="' + memory + '">';
+                html += memory;
+                html += '<span class="memory-remove" data-memory="' + memory + '">&times;</span>';
+                html += '</div>';
             });
             html += '</div>';
             html += '</div>';
         }
 
+        // Configuration help link
+        html += '<div style="margin-top: 15px; padding: 10px; background: var(--bg-secondary); border-radius: 4px; font-size: 13px; border: 1px solid var(--border-color);">';
+        html += '<span style="color: var(--text-muted);">📖</span> ';
+        html += '<a href="https://github.com/oraios/serena#configuration" target="_blank" rel="noopener noreferrer" style="color: var(--btn-primary); text-decoration: none; font-weight: 500;">View Configuration Guide</a>';
+        html += '</div>';
+
         this.$configDisplay.html(html);
+
+        // Attach event handlers for the dynamically created add language button
+        $('#add-language-btn').click(this.openLanguageModal.bind(this));
+
+        // Attach event handlers for language remove buttons
+        const self = this;
+        $('.language-remove').click(function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const language = $(this).data('language');
+            self.confirmRemoveLanguage(language);
+        });
+
+        // Attach event handlers for memory items
+        $('.memory-item').click(function(e) {
+            e.preventDefault();
+            const memoryName = $(this).data('memory');
+            self.openEditMemoryModal(memoryName);
+        });
+
+        // Attach event handlers for memory remove buttons
+        $('.memory-remove').click(function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const memoryName = $(this).data('memory');
+            self.confirmDeleteMemory(memoryName);
+        });
 
         // Re-attach collapsible handler for the newly created tools header
         $('#tools-header').click(function() {
@@ -313,6 +466,10 @@ class Dashboard {
             $content.slideToggle(300);
             $icon.toggleClass('expanded');
         });
+        } catch (error) {
+            console.error('Error in displayConfig:', error);
+            this.$configDisplay.html('<div class="error-message">Error displaying configuration: ' + error.message + '</div>');
+        }
     }
 
     displayBasicStats(stats) {
@@ -902,9 +1059,9 @@ class Dashboard {
         const logoElement = document.getElementById('serena-logo');
         if (logoElement) {
             if (theme === 'dark') {
-                logoElement.src = 'serena-logs-dark-mode.png';
+                logoElement.src = 'serena-logo-dark-mode.svg';
             } else {
-                logoElement.src = 'serena-logs.png';
+                logoElement.src = 'serena-logo.svg';
             }
         }
     }
@@ -950,6 +1107,295 @@ class Dashboard {
             }
             this.tokensChart.update();
         }
+    }
+
+    // ===== Language Management Methods =====
+
+    confirmRemoveLanguage(language) {
+        // Store the language to remove
+        this.languageToRemove = language;
+
+        // Set language name in modal
+        this.$removeLanguageName.text(language);
+
+        // Show modal
+        this.$removeLanguageModal.fadeIn(200);
+    }
+
+    closeRemoveLanguageModal() {
+        this.$removeLanguageModal.fadeOut(200);
+        this.languageToRemove = null;
+    }
+
+    confirmRemoveLanguageOk() {
+        if (this.languageToRemove) {
+            this.removeLanguage(this.languageToRemove);
+            this.closeRemoveLanguageModal();
+        }
+    }
+
+    removeLanguage(language) {
+        const self = this;
+
+        $.ajax({
+            url: '/remove_language',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                language: language
+            }),
+            success: function(response) {
+                if (response.status === 'success') {
+                    // Reload config to show updated language list
+                    self.loadConfigOverview();
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error removing language:', error);
+                alert('Error removing language: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
+            }
+        });
+    }
+
+    openLanguageModal() {
+        // Set project name in modal
+        this.$modalProjectName.text(this.activeProjectName || 'Unknown');
+
+        // Load available languages into modal dropdown
+        this.loadAvailableLanguages();
+
+        // Show modal
+        this.$addLanguageModal.fadeIn(200);
+    }
+
+    closeLanguageModal() {
+        this.$addLanguageModal.fadeOut(200);
+        this.$modalLanguageSelect.empty();
+        this.$modalAddBtn.prop('disabled', false).text('Add Language');
+    }
+
+    loadAvailableLanguages() {
+        let self = this;
+        $.ajax({
+            url: '/get_available_languages',
+            type: 'GET',
+            success: function(response) {
+                const languages = response.languages || [];
+                // Clear all existing options
+                self.$modalLanguageSelect.empty();
+
+                if (languages.length === 0) {
+                    // Show message if no languages available
+                    self.$modalLanguageSelect.append($('<option>').val('').text('No languages available to add'));
+                    self.$modalAddBtn.prop('disabled', true);
+                } else {
+                    // Add language options
+                    languages.forEach(function(language) {
+                        self.$modalLanguageSelect.append($('<option>').val(language).text(language));
+                    });
+                    self.$modalAddBtn.prop('disabled', false);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error loading available languages:', error);
+            }
+        });
+    }
+
+    addLanguageFromModal() {
+        const selectedLanguage = this.$modalLanguageSelect.val();
+        if (!selectedLanguage) {
+            alert('No language selected or no languages available to add');
+            return;
+        }
+
+        const self = this;
+
+        // Close modal immediately
+        self.closeLanguageModal();
+
+        // Hide the inline add language button and show spinner
+        $('#add-language-btn').hide();
+        $('#add-language-spinner').show();
+        self.isAddingLanguage = true;
+
+        $.ajax({
+            url: '/add_language',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                language: selectedLanguage
+            }),
+            success: function(response) {
+                if (response.status === 'success') {
+                    console.log("Language added successfully");
+                } else {
+                    alert('Error: ' + response.message);
+                    // Restore button visibility on error
+                    $('#add-language-btn').show();
+                    $('#add-language-spinner').hide();
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error adding language:', error);
+                alert('Error adding language: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
+                // Restore button visibility on error
+                $('#add-language-btn').show();
+                $('#add-language-spinner').hide();
+            },
+            complete: function() {
+                self.isAddingLanguage = false;
+                self.loadConfigOverview();
+            }
+        });
+    }
+
+    // ===== Memory Editing Methods =====
+
+    openEditMemoryModal(memoryName) {
+        const self = this;
+        this.currentMemoryName = memoryName;
+        this.memoryContentDirty = false;
+
+        // Set memory name in modal
+        this.$editMemoryName.text(memoryName);
+
+        // Load memory content
+        $.ajax({
+            url: '/get_memory',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                memory_name: memoryName
+            }),
+            success: function(response) {
+                if (response.status === 'error') {
+                    alert('Error: ' + response.message);
+                    return;
+                }
+                self.originalMemoryContent = response.content;
+                self.$editMemoryContent.val(response.content);
+                self.memoryContentDirty = false;
+                self.$editMemoryModal.fadeIn(200);
+            },
+            error: function(xhr, status, error) {
+                console.error('Error loading memory:', error);
+                alert('Error loading memory: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
+            }
+        });
+    }
+
+    closeEditMemoryModal() {
+        // Check if there are unsaved changes
+        if (this.memoryContentDirty) {
+            if (!confirm('You have unsaved changes. Are you sure you want to close?')) {
+                return;
+            }
+        }
+
+        this.$editMemoryModal.fadeOut(200);
+        this.currentMemoryName = null;
+        this.originalMemoryContent = null;
+        this.memoryContentDirty = false;
+    }
+
+    trackMemoryChanges() {
+        const currentContent = this.$editMemoryContent.val();
+        this.memoryContentDirty = (currentContent !== this.originalMemoryContent);
+    }
+
+    saveMemoryFromModal() {
+        const self = this;
+        const memoryName = this.currentMemoryName;
+        const content = this.$editMemoryContent.val();
+
+        if (!memoryName) {
+            alert('No memory selected');
+            return;
+        }
+
+        // Disable button during request
+        self.$editMemorySaveBtn.prop('disabled', true).text('Saving...');
+
+        $.ajax({
+            url: '/save_memory',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                memory_name: memoryName,
+                content: content
+            }),
+            success: function(response) {
+                if (response.status === 'success') {
+                    // Update original content and reset dirty flag
+                    self.originalMemoryContent = content;
+                    self.memoryContentDirty = false;
+                    // Close modal
+                    self.$editMemoryModal.fadeOut(200);
+                    self.currentMemoryName = null;
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error saving memory:', error);
+                alert('Error saving memory: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
+            },
+            complete: function() {
+                // Re-enable button
+                self.$editMemorySaveBtn.prop('disabled', false).text('Save');
+            }
+        });
+    }
+
+    confirmDeleteMemory(memoryName) {
+        // Set memory name to delete
+        this.memoryToDelete = memoryName;
+
+        // Set memory name in modal
+        this.$deleteMemoryName.text(memoryName);
+
+        // Show modal
+        this.$deleteMemoryModal.fadeIn(200);
+    }
+
+    closeDeleteMemoryModal() {
+        this.$deleteMemoryModal.fadeOut(200);
+        this.memoryToDelete = null;
+    }
+
+    confirmDeleteMemoryOk() {
+        if (this.memoryToDelete) {
+            this.deleteMemory(this.memoryToDelete);
+            this.closeDeleteMemoryModal();
+        }
+    }
+
+    deleteMemory(memoryName) {
+        const self = this;
+
+        $.ajax({
+            url: '/delete_memory',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                memory_name: memoryName
+            }),
+            success: function(response) {
+                if (response.status === 'success') {
+                    // Reload config to show updated memory list
+                    self.loadConfigOverview();
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error deleting memory:', error);
+                alert('Error deleting memory: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
+            }
+        });
     }
 
     // ===== Shutdown Method =====

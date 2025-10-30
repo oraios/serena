@@ -41,6 +41,8 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 T = TypeVar("T")
 DEFAULT_TOOL_TIMEOUT: float = 240
+DictType = dict | CommentedMap
+TDict = TypeVar("TDict", bound=DictType)
 
 
 @singleton
@@ -212,7 +214,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                 languages_to_use = [dominant_language]
             else:
                 languages_to_use = [lang.value for lang in languages]
-            config_with_comments = load_yaml(PROJECT_TEMPLATE_FILE, preserve_comments=True)
+            config_with_comments = cls.load_commented_map(PROJECT_TEMPLATE_FILE)
             config_with_comments["project_name"] = project_name
             config_with_comments["languages"] = languages_to_use
             if save_to_disk:
@@ -224,20 +226,46 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         return os.path.join(SERENA_MANAGED_DIR_NAME, cls.SERENA_DEFAULT_PROJECT_FILE)
 
     @classmethod
+    def _apply_defaults_to_dict(cls, data: TDict) -> TDict:
+        # apply defaults for new fields
+        data["languages"] = data.get("languages", [])
+        data["ignored_paths"] = data.get("ignored_paths", [])
+        data["excluded_tools"] = data.get("excluded_tools", [])
+        data["included_optional_tools"] = data.get("included_optional_tools", [])
+        data["read_only"] = data.get("read_only", False)
+        data["ignore_all_files_in_gitignore"] = data.get("ignore_all_files_in_gitignore", True)
+        data["initial_prompt"] = data.get("initial_prompt", "")
+        data["encoding"] = data.get("encoding", DEFAULT_SOURCE_FILE_ENCODING)
+
+        # backward compatibility: handle single "language" field
+        if len(data["languages"]) == 0 and "language" in data:
+            data["languages"] = [data["language"]]
+        if "language" in data:
+            del data["language"]
+
+        return data
+
+    @classmethod
+    def load_commented_map(cls, yml_path: str) -> CommentedMap:
+        """
+        Load the project configuration as a CommentedMap, preserving comments and ensuring
+        completeness of the configuration by applying default values for missing fields
+        and backward compatibility adjustments.
+
+        :param yml_path: the path to the project.yml file
+        :return: a CommentedMap representing a full project configuration
+        """
+        data = load_yaml(yml_path, preserve_comments=True)
+        return cls._apply_defaults_to_dict(data)
+
+    @classmethod
     def _from_dict(cls, data: dict[str, Any]) -> Self:
         """
-        Create a ProjectConfig instance from a configuration dictionary
+        Create a ProjectConfig instance from a (full) configuration dictionary
         """
-        project_name = data["project_name"]
-        language_strings = data.get("languages", [])
-
-        # backwards compatibility
         lang_name_mapping = {"javascript": "typescript"}
-        if len(language_strings) == 0 and "language" in data:
-            language_strings = [data["language"]]
-
         languages: list[Language] = []
-        for language_str in language_strings:
+        for language_str in data["languages"]:
             try:
                 language_str = language_str.lower()
                 if language_str in lang_name_mapping:
@@ -248,15 +276,15 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                 raise ValueError(f"Invalid language: {data['language']}.\nValid language_strings are: {[l.value for l in Language]}") from e
 
         return cls(
-            project_name=project_name,
+            project_name=data["project_name"],
             languages=languages,
-            ignored_paths=data.get("ignored_paths", []),
-            excluded_tools=data.get("excluded_tools", []),
-            included_optional_tools=data.get("included_optional_tools", []),
-            read_only=data.get("read_only", False),
-            ignore_all_files_in_gitignore=data.get("ignore_all_files_in_gitignore", True),
-            initial_prompt=data.get("initial_prompt", ""),
-            encoding=data.get("encoding", DEFAULT_SOURCE_FILE_ENCODING),
+            ignored_paths=data["ignored_paths"],
+            excluded_tools=data["excluded_tools"],
+            included_optional_tools=data["included_optional_tools"],
+            read_only=data["read_only"],
+            ignore_all_files_in_gitignore=data["ignore_all_files_in_gitignore"],
+            initial_prompt=data["initial_prompt"],
+            encoding=data["encoding"],
         )
 
     def to_yaml_dict(self) -> dict:
@@ -279,8 +307,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                 return cls.autogenerate(project_root)
             else:
                 raise FileNotFoundError(f"Project configuration file not found: {yaml_path}")
-        with open(yaml_path, encoding=SERENA_FILE_ENCODING) as f:
-            yaml_data = yaml.safe_load(f)
+        yaml_data = cls.load_commented_map(str(yaml_path))
         if "project_name" not in yaml_data:
             yaml_data["project_name"] = project_root.name
         return cls._from_dict(yaml_data)

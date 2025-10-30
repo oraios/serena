@@ -50,6 +50,39 @@ class ResponseConfigOverview(BaseModel):
     available_modes: list[dict[str, str | bool]]
     available_contexts: list[dict[str, str | bool]]
     available_memories: list[str] | None
+    jetbrains_mode: bool
+    languages: list[str]
+    encoding: str | None
+
+
+class ResponseAvailableLanguages(BaseModel):
+    languages: list[str]
+
+
+class RequestAddLanguage(BaseModel):
+    language: str
+
+
+class RequestRemoveLanguage(BaseModel):
+    language: str
+
+
+class RequestGetMemory(BaseModel):
+    memory_name: str
+
+
+class ResponseGetMemory(BaseModel):
+    content: str
+    memory_name: str
+
+
+class RequestSaveMemory(BaseModel):
+    memory_name: str
+    content: str
+
+
+class RequestDeleteMemory(BaseModel):
+    memory_name: str
 
 
 class SerenaDashboardAPI:
@@ -126,6 +159,71 @@ class SerenaDashboardAPI:
         def shutdown() -> dict[str, str]:
             self._shutdown()
             return {"status": "shutting down"}
+
+        @self._app.route("/get_available_languages", methods=["GET"])
+        def get_available_languages() -> dict[str, Any]:
+            result = self._get_available_languages()
+            return result.model_dump()
+
+        @self._app.route("/add_language", methods=["POST"])
+        def add_language() -> dict[str, str]:
+            request_data = request.get_json()
+            if not request_data:
+                return {"status": "error", "message": "No data provided"}
+            request_add_language = RequestAddLanguage.model_validate(request_data)
+            try:
+                self._add_language(request_add_language)
+                return {"status": "success", "message": f"Language {request_add_language.language} added successfully"}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+
+        @self._app.route("/remove_language", methods=["POST"])
+        def remove_language() -> dict[str, str]:
+            request_data = request.get_json()
+            if not request_data:
+                return {"status": "error", "message": "No data provided"}
+            request_remove_language = RequestRemoveLanguage.model_validate(request_data)
+            try:
+                self._remove_language(request_remove_language)
+                return {"status": "success", "message": f"Language {request_remove_language.language} removed successfully"}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+
+        @self._app.route("/get_memory", methods=["POST"])
+        def get_memory() -> dict[str, Any]:
+            request_data = request.get_json()
+            if not request_data:
+                return {"status": "error", "message": "No data provided"}
+            request_get_memory = RequestGetMemory.model_validate(request_data)
+            try:
+                result = self._get_memory(request_get_memory)
+                return result.model_dump()
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+
+        @self._app.route("/save_memory", methods=["POST"])
+        def save_memory() -> dict[str, str]:
+            request_data = request.get_json()
+            if not request_data:
+                return {"status": "error", "message": "No data provided"}
+            request_save_memory = RequestSaveMemory.model_validate(request_data)
+            try:
+                self._save_memory(request_save_memory)
+                return {"status": "success", "message": f"Memory {request_save_memory.memory_name} saved successfully"}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+
+        @self._app.route("/delete_memory", methods=["POST"])
+        def delete_memory() -> dict[str, str]:
+            request_data = request.get_json()
+            if not request_data:
+                return {"status": "error", "message": "No data provided"}
+            request_delete_memory = RequestDeleteMemory.model_validate(request_data)
+            try:
+                self._delete_memory(request_delete_memory)
+                return {"status": "success", "message": f"Memory {request_delete_memory.memory_name} deleted successfully"}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
 
     def _get_log_messages(self, request_log: RequestLog) -> ResponseLog:
         all_messages = self._memory_log_handler.get_log_messages()
@@ -233,6 +331,16 @@ class SerenaDashboardAPI:
         if self._agent.tool_is_active("read_memory") and project is not None:
             available_memories = project.memories_manager.list_memories()
 
+        # Get list of languages for the active project
+        languages = []
+        if project is not None:
+            languages = [lang.value for lang in project.project_config.languages]
+
+        # Get file encoding for the active project
+        encoding = None
+        if project is not None:
+            encoding = project.project_config.encoding
+
         return ResponseConfigOverview(
             active_project=project_info,
             context=context_info,
@@ -244,6 +352,9 @@ class SerenaDashboardAPI:
             available_modes=available_modes,
             available_contexts=available_contexts,
             available_memories=available_memories,
+            jetbrains_mode=self._agent.serena_config.jetbrains,
+            languages=languages,
+            encoding=encoding,
         )
 
     def _shutdown(self) -> None:
@@ -254,6 +365,68 @@ class SerenaDashboardAPI:
             # noinspection PyProtectedMember
             # noinspection PyUnresolvedReferences
             os._exit(0)
+
+    def _get_available_languages(self) -> ResponseAvailableLanguages:
+        from solidlsp.ls_config import Language
+
+        # Get all non-experimental languages
+        all_languages = [lang.value for lang in Language.iter_all(include_experimental=False)]
+
+        # Filter out already added languages for the active project
+        project = self._agent.get_active_project()
+        if project:
+            current_languages = [lang.value for lang in project.project_config.languages]
+            available_languages = [lang for lang in all_languages if lang not in current_languages]
+        else:
+            available_languages = all_languages
+
+        return ResponseAvailableLanguages(languages=sorted(available_languages))
+
+    def _get_memory(self, request_get_memory: RequestGetMemory) -> ResponseGetMemory:
+        project = self._agent.get_active_project()
+        if project is None:
+            raise ValueError("No active project")
+
+        content = project.memories_manager.load_memory(request_get_memory.memory_name)
+        return ResponseGetMemory(content=content, memory_name=request_get_memory.memory_name)
+
+    def _save_memory(self, request_save_memory: RequestSaveMemory) -> None:
+        project = self._agent.get_active_project()
+        if project is None:
+            raise ValueError("No active project")
+
+        project.memories_manager.save_memory(request_save_memory.memory_name, request_save_memory.content)
+
+    def _delete_memory(self, request_delete_memory: RequestDeleteMemory) -> None:
+        project = self._agent.get_active_project()
+        if project is None:
+            raise ValueError("No active project")
+
+        project.memories_manager.delete_memory(request_delete_memory.memory_name)
+
+    def _add_language(self, request_add_language: RequestAddLanguage) -> None:
+        from solidlsp.ls_config import Language
+
+        # Convert string to Language enum
+        try:
+            language = Language(request_add_language.language)
+        except ValueError:
+            raise ValueError(f"Invalid language: {request_add_language.language}")
+
+        # Add the language to the active project
+        self._agent.add_language(language)
+
+    def _remove_language(self, request_remove_language: RequestRemoveLanguage) -> None:
+        from solidlsp.ls_config import Language
+
+        # Convert string to Language enum
+        try:
+            language = Language(request_remove_language.language)
+        except ValueError:
+            raise ValueError(f"Invalid language: {request_remove_language.language}")
+
+        # Remove the language from the active project
+        self._agent.remove_language(language)
 
     @staticmethod
     def _find_first_free_port(start_port: int) -> int:

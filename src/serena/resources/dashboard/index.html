@@ -38,13 +38,15 @@
             </div>
         </nav>
     </header>
-
+    <div class="main">
     <!-- Overview Page (Landing) -->
     <div id="page-overview" class="page-view">
         <div class="overview-container">
             <div class="overview-left">
                 <section class="config-section">
-                    <h2>Current Configuration</h2>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h2 style="margin: 0;">Current Configuration</h2>
+                    </div>
                     <div id="config-display">
                         <div class="loading">Loading configuration...</div>
                     </div>
@@ -143,6 +145,71 @@
             </div>
         </div>
     </div>
+
+    <!-- Add Language Modal -->
+    <div id="add-language-modal" class="modal" style="display:none">
+        <div class="modal-content">
+            <span class="modal-close">&times;</span>
+            <h3>Add Language</h3>
+            <p id="modal-project-info" style="margin: 15px 0; color: var(--text-primary); line-height: 1.5;">
+                Adding a language to serena config of project <strong id="modal-project-name"></strong>.
+            </p>
+            <p style="margin: 15px 0; color: var(--text-muted); font-size: 13px; line-height: 1.5;">
+                Note that this may download some dependencies needed for the language server and then start it,
+                it may take a few seconds before the LS is responsive.
+            </p>
+            <div style="margin: 20px 0;">
+                <label for="modal-language-select" style="display: block; margin-bottom: 8px; font-weight: 500;">Select Language:</label>
+                <select id="modal-language-select" class="language-select" style="width: 100%; padding: 8px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); font-size: 14px;">
+                </select>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button id="modal-cancel-btn" class="btn" style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel</button>
+                <button id="modal-add-btn" class="btn" style="padding: 8px 16px;">Add Language</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Remove Language Confirmation Modal -->
+    <div id="remove-language-modal" class="modal" style="display:none">
+        <div class="modal-content">
+            <span class="modal-close modal-close-remove">&times;</span>
+            <p style="margin: 20px 0; color: var(--text-primary); line-height: 1.5; font-size: 15px;">
+                Remove language <strong id="remove-language-name"></strong> from configuration?
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button id="remove-modal-cancel-btn" class="btn" style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel</button>
+                <button id="remove-modal-ok-btn" class="btn" style="padding: 8px 16px;">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Memory Modal -->
+    <div id="edit-memory-modal" class="modal" style="display:none">
+        <div class="modal-content modal-content-large">
+            <span class="modal-close modal-close-edit-memory">&times;</span>
+            <h3 style="margin-bottom: 20px;">Memory: <span id="edit-memory-name"></span></h3>
+            <textarea id="edit-memory-content" class="memory-editor" rows="20" style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-family: 'Courier New', monospace; font-size: 13px; resize: vertical;"></textarea>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button id="edit-memory-cancel-btn" class="btn" style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel</button>
+                <button id="edit-memory-save-btn" class="btn" style="padding: 8px 16px;">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Memory Confirmation Modal -->
+    <div id="delete-memory-modal" class="modal" style="display:none">
+        <div class="modal-content">
+            <span class="modal-close modal-close-delete-memory">&times;</span>
+            <p style="margin: 20px 0; color: var(--text-primary); line-height: 1.5; font-size: 15px;">
+                Delete memory <strong id="delete-memory-name"></strong>?
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button id="delete-memory-cancel-btn" class="btn" style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel</button>
+                <button id="delete-memory-ok-btn" class="btn" style="padding: 8px 16px;">OK</button>
+            </div>
+        </div>
+    </div> <!-- End of Main -->
 
     <script>
         $(document).ready(function () {

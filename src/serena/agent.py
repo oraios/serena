@@ -2,6 +2,7 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
+import concurrent.futures
 import multiprocessing
 import os
 import platform
@@ -9,12 +10,15 @@ import sys
 import threading
 import webbrowser
 from collections.abc import Callable
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import Future
 from logging import Logger
+from queue import Queue
+from threading import Thread
 from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
 from sensai.util import logging
 from sensai.util.logging import LogTime
+from sensai.util.string import ToStringMixin
 
 from interprompt.jinja_template import JinjaTemplate
 from serena import serena_version
@@ -153,7 +157,9 @@ class SerenaAgent:
 
         # create executor for starting the language server and running tools in another thread
         # This executor is used to achieve linear task execution, so it is important to use a single-threaded executor.
-        self._task_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="SerenaAgentExecutor")
+        self._task_executor_queue: Queue = Queue()
+        self._task_executor_thread = Thread(target=self._process_task_queue, name="SerenaAgentTaskExecutor", daemon=True)
+        self._task_executor_thread.start()
         self._task_executor_lock = threading.Lock()
         self._task_executor_task_index = 1
 
@@ -191,6 +197,32 @@ class SerenaAgent:
                 process = multiprocessing.Process(target=self._open_dashboard, args=(dashboard_url,))
                 process.start()
                 process.join(timeout=1)
+
+    class Task(ToStringMixin):
+        def __init__(self, function: Callable[[], Any], name: str):
+            self.name = name
+            self.future: concurrent.futures.Future = concurrent.futures.Future()
+            self._function = function
+
+        def _tostring_includes(self) -> list[str]:
+            return ["name"]
+
+        def execute(self) -> None:
+            """
+            Execute the task, setting the result or exception on the future.
+            """
+            try:
+                with LogTime(self.name, logger=log):
+                    result = self._function()
+                    self.future.set_result(result)
+            except Exception as e:
+                log.error(f"Error during execution of {self.name}: {e}", exc_info=e)
+                self.future.set_exception(e)
+
+    def _process_task_queue(self) -> None:
+        while True:
+            task: SerenaAgent.Task = self._task_executor_queue.get()
+            task.execute()
 
     def get_language_server_manager(self) -> LanguageServerManager | None:
         if self._active_project is not None:
@@ -376,13 +408,10 @@ class SerenaAgent:
         with self._task_executor_lock:
             task_name = f"Task-{self._task_executor_task_index}[{name or task.__name__}]"
             self._task_executor_task_index += 1
-
-            def task_execution_wrapper() -> Any:
-                with LogTime(task_name, logger=log):
-                    return task()
-
             log.info(f"Scheduling {task_name}")
-            return self._task_executor.submit(task_execution_wrapper)
+            task = SerenaAgent.Task(function=task, name=task_name)
+            self._task_executor_queue.put(task)
+            return task.future
 
     def execute_task(self, task: Callable[[], T], name: str | None = None) -> T:
         """
@@ -549,6 +578,15 @@ class SerenaAgent:
         :param language: the language to add
         """
         self.execute_task(lambda: self.get_active_project_or_raise().add_language(language), name=f"AddLanguage:{language.value}")
+
+    def remove_language(self, language: Language) -> None:
+        """
+        Removes a language from the active project, shutting down the respective language server and updating the project configuration.
+        The removal is scheduled via the agent's task executor and executed asynchronously.
+
+        :param language: the language to remove
+        """
+        self.issue_task(lambda: self.get_active_project_or_raise().remove_language(language), name=f"RemoveLanguage:{language.value}")
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self._all_tools[tool_class]  # type: ignore

@@ -12,7 +12,7 @@ from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_NAME
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.text_utils import MatchedConsecutiveLines, search_files
 from serena.util.file_system import GitignoreParser, match_path
-from serena.util.general import load_yaml, save_yaml
+from serena.util.general import save_yaml
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import FileUtils
@@ -71,7 +71,7 @@ class Project(ToStringMixin):
                 f.write(f"/{SolidLanguageServer.CACHE_FOLDER_NAME}\n")
 
         # gather ignored paths from the project configuration and gitignore files
-        ignored_patterns = project_config.ignored_paths
+        ignored_patterns = list(project_config.ignored_paths)
         if len(ignored_patterns) > 0:
             log.info(f"Using {len(ignored_patterns)} ignored paths from the explicit project configuration.")
             log.debug(f"Ignored paths: {ignored_patterns}")
@@ -116,7 +116,7 @@ class Project(ToStringMixin):
         """
         config_path = os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
         log.info("Saving updated project configuration to %s", config_path)
-        config_with_comments = load_yaml(config_path, preserve_comments=True)
+        config_with_comments = ProjectConfig.load_commented_map(config_path)
         config_with_comments.update(self.project_config.to_yaml_dict())
         save_yaml(config_path, config_with_comments, preserve_comments=True)
 
@@ -416,6 +416,28 @@ class Project(ToStringMixin):
         # update the project configuration
         self.project_config.languages.append(language)
         self.save_config()
+
+    def remove_language(self, language: Language) -> None:
+        """
+        Removes a programming language from the project configuration, stopping the corresponding
+        language server instance if the LS manager is active.
+        The project configuration is saved to disk after removing the language.
+
+        :param language: the programming language to remove
+        """
+        if language not in self.project_config.languages:
+            log.info(f"Language {language.value} is not present in the project configuration.")
+            return
+        # update the project configuration
+        self.project_config.languages.remove(language)
+        self.save_config()
+
+        # stop the language server (if the LS manager is active)
+        if self.language_server_manager is None:
+            log.info("Language server manager is not active; skipping language server shutdown for the removed language.")
+        else:
+            log.info("Removing and stopping the language server for language %s ...", language.value)
+            self.language_server_manager.remove_language_server(language)
 
     def shutdown(self) -> None:
         if self.language_server_manager is not None:
