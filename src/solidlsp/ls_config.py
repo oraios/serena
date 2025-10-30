@@ -93,7 +93,14 @@ class Language(str, Enum):
         """
         Check if the language server is experimental or deprecated.
         """
-        return self in {self.TYPESCRIPT_VTS, self.PYTHON_JEDI, self.CSHARP_OMNISHARP, self.RUBY_SOLARGRAPH, self.PHP_DEVSENSE, self.MARKDOWN}
+        return self in {
+            self.TYPESCRIPT_VTS,
+            self.PYTHON_JEDI,
+            self.CSHARP_OMNISHARP,
+            self.RUBY_SOLARGRAPH,
+            self.PHP_DEVSENSE,
+            self.MARKDOWN,
+        }
 
     def __str__(self) -> str:
         return self.value
