@@ -6,7 +6,7 @@ import subprocess
 import sys
 from logging import Logger
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Tuple
 
 import click
 from sensai.util import logging
@@ -412,6 +412,97 @@ class ProjectCommands(AutoRegisteringGroup):
         super().__init__(
             name="project", help="Manage Serena projects. You can run `project <command> --help` for more info on each command."
         )
+
+    @staticmethod
+    @click.command(
+        "download-language-dps",
+        help="Pré-baixa dependências runtime para linguagens (passar nomes ou --all).",
+    )
+    @click.option("--language", "-l", "languages", multiple=True, help="Nome da linguagem (use enum Language names).")
+    @click.option("--all", "download_all", is_flag=True, help="Baixar deps para todos os language servers conhecidos.")
+    def download_language_dps(languages: Tuple[str, ...], download_all: bool = True) -> None:
+        import importlib
+        import inspect
+        import logging
+        import pkgutil
+
+        import click
+
+        from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
+        from solidlsp.ls import SolidLanguageServer
+        from solidlsp.ls_config import LanguageServerConfig
+        from solidlsp.ls_logger import LanguageServerLogger
+        from solidlsp.settings import SolidLSPSettings
+
+        logger = LanguageServerLogger(json_format=False, log_level=logging.INFO)
+        solidlsp_settings = SolidLSPSettings(
+            solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME, project_data_relative_path=SERENA_MANAGED_DIR_NAME
+        )
+
+        requested = {l.lower() for l in languages}
+        total = success = failed = skipped = 0
+        details: list[tuple[str, str, str]] = []
+
+        try:
+            pkg = importlib.import_module("solidlsp.language_servers")
+        except Exception as e:
+            click.echo(f"Erro ao importar pacote solidlsp.language_servers: {e}")
+            return
+
+        for finder, mod_name, ispkg in pkgutil.iter_modules(pkg.__path__):
+            full_name = f"{pkg.__name__}.{mod_name}"
+            try:
+                mod = importlib.import_module(full_name)
+            except Exception as e:
+                logger.log(f"Falha ao importar {full_name}: {e}", logging.WARNING)
+                continue
+
+            for _, cls in inspect.getmembers(mod, inspect.isclass):
+                if cls is SolidLanguageServer or not issubclass(cls, SolidLanguageServer):
+                    continue
+
+                total += 1
+                lang_name = getattr(cls, "language_name", cls.__name__).lower()
+
+                if not download_all and requested and lang_name not in requested:
+                    skipped += 1
+                    details.append((lang_name, "⊘ skip", "não solicitado"))
+                    continue
+
+                try:
+                    result, log = cls.prepare_runtime_dependencies(
+                        logger=logger,
+                        solidlsp_settings=solidlsp_settings
+                    )
+
+                    if result:
+                        success += 1
+                        status = "✓ ok"
+                        details.append((lang_name, status, log))
+
+                    else:
+                        failed += 1
+                        status = "✗ falha"
+                        details.append((lang_name, status, log))
+
+                except Exception as e:
+                    failed += 1
+                    logger.log(f"Falha ao preparar deps para {cls.__name__}: {e}", logging.WARNING)
+                    status = "✗ erro"
+                    error_msg = str(e)[:100]
+                    details.append((lang_name, status, error_msg))
+
+        # Print summary
+        click.echo("\n" + "=" * 80)
+        click.echo(f"RESUMO: Total={total} | ✓ Sucesso={success} | ✗ Falha={failed} | ⊘ Pulados={skipped}")
+        click.echo("=" * 80)
+        click.echo(f"{'Linguagem':<20} {'Status':<15} {'Mensagem':<45}")
+        click.echo("-" * 80)
+        for lang, status, msg in details:
+            click.echo(f"{lang:<20} {status:<15} {msg:<45}")
+        click.echo("=" * 80 + "\n")
+
+        
 
     @staticmethod
     @click.command("generate-yml", help="Generate a project.yml file.")
