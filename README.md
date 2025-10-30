@@ -78,7 +78,7 @@ With Serena, we provide direct, out-of-the-box support for:
 
   * Python
   * TypeScript/Javascript
-  * PHP (uses Intelephense LSP; set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features)
+  * PHP (by default, uses Intelephense LSP; set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features; alternatively, use `php_devsense` for Devsense language server)
   * Go (requires installation of gopls)
   * R (requires installation of the `languageserver` R package)
   * Rust (requires [rustup](https://rustup.rs/) - uses rust-analyzer from your toolchain)

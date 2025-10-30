@@ -73,6 +73,10 @@ class Language(str, Enum):
     """Solargraph language server for Ruby (legacy, experimental).
     Use Language.RUBY (ruby-lsp) for better performance and modern LSP features.
     """
+    PHP_DEVSENSE = "php_devsense"
+    """Devsense language server for PHP (alternative to Intelephense).
+    Provides fast PHP language support with advanced static analysis.
+    """
     MARKDOWN = "markdown"
     """Marksman language server for Markdown (experimental).
     Must be explicitly specified as the main language, not auto-detected.
@@ -89,7 +93,7 @@ class Language(str, Enum):
         """
         Check if the language server is experimental or deprecated.
         """
-        return self in {self.TYPESCRIPT_VTS, self.PYTHON_JEDI, self.CSHARP_OMNISHARP, self.RUBY_SOLARGRAPH, self.MARKDOWN}
+        return self in {self.TYPESCRIPT_VTS, self.PYTHON_JEDI, self.CSHARP_OMNISHARP, self.RUBY_SOLARGRAPH, self.PHP_DEVSENSE, self.MARKDOWN}
 
     def __str__(self) -> str:
         return self.value
@@ -125,6 +129,8 @@ class Language(str, Enum):
             case self.DART:
                 return FilenameMatcher("*.dart")
             case self.PHP:
+                return FilenameMatcher("*.php")
+            case self.PHP_DEVSENSE:
                 return FilenameMatcher("*.php")
             case self.R:
                 return FilenameMatcher("*.R", "*.r", "*.Rmd", "*.Rnw")
@@ -231,6 +237,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.intelephense import Intelephense
 
                 return Intelephense
+            case self.PHP_DEVSENSE:
+                from solidlsp.language_servers.devsense_php import DevsensePHP
+
+                return DevsensePHP
             case self.PERL:
                 from solidlsp.language_servers.perl_language_server import PerlLanguageServer
 
