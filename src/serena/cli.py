@@ -28,7 +28,7 @@ from serena.constants import (
     USER_CONTEXT_YAMLS_DIR,
     USER_MODE_YAMLS_DIR,
 )
-from serena.mcp import SerenaMCPFactory, SerenaMCPFactorySingleProcess
+from serena.mcp import SerenaMCPFactory, SerenaMCPFactorySingleProcess, set_mcp_server_instance
 from serena.project import Project
 from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsOverviewTool, SearchForPatternTool, ToolRegistry
 from serena.util.logging import MemoryLogHandler
@@ -183,11 +183,15 @@ class TopLevelCommands(AutoRegisteringGroup):
             trace_lsp_communication=trace_lsp_communication,
             tool_timeout=tool_timeout,
         )
+        set_mcp_server_instance(server)
         if project_file_arg:
             log.warning(
                 "Positional project arg is deprecated; use --project instead. Used: %s",
                 project_file,
             )
+
+        # enable communication
+
         log.info("Starting MCP server …")
         server.run(transport=transport)
 

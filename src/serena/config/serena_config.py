@@ -134,6 +134,15 @@ class ToolSet:
     def includes_name(self, tool_name: str) -> bool:
         return tool_name in self._tool_names
 
+    def add(self, tool_name: str) -> None:
+        self._tool_names.add(tool_name)
+
+    def remove(self, tool_name: str) -> None:
+        try:
+            self._tool_names.remove(tool_name)
+        except KeyError:
+            log.warning(f"Tool '{tool_name}' not found in tool set, cannot remove it.")
+
 
 @dataclass
 class ToolInclusionDefinition:

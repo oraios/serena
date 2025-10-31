@@ -17,7 +17,7 @@ T = TypeVar("T")
 
 class TaskExecutor:
     def __init__(self, name: str):
-        self._task_executor_lock = threading.Lock()
+        self.task_executor_lock = threading.Lock()
         self._task_executor_queue: list[TaskExecutor.Task] = []
         self._task_executor_thread = Thread(target=self._process_task_queue, name=name, daemon=True)
         self._task_executor_thread.start()
@@ -109,7 +109,7 @@ class TaskExecutor:
         while True:
             # obtain task from the queue
             task: TaskExecutor.Task | None = None
-            with self._task_executor_lock:
+            with self.task_executor_lock:
                 if len(self._task_executor_queue) > 0:
                     task = self._task_executor_queue.pop(0)
             if task is None:
@@ -117,7 +117,7 @@ class TaskExecutor:
                 continue
 
             # start task execution asynchronously
-            with self._task_executor_lock:
+            with self.task_executor_lock:
                 self._task_executor_current_task = task
             if task.logged:
                 log.info("Starting execution of %s", task.name)
@@ -125,7 +125,7 @@ class TaskExecutor:
 
             # wait for task completion
             task.wait_until_done(timeout=task.timeout)
-            with self._task_executor_lock:
+            with self.task_executor_lock:
                 self._task_executor_current_task = None
                 if task.logged:
                     self._task_executor_last_executed_task_info = self.TaskInfo.from_task(task, is_running=False)
@@ -162,7 +162,7 @@ class TaskExecutor:
         :return: the list of tasks in the execution order (running task first)
         """
         tasks = []
-        with self._task_executor_lock:
+        with self.task_executor_lock:
             if self._task_executor_current_task is not None:
                 tasks.append(self.TaskInfo.from_task(self._task_executor_current_task, True))
             for task in self._task_executor_queue:
@@ -181,7 +181,7 @@ class TaskExecutor:
         :param timeout: the maximum time to wait for task completion in seconds, or None to wait indefinitely
         :return: the task object, through which the task's future result can be accessed
         """
-        with self._task_executor_lock:
+        with self.task_executor_lock:
             if logged:
                 task_prefix_name = f"Task-{self._task_executor_task_index}"
                 self._task_executor_task_index += 1
@@ -214,5 +214,5 @@ class TaskExecutor:
 
         :return: TaskInfo of the last executed task, or None if no task has been executed yet.
         """
-        with self._task_executor_lock:
+        with self.task_executor_lock:
             return self._task_executor_last_executed_task_info

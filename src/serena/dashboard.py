@@ -98,6 +98,14 @@ class RequestCancelTaskExecution(BaseModel):
     task_id: int
 
 
+class RequestEnableTool(BaseModel):
+    tool_name: str
+
+
+class RequestDisableTool(BaseModel):
+    tool_name: str
+
+
 class QueuedExecution(BaseModel):
     task_id: int
     is_running: bool
@@ -308,6 +316,30 @@ class SerenaDashboardAPI:
                 last_execution_info = self._agent.get_last_executed_task()
                 response = QueuedExecution.from_task_info(last_execution_info).model_dump() if last_execution_info is not None else None
                 return {"last_execution": response, "status": "success"}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+
+        @self._app.route("/enable_tool", methods=["POST"])
+        def enable_tool() -> dict[str, str]:
+            request_data = request.get_json()
+            if not request_data:
+                return {"status": "error", "message": "No data provided"}
+            request_enable_tool = RequestEnableTool.model_validate(request_data)
+            try:
+                self._enable_tool(request_enable_tool)
+                return {"status": "success", "message": f"Tool {request_enable_tool.tool_name} enabled successfully"}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+
+        @self._app.route("/disable_tool", methods=["POST"])
+        def disable_tool() -> dict[str, str]:
+            request_data = request.get_json()
+            if not request_data:
+                return {"status": "error", "message": "No data provided"}
+            request_disable_tool = RequestDisableTool.model_validate(request_data)
+            try:
+                self._disable_tool(request_disable_tool)
+                return {"status": "success", "message": f"Tool {request_disable_tool.tool_name} disabled successfully"}
             except Exception as e:
                 return {"status": "error", "message": str(e)}
 
@@ -541,6 +573,14 @@ class SerenaDashboardAPI:
             raise ValueError(f"Invalid language: {request_remove_language.language}")
         # remove_language is already thread-safe
         self._agent.remove_language(language)
+
+    def _enable_tool(self, request_enable_tool: RequestEnableTool) -> None:
+        """Enable a tool by calling the agent's enable_tool method"""
+        self._agent.enable_tool(request_enable_tool.tool_name)
+
+    def _disable_tool(self, request_disable_tool: RequestDisableTool) -> None:
+        """Disable a tool by calling the agent's disable_tool method"""
+        self._agent.disable_tool(request_disable_tool.tool_name)
 
     @staticmethod
     def _find_first_free_port(start_port: int) -> int:
