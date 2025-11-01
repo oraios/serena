@@ -54,6 +54,7 @@ class ResponseConfigOverview(BaseModel):
     jetbrains_mode: bool
     languages: list[str]
     encoding: str | None
+    tool_management_enabled: bool
 
 
 class ResponseAvailableLanguages(BaseModel):
@@ -134,6 +135,7 @@ class SerenaDashboardAPI:
         agent: "SerenaAgent",
         shutdown_callback: Callable[[], None] | None = None,
         tool_usage_stats: ToolUsageStats | None = None,
+        enable_tool_management: bool = False,
     ) -> None:
         self._memory_log_handler = memory_log_handler
         self._tool_names = tool_names
@@ -141,6 +143,7 @@ class SerenaDashboardAPI:
         self._shutdown_callback = shutdown_callback
         self._app = Flask(__name__)
         self._tool_usage_stats = tool_usage_stats
+        self._enable_tool_management = enable_tool_management
         self._setup_routes()
 
     @property
@@ -473,6 +476,7 @@ class SerenaDashboardAPI:
             jetbrains_mode=self._agent.serena_config.jetbrains,
             languages=languages,
             encoding=encoding,
+            tool_management_enabled=self._enable_tool_management,
         )
 
     def _shutdown(self) -> None:

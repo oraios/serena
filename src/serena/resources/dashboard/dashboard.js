@@ -461,6 +461,10 @@ class Dashboard {
             html += '<div class="config-label">File Encoding:</div>';
             html += '<div class="config-value">' + (config.encoding || 'N/A') + '</div>';
 
+            // Tool Management Enabled info
+            html += '<div class="config-label">Tool Management Enabled:</div>';
+            html += '<div class="config-value">' + (config.tool_management_enabled ? 'Yes' : 'No') + '</div>';
+
             html += '</div>';
 
             // Active tools - collapsible
@@ -470,10 +474,13 @@ class Dashboard {
             html += '<span class="toggle-icon' + (wasToolsExpanded ? ' expanded' : '') + '">▼</span>';
             html += '</h3>';
             html += '<div class="collapsible-content tools-grid" id="tools-content" style="' + (wasToolsExpanded ? '' : 'display:none;') + ' margin-top: 10px;">';
+            const toolManagementEnabled = config.tool_management_enabled;
             config.active_tools.forEach(function (tool) {
-                html += '<div class="tool-item removable" data-tool="' + tool + '" title="' + tool + '">';
+                html += '<div class="tool-item' + (toolManagementEnabled ? ' removable' : '') + '" data-tool="' + tool + '" title="' + tool + '">';
                 html += tool;
-                html += '<span class="tool-remove" data-tool="' + tool + '">&times;</span>';
+                if (toolManagementEnabled) {
+                    html += '<span class="tool-remove" data-tool="' + tool + '">&times;</span>';
+                }
                 html += '</div>';
             });
             html += '</div>';
@@ -528,13 +535,15 @@ class Dashboard {
                 self.confirmRemoveLanguage(language);
             });
 
-            // Attach event handlers for tool remove buttons (disable tools)
-            $('.tool-remove').click(function (e) {
-                e.preventDefault();
-                e.stopPropagation();
-                const toolName = $(this).data('tool');
-                self.disableTool(toolName);
-            });
+            // Attach event handlers for tool remove buttons (disable tools) - only if tool management is enabled
+            if (config.tool_management_enabled) {
+                $('.tool-remove').click(function (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const toolName = $(this).data('tool');
+                    self.disableTool(toolName);
+                });
+            }
 
             // Attach event handlers for memory items
             $('.memory-item').click(function (e) {
@@ -634,21 +643,30 @@ class Dashboard {
         }
 
         const self = this;
+        const toolManagementEnabled = this.configData && this.configData.tool_management_enabled;
         let html = '';
         tools.forEach(function (tool) {
-            html += '<div class="info-item tool-enable-item" data-tool="' + tool.name + '" title="Click to enable ' + tool.name + '">';
-            html += '<span class="tool-enable-icon">+</span>';
-            html += '<span class="tool-enable-name">' + tool.name + '</span>';
-            html += '</div>';
+            if (toolManagementEnabled) {
+                html += '<div class="info-item tool-enable-item" data-tool="' + tool.name + '" title="Click to enable ' + tool.name + '">';
+                html += '<span class="tool-enable-icon">+</span>';
+                html += '<span class="tool-enable-name">' + tool.name + '</span>';
+                html += '</div>';
+            } else {
+                html += '<div class="info-item" title="' + tool.name + '">';
+                html += '<span class="tool-enable-name">' + tool.name + '</span>';
+                html += '</div>';
+            }
         });
 
         this.$availableToolsDisplay.html(html);
 
-        // Attach click handlers to enable tools
-        $('.tool-enable-item').click(function () {
-            const toolName = $(this).data('tool');
-            self.enableTool(toolName);
-        });
+        // Attach click handlers to enable tools - only if tool management is enabled
+        if (toolManagementEnabled) {
+            $('.tool-enable-item').click(function () {
+                const toolName = $(this).data('tool');
+                self.enableTool(toolName);
+            });
+        }
     }
 
     displayAvailableModes(modes) {

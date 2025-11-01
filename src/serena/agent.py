@@ -203,7 +203,8 @@ class SerenaAgent:
         # may access various parts of the agent
         if self.serena_config.web_dashboard:
             self._dashboard_thread, port = SerenaDashboardAPI(
-                get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats
+                get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats,
+                enable_tool_management=self.serena_config.permit_tool_management_in_dashboard,
             ).run_in_thread()
             dashboard_url = f"http://127.0.0.1:{port}/dashboard/index.html"
             log.info("Serena web dashboard started at %s", dashboard_url)
