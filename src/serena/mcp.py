@@ -4,16 +4,22 @@ The Serena Model Context Protocol (MCP) Server
 
 import sys
 from abc import abstractmethod
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Iterable, Iterator, Sequence
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
+import anyio
 import docstring_parser
+import janus
+from mcp import stdio_server, types
 from mcp.server.fastmcp import server
 from mcp.server.fastmcp.server import FastMCP, Settings
 from mcp.server.fastmcp.tools.base import Tool as MCPTool
+from mcp.shared.message import ServerMessageMetadata, SessionMessage
+from mcp.shared.session import RequestId, SendNotificationT
+from mcp.types import JSONRPCMessage, JSONRPCNotification
 from pydantic_settings import SettingsConfigDict
 from sensai.util import logging
 
@@ -44,6 +50,121 @@ server.configure_logging = configure_logging  # type: ignore
 @dataclass
 class SerenaMCPRequestContext:
     agent: SerenaAgent
+
+
+class FastMCPWithExternalCommandExecution(FastMCP):
+    """
+    Extends FastMCP to support executing tools in an external process.
+    """
+
+    @dataclass
+    class ExternalCall:
+        method_name: str
+        args: dict[str, Any]
+
+    def run(
+        self,
+        transport: Literal["stdio", "sse", "streamable-http"] = "stdio",
+        mount_path: str | None = None,
+    ) -> None:
+        """Run the FastMCP server with cross-thread queue support.
+        We need this to be able to run tool executions and other operations in
+        the main thread.
+        """
+        self._external_calls_queue: janus.Queue[FastMCPWithExternalCommandExecution.ExternalCall] = janus.Queue()
+
+        async def with_external_calls_queue() -> None:
+            # Start background queue consumer
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(self._process_external_calls_queue_loop)
+
+                # Run the normal transport startup
+                match transport:
+                    case "stdio":
+                        await self.run_stdio_async()
+                    case "sse":
+                        await self.run_sse_async(mount_path)
+                    case "streamable-http":
+                        await self.run_streamable_http_async()
+
+        anyio.run(with_external_calls_queue)
+
+    async def _process_external_calls_queue_loop(self) -> None:
+        """Continuously process items from the external calls queue."""
+        while True:
+            external_call: FastMCPWithExternalCommandExecution.ExternalCall = await self._external_calls_queue.async_q.get()
+            try:
+                method = getattr(self, external_call.method_name)
+                await method(**external_call.args)
+            except Exception as e:
+                log.error(f"Error running external call {external_call}: {e}")
+
+    def update_tool_list(self) -> None:
+        """Sync method to request tool list update from other threads."""
+        update_tool_list_call = FastMCPWithExternalCommandExecution.ExternalCall(
+            method_name="send_tool_list_changed",
+            args={},
+        )
+        self._external_calls_queue.sync_q.put(update_tool_list_call)
+        
+    # For demo purposes, we aren't using this now
+    def call_tool_sync(self, tool_name: str, parameters: dict[str, Any]) -> None:
+        """Sync method to call a tool from other threads."""
+        call_tool = FastMCPWithExternalCommandExecution.ExternalCall(
+            method_name="call_tool",
+            args={
+                "tool_name": tool_name,
+                "parameters": parameters,
+            },
+        )
+        self._external_calls_queue.sync_q.put(call_tool)
+
+    # Copied from mcp.server.session.Session since we don't have access to it here, but
+    # we hacked our way to have access to the write stream.
+    async def send_notification(
+        self,
+        notification: SendNotificationT,
+        related_request_id: RequestId | None = None,
+    ) -> None:
+        """
+        Emits a notification, which is a one-way message that does not expect
+        a response.
+        """
+        # Some transport implementations may need to set the related_request_id
+        # to attribute to the notifications to the request that triggered them.
+        jsonrpc_notification = JSONRPCNotification(
+            jsonrpc="2.0",
+            **notification.model_dump(by_alias=True, mode="json", exclude_none=True),
+        )
+        session_message = SessionMessage(
+            message=JSONRPCMessage(jsonrpc_notification),
+            metadata=ServerMessageMetadata(related_request_id=related_request_id) if related_request_id else None,
+        )
+        await self._write_stream.send(session_message)
+
+    # also copied from mcp.server.session.Session
+    async def send_tool_list_changed(self) -> None:
+        """Send a tool list changed notification."""
+        await self.send_notification(
+            types.ServerNotification(
+                types.ToolListChangedNotification(
+                    method="notifications/tools/list_changed",
+                )
+            )
+        )
+
+    # override to save the read and write streams, which permits talking to (stdio) clients outside of request handling
+    # by using the external calls queue
+    async def run_stdio_async(self) -> None:
+        """Run the server using stdio transport."""
+        async with stdio_server() as (read_stream, write_stream):
+            self._read_stream = read_stream
+            self._write_stream = write_stream
+            await self._mcp_server.run(
+                read_stream,
+                write_stream,
+                self._mcp_server.create_initialization_options(),
+            )
 
 
 class SerenaMCPFactory:
@@ -233,10 +354,7 @@ class SerenaMCPFactory:
     def _set_mcp_tools(self, mcp: FastMCP, openai_tool_compatible: bool = False) -> None:
         """Update the tools in the MCP server"""
         if mcp is not None:
-            mcp._tool_manager._tools = {}
-            for tool in self._iter_tools():
-                mcp_tool = self.make_mcp_tool(tool, openai_tool_compatible=openai_tool_compatible)
-                mcp._tool_manager._tools[tool.get_name()] = mcp_tool
+            set_mcp_tool_list(mcp, self._iter_tools(), openai_tool_compatible=openai_tool_compatible)
             log.info(f"Starting MCP server with {len(mcp._tool_manager._tools)} tools: {list(mcp._tool_manager._tools.keys())}")
 
     @abstractmethod
@@ -253,7 +371,7 @@ class SerenaMCPFactory:
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
         trace_lsp_communication: bool | None = None,
         tool_timeout: float | None = None,
-    ) -> FastMCP:
+    ) -> FastMCPWithExternalCommandExecution:
         """
         Create an MCP server with process-isolated SerenaAgent to prevent asyncio contamination.
 
@@ -296,7 +414,7 @@ class SerenaMCPFactory:
         # retain only FASTMCP_ prefix for already set environment variables.
         Settings.model_config = SettingsConfigDict(env_prefix="FASTMCP_")
         instructions = self._get_initial_instructions()
-        mcp = FastMCP(lifespan=self.server_lifespan, host=host, port=port, instructions=instructions)
+        mcp = FastMCPWithExternalCommandExecution(lifespan=self.server_lifespan, host=host, port=port, instructions=instructions)
         return mcp
 
     @asynccontextmanager
@@ -346,3 +464,35 @@ class SerenaMCPFactorySingleProcess(SerenaMCPFactory):
         self._set_mcp_tools(mcp_server, openai_tool_compatible=openai_tool_compatible)
         log.info("MCP server lifetime setup complete")
         yield
+
+
+_MCP_SERVER_INSTANCE: FastMCPWithExternalCommandExecution | None = None
+
+
+def set_mcp_server_instance(mcp_server: FastMCPWithExternalCommandExecution) -> None:
+    global _MCP_SERVER_INSTANCE
+    _MCP_SERVER_INSTANCE = mcp_server
+
+
+def get_mcp_server_instance() -> FastMCPWithExternalCommandExecution | None:
+    """Get the global MCP server instance, or None if not set."""
+    return _MCP_SERVER_INSTANCE
+
+
+# noinspection PyProtectedMember
+def set_mcp_tool_list(mcp_server: FastMCP, tools: Iterable[Tool], openai_tool_compatible: bool = False) -> None:
+    mcp_server._tool_manager._tools = {}
+    for tool in tools:
+        mcp_tool = SerenaMCPFactory.make_mcp_tool(tool, openai_tool_compatible=openai_tool_compatible)
+        mcp_server._tool_manager._tools[tool.get_name()] = mcp_tool
+
+
+def update_mcp_server_tool_list(tools: Iterable[Tool], openai_tool_compatible: bool = False) -> None:
+    """
+    Update the global MCP server's tool list and notify all connected clients.
+    This should be called after enabling or disabling tools.
+    """
+    mcp_server = get_mcp_server_instance()
+    if mcp_server is not None:
+        set_mcp_tool_list(mcp_server, tools)
+        mcp_server.update_tool_list()

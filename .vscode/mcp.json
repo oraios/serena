@@ -1,0 +1,19 @@
+{
+	"servers": {
+		"serena": {
+			"type": "stdio",
+			"command": "uv",
+			"args": [
+				"run",
+				"--directory",
+				"${workspaceFolder}",
+				"serena",
+				"start-mcp-server",
+				"--context",
+				"ide-assistant",
+				"--project",
+				"${workspaceFolder}"
+			]
+		}
+	}
+}

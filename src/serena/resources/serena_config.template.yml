@@ -20,6 +20,14 @@ web_dashboard: True
 # shows Serena's current session logs - as an alternative to the GUI log window which
 # is supported on all platforms.
 
+
+permit_tool_management_in_dashboard: False
+# whether to permit enabling and disabling tools from the web dashboard. Some MCP clients
+# (as of November 2025 this includes Claude Desktop and Claude Code) don't support the MCP
+# endpoint for updating the tool list dynamically. Others, such as VSCode and Cursor, do support it.
+# If you are using an MCP client that doesn't support dynamic tool management, you should
+# set this option to False to avoid confusion.
+
 web_dashboard_open_on_launch: True
 # whether to open a browser window with the web dashboard when Serena starts (provided that web_dashboard
 # is enabled). If set to False, you can still open the dashboard manually by navigating to
