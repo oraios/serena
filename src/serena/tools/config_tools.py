@@ -1,38 +1,20 @@
-import json
-
 from serena.config.context_mode import SerenaAgentMode
 from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional
 
 
 class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     """
-    Activates a project by name.
+    Activates a project based on the project name or path.
     """
 
     def apply(self, project: str) -> str:
         """
-        Activates the project with the given name.
+        Activates the project with the given name or path.
 
         :param project: the name of a registered project to activate or a path to a project directory
         """
         active_project = self.agent.activate_project_from_path_or_name(project)
-        if active_project.is_newly_created:
-            result_str = (
-                f"Created and activated a new project with name '{active_project.project_name}' at {active_project.project_root}, language: {active_project.project_config.language.value}. "
-                "You can activate this project later by name.\n"
-                f"The project's Serena configuration is in {active_project.path_to_project_yml()}. In particular, you may want to edit the project name and the initial prompt."
-            )
-        else:
-            result_str = f"Activated existing project with name '{active_project.project_name}' at {active_project.project_root}, language: {active_project.project_config.language.value}"
-
-        if active_project.project_config.initial_prompt:
-            result_str += f"\nAdditional project information:\n {active_project.project_config.initial_prompt}"
-        result_str += (
-            f"\nAvailable memories:\n {json.dumps(list(self.memories_manager.list_memories()))}"
-            + "You should not read these memories directly, but rather use the `read_memory` tool to read them later if needed for the task."
-        )
-        result_str += f"\nAvailable tools:\n {json.dumps(self.agent.get_active_tool_names())}"
-        return result_str
+        return active_project.get_activation_message()
 
 
 class RemoveProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional):
@@ -71,7 +53,7 @@ class SwitchModesTool(Tool, ToolMarkerOptional):
         return result_str
 
 
-class GetCurrentConfigTool(Tool, ToolMarkerOptional):
+class GetCurrentConfigTool(Tool):
     """
     Prints the current configuration of the agent, including the active and available projects, tools, contexts, and modes.
     """

@@ -33,6 +33,14 @@ trace_lsp_communication: False
 # whether to trace the communication between Serena and the language servers.
 # This is useful for debugging language server issues.
 
+ls_specific_settings: {}
+# Added on 23.08.2025
+# Advanced configuration option allowing to configure language server implementation specific options. Maps the language
+# (same entry as in project.yml) to the options.
+# Have a look at the docstring of the constructors of the LS implementations within solidlsp (e.g., for C# or PHP) to see which options are available.
+# No documentation on options means no options are available.
+#
+
 tool_timeout: 240
 # timeout, in seconds, after which tool executions are terminated
 
@@ -53,16 +61,14 @@ default_max_tool_answer_chars: 150000
 # Even though the value of the max_answer_chars can be changed when calling the tool, it may make sense to adjust this default
 # through the global configuration.
 
-record_tool_usage_stats:  False
-# whether to record tool usage statistics, they will be shown in the web dashboard if recording is active.
-
-token_count_estimator: TIKTOKEN_GPT4O
-# Only relevant if `record_tool_usage` is True; the name of the token count estimator to use for tool usage statistics.
+token_count_estimator: CHAR_COUNT
+# the name of the token count estimator to use for tool usage statistics.
 # See the `RegisteredTokenCountEstimator` enum for available options.
 #
-# Note: some token estimators (like tiktoken) may require downloading data files
-# on the first run, which can take some time and require internet access. Others, like the Anthropic ones, may require an API key
-# and rate limits may apply.
+# By default, a very naive character count estimator is used, which simply counts the number of characters.
+# You can configure this to TIKTOKEN_GPT4 to use a local tiktoken-based estimator for GPT-4 (will download tiktoken
+# data files on first run), or ANTHROPIC_CLAUDE_SONNET_4 which will use the (free of cost) Anthropic API to
+# estimate the token count using the Claude Sonnet 4 tokenizer.
 
 
 # MANAGED BY SERENA, KEEP AT THE BOTTOM OF THE YAML AND DON'T EDIT WITHOUT NEED

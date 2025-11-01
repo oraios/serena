@@ -50,7 +50,14 @@
         sourcePreference = "wheel"; # or sourcePreference = "sdist";
       };
 
-      pyprojectOverrides = _final: _prev: {};
+      pyprojectOverrides = final: prev: {
+        # Add setuptools for packages that need it during build
+        ruamel-yaml-clib = prev.ruamel-yaml-clib.overrideAttrs (old: {
+          nativeBuildInputs = (old.nativeBuildInputs or []) ++ [
+            final.setuptools
+          ];
+        });
+      };
 
       python = pkgs.python311;
 

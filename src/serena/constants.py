@@ -25,9 +25,13 @@ INTERNAL_MODE_YAMLS_DIR = str(_serena_pkg_path / "resources" / "config" / "inter
 SERENA_DASHBOARD_DIR = str(_serena_pkg_path / "resources" / "dashboard")
 SERENA_ICON_DIR = str(_serena_pkg_path / "resources" / "icons")
 
-DEFAULT_ENCODING = "utf-8"
+DEFAULT_SOURCE_FILE_ENCODING = "utf-8"
+"""The default encoding assumed for project source files."""
 DEFAULT_CONTEXT = "desktop-app"
 DEFAULT_MODES = ("interactive", "editing")
+
+SERENA_FILE_ENCODING = "utf-8"
+"""The encoding used for Serena's own files, such as configuration files and memories."""
 
 PROJECT_TEMPLATE_FILE = str(_serena_pkg_path / "resources" / "project.template.yml")
 SERENA_CONFIG_TEMPLATE_FILE = str(_serena_pkg_path / "resources" / "serena_config.template.yml")

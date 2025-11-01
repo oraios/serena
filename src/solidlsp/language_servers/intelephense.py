@@ -24,6 +24,10 @@ from .common import RuntimeDependency, RuntimeDependencyCollection
 class Intelephense(SolidLanguageServer):
     """
     Provides PHP specific instantiation of the LanguageServer class using Intelephense.
+
+    You can pass the following entries in ls_specific_settings["php"]:
+        - maxMemory
+        - maxFileSize
     """
 
     @override
@@ -35,9 +39,7 @@ class Intelephense(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in ["node_modules", "vendor", "cache"]
 
     @classmethod
-    def _setup_runtime_dependencies(
-        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> str:
+    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, solidlsp_settings: SolidLSPSettings) -> list[str]:
         """
         Setup runtime dependencies for Intelephense and return the command to start the server.
         """
@@ -80,13 +82,13 @@ class Intelephense(SolidLanguageServer):
             intelephense_executable_path
         ), f"intelephense executable not found at {intelephense_executable_path}, something went wrong."
 
-        return f"{intelephense_executable_path} --stdio"
+        return [intelephense_executable_path, "--stdio"]
 
     def __init__(
         self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
     ):
         # Setup runtime dependencies before initializing
-        intelephense_cmd = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
+        intelephense_cmd = self._setup_runtime_dependencies(logger, solidlsp_settings)
 
         super().__init__(
             config,
@@ -98,10 +100,9 @@ class Intelephense(SolidLanguageServer):
         )
         self.request_id = 0
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
-        Returns the initialize params for the Intelephense Language Server.
+        Returns the initialization params for the Intelephense Language Server.
         """
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
@@ -123,12 +124,21 @@ class Intelephense(SolidLanguageServer):
                 }
             ],
         }
-
+        initialization_options = {}
         # Add license key if provided via environment variable
         license_key = os.environ.get("INTELEPHENSE_LICENSE_KEY")
         if license_key:
-            initialize_params["initializationOptions"] = {"licenceKey": license_key}
+            initialization_options["licenceKey"] = license_key
 
+        custom_intelephense_settings = self._solidlsp_settings.ls_specific_settings.get(self.get_language_enum_instance(), {})
+        max_memory = custom_intelephense_settings.get("maxMemory")
+        max_file_size = custom_intelephense_settings.get("maxFileSize")
+        if max_memory is not None:
+            initialization_options["intelephense.maxMemory"] = max_memory
+        if max_file_size is not None:
+            initialization_options["intelephense.files.maxSize"] = max_file_size
+
+        initialize_params["initializationOptions"] = initialization_options
         return initialize_params
 
     def _start_server(self):

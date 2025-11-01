@@ -2,6 +2,8 @@
 Tools supporting the execution of (external) commands
 """
 
+import os.path
+
 from serena.tools import Tool, ToolMarkerCanEdit
 from serena.util.shell import execute_shell_command
 
@@ -20,7 +22,10 @@ class ExecuteShellCommandTool(Tool, ToolMarkerCanEdit):
     ) -> str:
         """
         Execute a shell command and return its output. If there is a memory about suggested commands, read that first.
-        Never execute unsafe shell commands like `rm -rf /` or similar!
+        Never execute unsafe shell commands!
+        IMPORTANT: Do not use this tool to start
+          * long-running processes (e.g. servers) that are not intended to terminate quickly,
+          * processes that require user interaction.
 
         :param command: the shell command to execute
         :param cwd: the working directory to execute the command in. If None, the project root will be used.
@@ -30,7 +35,18 @@ class ExecuteShellCommandTool(Tool, ToolMarkerCanEdit):
             required for the task.
         :return: a JSON object containing the command's stdout and optionally stderr output
         """
-        _cwd = cwd or self.get_project_root()
+        if cwd is None:
+            _cwd = self.get_project_root()
+        else:
+            if os.path.isabs(cwd):
+                _cwd = cwd
+            else:
+                _cwd = os.path.join(self.get_project_root(), cwd)
+                if not os.path.isdir(_cwd):
+                    raise FileNotFoundError(
+                        f"Specified a relative working directory ({cwd}), but the resulting path is not a directory: {_cwd}"
+                    )
+
         result = execute_shell_command(command, cwd=_cwd, capture_stderr=capture_stderr)
         result = result.json()
         return self._limit_length(result, max_answer_chars)

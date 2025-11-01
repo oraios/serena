@@ -8,271 +8,142 @@
     <link rel="icon" type="image/png" sizes="16x16" href="serena-icon-16.png">
     <link rel="icon" type="image/png" sizes="32x32" href="serena-icon-32.png">
     <link rel="icon" type="image/png" sizes="48x48" href="serena-icon-48.png">
+    <link rel="stylesheet" href="dashboard.css">
     <script src="jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <script src="dashboard.js"></script>
-    <style>
-        :root {
-            /* Light theme variables */
-            --bg-primary: #f5f5f5;
-            --bg-secondary: #ffffff;
-            --text-primary: #000000;
-            --text-secondary: #333333;
-            --text-muted: #666666;
-            --border-color: #ddd;
-            --btn-primary: #eaa45d;
-            --btn-hover: #dca662;
-            --btn-disabled: #6c757d;
-            --shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            --tool-highlight: #ffff00;
-            --tool-highlight-text: #000000;
-            --log-debug: #808080;
-            --log-info: #000000;
-            --log-warning: #FF8C00;
-            --log-error: #FF0000;
-            --stats-header: #f8f9fa;
-        }
-
-        [data-theme="dark"] {
-            /* Dark theme variables */
-            --bg-primary: #1a1a1a;
-            --bg-secondary: #2d2d2d;
-            --text-primary: #ffffff;
-            --text-secondary: #e0e0e0;
-            --text-muted: #b0b0b0;
-            --border-color: #444;
-            --btn-primary: #eaa45d;
-            --btn-hover: #dca662;
-            --btn-disabled: #6c757d;
-            --shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-            --tool-highlight: #ffd700;
-            --tool-highlight-text: #000000;
-            --log-debug: #808080;
-            --log-info: #ffffff;
-            --log-warning: #FF8C00;
-            --log-error: #FF0000;
-            --stats-header: #3a3a3a;
-        }
-
-        body {
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-            margin: 0;
-            padding: 20px;
-            background-color: var(--bg-primary);
-            color: var(--text-primary);
-            transition: background-color 0.3s ease, color 0.3s ease;
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
-        .log-container {
-            background-color: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 5px;
-            height: 600px;
-            overflow-y: auto;
-            overflow-x: auto;
-            padding: 10px;
-            white-space: pre-wrap;
-            font-size: 12px;
-            line-height: 1.4;
-            color: var(--text-primary);
-            transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
-        }
-
-        .controls {
-            margin-bottom: 10px;
-            text-align: center;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
-        .logo {
-            margin-bottom: 10px;
-            text-align: center;
-        }
-
-        .btn {
-            background-color: var(--btn-primary);
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background-color 0.3s ease;
-        }
-
-        .btn:hover {
-            background-color: var(--btn-hover);
-        }
-
-        .btn:disabled {
-            background-color: var(--btn-disabled);
-            cursor: not-allowed;
-        }
-
-        .theme-toggle {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            background-color: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            padding: 6px 12px;
-            cursor: pointer;
-            transition: background-color 0.3s ease, border-color 0.3s ease;
-        }
-
-        .theme-toggle:hover {
-            background-color: var(--border-color);
-        }
-
-        .theme-toggle .icon {
-            font-size: 16px;
-        }
-
-        .log-debug {
-            color: var(--log-debug);
-        }
-
-        .log-info {
-            color: var(--log-info);
-        }
-
-        .log-warning {
-            color: var(--log-warning);
-        }
-
-        .log-error {
-            color: var(--log-error);
-        }
-
-        .log-default {
-            color: var(--log-info);
-        }
-
-        /* Tool name highlighting */
-        .tool-name {
-            background-color: var(--tool-highlight);
-            color: var(--tool-highlight-text);
-            font-weight: bold;
-        }
-
-        .loading {
-            text-align: center;
-            color: var(--text-muted);
-            font-style: italic;
-        }
-
-        .error-message {
-            color: var(--log-error);
-            text-align: center;
-            margin: 10px 0;
-        }
-
-        .charts-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            justify-content: space-between;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        .chart-group {
-            flex: 1;
-            min-width: 280px;
-            max-width: 320px;
-            text-align: center;
-        }
-
-        .chart-wide {
-            flex: 0 0 100%;
-            min-width: 100%;
-            margin-top: 10px;
-        }
-
-        .chart-group h3 {
-            margin: 0 0 10px 0;
-            color: var(--text-secondary);
-        }
-
-        .stats-summary {
-            margin: 0 auto;
-            border-collapse: collapse;
-            background: var(--bg-secondary);
-            border-radius: 5px;
-            overflow: hidden;
-            box-shadow: var(--shadow);
-            transition: background-color 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .stats-summary th,
-        .stats-summary td {
-            padding: 10px 20px;
-            text-align: left;
-            border-bottom: 1px solid var(--border-color);
-            color: var(--text-primary);
-            transition: border-color 0.3s ease, color 0.3s ease;
-        }
-
-        .stats-summary th {
-            background-color: var(--stats-header);
-            font-weight: bold;
-            transition: background-color 0.3s ease;
-        }
-
-        .stats-summary tr:last-child td {
-            border-bottom: none;
-        }
-
-        @media (max-width: 768px) {
-            .charts-container {
-                flex-direction: column;
-            }
-
-            .chart-group,
-            .chart-wide {
-                min-width: auto;
-                max-width: none;
-            }
-
-            .controls {
-                flex-direction: column;
-                gap: 5px;
-            }
-        }
-    </style>
 </head>
 
 <body>
-    <div class="header">
-        <img id="serena-logo" src="serena-logs.png" alt="Serena" style="max-width: 400px; height: auto;">
+<header class="header">
+    <div class="logo-container">
+        <img id="serena-logo" src="serena-logs.png" alt="Serena">
     </div>
-
-    <div class="controls">
-        <button id="load-logs" class="btn">Reload Log</button>
-        <button id="shutdown" class="btn">Shutdown Server</button>
-        <button id="toggle-stats" class="btn">Show Stats</button>
-        <div id="theme-toggle" class="theme-toggle" title="Toggle theme">
-            <span class="icon" id="theme-icon">🌙</span>
+    <nav class="header-nav">
+        <button id="theme-toggle" class="theme-toggle">
+            <span id="theme-icon">🌙</span>
             <span id="theme-text">Dark</span>
+        </button>
+        <button id="menu-toggle" class="menu-button">
+            <span>☰</span>
+            <span>Menu</span>
+        </button>
+        <div id="menu-dropdown" class="menu-dropdown" style="display:none">
+            <a href="#" data-page="overview" class="active">Overview</a>
+            <a href="#" data-page="logs">Logs</a>
+            <a href="#" data-page="stats">Advanced Stats</a>
+            <hr>
+            <a href="#" id="menu-shutdown">Shutdown Server</a>
+        </div>
+    </nav>
+</header>
+<div class="main">
+    <!-- Overview Page (Landing) -->
+    <div id="page-overview" class="page-view">
+        <div class="overview-container">
+            <div class="overview-left">
+                <section class="config-section">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h2 style="margin: 0;">Current Configuration</h2>
+                    </div>
+                    <div id="config-display">
+                        <div class="loading">Loading configuration...</div>
+                    </div>
+                </section>
+
+                <section class="basic-stats-section">
+                    <h2>Tool Usage</h2>
+                    <div id="basic-stats-display">
+                        <div class="loading">Loading stats...</div>
+                    </div>
+                </section>
+
+                <section class="executions-section">
+                    <h2>Executions Queue</h2>
+                    <div id="active-executions-display">
+                        <div class="loading">Loading executions...</div>
+                    </div>
+                </section>
+
+                <section class="executions-section">
+                    <h2>Last Execution</h2>
+                    <div id="last-execution-display">
+                        <div class="loading">Loading...</div>
+                    </div>
+                </section>
+
+                <section class="executions-section" style="display:none">
+                    <h2>Cancelled Executions</h2>
+                    <div id="cancelled-executions-display">
+                        <div class="no-stats-message">No cancelled executions.</div>
+                    </div>
+                </section>
+            </div>
+
+            <div class="overview-right">
+                <section class="projects-section">
+                    <h2 class="collapsible-header" id="projects-header">
+                        <span>Registered Projects</span>
+                        <span class="toggle-icon">▼</span>
+                    </h2>
+                    <div id="projects-display" class="collapsible-content" style="display:none">
+                        <div class="loading">Loading projects...</div>
+                    </div>
+                </section>
+
+                <section class="projects-section">
+                    <h2 class="collapsible-header" id="available-tools-header">
+                        <span>Available Tools (Disabled)</span>
+                        <span class="toggle-icon">▼</span>
+                    </h2>
+                    <div id="available-tools-display" class="collapsible-content" style="display:none">
+                        <div class="loading">Loading tools...</div>
+                    </div>
+                </section>
+
+                <section class="projects-section">
+                    <h2 class="collapsible-header" id="available-modes-header">
+                        <span>Available Modes</span>
+                        <span class="toggle-icon">▼</span>
+                    </h2>
+                    <div id="available-modes-display" class="collapsible-content" style="display:none">
+                        <div class="loading">Loading modes...</div>
+                    </div>
+                </section>
+
+                <section class="projects-section">
+                    <h2 class="collapsible-header" id="available-contexts-header">
+                        <span>Available Contexts</span>
+                        <span class="toggle-icon">▼</span>
+                    </h2>
+                    <div id="available-contexts-display" class="collapsible-content" style="display:none">
+                        <div class="loading">Loading contexts...</div>
+                    </div>
+                </section>
+            </div>
         </div>
     </div>
 
-    <div id="error-container"></div>
-    <div id="log-container" class="log-container"></div>
+    <!-- Logs Page -->
+    <div id="page-logs" class="page-view" style="display:none">
+        <div id="error-container"></div>
+        <div style="position: relative;">
+            <button id="copy-logs-btn" class="copy-logs-btn" title="Copy logs">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span class="copy-logs-text">copy logs</span>
+            </button>
+            <div id="log-container" class="log-container"></div>
+        </div>
+    </div>
 
-    <div id="stats-section" style="display:none; margin-top:20px;">
-        <div style="text-align:center; margin-bottom:20px;">
+    <!-- Advanced Stats Page -->
+    <div id="page-stats" class="page-view" style="display:none">
+        <div class="controls">
             <button id="refresh-stats" class="btn">Refresh Stats</button>
             <button id="clear-stats" class="btn">Clear Stats</button>
         </div>
@@ -280,9 +151,8 @@
         <div id="stats-summary" style="margin-bottom:20px; text-align:center;"></div>
         <div id="estimator-name" style="text-align:center; margin-bottom:10px;"></div>
         <div id="no-stats-message" style="text-align:center; color:var(--text-muted); font-style:italic; display:none;">
-            No tool stats collected. Have you enabled tool stats collection in the configuration?
+            No tool stats collected yet.
         </div>
-
 
         <div class="charts-container">
             <div class="chart-group">
@@ -304,11 +174,151 @@
         </div>
     </div>
 
-    <script>
-        $(document).ready(function () {
-            const dashboard = new Dashboard();
-        });
-    </script>
+    <!-- Add Language Modal -->
+    <div id="add-language-modal" class="modal" style="display:none">
+        <div class="modal-content">
+            <span class="modal-close">&times;</span>
+            <h3>Add Language</h3>
+            <p id="modal-project-info" style="margin: 15px 0; color: var(--text-primary); line-height: 1.5;">
+                Adding a language to serena config of project <strong id="modal-project-name"></strong>.
+            </p>
+            <p style="margin: 15px 0; color: var(--text-muted); font-size: 13px; line-height: 1.5;">
+                Note that this may download some dependencies needed for the language server and then start it,
+                it may take a few seconds before the LS is responsive.
+            </p>
+            <div style="margin: 20px 0;">
+                <label for="modal-language-select" style="display: block; margin-bottom: 8px; font-weight: 500;">Select
+                    Language:</label>
+                <select id="modal-language-select" class="language-select"
+                        style="width: 100%; padding: 8px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); font-size: 14px;">
+                </select>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button id="modal-cancel-btn" class="btn"
+                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
+                </button>
+                <button id="modal-add-btn" class="btn" style="padding: 8px 16px;">Add Language</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Remove Language Confirmation Modal -->
+    <div id="remove-language-modal" class="modal" style="display:none">
+        <div class="modal-content">
+            <span class="modal-close modal-close-remove">&times;</span>
+            <p style="margin: 20px 0; color: var(--text-primary); line-height: 1.5; font-size: 15px;">
+                Remove language <strong id="remove-language-name"></strong> from configuration?
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button id="remove-modal-cancel-btn" class="btn"
+                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
+                </button>
+                <button id="remove-modal-ok-btn" class="btn" style="padding: 8px 16px;">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Memory Modal -->
+    <div id="edit-memory-modal" class="modal" style="display:none">
+        <div class="modal-content modal-content-large">
+            <span class="modal-close modal-close-edit-memory">&times;</span>
+            <h3 style="margin-bottom: 20px;">Memory: <span id="edit-memory-name"></span></h3>
+            <textarea id="edit-memory-content" class="memory-editor" rows="20"
+                      style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-family: 'Courier New', monospace; font-size: 13px; resize: vertical;"></textarea>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button id="edit-memory-cancel-btn" class="btn"
+                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
+                </button>
+                <button id="edit-memory-save-btn" class="btn" style="padding: 8px 16px;">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Memory Confirmation Modal -->
+    <div id="delete-memory-modal" class="modal" style="display:none">
+        <div class="modal-content">
+            <span class="modal-close modal-close-delete-memory">&times;</span>
+            <p style="margin: 20px 0; color: var(--text-primary); line-height: 1.5; font-size: 15px;">
+                Delete memory <strong id="delete-memory-name"></strong>?
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button id="delete-memory-cancel-btn" class="btn"
+                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
+                </button>
+                <button id="delete-memory-ok-btn" class="btn" style="padding: 8px 16px;">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Memory Modal -->
+    <div id="create-memory-modal" class="modal" style="display:none">
+        <div class="modal-content">
+            <span class="modal-close modal-close-create-memory">&times;</span>
+            <p id="create-memory-project-info" style="margin: 15px 0; color: var(--text-primary); line-height: 1.5;">
+                Create a new memory for project <strong id="create-memory-project-name"></strong>.
+            </p>
+            <p style="margin: 15px 0; color: var(--text-muted); font-size: 13px; line-height: 1.5;">
+                Memory names should be descriptive and use underscores instead of spaces (e.g., "api_architecture",
+                "testing_guidelines").
+            </p>
+            <div style="margin: 20px 0;">
+                <label for="create-memory-name-input" style="display: block; margin-bottom: 8px; font-weight: 500;">Memory
+                    Name:</label>
+                <input type="text" id="create-memory-name-input" class="memory-name-input"
+                       placeholder="e.g., project_overview"
+                       style="width: 100%; padding: 8px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); font-size: 14px;">
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button id="create-memory-cancel-btn" class="btn"
+                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
+                </button>
+                <button id="create-memory-create-btn" class="btn" style="padding: 8px 16px;">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cancel Execution Confirmation Modal -->
+    <div id="cancel-execution-modal" class="modal" style="display:none">
+        <div class="modal-content">
+            <span class="modal-close modal-close-cancel-execution">&times;</span>
+            <p style="margin: 20px 0; color: var(--text-primary); line-height: 1.5; font-size: 15px;">
+                Are you sure? The execution will continue running until timeout, it will simply no longer be in the queue.
+                Abandoning a running execution is only advised as a measure for unblocking Serena.
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button id="cancel-execution-cancel-btn" class="btn"
+                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
+                </button>
+                <button id="cancel-execution-ok-btn" class="btn" style="padding: 8px 16px;">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Serena Config Modal -->
+    <div id="edit-serena-config-modal" class="modal" style="display:none">
+        <div class="modal-content modal-content-large">
+            <span class="modal-close modal-close-edit-serena-config">&times;</span>
+            <h3 style="margin-bottom: 10px;">Global Serena Configuration</h3>
+            <p style="margin: 10px 0 20px 0; color: var(--text-muted); font-size: 13px; line-height: 1.5;">
+                Note: Changes to the configuration will only take effect after Serena is restarted.
+            </p>
+            <textarea id="edit-serena-config-content" class="memory-editor" rows="20"
+                      style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-family: 'Courier New', monospace; font-size: 13px; resize: vertical;"></textarea>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button id="edit-serena-config-cancel-btn" class="btn"
+                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
+                </button>
+                <button id="edit-serena-config-save-btn" class="btn" style="padding: 8px 16px;">Save</button>
+            </div>
+        </div>
+    </div>
+</div>    <!-- End of Main -->
+
+<script>
+    $(document).ready(function () {
+        const dashboard = new Dashboard();
+    });
+</script>
 </body>
 
 </html>

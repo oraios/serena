@@ -17,6 +17,7 @@ from serena.constants import (
     DEFAULT_CONTEXT,
     DEFAULT_MODES,
     INTERNAL_MODE_YAMLS_DIR,
+    SERENA_FILE_ENCODING,
     SERENAS_OWN_CONTEXT_YAMLS_DIR,
     SERENAS_OWN_MODE_YAMLS_DIR,
     USER_CONTEXT_YAMLS_DIR,
@@ -56,7 +57,7 @@ class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
     @classmethod
     def from_yaml(cls, yaml_path: str | Path) -> Self:
         """Load a mode from a YAML file."""
-        with open(yaml_path, encoding="utf-8") as f:
+        with open(yaml_path, encoding=SERENA_FILE_ENCODING) as f:
             data = yaml.safe_load(f)
         name = data.pop("name", Path(yaml_path).stem)
         return cls(name=name, **data)
@@ -139,7 +140,7 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
     @classmethod
     def from_yaml(cls, yaml_path: str | Path) -> Self:
         """Load a context from a YAML file."""
-        with open(yaml_path, encoding="utf-8") as f:
+        with open(yaml_path, encoding=SERENA_FILE_ENCODING) as f:
             data = yaml.safe_load(f)
         name = data.pop("name", Path(yaml_path).stem)
         # Ensure backwards compatibility for tool_description_overrides

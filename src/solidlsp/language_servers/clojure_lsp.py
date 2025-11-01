@@ -112,7 +112,7 @@ class ClojureLSP(SolidLanguageServer):
         """Setup runtime dependencies for clojure-lsp and return the command to start the server."""
         verify_clojure_cli()
         deps = ClojureLSP.runtime_dependencies
-        dependency = deps.single_for_current_platform()
+        dependency = deps.get_single_dep_for_current_platform()
 
         clojurelsp_ls_dir = cls.ls_resources_dir(solidlsp_settings)
         clojurelsp_executable_path = deps.binary_path(clojurelsp_ls_dir)

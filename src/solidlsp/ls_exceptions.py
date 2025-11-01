@@ -2,6 +2,8 @@
 This module contains the exceptions raised by the framework.
 """
 
+from solidlsp.ls_config import Language
+
 
 class SolidLSPException(Exception):
     def __init__(self, message: str, cause: Exception | None = None):
@@ -25,6 +27,16 @@ class SolidLSPException(Exception):
         from .ls_handler import LanguageServerTerminatedException
 
         return isinstance(self.cause, LanguageServerTerminatedException)
+
+    def get_affected_language(self) -> Language | None:
+        """
+        :return: the affected language for the case where the exception is caused by the language server having terminated
+        """
+        from .ls_handler import LanguageServerTerminatedException
+
+        if isinstance(self.cause, LanguageServerTerminatedException):
+            return self.cause.language
+        return None
 
     def __str__(self) -> str:
         """

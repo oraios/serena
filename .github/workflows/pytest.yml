@@ -28,6 +28,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ">=1.17.0"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
       - name: Ensure cached directory exist before calling cache-related actions
         shell: bash
         run: |
@@ -102,10 +106,17 @@ jobs:
           swiftly use 6.1.2
           echo "~/.swiftly/bin" >> $GITHUB_PATH
           echo "Swiftly installed successfully"
+          # Verify sourcekit-lsp is working before proceeding
+          echo "=== Verifying sourcekit-lsp installation ==="
+          which sourcekit-lsp || echo "Warning: sourcekit-lsp not found in PATH"
+          sourcekit-lsp --help || echo "Warning: sourcekit-lsp not responding"
       - name: Install Swift with swiftly (Ubuntu)
         if: runner.os == 'Linux'
         run: |
           echo "=== Installing swiftly on Ubuntu ==="
+          # Install dependencies BEFORE Swift to avoid exit code 1
+          sudo apt-get update
+          sudo apt-get -y install libcurl4-openssl-dev
           curl -O https://download.swift.org/swiftly/linux/swiftly-$(uname -m).tar.gz && \
           tar zxf swiftly-$(uname -m).tar.gz && \
           ./swiftly init --quiet-shell-followup && \
@@ -113,10 +124,13 @@ jobs:
           hash -r
           swiftly install --use 6.1.2
           swiftly use 6.1.2
-          sudo apt-get -y install libcurl4-openssl-dev
           echo "=== Adding Swift toolchain to PATH ==="
           echo "$HOME/.local/share/swiftly/bin" >> $GITHUB_PATH
           echo "Swiftly installed successfully!"
+          # Verify sourcekit-lsp is working before proceeding
+          echo "=== Verifying sourcekit-lsp installation ==="
+          which sourcekit-lsp || echo "Warning: sourcekit-lsp not found in PATH"
+          sourcekit-lsp --help || echo "Warning: sourcekit-lsp not responding"
       - name: Install Ruby
         uses: ruby/setup-ruby@v1
         with:
@@ -133,6 +147,47 @@ jobs:
         shell: bash
         run: |
           Rscript -e "install.packages('languageserver', repos='https://cloud.r-project.org')"
+      - name: Set up Julia
+        uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.10'
+      - name: Install Julia LanguageServer
+        shell: bash
+        run: julia -e 'using Pkg; Pkg.add("LanguageServer")'
+      - name: Setup Haskell toolchain
+        if: runner.os != 'Windows'
+        uses: haskell/ghcup-setup@v1
+        with:
+          ghc: '9.12.2'
+          cabal: '3.10.3.0'
+          hls: '2.11.0.0'
+      - name: Verify Haskell tools
+        if: runner.os != 'Windows'
+        run: |
+          echo "Verifying installed Haskell tools:"
+          which ghc && ghc --version
+          which cabal && cabal --version
+          # HLS verification - non-blocking in case of version incompatibility
+          if command -v haskell-language-server-wrapper &>/dev/null; then
+            echo "Found haskell-language-server-wrapper"
+            haskell-language-server-wrapper --version || echo "WARNING: HLS wrapper found but version check failed"
+          elif command -v haskell-language-server &>/dev/null; then
+            echo "Found haskell-language-server"
+            haskell-language-server --version || echo "WARNING: HLS found but version check failed"
+          else
+            echo "WARNING: HLS not found (may be incompatible with GHC 9.12.2)"
+            echo "This is not a critical error - tests will use HLS if available at runtime"
+          fi
+        shell: bash
+      - name: Pre-build Haskell test project for HLS
+        if: runner.os != 'Windows'
+        run: |
+          cd test/resources/repos/haskell/test_repo
+          cabal update
+          cabal build --only-dependencies
+          cabal build
+          echo "Haskell test project built successfully"
+        shell: bash
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
@@ -203,6 +258,26 @@ jobs:
             echo "$LUA_LS_DIR/bin" >> $GITHUB_PATH
             rm lua-ls.zip
           fi
+      - name: Install Perl::LanguageServer
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y cpanminus build-essential libanyevent-perl libio-aio-perl
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            brew install cpanminus
+          fi
+          PERL_MM_USE_DEFAULT=1 cpanm --notest --force Perl::LanguageServer
+          # Set up Perl local::lib environment for subsequent steps
+          echo "PERL5LIB=$HOME/perl5/lib/perl5${PERL5LIB:+:${PERL5LIB}}" >> $GITHUB_ENV
+          echo "PERL_LOCAL_LIB_ROOT=$HOME/perl5${PERL_LOCAL_LIB_ROOT:+:${PERL_LOCAL_LIB_ROOT}}" >> $GITHUB_ENV
+          echo "PERL_MB_OPT=--install_base \"$HOME/perl5\"" >> $GITHUB_ENV
+          echo "PERL_MM_OPT=INSTALL_BASE=$HOME/perl5" >> $GITHUB_ENV
+          echo "$HOME/perl5/bin" >> $GITHUB_PATH
+      - name: Install Elm
+        shell: bash
+        run: npm install -g elm@0.19.1-6
       - name: Install Nix
         if: runner.os != 'Windows'  # Nix doesn't support Windows natively
         uses: cachix/install-nix-action@v30
@@ -214,14 +289,47 @@ jobs:
         run: |
           # Install nixd using nix
           nix profile install github:nix-community/nixd
-          
+
           # Verify nixd is installed and working
           if ! command -v nixd &> /dev/null; then
             echo "nixd installation failed or not in PATH"
             exit 1
           fi
-          
+
           echo "$HOME/.nix-profile/bin" >> $GITHUB_PATH
+      - name: Verify Nix package build
+        if: runner.os != 'Windows'  # Nix only supported on Linux/macOS
+        shell: bash
+        run: |
+          # Verify the flake builds successfully
+          nix build --no-link
+      - name: Install Regal (Rego Language Server)
+        shell: bash
+        run: |
+          REGAL_VERSION="0.36.1"
+
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            if [[ "$(uname -m)" == "x86_64" ]]; then
+              curl -L -o regal https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Linux_x86_64
+            else
+              curl -L -o regal https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Linux_arm64
+            fi
+            chmod +x regal
+            sudo mv regal /usr/local/bin/
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            if [[ "$(uname -m)" == "x86_64" ]]; then
+              curl -L -o regal https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Darwin_x86_64
+            else
+              curl -L -o regal https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Darwin_arm64
+            fi
+            chmod +x regal
+            sudo mv regal /usr/local/bin/
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            curl -L -o regal.exe https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Windows_x86_64.exe
+            mkdir -p "$HOME/bin"
+            mv regal.exe "$HOME/bin/"
+            echo "$HOME/bin" >> $GITHUB_PATH
+          fi
       - name: Install uv
         shell: bash
         run: curl -LsSf https://astral.sh/uv/install.sh | sh

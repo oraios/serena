@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Optional, Self, TypeVar
 
 import requests
+from requests import Response
 from sensai.util.string import ToStringMixin
 
 from serena.project import Project
@@ -78,6 +79,7 @@ class JetBrainsPluginClient(ToStringMixin):
     def _make_request(self, method: str, endpoint: str, data: Optional[dict] = None) -> dict[str, Any]:
         url = f"{self.base_url}{endpoint}"
 
+        response: Response | None = None
         try:
             if method.upper() == "GET":
                 response = self.session.get(url, timeout=self.timeout)
@@ -100,8 +102,10 @@ class JetBrainsPluginClient(ToStringMixin):
             raise ConnectionError(f"Failed to connect to Serena service at {url}: {e}")
         except requests.exceptions.Timeout as e:
             raise ConnectionError(f"Request to {url} timed out: {e}")
-        except requests.exceptions.HTTPError:
-            raise APIError(f"API request failed with status {response.status_code}: {response.text}")
+        except requests.exceptions.HTTPError as e:
+            if response is not None:
+                raise APIError(f"API request failed with status {response.status_code}: {response.text}")
+            raise APIError(f"API request failed with HTTP error: {e}")
         except requests.exceptions.RequestException as e:
             raise SerenaClientError(f"Request failed: {e}")
 
@@ -132,7 +136,7 @@ class JetBrainsPluginClient(ToStringMixin):
         self, name_path: str, relative_path: str | None = None, include_body: bool = False, depth: int = 0, include_location: bool = False
     ) -> dict[str, Any]:
         """
-        Find symbols by name.
+        Finds symbols by name.
 
         :param name_path: the name path to match
         :param relative_path: the relative path to which to restrict the search
@@ -152,7 +156,7 @@ class JetBrainsPluginClient(ToStringMixin):
 
     def find_references(self, name_path: str, relative_path: str) -> dict[str, Any]:
         """
-        Find references to a symbol.
+        Finds references to a symbol.
 
         :param name_path: the name path of the symbol
         :param relative_path: the relative path
@@ -168,10 +172,31 @@ class JetBrainsPluginClient(ToStringMixin):
         request_data = {"relativePath": relative_path}
         return self._make_request("POST", "/getSymbolsOverview", request_data)
 
+    def rename_symbol(
+        self, name_path: str, relative_path: str, new_name: str, rename_in_comments: bool, rename_in_text_occurrences: bool
+    ) -> None:
+        """
+        Renames a symbol.
+
+        :param name_path: the name path of the symbol
+        :param relative_path: the relative path
+        :param new_name: the new name for the symbol
+        :param rename_in_comments: whether to rename in comments
+        :param rename_in_text_occurrences: whether to rename in text occurrences
+        """
+        request_data = {
+            "namePath": name_path,
+            "relativePath": relative_path,
+            "newName": new_name,
+            "renameInComments": rename_in_comments,
+            "renameInTextOccurrences": rename_in_text_occurrences,
+        }
+        self._make_request("POST", "/renameSymbol", request_data)
+
     def is_service_available(self) -> bool:
         try:
-            response = self.heartbeat()
-            return response.get("status") == "OK"
+            self.project_root()
+            return True
         except (ConnectionError, APIError):
             return False
 

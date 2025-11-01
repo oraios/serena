@@ -119,7 +119,13 @@ class TopLevelCommands(AutoRegisteringGroup):
         show_default=True,
         help="Built-in mode names or paths to custom mode YAMLs.",
     )
-    @click.option("--transport", type=click.Choice(["stdio", "sse"]), default="stdio", show_default=True, help="Transport protocol.")
+    @click.option(
+        "--transport",
+        type=click.Choice(["stdio", "sse", "streamable-http"]),
+        default="stdio",
+        show_default=True,
+        help="Transport protocol.",
+    )
     @click.option("--host", type=str, default="0.0.0.0", show_default=True)
     @click.option("--port", type=int, default=8000, show_default=True)
     @click.option("--enable-web-dashboard", type=bool, is_flag=False, default=None, help="Override dashboard setting in config.")
@@ -137,7 +143,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         project_file_arg: str | None,
         context: str,
         modes: tuple[str, ...],
-        transport: Literal["stdio", "sse"],
+        transport: Literal["stdio", "sse", "streamable-http"],
         host: str,
         port: int,
         enable_web_dashboard: bool | None,
@@ -410,20 +416,23 @@ class ProjectCommands(AutoRegisteringGroup):
     @staticmethod
     @click.command("generate-yml", help="Generate a project.yml file.")
     @click.argument("project_path", type=click.Path(exists=True, file_okay=False), default=os.getcwd())
-    @click.option("--language", type=str, default=None, help="Programming language; inferred if not specified.")
-    def generate_yml(project_path: str, language: str | None = None) -> None:
+    @click.option(
+        "--language", type=str, multiple=True, help="Programming language(s); inferred if not specified. Can be passed multiple times."
+    )
+    def generate_yml(project_path: str, language: tuple[str, ...]) -> None:
         yml_path = os.path.join(project_path, ProjectConfig.rel_path_to_project_yml())
         if os.path.exists(yml_path):
             raise FileExistsError(f"Project file {yml_path} already exists.")
-        lang_inst = None
+        languages: list[Language] = []
         if language:
-            try:
-                lang_inst = Language[language.upper()]
-            except KeyError:
-                all_langs = [l.name.lower() for l in Language.iter_all(include_experimental=True)]
-                raise ValueError(f"Unknown language '{language}'. Supported: {all_langs}")
-        generated_conf = ProjectConfig.autogenerate(project_root=project_path, project_language=lang_inst)
-        print(f"Generated project.yml with language {generated_conf.language.value} at {yml_path}.")
+            for lang in language:
+                try:
+                    languages.append(Language(lang.lower()))
+                except ValueError:
+                    all_langs = [l.value for l in Language]
+                    raise ValueError(f"Unknown language '{lang}'. Supported: {all_langs}")
+        generated_conf = ProjectConfig.autogenerate(project_root=project_path, languages=languages if languages else None)
+        print(f"Generated project.yml with languages {generated_conf.languages} at {yml_path}.")
 
     @staticmethod
     @click.command("index", help="Index a project by saving symbols to the LSP cache.")
@@ -451,34 +460,44 @@ class ProjectCommands(AutoRegisteringGroup):
     def _index_project(project: str, log_level: str, timeout: float) -> None:
         lvl = logging.getLevelNamesMapping()[log_level.upper()]
         logging.configure(level=lvl)
+        serena_config = SerenaConfig.from_config_file()
         proj = Project.load(os.path.abspath(project))
-        click.echo(f"Indexing symbols in project {project}…")
-        ls = proj.create_language_server(log_level=lvl, ls_timeout=timeout)
-        log_file = os.path.join(project, ".serena", "logs", "indexing.txt")
+        click.echo(f"Indexing symbols in project {project} …")
+        ls_mgr = proj.create_language_server_manager(
+            log_level=lvl, ls_timeout=timeout, ls_specific_settings=serena_config.ls_specific_settings
+        )
+        try:
+            log_file = os.path.join(project, ".serena", "logs", "indexing.txt")
 
-        collected_exceptions: list[Exception] = []
-        files_failed = []
-        with ls.start_server():
             files = proj.gather_source_files()
-            for i, f in enumerate(tqdm(files, desc="Indexing")):
-                try:
-                    ls.request_document_symbols(f, include_body=False)
-                    ls.request_document_symbols(f, include_body=True)
-                except Exception as e:
-                    log.error(f"Failed to index {f}, continuing.")
-                    collected_exceptions.append(e)
-                    files_failed.append(f)
-                if (i + 1) % 10 == 0:
-                    ls.save_cache()
-            ls.save_cache()
-        click.echo(f"Symbols saved to {ls.cache_path}")
-        if len(files_failed) > 0:
-            os.makedirs(os.path.dirname(log_file), exist_ok=True)
-            with open(log_file, "w") as f:
-                for file, exception in zip(files_failed, collected_exceptions, strict=True):
-                    f.write(f"{file}\n")
-                    f.write(f"{exception}\n")
-            click.echo(f"Failed to index {len(files_failed)} files, see:\n{log_file}")
+
+            servers = list(ls_mgr.iter_language_servers())
+            for k, ls in enumerate(servers, start=1):
+                click.echo(f"Indexing for language {ls.language.value} ({k}/{len(servers)}) …")
+                collected_exceptions: list[Exception] = []
+                files_failed = []
+                for i, f in enumerate(tqdm(files, desc="Indexing")):
+                    try:
+                        ls.request_document_symbols(f, include_body=False)
+                        ls.request_document_symbols(f, include_body=True)
+                    except Exception as e:
+                        log.error(f"Failed to index {f}, continuing.")
+                        collected_exceptions.append(e)
+                        files_failed.append(f)
+                    if (i + 1) % 10 == 0:
+                        ls.save_cache()
+                ls.save_cache()
+                click.echo(f"Symbols saved to {ls.cache_path}")
+
+            if len(files_failed) > 0:
+                os.makedirs(os.path.dirname(log_file), exist_ok=True)
+                with open(log_file, "w") as f:
+                    for file, exception in zip(files_failed, collected_exceptions, strict=True):
+                        f.write(f"{file}\n")
+                        f.write(f"{exception}\n")
+                click.echo(f"Failed to index {len(files_failed)} files, see:\n{log_file}")
+        finally:
+            ls_mgr.stop_all()
 
     @staticmethod
     @click.command("is_ignored_path", help="Check if a path is ignored by the project configuration.")
@@ -515,16 +534,20 @@ class ProjectCommands(AutoRegisteringGroup):
         if proj.is_ignored_path(file, ignore_non_source_files=True):
             click.echo(f"'{file}' is ignored or declared as non-code file by the project configuration, won't index.")
             exit(1)
-        ls = proj.create_language_server()
-        with ls.start_server():
-            symbols, _ = ls.request_document_symbols(file, include_body=False)
-            ls.request_document_symbols(file, include_body=True)
-            if verbose:
-                click.echo(f"Symbols in file '{file}':")
-                for symbol in symbols:
-                    click.echo(f"  - {symbol['name']} at line {symbol['selectionRange']['start']['line']} of kind {symbol['kind']}")
-            ls.save_cache()
-            click.echo(f"Successfully indexed file '{file}', {len(symbols)} symbols saved to {ls.cache_path}.")
+        ls_mgr = proj.create_language_server_manager()
+        try:
+            for ls in ls_mgr.iter_language_servers():
+                click.echo(f"Indexing for language {ls.language.value} …")
+                symbols, _ = ls.request_document_symbols(file, include_body=False)
+                ls.request_document_symbols(file, include_body=True)
+                if verbose:
+                    click.echo(f"Symbols in file '{file}':")
+                    for symbol in symbols:
+                        click.echo(f"  - {symbol['name']} at line {symbol['selectionRange']['start']['line']} of kind {symbol['kind']}")
+                ls.save_cache()
+                click.echo(f"Successfully indexed file '{file}', {len(symbols)} symbols saved to {ls.cache_path}.")
+        finally:
+            ls_mgr.stop_all()
 
     @staticmethod
     @click.command("health-check", help="Perform a comprehensive health check of the project's tools and language server.")

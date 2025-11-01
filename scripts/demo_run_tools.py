@@ -12,7 +12,7 @@ from serena.constants import REPO_ROOT
 from serena.tools import FindFileTool, FindReferencingSymbolsTool, GetSymbolsOverviewTool, SearchForPatternTool
 
 if __name__ == "__main__":
-    agent = SerenaAgent(project=REPO_ROOT, serena_config=SerenaConfig(gui_log_window_enabled=False, web_dashboard=False))
+    agent = SerenaAgent(project=REPO_ROOT, serena_config=SerenaConfig(gui_log_window_enabled=False, web_dashboard=True))
 
     # apply a tool
     find_refs_tool = agent.get_tool(FindReferencingSymbolsTool)
@@ -21,6 +21,7 @@ if __name__ == "__main__":
     overview_tool = agent.get_tool(GetSymbolsOverviewTool)
 
     result = agent.execute_task(
-        lambda: overview_tool.apply("src/solidlsp/ls.py"),
+        lambda: overview_tool.apply_ex(relative_file_path="src/solidlsp/ls.py"),
     )
     pprint(json.loads(result))
+    # input("Press Enter to continue...")

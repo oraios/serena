@@ -39,8 +39,24 @@ class RuntimeDependencyPaths:
 
 
 class EclipseJDTLS(SolidLanguageServer):
-    """
+    r"""
     The EclipseJDTLS class provides a Java specific implementation of the LanguageServer class
+
+    You can configure the following options in ls_specific_settings (in serena_config.yml):
+        - maven_user_settings: Path to Maven settings.xml file (default: ~/.m2/settings.xml)
+        - gradle_user_home: Path to Gradle user home directory (default: ~/.gradle)
+
+    Note: Gradle wrapper is disabled by default. Projects will use the bundled Gradle distribution.
+
+    Example configuration in ~/.serena/serena_config.yml:
+    ```yaml
+    ls_specific_settings:
+      java:
+        maven_user_settings: "/home/user/.m2/settings.xml"  # Unix/Linux/Mac
+        # maven_user_settings: 'C:\\Users\\YourName\\.m2\\settings.xml'  # Windows (use single quotes!)
+        gradle_user_home: "/home/user/.gradle"  # Unix/Linux/Mac
+        # gradle_user_home: 'C:\\Users\\YourName\\.gradle'  # Windows (use single quotes!)
+    ```
     """
 
     def __init__(
@@ -326,6 +342,57 @@ class EclipseJDTLS(SolidLanguageServer):
             repository_absolute_path = os.path.abspath(repository_absolute_path)
         repo_uri = pathlib.Path(repository_absolute_path).as_uri()
 
+        # Load user's Maven and Gradle configuration paths from ls_specific_settings["java"]
+        custom_java_settings = self._solidlsp_settings.ls_specific_settings.get(self.get_language_enum_instance(), {})
+
+        # Maven settings: default to ~/.m2/settings.xml
+        default_maven_settings = os.path.join(os.path.expanduser("~"), ".m2", "settings.xml")
+        maven_user_settings = None
+        if "maven_user_settings" in custom_java_settings:
+            # User explicitly provided a path
+            maven_settings_path = custom_java_settings["maven_user_settings"]
+            if not os.path.exists(maven_settings_path):
+                error_msg = (
+                    f"Maven settings file not found: {maven_settings_path}. "
+                    f"Fix: create the file, update path in ~/.serena/serena_config.yml (ls_specific_settings -> java -> maven_user_settings), "
+                    f"or remove the setting to use default (~/.m2/settings.xml)"
+                )
+                self.logger.log(error_msg, logging.ERROR)
+                raise FileNotFoundError(error_msg)
+            maven_user_settings = maven_settings_path
+            self.logger.log(f"Using Maven settings from custom location: {maven_user_settings}", logging.INFO)
+        elif os.path.exists(default_maven_settings):
+            maven_user_settings = default_maven_settings
+            self.logger.log(f"Using Maven settings from default location: {maven_user_settings}", logging.INFO)
+        else:
+            self.logger.log(
+                f"Maven settings not found at default location ({default_maven_settings}), will use JDTLS defaults", logging.INFO
+            )
+
+        # Gradle user home: default to ~/.gradle
+        default_gradle_home = os.path.join(os.path.expanduser("~"), ".gradle")
+        gradle_user_home = None
+        if "gradle_user_home" in custom_java_settings:
+            # User explicitly provided a path
+            gradle_user_home_path = custom_java_settings["gradle_user_home"]
+            if not os.path.exists(gradle_user_home_path):
+                error_msg = (
+                    f"Gradle user home directory not found: {gradle_user_home_path}. "
+                    f"Fix: create the directory, update path in ~/.serena/serena_config.yml (ls_specific_settings -> java -> gradle_user_home), "
+                    f"or remove the setting to use default (~/.gradle)"
+                )
+                self.logger.log(error_msg, logging.ERROR)
+                raise FileNotFoundError(error_msg)
+            gradle_user_home = gradle_user_home_path
+            self.logger.log(f"Using Gradle user home from custom location: {gradle_user_home}", logging.INFO)
+        elif os.path.exists(default_gradle_home):
+            gradle_user_home = default_gradle_home
+            self.logger.log(f"Using Gradle user home from default location: {gradle_user_home}", logging.INFO)
+        else:
+            self.logger.log(
+                f"Gradle user home not found at default location ({default_gradle_home}), will use JDTLS defaults", logging.INFO
+            )
+
         initialize_params = {
             "locale": "en",
             "rootPath": repository_absolute_path,
@@ -512,7 +579,7 @@ class EclipseJDTLS(SolidLanguageServer):
                             "checkProjectSettingsExclusions": False,
                             "updateBuildConfiguration": "interactive",
                             "maven": {
-                                "userSettings": None,
+                                "userSettings": maven_user_settings,
                                 "globalSettings": None,
                                 "notCoveredPluginExecutionSeverity": "warning",
                                 "defaultMojoExecutionAction": "ignore",
@@ -538,7 +605,7 @@ class EclipseJDTLS(SolidLanguageServer):
                                 "offline": {"enabled": False},
                                 "arguments": None,
                                 "jvmArguments": None,
-                                "user": {"home": None},
+                                "user": {"home": gradle_user_home},
                                 "annotationProcessing": {"enabled": True},
                             },
                             "exclusions": [
@@ -549,7 +616,9 @@ class EclipseJDTLS(SolidLanguageServer):
                             ],
                             "generatesMetadataFilesAtProjectRoot": False,
                         },
-                        "maven": {"downloadSources": True, "updateSnapshots": True},
+                        # Set updateSnapshots to False to improve performance and avoid unnecessary network calls
+                        # Snapshots will only be updated when explicitly requested by the user
+                        "maven": {"downloadSources": True, "updateSnapshots": False},
                         "eclipse": {"downloadSources": True},
                         "signatureHelp": {"enabled": True, "description": {"enabled": True}},
                         "implementationsCodeLens": {"enabled": True},
