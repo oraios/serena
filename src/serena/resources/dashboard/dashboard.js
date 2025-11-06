@@ -361,7 +361,7 @@ class Dashboard {
         this.initializeTheme();
 
         // Initialize sponsor rotation
-        //this.sponsorRotation = new SponsorRotation();
+        this.sponsorRotation = new SponsorRotation();
 
         // Add ESC key handler for closing modals
         $(document).keydown(function (e) {
