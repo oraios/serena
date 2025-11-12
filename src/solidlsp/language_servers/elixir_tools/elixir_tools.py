@@ -251,7 +251,7 @@ class ElixirTools(SolidLanguageServer):
                     "executeCommand": {"dynamicRegistration": True},
                 },
                 "window": {
-                    "showMessage": True,
+                    "showMessage": {"messageActionItem": {"additionalPropertiesSupport": True}},
                     "showDocument": {"support": True},
                     "workDoneProgress": True,
                 },
