@@ -22,19 +22,23 @@ You can create a project either
 
 To explicitly create a project, use the following command while in the project directory:
 
-    <serena> project generate-yml [options]
+    <serena> project create [options]
 
 For instance, when using `uvx`, run
 
-    uvx --from git+https://github.com/oraios/serena serena project generate-yml [options]
+    uvx --from git+https://github.com/oraios/serena serena project create [options]
 
  * For an empty project, you will need to specify the programming language
    (e.g., `--language python`). 
  * For an existing project, the main programming language will be detected automatically,
    but you can choose to explicitly specify multiple languages by passing the `--language` parameter
    multiple times (e.g. `--language python --language typescript`).
+ * You can optionally specify a custom project name with `--name "My Project"`.
+ * You can immediately index the project after creation with `--index`.
 
 After creation, you can adjust the project settings in the generated `.serena/project.yml` file.
+
+**Note:** The old `project generate-yml` command is deprecated but still functional for backward compatibility.
 
 (indexing)=
 ### Indexing

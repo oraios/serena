@@ -414,15 +414,21 @@ class ProjectCommands(AutoRegisteringGroup):
         )
 
     @staticmethod
-    @click.command("generate-yml", help="Generate a project.yml file.")
-    @click.argument("project_path", type=click.Path(exists=True, file_okay=False), default=os.getcwd())
-    @click.option(
-        "--language", type=str, multiple=True, help="Programming language(s); inferred if not specified. Can be passed multiple times."
-    )
-    def generate_yml(project_path: str, language: tuple[str, ...]) -> None:
+    def _create_project(project_path: str, name: str | None, language: tuple[str, ...]) -> ProjectConfig:
+        """
+        Helper method to create a project configuration file.
+
+        :param project_path: Path to the project directory
+        :param name: Optional project name (defaults to directory name if not specified)
+        :param language: Tuple of language names
+        :return: The generated ProjectConfig instance
+        :raises FileExistsError: If project.yml already exists
+        :raises ValueError: If an unsupported language is specified
+        """
         yml_path = os.path.join(project_path, ProjectConfig.rel_path_to_project_yml())
         if os.path.exists(yml_path):
             raise FileExistsError(f"Project file {yml_path} already exists.")
+
         languages: list[Language] = []
         if language:
             for lang in language:
@@ -431,12 +437,68 @@ class ProjectCommands(AutoRegisteringGroup):
                 except ValueError:
                     all_langs = [l.value for l in Language]
                     raise ValueError(f"Unknown language '{lang}'. Supported: {all_langs}")
-        generated_conf = ProjectConfig.autogenerate(project_root=project_path, languages=languages if languages else None)
-        print(f"Generated project.yml with languages {generated_conf.languages} at {yml_path}.")
+
+        generated_conf = ProjectConfig.autogenerate(
+            project_root=project_path, project_name=name, languages=languages if languages else None
+        )
+        return generated_conf
 
     @staticmethod
-    @click.command("index", help="Index a project by saving symbols to the LSP cache.")
+    @click.command("create", help="Create a new Serena project configuration.")
+    @click.argument("project_path", type=click.Path(exists=True, file_okay=False), default=os.getcwd())
+    @click.option("--name", type=str, default=None, help="Project name; defaults to directory name if not specified.")
+    @click.option(
+        "--language", type=str, multiple=True, help="Programming language(s); inferred if not specified. Can be passed multiple times."
+    )
+    @click.option("--index", is_flag=True, help="Index the project after creation.")
+    @click.option(
+        "--log-level",
+        type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+        default="WARNING",
+        help="Log level for indexing (only used if --index is set).",
+    )
+    @click.option("--timeout", type=float, default=10, help="Timeout for indexing a single file (only used if --index is set).")
+    def create(project_path: str, name: str | None, language: tuple[str, ...], index: bool, log_level: str, timeout: float) -> None:
+        try:
+            generated_conf = ProjectCommands._create_project(project_path, name, language)
+            yml_path = os.path.join(project_path, ProjectConfig.rel_path_to_project_yml())
+            click.echo(f"Generated project.yml with languages {generated_conf.languages} at {yml_path}.")
+
+            if index:
+                click.echo("Indexing project...")
+                ProjectCommands._index_project(project_path, log_level, timeout=timeout)
+        except FileExistsError as e:
+            raise click.ClickException(f"Project already exists: {e}\nUse 'serena project index' to index an existing project.")
+        except ValueError as e:
+            raise click.ClickException(str(e))
+
+    @staticmethod
+    @click.command("generate-yml", help="[DEPRECATED] Generate a project.yml file. Use 'project create' instead.")
+    @click.argument("project_path", type=click.Path(exists=True, file_okay=False), default=os.getcwd())
+    @click.option(
+        "--language", type=str, multiple=True, help="Programming language(s); inferred if not specified. Can be passed multiple times."
+    )
+    def generate_yml(project_path: str, language: tuple[str, ...]) -> None:
+        click.echo("Deprecated! Use 'serena project create' instead.")
+        try:
+            generated_conf = ProjectCommands._create_project(project_path, None, language)
+            yml_path = os.path.join(project_path, ProjectConfig.rel_path_to_project_yml())
+            click.echo(f"Generated project.yml with languages {generated_conf.languages} at {yml_path}.")
+        except FileExistsError as e:
+            raise click.ClickException(f"Project already exists: {e}")
+        except ValueError as e:
+            raise click.ClickException(str(e))
+
+    @staticmethod
+    @click.command("index", help="Index a project by saving symbols to the LSP cache. Auto-creates project.yml if it doesn't exist.")
     @click.argument("project", type=click.Path(exists=True), default=os.getcwd(), required=False)
+    @click.option("--name", type=str, default=None, help="Project name (only used if auto-creating project.yml).")
+    @click.option(
+        "--language",
+        type=str,
+        multiple=True,
+        help="Programming language(s) (only used if auto-creating project.yml). Inferred if not specified.",
+    )
     @click.option(
         "--log-level",
         type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
@@ -444,7 +506,20 @@ class ProjectCommands(AutoRegisteringGroup):
         help="Log level for indexing.",
     )
     @click.option("--timeout", type=float, default=10, help="Timeout for indexing a single file.")
-    def index(project: str, log_level: str, timeout: float) -> None:
+    def index(project: str, name: str | None, language: tuple[str, ...], log_level: str, timeout: float) -> None:
+        # Check if project.yml exists, if not auto-create it
+        yml_path = os.path.join(project, ProjectConfig.rel_path_to_project_yml())
+        if not os.path.exists(yml_path):
+            click.echo(f"Project configuration not found at {yml_path}. Auto-creating...")
+            try:
+                generated_conf = ProjectCommands._create_project(project, name, language)
+                click.echo(f"Generated project.yml with languages {generated_conf.languages} at {yml_path}.")
+            except FileExistsError:
+                # Race condition - file was created between check and creation
+                pass
+            except ValueError as e:
+                raise click.ClickException(str(e))
+
         ProjectCommands._index_project(project, log_level, timeout=timeout)
 
     @staticmethod

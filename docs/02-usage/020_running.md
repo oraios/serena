@@ -178,9 +178,12 @@ Here are some examples of commands you might find useful:
 <serena> tools description find_symbol
 
 # creating a new Serena project in the current directory 
-<serena> project generate-yml
+<serena> project create
 
-# indexing the project in the current directory
+# creating and immediately indexing a project
+<serena> project create --index
+
+# indexing the project in the current directory (auto-creates if needed)
 <serena> project index
 
 # run a health check on the project in the current directory
