@@ -473,23 +473,6 @@ class ProjectCommands(AutoRegisteringGroup):
             raise click.ClickException(str(e))
 
     @staticmethod
-    @click.command("generate-yml", help="[DEPRECATED] Generate a project.yml file. Use 'project create' instead.")
-    @click.argument("project_path", type=click.Path(exists=True, file_okay=False), default=os.getcwd())
-    @click.option(
-        "--language", type=str, multiple=True, help="Programming language(s); inferred if not specified. Can be passed multiple times."
-    )
-    def generate_yml(project_path: str, language: tuple[str, ...]) -> None:
-        click.echo("Deprecated! Use 'serena project create' instead.")
-        try:
-            generated_conf = ProjectCommands._create_project(project_path, None, language)
-            yml_path = os.path.join(project_path, ProjectConfig.rel_path_to_project_yml())
-            click.echo(f"Generated project.yml with languages {generated_conf.languages} at {yml_path}.")
-        except FileExistsError as e:
-            raise click.ClickException(f"Project already exists: {e}")
-        except ValueError as e:
-            raise click.ClickException(str(e))
-
-    @staticmethod
     @click.command("index", help="Index a project by saving symbols to the LSP cache. Auto-creates project.yml if it doesn't exist.")
     @click.argument("project", type=click.Path(exists=True), default=os.getcwd(), required=False)
     @click.option("--name", type=str, default=None, help="Project name (only used if auto-creating project.yml).")

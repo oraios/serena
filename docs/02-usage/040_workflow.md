@@ -38,8 +38,6 @@ For instance, when using `uvx`, run
 
 After creation, you can adjust the project settings in the generated `.serena/project.yml` file.
 
-**Note:** The old `project generate-yml` command is deprecated but still functional for backward compatibility.
-
 (indexing)=
 ### Indexing
 

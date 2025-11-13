@@ -1,7 +1,9 @@
-"""Tests for CLI project commands (create, index, generate-yml)."""
+"""Tests for CLI project commands (create, index)."""
 
 import os
+import shutil
 import tempfile
+import time
 
 import pytest
 from click.testing import CliRunner
@@ -177,10 +179,12 @@ class TestProjectIndex:
 
     def test_index_is_equivalent_to_create_with_index(self, cli_runner, temp_project_dir_with_python_file):
         """Test that 'index' behaves like 'create --index' for new projects."""
-        # Use two separate temp directories to compare
-        import tempfile
+        # Use manual temp directory creation with Windows-safe cleanup
+        # to avoid PermissionError on Windows CI when language servers hold file locks
+        dir1 = tempfile.mkdtemp()
+        dir2 = tempfile.mkdtemp()
 
-        with tempfile.TemporaryDirectory() as dir1, tempfile.TemporaryDirectory() as dir2:
+        try:
             # Setup both directories with same file
             for d in [dir1, dir2]:
                 with open(os.path.join(d, "test.py"), "w") as f:
@@ -205,30 +209,13 @@ class TestProjectIndex:
             # Both should create cache (proof of indexing)
             assert os.path.exists(os.path.join(dir1, ".serena", "cache"))
             assert os.path.exists(os.path.join(dir2, ".serena", "cache"))
-
-
-class TestProjectGenerateYml:
-    """Tests for deprecated 'generate-yml' command."""
-
-    def test_generate_yml_deprecated(self, cli_runner, temp_project_dir):
-        """Test that generate-yml command shows deprecation warning."""
-        result = cli_runner.invoke(ProjectCommands.generate_yml, [temp_project_dir, "--language", "python"])
-        assert result.exit_code == 0, f"Command failed: {result.output}"
-        assert "Deprecated" in result.output, "Should show deprecation warning"
-        assert "project create" in result.output
-
-        # Verify it still works
-        yml_path = os.path.join(temp_project_dir, ".serena", "project.yml")
-        assert os.path.exists(yml_path), "project.yml should still be created"
-
-    def test_generate_yml_with_auto_detect(self, cli_runner, temp_project_dir_with_python_file):
-        """Test generate-yml with auto-detected language."""
-        result = cli_runner.invoke(ProjectCommands.generate_yml, [temp_project_dir_with_python_file])
-        assert result.exit_code == 0, f"Command failed: {result.output}"
-        assert "Deprecated" in result.output
-
-        yml_path = os.path.join(temp_project_dir_with_python_file, ".serena", "project.yml")
-        assert os.path.exists(yml_path)
+        finally:
+            # Windows-safe cleanup: wait for file handles to be released
+            if os.name == "nt":
+                time.sleep(0.2)
+            # Use ignore_errors to handle lingering file locks on Windows
+            shutil.rmtree(dir1, ignore_errors=True)
+            shutil.rmtree(dir2, ignore_errors=True)
 
 
 class TestProjectCreateHelper:
