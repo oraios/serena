@@ -25,7 +25,7 @@ class TestElixirBasic:
     def test_request_references_function_definition(self, language_server: SolidLanguageServer):
         """Test finding references to a function definition."""
         file_path = os.path.join("lib", "models.ex")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Find the User module's 'new' function
         user_new_symbol = None
@@ -54,7 +54,7 @@ class TestElixirBasic:
     def test_request_references_create_user_function(self, language_server: SolidLanguageServer):
         """Test finding references to create_user function."""
         file_path = os.path.join("lib", "services.ex")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Find the UserService module's 'create_user' function
         create_user_symbol = None
@@ -79,7 +79,7 @@ class TestElixirBasic:
     def test_request_referencing_symbols_function(self, language_server: SolidLanguageServer):
         """Test finding symbols that reference a specific function."""
         file_path = os.path.join("lib", "models.ex")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Find the User module's 'new' function
         user_new_symbol = None
@@ -103,10 +103,10 @@ class TestElixirBasic:
     def test_timeout_enumeration_bug(self, language_server: SolidLanguageServer):
         """Test that enumeration doesn't timeout (regression test)."""
         # This should complete without timing out
-        symbols = language_server.request_document_symbols("lib/models.ex")
+        symbols = language_server.request_document_symbols("lib/models.ex").get_all_symbols_and_roots()
         assert symbols is not None
 
         # Test multiple symbol requests in succession
         for _ in range(3):
-            symbols = language_server.request_document_symbols("lib/services.ex")
+            symbols = language_server.request_document_symbols("lib/services.ex").get_all_symbols_and_roots()
             assert symbols is not None

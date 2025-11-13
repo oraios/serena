@@ -46,7 +46,7 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     definition_file = "lib/models.ex"
 
     # Find the User struct definition
-    symbols = ls_with_ignored_dirs.request_document_symbols(definition_file)
+    symbols = ls_with_ignored_dirs.request_document_symbols(definition_file).get_all_symbols_and_roots()
     user_symbol = None
     for symbol_group in symbols:
         user_symbol = next((s for s in symbol_group if "User" in s.get("name", "")), None)
@@ -87,7 +87,7 @@ def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
         definition_file = "lib/models.ex"
 
         # Find the User struct definition
-        symbols = ls.request_document_symbols(definition_file)
+        symbols = ls.request_document_symbols(definition_file).get_all_symbols_and_roots()
         user_symbol = None
         for symbol_group in symbols:
             user_symbol = next((s for s in symbol_group if "User" in s.get("name", "")), None)

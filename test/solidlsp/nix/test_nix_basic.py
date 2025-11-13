@@ -22,7 +22,7 @@ class TestNixLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
     def test_find_symbols_in_default_nix(self, language_server: SolidLanguageServer) -> None:
         """Test finding specific symbols in default.nix."""
-        symbols = language_server.request_document_symbols("default.nix")
+        symbols = language_server.request_document_symbols("default.nix").get_all_symbols_and_roots()
 
         assert symbols is not None
         assert len(symbols) > 0
@@ -42,7 +42,7 @@ class TestNixLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
     def test_find_symbols_in_utils(self, language_server: SolidLanguageServer) -> None:
         """Test finding symbols in lib/utils.nix."""
-        symbols = language_server.request_document_symbols("lib/utils.nix")
+        symbols = language_server.request_document_symbols("lib/utils.nix").get_all_symbols_and_roots()
 
         assert symbols is not None
         assert len(symbols) > 0
@@ -58,7 +58,7 @@ class TestNixLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
     def test_find_symbols_in_flake(self, language_server: SolidLanguageServer) -> None:
         """Test finding symbols in flake.nix."""
-        symbols = language_server.request_document_symbols("flake.nix")
+        symbols = language_server.request_document_symbols("flake.nix").get_all_symbols_and_roots()
 
         assert symbols is not None
         assert len(symbols) > 0
@@ -72,7 +72,7 @@ class TestNixLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
     def test_find_symbols_in_module(self, language_server: SolidLanguageServer) -> None:
         """Test finding symbols in a NixOS module."""
-        symbols = language_server.request_document_symbols("modules/example.nix")
+        symbols = language_server.request_document_symbols("modules/example.nix").get_all_symbols_and_roots()
 
         assert symbols is not None
         assert len(symbols) > 0
@@ -86,7 +86,7 @@ class TestNixLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
     def test_find_references_within_file(self, language_server: SolidLanguageServer) -> None:
         """Test finding references within the same file."""
-        symbols = language_server.request_document_symbols("default.nix")
+        symbols = language_server.request_document_symbols("default.nix").get_all_symbols_and_roots()
 
         assert symbols is not None
         symbol_list = symbols[0] if isinstance(symbols, tuple) else symbols
@@ -154,7 +154,7 @@ class TestNixLanguageServer:
     def test_verify_imports_exist(self, language_server: SolidLanguageServer) -> None:
         """Verify that our test files have proper imports set up."""
         # Verify that default.nix imports utils from lib/utils.nix
-        symbols = language_server.request_document_symbols("default.nix")
+        symbols = language_server.request_document_symbols("default.nix").get_all_symbols_and_roots()
 
         assert symbols is not None
         symbol_list = symbols[0] if isinstance(symbols, tuple) else symbols
@@ -164,7 +164,7 @@ class TestNixLanguageServer:
         assert "makeGreeting" in symbol_names, "makeGreeting should be found in default.nix"
 
         # Verify lib/utils.nix has the expected structure
-        utils_symbols = language_server.request_document_symbols("lib/utils.nix")
+        utils_symbols = language_server.request_document_symbols("lib/utils.nix").get_all_symbols_and_roots()
         assert utils_symbols is not None
         utils_list = utils_symbols[0] if isinstance(utils_symbols, tuple) else utils_symbols
         utils_names = {sym.get("name") for sym in utils_list if isinstance(sym, dict)}

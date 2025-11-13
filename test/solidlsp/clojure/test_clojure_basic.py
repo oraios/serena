@@ -53,7 +53,7 @@ class TestLanguageServerBasics:
 
     @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
     def test_document_symbols(self, language_server: SolidLanguageServer):
-        symbols, _ = language_server.request_document_symbols(CORE_PATH)
+        symbols, _ = language_server.request_document_symbols(CORE_PATH).get_all_symbols_and_roots()
 
         assert isinstance(symbols, list) and len(symbols) >= 4, "greet, add, multiply, -main functions"
 

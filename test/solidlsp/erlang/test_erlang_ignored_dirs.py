@@ -63,7 +63,7 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     definition_file = "include/records.hrl"
 
     # Find the user record definition
-    symbols = ls_with_ignored_dirs.request_document_symbols(definition_file)
+    symbols = ls_with_ignored_dirs.request_document_symbols(definition_file).get_all_symbols_and_roots()
     user_symbol = None
     for symbol_group in symbols:
         user_symbol = next((s for s in symbol_group if "user" in s.get("name", "").lower()), None)
@@ -107,7 +107,7 @@ def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
         definition_file = "include/records.hrl"
 
         # Find the user record definition
-        symbols = ls.request_document_symbols(definition_file)
+        symbols = ls.request_document_symbols(definition_file).get_all_symbols_and_roots()
         user_symbol = None
         for symbol_group in symbols:
             user_symbol = next((s for s in symbol_group if "user" in s.get("name", "").lower()), None)
@@ -203,7 +203,7 @@ def test_document_symbols_ignores_dirs(ls_with_ignored_dirs: SolidLanguageServer
     # Try to get symbols from a file in ignored directory (should not find it)
     try:
         ignored_file = "ignored_dir/ignored_module.erl"
-        symbols = ls_with_ignored_dirs.request_document_symbols(ignored_file)
+        symbols = ls_with_ignored_dirs.request_document_symbols(ignored_file).get_all_symbols_and_roots()
         # If we get here, the file was found - symbols should be empty or None
         if symbols:
             assert len(symbols) == 0, "Should not find symbols in ignored directory"

@@ -31,7 +31,7 @@ class TestRust2024EditionLanguageServer:
     def test_find_references_raw(self) -> None:
         # Test finding references to the 'add' function defined in main.rs
         file_path = os.path.join("src", "main.rs")
-        symbols = self.language_server.request_document_symbols(file_path)
+        symbols = self.language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         add_symbol = None
         for sym in symbols[0]:
             if sym.get("name") == "add":
@@ -53,7 +53,7 @@ class TestRust2024EditionLanguageServer:
     def test_find_referencing_symbols_multiply(self) -> None:
         # Find references to 'multiply' function defined in lib.rs
         file_path = os.path.join("src", "lib.rs")
-        symbols = self.language_server.request_document_symbols(file_path)
+        symbols = self.language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         multiply_symbol = None
         for sym in symbols[0]:
             if sym.get("name") == "multiply":
@@ -69,7 +69,7 @@ class TestRust2024EditionLanguageServer:
     def test_find_calculator_struct_and_impl(self) -> None:
         # Test finding the Calculator struct and its impl block
         file_path = os.path.join("src", "lib.rs")
-        symbols = self.language_server.request_document_symbols(file_path)
+        symbols = self.language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Find the Calculator struct
         calculator_struct = None

@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = "==3.11.*"
 
 [[package]]
@@ -1525,6 +1525,22 @@ wheels = [
 ]
 
 [[package]]
+name = "pyinstrument"
+version = "5.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/80/ce/824ee634994e612156f7b84eaf50b8523c676ebfed8d8dd12939a82f4c15/pyinstrument-5.1.1.tar.gz", hash = "sha256:bc401cda990b3c1cfe8e0e0473cbd605df3c63b73478a89ac4ab108f2184baa8", size = 264730, upload-time = "2025-08-12T11:35:43.426Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/52/65/dc0fcc6122e6f484ffa48260d1023e1fe90e53da8d69a7de656205af91ba/pyinstrument-5.1.1-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:5272cff6eea21163b2105f6a80c907315e0f567720621e6d5672dc01bf71ee48", size = 130287, upload-time = "2025-08-12T11:34:32.436Z" },
+    { url = "https://files.pythonhosted.org/packages/90/96/8a6cab312342f1ad7322b459dcbdb2e041251b7bbe4c1d0dd38ccbf2ae20/pyinstrument-5.1.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:d4e7dc5a4aee37a44ff2e63db3127f2044dd95edcae240cb95915adbf223d4be", size = 122879, upload-time = "2025-08-12T11:34:33.506Z" },
+    { url = "https://files.pythonhosted.org/packages/8a/89/1ad1ae703951832a34ec6b32354c6df1d0690b0333b7b8396c92afcdc23e/pyinstrument-5.1.1-cp311-cp311-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:602d55121df1d88aeb6d8ebc801597fdcb9718f78d602ae81458d65c56f25d24", size = 146412, upload-time = "2025-08-12T11:34:34.975Z" },
+    { url = "https://files.pythonhosted.org/packages/a5/70/588ec07eeaa5d5d4aff2d47c8010379e9b39a7aee7e3fda625a0ce4f5838/pyinstrument-5.1.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:63b5a788ff955e0597bc95463e64d5fa3747017524fdc02a0f5d12d5117cf2b9", size = 144885, upload-time = "2025-08-12T11:34:36.546Z" },
+    { url = "https://files.pythonhosted.org/packages/0a/8f/119ad44d454edb927434bb53d8a69904ecaa47ec56f95c688c557a9590de/pyinstrument-5.1.1-cp311-cp311-musllinux_1_2_aarch64.whl", hash = "sha256:7f66038ec55a12e5510689240cdc745f8e98c90b93363f745106976e5cfb7397", size = 145530, upload-time = "2025-08-12T11:34:37.726Z" },
+    { url = "https://files.pythonhosted.org/packages/8e/31/d53b20d1967ba78574807c5940251c0f238e8e3515ee9c4f20207eb09199/pyinstrument-5.1.1-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:110a08b6e7fa9542eb37c337e79467913d364a03bc2062f85566ba96bc82f54e", size = 144708, upload-time = "2025-08-12T11:34:38.855Z" },
+    { url = "https://files.pythonhosted.org/packages/48/18/78ccb35dd265e83c0b7404a501004387b2e2390a0a44b6e4a004307931d1/pyinstrument-5.1.1-cp311-cp311-win32.whl", hash = "sha256:a223d5e9226ccede5bf2fbd4d13ce0aeb5120501b633ba85290ed94df37d3623", size = 124151, upload-time = "2025-08-12T11:34:40.392Z" },
+    { url = "https://files.pythonhosted.org/packages/43/c0/3eb94aa2c2f0b8d49e290d4df662e21e707eb4a23f3b938239634fbfdc17/pyinstrument-5.1.1-cp311-cp311-win_amd64.whl", hash = "sha256:16ce582a7b56287d338a8b59688458341aab5c6abda970ba50b2f7b3fd69f89d", size = 124942, upload-time = "2025-08-12T11:34:41.564Z" },
+]
+
+[[package]]
 name = "pyright"
 version = "1.1.403"
 source = { registry = "https://pypi.org/simple" }
@@ -1875,6 +1891,7 @@ dev = [
     { name = "mypy" },
     { name = "nbsphinx" },
     { name = "poethepoet" },
+    { name = "pyinstrument" },
     { name = "pytest" },
     { name = "pytest-xdist" },
     { name = "ruff" },
@@ -1912,6 +1929,7 @@ requires-dist = [
     { name = "poethepoet", marker = "extra == 'dev'", specifier = ">=0.20.0" },
     { name = "psutil", specifier = ">=7.0.0" },
     { name = "pydantic", specifier = ">=2.10.6" },
+    { name = "pyinstrument", marker = "extra == 'dev'" },
     { name = "pyright", specifier = ">=1.1.396,<2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.2" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.5.0" },

@@ -789,8 +789,8 @@ class EclipseJDTLS(SolidLanguageServer):
         # TODO: Add comments about why we wait here, and how this can be optimized
         self.service_ready_event.wait()
 
-    def _request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> list[GenericDocumentSymbol]:
-        result = super()._request_document_symbols(relative_file_path, include_body)
+    def _request_document_symbols(self, relative_file_path: str) -> list[GenericDocumentSymbol]:
+        result = super()._request_document_symbols(relative_file_path)
 
         # JDTLS sometimes returns symbol names with type information to handle overloads,
         # e.g. "myMethod(int) <T>", but we want overloads to be handled via overload_idx,

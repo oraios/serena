@@ -19,7 +19,7 @@ class TestLuaLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
     def test_find_symbols_in_calculator(self, language_server: SolidLanguageServer) -> None:
         """Test finding specific functions in calculator.lua."""
-        symbols = language_server.request_document_symbols("src/calculator.lua")
+        symbols = language_server.request_document_symbols("src/calculator.lua").get_all_symbols_and_roots()
 
         assert symbols is not None
         assert len(symbols) > 0
@@ -49,7 +49,7 @@ class TestLuaLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
     def test_find_symbols_in_utils(self, language_server: SolidLanguageServer) -> None:
         """Test finding specific functions in utils.lua."""
-        symbols = language_server.request_document_symbols("src/utils.lua")
+        symbols = language_server.request_document_symbols("src/utils.lua").get_all_symbols_and_roots()
 
         assert symbols is not None
         assert len(symbols) > 0
@@ -84,7 +84,7 @@ class TestLuaLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
     def test_find_symbols_in_main(self, language_server: SolidLanguageServer) -> None:
         """Test finding functions in main.lua."""
-        symbols = language_server.request_document_symbols("main.lua")
+        symbols = language_server.request_document_symbols("main.lua").get_all_symbols_and_roots()
 
         assert symbols is not None
         assert len(symbols) > 0
@@ -107,7 +107,7 @@ class TestLuaLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
     def test_cross_file_references_calculator_add(self, language_server: SolidLanguageServer) -> None:
         """Test finding cross-file references to calculator.add function."""
-        symbols = language_server.request_document_symbols("src/calculator.lua")
+        symbols = language_server.request_document_symbols("src/calculator.lua").get_all_symbols_and_roots()
 
         assert symbols is not None
         symbol_list = symbols[0] if isinstance(symbols, tuple) else symbols
@@ -163,7 +163,7 @@ class TestLuaLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
     def test_cross_file_references_utils_trim(self, language_server: SolidLanguageServer) -> None:
         """Test finding cross-file references to utils.trim function."""
-        symbols = language_server.request_document_symbols("src/utils.lua")
+        symbols = language_server.request_document_symbols("src/utils.lua").get_all_symbols_and_roots()
 
         assert symbols is not None
         symbol_list = symbols[0] if isinstance(symbols, tuple) else symbols
@@ -245,7 +245,7 @@ class TestLuaLanguageServer:
     def test_references_between_test_and_source(self, language_server: SolidLanguageServer) -> None:
         """Test finding references from test files to source files."""
         # Check if test_calculator.lua references calculator module
-        test_symbols = language_server.request_document_symbols("tests/test_calculator.lua")
+        test_symbols = language_server.request_document_symbols("tests/test_calculator.lua").get_all_symbols_and_roots()
 
         assert test_symbols is not None
         assert len(test_symbols) > 0

@@ -120,7 +120,7 @@ class TestElixirLanguageServerSymbols:
         # Test referencing symbols for User struct
         file_path = os.path.join("lib", "models.ex")
 
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         user_symbol = None
         for symbol_group in symbols:
             user_symbol = next((s for s in symbol_group if "User" in s.get("name", "")), None)

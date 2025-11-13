@@ -34,7 +34,7 @@ class TestHaskellLanguageServer:
         - All exported functions with correct names
         - Module structure
         """
-        all_symbols, _ = language_server.request_document_symbols("src/Calculator.hs")
+        all_symbols, _ = language_server.request_document_symbols("src/Calculator.hs").get_all_symbols_and_roots()
         symbol_names = {s["name"] for s in all_symbols}
 
         # Verify exact set of expected top-level symbols
@@ -71,7 +71,7 @@ class TestHaskellLanguageServer:
         Verifies Serena identifies all helper functions that are imported
         and used by Calculator module.
         """
-        all_symbols, _ = language_server.request_document_symbols("src/Helper.hs")
+        all_symbols, _ = language_server.request_document_symbols("src/Helper.hs").get_all_symbols_and_roots()
         symbol_names = {s["name"] for s in all_symbols}
 
         # Verify expected helper functions (module name may also appear)
@@ -97,7 +97,7 @@ class TestHaskellLanguageServer:
 
         Verifies Serena can identify cross-module dependencies.
         """
-        all_symbols, _ = language_server.request_document_symbols("app/Main.hs")
+        all_symbols, _ = language_server.request_document_symbols("app/Main.hs").get_all_symbols_and_roots()
         symbol_names = {s["name"] for s in all_symbols}
 
         # Main.hs should have the main function

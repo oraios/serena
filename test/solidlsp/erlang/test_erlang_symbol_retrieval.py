@@ -126,7 +126,7 @@ class TestErlangLanguageServerSymbols:
         # Test referencing symbols for user record
         file_path = os.path.join("include", "records.hrl")
 
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         user_symbol = None
         for symbol_group in symbols:
             user_symbol = next((s for s in symbol_group if "user" in s.get("name", "")), None)
@@ -156,7 +156,7 @@ class TestErlangLanguageServerSymbols:
         # Test referencing symbols for create_user function
         file_path = os.path.join("src", "models.erl")
 
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         create_user_symbol = None
         for symbol_group in symbols:
             create_user_symbol = next((s for s in symbol_group if "create_user" in s.get("name", "")), None)
@@ -418,7 +418,7 @@ class TestErlangLanguageServerSymbols:
         # Test that we can find references to models module functions in services.erl
         file_path = os.path.join("src", "models.erl")
 
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         create_user_symbol = None
         for symbol_group in symbols:
             create_user_symbol = next((s for s in symbol_group if "create_user" in s.get("name", "")), None)

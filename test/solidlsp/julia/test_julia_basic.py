@@ -11,7 +11,7 @@ class TestJuliaLanguageServer:
         """
         Test if we can find the top-level symbols in the main.jl file.
         """
-        all_symbols, _ = language_server.request_document_symbols("main.jl")
+        all_symbols, _ = language_server.request_document_symbols("main.jl").get_all_symbols_and_roots()
         symbol_names = {s["name"] for s in all_symbols}
         assert "calculate_sum" in symbol_names
         assert "main" in symbol_names

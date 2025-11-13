@@ -107,7 +107,7 @@ class TestLanguageServerSymbols:
         # Test referencing symbols for create_user function
         file_path = os.path.join("test_repo", "services.py")
         # Line 15 contains the create_user function definition
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         create_user_symbol = next((s for s in symbols[0] if s.get("name") == "create_user"), None)
         if not create_user_symbol or "selectionRange" not in create_user_symbol:
             raise AssertionError("create_user symbol or its selectionRange not found")
@@ -131,7 +131,7 @@ class TestLanguageServerSymbols:
         # Test referencing symbols for User class
         file_path = os.path.join("test_repo", "models.py")
         # Line 31 contains the User class definition
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         user_symbol = next((s for s in symbols[0] if s.get("name") == "User"), None)
         if not user_symbol or "selectionRange" not in user_symbol:
             raise AssertionError("User symbol or its selectionRange not found")
@@ -152,7 +152,7 @@ class TestLanguageServerSymbols:
         # Test referencing symbols for id parameter in get_user
         file_path = os.path.join("test_repo", "services.py")
         # Line 24 contains the get_user method with id parameter
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         get_user_symbol = next((s for s in symbols[0] if s.get("name") == "get_user"), None)
         if not get_user_symbol or "selectionRange" not in get_user_symbol:
             raise AssertionError("get_user symbol or its selectionRange not found")
@@ -390,7 +390,9 @@ class TestLanguageServerSymbols:
         if "location" in user_management_node and "relativePath" in user_management_node["location"]:
             user_management_rel_path = user_management_node["location"]["relativePath"]
             assert user_management_rel_path == os.path.join("examples", "user_management.py")
-            _, user_management_roots = language_server.request_document_symbols(os.path.join("examples", "user_management.py"))
+            _, user_management_roots = language_server.request_document_symbols(
+                os.path.join("examples", "user_management.py")
+            ).get_all_symbols_and_roots()
             assert user_management_roots == user_management_node["children"]
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
@@ -411,7 +413,9 @@ class TestLanguageServerSymbols:
         if "location" in user_management_node and "relativePath" in user_management_node["location"]:
             user_management_rel_path = user_management_node["location"]["relativePath"]
             assert user_management_rel_path == os.path.join("examples", "user_management.py")
-            _, user_management_roots = language_server.request_document_symbols(os.path.join("examples", "user_management.py"))
+            _, user_management_roots = language_server.request_document_symbols(
+                os.path.join("examples", "user_management.py")
+            ).get_all_symbols_and_roots()
             assert user_management_roots == user_management_node["children"]
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)

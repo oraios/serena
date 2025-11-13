@@ -31,7 +31,7 @@ class TestPerlLanguageServer:
     def test_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test that document symbols are correctly identified."""
         # Request document symbols
-        all_symbols, _ = language_server.request_document_symbols("main.pl", include_body=False)
+        all_symbols, _ = language_server.request_document_symbols("main.pl").get_all_symbols_and_roots()
 
         assert all_symbols, "Expected to find symbols in main.pl"
         assert len(all_symbols) > 0, "Expected at least one symbol"

@@ -150,7 +150,6 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         symbol_retriever = self.create_language_server_symbol_retriever()
         symbols = symbol_retriever.find_by_name(
             name_path,
-            include_body=include_body,
             include_kinds=parsed_include_kinds,
             exclude_kinds=parsed_exclude_kinds,
             substring_matching=substring_matching,

@@ -88,7 +88,7 @@ class TestSwiftLanguageServerBasics:
 
         # First, let's check if Utils is used anywhere (it might not be in this simple test)
         # We'll test goto_definition on Utils struct itself
-        symbols = language_server.request_document_symbols(utils_file)
+        symbols = language_server.request_document_symbols(utils_file).get_all_symbols_and_roots()
         utils_symbol = next((s for s in symbols[0] if s.get("name") == "Utils"), None)
 
         sel_start = utils_symbol["selectionRange"]["start"]
@@ -104,7 +104,7 @@ class TestSwiftLanguageServerBasics:
         """Test request_references on the Calculator class."""
         # Get references to the Calculator class in main.swift
         file_path = os.path.join("src", "main.swift")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         calculator_symbol = next((s for s in symbols[0] if s.get("name") == "Calculator"), None)
 
@@ -126,7 +126,7 @@ class TestSwiftLanguageServerBasics:
         """Test request_references on the User struct."""
         # Get references to the User struct in main.swift
         file_path = os.path.join("src", "main.swift")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         user_symbol = next((s for s in symbols[0] if s.get("name") == "User"), None)
 
@@ -147,7 +147,7 @@ class TestSwiftLanguageServerBasics:
         """Test request_references on the Utils struct."""
         # Get references to the Utils struct in utils.swift
         file_path = os.path.join("src", "utils.swift")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         utils_symbol = next((s for s in symbols[0] if s.get("name") == "Utils"), None)
         if not utils_symbol or "selectionRange" not in utils_symbol:
             raise AssertionError("Utils symbol or its selectionRange not found")

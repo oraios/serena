@@ -491,7 +491,6 @@ class LanguageServerSymbolRetriever:
     def find_by_name(
         self,
         name_path: str,
-        include_body: bool = False,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
         substring_matching: bool = False,
@@ -504,7 +503,7 @@ class LanguageServerSymbolRetriever:
         """
         symbols: list[LanguageServerSymbol] = []
         for lang_server in self._ls_manager.iter_language_servers():
-            symbol_roots = lang_server.request_full_symbol_tree(within_relative_path=within_relative_path, include_body=include_body)
+            symbol_roots = lang_server.request_full_symbol_tree(within_relative_path=within_relative_path)
             for root in symbol_roots:
                 symbols.extend(
                     LanguageServerSymbol(root).find(
@@ -513,18 +512,12 @@ class LanguageServerSymbolRetriever:
                 )
         return symbols
 
-    def get_document_symbols(self, relative_path: str) -> list[LanguageServerSymbol]:
-        lang_server = self.get_language_server(relative_path)
-        symbol_dicts, _roots = lang_server.request_document_symbols(relative_path, include_body=False)
-        symbols = [LanguageServerSymbol(s) for s in symbol_dicts]
-        return symbols
-
     def find_by_location(self, location: LanguageServerSymbolLocation) -> LanguageServerSymbol | None:
         if location.relative_path is None:
             return None
         lang_server = self.get_language_server(location.relative_path)
-        symbol_dicts, _roots = lang_server.request_document_symbols(location.relative_path, include_body=False)
-        for symbol_dict in symbol_dicts:
+        document_symbols = lang_server.request_document_symbols(location.relative_path)
+        for symbol_dict in document_symbols.iter_symbols():
             symbol = LanguageServerSymbol(symbol_dict)
             if symbol.location == location:
                 return symbol

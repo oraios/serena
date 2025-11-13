@@ -29,7 +29,7 @@ def scala_ls():
 
 def test_scala_document_symbols(scala_ls):
     """Test document symbols for Main.scala"""
-    symbols, _ = scala_ls.request_document_symbols(MAIN_FILE_PATH)
+    symbols, _ = scala_ls.request_document_symbols(MAIN_FILE_PATH).get_all_symbols_and_roots()
     symbol_names = [s["name"] for s in symbols]
     assert symbol_names[0] == "com.example"
     assert symbol_names[1] == "Main"

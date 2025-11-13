@@ -31,7 +31,7 @@ class TestCSharpLanguageServer:
     def test_get_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test getting document symbols from a C# file."""
         file_path = os.path.join("Program.cs")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Check that we have symbols
         assert len(symbols) > 0
@@ -49,7 +49,7 @@ class TestCSharpLanguageServer:
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test finding references using symbol selection range."""
         file_path = os.path.join("Program.cs")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         add_symbol = None
         # Handle nested symbol structure
         symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
@@ -68,7 +68,7 @@ class TestCSharpLanguageServer:
     def test_nested_namespace_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test getting symbols from nested namespace."""
         file_path = os.path.join("Models", "Person.cs")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Check that we have symbols
         assert len(symbols) > 0
@@ -93,7 +93,7 @@ class TestCSharpLanguageServer:
         """Test finding references to Calculator.Subtract method across files."""
         # First, find the Subtract method in Program.cs
         file_path = os.path.join("Program.cs")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Flatten the symbols if they're nested
         symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols

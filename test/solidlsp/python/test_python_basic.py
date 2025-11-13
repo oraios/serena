@@ -26,7 +26,7 @@ class TestLanguageServerBasics:
         file_path = os.path.join("test_repo", "models.py")
         # Line 31 contains the User class definition
         # Use selectionRange only
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         user_symbol = next((s for s in symbols[0] if s.get("name") == "User"), None)
         if not user_symbol or "selectionRange" not in user_symbol:
             raise AssertionError("User symbol or its selectionRange not found")
@@ -41,7 +41,7 @@ class TestLanguageServerBasics:
         file_path = os.path.join("test_repo", "models.py")
         # Line 56 contains the Item class definition
         # Use selectionRange only
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         item_symbol = next((s for s in symbols[0] if s.get("name") == "Item"), None)
         if not item_symbol or "selectionRange" not in item_symbol:
             raise AssertionError("Item symbol or its selectionRange not found")
@@ -57,7 +57,7 @@ class TestLanguageServerBasics:
         file_path = os.path.join("test_repo", "services.py")
         # Line 24 contains the get_user method with id parameter
         # Use selectionRange only
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         get_user_symbol = next((s for s in symbols[0] if s.get("name") == "get_user"), None)
         if not get_user_symbol or "selectionRange" not in get_user_symbol:
             raise AssertionError("get_user symbol or its selectionRange not found")
@@ -71,7 +71,7 @@ class TestLanguageServerBasics:
         file_path = os.path.join("test_repo", "services.py")
         # Line 15 contains the create_user method definition
         # Use selectionRange only
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         create_user_symbol = next((s for s in symbols[0] if s.get("name") == "create_user"), None)
         if not create_user_symbol or "selectionRange" not in create_user_symbol:
             raise AssertionError("create_user symbol or its selectionRange not found")

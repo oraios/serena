@@ -41,12 +41,12 @@ class TestFortranLanguageServer:
     def test_request_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test that document symbols can be retrieved from Fortran files."""
         # Test main.f90 - should have a program symbol
-        main_symbols, _ = language_server.request_document_symbols("main.f90")
+        main_symbols, _ = language_server.request_document_symbols("main.f90").get_all_symbols_and_roots()
         program_names = [s.get("name") for s in main_symbols]
         assert "test_program" in program_names, f"Program 'test_program' not found in main.f90. Found: {program_names}"
 
         # Test modules/math_utils.f90 - should have module and function symbols
-        module_symbols, _ = language_server.request_document_symbols("modules/math_utils.f90")
+        module_symbols, _ = language_server.request_document_symbols("modules/math_utils.f90").get_all_symbols_and_roots()
         all_names = [s.get("name") for s in module_symbols]
         assert "math_utils" in all_names, f"Module 'math_utils' not found. Found: {all_names}"
         assert "add_numbers" in all_names, f"Function 'add_numbers' not found. Found: {all_names}"
@@ -60,7 +60,7 @@ class TestFortranLanguageServer:
         This tests the LSP textDocument/references capability.
         """
         file_path = "modules/math_utils.f90"
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Find the add_numbers function
         add_numbers_symbol = None
@@ -125,7 +125,7 @@ class TestFortranLanguageServer:
         """
         # Get the add_numbers function symbol from math_utils.f90
         file_path = "modules/math_utils.f90"
-        symbols, _ = language_server.request_document_symbols(file_path)
+        symbols, _ = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Find the add_numbers function
         add_numbers_symbol = None
@@ -230,7 +230,7 @@ class TestFortranLanguageServer:
         fortls returns these as SymbolKind.Class (11) for types and SymbolKind.Interface (5) for interfaces.
         """
         file_path = "modules/geometry.f90"
-        symbols, _ = language_server.request_document_symbols(file_path)
+        symbols, _ = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Find type and interface symbols
         type_names = []
