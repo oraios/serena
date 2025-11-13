@@ -17,19 +17,31 @@ pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
 @pytest.fixture
 def temp_project_dir():
     """Create a temporary directory for testing."""
-    with tempfile.TemporaryDirectory() as tmpdir:
+    tmpdir = tempfile.mkdtemp()
+    try:
         yield tmpdir
+    finally:
+        # if windows, wait a bit to avoid PermissionError on cleanup
+        if os.name == "nt":
+            time.sleep(0.2)
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 @pytest.fixture
 def temp_project_dir_with_python_file():
     """Create a temporary directory with a Python file for testing."""
-    with tempfile.TemporaryDirectory() as tmpdir:
+    tmpdir = tempfile.mkdtemp()
+    try:
         # Create a simple Python file so language detection works
         py_file = os.path.join(tmpdir, "test.py")
         with open(py_file, "w") as f:
             f.write("def hello():\n    pass\n")
         yield tmpdir
+    finally:
+        # if windows, wait a bit to avoid PermissionError on cleanup
+        if os.name == "nt":
+            time.sleep(0.2)
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 @pytest.fixture
