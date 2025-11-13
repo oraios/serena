@@ -80,8 +80,6 @@
         serena = pkgs.runCommand "serena" {} ''
           mkdir -p $out/bin
           ln -s ${packages.serena-env}/bin/serena $out/bin/serena
-          ln -s ${packages.serena-env}/bin/serena-mcp-server $out/bin/serena-mcp-server
-          ln -s ${packages.serena-env}/bin/index-project $out/bin/index-project
         '';
         default = packages.serena;
       };
