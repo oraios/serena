@@ -343,6 +343,7 @@ body {
 }
 
 .tool-item {
+    position: relative;
     background-color: var(--bg-primary);
     padding: 6px 10px;
     border-radius: 3px;
@@ -352,6 +353,66 @@ body {
     text-overflow: ellipsis;
     white-space: nowrap;
     cursor: default;
+}
+
+.tool-item.removable {
+    padding-right: 28px;
+}
+
+.tool-remove {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 68, 68, 0.1);
+    border-radius: 3px;
+    cursor: pointer;
+    color: #ff4444;
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 1;
+    transition: all 0.2s;
+}
+
+.tool-remove:hover {
+    background: rgba(255, 68, 68, 0.2);
+    transform: scale(1.1);
+}
+
+.tool-enable-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    margin: 5px 0;
+    border-radius: 4px;
+    background-color: var(--bg-primary);
+    border: 1px dashed var(--border-color);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.tool-enable-item:hover {
+    background-color: var(--border-color);
+    border-color: var(--btn-primary);
+    color: var(--btn-primary);
+    border-style: solid;
+}
+
+.tool-enable-icon {
+    font-size: 18px;
+    font-weight: bold;
+    line-height: 1;
+    color: var(--btn-primary);
+}
+
+.tool-enable-name {
+    flex: 1;
+    font-size: 13px;
 }
 
 /* Projects List */

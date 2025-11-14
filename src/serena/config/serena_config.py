@@ -13,6 +13,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Self, TypeVar
 
+from regex import F
 import yaml
 from ruamel.yaml.comments import CommentedMap
 from sensai.util import logging
@@ -133,6 +134,15 @@ class ToolSet:
 
     def includes_name(self, tool_name: str) -> bool:
         return tool_name in self._tool_names
+
+    def add(self, tool_name: str) -> None:
+        self._tool_names.add(tool_name)
+
+    def remove(self, tool_name: str) -> None:
+        try:
+            self._tool_names.remove(tool_name)
+        except KeyError:
+            log.warning(f"Tool '{tool_name}' not found in tool set, cannot remove it.")
 
 
 @dataclass
@@ -375,6 +385,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     trace_lsp_communication: bool = False
     web_dashboard: bool = True
     web_dashboard_open_on_launch: bool = True
+    permit_tool_management_in_dashboard: bool = False
     tool_timeout: float = DEFAULT_TOOL_TIMEOUT
     loaded_commented_yaml: CommentedMap | None = None
     config_file_path: str | None = None
@@ -495,6 +506,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
             instance.gui_log_window_enabled = loaded_commented_yaml.get("gui_log_window", False)
         instance.log_level = loaded_commented_yaml.get("log_level", loaded_commented_yaml.get("gui_log_level", logging.INFO))
         instance.web_dashboard = loaded_commented_yaml.get("web_dashboard", True)
+        instance.permit_tool_management_in_dashboard = loaded_commented_yaml.get("permit_tool_management_in_dashboard", False)
         instance.web_dashboard_open_on_launch = loaded_commented_yaml.get("web_dashboard_open_on_launch", True)
         instance.tool_timeout = loaded_commented_yaml.get("tool_timeout", DEFAULT_TOOL_TIMEOUT)
         instance.trace_lsp_communication = loaded_commented_yaml.get("trace_lsp_communication", False)

@@ -55,6 +55,31 @@ class AvailableTools:
                 if isinstance(tool, marker_class):
                     self.tool_marker_names.add(marker_class.__name__)
 
+    def add(self, tool: Tool) -> None:
+        tool_name = tool.get_name()
+        if tool_name in self.tool_names:
+            log.warning(f"Tool '{tool_name}' is already in the available tools list")
+            return
+        self.tools.append(tool)
+        self.tool_names.append(tool_name)
+        for marker_class in iter_subclasses(ToolMarker):
+            if isinstance(tool, marker_class):
+                self.tool_marker_names.add(marker_class.__name__)
+
+    def remove(self, tool: Tool) -> None:
+        tool_name = tool.get_name()
+        if tool_name not in self.tool_names:
+            log.warning(f"Tool '{tool_name}' is not in the available tools list")
+            return
+        self.tools.remove(tool)
+        self.tool_names.remove(tool_name)
+        # Recompute marker names
+        self.tool_marker_names = set()
+        for marker_class in iter_subclasses(ToolMarker):
+            for t in self.tools:
+                if isinstance(t, marker_class):
+                    self.tool_marker_names.add(marker_class.__name__)
+
     def __len__(self) -> int:
         return len(self.tools)
 
@@ -178,7 +203,8 @@ class SerenaAgent:
         # may access various parts of the agent
         if self.serena_config.web_dashboard:
             self._dashboard_thread, port = SerenaDashboardAPI(
-                get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats
+                get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats,
+                enable_tool_management=self.serena_config.permit_tool_management_in_dashboard,
             ).run_in_thread()
             dashboard_url = f"http://127.0.0.1:{port}/dashboard/index.html"
             log.info("Serena web dashboard started at %s", dashboard_url)
@@ -191,6 +217,9 @@ class SerenaAgent:
             # inform the GUI window (if any)
             if self._gui_log_viewer is not None:
                 self._gui_log_viewer.set_dashboard_url(dashboard_url)
+
+    def is_for_openai_compatible_context(self) -> bool:
+        return self._context.name in ["chatgpt", "codex", "oaicompat-agent"]
 
     def get_current_tasks(self) -> list[TaskExecutor.TaskInfo]:
         """
@@ -572,6 +601,48 @@ class SerenaAgent:
         :param language: the language to remove
         """
         self.issue_task(lambda: self.get_active_project_or_raise().remove_language(language), name=f"RemoveLanguage:{language.value}")
+
+    def enable_tool(self, tool_name: str) -> None:
+        """
+        Enable a tool that was previously disabled. The tool will be added to both the active
+        tools and the exposed tools.
+
+        :param tool_name: the name of the tool to enable
+        :raises ValueError: if the tool name is invalid or the tool is already enabled
+        """
+        from serena.mcp import update_mcp_server_tool_list
+
+        def do_enable() -> None:
+            tool_class = ToolRegistry().get_tool_class_by_name(tool_name)
+            if tool_class in self._active_tools:
+                log.warning(f"Tool '{tool_name}' is already enabled")
+                return
+            tool_instance = self._all_tools[tool_class]
+            self._active_tools[tool_class] = tool_instance
+            self._exposed_tools.add(tool_instance)
+            update_mcp_server_tool_list(self._exposed_tools.tools, openai_tool_compatible=self.is_for_openai_compatible_context())
+
+        self.execute_task(do_enable, name=f"EnableTool:{tool_name}")
+
+    def disable_tool(self, tool_name: str) -> None:
+        """
+        Disable a tool. The tool will be removed from the active and the exposed tool sets.
+
+        :param tool_name: the name of the tool to disable
+        :raises ValueError: if the tool name is invalid or the tool is already disabled
+        """
+        from serena.mcp import update_mcp_server_tool_list
+
+        def do_disable() -> None:
+            tool_class = ToolRegistry().get_tool_class_by_name(tool_name)
+            if tool_class not in self._active_tools:
+                log.warning(f"Tool '{tool_name}' is already disabled")
+                return
+            tool_instance = self._active_tools.pop(tool_class)
+            self._exposed_tools.remove(tool_instance)
+            update_mcp_server_tool_list(self._exposed_tools.tools, openai_tool_compatible=self.is_for_openai_compatible_context())
+
+        self.execute_task(do_disable, name=f"DisableTool:{tool_name}")
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self._all_tools[tool_class]  # type: ignore

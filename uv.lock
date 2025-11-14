@@ -754,6 +754,15 @@ wheels = [
 ]
 
 [[package]]
+name = "janus"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d8/7f/69884b6618be4baf6ebcacc716ee8680a842428a19f403db6d1c0bb990aa/janus-2.0.0.tar.gz", hash = "sha256:0970f38e0e725400496c834a368a67ee551dc3b5ad0a257e132f5b46f2e77770", size = 22910, upload-time = "2024-12-13T12:59:08.622Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/68/34/65604740edcb20e1bda6a890348ed7d282e7dd23aa00401cbe36fd0edbd9/janus-2.0.0-py3-none-any.whl", hash = "sha256:7e6449d34eab04cd016befbd7d8c0d8acaaaab67cb59e076a69149f9031745f9", size = 12161, upload-time = "2024-12-13T12:59:06.106Z" },
+]
+
+[[package]]
 name = "jedi"
 version = "0.19.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1845,6 +1854,7 @@ dependencies = [
     { name = "dotenv" },
     { name = "flask" },
     { name = "fortls" },
+    { name = "janus" },
     { name = "jinja2" },
     { name = "joblib" },
     { name = "mcp" },
@@ -1900,6 +1910,7 @@ requires-dist = [
     { name = "flask", specifier = ">=3.0.0" },
     { name = "fortls", specifier = ">=3.2.2" },
     { name = "google-genai", marker = "extra == 'google'", specifier = ">=1.8.0" },
+    { name = "janus", specifier = ">=2.0.0" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "jinja2", marker = "extra == 'dev'" },
     { name = "joblib", specifier = ">=1.5.1" },
