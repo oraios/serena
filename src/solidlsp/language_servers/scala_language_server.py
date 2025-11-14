@@ -150,6 +150,7 @@ class ScalaLanguageServer(SolidLanguageServer):
                 "copyWorksheetOutputProvider": False,
                 "doctorVisibilityProvider": False,
             },
+            "capabilities": {"textDocument": {"documentSymbol": {"hierarchicalDocumentSymbolSupport": True}}},
         }
         return initialize_params
 

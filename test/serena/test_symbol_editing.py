@@ -205,7 +205,7 @@ class EditingTest(ABC):
             log.info(f"Starting language server for {self.language} {self.rel_path}")
             language_server.start()
             log.info(f"Language server started for {self.language} {self.rel_path}")
-            yield LanguageServerSymbolRetriever(lang_server=language_server)
+            yield LanguageServerSymbolRetriever(ls=language_server)
         finally:
             if language_server is not None and language_server.is_running():
                 log.info(f"Stopping language server for {self.language} {self.rel_path}")

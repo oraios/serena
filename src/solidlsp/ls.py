@@ -176,6 +176,12 @@ class SolidLanguageServer(ABC):
                     as opposed to HTTP, TCP modes supported by some language servers.
         """
         self._solidlsp_settings = solidlsp_settings
+        lang = self.get_language_enum_instance()
+        self._custom_settings = solidlsp_settings.get_ls_specific_settings(lang)
+        logger.log(
+            f"Custom config (LS-specific settings) for {lang}: {self._custom_settings}",
+            logging.DEBUG,
+        )
         self._encoding = config.encoding
         self.logger = logger
         self.repository_root_path: str = repository_root_path
@@ -214,6 +220,7 @@ class SolidLanguageServer(ABC):
         )
         self.server = SolidLanguageServerHandler(
             process_launch_info,
+            language=self.language,
             logger=logging_fn,
             start_independent_lsp_process=config.start_independent_lsp_process,
         )
@@ -1687,7 +1694,16 @@ class SolidLanguageServer(ABC):
         return self
 
     def stop(self, shutdown_timeout: float = 2.0) -> None:
-        self._shutdown(timeout=shutdown_timeout)
+        """
+        Stops the language server process.
+        This function never raises an exception (any exceptions during shutdown are logged).
+
+        :param shutdown_timeout: time, in seconds, to wait for the server to shutdown gracefully before killing it
+        """
+        try:
+            self._shutdown(timeout=shutdown_timeout)
+        except Exception as e:
+            self.logger.log(f"Exception while shutting down language server: {e}", logging.WARNING)
 
     @property
     def language_server(self) -> Self:

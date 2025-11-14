@@ -26,17 +26,14 @@ class Intelephense(SolidLanguageServer):
     Provides PHP specific instantiation of the LanguageServer class using Intelephense.
 
     You can pass the following entries in ls_specific_settings["php"]:
-        - maxMemory
-        - maxFileSize
+        - maxMemory: sets intelephense.maxMemory
+        - maxFileSize: sets intelephense.files.maxSize
+        - ignore_vendor: whether or ignore directories named "vendor" (default: true)
     """
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
-        # For PHP projects, we should ignore:
-        # - vendor: third-party dependencies managed by Composer
-        # - node_modules: if the project has JavaScript components
-        # - cache: commonly used for caching
-        return super().is_ignored_dirname(dirname) or dirname in ["node_modules", "vendor", "cache"]
+        return super().is_ignored_dirname(dirname) or dirname in self._ignored_dirnames
 
     @classmethod
     def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, solidlsp_settings: SolidLSPSettings) -> list[str]:
@@ -100,6 +97,18 @@ class Intelephense(SolidLanguageServer):
         )
         self.request_id = 0
 
+        # For PHP projects, we should ignore:
+        # - node_modules: if the project has JavaScript components
+        # - cache: commonly used for caching
+        # - (configurable) vendor: third-party dependencies <managed by Composer
+        self._ignored_dirnames = {"node_modules", "cache"}
+        if self._custom_settings.get("ignore_vendor", True):
+            self._ignored_dirnames.add("vendor")
+        self.logger.log(
+            f"Ignoring the following directories for PHP projects: {', '.join(sorted(self._ignored_dirnames))}",
+            logging.INFO,
+        )
+
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialization params for the Intelephense Language Server.
@@ -130,9 +139,8 @@ class Intelephense(SolidLanguageServer):
         if license_key:
             initialization_options["licenceKey"] = license_key
 
-        custom_intelephense_settings = self._solidlsp_settings.ls_specific_settings.get(self.get_language_enum_instance(), {})
-        max_memory = custom_intelephense_settings.get("maxMemory")
-        max_file_size = custom_intelephense_settings.get("maxFileSize")
+        max_memory = self._custom_settings.get("maxMemory")
+        max_file_size = self._custom_settings.get("maxFileSize")
         if max_memory is not None:
             initialization_options["intelephense.maxMemory"] = max_memory
         if max_file_size is not None:

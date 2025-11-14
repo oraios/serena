@@ -64,3 +64,5 @@ prompts:
     {% for prompt in mode_system_prompts %}
     - {{ prompt }}
     {% endfor %}
+    
+    You have hereby read the 'Serena Instructions Manual' and do not need to read it again.

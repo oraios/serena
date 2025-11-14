@@ -250,6 +250,11 @@ class ElixirTools(SolidLanguageServer):
                     "didChangeConfiguration": {"dynamicRegistration": True},
                     "executeCommand": {"dynamicRegistration": True},
                 },
+                "window": {
+                    "showMessage": {"messageActionItem": {"additionalPropertiesSupport": True}},
+                    "showDocument": {"support": True},
+                    "workDoneProgress": True,
+                },
             },
             "workspaceFolders": [{"uri": root_uri, "name": os.path.basename(repository_absolute_path)}],
         }

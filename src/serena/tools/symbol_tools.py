@@ -42,7 +42,7 @@ class RestartLanguageServerTool(Tool, ToolMarkerOptional):
         """Use this tool only on explicit user request or after confirmation.
         It may be necessary to restart the language server if it hangs.
         """
-        self.agent.reset_language_server()
+        self.agent.reset_language_server_manager()
         return SUCCESS_RESULT
 
 

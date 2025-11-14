@@ -154,6 +154,40 @@ jobs:
       - name: Install Julia LanguageServer
         shell: bash
         run: julia -e 'using Pkg; Pkg.add("LanguageServer")'
+      - name: Setup Haskell toolchain
+        if: runner.os != 'Windows'
+        uses: haskell/ghcup-setup@v1
+        with:
+          ghc: '9.12.2'
+          cabal: '3.10.3.0'
+          hls: '2.11.0.0'
+      - name: Verify Haskell tools
+        if: runner.os != 'Windows'
+        run: |
+          echo "Verifying installed Haskell tools:"
+          which ghc && ghc --version
+          which cabal && cabal --version
+          # HLS verification - non-blocking in case of version incompatibility
+          if command -v haskell-language-server-wrapper &>/dev/null; then
+            echo "Found haskell-language-server-wrapper"
+            haskell-language-server-wrapper --version || echo "WARNING: HLS wrapper found but version check failed"
+          elif command -v haskell-language-server &>/dev/null; then
+            echo "Found haskell-language-server"
+            haskell-language-server --version || echo "WARNING: HLS found but version check failed"
+          else
+            echo "WARNING: HLS not found (may be incompatible with GHC 9.12.2)"
+            echo "This is not a critical error - tests will use HLS if available at runtime"
+          fi
+        shell: bash
+      - name: Pre-build Haskell test project for HLS
+        if: runner.os != 'Windows'
+        run: |
+          cd test/resources/repos/haskell/test_repo
+          cabal update
+          cabal build --only-dependencies
+          cabal build
+          echo "Haskell test project built successfully"
+        shell: bash
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@v2
         with:

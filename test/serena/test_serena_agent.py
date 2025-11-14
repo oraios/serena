@@ -37,7 +37,7 @@ def serena_config():
                 project_root=str(repo_path),
                 project_config=ProjectConfig(
                     project_name=project_name,
-                    language=language,
+                    languages=[language],
                     ignored_paths=[],
                     excluded_tools=set(),
                     read_only=False,
@@ -248,7 +248,7 @@ class TestSerenaAgent:
             and expected_kind.lower() in s["kind"].lower()
             and expected_file in s["relative_path"]
             for s in symbols
-        ), f"Expected to find {name_path} ({expected_kind}) in {expected_file} for {agent._active_project.language.name}. Symbols: {symbols}"
+        ), f"Expected to find {name_path} ({expected_kind}) in {expected_file}. Symbols: {symbols}"
 
     @pytest.mark.parametrize(
         "serena_agent,name_path",

@@ -50,7 +50,7 @@ class TestProjectConfigAutogenerate:
 
         # Verify the configuration
         assert config.project_name == self.project_path.name
-        assert config.language == Language.PYTHON
+        assert config.languages == [Language.PYTHON]
 
     def test_autogenerate_with_multiple_languages(self):
         """Test autogeneration picks dominant language when multiple are present."""
@@ -62,7 +62,7 @@ class TestProjectConfigAutogenerate:
         # Run autogenerate - should pick Python as dominant
         config = ProjectConfig.autogenerate(self.project_path, save_to_disk=False)
 
-        assert config.language == Language.PYTHON
+        assert config.languages == [Language.PYTHON]
 
     def test_autogenerate_saves_to_disk(self):
         """Test that autogenerate can save the configuration to disk."""
@@ -78,7 +78,7 @@ class TestProjectConfigAutogenerate:
         assert config_path.exists()
 
         # Verify the content
-        assert config.language == Language.GO
+        assert config.languages == [Language.GO]
 
     def test_autogenerate_nonexistent_path(self):
         """Test that autogenerate raises FileNotFoundError for non-existent path."""
@@ -115,7 +115,7 @@ class TestProjectConfigAutogenerate:
         config = ProjectConfig.autogenerate(self.project_path, project_name=custom_name, save_to_disk=False)
 
         assert config.project_name == custom_name
-        assert config.language == Language.TYPESCRIPT
+        assert config.languages == [Language.TYPESCRIPT]
 
     def test_autogenerate_error_message_format(self):
         """Test the specific format of the error message for better user experience."""

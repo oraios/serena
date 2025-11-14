@@ -14,6 +14,7 @@ from typing import Any
 import psutil
 from sensai.util.string import ToStringMixin
 
+from solidlsp.ls_config import Language
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_request import LanguageServerRequest
 from solidlsp.lsp_protocol_handler.lsp_requests import LspNotification
@@ -42,9 +43,10 @@ class LanguageServerTerminatedException(Exception):
     Exception raised when the language server process has terminated unexpectedly.
     """
 
-    def __init__(self, message: str, cause: Exception | None = None) -> None:
+    def __init__(self, message: str, language: Language, cause: Exception | None = None) -> None:
         super().__init__(message)
         self.message = message
+        self.language = language
         self.cause = cause
 
     def __str__(self) -> str:
@@ -132,10 +134,12 @@ class SolidLanguageServerHandler:
     def __init__(
         self,
         process_launch_info: ProcessLaunchInfo,
+        language: Language,
         logger: Callable[[str, str, StringDict | str], None] | None = None,
         start_independent_lsp_process=True,
         request_timeout: float | None = None,
     ) -> None:
+        self.language = language
         self.send = LanguageServerRequest(self)
         self.notify = LspNotification(self.send_notification)
 
@@ -211,12 +215,12 @@ class SolidLanguageServerHandler:
         # start threads to read stdout and stderr of the process
         threading.Thread(
             target=self._read_ls_process_stdout,
-            name="LSP-stdout-reader",
+            name=f"LSP-stdout-reader:{self.language.value}",
             daemon=True,
         ).start()
         threading.Thread(
             target=self._read_ls_process_stderr,
-            name="LSP-stderr-reader",
+            name=f"LSP-stderr-reader:{self.language.value}",
             daemon=True,
         ).start()
 
@@ -310,8 +314,7 @@ class SolidLanguageServerHandler:
         if self.logger is not None:
             self.logger("client", "logger", message)
 
-    @staticmethod
-    def _read_bytes_from_process(process, stream, num_bytes):
+    def _read_bytes_from_process(self, process, stream, num_bytes):
         """Read exactly num_bytes from process stdout"""
         data = b""
         while len(data) < num_bytes:
@@ -319,7 +322,8 @@ class SolidLanguageServerHandler:
             if not chunk:
                 if process.poll() is not None:
                     raise LanguageServerTerminatedException(
-                        f"Process terminated while trying to read response (read {num_bytes} of {len(data)} bytes before termination)"
+                        f"Process terminated while trying to read response (read {num_bytes} of {len(data)} bytes before termination)",
+                        language=self.language,
                     )
                 # Process still running but no data available yet, retry after a short delay
                 time.sleep(0.01)
@@ -356,13 +360,15 @@ class SolidLanguageServerHandler:
         except LanguageServerTerminatedException as e:
             exception = e
         except (BrokenPipeError, ConnectionResetError) as e:
-            exception = LanguageServerTerminatedException("Language server process terminated while reading stdout", cause=e)
+            exception = LanguageServerTerminatedException("Language server process terminated while reading stdout", self.language, cause=e)
         except Exception as e:
-            exception = LanguageServerTerminatedException("Unexpected error while reading stdout from language server process", cause=e)
+            exception = LanguageServerTerminatedException(
+                "Unexpected error while reading stdout from language server process", self.language, cause=e
+            )
         log.info("Language server stdout reader thread has terminated")
         if not self._is_shutting_down:
             if exception is None:
-                exception = LanguageServerTerminatedException("Language server stdout read process terminated unexpectedly")
+                exception = LanguageServerTerminatedException("Language server stdout read process terminated unexpectedly", self.language)
             log.error(str(exception))
             self._cancel_pending_requests(exception)
 

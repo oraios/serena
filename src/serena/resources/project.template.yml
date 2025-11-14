@@ -1,9 +1,19 @@
-# language of the project (csharp, python, rust, java, typescript, go, cpp, or ruby)
-#  * For C, use cpp
-#  * For JavaScript, use typescript
+# list of languages for which language servers are started; choose from:
+#   al               bash             clojure          cpp              csharp           csharp_omnisharp
+#   dart             elixir           elm              erlang           fortran          go
+#   haskell          java             julia            kotlin           lua              markdown
+#   nix              perl             php              python           python_jedi      r
+#   rego             ruby             ruby_solargraph  rust             scala            swift
+#   terraform        typescript       typescript_vts   zig
+# Note:
+#   - For C, use cpp
+#   - For JavaScript, use typescript
 # Special requirements:
-#  * csharp: Requires the presence of a .sln file in the project folder.
-language: python
+#   - csharp: Requires the presence of a .sln file in the project folder.
+# When using multiple languages, the first language server that supports a given file will be used for that file.
+# The first language is the default language and the respective language server will be used as a fallback.
+# Note that when using the JetBrains backend, language servers are not used and this list is correspondingly ignored.
+languages: ["python"]
 
 # the encoding used by text files in the project
 # For a list of possible encodings, see https://docs.python.org/3.11/library/codecs.html#standard-encodings
@@ -12,6 +22,7 @@ encoding: "utf-8"
 # whether to use the project's gitignore file to ignore files
 # Added on 2025-04-07
 ignore_all_files_in_gitignore: true
+
 # list of additional paths to ignore
 # same syntax as gitignore, so you can use * and **
 # Was previously called `ignored_dirs`, please update your config if you are using that.

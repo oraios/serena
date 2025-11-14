@@ -16,6 +16,7 @@ classifiers = [
 dependencies = [
   "requests>=2.32.3,<3",
   "pyright>=1.1.396,<2",
+  "fortls>=3.2.2",
   "overrides>=7.7.0,<8",
   "python-dotenv>=1.0.0, <2",
   "mcp==1.12.3",
@@ -64,8 +65,14 @@ dev = [
   "types-pyyaml>=6.0.12.20241230",
   "syrupy>=4.9.1",
   "types-requests>=2.32.4.20241230",
+  # docs
+  "sphinx>=7,<8",
+  "sphinx_rtd_theme>=0.5.1",
+  "sphinx-toolbox==3.7.0",
+  "jupyter-book>=1,<2",
+  "nbsphinx"
 ]
-agno = ["agno>=1.2.6", "sqlalchemy>=2.0.40"]
+agno = ["agno>=2.2.1", "sqlalchemy>=2.0.40"]
 google = ["google-genai>=1.8.0"]
 
 [project.urls]
@@ -122,6 +129,14 @@ lint = ["_black_check", "_ruff_check"]
 format = ["_ruff_format", "_black_format"]
 _mypy = "mypy src/serena"
 type-check = ["_mypy"]
+# docs
+_autogen_rst = "python docs/autogen_rst.py"
+_sphinx_build = "sphinx-build -b html docs docs/_build -W --keep-going"
+_jb_generate_toc = "python docs/create_toc.py"
+_jb_generate_config = "jupyter-book config sphinx docs/"
+doc-clean = "rm -rf docs/_build docs/03_api"
+doc-generate-files = ["_autogen_rst", "_jb_generate_toc", "_jb_generate_config"]
+doc-build = ["doc-clean", "doc-generate-files", "_sphinx_build"]
 
 [tool.ruff]
 target-version = "py311"
@@ -210,7 +225,6 @@ ignore = [
   "COM812",
   "RET503",
   "RET504",
-  "UP038",
   "F403",
   "F405",
   "C401",
@@ -276,11 +290,12 @@ markers = [
   "dart: language server running for Dart",
   "erlang: language server running for Erlang",
   "scala: language server running for Scala",
-  "scala: language server running for Scala",
   "al: language server running for AL (Microsoft Dynamics 365 Business Central)",
   "rego: language server running for Rego",
   "markdown: language server running for Markdown",
   "julia: Julia language server tests",
+  "fortran: language server running for Fortran",
+  "haskell: Haskell language server tests",
 ]
 
 [tool.codespell]

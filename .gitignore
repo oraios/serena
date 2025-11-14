@@ -200,6 +200,7 @@ pylint.html
 /*.yml
 !*.template.yml
 /agent-ui
+/test/**/.serena
 
 # dynamic LS installations
 /src/multilspy/language_servers/*/static
@@ -215,9 +216,11 @@ pylint.html
 # Cache is in .multilspy 
 **/.multilspy/**
 
+# temporary and backup files
+*.bak
+*.tmp
 tmp/
 
-.serena/
 .vscode/
 
 # Claude settings
@@ -249,3 +252,11 @@ tmp/
 .bloop/
 bootstrap
 test/resources/repos/scala/.bloop/
+
+# Haskell
+.stack-work/
+*.cabal
+stack.yaml.lock
+dist-newstyle/
+cabal.project.local*
+.ghc.environment.*

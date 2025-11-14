@@ -247,17 +247,10 @@ class CSharpLanguageServer(SolidLanguageServer):
         Ensure .NET runtime and Microsoft.CodeAnalysis.LanguageServer are available.
         Returns a tuple of (dotnet_path, language_server_dll_path).
         """
-        language_enum = cls.get_language_enum_instance()
-        ls_specific_settings = solidlsp_settings.ls_specific_settings or {}
-        language_specific_config = ls_specific_settings.get(language_enum, {})
+        language_specific_config = solidlsp_settings.get_ls_specific_settings(cls.get_language_enum_instance())
         runtime_dependency_overrides = cast(list[dict[str, Any]], language_specific_config.get("runtime_dependencies", []))
 
         logger.log("Resolving runtime dependencies", logging.DEBUG)
-        if language_specific_config:
-            logger.log(
-                f"Language-specific config for {language_enum}: {language_specific_config}",
-                logging.DEBUG,
-            )
 
         runtime_dependencies = RuntimeDependencyCollection(
             _RUNTIME_DEPENDENCIES,
@@ -448,9 +441,8 @@ class CSharpLanguageServer(SolidLanguageServer):
         logger.log("Downloading .NET 9 runtime...", logging.INFO)
         dotnet_dir.mkdir(parents=True, exist_ok=True)
 
-        custom_dotnet_runtime_url = solidlsp_settings.ls_specific_settings.get(cls.get_language_enum_instance(), {}).get(
-            "dotnet_runtime_url"
-        )
+        custom_settings = solidlsp_settings.get_ls_specific_settings(cls.get_language_enum_instance())
+        custom_dotnet_runtime_url = custom_settings.get("dotnet_runtime_url")
         if custom_dotnet_runtime_url is not None:
             logger.log(f"Using custom .NET runtime url: {custom_dotnet_runtime_url}", logging.INFO)
             url = custom_dotnet_runtime_url

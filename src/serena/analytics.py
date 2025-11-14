@@ -69,12 +69,26 @@ class AnthropicTokenCount(TokenCountEstimator):
         return self._send_count_tokens_request(text).input_tokens
 
 
+class CharCountEstimator(TokenCountEstimator):
+    """
+    A naive character count estimator that estimates tokens based on character count.
+    """
+
+    def __init__(self, avg_chars_per_token: int = 4):
+        self._avg_chars_per_token = avg_chars_per_token
+
+    def estimate_token_count(self, text: str) -> int:
+        # Assuming an average of 4 characters per token
+        return len(text) // self._avg_chars_per_token
+
+
 _registered_token_estimator_instances_cache: dict[RegisteredTokenCountEstimator, TokenCountEstimator] = {}
 
 
 class RegisteredTokenCountEstimator(Enum):
     TIKTOKEN_GPT4O = "TIKTOKEN_GPT4O"
     ANTHROPIC_CLAUDE_SONNET_4 = "ANTHROPIC_CLAUDE_SONNET_4"
+    CHAR_COUNT = "CHAR_COUNT"
 
     @classmethod
     def get_valid_names(cls) -> list[str]:
@@ -89,8 +103,10 @@ class RegisteredTokenCountEstimator(Enum):
                 return TiktokenCountEstimator(model_name="gpt-4o")
             case RegisteredTokenCountEstimator.ANTHROPIC_CLAUDE_SONNET_4:
                 return AnthropicTokenCount(model_name="claude-sonnet-4-20250514")
+            case RegisteredTokenCountEstimator.CHAR_COUNT:
+                return CharCountEstimator(avg_chars_per_token=4)
             case _:
-                raise ValueError(f"Unknown token count estimator: {self.value}")
+                raise ValueError(f"Unknown token count estimator: {self}")
 
     def load_estimator(self) -> TokenCountEstimator:
         estimator_instance = _registered_token_estimator_instances_cache.get(self)

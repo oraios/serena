@@ -6,12 +6,10 @@ import multiprocessing
 import os
 import platform
 import sys
-import threading
 import webbrowser
 from collections.abc import Callable
-from concurrent.futures import Future, ThreadPoolExecutor
 from logging import Logger
-from typing import TYPE_CHECKING, Any, Optional, TypeVar
+from typing import TYPE_CHECKING, Optional, TypeVar
 
 from sensai.util import logging
 from sensai.util.logging import LogTime
@@ -22,12 +20,14 @@ from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
 from serena.config.context_mode import RegisteredContext, SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import SerenaConfig, ToolInclusionDefinition, ToolSet
 from serena.dashboard import SerenaDashboardAPI
+from serena.ls_manager import LanguageServerManager
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
+from serena.task_executor import TaskExecutor
 from serena.tools import ActivateProjectTool, GetCurrentConfigTool, Tool, ToolMarker, ToolRegistry
 from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
-from solidlsp import SolidLanguageServer
+from solidlsp.ls_config import Language
 
 if TYPE_CHECKING:
     from serena.gui_log_viewer import GuiLogViewer
@@ -86,7 +86,6 @@ class SerenaAgent:
 
         # project-specific instances, which will be initialized upon project activation
         self._active_project: Project | None = None
-        self.language_server: SolidLanguageServer | None = None
 
         # adjust log level
         serena_log_level = self.serena_config.log_level
@@ -127,25 +126,9 @@ class SerenaAgent:
         if self._gui_log_viewer is not None:
             self._gui_log_viewer.set_tool_names(tool_names)
 
-        self._tool_usage_stats: ToolUsageStats | None = None
-        if self.serena_config.record_tool_usage_stats:
-            token_count_estimator = RegisteredTokenCountEstimator[self.serena_config.token_count_estimator]
-            log.info(f"Tool usage statistics recording is enabled with token count estimator: {token_count_estimator.name}.")
-            self._tool_usage_stats = ToolUsageStats(token_count_estimator)
-
-        # start the dashboard (web frontend), registering its log handler
-        if self.serena_config.web_dashboard:
-            self._dashboard_thread, port = SerenaDashboardAPI(
-                get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats
-            ).run_in_thread()
-            dashboard_url = f"http://127.0.0.1:{port}/dashboard/index.html"
-            log.info("Serena web dashboard started at %s", dashboard_url)
-            if self.serena_config.web_dashboard_open_on_launch:
-                # open the dashboard URL in the default web browser (using a separate process to control
-                # output redirection)
-                process = multiprocessing.Process(target=self._open_dashboard, args=(dashboard_url,))
-                process.start()
-                process.join(timeout=1)
+        token_count_estimator = RegisteredTokenCountEstimator[self.serena_config.token_count_estimator]
+        log.info(f"Will record tool usage statistics with token count estimator: {token_count_estimator.name}.")
+        self._tool_usage_stats = ToolUsageStats(token_count_estimator)
 
         # log fundamental information
         log.info(f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()})")
@@ -168,10 +151,8 @@ class SerenaAgent:
         log.info(f"Number of exposed tools: {len(self._exposed_tools)}")
 
         # create executor for starting the language server and running tools in another thread
-        # This executor is used to achieve linear task execution, so it is important to use a single-threaded executor.
-        self._task_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="SerenaAgentExecutor")
-        self._task_executor_lock = threading.Lock()
-        self._task_executor_task_index = 1
+        # This executor is used to achieve linear task execution
+        self._task_executor = TaskExecutor("SerenaAgentTaskExecutor")
 
         # Initialize the prompt factory
         self.prompt_factory = SerenaPromptFactory()
@@ -191,6 +172,57 @@ class SerenaAgent:
                 self.activate_project_from_path_or_name(project)
             except Exception as e:
                 log.error(f"Error activating project '{project}' at startup: {e}", exc_info=e)
+
+        # start the dashboard (web frontend), registering its log handler
+        # should be the last thing to happen in the initialization since the dashboard
+        # may access various parts of the agent
+        if self.serena_config.web_dashboard:
+            self._dashboard_thread, port = SerenaDashboardAPI(
+                get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats
+            ).run_in_thread()
+            dashboard_url = f"http://127.0.0.1:{port}/dashboard/index.html"
+            log.info("Serena web dashboard started at %s", dashboard_url)
+            if self.serena_config.web_dashboard_open_on_launch:
+                # open the dashboard URL in the default web browser (using a separate process to control
+                # output redirection)
+                process = multiprocessing.Process(target=self._open_dashboard, args=(dashboard_url,))
+                process.start()
+                process.join(timeout=1)
+            # inform the GUI window (if any)
+            if self._gui_log_viewer is not None:
+                self._gui_log_viewer.set_dashboard_url(dashboard_url)
+
+    def get_current_tasks(self) -> list[TaskExecutor.TaskInfo]:
+        """
+        Gets the list of tasks currently running or queued for execution.
+        The function returns a list of thread-safe TaskInfo objects (specifically created for the caller).
+
+        :return: the list of tasks in the execution order (running task first)
+        """
+        return self._task_executor.get_current_tasks()
+
+    def get_last_executed_task(self) -> TaskExecutor.TaskInfo | None:
+        """
+        Gets the last executed task.
+
+        :return: the last executed task info or None if no task has been executed yet
+        """
+        return self._task_executor.get_last_executed_task()
+
+    def get_language_server_manager(self) -> LanguageServerManager | None:
+        if self._active_project is not None:
+            return self._active_project.language_server_manager
+        return None
+
+    def get_language_server_manager_or_raise(self) -> LanguageServerManager:
+        language_server_manager = self.get_language_server_manager()
+        if language_server_manager is None:
+            raise Exception(
+                "The language server manager is not initialized, indicating a problem during project activation. "
+                "Inform the user, telling them to inspect Serena's logs in order to determine the issue. "
+                "IMPORTANT: Wait for further instructions before you continue!"
+            )
+        return language_server_manager
 
     def get_context(self) -> SerenaAgentContext:
         return self._context
@@ -234,18 +266,15 @@ class SerenaAgent:
                 tool_inclusion_definitions.append(project.project_config)
         return tool_inclusion_definitions
 
-    def record_tool_usage_if_enabled(self, input_kwargs: dict, tool_result: str | dict, tool: Tool) -> None:
+    def record_tool_usage(self, input_kwargs: dict, tool_result: str | dict, tool: Tool) -> None:
         """
         Record the usage of a tool with the given input and output strings if tool usage statistics recording is enabled.
         """
         tool_name = tool.get_name()
-        if self._tool_usage_stats is not None:
-            input_str = str(input_kwargs)
-            output_str = str(tool_result)
-            log.debug(f"Recording tool usage for tool '{tool_name}'")
-            self._tool_usage_stats.record_tool_usage(tool_name, input_str, output_str)
-        else:
-            log.debug(f"Tool usage statistics recording is disabled, not recording usage of '{tool_name}'.")
+        input_str = str(input_kwargs)
+        output_str = str(tool_result)
+        log.debug(f"Recording tool usage for tool '{tool_name}'")
+        self._tool_usage_stats.record_tool_usage(tool_name, input_str, output_str)
 
     @staticmethod
     def _open_dashboard(url: str) -> None:
@@ -352,36 +381,33 @@ class SerenaAgent:
 
         log.info(f"Active tools ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
 
-    def issue_task(self, task: Callable[[], Any], name: str | None = None) -> Future:
+    def issue_task(
+        self, task: Callable[[], T], name: str | None = None, logged: bool = True, timeout: float | None = None
+    ) -> TaskExecutor.Task[T]:
         """
         Issue a task to the executor for asynchronous execution.
         It is ensured that tasks are executed in the order they are issued, one after another.
 
         :param task: the task to execute
         :param name: the name of the task for logging purposes; if None, use the task function's name
-        :return: a Future object representing the execution of the task
+        :param logged: whether to log management of the task; if False, only errors will be logged
+        :param timeout: the maximum time to wait for task completion in seconds, or None to wait indefinitely
+        :return: the task object, through which the task's future result can be accessed
         """
-        with self._task_executor_lock:
-            task_name = f"Task-{self._task_executor_task_index}[{name or task.__name__}]"
-            self._task_executor_task_index += 1
+        return self._task_executor.issue_task(task, name=name, logged=logged, timeout=timeout)
 
-            def task_execution_wrapper() -> Any:
-                with LogTime(task_name, logger=log):
-                    return task()
-
-            log.info(f"Scheduling {task_name}")
-            return self._task_executor.submit(task_execution_wrapper)
-
-    def execute_task(self, task: Callable[[], T]) -> T:
+    def execute_task(self, task: Callable[[], T], name: str | None = None, logged: bool = True, timeout: float | None = None) -> T:
         """
         Executes the given task synchronously via the agent's task executor.
         This is useful for tasks that need to be executed immediately and whose results are needed right away.
 
         :param task: the task to execute
+        :param name: the name of the task for logging purposes; if None, use the task function's name
+        :param logged: whether to log management of the task; if False, only errors will be logged
+        :param timeout: the maximum time to wait for task completion in seconds, or None to wait indefinitely
         :return: the result of the task execution
         """
-        future = self.issue_task(task)
-        return future.result()
+        return self._task_executor.execute_task(task, name=name, logged=logged, timeout=timeout)
 
     def is_using_language_server(self) -> bool:
         """
@@ -394,15 +420,14 @@ class SerenaAgent:
         self._active_project = project
         self._update_active_tools()
 
-        def init_language_server() -> None:
+        def init_language_server_manager() -> None:
             # start the language server
             with LogTime("Language server initialization", logger=log):
-                self.reset_language_server()
-                assert self.language_server is not None
+                self.reset_language_server_manager()
 
         # initialize the language server in the background (if in language server mode)
         if self.is_using_language_server():
-            self.issue_task(init_language_server)
+            self.issue_task(init_language_server_manager)
 
         if self._project_activation_callback is not None:
             self._project_activation_callback()
@@ -509,12 +534,9 @@ class SerenaAgent:
 
         return result_str
 
-    def is_language_server_running(self) -> bool:
-        return self.language_server is not None and self.language_server.is_running()
-
-    def reset_language_server(self) -> None:
+    def reset_language_server_manager(self) -> None:
         """
-        Starts/resets the language server for the current project
+        Starts/resets the language server manager for the current project
         """
         tool_timeout = self.serena_config.tool_timeout
         if tool_timeout is None or tool_timeout < 0:
@@ -524,27 +546,32 @@ class SerenaAgent:
                 raise ValueError(f"Tool timeout must be at least 10 seconds, but is {tool_timeout} seconds")
             ls_timeout = tool_timeout - 5  # the LS timeout is for a single call, it should be smaller than the tool timeout
 
-        # stop the language server if it is running
-        if self.is_language_server_running():
-            assert self.language_server is not None
-            log.info(f"Stopping the current language server at {self.language_server.repository_root_path} ...")
-            self.language_server.stop()
-            self.language_server = None
-
-        # instantiate and start the language server
-        assert self._active_project is not None
-        self.language_server = self._active_project.create_language_server(
+        # instantiate and start the necessary language servers
+        self.get_active_project_or_raise().create_language_server_manager(
             log_level=self.serena_config.log_level,
             ls_timeout=ls_timeout,
             trace_lsp_communication=self.serena_config.trace_lsp_communication,
             ls_specific_settings=self.serena_config.ls_specific_settings,
         )
-        log.info(f"Starting the language server for {self._active_project.project_name}")
-        self.language_server.start()
-        if not self.language_server.is_running():
-            raise RuntimeError(
-                f"Failed to start the language server for {self._active_project.project_name} at {self._active_project.project_root}"
-            )
+
+    def add_language(self, language: Language) -> None:
+        """
+        Adds a new language to the active project, spawning the respective language server and updating the project configuration.
+        The addition is scheduled via the agent's task executor and executed synchronously, i.e. the method returns
+        when the addition is complete.
+
+        :param language: the language to add
+        """
+        self.execute_task(lambda: self.get_active_project_or_raise().add_language(language), name=f"AddLanguage:{language.value}")
+
+    def remove_language(self, language: Language) -> None:
+        """
+        Removes a language from the active project, shutting down the respective language server and updating the project configuration.
+        The removal is scheduled via the agent's task executor and executed asynchronously.
+
+        :param language: the language to remove
+        """
+        self.issue_task(lambda: self.get_active_project_or_raise().remove_language(language), name=f"RemoveLanguage:{language.value}")
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self._all_tools[tool_class]  # type: ignore
@@ -559,11 +586,9 @@ class SerenaAgent:
         if not hasattr(self, "_is_initialized"):
             return
         log.info("SerenaAgent is shutting down ...")
-        if self.is_language_server_running():
-            log.info("Stopping the language server ...")
-            assert self.language_server is not None
-            self.language_server.save_cache()
-            self.language_server.stop()
+        if self._active_project is not None:
+            self._active_project.shutdown()
+            self._active_project = None
         if self._gui_log_viewer:
             log.info("Stopping the GUI log window ...")
             self._gui_log_viewer.stop()
