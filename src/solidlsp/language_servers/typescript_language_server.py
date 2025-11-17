@@ -69,6 +69,11 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             "coverage",
         ]
 
+    @override
+    def classify_stderr_line(self, line: str) -> int:
+        """Classify typescript-language-server stderr output to avoid false-positive errors."""
+        return super().classify_stderr_line(line)
+
     @classmethod
     def _setup_runtime_dependencies(
         cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
@@ -184,8 +189,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             await lsp.request_definition(...)
             await lsp.request_references(...)
             # Shutdown the LanguageServer on exit from scope
-        # LanguageServer has been shutdown
-        """
+        # LanguageServer has been shutdown"""
 
         def register_capability_handler(params):
             assert "registrations" in params

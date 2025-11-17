@@ -5,7 +5,6 @@ Provides Rust specific instantiation of the LanguageServer class. Contains vario
 import logging
 import os
 import pathlib
-import shutil
 import subprocess
 import threading
 
@@ -24,6 +23,22 @@ class RustAnalyzer(SolidLanguageServer):
     Provides Rust specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Rust.
     """
 
+    @override
+    def classify_stderr_line(self, line: str) -> int:
+        """Classify rust-analyzer stderr output to avoid false-positive errors."""
+        line_lower = line.lower()
+
+        # Known informational/warning messages from rust-analyzer that aren't critical errors
+        if any(
+            [
+                "failed to find any projects in" in line_lower,
+                "fetchworkspaceerror" in line_lower,
+            ]
+        ):
+            return logging.DEBUG
+
+        return super().classify_stderr_line(line)
+
     @staticmethod
     def _get_rustup_version():
         """Get installed rustup version or None if not found."""
@@ -37,17 +52,17 @@ class RustAnalyzer(SolidLanguageServer):
 
     @staticmethod
     def _get_rust_analyzer_path():
-        """Get rust-analyzer path via rustup or system PATH."""
-        # First try rustup
+        """Get rust-analyzer path via rustup. Returns None if not found."""
         try:
+            # Note: we avoid using system PATH to avoid picking up incorrect aliases
             result = subprocess.run(["rustup", "which", "rust-analyzer"], capture_output=True, text=True, check=False)
             if result.returncode == 0:
                 return result.stdout.strip()
+
         except FileNotFoundError:
             pass
 
-        # Fallback to system PATH
-        return shutil.which("rust-analyzer")
+        return None
 
     @staticmethod
     def _ensure_rust_analyzer_installed():

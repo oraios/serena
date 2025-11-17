@@ -534,7 +534,11 @@ class ProjectCommands(AutoRegisteringGroup):
                 click.echo(f"Indexing for language {ls.language.value} ({k}/{len(servers)}) …")
                 collected_exceptions: list[Exception] = []
                 files_failed = []
-                for i, f in enumerate(tqdm(files, desc="Indexing")):
+
+                matcher = ls.language.get_source_fn_matcher()
+                matching_files = [f for f in files if matcher.is_relevant_filename(f)]
+
+                for i, f in enumerate(tqdm(matching_files, desc="Indexing")):
                     try:
                         ls.request_document_symbols(f, include_body=False)
                         ls.request_document_symbols(f, include_body=True)

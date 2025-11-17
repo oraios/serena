@@ -25,6 +25,23 @@ class TerraformLS(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in [".terraform", "terraform.tfstate.d"]
 
+    @override
+    def classify_stderr_line(self, line: str) -> int:
+        """Classify terraform-ls stderr output to avoid false-positive errors."""
+        line_lower = line.lower()
+
+        # Known informational messages from terraform-ls that contain "error" but aren't errors
+        # Note: pattern match is flexible to handle file paths between keywords
+        if any(
+            [
+                "loading module metadata returned error:" in line_lower and "state not changed" in line_lower,
+                "incoming notification for" in line_lower,
+            ]
+        ):
+            return logging.DEBUG
+
+        return super().classify_stderr_line(line)
+
     @staticmethod
     def _ensure_tf_command_available(logger: LanguageServerLogger):
         logger.log("Starting terraform version detection...", logging.DEBUG)

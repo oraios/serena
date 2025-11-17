@@ -94,6 +94,26 @@ class SolidLanguageServer(ABC):
         """
         return dirname.startswith(".")
 
+    def classify_stderr_line(self, line: str) -> int:
+        """
+        Classify a stderr line from the language server to determine appropriate logging level.
+
+        Language servers may emit informational messages to stderr that contain words like "error"
+        but are not actual errors. Subclasses can override this method to filter out known
+        false-positive patterns specific to their language server.
+
+        :param line: The stderr line to classify
+        :return: A logging level (logging.DEBUG, logging.INFO, logging.WARNING, or logging.ERROR)
+        """
+        line_lower = line.lower()
+
+        # Default classification: treat lines with "error" or "exception" as ERROR level
+        if "error" in line_lower or "exception" in line_lower or line.startswith("E["):
+            return logging.ERROR
+
+        else:
+            return logging.INFO
+
     @classmethod
     def get_language_enum_instance(cls) -> Language:
         return Language.from_ls_class(cls)
@@ -221,6 +241,7 @@ class SolidLanguageServer(ABC):
         self.server = SolidLanguageServerHandler(
             process_launch_info,
             language=self.language,
+            language_server=self,
             logger=logging_fn,
             start_independent_lsp_process=config.start_independent_lsp_process,
         )

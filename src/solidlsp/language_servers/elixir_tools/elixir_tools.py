@@ -34,6 +34,15 @@ class ElixirTools(SolidLanguageServer):
         # - cover: coverage reports
         return super().is_ignored_dirname(dirname) or dirname in ["_build", "deps", "node_modules", ".elixir_ls", "cover"]
 
+    @override
+    def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool = True) -> bool:
+        """Check if a path should be ignored for symbol indexing."""
+        if relative_path.endswith("mix.exs"):
+            # These are project configuration files, not source code with symbols to index
+            return True
+
+        return super().is_ignored_path(relative_path, ignore_unsupported_files)
+
     def _is_next_ls_internal_file(self, abs_path: str) -> bool:
         """Check if an absolute path is a Next LS internal file that should be ignored."""
         return any(
@@ -309,7 +318,7 @@ class ElixirTools(SolidLanguageServer):
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", check_server_ready)
-        self.server.on_notification("window/workDoneProgress/create", do_nothing)
+        self.server.on_request("window/workDoneProgress/create", do_nothing)
         self.server.on_notification("$/workDoneProgress", work_done_progress)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
@@ -329,11 +338,12 @@ class ElixirTools(SolidLanguageServer):
         # Next LS may not provide all capabilities immediately, so we check for basic ones
         assert "textDocumentSync" in init_response["capabilities"], f"Missing textDocumentSync in {init_response['capabilities']}"
 
-        # Some capabilities might be optional or provided later
+        # Some capabilities might be optional or provided later. This is expected, so we log as info
         if "completionProvider" not in init_response["capabilities"]:
-            self.logger.log("Warning: completionProvider not available in initial capabilities", logging.WARNING)
+            self.logger.log("completionProvider not available in initial capabilities", logging.INFO)
+
         if "definitionProvider" not in init_response["capabilities"]:
-            self.logger.log("Warning: definitionProvider not available in initial capabilities", logging.WARNING)
+            self.logger.log("definitionProvider not available in initial capabilities", logging.INFO)
 
         self.server.notify.initialized({})
         self.completions_available.set()
@@ -346,12 +356,6 @@ class ElixirTools(SolidLanguageServer):
         if self.server_ready.wait(timeout=ready_timeout):
             self.logger.log("Next LS is ready and available for requests", logging.INFO)
 
-            # Add a small settling period to ensure background indexing is complete
-            # Next LS often continues compilation/indexing in background after ready signal
-            settling_time = 120.0
-            self.logger.log(f"Allowing {settling_time} seconds for Next LS background indexing to complete...", logging.INFO)
-            time.sleep(settling_time)
-            self.logger.log("Next LS settling period complete", logging.INFO)
         else:
             error_msg = f"Next LS failed to initialize within {ready_timeout} seconds. This may indicate a problem with the Elixir installation, project compilation, or Next LS itself."
             self.logger.log(error_msg, logging.ERROR)

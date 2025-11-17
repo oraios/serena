@@ -188,7 +188,8 @@ class BashLanguageServer(SolidLanguageServer):
         self.logger.log("Waiting for Bash language server to be ready...", logging.INFO)
         if not self.server_ready.wait(timeout=3.0):
             # Fallback: assume server is ready after timeout
-            self.logger.log("Timeout waiting for bash server ready signal, proceeding anyway", logging.WARNING)
+            # This is common. bash-language-server doesn't always send explicit ready signals. Log as info
+            self.logger.log("Timeout waiting for bash server ready signal, proceeding anyway", logging.INFO)
             self.server_ready.set()
             self.completions_available.set()
         else:

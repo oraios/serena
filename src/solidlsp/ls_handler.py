@@ -54,7 +54,6 @@ class LanguageServerTerminatedException(Exception):
 
 
 class Request(ToStringMixin):
-
     @dataclass
     class Result:
         payload: PayloadLike | None = None
@@ -135,11 +134,13 @@ class SolidLanguageServerHandler:
         self,
         process_launch_info: ProcessLaunchInfo,
         language: Language,
+        language_server: Any,
         logger: Callable[[str, str, StringDict | str], None] | None = None,
         start_independent_lsp_process=True,
         request_timeout: float | None = None,
     ) -> None:
         self.language = language
+        self._language_server = language_server
         self.send = LanguageServerRequest(self)
         self.notify = LspNotification(self.send_notification)
 
@@ -385,11 +386,7 @@ class SolidLanguageServerHandler:
                 if not line:
                     continue
                 line = line.decode(ENCODING, errors="replace")
-                line_lower = line.lower()
-                if "error" in line_lower or "exception" in line_lower or line.startswith("E["):
-                    level = logging.ERROR
-                else:
-                    level = logging.INFO
+                level = self._language_server.classify_stderr_line(line)
                 log.log(level, line)
         except Exception as e:
             log.error("Error while reading stderr from language server process: %s", e, exc_info=e)

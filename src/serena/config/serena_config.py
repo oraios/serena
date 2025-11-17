@@ -209,9 +209,15 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                         f"  project_name: {project_name}\n"
                         f"  language: python  # or typescript, java, csharp, rust, go, ruby, cpp, php, swift, elixir, terraform, bash\n"
                     )
-                # find the language with the highest percentage
-                dominant_language = max(language_composition.keys(), key=lambda lang: language_composition[lang])
-                languages_to_use = [dominant_language]
+                # Include all languages with at least 0.5% representation
+                # This ensures multi-language projects get full language server support
+                MIN_PERCENTAGE_THRESHOLD = 0.5
+                languages_to_use = [
+                    lang for lang, percentage in language_composition.items()
+                    if percentage >= MIN_PERCENTAGE_THRESHOLD
+                ]
+                # Sort by percentage (highest first) for better language server priority
+                languages_to_use.sort(key=lambda lang: language_composition[lang], reverse=True)
             else:
                 languages_to_use = [lang.value for lang in languages]
             config_with_comments = cls.load_commented_map(PROJECT_TEMPLATE_FILE)
