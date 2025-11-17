@@ -53,18 +53,16 @@ class TestProjectConfigAutogenerate:
         assert config.languages == [Language.PYTHON]
 
     def test_autogenerate_with_multiple_languages(self):
-        """Test autogeneration includes all languages above 0.5% threshold."""
+        """Test autogeneration picks dominant language when multiple are present."""
         # Create files for multiple languages
         (self.project_path / "main.py").write_text("print('Python')")
         (self.project_path / "util.py").write_text("def util(): pass")
         (self.project_path / "small.js").write_text("console.log('JS');")
 
-        # Run autogenerate - should include both Python and TypeScript (JS)
-        # Python: 2 files (66.7%), TypeScript: 1 file (33.3%), both above 0.5% threshold
+        # Run autogenerate - should pick Python as dominant
         config = ProjectConfig.autogenerate(self.project_path, save_to_disk=False)
 
-        # Should include both languages, sorted by percentage (Python first)
-        assert config.languages == [Language.PYTHON, Language.TYPESCRIPT]
+        assert config.languages == [Language.PYTHON]
 
     def test_autogenerate_saves_to_disk(self):
         """Test that autogenerate can save the configuration to disk."""
