@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/TahirRiaz/serena-tf/pkg/cache"
+	"github.com/TahirRiaz/serena-tf/pkg/editor"
 	"github.com/TahirRiaz/serena-tf/pkg/lsp"
 	"github.com/TahirRiaz/serena-tf/pkg/memory"
 	"github.com/TahirRiaz/serena-tf/pkg/util"
@@ -20,6 +21,7 @@ type Project struct {
 	symbolRetriever *lsp.SymbolRetriever
 	symbolCache     *cache.SymbolCache
 	memoryManager   *memory.Manager
+	codeEditor      *editor.CodeEditor
 	gitignore       gitignore.Matcher
 }
 
@@ -61,6 +63,9 @@ func NewProject(rootPath string) (*Project, error) {
 	// Initialize symbol retriever
 	symbolRetriever := lsp.NewSymbolRetriever(terraformLS, absRoot, symbolCache)
 
+	// Initialize code editor
+	codeEditor := editor.NewCodeEditor(absRoot, symbolRetriever, terraformLS)
+
 	// Initialize memory manager
 	memoryManager, err := memory.NewManager(absRoot)
 	if err != nil {
@@ -81,6 +86,7 @@ func NewProject(rootPath string) (*Project, error) {
 		symbolRetriever: symbolRetriever,
 		symbolCache:     symbolCache,
 		memoryManager:   memoryManager,
+		codeEditor:      codeEditor,
 		gitignore:       gitignoreMatcher,
 	}, nil
 }
@@ -108,6 +114,11 @@ func (p *Project) GetSymbolRetriever() *lsp.SymbolRetriever {
 // GetMemoryManager returns the memory manager
 func (p *Project) GetMemoryManager() *memory.Manager {
 	return p.memoryManager
+}
+
+// GetCodeEditor returns the code editor
+func (p *Project) GetCodeEditor() *editor.CodeEditor {
+	return p.codeEditor
 }
 
 // ReadFile reads a file from the project

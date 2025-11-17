@@ -20,6 +20,8 @@ Serena-TF is a production-ready Golang port of Serena, specifically focused on T
   - Get document symbol overviews
   - Find all references to symbols
   - Advanced filtering by symbol kind
+  - **Edit symbols**: Replace body, insert before/after, rename across project
+  - LSP-powered refactoring with workspace-wide changes
 
 - **File Operations**
   - Read, create, list, and find files
@@ -43,6 +45,11 @@ Serena-TF is a production-ready Golang port of Serena, specifically focused on T
   - Run Terraform CLI commands (plan, apply, validate, etc.)
   - Configurable working directory
   - Capture stdout/stderr
+
+- **Workflow Tools**
+  - Project onboarding with guided analysis
+  - Initial instructions and manual
+  - Onboarding status tracking
 
 ### 🎯 MCP Protocol
 
@@ -125,7 +132,7 @@ Add to your MCP client configuration (e.g., Claude Desktop):
 
 ## Available Tools
 
-### File Tools
+### File Tools (6 tools)
 
 - **read_file**: Read files with line range support
 - **create_text_file**: Create or overwrite files
@@ -134,27 +141,49 @@ Add to your MCP client configuration (e.g., Claude Desktop):
 - **search_for_pattern**: Regex search across files with context
 - **replace_regex**: Regex-based file editing
 
-### Symbol Tools
+### Symbol Tools - Read Operations (3 tools)
 
 - **get_symbols_overview**: Get top-level symbols in a file
 - **find_symbol**: Advanced symbol search with name path patterns
 - **find_referencing_symbols**: Find all references to a symbol
 
-### Memory Tools
+### Symbol Tools - Editing Operations (5 tools)
 
-- **write_memory**: Save project knowledge
+- **replace_symbol_body**: Replace entire symbol definition
+- **insert_after_symbol**: Insert content after a symbol
+- **insert_before_symbol**: Insert content before a symbol (e.g., add imports)
+- **rename_symbol**: LSP-powered symbol renaming across project
+- **restart_language_server**: Restart hung language server (optional)
+
+### Line Editing Tools (3 tools - optional)
+
+- **delete_lines**: Delete a range of lines
+- **replace_lines**: Replace a range of lines with new content
+- **insert_at_line**: Insert content at a specific line
+
+### Memory Tools (5 tools)
+
+- **write_memory**: Save project knowledge for future sessions
 - **read_memory**: Retrieve saved knowledge
 - **list_memories**: List all memories
 - **delete_memory**: Remove a memory
 - **edit_memory**: Edit memory with regex
 
-### Config Tools
+### Workflow Tools (3 tools)
 
-- **get_current_config**: Show current configuration
+- **initial_instructions**: Get system prompt and manual
+- **check_onboarding_performed**: Check if onboarding was done
+- **onboarding**: Get instructions for project onboarding (optional)
 
-### Command Tools
+### Config Tools (1 tool)
 
-- **execute_shell_command**: Execute shell commands (terraform, etc.)
+- **get_current_config**: Show current configuration and active project
+
+### Command Tools (1 tool)
+
+- **execute_shell_command**: Execute shell commands (terraform plan/apply/validate, etc.)
+
+**Total: 27 comprehensive tools**
 
 ## Architecture
 
@@ -165,7 +194,8 @@ serena-tf/
 ├── cmd/serena-tf/          # CLI entry point
 ├── pkg/
 │   ├── lsp/                # LSP client and Terraform LS wrapper
-│   ├── tools/              # Tool system and implementations
+│   ├── editor/             # Code editor with symbol-aware operations
+│   ├── tools/              # Tool system and implementations (27 tools)
 │   ├── mcp/                # MCP protocol server
 │   ├── project/            # Project management
 │   ├── memory/             # Memory system
@@ -182,10 +212,11 @@ serena-tf/
 
 1. **LSP Client**: Generic JSON-RPC LSP client with full protocol support
 2. **Terraform LS**: Wrapper with auto-download and lifecycle management
-3. **Symbol Cache**: MD5-based file caching for performance
-4. **Tool Registry**: Plugin-style tool registration and discovery
-5. **MCP Server**: Full MCP protocol implementation
-6. **Agent**: Orchestrates all components and provides tool access
+3. **Code Editor**: Symbol-aware editing with LSP refactoring support
+4. **Symbol Cache**: MD5-based file caching for performance
+5. **Tool Registry**: Plugin-style tool registration and discovery (27 tools)
+6. **MCP Server**: Full MCP protocol implementation
+7. **Agent**: Orchestrates all components and provides tool access
 
 ## Configuration
 

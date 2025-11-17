@@ -81,10 +81,22 @@ func registerAllTools(registry *tools.Registry) error {
 		tools.NewSearchForPatternTool(),
 		tools.NewReplaceRegexTool(),
 
-		// Symbol tools
+		// Symbol tools (read-only)
 		tools.NewGetSymbolsOverviewTool(),
 		tools.NewFindSymbolTool(),
 		tools.NewFindReferencingSymbolsTool(),
+
+		// Symbol editing tools
+		tools.NewReplaceSymbolBodyTool(),
+		tools.NewInsertAfterSymbolTool(),
+		tools.NewInsertBeforeSymbolTool(),
+		tools.NewRenameSymbolTool(),
+		tools.NewRestartLanguageServerTool(),
+
+		// Line editing tools (optional)
+		tools.NewDeleteLinesTool(),
+		tools.NewReplaceLinesTool(),
+		tools.NewInsertAtLineTool(),
 
 		// Memory tools
 		tools.NewWriteMemoryTool(),
@@ -98,6 +110,11 @@ func registerAllTools(registry *tools.Registry) error {
 
 		// Command tools
 		tools.NewExecuteShellCommandTool(),
+
+		// Workflow tools
+		tools.NewInitialInstructionsTool(),
+		tools.NewCheckOnboardingPerformedTool(),
+		tools.NewOnboardingTool(),
 	}
 
 	for _, tool := range toolsToRegister {
