@@ -469,11 +469,16 @@ class ProjectCommands(AutoRegisteringGroup):
         try:
             log_file = os.path.join(project, ".serena", "logs", "indexing.txt")
 
-            files = proj.gather_source_files()
-
             servers = list(ls_mgr.iter_language_servers())
             for k, ls in enumerate(servers, start=1):
+                # TODO (if multiple calls to gather_source_files is ever a performance bottleneck):
+                #  we should eventually change the interface of gather_source_files
+                #  to return langauge -> list of files per language.
+                #  But it would involve a larger refactoring (unless we repeat the call to the matching method there)
+                #  since `is_ignored_path` doesn't return information due to which language
+                #  something was ignored (if due to a language at all)
                 click.echo(f"Indexing for language {ls.language.value} ({k}/{len(servers)}) …")
+                files = proj.gather_source_files(languages=[ls.language])
                 collected_exceptions: list[Exception] = []
                 files_failed = []
                 for i, f in enumerate(tqdm(files, desc="Indexing")):

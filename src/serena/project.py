@@ -163,7 +163,9 @@ class Project(ToStringMixin):
         """
         return self._ignore_spec
 
-    def _is_ignored_relative_path(self, relative_path: str | Path, ignore_non_source_files: bool = True) -> bool:
+    def _is_ignored_relative_path(
+        self, relative_path: str | Path, ignore_non_source_files: bool = True, languages: list[Language] | None = None
+    ) -> bool:
         """
         Determine whether an existing path should be ignored based on file type and ignore patterns.
         Raises `FileNotFoundError` if the path does not exist.
@@ -171,6 +173,8 @@ class Project(ToStringMixin):
         :param relative_path: Relative path to check
         :param ignore_non_source_files: whether files that are not source files (according to the file masks
             determined by the project's programming language) shall be ignored
+        :param languages: only has an effect if `ignore_non_source_files` is True; whether to only consider
+            source files of the given programming languages (otherwise, all configured languages are considered)
 
         :return: whether the path should be ignored
         """
@@ -188,7 +192,8 @@ class Project(ToStringMixin):
         is_file = os.path.isfile(abs_path)
         if is_file and ignore_non_source_files:
             is_file_in_supported_language = False
-            for language in self.project_config.languages:
+            languages_to_consider = languages if languages is not None else self.project_config.languages
+            for language in languages_to_consider:
                 fn_matcher = language.get_source_fn_matcher()
                 if fn_matcher.is_relevant_filename(abs_path):
                     is_file_in_supported_language = True
@@ -205,13 +210,15 @@ class Project(ToStringMixin):
 
         return match_path(str(relative_path), self.get_ignore_spec(), root_path=self.project_root)
 
-    def is_ignored_path(self, path: str | Path, ignore_non_source_files: bool = False) -> bool:
+    def is_ignored_path(self, path: str | Path, ignore_non_source_files: bool = False, languages: list[Language] | None = None) -> bool:
         """
         Checks whether the given path is ignored
 
         :param path: the path to check, can be absolute or relative
         :param ignore_non_source_files: whether to ignore files that are not source files
             (according to the file masks determined by the project's programming language)
+        :param languages: only has an effect if `ignore_non_source_files` is True; whether to only consider
+            source files of the given programming languages (otherwise, all configured languages are considered)
         """
         path = Path(path)
         if path.is_absolute():
@@ -225,7 +232,7 @@ class Project(ToStringMixin):
         else:
             relative_path = path
 
-        return self._is_ignored_relative_path(str(relative_path), ignore_non_source_files=ignore_non_source_files)
+        return self._is_ignored_relative_path(str(relative_path), ignore_non_source_files=ignore_non_source_files, languages=languages)
 
     def is_path_in_project(self, path: str | Path) -> bool:
         """
@@ -267,10 +274,12 @@ class Project(ToStringMixin):
             if self.is_ignored_path(relative_path):
                 raise ValueError(f"Path {relative_path} is ignored; cannot access for safety reasons")
 
-    def gather_source_files(self, relative_path: str = "") -> list[str]:
+    def gather_source_files(self, relative_path: str = "", languages: list[Language] | None = None) -> list[str]:
         """Retrieves relative paths of all source files, optionally limited to the given path
 
         :param relative_path: if provided, restrict search to this path
+        :param languages: only has an effect if `ignore_non_source_files` is True; whether to only consider
+            source files of the given programming languages (otherwise, all configured languages are considered)
         """
         rel_file_paths = []
         start_path = os.path.join(self.project_root, relative_path)
@@ -281,13 +290,13 @@ class Project(ToStringMixin):
         else:
             for root, dirs, files in os.walk(start_path, followlinks=True):
                 # prevent recursion into ignored directories
-                dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d))]
+                dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d), languages=languages)]
 
                 # collect non-ignored files
                 for file in files:
                     abs_file_path = os.path.join(root, file)
                     try:
-                        if not self.is_ignored_path(abs_file_path, ignore_non_source_files=True):
+                        if not self.is_ignored_path(abs_file_path, ignore_non_source_files=True, languages=languages):
                             try:
                                 rel_file_path = os.path.relpath(abs_file_path, start=self.project_root)
                             except Exception:
