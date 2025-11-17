@@ -296,6 +296,7 @@ markers = [
   "julia: Julia language server tests",
   "fortran: language server running for Fortran",
   "haskell: Haskell language server tests",
+  "yaml: language server running for YAML",
 ]
 
 [tool.codespell]
