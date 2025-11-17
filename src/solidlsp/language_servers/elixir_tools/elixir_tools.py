@@ -4,7 +4,6 @@ import pathlib
 import stat
 import subprocess
 import threading
-import time
 
 from overrides import override
 
