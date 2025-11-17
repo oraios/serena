@@ -30,6 +30,17 @@ class TerraformLS(SolidLanguageServer):
         """Classify terraform-ls stderr output to avoid false-positive errors."""
         line_lower = line.lower()
 
+        # File discovery messages that are not actual errors
+        if any(
+            [
+                "discover.go:" in line_lower,
+                "walker.go:" in line_lower,
+                "walking of {file://" in line_lower,
+                "bus: -> discover" in line_lower,
+            ]
+        ):
+            return logging.DEBUG
+
         # Known informational messages from terraform-ls that contain "error" but aren't errors
         # Note: pattern match is flexible to handle file paths between keywords
         if any(

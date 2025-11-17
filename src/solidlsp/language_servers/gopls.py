@@ -32,13 +32,15 @@ class Gopls(SolidLanguageServer):
         """Classify gopls stderr output to avoid false-positive errors."""
         line_lower = line.lower()
 
-        # gopls-specific discovery messages that are not actual errors
-        if any([
-            "discover.go:" in line_lower,
-            "walker.go:" in line_lower,
-            "walking of {file://" in line_lower,
-            "bus: -> discover" in line_lower,
-        ]):
+        # File discovery messages that are not actual errors
+        if any(
+            [
+                "discover.go:" in line_lower,
+                "walker.go:" in line_lower,
+                "walking of {file://" in line_lower,
+                "bus: -> discover" in line_lower,
+            ]
+        ):
             return logging.DEBUG
 
         return super().classify_stderr_line(line)
