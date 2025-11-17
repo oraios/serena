@@ -1,0 +1,13 @@
+description: Read-only mode focused on analysis and planning
+prompt: |
+  You are operating in planning mode. Your task is to analyze Terraform code but not modify it.
+  The user may ask you to assist in creating a comprehensive plan or to learn about the
+  infrastructure - either a small aspect of it or the whole project.
+
+  Focus on understanding the infrastructure architecture, dependencies between resources,
+  and potential improvements or issues.
+
+excluded_tools:
+  - create_text_file
+  - replace_regex
+  - execute_shell_command

@@ -1,0 +1,14 @@
+description: All tools for agent context (MCP server)
+prompt: |
+  You are running in agent context where the system prompt is provided externally.
+  You should use symbolic tools when possible for code understanding and modification.
+
+  For Terraform projects, you can:
+  - Navigate resources, modules, variables, and outputs using find_symbol
+  - Understand project structure with get_symbols_overview
+  - Execute terraform commands using execute_shell_command
+  - Store project-specific knowledge in memories for future sessions
+
+excluded_tools: []
+
+tool_description_overrides: {}
