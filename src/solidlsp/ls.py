@@ -26,7 +26,7 @@ from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_handler import SolidLanguageServerHandler
 from solidlsp.ls_logger import LanguageServerLogger
-from solidlsp.ls_logging import determine_log_level as _default_determine_log_level
+from solidlsp.ls_logging import determine_log_level as default_determine_log_level
 from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils, PathUtils, TextUtils
 from solidlsp.lsp_protocol_handler import lsp_types
@@ -107,7 +107,7 @@ class SolidLanguageServer(ABC):
         :param line: The stderr line to classify
         :return: A logging level (logging.DEBUG, logging.INFO, logging.WARNING, or logging.ERROR)
         """
-        return _default_determine_log_level(line)
+        return default_determine_log_level(line)
 
     @classmethod
     def get_language_enum_instance(cls) -> Language:
