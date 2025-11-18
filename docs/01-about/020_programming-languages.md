@@ -15,48 +15,50 @@ With Serena, we provide direct, out-of-the-box support for:
 * **AL**
 * **Bash**
 * **C#**
-* **C/C++**  
+* **C/C++**
   (you may experience issues with finding references, we are working on it)
 * **Clojure**
 * **Dart**
-* **Elixir**  
+* **Elixir**
   (requires installation of NextLS and Elixir; Windows not supported)
-* **Elm**  
+* **Elm**
   (requires Elm compiler)
-* **Erlang**  
+* **Erlang**
   (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls); experimental, might be slow or hang)
-* **Fortran**  
+* **F#**
+  (requires installation of FsAutoComplete: `dotnet tool install --global fsautocomplete`)
+* **Fortran**
   (requires installation of fortls: `pip install fortls`)
-* **Go**  
+* **Go**
   (requires installation of `gopls`)
-* **Haskell**  
+* **Haskell**
   (automatically locates HLS via ghcup, stack, or system PATH; supports Stack and Cabal projects)
-* **Java**  
+* **Java**
 * **JavaScript**
 * **Julia**
-* **Kotlin**  
+* **Kotlin**
   (uses the pre-alpha [official kotlin LS](https://github.com/Kotlin/kotlin-lsp), some issues may appear)
 * **Lua**
-* **Markdown**  
+* **Markdown**
   (must be explicitly specified via `--language markdown` when generating project config, primarily useful for documentation-heavy projects)
-* **Nix**  
+* **Nix**
   (requires nixd installation)
-* **Perl**  
+* **Perl**
   (requires installation of Perl::LanguageServer)
-* **PHP**  
+* **PHP**
   (uses Intelephense LSP; set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features)
 * **Python**
-* **R**  
+* **R**
   (requires installation of the `languageserver` R package)
-* **Ruby**  
+* **Ruby**
   (by default, uses [ruby-lsp](https://github.com/Shopify/ruby-lsp), specify ruby_solargraph as your language to use the previous solargraph based implementation)
-* **Rust**  
+* **Rust**
   (requires [rustup](https://rustup.rs/) - uses rust-analyzer from your toolchain)
-* **Scala**  
+* **Scala**
   (requires some [manual setup](../03-special-guides/scala_setup_guide_for_serena); uses Metals LSP)
 * **Swift**
 * **TypeScript**
-* **Zig**  
+* **Zig**
   (requires installation of ZLS - Zig Language Server)
 
 Support for further languages can easily be added by providing a shallow adapter for a new language server implementation,

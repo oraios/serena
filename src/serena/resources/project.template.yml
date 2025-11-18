@@ -1,10 +1,10 @@
 # list of languages for which language servers are started; choose from:
 #   al               bash             clojure          cpp              csharp           csharp_omnisharp
-#   dart             elixir           elm              erlang           fortran          go
-#   haskell          java             julia            kotlin           lua              markdown
-#   nix              perl             php              python           python_jedi      r
-#   rego             ruby             ruby_solargraph  rust             scala            swift
-#   terraform        typescript       typescript_vts   yaml             zig
+#   dart             elixir           elm              erlang           fortran          fsharp
+#   go               haskell          java             julia            kotlin           lua
+#   markdown         nix              perl             php              python           python_jedi
+#   r                rego             ruby             ruby_solargraph  rust             scala
+#   swift            terraform        typescript       typescript_vts   yaml             zig
 # Note:
 #   - For C, use cpp
 #   - For JavaScript, use typescript
