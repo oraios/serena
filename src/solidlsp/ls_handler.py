@@ -16,7 +16,6 @@ from sensai.util.string import ToStringMixin
 
 from solidlsp.ls_config import Language
 from solidlsp.ls_exceptions import SolidLSPException
-from solidlsp.ls_logging import determine_log_level as default_determine_log_level
 from solidlsp.ls_request import LanguageServerRequest
 from solidlsp.lsp_protocol_handler.lsp_requests import LspNotification
 from solidlsp.lsp_protocol_handler.lsp_types import ErrorCodes
@@ -135,13 +134,13 @@ class SolidLanguageServerHandler:
         self,
         process_launch_info: ProcessLaunchInfo,
         language: Language,
-        determine_log_level: Callable[[str], int] | None = None,
+        determine_log_level: Callable[[str], int],
         logger: Callable[[str, str, StringDict | str], None] | None = None,
         start_independent_lsp_process=True,
         request_timeout: float | None = None,
     ) -> None:
         self.language = language
-        self._determine_log_level = determine_log_level if determine_log_level is not None else default_determine_log_level
+        self._determine_log_level = determine_log_level
         self.send = LanguageServerRequest(self)
         self.notify = LspNotification(self.send_notification)
 
