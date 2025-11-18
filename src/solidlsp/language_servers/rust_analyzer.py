@@ -23,8 +23,8 @@ class RustAnalyzer(SolidLanguageServer):
     Provides Rust specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Rust.
     """
 
-    @override
-    def classify_stderr_line(self, line: str) -> int:
+    @staticmethod
+    def _determine_log_level(line: str) -> int:
         """Classify rust-analyzer stderr output to avoid false-positive errors."""
         line_lower = line.lower()
 
@@ -37,7 +37,7 @@ class RustAnalyzer(SolidLanguageServer):
         ):
             return logging.DEBUG
 
-        return super().classify_stderr_line(line)
+        return SolidLanguageServer._determine_log_level(line)
 
     @staticmethod
     def _get_rustup_version():

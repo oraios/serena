@@ -9,8 +9,6 @@ import pathlib
 import shutil
 import threading
 
-from overrides import override
-
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
@@ -26,8 +24,8 @@ class YamlLanguageServer(SolidLanguageServer):
     Contains various configurations and settings specific to YAML files.
     """
 
-    @override
-    def classify_stderr_line(self, line: str) -> int:
+    @staticmethod
+    def _determine_log_level(line: str) -> int:
         """Classify yaml-language-server stderr output to avoid false-positive errors."""
         line_lower = line.lower()
 
@@ -40,7 +38,7 @@ class YamlLanguageServer(SolidLanguageServer):
         ):
             return logging.DEBUG
 
-        return super().classify_stderr_line(line)
+        return SolidLanguageServer._determine_log_level(line)
 
     def __init__(
         self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings

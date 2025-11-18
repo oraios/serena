@@ -25,8 +25,8 @@ class TerraformLS(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in [".terraform", "terraform.tfstate.d"]
 
-    @override
-    def classify_stderr_line(self, line: str) -> int:
+    @staticmethod
+    def _determine_log_level(line: str) -> int:
         """Classify terraform-ls stderr output to avoid false-positive errors."""
         line_lower = line.lower()
 
@@ -51,7 +51,7 @@ class TerraformLS(SolidLanguageServer):
         ):
             return logging.DEBUG
 
-        return super().classify_stderr_line(line)
+        return SolidLanguageServer._determine_log_level(line)
 
     @staticmethod
     def _ensure_tf_command_available(logger: LanguageServerLogger):

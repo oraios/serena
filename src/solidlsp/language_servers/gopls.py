@@ -27,8 +27,8 @@ class Gopls(SolidLanguageServer):
         # - dist/build: common output directories
         return super().is_ignored_dirname(dirname) or dirname in ["vendor", "node_modules", "dist", "build"]
 
-    @override
-    def classify_stderr_line(self, line: str) -> int:
+    @staticmethod
+    def _determine_log_level(line: str) -> int:
         """Classify gopls stderr output to avoid false-positive errors."""
         line_lower = line.lower()
 
@@ -43,7 +43,7 @@ class Gopls(SolidLanguageServer):
         ):
             return logging.DEBUG
 
-        return super().classify_stderr_line(line)
+        return SolidLanguageServer._determine_log_level(line)
 
     @staticmethod
     def _get_go_version():
