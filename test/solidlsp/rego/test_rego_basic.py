@@ -21,7 +21,7 @@ class TestRegoLanguageServer:
     def test_request_document_symbols_authz(self, language_server: SolidLanguageServer) -> None:
         """Test that document symbols can be retrieved from authz.rego."""
         file_path = os.path.join("policies", "authz.rego")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         assert symbols is not None
         assert len(symbols) > 0
@@ -40,7 +40,7 @@ class TestRegoLanguageServer:
     def test_request_document_symbols_helpers(self, language_server: SolidLanguageServer) -> None:
         """Test that document symbols can be retrieved from helpers.rego."""
         file_path = os.path.join("utils", "helpers.rego")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         assert symbols is not None
         assert len(symbols) > 0
@@ -71,7 +71,7 @@ class TestRegoLanguageServer:
         file_path = os.path.join("policies", "authz.rego")
 
         # Get document symbols
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         symbol_list = symbols[0] if isinstance(symbols, tuple) else symbols
 
         # Find the is_admin symbol which references admin_roles
@@ -98,7 +98,7 @@ class TestRegoLanguageServer:
         file_path = os.path.join("policies", "authz.rego")
 
         # Get document symbols
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         symbol_list = symbols[0] if isinstance(symbols, tuple) else symbols
 
         # Find the allow symbol
@@ -123,7 +123,7 @@ class TestRegoLanguageServer:
     def test_find_symbols_validation(self, language_server: SolidLanguageServer) -> None:
         """Test finding symbols in validation.rego which has imports."""
         file_path = os.path.join("policies", "validation.rego")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         assert symbols is not None
         assert len(symbols) > 0

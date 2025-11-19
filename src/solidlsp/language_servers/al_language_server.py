@@ -680,7 +680,7 @@ class ALLanguageServer(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in al_ignore_dirs
 
     @override
-    def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> list[dict]:
+    def request_full_symbol_tree(self, within_relative_path: str | None = None) -> list[dict]:
         """
         Override to handle AL's requirement of opening files before requesting symbols.
 
@@ -713,7 +713,7 @@ class ALLanguageServer(SolidLanguageServer):
 
             if os.path.isfile(within_abs_path):
                 # Single file case - use parent class implementation
-                _, root_nodes = self.request_document_symbols(within_relative_path, include_body=include_body)
+                root_nodes = self.request_document_symbols(within_relative_path).root_symbols
                 return root_nodes
 
             # Directory case - scan within this directory
@@ -755,7 +755,7 @@ class ALLanguageServer(SolidLanguageServer):
             try:
                 # Use our overridden request_document_symbols which handles opening
                 self.logger.log(f"AL: Getting symbols for {relative_path}", logging.DEBUG)
-                all_syms, root_syms = self.request_document_symbols(relative_path, include_body=include_body)
+                all_syms, root_syms = self.request_document_symbols(relative_path).get_all_symbols_and_roots()
 
                 if root_syms:
                     # Create a file-level symbol containing the document symbols

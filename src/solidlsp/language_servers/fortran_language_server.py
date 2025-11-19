@@ -12,7 +12,7 @@ import threading
 from overrides import override
 
 from solidlsp import ls_types
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import DocumentSymbols, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
@@ -138,24 +138,20 @@ class FortranLanguageServer(SolidLanguageServer):
         return symbol
 
     @override
-    def request_document_symbols(
-        self, relative_file_path: str, include_body: bool = False
-    ) -> tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]:
-        """
-        Override to fix fortls's incorrect selectionRange bug.
+    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
+        # Override to fix fortls's incorrect selectionRange bug.
+        #
+        # fortls returns selectionRange pointing to line start (character 0) instead of the
+        # identifier name position. This breaks MCP server features that rely on exact positions.
+        #
+        # This override:
+        # 1. Gets symbols from fortls via parent implementation
+        # 2. Parses each symbol's line to find the correct identifier position
+        # 3. Fixes selectionRange for all symbols recursively
+        # 4. Returns corrected symbols
 
-        fortls returns selectionRange pointing to line start (character 0) instead of the
-        identifier name position. This breaks MCP server features that rely on exact positions.
-
-        This override:
-        1. Gets symbols from fortls via parent implementation
-        2. Parses each symbol's line to find the correct identifier position
-        3. Fixes selectionRange for all symbols recursively
-        4. Returns corrected symbols
-
-        """
         # Get symbols from fortls (with incorrect selectionRange)
-        all_symbols, root_symbols = super().request_document_symbols(relative_file_path, include_body)
+        document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
 
         # Get file content for parsing
         with self.open_file(relative_file_path) as file_data:
@@ -173,10 +169,9 @@ class FortranLanguageServer(SolidLanguageServer):
             return fixed
 
         # Apply fix to all symbols
-        fixed_all_symbols = [fix_symbol_and_children(sym) for sym in all_symbols]
-        fixed_root_symbols = [fix_symbol_and_children(sym) for sym in root_symbols]
+        fixed_root_symbols = [fix_symbol_and_children(sym) for sym in document_symbols.root_symbols]
 
-        return fixed_all_symbols, fixed_root_symbols
+        return DocumentSymbols(fixed_root_symbols)
 
     @staticmethod
     def _check_fortls_installation():

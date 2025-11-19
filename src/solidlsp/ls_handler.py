@@ -33,7 +33,7 @@ from solidlsp.lsp_protocol_handler.server import (
     make_request,
     make_response,
 )
-from solidlsp.util.subprocess_util import subprocess_kwargs
+from solidlsp.util.subprocess_util import quote_arg, subprocess_kwargs
 
 log = logging.getLogger(__name__)
 
@@ -190,7 +190,7 @@ class SolidLanguageServerHandler:
         if not isinstance(cmd, str) and not is_windows:
             # Since we are using the shell, we need to convert the command list to a single string
             # on Linux/macOS
-            cmd = " ".join(cmd)
+            cmd = " ".join(map(quote_arg, cmd))
         log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
         kwargs = subprocess_kwargs()
         kwargs["start_new_session"] = self.start_independent_lsp_process

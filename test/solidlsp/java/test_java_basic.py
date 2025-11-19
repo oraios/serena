@@ -25,7 +25,7 @@ class TestJavaLanguageServer:
 
         # Dynamically determine the correct line/column for the 'Model' class name
         file_path = os.path.join("src", "main", "java", "test_repo", "Model.java")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         model_symbol = None
         for sym in symbols[0]:
             if sym.get("name") == "Model" and sym.get("kind") == 5:  # 5 = Class

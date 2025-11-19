@@ -70,7 +70,8 @@ dev = [
   "sphinx_rtd_theme>=0.5.1",
   "sphinx-toolbox==3.7.0",
   "jupyter-book>=1,<2",
-  "nbsphinx"
+  "nbsphinx",
+  "pyinstrument",
 ]
 agno = ["agno>=2.2.1", "sqlalchemy>=2.0.40"]
 google = ["google-genai>=1.8.0"]

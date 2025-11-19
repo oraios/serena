@@ -72,7 +72,7 @@ class TestElixirIntegration:
     def test_module_hierarchy_understanding(self, language_server: SolidLanguageServer):
         """Test that the language server understands Elixir module hierarchy."""
         models_file = os.path.join("lib", "models.ex")
-        symbols = language_server.request_document_symbols(models_file)
+        symbols = language_server.request_document_symbols(models_file).get_all_symbols_and_roots()
 
         if symbols:
             # Flatten symbol structure

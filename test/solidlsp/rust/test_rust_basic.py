@@ -13,7 +13,7 @@ class TestRustLanguageServer:
     def test_find_references_raw(self, language_server: SolidLanguageServer) -> None:
         # Directly test the request_references method for the add function
         file_path = os.path.join("src", "lib.rs")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         add_symbol = None
         for sym in symbols[0]:
             if sym.get("name") == "add":
@@ -37,7 +37,7 @@ class TestRustLanguageServer:
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         # Find references to 'add' defined in lib.rs, should be referenced from main.rs
         file_path = os.path.join("src", "lib.rs")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         add_symbol = None
         for sym in symbols[0]:
             if sym.get("name") == "add":

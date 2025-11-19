@@ -43,7 +43,7 @@ class TestALLanguageServer:
     def test_find_table_fields(self, language_server: SolidLanguageServer) -> None:
         """Test that AL Language Server can find fields within a table."""
         file_path = os.path.join("src", "Tables", "Customer.Table.al")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # AL tables should have their fields as child symbols
         customer_table = None
@@ -76,7 +76,7 @@ class TestALLanguageServer:
     def test_find_procedures(self, language_server: SolidLanguageServer) -> None:
         """Test that AL Language Server can find procedures in codeunits."""
         file_path = os.path.join("src", "Codeunits", "CustomerMgt.Codeunit.al")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Find the codeunit symbol - AL returns 'Codeunit 50000 CustomerMgt'
         codeunit_symbol = None
@@ -100,7 +100,7 @@ class TestALLanguageServer:
         """Test that AL Language Server can find references to symbols."""
         # Find references to the Customer table from the CustomerMgt codeunit
         table_file = os.path.join("src", "Tables", "Customer.Table.al")
-        symbols = language_server.request_document_symbols(table_file)
+        symbols = language_server.request_document_symbols(table_file).get_all_symbols_and_roots()
 
         # Find the Customer table symbol
         customer_symbol = None

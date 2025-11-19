@@ -1,3 +1,4 @@
+import collections
 import glob
 import json
 import os
@@ -11,6 +12,7 @@ from typing import Any, Literal
 import click
 from sensai.util import logging
 from sensai.util.logging import FileLoggerContext, datetime_tag
+from sensai.util.string import dict_string
 from tqdm import tqdm
 
 from serena.agent import SerenaAgent
@@ -529,23 +531,23 @@ class ProjectCommands(AutoRegisteringGroup):
 
             files = proj.gather_source_files()
 
-            servers = list(ls_mgr.iter_language_servers())
-            for k, ls in enumerate(servers, start=1):
-                click.echo(f"Indexing for language {ls.language.value} ({k}/{len(servers)}) …")
-                collected_exceptions: list[Exception] = []
-                files_failed = []
-                for i, f in enumerate(tqdm(files, desc="Indexing")):
-                    try:
-                        ls.request_document_symbols(f, include_body=False)
-                        ls.request_document_symbols(f, include_body=True)
-                    except Exception as e:
-                        log.error(f"Failed to index {f}, continuing.")
-                        collected_exceptions.append(e)
-                        files_failed.append(f)
-                    if (i + 1) % 10 == 0:
-                        ls.save_cache()
-                ls.save_cache()
-                click.echo(f"Symbols saved to {ls.cache_path}")
+            collected_exceptions: list[Exception] = []
+            files_failed = []
+            language_file_counts: dict[Language, int] = collections.defaultdict(lambda: 0)
+            for i, f in enumerate(tqdm(files, desc="Indexing")):
+                try:
+                    ls = ls_mgr.get_language_server(f)
+                    ls.request_document_symbols(f)
+                    language_file_counts[ls.language] += 1
+                except Exception as e:
+                    log.error(f"Failed to index {f}, continuing.")
+                    collected_exceptions.append(e)
+                    files_failed.append(f)
+                if (i + 1) % 10 == 0:
+                    ls_mgr.save_all_caches()
+            reported_language_file_counts = {k.value: v for k, v in language_file_counts.items()}
+            click.echo(f"Indexed files per language: {dict_string(reported_language_file_counts, brackets=None)}")
+            ls_mgr.save_all_caches()
 
             if len(files_failed) > 0:
                 os.makedirs(os.path.dirname(log_file), exist_ok=True)
@@ -596,14 +598,14 @@ class ProjectCommands(AutoRegisteringGroup):
         try:
             for ls in ls_mgr.iter_language_servers():
                 click.echo(f"Indexing for language {ls.language.value} …")
-                symbols, _ = ls.request_document_symbols(file, include_body=False)
-                ls.request_document_symbols(file, include_body=True)
+                document_symbols = ls.request_document_symbols(file)
+                symbols, _ = document_symbols.get_all_symbols_and_roots()
                 if verbose:
                     click.echo(f"Symbols in file '{file}':")
                     for symbol in symbols:
                         click.echo(f"  - {symbol['name']} at line {symbol['selectionRange']['start']['line']} of kind {symbol['kind']}")
                 ls.save_cache()
-                click.echo(f"Successfully indexed file '{file}', {len(symbols)} symbols saved to {ls.cache_path}.")
+                click.echo(f"Successfully indexed file '{file}', {len(symbols)} symbols saved to cache in {ls.cache_dir}.")
         finally:
             ls_mgr.stop_all()
 

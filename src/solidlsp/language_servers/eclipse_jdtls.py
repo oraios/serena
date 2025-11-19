@@ -13,7 +13,7 @@ from pathlib import PurePath
 
 from overrides import override
 
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import GenericDocumentSymbol, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
@@ -109,41 +109,39 @@ class EclipseJDTLS(SolidLanguageServer):
         # TODO: Add "self.runtime_dependency_paths.jre_home_path"/bin to $PATH as well
         proc_env = {"syntaxserver": "false", "JAVA_HOME": self.runtime_dependency_paths.jre_home_path}
         proc_cwd = repository_root_path
-        cmd = " ".join(
-            [
-                jre_path,
-                "--add-modules=ALL-SYSTEM",
-                "--add-opens",
-                "java.base/java.util=ALL-UNNAMED",
-                "--add-opens",
-                "java.base/java.lang=ALL-UNNAMED",
-                "--add-opens",
-                "java.base/sun.nio.fs=ALL-UNNAMED",
-                "-Declipse.application=org.eclipse.jdt.ls.core.id1",
-                "-Dosgi.bundles.defaultStartLevel=4",
-                "-Declipse.product=org.eclipse.jdt.ls.core.product",
-                "-Djava.import.generatesMetadataFilesAtProjectRoot=false",
-                "-Dfile.encoding=utf8",
-                "-noverify",
-                "-XX:+UseParallelGC",
-                "-XX:GCTimeRatio=4",
-                "-XX:AdaptiveSizePolicyWeight=90",
-                "-Dsun.zip.disableMemoryMapping=true",
-                "-Djava.lsp.joinOnCompletion=true",
-                "-Xmx3G",
-                "-Xms100m",
-                "-Xlog:disable",
-                "-Dlog.level=ALL",
-                f'"-javaagent:{lombok_jar_path}"',
-                f'"-Djdt.core.sharedIndexLocation={shared_cache_location}"',
-                "-jar",
-                f'"{jdtls_launcher_jar}"',
-                "-configuration",
-                f'"{jdtls_config_path}"',
-                "-data",
-                f'"{data_dir}"',
-            ]
-        )
+        cmd = [
+            jre_path,
+            "--add-modules=ALL-SYSTEM",
+            "--add-opens",
+            "java.base/java.util=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.lang=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/sun.nio.fs=ALL-UNNAMED",
+            "-Declipse.application=org.eclipse.jdt.ls.core.id1",
+            "-Dosgi.bundles.defaultStartLevel=4",
+            "-Declipse.product=org.eclipse.jdt.ls.core.product",
+            "-Djava.import.generatesMetadataFilesAtProjectRoot=false",
+            "-Dfile.encoding=utf8",
+            "-noverify",
+            "-XX:+UseParallelGC",
+            "-XX:GCTimeRatio=4",
+            "-XX:AdaptiveSizePolicyWeight=90",
+            "-Dsun.zip.disableMemoryMapping=true",
+            "-Djava.lsp.joinOnCompletion=true",
+            "-Xmx3G",
+            "-Xms100m",
+            "-Xlog:disable",
+            "-Dlog.level=ALL",
+            f"-javaagent:{lombok_jar_path}",
+            f"-Djdt.core.sharedIndexLocation={shared_cache_location}",
+            "-jar",
+            f"{jdtls_launcher_jar}",
+            "-configuration",
+            f"{jdtls_config_path}",
+            "-data",
+            f"{data_dir}",
+        ]
 
         self.service_ready_event = threading.Event()
         self.intellicode_enable_command_available = threading.Event()
@@ -789,3 +787,23 @@ class EclipseJDTLS(SolidLanguageServer):
 
         # TODO: Add comments about why we wait here, and how this can be optimized
         self.service_ready_event.wait()
+
+    def _request_document_symbols(self, relative_file_path: str) -> list[GenericDocumentSymbol]:
+        result = super()._request_document_symbols(relative_file_path)
+
+        # JDTLS sometimes returns symbol names with type information to handle overloads,
+        # e.g. "myMethod(int) <T>", but we want overloads to be handled via overload_idx,
+        # which requires the name to be just "myMethod".
+
+        def fix_name(symbol: GenericDocumentSymbol):
+            if "(" in symbol["name"]:
+                symbol["name"] = symbol["name"][: symbol["name"].index("(")]
+            children = symbol.get("children")
+            if children:
+                for child in children:
+                    fix_name(child)
+
+        for root_symbol in result:
+            fix_name(root_symbol)
+
+        return result

@@ -30,7 +30,7 @@ class TestZigLanguageServer:
     def test_find_symbols_in_main(self, language_server: SolidLanguageServer) -> None:
         """Test finding specific symbols in main.zig."""
         file_path = os.path.join("src", "main.zig")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         assert symbols is not None
         assert len(symbols) > 0
@@ -47,7 +47,7 @@ class TestZigLanguageServer:
     def test_find_symbols_in_calculator(self, language_server: SolidLanguageServer) -> None:
         """Test finding Calculator struct and its methods."""
         file_path = os.path.join("src", "calculator.zig")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         assert symbols is not None
         assert len(symbols) > 0
@@ -90,7 +90,7 @@ class TestZigLanguageServer:
     def test_find_symbols_in_math_utils(self, language_server: SolidLanguageServer) -> None:
         """Test finding functions in math_utils.zig."""
         file_path = os.path.join("src", "math_utils.zig")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         assert symbols is not None
         assert len(symbols) > 0
@@ -106,7 +106,7 @@ class TestZigLanguageServer:
     def test_find_references_within_file(self, language_server: SolidLanguageServer) -> None:
         """Test finding references within the same file."""
         file_path = os.path.join("src", "calculator.zig")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         symbol_list = symbols[0] if isinstance(symbols, tuple) else symbols
 
@@ -163,7 +163,7 @@ class TestZigLanguageServer:
                     time.sleep(1)
 
                     # Find Calculator struct
-                    symbols = language_server.request_document_symbols(os.path.join("src", "calculator.zig"))
+                    symbols = language_server.request_document_symbols(os.path.join("src", "calculator.zig")).get_all_symbols_and_roots()
                     symbol_list = symbols[0] if isinstance(symbols, tuple) else symbols
 
                     calculator_symbol = None
@@ -207,7 +207,7 @@ class TestZigLanguageServer:
         """
         # Find references to Calculator from calculator.zig
         file_path = os.path.join("src", "calculator.zig")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         symbol_list = symbols[0] if isinstance(symbols, tuple) else symbols
 
         calculator_symbol = None
@@ -291,7 +291,7 @@ class TestZigLanguageServer:
     def test_verify_cross_file_imports(self, language_server: SolidLanguageServer) -> None:
         """Verify that our test files have proper cross-file imports."""
         # Verify main.zig imports
-        main_symbols = language_server.request_document_symbols(os.path.join("src", "main.zig"))
+        main_symbols = language_server.request_document_symbols(os.path.join("src", "main.zig")).get_all_symbols_and_roots()
         assert main_symbols is not None
         main_list = main_symbols[0] if isinstance(main_symbols, tuple) else main_symbols
         main_names = {sym.get("name") for sym in main_list if isinstance(sym, dict)}
@@ -301,14 +301,14 @@ class TestZigLanguageServer:
         assert "greeting" in main_names, "greeting function should be in main.zig"
 
         # Verify calculator.zig exports Calculator
-        calc_symbols = language_server.request_document_symbols(os.path.join("src", "calculator.zig"))
+        calc_symbols = language_server.request_document_symbols(os.path.join("src", "calculator.zig")).get_all_symbols_and_roots()
         assert calc_symbols is not None
         calc_list = calc_symbols[0] if isinstance(calc_symbols, tuple) else calc_symbols
         calc_names = {sym.get("name") for sym in calc_list if isinstance(sym, dict)}
         assert "Calculator" in calc_names, "Calculator struct should be in calculator.zig"
 
         # Verify math_utils.zig exports functions
-        math_symbols = language_server.request_document_symbols(os.path.join("src", "math_utils.zig"))
+        math_symbols = language_server.request_document_symbols(os.path.join("src", "math_utils.zig")).get_all_symbols_and_roots()
         assert math_symbols is not None
         math_list = math_symbols[0] if isinstance(math_symbols, tuple) else math_symbols
         math_names = {sym.get("name") for sym in math_list if isinstance(sym, dict)}

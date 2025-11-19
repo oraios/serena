@@ -4,7 +4,6 @@ import json
 import logging
 import os
 import pathlib
-import pickle
 import shutil
 import subprocess
 import threading
@@ -18,6 +17,7 @@ from time import sleep
 from typing import Self, Union, cast
 
 import pathspec
+from sensai.util.pickle import getstate, load_pickle
 
 from serena.text_utils import MatchedConsecutiveLines
 from serena.util.file_system import match_path
@@ -31,15 +31,17 @@ from solidlsp.ls_utils import FileUtils, PathUtils, TextUtils
 from solidlsp.lsp_protocol_handler import lsp_types
 from solidlsp.lsp_protocol_handler import lsp_types as LSPTypes
 from solidlsp.lsp_protocol_handler.lsp_constants import LSPConstants
-from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink, SymbolKind
+from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink
 from solidlsp.lsp_protocol_handler.server import (
     LSPError,
     ProcessLaunchInfo,
     StringDict,
 )
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.cache import load_cache, save_cache
 
 GenericDocumentSymbol = Union[LSPTypes.DocumentSymbol, LSPTypes.SymbolInformation, ls_types.UnifiedSymbolInformation]
+log = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -77,6 +79,50 @@ class LSPFileBuffer:
     def __post_init__(self):
         self.content_hash = hashlib.md5(self.contents.encode("utf-8")).hexdigest()
 
+    def split_lines(self) -> list[str]:
+        """Splits the contents of the file into lines."""
+        return self.contents.split("\n")
+
+
+class DocumentSymbols:
+    # IMPORTANT: Instances of this class are persisted in the high-level document symbol cache
+
+    def __init__(self, root_symbols: list[ls_types.UnifiedSymbolInformation]):
+        self.root_symbols = root_symbols
+        self._all_symbols: list[ls_types.UnifiedSymbolInformation] | None = None
+
+    def __getstate__(self):
+        return getstate(DocumentSymbols, self, transient_properties=["_all_symbols"])
+
+    def iter_symbols(self) -> Iterator[ls_types.UnifiedSymbolInformation]:
+        """
+        Iterate over all symbols in the document symbol tree.
+        Yields symbols in a depth-first manner.
+        """
+        if self._all_symbols is not None:
+            yield from self._all_symbols
+            return
+
+        def traverse(s: ls_types.UnifiedSymbolInformation):
+            yield s
+            for child in s.get("children", []):
+                yield from traverse(child)
+
+        for root_symbol in self.root_symbols:
+            yield from traverse(root_symbol)
+
+    def get_all_symbols_and_roots(self) -> tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]:
+        """
+        This function returns all symbols in the document as a flat list and the root symbols.
+        It exists to facilitate migration from previous versions, where this was the return interface of
+        the LS method that obtained document symbols.
+
+        :return: A tuple containing a list of all symbols in the document and a list of root symbols.
+        """
+        if self._all_symbols is None:
+            self._all_symbols = list(self.iter_symbols())
+        return self._all_symbols, self.root_symbols
+
 
 class SolidLanguageServer(ABC):
     """
@@ -85,6 +131,17 @@ class SolidLanguageServer(ABC):
     """
 
     CACHE_FOLDER_NAME = "cache"
+    RAW_DOCUMENT_SYMBOLS_CACHE_VERSION = 1
+    """
+    global version identifier for raw symbol caches; an LS-specific version is defined separately and combined with this.
+    This should be incremented whenever there is a change in the way raw document symbols are stored.
+    If the result of a language server changes in a way that affects the raw document symbols,
+    the LS-specific version should be incremented instead.
+    """
+    RAW_DOCUMENT_SYMBOL_CACHE_FILENAME = "raw_document_symbols.pkl"
+    RAW_DOCUMENT_SYMBOL_CACHE_FILENAME_LEGACY_FALLBACK = "document_symbols_cache_v23-06-25.pkl"
+    DOCUMENT_SYMBOL_CACHE_VERSION = 3
+    DOCUMENT_SYMBOL_CACHE_FILENAME = "document_symbols.pkl"
 
     # To be overridden and extended by subclasses
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -181,6 +238,7 @@ class SolidLanguageServer(ABC):
         process_launch_info: ProcessLaunchInfo,
         language_id: str,
         solidlsp_settings: SolidLSPSettings,
+        cache_version_raw_document_symbols: int = 1,
     ):
         """
         Initializes a LanguageServer instance.
@@ -194,6 +252,10 @@ class SolidLanguageServer(ABC):
                     This parameter is the command to launch the language server process.
                     The command must pass appropriate flags to the binary, so that it runs in the stdio mode,
                     as opposed to HTTP, TCP modes supported by some language servers.
+        :param cache_version_raw_document_symbols: the version, for caching, of the raw document symbols coming
+            from this specific language server. This should be incremented by subclasses calling this constructor
+            whenever the format of the raw document symbols changes (typically because the language server
+            improves/fixes its output).
         """
         self._solidlsp_settings = solidlsp_settings
         lang = self.get_language_enum_instance()
@@ -214,14 +276,22 @@ class SolidLanguageServer(ABC):
         self.open_file_buffers: dict[str, LSPFileBuffer] = {}
         self.language = Language(language_id)
 
-        # load cache first to prevent any racing conditions due to asyncio stuff
-        self._document_symbols_cache: dict[
-            str, tuple[str, tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]]
-        ] = {}
-        """Maps file paths to a tuple of (file_content_hash, result_of_request_document_symbols)"""
-        self._cache_lock = threading.Lock()
-        self._cache_has_changed: bool = False
-        self.load_cache()
+        # initialise symbol caches
+        self.cache_dir = (
+            Path(self.repository_root_path) / self._solidlsp_settings.project_data_relative_path / self.CACHE_FOLDER_NAME / self.language_id
+        )
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        # * raw document symbols cache
+        self._ls_specific_raw_document_symbols_cache_version = cache_version_raw_document_symbols
+        self._raw_document_symbols_cache: dict[str, tuple[str, list[GenericDocumentSymbol]]] = {}
+        """maps relative file paths to a tuple of (file_content_hash, raw_root_symbols)"""
+        self._raw_document_symbols_cache_is_modified: bool = False
+        self._load_raw_document_symbols_cache()
+        # * high-level document symbols cache
+        self._document_symbols_cache: dict[str, tuple[str, DocumentSymbols]] = {}
+        """maps relative file paths to a tuple of (file_content_hash, document_symbols)"""
+        self._document_symbols_cache_is_modified: bool = False
+        self._load_document_symbols_cache()
 
         self.server_started = False
         self.completions_available = threading.Event()
@@ -447,6 +517,20 @@ class SolidLanguageServer(ABC):
                 }
             )
             del self.open_file_buffers[uri]
+
+    @contextmanager
+    def _open_file_context(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> Iterator[LSPFileBuffer]:
+        """
+        Internal context manager to open a file, optionally reusing an existing file buffer.
+
+        :param relative_file_path: the relative path of the file to open.
+        :param file_buffer: an optional existing file buffer to reuse.
+        """
+        if file_buffer is not None:
+            yield file_buffer
+        else:
+            with self.open_file(relative_file_path) as fb:
+                yield fb
 
     def insert_text_at_position(self, relative_file_path: str, line: int, column: int, text_to_be_inserted: str) -> ls_types.Position:
         """
@@ -857,136 +941,174 @@ class SolidLanguageServer(ABC):
 
             return [json.loads(json_repr) for json_repr in set(json.dumps(item, sort_keys=True) for item in completions_list)]
 
-    def request_document_symbols(
-        self, relative_file_path: str, include_body: bool = False
-    ) -> tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]:
+    def _request_document_symbols(self, relative_file_path: str, file_data: LSPFileBuffer | None) -> list[GenericDocumentSymbol]:
         """
-        Raise a [textDocument/documentSymbol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_documentSymbol) request to the Language Server
-        to find symbols in the given file. Wait for the response and return the result.
+        Sends a [documentSymbol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_documentSymbol)
+        request to the language server to find symbols in the given file - or returns a cached result if available.
+
+        :param relative_file_path: the relative path of the file that has the symbols.
+        :param file_data: the file data buffer, if already opened. If None, the file will be opened in this method.
+        :return: the list of root symbols in the file.
+        """
+
+        def get_cached_raw_document_symbols(cache_key: str, fd: LSPFileBuffer) -> list[GenericDocumentSymbol] | None:
+            file_hash_and_result = self._raw_document_symbols_cache.get(cache_key)
+            if file_hash_and_result is not None:
+                file_hash, result = file_hash_and_result
+                if file_hash == fd.content_hash:
+                    log.debug("Returning cached raw document symbols for %s", relative_file_path)
+                    return result
+                else:
+                    log.debug("Document content for %s has changed (raw symbol cache is not up-to-date)", relative_file_path)
+            else:
+                log.debug("No cache hit for raw document symbols symbols in %s", relative_file_path)
+            return None
+
+        def get_raw_document_symbols(fd: LSPFileBuffer) -> list[GenericDocumentSymbol]:
+            # check for cached result
+            cache_key = relative_file_path
+            response = get_cached_raw_document_symbols(cache_key, fd)
+            if response is not None:
+                return response
+
+            # no cached result, query language server
+            self.logger.log(f"Requesting document symbols for {relative_file_path} from the Language Server", logging.DEBUG)
+            response = self.server.send.document_symbol(
+                {"textDocument": {"uri": pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()}}
+            )
+
+            # update cache
+            self._raw_document_symbols_cache[cache_key] = (file_data.content_hash, response)
+            self._raw_document_symbols_cache_is_modified = True
+
+            return response
+
+        if file_data is not None:
+            return get_raw_document_symbols(file_data)
+        else:
+            with self.open_file(relative_file_path) as opened_file_data:
+                return get_raw_document_symbols(opened_file_data)
+
+    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
+        """
+        Retrieves the collection of symbols in the given file
 
         :param relative_file_path: The relative path of the file that has the symbols
-        :param include_body: whether to include the body of the symbols in the result.
-        :return: A list of symbols in the file, and a list of root symbols that represent the tree structure of the symbols.
-            All symbols will have a location, a children, and a parent attribute,
+        :param file_buffer: an optional file buffer if the file is already opened.
+        :return: the collection of symbols in the file.
+            All contained symbols will have a location, children, and a parent attribute,
             where the parent attribute is None for root symbols.
             Note that this is slightly different from the call to request_full_symbol_tree,
             where the parent attribute will be the file symbol which in turn may have a package symbol as parent.
             If you need a symbol tree that contains file symbols as well, you should use `request_full_symbol_tree` instead.
         """
-        # TODO: it's kinda dumb to not use the cache if include_body is False after include_body was True once
-        #   Should be fixed in the future, it's a small performance optimization
-        cache_key = f"{relative_file_path}-{include_body}"
-        with self.open_file(relative_file_path) as file_data:
-            with self._cache_lock:
-                file_hash_and_result = self._document_symbols_cache.get(cache_key)
-                if file_hash_and_result is not None:
-                    file_hash, result = file_hash_and_result
-                    if file_hash == file_data.content_hash:
-                        self.logger.log(f"Returning cached document symbols for {relative_file_path}", logging.DEBUG)
-                        return result
-                    else:
-                        self.logger.log(f"Content for {relative_file_path} has changed. Will overwrite in-memory cache", logging.DEBUG)
+        with self._open_file_context(relative_file_path, file_buffer) as file_data:
+            # check if the desired result is cached
+            cache_key = relative_file_path
+            file_hash_and_result = self._document_symbols_cache.get(cache_key)
+            if file_hash_and_result is not None:
+                file_hash, document_symbols = file_hash_and_result
+                if file_hash == file_data.content_hash:
+                    log.debug("Returning cached document symbols for %s", relative_file_path)
+                    return document_symbols
                 else:
-                    self.logger.log(f"No cache hit for symbols with {include_body=} in {relative_file_path}", logging.DEBUG)
+                    log.debug("Cached document symbol content for %s has changed", relative_file_path)
+            else:
+                log.debug("No cache hit for document symbols in %s", relative_file_path)
 
-            self.logger.log(f"Requesting document symbols for {relative_file_path} from the Language Server", logging.DEBUG)
-            response = self.server.send.document_symbol(
-                {"textDocument": {"uri": pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()}}
-            )
-            if response is None:
-                self.logger.log(
+            # no cached result: request the root symbols from the language server
+            root_symbols = self._request_document_symbols(relative_file_path, file_data)
+
+            if root_symbols is None:
+                log.warning(
                     f"Received None response from the Language Server for document symbols in {relative_file_path}. "
                     f"This means the language server can't understand this file (possibly due to syntax errors). It may also be due to a bug or misconfiguration of the LS. "
                     f"Returning empty list",
-                    logging.WARNING,
                 )
-                return [], []
-            assert isinstance(response, list), f"Unexpected response from Language Server: {response}"
-            self.logger.log(
-                f"Received {len(response)} document symbols for {relative_file_path} from the Language Server",
-                logging.DEBUG,
-            )
+                return DocumentSymbols([])
 
-        def turn_item_into_symbol_with_children(item: GenericDocumentSymbol):
-            item = cast(ls_types.UnifiedSymbolInformation, item)
-            absolute_path = os.path.join(self.repository_root_path, relative_file_path)
+            assert isinstance(root_symbols, list), f"Unexpected response from Language Server: {root_symbols}"
+            log.debug("Received %d root symbols for %s from the language server", len(root_symbols), relative_file_path)
 
-            # handle missing entries in location
-            if "location" not in item:
-                uri = pathlib.Path(absolute_path).as_uri()
-                assert "range" in item
-                tree_location = ls_types.Location(
-                    uri=uri,
-                    range=item["range"],
-                    absolutePath=absolute_path,
-                    relativePath=relative_file_path,
-                )
-                item["location"] = tree_location
-            location = item["location"]
-            if "absolutePath" not in location:
-                location["absolutePath"] = absolute_path
-            if "relativePath" not in location:
-                location["relativePath"] = relative_file_path
-            if include_body:
-                item["body"] = self.retrieve_symbol_body(item)
-            # handle missing selectionRange
-            if "selectionRange" not in item:
-                if "range" in item:
-                    item["selectionRange"] = item["range"]
-                else:
-                    item["selectionRange"] = item["location"]["range"]
-            children = item.get(LSPConstants.CHILDREN, [])
-            for child in children:
-                child["parent"] = item
-            item[LSPConstants.CHILDREN] = children
+            file_lines = file_data.split_lines()
 
-        flat_all_symbol_list: list[ls_types.UnifiedSymbolInformation] = []
-        root_nodes: list[ls_types.UnifiedSymbolInformation] = []
-        for root_item in response:
-            if "range" not in root_item and "location" not in root_item:
-                if root_item["kind"] in [SymbolKind.File, SymbolKind.Module]:
-                    ...
+            def convert_to_unified_symbol(original_symbol_dict: GenericDocumentSymbol) -> ls_types.UnifiedSymbolInformation:
+                """
+                Converts the given symbol dictionary to the unified representation, ensuring
+                that all required fields are present (except 'children' which is handled separately).
 
-            # mutation is more convenient than creating a new dict,
-            # so we cast and rename the var after the mutating call to turn_item_into_symbol_with_children
-            # which turned and item into a "symbol"
-            turn_item_into_symbol_with_children(root_item)
-            root_symbol = cast(ls_types.UnifiedSymbolInformation, root_item)
-            root_symbol["parent"] = None
+                :param original_symbol_dict: the item to augment
+                :return: the augmented item (new object)
+                """
+                # noinspection PyInvalidCast
+                item = cast(ls_types.UnifiedSymbolInformation, dict(original_symbol_dict))
+                absolute_path = os.path.join(self.repository_root_path, relative_file_path)
 
-            root_nodes.append(root_symbol)
-            assert isinstance(root_symbol, dict)
-            assert LSPConstants.NAME in root_symbol
-            assert LSPConstants.KIND in root_symbol
+                # handle missing location and path entries
+                if "location" not in item:
+                    uri = pathlib.Path(absolute_path).as_uri()
+                    assert "range" in item
+                    tree_location = ls_types.Location(
+                        uri=uri,
+                        range=item["range"],
+                        absolutePath=absolute_path,
+                        relativePath=relative_file_path,
+                    )
+                    item["location"] = tree_location
+                location = item["location"]
+                if "absolutePath" not in location:
+                    location["absolutePath"] = absolute_path
+                if "relativePath" not in location:
+                    location["relativePath"] = relative_file_path
 
-            if LSPConstants.CHILDREN in root_symbol:
-                # TODO: l_tree should be a list of TreeRepr. Define the following function to return TreeRepr as well
+                if "body" not in item:
+                    item["body"] = self.retrieve_symbol_body(item, file_lines=file_lines)
 
-                def visit_tree_nodes_and_build_tree_repr(node: GenericDocumentSymbol) -> list[ls_types.UnifiedSymbolInformation]:
-                    node = cast(ls_types.UnifiedSymbolInformation, node)
-                    l: list[ls_types.UnifiedSymbolInformation] = []
-                    turn_item_into_symbol_with_children(node)
-                    assert LSPConstants.CHILDREN in node
-                    children = node[LSPConstants.CHILDREN]
-                    l.append(node)
-                    for child in children:
-                        l.extend(visit_tree_nodes_and_build_tree_repr(child))
-                    return l
+                # handle missing selectionRange
+                if "selectionRange" not in item:
+                    if "range" in item:
+                        item["selectionRange"] = item["range"]
+                    else:
+                        item["selectionRange"] = item["location"]["range"]
 
-                flat_all_symbol_list.extend(visit_tree_nodes_and_build_tree_repr(root_symbol))
-            else:
-                flat_all_symbol_list.append(ls_types.UnifiedSymbolInformation(**root_symbol))
+                return item
 
-        result = flat_all_symbol_list, root_nodes
-        self.logger.log(f"Caching document symbols for {relative_file_path}", logging.DEBUG)
-        with self._cache_lock:
-            self._document_symbols_cache[cache_key] = (file_data.content_hash, result)
-            self._cache_has_changed = True
-        return result
+            def convert_symbols_with_common_parent(
+                symbols: list[GenericDocumentSymbol], parent: ls_types.UnifiedSymbolInformation | None
+            ) -> list[ls_types.UnifiedSymbolInformation]:
+                """
+                Converts the given symbols into UnifiedSymbolInformation with proper parent-child relationships,
+                adding overload indices for symbols with the same name under the same parent.
+                """
+                total_name_counts = defaultdict(lambda: 0)
+                for symbol in symbols:
+                    total_name_counts[symbol["name"]] += 1
+                name_counts = defaultdict(lambda: 0)
+                unified_symbols = []
+                for symbol in symbols:
+                    usymbol = convert_to_unified_symbol(symbol)
+                    if total_name_counts[usymbol["name"]] > 1:
+                        usymbol["overload_idx"] = name_counts[usymbol["name"]]
+                    name_counts[usymbol["name"]] += 1
+                    usymbol["parent"] = parent
+                    if "children" in usymbol:
+                        usymbol["children"] = convert_symbols_with_common_parent(usymbol["children"], usymbol)
+                    else:
+                        usymbol["children"] = []
+                    unified_symbols.append(usymbol)
+                return unified_symbols
 
-    def request_full_symbol_tree(
-        self, within_relative_path: str | None = None, include_body: bool = False
-    ) -> list[ls_types.UnifiedSymbolInformation]:
+            unified_root_symbols = convert_symbols_with_common_parent(root_symbols, None)
+            document_symbols = DocumentSymbols(unified_root_symbols)
+
+            # update cache
+            log.debug("Updating cached document symbols for %s", relative_file_path)
+            self._document_symbols_cache[cache_key] = (file_data.content_hash, document_symbols)
+            self._document_symbols_cache_is_modified = True
+
+            return document_symbols
+
+    def request_full_symbol_tree(self, within_relative_path: str | None = None) -> list[ls_types.UnifiedSymbolInformation]:
         """
         Will go through all files in the project or within a relative path and build a tree of symbols.
         Note: this may be slow the first time it is called, especially if `within_relative_path` is not used to restrict the search.
@@ -1001,8 +1123,6 @@ class SolidLanguageServer(ABC):
         :param within_relative_path: pass a relative path to only consider symbols within this path.
             If a file is passed, only the symbols within this file will be considered.
             If a directory is passed, all files within this directory will be considered.
-        :param include_body: whether to include the body of the symbols in the result.
-
         :return: A list of root symbols representing the top-level packages/modules in the project.
         """
         if within_relative_path is not None:
@@ -1011,13 +1131,10 @@ class SolidLanguageServer(ABC):
                 raise FileNotFoundError(f"File or directory not found: {within_abs_path}")
             if os.path.isfile(within_abs_path):
                 if self.is_ignored_path(within_relative_path):
-                    self.logger.log(
-                        f"You passed a file explicitly, but it is ignored. This is probably an error. File: {within_relative_path}",
-                        logging.ERROR,
-                    )
+                    log.error("You passed a file explicitly, but it is ignored. This is probably an error. File: %s", within_relative_path)
                     return []
                 else:
-                    _, root_nodes = self.request_document_symbols(within_relative_path, include_body=include_body)
+                    root_nodes = self.request_document_symbols(within_relative_path).root_symbols
                     return root_nodes
 
         # Helper function to recursively process directories
@@ -1026,7 +1143,7 @@ class SolidLanguageServer(ABC):
             abs_dir_path = os.path.realpath(abs_dir_path)
 
             if self.is_ignored_path(str(Path(abs_dir_path).relative_to(self.repository_root_path))):
-                self.logger.log(f"Skipping directory: {rel_dir_path}\n(because it should be ignored)", logging.DEBUG)
+                log.debug("Skipping directory: %s (because it should be ignored)", rel_dir_path)
                 return []
 
             result = []
@@ -1059,14 +1176,16 @@ class SolidLanguageServer(ABC):
                     )
                 except ValueError as e:
                     # Typically happens when the path is not under the repository root (e.g., symlink pointing outside)
-                    self.logger.log(
-                        f"Skipping path {contained_dir_or_file_abs_path}; likely outside of the repository root {self.repository_root_path} [cause: {e}]",
-                        logging.WARNING,
+                    log.warning(
+                        "Skipping path %s; likely outside of the repository root %s [cause: %s]",
+                        contained_dir_or_file_abs_path,
+                        self.repository_root_path,
+                        e,
                     )
                     continue
 
                 if self.is_ignored_path(contained_dir_or_file_rel_path):
-                    self.logger.log(f"Skipping item: {contained_dir_or_file_rel_path}\n(because it should be ignored)", logging.DEBUG)
+                    log.debug("Skipping item: %s (because it should be ignored)", contained_dir_or_file_rel_path)
                     continue
 
                 if os.path.isdir(contained_dir_or_file_abs_path):
@@ -1076,28 +1195,28 @@ class SolidLanguageServer(ABC):
                         child["parent"] = package_symbol
 
                 elif os.path.isfile(contained_dir_or_file_abs_path):
-                    _, file_root_nodes = self.request_document_symbols(contained_dir_or_file_rel_path, include_body=include_body)
+                    with self._open_file_context(contained_dir_or_file_rel_path) as file_data:
+                        document_symbols = self.request_document_symbols(contained_dir_or_file_rel_path, file_data)
+                        file_root_nodes = document_symbols.root_symbols
 
-                    # Create file symbol, link with children
-                    file_rel_path = str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path))
-                    with self.open_file(file_rel_path) as file_data:
-                        fileRange = self._get_range_from_file_content(file_data.contents)
-                    file_symbol = ls_types.UnifiedSymbolInformation(  # type: ignore
-                        name=os.path.splitext(contained_dir_or_file_name)[0],
-                        kind=ls_types.SymbolKind.File,
-                        range=fileRange,
-                        selectionRange=fileRange,
-                        location=ls_types.Location(
-                            uri=str(pathlib.Path(contained_dir_or_file_abs_path).as_uri()),
-                            range=fileRange,
-                            absolutePath=str(contained_dir_or_file_abs_path),
-                            relativePath=str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path)),
-                        ),
-                        children=file_root_nodes,
-                        parent=package_symbol,
-                    )
-                    for child in file_root_nodes:
-                        child["parent"] = file_symbol
+                        # Create file symbol, link with children
+                        file_range = self._get_range_from_file_content(file_data.contents)
+                        file_symbol = ls_types.UnifiedSymbolInformation(  # type: ignore
+                            name=os.path.splitext(contained_dir_or_file_name)[0],
+                            kind=ls_types.SymbolKind.File,
+                            range=file_range,
+                            selectionRange=file_range,
+                            location=ls_types.Location(
+                                uri=str(pathlib.Path(contained_dir_or_file_abs_path).as_uri()),
+                                range=file_range,
+                                absolutePath=str(contained_dir_or_file_abs_path),
+                                relativePath=str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path)),
+                            ),
+                            children=file_root_nodes,
+                            parent=package_symbol,
+                        )
+                        for child in file_root_nodes:
+                            child["parent"] = file_symbol
 
                     # Link file symbol with package
                     package_symbol["children"].append(file_symbol)
@@ -1185,8 +1304,7 @@ class SolidLanguageServer(ABC):
         """
         :return: the top-level symbols in the given file.
         """
-        _, document_roots = self.request_document_symbols(relative_file_path)
-        return document_roots
+        return self.request_document_symbols(relative_file_path).root_symbols
 
     def request_overview(self, within_relative_path: str) -> dict[str, list[UnifiedSymbolInformation]]:
         """
@@ -1234,7 +1352,12 @@ class SolidLanguageServer(ABC):
 
         return ls_types.Hover(**response)
 
-    def retrieve_symbol_body(self, symbol: ls_types.UnifiedSymbolInformation | LSPTypes.DocumentSymbol | LSPTypes.SymbolInformation) -> str:
+    def retrieve_symbol_body(
+        self,
+        symbol: ls_types.UnifiedSymbolInformation | LSPTypes.DocumentSymbol | LSPTypes.SymbolInformation,
+        file_lines: list[str] | None = None,
+        file_buffer: LSPFileBuffer | None = None,
+    ) -> str:
         """
         Load the body of the given symbol. If the body is already contained in the symbol, just return it.
         """
@@ -1246,9 +1369,10 @@ class SolidLanguageServer(ABC):
         symbol_start_line = symbol["location"]["range"]["start"]["line"]
         symbol_end_line = symbol["location"]["range"]["end"]["line"]
         assert "relativePath" in symbol["location"]
-        symbol_file = self.retrieve_full_file_content(symbol["location"]["relativePath"])
-        symbol_lines = symbol_file.split("\n")
-        symbol_body = "\n".join(symbol_lines[symbol_start_line : symbol_end_line + 1])
+        if file_lines is None:
+            with self._open_file_context(symbol["location"]["relativePath"], file_buffer) as f:
+                file_lines = f.split_lines()
+        symbol_body = "\n".join(file_lines[symbol_start_line : symbol_end_line + 1])
 
         # remove leading indentation
         symbol_start_column = symbol["location"]["range"]["start"]["character"]
@@ -1323,8 +1447,8 @@ class SolidLanguageServer(ABC):
                     ref_text = file_data.contents.split("\n")[ref_line]
                     if "." in ref_text:
                         containing_symbol_name = ref_text.split(".")[0]
-                        all_symbols, _ = self.request_document_symbols(ref_path)
-                        for symbol in all_symbols:
+                        document_symbols = self.request_document_symbols(ref_path)
+                        for symbol in document_symbols.iter_symbols():
                             if symbol["name"] == containing_symbol_name and symbol["kind"] == ls_types.SymbolKind.Variable:
                                 containing_symbol = copy(symbol)
                                 containing_symbol["location"] = ref
@@ -1445,12 +1569,12 @@ class SolidLanguageServer(ABC):
                 )
                 return None
 
-        symbols, _ = self.request_document_symbols(relative_file_path)
+        document_symbols = self.request_document_symbols(relative_file_path)
 
         # make jedi and pyright api compatible
         # the former has no location, the later has no range
         # we will just always add location of the desired format to all symbols
-        for symbol in symbols:
+        for symbol in document_symbols.iter_symbols():
             if "location" not in symbol:
                 range = symbol["range"]
                 location = ls_types.Location(
@@ -1488,10 +1612,10 @@ class SolidLanguageServer(ABC):
         # Only consider containers that are not one-liners (otherwise we may get imports)
         candidate_containers = [
             s
-            for s in symbols
+            for s in document_symbols.iter_symbols()
             if s["kind"] in container_symbol_kinds and s["location"]["range"]["start"]["line"] != s["location"]["range"]["end"]["line"]
         ]
-        var_containers = [s for s in symbols if s["kind"] == ls_types.SymbolKind.Variable]
+        var_containers = [s for s in document_symbols.iter_symbols() if s["kind"] == ls_types.SymbolKind.Variable]
         candidate_containers.extend(var_containers)
 
         if not candidate_containers:
@@ -1578,55 +1702,112 @@ class SolidLanguageServer(ABC):
 
         return defining_symbol
 
-    @property
-    def cache_path(self) -> Path:
-        """
-        The path to the cache file for the document symbols.
-        """
-        return (
-            Path(self.repository_root_path)
-            / self._solidlsp_settings.project_data_relative_path
-            / self.CACHE_FOLDER_NAME
-            / self.language_id
-            / "document_symbols_cache_v23-06-25.pkl"
-        )
+    def _save_raw_document_symbols_cache(self):
+        cache_file = self.cache_dir / self.RAW_DOCUMENT_SYMBOL_CACHE_FILENAME
 
-    def save_cache(self):
-        with self._cache_lock:
-            if not self._cache_has_changed:
-                self.logger.log("No changes to document symbols cache, skipping save", logging.DEBUG)
-                return
-
-            self.logger.log(f"Saving updated document symbols cache to {self.cache_path}", logging.INFO)
-            self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                with open(self.cache_path, "wb") as f:
-                    pickle.dump(self._document_symbols_cache, f)
-                self._cache_has_changed = False
-            except Exception as e:
-                self.logger.log(
-                    f"Failed to save document symbols cache to {self.cache_path}: {e}. "
-                    "Note: this may have resulted in a corrupted cache file.",
-                    logging.ERROR,
-                )
-
-    def load_cache(self):
-        if not self.cache_path.exists():
+        if not self._raw_document_symbols_cache_is_modified:
+            log.debug("No changes to raw document symbols cache, skipping save")
             return
 
-        with self._cache_lock:
-            self.logger.log(f"Loading document symbols cache from {self.cache_path}", logging.INFO)
+        log.info("Saving updated raw document symbols cache to %s", cache_file)
+        try:
+            save_cache(str(cache_file), self._raw_document_symbols_cache_version(), self._raw_document_symbols_cache)
+            self._raw_document_symbols_cache_is_modified = False
+        except Exception as e:
+            log.error(
+                "Failed to save raw document symbols cache to %s: %s. Note: this may have resulted in a corrupted cache file.",
+                cache_file,
+                e,
+            )
+
+    def _raw_document_symbols_cache_version(self):
+        return (self.RAW_DOCUMENT_SYMBOLS_CACHE_VERSION, self._ls_specific_raw_document_symbols_cache_version)
+
+    def _load_raw_document_symbols_cache(self):
+        cache_file = self.cache_dir / self.RAW_DOCUMENT_SYMBOL_CACHE_FILENAME
+
+        if not cache_file.exists():
+            # check for legacy cache to load to migrate
+            legacy_cache_file = self.cache_dir / self.RAW_DOCUMENT_SYMBOL_CACHE_FILENAME_LEGACY_FALLBACK
+            if legacy_cache_file.exists():
+                try:
+                    legacy_cache: dict[
+                        str, tuple[str, tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]]
+                    ] = load_pickle(legacy_cache_file)
+                    log.info("Migrating legacy document symbols cache with %d entries", len(legacy_cache))
+                    num_symbols_migrated = 0
+                    migrated_cache = {}
+                    for cache_key, (file_hash, (all_symbols, root_symbols)) in legacy_cache.items():
+                        if cache_key.endswith("-True"):  # include_body=True
+                            new_cache_key = cache_key[:-5]
+                            migrated_cache[new_cache_key] = (file_hash, root_symbols)
+                            num_symbols_migrated += len(all_symbols)
+                    log.info("Migrated %d document symbols from legacy cache", num_symbols_migrated)
+                    self._raw_document_symbols_cache = migrated_cache
+                    self._raw_document_symbols_cache_is_modified = True
+                    self._save_raw_document_symbols_cache()
+                    legacy_cache_file.unlink()
+                    return
+                except Exception as e:
+                    log.error("Error during cache migration: %s", e)
+                    return
+
+        # load existing cache (if any)
+        if cache_file.exists():
+            log.info("Loading document symbols cache from %s", cache_file)
             try:
-                with open(self.cache_path, "rb") as f:
-                    self._document_symbols_cache = pickle.load(f)
-                self.logger.log(f"Loaded {len(self._document_symbols_cache)} document symbols from cache.", logging.INFO)
+                saved_cache = load_cache(str(cache_file), self._raw_document_symbols_cache_version())
+                if saved_cache is not None:
+                    self._raw_document_symbols_cache = saved_cache
+                    self.logger.log(
+                        f"Loaded {len(self._raw_document_symbols_cache)} entries from raw document symbols cache.", logging.INFO
+                    )
             except Exception as e:
-                # cache often becomes corrupt, so just skip loading it
-                self.logger.log(
-                    f"Failed to load document symbols cache from {self.cache_path}: {e}. Possible cause: the cache file is corrupted. "
-                    "Check for any errors related to saving the cache in the logs.",
-                    logging.ERROR,
+                # cache can become corrupt, so just skip loading it
+                log.warning(
+                    "Failed to load raw document symbols cache from %s (%s); Ignoring cache.",
+                    cache_file,
+                    e,
                 )
+
+    def _save_document_symbols_cache(self):
+        cache_file = self.cache_dir / self.DOCUMENT_SYMBOL_CACHE_FILENAME
+
+        if not self._document_symbols_cache_is_modified:
+            log.debug("No changes to document symbols cache, skipping save")
+            return
+
+        log.info("Saving updated document symbols cache to %s", cache_file)
+        try:
+            save_cache(str(cache_file), self.DOCUMENT_SYMBOL_CACHE_VERSION, self._document_symbols_cache)
+            self._document_symbols_cache_is_modified = False
+        except Exception as e:
+            log.error(
+                "Failed to save document symbols cache to %s: %s. Note: this may have resulted in a corrupted cache file.",
+                cache_file,
+                e,
+            )
+
+    def _load_document_symbols_cache(self):
+        cache_file = self.cache_dir / self.DOCUMENT_SYMBOL_CACHE_FILENAME
+        if cache_file.exists():
+            log.info("Loading document symbols cache from %s", cache_file)
+            try:
+                saved_cache = load_cache(str(cache_file), self.DOCUMENT_SYMBOL_CACHE_VERSION)
+                if saved_cache is not None:
+                    self._document_symbols_cache = saved_cache
+                    self.logger.log(f"Loaded {len(self._document_symbols_cache)} entries from document symbols cache.", logging.INFO)
+            except Exception as e:
+                # cache can become corrupt, so just skip loading it
+                log.warning(
+                    "Failed to load document symbols cache from %s (%s); Ignoring cache.",
+                    cache_file,
+                    e,
+                )
+
+    def save_cache(self):
+        self._save_raw_document_symbols_cache()
+        self._save_document_symbols_cache()
 
     def request_workspace_symbol(self, query: str) -> list[ls_types.UnifiedSymbolInformation] | None:
         """
