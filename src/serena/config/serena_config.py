@@ -21,6 +21,7 @@ from sensai.util.string import ToStringMixin
 
 from serena.constants import (
     DEFAULT_SOURCE_FILE_ENCODING,
+    DEFAULT_TOOL_TIMEOUT,
     PROJECT_TEMPLATE_FILE,
     REPO_ROOT,
     SERENA_CONFIG_TEMPLATE_FILE,
@@ -41,7 +42,6 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 T = TypeVar("T")
-DEFAULT_TOOL_TIMEOUT: float = 240
 DictType = dict | CommentedMap
 TDict = TypeVar("TDict", bound=DictType)
 
