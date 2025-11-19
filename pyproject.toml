@@ -35,6 +35,7 @@ dependencies = [
   "tqdm>=4.67.1",
   "tiktoken>=0.9.0",
   "anthropic>=0.54.0",
+  "janus>=2.0.0",
 ]
 
 [[tool.uv.index]]
@@ -180,6 +181,7 @@ select = [
   "YTT",
 ]
 ignore = [
+  "PLW0603", # using global to set a var is fine
   "PLC0415",
   "RUF002",
   "RUF005",

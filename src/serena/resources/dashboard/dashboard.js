@@ -597,6 +597,10 @@ class Dashboard {
             html += '<div class="config-label">File Encoding:</div>';
             html += '<div class="config-value">' + (config.encoding || 'N/A') + '</div>';
 
+            // Tool Management Enabled info
+            html += '<div class="config-label">Tool Management Enabled:</div>';
+            html += '<div class="config-value">' + (config.tool_management_enabled ? 'Yes' : 'No') + '</div>';
+
             html += '</div>';
 
             // Active tools - collapsible
@@ -606,8 +610,14 @@ class Dashboard {
             html += '<span class="toggle-icon' + (wasToolsExpanded ? ' expanded' : '') + '">▼</span>';
             html += '</h3>';
             html += '<div class="collapsible-content tools-grid" id="tools-content" style="' + (wasToolsExpanded ? '' : 'display:none;') + ' margin-top: 10px;">';
+            const toolManagementEnabled = config.tool_management_enabled;
             config.active_tools.forEach(function (tool) {
-                html += '<div class="tool-item" title="' + tool + '">' + tool + '</div>';
+                html += '<div class="tool-item' + (toolManagementEnabled ? ' removable' : '') + '" data-tool="' + tool + '" title="' + tool + '">';
+                html += tool;
+                if (toolManagementEnabled) {
+                    html += '<span class="tool-remove" data-tool="' + tool + '">&times;</span>';
+                }
+                html += '</div>';
             });
             html += '</div>';
             html += '</div>';
@@ -660,6 +670,16 @@ class Dashboard {
                 const language = $(this).data('language');
                 self.confirmRemoveLanguage(language);
             });
+
+            // Attach event handlers for tool remove buttons (disable tools) - only if tool management is enabled
+            if (config.tool_management_enabled) {
+                $('.tool-remove').click(function (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const toolName = $(this).data('tool');
+                    self.disableTool(toolName);
+                });
+            }
 
             // Attach event handlers for memory items
             $('.memory-item').click(function (e) {
@@ -758,12 +778,31 @@ class Dashboard {
             return;
         }
 
+        const self = this;
+        const toolManagementEnabled = this.configData && this.configData.tool_management_enabled;
         let html = '';
         tools.forEach(function (tool) {
-            html += '<div class="info-item" title="' + tool.name + '">' + tool.name + '</div>';
+            if (toolManagementEnabled) {
+                html += '<div class="info-item tool-enable-item" data-tool="' + tool.name + '" title="Click to enable ' + tool.name + '">';
+                html += '<span class="tool-enable-icon">+</span>';
+                html += '<span class="tool-enable-name">' + tool.name + '</span>';
+                html += '</div>';
+            } else {
+                html += '<div class="info-item" title="' + tool.name + '">';
+                html += '<span class="tool-enable-name">' + tool.name + '</span>';
+                html += '</div>';
+            }
         });
 
         this.$availableToolsDisplay.html(html);
+
+        // Attach click handlers to enable tools - only if tool management is enabled
+        if (toolManagementEnabled) {
+            $('.tool-enable-item').click(function () {
+                const toolName = $(this).data('tool');
+                self.enableTool(toolName);
+            });
+        }
     }
 
     displayAvailableModes(modes) {
@@ -1665,6 +1704,64 @@ class Dashboard {
             }, complete: function () {
                 self.isAddingLanguage = false;
                 self.loadConfigOverview();
+            }
+        });
+    }
+
+    // ===== Tool Enable/Disable Methods =====
+
+    enableTool(toolName) {
+        const self = this;
+
+        console.log('Enabling tool:', toolName);
+
+        $.ajax({
+            url: '/enable_tool',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                tool_name: toolName
+            }),
+            success: function (response) {
+                if (response.status === 'success') {
+                    console.log('Tool enabled successfully:', toolName);
+                    // Reload config to show updated tool list
+                    self.loadConfigOverview();
+                } else {
+                    alert('Error enabling tool ' + toolName + ': ' + response.message);
+                }
+            },
+            error: function (xhr, status, error) {
+                console.error('Error enabling tool:', error);
+                alert('Error enabling tool: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
+            }
+        });
+    }
+
+    disableTool(toolName) {
+        const self = this;
+
+        console.log('Disabling tool:', toolName);
+
+        $.ajax({
+            url: '/disable_tool',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                tool_name: toolName
+            }),
+            success: function (response) {
+                if (response.status === 'success') {
+                    console.log('Tool disabled successfully:', toolName);
+                    // Reload config to show updated tool list
+                    self.loadConfigOverview();
+                } else {
+                    alert('Error disabling tool ' + toolName + ': ' + response.message);
+                }
+            },
+            error: function (xhr, status, error) {
+                console.error('Error disabling tool:', error);
+                alert('Error disabling tool: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
             }
         });
     }
