@@ -30,7 +30,7 @@ class TestYAMLLanguageServerBasics:
     @pytest.mark.parametrize("repo_path", [Language.YAML], indirect=True)
     def test_yaml_config_file_symbols(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test document symbols detection in config.yaml with specific symbol verification."""
-        all_symbols, root_symbols = language_server.request_document_symbols("config.yaml", include_body=False)
+        all_symbols, root_symbols = language_server.request_document_symbols("config.yaml").get_all_symbols_and_roots()
 
         assert all_symbols is not None, "Should return symbols for config.yaml"
         assert len(all_symbols) > 0, f"Should find symbols in config.yaml, found {len(all_symbols)}"
@@ -64,7 +64,7 @@ class TestYAMLLanguageServerBasics:
     @pytest.mark.parametrize("repo_path", [Language.YAML], indirect=True)
     def test_yaml_services_file_symbols(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test symbol detection in services.yml Docker Compose file."""
-        all_symbols, root_symbols = language_server.request_document_symbols("services.yml", include_body=False)
+        all_symbols, root_symbols = language_server.request_document_symbols("services.yml").get_all_symbols_and_roots()
 
         assert all_symbols is not None, "Should return symbols for services.yml"
         assert len(all_symbols) > 0, f"Should find symbols in services.yml, found {len(all_symbols)}"
@@ -92,7 +92,7 @@ class TestYAMLLanguageServerBasics:
     @pytest.mark.parametrize("repo_path", [Language.YAML], indirect=True)
     def test_yaml_data_file_symbols(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test symbol detection in data.yaml file with array structures."""
-        all_symbols, root_symbols = language_server.request_document_symbols("data.yaml", include_body=False)
+        all_symbols, root_symbols = language_server.request_document_symbols("data.yaml").get_all_symbols_and_roots()
 
         assert all_symbols is not None, "Should return symbols for data.yaml"
         assert len(all_symbols) > 0, f"Should find symbols in data.yaml, found {len(all_symbols)}"
@@ -113,7 +113,7 @@ class TestYAMLLanguageServerBasics:
     @pytest.mark.parametrize("repo_path", [Language.YAML], indirect=True)
     def test_yaml_symbols_with_body(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test request_document_symbols with body extraction."""
-        all_symbols, root_symbols = language_server.request_document_symbols("config.yaml", include_body=True)
+        all_symbols, root_symbols = language_server.request_document_symbols("config.yaml").get_all_symbols_and_roots()
 
         assert all_symbols is not None, "Should return symbols for config.yaml"
         assert len(all_symbols) > 0, "Should have symbols"
@@ -150,7 +150,7 @@ class TestYAMLLanguageServerBasics:
     @pytest.mark.parametrize("repo_path", [Language.YAML], indirect=True)
     def test_yaml_symbol_ranges(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that symbols have proper range information."""
-        all_symbols, root_symbols = language_server.request_document_symbols("config.yaml", include_body=False)
+        all_symbols, root_symbols = language_server.request_document_symbols("config.yaml").get_all_symbols_and_roots()
 
         assert all_symbols is not None
         assert len(all_symbols) > 0
