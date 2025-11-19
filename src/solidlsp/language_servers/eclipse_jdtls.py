@@ -13,7 +13,7 @@ from pathlib import PurePath
 
 from overrides import override
 
-from solidlsp.ls import GenericDocumentSymbol, SolidLanguageServer
+from solidlsp.ls import GenericDocumentSymbol, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
@@ -788,8 +788,8 @@ class EclipseJDTLS(SolidLanguageServer):
         # TODO: Add comments about why we wait here, and how this can be optimized
         self.service_ready_event.wait()
 
-    def _request_document_symbols(self, relative_file_path: str) -> list[GenericDocumentSymbol]:
-        result = super()._request_document_symbols(relative_file_path)
+    def _request_document_symbols(self, relative_file_path: str, file_data: LSPFileBuffer | None) -> list[GenericDocumentSymbol]:
+        result = super()._request_document_symbols(relative_file_path, file_data)
 
         # JDTLS sometimes returns symbol names with type information to handle overloads,
         # e.g. "myMethod(int) <T>", but we want overloads to be handled via overload_idx,
