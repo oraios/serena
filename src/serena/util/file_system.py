@@ -9,7 +9,14 @@ import pathspec
 from pathspec import PathSpec
 from sensai.util.logging import LogTime
 
+from serena.constants import SERENA_MANAGED_DIR_NAME
+
 log = logging.getLogger(__name__)
+
+
+def get_serena_managed_in_project_dir(project_root: str | Path) -> str:
+    return os.path.join(str(project_root), SERENA_MANAGED_DIR_NAME)
+
 
 
 class ScanResult(NamedTuple):

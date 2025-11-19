@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from serena.config.serena_config import ProjectConfig
+from serena.config.project_config import ProjectConfig
 from solidlsp.ls_config import Language
 
 

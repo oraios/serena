@@ -9,7 +9,7 @@ import pytest
 from click.testing import CliRunner
 
 from serena.cli import ProjectCommands
-from serena.config.serena_config import ProjectConfig
+from serena.config.project_config import ProjectConfig
 
 pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
 

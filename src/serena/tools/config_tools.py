@@ -1,4 +1,3 @@
-from serena.config.context_mode import SerenaAgentMode
 from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional
 
 
@@ -43,6 +42,8 @@ class SwitchModesTool(Tool, ToolMarkerOptional):
 
         :param modes: the names of the modes to activate
         """
+        from serena.config.context_mode import SerenaAgentMode
+
         mode_instances = [SerenaAgentMode.load(mode) for mode in modes]
         self.agent.set_modes(mode_instances)
 

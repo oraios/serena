@@ -7,11 +7,11 @@ from typing import Any
 import pathspec
 from sensai.util.string import ToStringMixin
 
-from serena.config.serena_config import ProjectConfig, get_serena_managed_in_project_dir
+from serena.config.project_config import ProjectConfig
 from serena.constants import DEFAULT_TOOL_TIMEOUT, SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_NAME
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.text_utils import MatchedConsecutiveLines, search_files
-from serena.util.file_system import GitignoreParser, match_path
+from serena.util.file_system import GitignoreParser, get_serena_managed_in_project_dir, match_path
 from serena.util.general import save_yaml
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language

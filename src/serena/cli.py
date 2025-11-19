@@ -17,7 +17,8 @@ from tqdm import tqdm
 
 from serena.agent import SerenaAgent
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
-from serena.config.serena_config import ProjectConfig, SerenaConfig, SerenaPaths
+from serena.config.project_config import ProjectConfig
+from serena.config.serena_config import SerenaConfig, SerenaPaths
 from serena.constants import (
     DEFAULT_CONTEXT,
     DEFAULT_MODES,
