@@ -15,11 +15,12 @@ from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import DidChangeConfigurationParams, InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 class PerlLanguageServer(SolidLanguageServer):
@@ -98,19 +99,12 @@ class PerlLanguageServer(SolidLanguageServer):
 
         return "perl -MPerl::LanguageServer -e 'Perl::LanguageServer::run'"
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         # Setup runtime dependencies before initializing
         perl_ls_cmd = self._setup_runtime_dependencies()
 
         super().__init__(
-            config,
-            logger,
-            repository_root_path,
-            ProcessLaunchInfo(cmd=perl_ls_cmd, cwd=repository_root_path),
-            "perl",
-            solidlsp_settings,
+            config, repository_root_path, ProcessLaunchInfo(cmd=perl_ls_cmd, cwd=repository_root_path), "perl", solidlsp_settings
         )
         self.request_id = 0
 
@@ -156,15 +150,15 @@ class PerlLanguageServer(SolidLanguageServer):
         def register_capability_handler(params: Any) -> None:
             return
 
-        def window_log_message(msg: str) -> None:
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"LSP: window/logMessage: {msg}")
 
         def do_nothing(params: Any) -> None:
             return
 
         def workspace_configuration_handler(params: Any) -> Any:
             """Handle workspace/configuration request from Perl::LanguageServer."""
-            self.logger.log(f"Received workspace/configuration request: {params}", logging.INFO)
+            log.info(f"Received workspace/configuration request: {params}")
 
             perl_config = {
                 "perlInc": [self.repository_root_path, "."],
@@ -180,18 +174,14 @@ class PerlLanguageServer(SolidLanguageServer):
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        self.logger.log("Starting Perl::LanguageServer process", logging.INFO)
+        log.info("Starting Perl::LanguageServer process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
-        self.logger.log(
+        log.info(
             "After sent initialize params",
-            logging.INFO,
         )
 
         # Verify server capabilities
@@ -213,7 +203,7 @@ class PerlLanguageServer(SolidLanguageServer):
                 }
             }
         }
-        self.logger.log(f"Sending workspace/didChangeConfiguration notification with config: {perl_config}", logging.INFO)
+        log.info(f"Sending workspace/didChangeConfiguration notification with config: {perl_config}")
         self.server.notify.workspace_did_change_configuration(perl_config)
 
         self.completions_available.set()
@@ -221,6 +211,6 @@ class PerlLanguageServer(SolidLanguageServer):
         # Perl::LanguageServer needs time to index files and resolve cross-file references
         # Without this delay, requests for definitions/references may return empty results
         settling_time = 0.5
-        self.logger.log(f"Allowing {settling_time} seconds for Perl::LanguageServer to index files...", logging.INFO)
+        log.info(f"Allowing {settling_time} seconds for Perl::LanguageServer to index files...")
         time.sleep(settling_time)
-        self.logger.log("Perl::LanguageServer settling period complete", logging.INFO)
+        log.info("Perl::LanguageServer settling period complete")

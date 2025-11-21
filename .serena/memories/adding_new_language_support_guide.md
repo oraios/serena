@@ -21,39 +21,35 @@ Have a look at `intelephense.py` for a reference implementation of a language se
 dependencies, and on `pyright_server.py` that does not need any additional dependencies
 because the language server can be installed directly as python package.
 
-
 ```python
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+
 
 class NewLanguageServer(SolidLanguageServer):
     """
     Language server implementation for NewLanguage.
     """
-    
-    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
+
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str):
         # Determine language server command
         cmd = self._get_language_server_command()
-        
-        super().__init__(
-            config,
-            logger,
-            repository_root_path,
+
+        super().__init__(config,
             ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path),
-            "new_language",  # Language ID for LSP
-        )
-    
+            "new_language",,
+
     def _get_language_server_command(self) -> list[str]:
         """Get the command to start the language server."""
         # Example: return ["new-language-server", "--stdio"]
         pass
-    
+
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         """Define language-specific directories to ignore."""
-        return super().is_ignored_dirname(dirname) or dirname in ["build", "dist", "target"]
+        return super().is_ignored_dirname(dirname) or dirname in ["build",
+            "dist", "target"]
 ```
 
 ### 1.2 Language Server Discovery and Installation
@@ -62,7 +58,7 @@ For languages requiring automatic installation, implement download logic similar
 
 ```python
 @classmethod
-def _ensure_server_installed(cls, logger: LanguageServerLogger) -> str:
+def _ensure_server_installed(cls) -> str:
     """Ensure language server is installed and return path."""
     # Check system installation first
     system_server = shutil.which("new-language-server")
@@ -70,10 +66,10 @@ def _ensure_server_installed(cls, logger: LanguageServerLogger) -> str:
         return system_server
     
     # Download and install if needed
-    server_path = cls._download_and_install_server(logger)
+    server_path = cls._download_and_install_server()
     return server_path
 
-def _download_and_install_server(cls, logger: LanguageServerLogger) -> str:
+def _download_and_install_server(cls) -> str:
     """Download and install the language server."""
     # Implementation specific to your language server
     pass
@@ -129,12 +125,12 @@ In `src/solidlsp/ls.py`, add your language to the `create` method:
 
 ```python
 @classmethod
-def create(cls, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str) -> "SolidLanguageServer":
+def create(cls, config: LanguageServerConfig, repository_root_path: str) -> "SolidLanguageServer":
     match config.code_language:
         # Existing cases...
         case Language.NEW_LANGUAGE:
             from solidlsp.language_servers.new_language_server import NewLanguageServer
-            return NewLanguageServer(config, logger, repository_root_path)
+            return NewLanguageServer(config, repository_root_path)
 ```
 
 ## Step 3: Test Repository

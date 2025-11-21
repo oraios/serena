@@ -15,10 +15,11 @@ from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams, InitializeResult
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 class RubyLsp(SolidLanguageServer):
@@ -27,21 +28,14 @@ class RubyLsp(SolidLanguageServer):
     Contains various configurations and settings specific to Ruby with modern LSP features.
     """
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a RubyLsp instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        ruby_lsp_executable = self._setup_runtime_dependencies(logger, config, repository_root_path)
+        ruby_lsp_executable = self._setup_runtime_dependencies(config, repository_root_path)
         super().__init__(
-            config,
-            logger,
-            repository_root_path,
-            ProcessLaunchInfo(cmd=ruby_lsp_executable, cwd=repository_root_path),
-            "ruby",
-            solidlsp_settings,
+            config, repository_root_path, ProcessLaunchInfo(cmd=ruby_lsp_executable, cwd=repository_root_path), "ruby", solidlsp_settings
         )
         self.analysis_complete = threading.Event()
         self.service_ready_event = threading.Event()
@@ -98,7 +92,7 @@ class RubyLsp(SolidLanguageServer):
             return shutil.which(executable_name)
 
     @staticmethod
-    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig, repository_root_path: str) -> list[str]:
+    def _setup_runtime_dependencies(config: LanguageServerConfig, repository_root_path: str) -> list[str]:
         """
         Setup runtime dependencies for ruby-lsp and return the command list to start the server.
         Installation strategy: Bundler project > global ruby-lsp > gem install ruby-lsp
@@ -125,24 +119,23 @@ class RubyLsp(SolidLanguageServer):
         if use_rbenv:
             ruby_cmd = ["rbenv", "exec", "ruby"]
             bundle_cmd = ["rbenv", "exec", "bundle"]
-            logger.log(f"Using rbenv-managed Ruby (found {ruby_version_file})", logging.INFO)
+            log.info(f"Using rbenv-managed Ruby (found {ruby_version_file})")
         else:
             ruby_cmd = ["ruby"]
             bundle_cmd = ["bundle"]
             if os.path.exists(ruby_version_file):
-                logger.log(
+                log.warning(
                     f"Found {ruby_version_file} but rbenv is not installed. "
                     "Using system Ruby. Consider installing rbenv for better version management: https://github.com/rbenv/rbenv",
-                    logging.WARNING,
                 )
             else:
-                logger.log("No .ruby-version file found, using system Ruby", logging.INFO)
+                log.info("No .ruby-version file found, using system Ruby")
 
         # Check if Ruby is installed
         try:
             result = subprocess.run(ruby_cmd + ["--version"], check=True, capture_output=True, cwd=repository_root_path, text=True)
             ruby_version = result.stdout.strip()
-            logger.log(f"Ruby version: {ruby_version}", logging.INFO)
+            log.info(f"Ruby version: {ruby_version}")
 
             # Extract version number for compatibility checks
             import re
@@ -151,7 +144,7 @@ class RubyLsp(SolidLanguageServer):
             if version_match:
                 major, minor, patch = map(int, version_match.groups())
                 if major < 2 or (major == 2 and minor < 6):
-                    logger.log(f"Warning: Ruby {major}.{minor}.{patch} detected. ruby-lsp works best with Ruby 2.6+", logging.WARNING)
+                    log.warning(f"Warning: Ruby {major}.{minor}.{patch} detected. ruby-lsp works best with Ruby 2.6+")
 
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr if isinstance(e.stderr, str) else e.stderr.decode() if e.stderr else "Unknown error"
@@ -173,7 +166,7 @@ class RubyLsp(SolidLanguageServer):
         is_bundler_project = os.path.exists(gemfile_path)
 
         if is_bundler_project:
-            logger.log("Detected Bundler project (Gemfile found)", logging.INFO)
+            log.info("Detected Bundler project (Gemfile found)")
 
             # Check if bundle command is available using Windows-compatible search
             bundle_path = RubyLsp._find_executable_with_extensions(bundle_cmd[0] if len(bundle_cmd) == 1 else "bundle")
@@ -190,9 +183,8 @@ class RubyLsp(SolidLanguageServer):
                         break
 
             if not bundle_path:
-                logger.log(
+                log.warning(
                     "Bundler project detected but 'bundle' command not found. Falling back to global ruby-lsp installation.",
-                    logging.WARNING,
                 )
             else:
                 # Check if ruby-lsp is in Gemfile.lock
@@ -203,29 +195,28 @@ class RubyLsp(SolidLanguageServer):
                             content = f.read()
                             ruby_lsp_in_bundle = "ruby-lsp" in content.lower()
                     except Exception as e:
-                        logger.log(f"Warning: Could not read Gemfile.lock: {e}", logging.WARNING)
+                        log.warning(f"Warning: Could not read Gemfile.lock: {e}")
 
                 if ruby_lsp_in_bundle:
-                    logger.log("Found ruby-lsp in Gemfile.lock", logging.INFO)
+                    log.info("Found ruby-lsp in Gemfile.lock")
                     return bundle_cmd + ["exec", "ruby-lsp"]
                 else:
-                    logger.log(
+                    log.info(
                         "ruby-lsp not found in Gemfile.lock. Consider adding 'gem \"ruby-lsp\"' to your Gemfile for better compatibility.",
-                        logging.INFO,
                     )
                     # Fall through to global installation check
 
         # Check if ruby-lsp is available globally using Windows-compatible search
         ruby_lsp_path = RubyLsp._find_executable_with_extensions("ruby-lsp")
         if ruby_lsp_path:
-            logger.log(f"Found ruby-lsp at: {ruby_lsp_path}", logging.INFO)
+            log.info(f"Found ruby-lsp at: {ruby_lsp_path}")
             return [ruby_lsp_path]
 
         # Try to install ruby-lsp globally
-        logger.log("ruby-lsp not found, attempting to install globally...", logging.INFO)
+        log.info("ruby-lsp not found, attempting to install globally...")
         try:
             subprocess.run(["gem", "install", "ruby-lsp"], check=True, capture_output=True, cwd=repository_root_path)
-            logger.log("Successfully installed ruby-lsp globally", logging.INFO)
+            log.info("Successfully installed ruby-lsp globally")
             # Find the newly installed ruby-lsp executable
             ruby_lsp_path = RubyLsp._find_executable_with_extensions("ruby-lsp")
             return [ruby_lsp_path] if ruby_lsp_path else ["ruby-lsp"]
@@ -351,13 +342,13 @@ class RubyLsp(SolidLanguageServer):
         def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
             for registration in params["registrations"]:
-                self.logger.log(f"Registered capability: {registration['method']}", logging.INFO)
+                log.info(f"Registered capability: {registration['method']}")
             return
 
         def lang_status_handler(params: dict) -> None:
-            self.logger.log(f"LSP: language/status: {params}", logging.INFO)
+            log.info(f"LSP: language/status: {params}")
             if params.get("type") == "ready":
-                self.logger.log("ruby-lsp service is ready.", logging.INFO)
+                log.info("ruby-lsp service is ready.")
                 self.analysis_complete.set()
                 self.completions_available.set()
 
@@ -368,36 +359,36 @@ class RubyLsp(SolidLanguageServer):
             return
 
         def window_log_message(msg: dict) -> None:
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+            log.info(f"LSP: window/logMessage: {msg}")
 
         def progress_handler(params: dict) -> None:
             # ruby-lsp sends progress notifications during indexing
-            self.logger.log(f"LSP: $/progress: {params}", logging.DEBUG)
+            log.debug(f"LSP: $/progress: {params}")
             if "value" in params:
                 value = params["value"]
                 # Check for completion indicators
                 if value.get("kind") == "end":
-                    self.logger.log("ruby-lsp indexing complete ($/progress end)", logging.INFO)
+                    log.info("ruby-lsp indexing complete ($/progress end)")
                     self.analysis_complete.set()
                     self.completions_available.set()
                 elif value.get("kind") == "begin":
-                    self.logger.log("ruby-lsp indexing started ($/progress begin)", logging.INFO)
+                    log.info("ruby-lsp indexing started ($/progress begin)")
                 elif "percentage" in value:
                     percentage = value.get("percentage", 0)
-                    self.logger.log(f"ruby-lsp indexing progress: {percentage}%", logging.DEBUG)
+                    log.debug(f"ruby-lsp indexing progress: {percentage}%")
             # Handle direct progress format (fallback)
             elif "token" in params and "value" in params:
                 token = params.get("token")
                 if isinstance(token, str) and "indexing" in token.lower():
                     value = params.get("value", {})
                     if value.get("kind") == "end" or value.get("percentage") == 100:
-                        self.logger.log("ruby-lsp indexing complete (token progress)", logging.INFO)
+                        log.info("ruby-lsp indexing complete (token progress)")
                         self.analysis_complete.set()
                         self.completions_available.set()
 
         def window_work_done_progress_create(params: dict) -> dict:
             """Handle workDoneProgress/create requests from ruby-lsp"""
-            self.logger.log(f"LSP: window/workDoneProgress/create: {params}", logging.DEBUG)
+            log.debug(f"LSP: window/workDoneProgress/create: {params}")
             return {}
 
         self.server.on_request("client/registerCapability", register_capability_handler)
@@ -408,17 +399,14 @@ class RubyLsp(SolidLanguageServer):
         self.server.on_request("window/workDoneProgress/create", window_work_done_progress_create)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        self.logger.log("Starting ruby-lsp server process", logging.INFO)
+        log.info("Starting ruby-lsp server process")
         self.server.start()
         initialize_params = self._get_initialize_params()
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
-        self.logger.log(f"Sending init params: {json.dumps(initialize_params, indent=4)}", logging.INFO)
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
+        log.info(f"Sending init params: {json.dumps(initialize_params, indent=4)}")
         init_response = self.server.send.initialize(initialize_params)
-        self.logger.log(f"Received init response: {init_response}", logging.INFO)
+        log.info(f"Received init response: {init_response}")
 
         # Verify expected capabilities
         # Note: ruby-lsp may return textDocumentSync in different formats (number or object)
@@ -434,11 +422,11 @@ class RubyLsp(SolidLanguageServer):
         self.server.notify.initialized({})
         # Wait for ruby-lsp to complete its initial indexing
         # ruby-lsp has fast indexing
-        self.logger.log("Waiting for ruby-lsp to complete initial indexing...", logging.INFO)
+        log.info("Waiting for ruby-lsp to complete initial indexing...")
         if self.analysis_complete.wait(timeout=30.0):
-            self.logger.log("ruby-lsp initial indexing complete, server ready", logging.INFO)
+            log.info("ruby-lsp initial indexing complete, server ready")
         else:
-            self.logger.log("Timeout waiting for ruby-lsp indexing completion, proceeding anyway", logging.WARNING)
+            log.warning("Timeout waiting for ruby-lsp indexing completion, proceeding anyway")
             # Fallback: assume indexing is complete after timeout
             self.analysis_complete.set()
             self.completions_available.set()
@@ -472,7 +460,7 @@ class RubyLsp(SolidLanguageServer):
 
             for cap in important_capabilities:
                 if cap in capabilities:
-                    self.logger.log(f"ruby-lsp {cap}: available", logging.DEBUG)
+                    log.debug(f"ruby-lsp {cap}: available")
 
         # Signal that the service is ready
         self.service_ready_event.set()

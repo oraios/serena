@@ -13,10 +13,11 @@ from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 class RustAnalyzer(SolidLanguageServer):
@@ -95,18 +96,15 @@ class RustAnalyzer(SolidLanguageServer):
 
         return path
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a RustAnalyzer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
         rustanalyzer_executable_path = self._ensure_rust_analyzer_installed()
-        logger.log(f"Using rust-analyzer at: {rustanalyzer_executable_path}", logging.INFO)
+        log.info(f"Using rust-analyzer at: {rustanalyzer_executable_path}")
 
         super().__init__(
             config,
-            logger,
             repository_root_path,
             ProcessLaunchInfo(cmd=rustanalyzer_executable_path, cwd=repository_root_path),
             "rust",
@@ -626,7 +624,7 @@ class RustAnalyzer(SolidLanguageServer):
                 self.server_ready.set()
 
         def window_log_message(msg: dict) -> None:
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+            log.info(f"LSP: window/logMessage: {msg}")
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("language/status", lang_status_handler)
@@ -637,14 +635,11 @@ class RustAnalyzer(SolidLanguageServer):
         self.server.on_notification("language/actionableNotification", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
-        self.logger.log("Starting RustAnalyzer server process", logging.INFO)
+        log.info("Starting RustAnalyzer server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
         assert init_response["capabilities"]["textDocumentSync"]["change"] == 2  # type: ignore
         assert "completionProvider" in init_response["capabilities"]

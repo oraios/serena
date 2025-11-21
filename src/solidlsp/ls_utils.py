@@ -17,7 +17,6 @@ import charset_normalizer
 import requests
 
 from solidlsp.ls_exceptions import SolidLSPException
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_types import UnifiedSymbolInformation
 
 log = logging.getLogger(__name__)
@@ -201,7 +200,7 @@ class FileUtils:
             raise exc
 
     @staticmethod
-    def download_file(logger: LanguageServerLogger, url: str, target_path: str) -> None:
+    def download_file(url: str, target_path: str) -> None:
         """
         Downloads the file from the given URL to the given {target_path}
         """
@@ -209,16 +208,16 @@ class FileUtils:
         try:
             response = requests.get(url, stream=True, timeout=60)
             if response.status_code != 200:
-                logger.log(f"Error downloading file '{url}': {response.status_code} {response.text}", logging.ERROR)
+                log.error(f"Error downloading file '{url}': {response.status_code} {response.text}")
                 raise SolidLSPException("Error downloading file.")
             with open(target_path, "wb") as f:
                 shutil.copyfileobj(response.raw, f)
         except Exception as exc:
-            logger.log(f"Error downloading file '{url}': {exc}", logging.ERROR)
+            log.error(f"Error downloading file '{url}': {exc}")
             raise SolidLSPException("Error downloading file.") from None
 
     @staticmethod
-    def download_and_extract_archive(logger: LanguageServerLogger, url: str, target_path: str, archive_type: str) -> None:
+    def download_and_extract_archive(url: str, target_path: str, archive_type: str) -> None:
         """
         Downloads the archive from the given URL having format {archive_type} and extracts it to the given {target_path}
         """
@@ -227,7 +226,7 @@ class FileUtils:
             tmp_file_name = str(PurePath(os.path.expanduser("~"), "multilspy_tmp", uuid.uuid4().hex))
             tmp_files.append(tmp_file_name)
             os.makedirs(os.path.dirname(tmp_file_name), exist_ok=True)
-            FileUtils.download_file(logger, url, tmp_file_name)
+            FileUtils.download_file(url, tmp_file_name)
             if archive_type in ["tar", "gztar", "bztar", "xztar"]:
                 os.makedirs(target_path, exist_ok=True)
                 shutil.unpack_archive(tmp_file_name, target_path, archive_type)
@@ -258,10 +257,10 @@ class FileUtils:
                 # For single binary files, just move to target without extraction
                 shutil.move(tmp_file_name, target_path)
             else:
-                logger.log(f"Unknown archive type '{archive_type}' for extraction", logging.ERROR)
+                log.error(f"Unknown archive type '{archive_type}' for extraction")
                 raise SolidLSPException(f"Unknown archive type '{archive_type}'")
         except Exception as exc:
-            logger.log(f"Error extracting archive '{tmp_file_name}' obtained from '{url}': {exc}", logging.ERROR)
+            log.error(f"Error extracting archive '{tmp_file_name}' obtained from '{url}': {exc}")
             raise SolidLSPException("Error extracting archive.") from exc
         finally:
             for tmp_file_name in tmp_files:

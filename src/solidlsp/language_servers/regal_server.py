@@ -9,11 +9,12 @@ from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 class RegalLanguageServer(SolidLanguageServer):
@@ -28,16 +29,13 @@ class RegalLanguageServer(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in [".regal", ".opa"]
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a RegalLanguageServer instance.
 
         This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
 
         :param config: Language server configuration
-        :param logger: Logger instance
         :param repository_root_path: Path to the repository root
         :param solidlsp_settings: Settings for solidlsp
         """
@@ -50,7 +48,6 @@ class RegalLanguageServer(SolidLanguageServer):
 
         super().__init__(
             config,
-            logger,
             repository_root_path,
             ProcessLaunchInfo(cmd=f"{regal_executable_path} language-server", cwd=repository_root_path),
             "rego",
@@ -108,7 +105,7 @@ class RegalLanguageServer(SolidLanguageServer):
             return
 
         def window_log_message(msg) -> None:  # type: ignore[no-untyped-def]
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+            log.info(f"LSP: window/logMessage: {msg}")
 
         def do_nothing(params) -> None:  # type: ignore[no-untyped-def]
             return
@@ -118,13 +115,12 @@ class RegalLanguageServer(SolidLanguageServer):
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        self.logger.log("Starting Regal language server process", logging.INFO)
+        log.info("Starting Regal language server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
+        log.info(
             "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
         )
         init_response = self.server.send.initialize(initialize_params)
 

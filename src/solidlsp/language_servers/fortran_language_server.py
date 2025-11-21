@@ -14,10 +14,11 @@ from overrides import override
 from solidlsp import ls_types
 from solidlsp.ls import DocumentSymbols, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 class FortranLanguageServer(SolidLanguageServer):
@@ -127,10 +128,7 @@ class FortranLanguageServer(SolidLanguageServer):
             corrected_symbol = symbol.copy()
             corrected_symbol["selectionRange"] = new_sel_range  # type: ignore[typeddict-item]
 
-            self.logger.log(
-                f"Fixed fortls selectionRange for {identifier_name}: char {start_char} -> {identifier_start}",
-                logging.DEBUG,
-            )
+            log.debug(f"Fixed fortls selectionRange for {identifier_name}: char {start_char} -> {identifier_start}")
 
             return corrected_symbol
 
@@ -181,13 +179,7 @@ class FortranLanguageServer(SolidLanguageServer):
             raise RuntimeError("fortls is not installed or not in PATH.\nInstall it with: pip install fortls")
         return fortls_path
 
-    def __init__(
-        self,
-        config: LanguageServerConfig,
-        logger: LanguageServerLogger,
-        repository_root_path: str,
-        solidlsp_settings: SolidLSPSettings,
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         # Check fortls installation
         fortls_path = self._check_fortls_installation()
 
@@ -196,12 +188,7 @@ class FortranLanguageServer(SolidLanguageServer):
         fortls_cmd = f"{fortls_path}"
 
         super().__init__(
-            config,
-            logger,
-            repository_root_path,
-            ProcessLaunchInfo(cmd=fortls_cmd, cwd=repository_root_path),
-            "fortran",  # Language ID for LSP
-            solidlsp_settings,
+            config, repository_root_path, ProcessLaunchInfo(cmd=fortls_cmd, cwd=repository_root_path), "fortran", solidlsp_settings
         )
         self.server_ready = threading.Event()
 
@@ -261,7 +248,7 @@ class FortranLanguageServer(SolidLanguageServer):
         """Start Fortran Language Server process."""
 
         def window_log_message(msg: dict) -> None:
-            self.logger.log(f"Fortran LSP: window/logMessage: {msg}", logging.INFO)
+            log.info(f"Fortran LSP: window/logMessage: {msg}")
 
         def do_nothing(params: dict) -> None:
             return
@@ -275,14 +262,11 @@ class FortranLanguageServer(SolidLanguageServer):
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        self.logger.log("Starting Fortran Language Server (fortls) process", logging.INFO)
+        log.info("Starting Fortran Language Server (fortls) process")
         self.server.start()
 
         initialize_params = self._get_initialize_params(self.repository_root_path)
-        self.logger.log(
-            "Sending initialize request to Fortran Language Server",
-            logging.INFO,
-        )
+        log.info("Sending initialize request to Fortran Language Server")
 
         init_response = self.server.send.initialize(initialize_params)
 
@@ -290,17 +274,17 @@ class FortranLanguageServer(SolidLanguageServer):
         capabilities = init_response.get("capabilities", {})
         assert "textDocumentSync" in capabilities
         if "completionProvider" in capabilities:
-            self.logger.log("Fortran LSP completion provider available", logging.INFO)
+            log.info("Fortran LSP completion provider available")
         if "definitionProvider" in capabilities:
-            self.logger.log("Fortran LSP definition provider available", logging.INFO)
+            log.info("Fortran LSP definition provider available")
         if "referencesProvider" in capabilities:
-            self.logger.log("Fortran LSP references provider available", logging.INFO)
+            log.info("Fortran LSP references provider available")
         if "documentSymbolProvider" in capabilities:
-            self.logger.log("Fortran LSP document symbol provider available", logging.INFO)
+            log.info("Fortran LSP document symbol provider available")
 
         self.server.notify.initialized({})
         self.completions_available.set()
 
         # Fortran Language Server is ready after initialization
         self.server_ready.set()
-        self.logger.log("Fortran Language Server initialization complete", logging.INFO)
+        log.info("Fortran Language Server initialization complete")

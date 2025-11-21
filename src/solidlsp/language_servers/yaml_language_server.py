@@ -13,10 +13,11 @@ from typing import Any
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 class YamlLanguageServer(SolidLanguageServer):
@@ -41,17 +42,14 @@ class YamlLanguageServer(SolidLanguageServer):
 
         return SolidLanguageServer._determine_log_level(line)
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a YamlLanguageServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        yaml_lsp_executable_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
+        yaml_lsp_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
         super().__init__(
             config,
-            logger,
             repository_root_path,
             ProcessLaunchInfo(cmd=yaml_lsp_executable_path, cwd=repository_root_path),
             "yaml",
@@ -60,9 +58,7 @@ class YamlLanguageServer(SolidLanguageServer):
         self.server_ready = threading.Event()
 
     @classmethod
-    def _setup_runtime_dependencies(
-        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> str:
+    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> str:
         """
         Setup runtime dependencies for YAML Language Server and return the command to start the server.
         """
@@ -92,9 +88,9 @@ class YamlLanguageServer(SolidLanguageServer):
             yaml_executable_path += ".cmd"
 
         if not os.path.exists(yaml_executable_path):
-            logger.log(f"YAML Language Server executable not found at {yaml_executable_path}. Installing...", logging.INFO)
-            deps.install(logger, yaml_ls_dir)
-            logger.log("YAML language server dependencies installed successfully", logging.INFO)
+            log.info(f"YAML Language Server executable not found at {yaml_executable_path}. Installing...")
+            deps.install(yaml_ls_dir)
+            log.info("YAML language server dependencies installed successfully")
 
         if not os.path.exists(yaml_executable_path):
             raise FileNotFoundError(
@@ -162,34 +158,31 @@ class YamlLanguageServer(SolidLanguageServer):
         def do_nothing(params: Any) -> None:
             return
 
-        def window_log_message(msg: str) -> None:
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"LSP: window/logMessage: {msg}")
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        self.logger.log("Starting YAML server process", logging.INFO)
+        log.info("Starting YAML server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
-        self.logger.log(f"Received initialize response from YAML server: {init_response}", logging.DEBUG)
+        log.debug(f"Received initialize response from YAML server: {init_response}")
 
         # Verify document symbol support is available
         if "documentSymbolProvider" in init_response["capabilities"]:
-            self.logger.log("YAML server supports document symbols", logging.INFO)
+            log.info("YAML server supports document symbols")
         else:
-            self.logger.log("Warning: YAML server does not report document symbol support", logging.WARNING)
+            log.warning("Warning: YAML server does not report document symbol support")
 
         self.server.notify.initialized({})
 
         # YAML language server is ready immediately after initialization
-        self.logger.log("YAML server initialization complete", logging.INFO)
+        log.info("YAML server initialization complete")
         self.server_ready.set()
         self.completions_available.set()
