@@ -185,7 +185,10 @@ class SerenaMCPFactory:
 
         # Mount the tool description as a combination of the docstring description and
         # the return value description, if it exists.
-        overridden_description = tool.agent.get_context().tool_description_overrides.get(func_name, None)
+        # overridden_description = tool.agent.get_context().tool_description_overrides.get(func_name, None)
+        context = tool.agent.get_context()
+        tool_desc_overrides = getattr(context, 'tool_description_overrides', None) if context else None
+        overridden_description = tool_desc_overrides.get(func_name, None) if tool_desc_overrides else None
 
         if overridden_description is not None:
             func_doc = overridden_description
