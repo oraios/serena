@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 import pytest
 from sensai.util import logging
 
+from serena.util.logging import SuspendedLoggersContext
 from solidlsp import SolidLanguageServer
 from solidlsp.language_servers.csharp_language_server import (
     CSharpLanguageServer,
@@ -256,7 +257,7 @@ class TestCSharpSolutionProjectOpening:
             mock_settings.ls_resources_dir = "/tmp/test_ls_resources"
             mock_settings.project_data_relative_path = "project_data"
 
-            with logging.SuspendedLoggersContext():
+            with SuspendedLoggersContext():
                 logging.getLogger().setLevel(logging.DEBUG)
                 with logging.MemoryLoggerContext() as mem_log:
                     CSharpLanguageServer(mock_config, str(temp_path), mock_settings)
@@ -285,7 +286,7 @@ class TestCSharpSolutionProjectOpening:
             mock_settings.project_data_relative_path = "project_data"
 
             # Create CSharpLanguageServer instance
-            with logging.SuspendedLoggersContext():
+            with SuspendedLoggersContext():
                 logging.getLogger().setLevel(logging.DEBUG)
                 with logging.MemoryLoggerContext() as mem_log:
                     CSharpLanguageServer(mock_config, str(temp_path), mock_settings)
