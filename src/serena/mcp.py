@@ -3,7 +3,6 @@ The Serena Model Context Protocol (MCP) Server
 """
 
 import sys
-from abc import abstractmethod
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
 from copy import deepcopy
@@ -47,15 +46,22 @@ class SerenaMCPRequestContext:
 
 
 class SerenaMCPFactory:
-    def __init__(self, context: str = DEFAULT_CONTEXT, project: str | None = None):
+    """
+    Factory for the creation of the Serena MCP server with an associated SerenaAgent.
+    """
+
+    def __init__(self, context: str = DEFAULT_CONTEXT, project: str | None = None, memory_log_handler: MemoryLogHandler | None = None):
         """
         :param context: The context name or path to context file
         :param project: Either an absolute path to the project directory or a name of an already registered project.
             If the project passed here hasn't been registered yet, it will be registered automatically and can be activated by its name
             afterward.
+        :param memory_log_handler: the in-memory log handler to use for the agent's logging
         """
         self.context = SerenaAgentContext.load(context)
         self.project = project
+        self.agent: SerenaAgent | None = None
+        self.memory_log_handler = memory_log_handler
 
     @staticmethod
     def _sanitize_for_openai_tools(schema: dict) -> dict:
@@ -225,9 +231,9 @@ class SerenaMCPFactory:
             title=None,
         )
 
-    @abstractmethod
     def _iter_tools(self) -> Iterator[Tool]:
-        pass
+        assert self.agent is not None
+        yield from self.agent.get_exposed_tool_instances()
 
     # noinspection PyProtectedMember
     def _set_mcp_tools(self, mcp: FastMCP, openai_tool_compatible: bool = False) -> None:
@@ -239,9 +245,13 @@ class SerenaMCPFactory:
                 mcp._tool_manager._tools[tool.get_name()] = mcp_tool
             log.info(f"Starting MCP server with {len(mcp._tool_manager._tools)} tools: {list(mcp._tool_manager._tools.keys())}")
 
-    @abstractmethod
-    def _instantiate_agent(self, serena_config: SerenaConfig, modes: list[SerenaAgentMode]) -> None:
-        pass
+    def _create_serena_agent(self, serena_config: SerenaConfig, modes: list[SerenaAgentMode]) -> SerenaAgent:
+        return SerenaAgent(
+            project=self.project, serena_config=serena_config, context=self.context, modes=modes, memory_log_handler=self.memory_log_handler
+        )
+
+    def _create_default_serena_config(self) -> SerenaConfig:
+        return SerenaConfig.from_config_file()
 
     def create_mcp_server(
         self,
@@ -269,7 +279,7 @@ class SerenaMCPFactory:
         :param tool_timeout: Timeout in seconds for tool execution. If not specified, will take the value from the serena configuration.
         """
         try:
-            config = SerenaConfig.from_config_file()
+            config = self._create_default_serena_config()
 
             # update configuration with the provided parameters
             if enable_web_dashboard is not None:
@@ -285,7 +295,7 @@ class SerenaMCPFactory:
                 config.tool_timeout = tool_timeout
 
             modes_instances = [SerenaAgentMode.load(mode) for mode in modes]
-            self._instantiate_agent(config, modes_instances)
+            self.agent = self._create_serena_agent(config, modes_instances)
 
         except Exception as e:
             show_fatal_exception_safe(e)
@@ -300,49 +310,13 @@ class SerenaMCPFactory:
         return mcp
 
     @asynccontextmanager
-    @abstractmethod
     async def server_lifespan(self, mcp_server: FastMCP) -> AsyncIterator[None]:
         """Manage server startup and shutdown lifecycle."""
-        yield None  # ensures MyPy understands we yield None
-
-    @abstractmethod
-    def _get_initial_instructions(self) -> str:
-        pass
-
-
-class SerenaMCPFactorySingleProcess(SerenaMCPFactory):
-    """
-    MCP server factory where the SerenaAgent and its language server run in the same process as the MCP server
-    """
-
-    def __init__(self, context: str = DEFAULT_CONTEXT, project: str | None = None, memory_log_handler: MemoryLogHandler | None = None):
-        """
-        :param context: The context name or path to context file
-        :param project: Either an absolute path to the project directory or a name of an already registered project.
-            If the project passed here hasn't been registered yet, it will be registered automatically and can be activated by its name
-            afterward.
-        """
-        super().__init__(context=context, project=project)
-        self.agent: SerenaAgent | None = None
-        self.memory_log_handler = memory_log_handler
-
-    def _instantiate_agent(self, serena_config: SerenaConfig, modes: list[SerenaAgentMode]) -> None:
-        self.agent = SerenaAgent(
-            project=self.project, serena_config=serena_config, context=self.context, modes=modes, memory_log_handler=self.memory_log_handler
-        )
-
-    def _iter_tools(self) -> Iterator[Tool]:
-        assert self.agent is not None
-        yield from self.agent.get_exposed_tool_instances()
-
-    def _get_initial_instructions(self) -> str:
-        assert self.agent is not None
-        # we don't use the tool (which at the time of writing calls this method), since the tool may be disabled by the config
-        return self.agent.create_system_prompt()
-
-    @asynccontextmanager
-    async def server_lifespan(self, mcp_server: FastMCP) -> AsyncIterator[None]:
         openai_tool_compatible = self.context.name in ["chatgpt", "codex", "oaicompat-agent"]
         self._set_mcp_tools(mcp_server, openai_tool_compatible=openai_tool_compatible)
         log.info("MCP server lifetime setup complete")
         yield
+
+    def _get_initial_instructions(self) -> str:
+        assert self.agent is not None
+        return self.agent.create_system_prompt()
