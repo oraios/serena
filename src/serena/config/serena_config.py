@@ -5,7 +5,7 @@ The Serena Model Context Protocol (MCP) Server
 import dataclasses
 import os
 import shutil
-from collections.abc import Iterable
+from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -72,8 +72,32 @@ class SerenaPaths:
 
 @dataclass
 class ToolInclusionDefinition:
-    excluded_tools: Iterable[str] = ()
-    included_optional_tools: Iterable[str] = ()
+    """
+    Defines which tools to include/exclude in Serena's operation.
+    This can mean either
+      * defining exclusions/inclusions to apply to an existing set of tools [incremental mode], or
+      * defining a fixed set of tools to use [fixed mode].
+    """
+
+    excluded_tools: Sequence[str] = ()
+    """
+    the names of tools to exclude from use [incremental mode]
+    """
+    included_optional_tools: Sequence[str] = ()
+    """
+    the names of optional tools to include [incremental mode]
+    """
+    fixed_tools: Sequence[str] = ()
+    """
+    the names of tools to use as a fixed set of tools [fixed mode]
+    """
+
+    def is_fixed_tool_set(self) -> bool:
+        num_fixed = len(self.fixed_tools)
+        num_incremental = len(self.excluded_tools) + len(self.included_optional_tools)
+        if num_fixed > 0 and num_incremental > 0:
+            raise ValueError("Cannot use both fixed_tools and excluded_tools/included_optional_tools at the same time.")
+        return num_fixed > 0
 
 
 class SerenaConfigError(Exception):

@@ -106,26 +106,35 @@ class ToolSet:
         registry = ToolRegistry()
         tool_names = set(self._tool_names)
         for definition in tool_inclusion_definitions:
-            included_tools = []
-            excluded_tools = []
-            for included_tool in definition.included_optional_tools:
-                included_tool = get_updated_tool_name(included_tool)
-                if not registry.is_valid_tool_name(included_tool):
-                    raise ValueError(f"Invalid tool name '{included_tool}' provided for inclusion")
-                if included_tool not in tool_names:
-                    tool_names.add(included_tool)
-                    included_tools.append(included_tool)
-            for excluded_tool in definition.excluded_tools:
-                excluded_tool = get_updated_tool_name(excluded_tool)
-                if not registry.is_valid_tool_name(excluded_tool):
-                    raise ValueError(f"Invalid tool name '{excluded_tool}' provided for exclusion")
-                if excluded_tool in tool_names:
-                    tool_names.remove(excluded_tool)
-                    excluded_tools.append(excluded_tool)
-            if included_tools:
-                log.info(f"{definition} included {len(included_tools)} tools: {', '.join(included_tools)}")
-            if excluded_tools:
-                log.info(f"{definition} excluded {len(excluded_tools)} tools: {', '.join(excluded_tools)}")
+            if definition.is_fixed_tool_set():
+                tool_names = set()
+                for fixed_tool in definition.fixed_tools:
+                    fixed_tool = get_updated_tool_name(fixed_tool)
+                    if not registry.is_valid_tool_name(fixed_tool):
+                        raise ValueError(f"Invalid tool name '{fixed_tool}' provided for fixed tool set")
+                    tool_names.add(fixed_tool)
+                log.info(f"{definition} defined a fixed tool set with {len(tool_names)} tools: {', '.join(tool_names)}")
+            else:
+                included_tools = []
+                excluded_tools = []
+                for included_tool in definition.included_optional_tools:
+                    included_tool = get_updated_tool_name(included_tool)
+                    if not registry.is_valid_tool_name(included_tool):
+                        raise ValueError(f"Invalid tool name '{included_tool}' provided for inclusion")
+                    if included_tool not in tool_names:
+                        tool_names.add(included_tool)
+                        included_tools.append(included_tool)
+                for excluded_tool in definition.excluded_tools:
+                    excluded_tool = get_updated_tool_name(excluded_tool)
+                    if not registry.is_valid_tool_name(excluded_tool):
+                        raise ValueError(f"Invalid tool name '{excluded_tool}' provided for exclusion")
+                    if excluded_tool in tool_names:
+                        tool_names.remove(excluded_tool)
+                        excluded_tools.append(excluded_tool)
+                if included_tools:
+                    log.info(f"{definition} included {len(included_tools)} tools: {', '.join(included_tools)}")
+                if excluded_tools:
+                    log.info(f"{definition} excluded {len(excluded_tools)} tools: {', '.join(excluded_tools)}")
         return ToolSet(tool_names)
 
     def without_editing_tools(self) -> "ToolSet":
