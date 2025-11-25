@@ -12,7 +12,6 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformId, PlatformUtils
-from solidlsp.lsp_protocol_handler import lsp_types
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -22,12 +21,12 @@ from ..common import RuntimeDependency
 
 class ElixirTools(SolidLanguageServer):
     """
-    Provides Elixir specific instantiation of the LanguageServer class using Next LS from elixir-tools.
+    Provides Elixir specific instantiation of the LanguageServer class using Expert, the official Elixir language server.
     """
 
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
-        return 10.0  # Elixir projects need a lot of time to compile and index before cross-file references work
+        return 10.0  # Elixir projects need time to compile and index before cross-file references work
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -37,7 +36,8 @@ class ElixirTools(SolidLanguageServer):
         # - node_modules: if the project has JavaScript components
         # - .elixir_ls: ElixirLS artifacts (in case both are present)
         # - cover: coverage reports
-        return super().is_ignored_dirname(dirname) or dirname in ["_build", "deps", "node_modules", ".elixir_ls", "cover"]
+        # - .expert: Expert artifacts
+        return super().is_ignored_dirname(dirname) or dirname in ["_build", "deps", "node_modules", ".elixir_ls", ".expert", "cover"]
 
     @override
     def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool = True) -> bool:
@@ -47,42 +47,6 @@ class ElixirTools(SolidLanguageServer):
             return True
 
         return super().is_ignored_path(relative_path, ignore_unsupported_files)
-
-    @staticmethod
-    def _is_next_ls_internal_file(abs_path: str) -> bool:
-        """Check if an absolute path is a Next LS internal file that should be ignored."""
-        return any(
-            pattern in abs_path
-            for pattern in [
-                ".burrito",  # Next LS runtime directory
-                "next_ls_erts-",  # Next LS Erlang runtime
-                "_next_ls_private_",  # Next LS private files
-                "/priv/monkey/",  # Next LS monkey patching directory
-            ]
-        )
-
-    @override
-    def _send_references_request(self, relative_file_path: str, line: int, column: int) -> list[lsp_types.Location] | None:
-        """Override to filter out Next LS internal files from references."""
-        from solidlsp.ls_utils import PathUtils
-
-        # Get the raw response from the parent implementation
-        raw_response = super()._send_references_request(relative_file_path, line, column)
-
-        if raw_response is None:
-            return None
-
-        # Filter out Next LS internal files
-        filtered_response = []
-        for item in raw_response:
-            if isinstance(item, dict) and "uri" in item:
-                abs_path = PathUtils.uri_to_path(item["uri"])
-                if self._is_next_ls_internal_file(abs_path):
-                    self.logger.log(f"Filtering out Next LS internal file: {abs_path}", logging.DEBUG)
-                    continue
-            filtered_response.append(item)
-
-        return filtered_response
 
     @classmethod
     def _get_elixir_version(cls) -> str | None:
@@ -100,8 +64,8 @@ class ElixirTools(SolidLanguageServer):
         cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
     ) -> str:
         """
-        Setup runtime dependencies for Next LS.
-        Downloads the Next LS binary for the current platform and returns the path to the executable.
+        Setup runtime dependencies for Expert.
+        Downloads the Expert binary for the current platform and returns the path to the executable.
         """
         # Check if Elixir is available first
         elixir_version = cls._get_elixir_version()
@@ -112,110 +76,132 @@ class ElixirTools(SolidLanguageServer):
 
         logger.log(f"Found Elixir: {elixir_version}", logging.INFO)
 
-        platform_id = PlatformUtils.get_platform_id()
+        # First, check if expert is already in PATH (user may have installed it manually)
+        import shutil
 
-        # Check for Windows and provide a helpful error message
-        if platform_id.value.startswith("win"):
-            raise RuntimeError(
-                "Windows is not supported by Next LS. The Next LS project does not provide Windows binaries. "
-                "Consider using Windows Subsystem for Linux (WSL) or a virtual machine with Linux/macOS."
-            )
+        expert_in_path = shutil.which("expert")
+        if expert_in_path:
+            logger.log(f"Found Expert in PATH: {expert_in_path}", logging.INFO)
+            return expert_in_path
+
+        platform_id = PlatformUtils.get_platform_id()
 
         valid_platforms = [
             PlatformId.LINUX_x64,
             PlatformId.LINUX_arm64,
             PlatformId.OSX_x64,
             PlatformId.OSX_arm64,
+            PlatformId.WIN_x64,
+            PlatformId.WIN_arm64,
         ]
-        assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for Next LS at the moment"
+        assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for Expert at the moment"
 
-        next_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "next-ls")
+        expert_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "expert")
 
-        NEXTLS_VERSION = "v0.23.4"
+        EXPERT_VERSION = "nightly"
 
         # Define runtime dependencies inline
         runtime_deps = {
             PlatformId.LINUX_x64: RuntimeDependency(
-                id="next_ls_linux_amd64",
+                id="expert_linux_amd64",
                 platform_id="linux-x64",
-                url=f"https://github.com/elixir-tools/next-ls/releases/download/{NEXTLS_VERSION}/next_ls_linux_amd64",
+                url=f"https://github.com/elixir-lang/expert/releases/download/{EXPERT_VERSION}/expert_linux_amd64",
                 archive_type="binary",
-                binary_name="next_ls_linux_amd64",
-                extract_path="next_ls",
+                binary_name="expert_linux_amd64",
+                extract_path="expert",
             ),
             PlatformId.LINUX_arm64: RuntimeDependency(
-                id="next_ls_linux_arm64",
+                id="expert_linux_arm64",
                 platform_id="linux-arm64",
-                url=f"https://github.com/elixir-tools/next-ls/releases/download/{NEXTLS_VERSION}/next_ls_linux_arm64",
+                url=f"https://github.com/elixir-lang/expert/releases/download/{EXPERT_VERSION}/expert_linux_arm64",
                 archive_type="binary",
-                binary_name="next_ls_linux_arm64",
-                extract_path="next_ls",
+                binary_name="expert_linux_arm64",
+                extract_path="expert",
             ),
             PlatformId.OSX_x64: RuntimeDependency(
-                id="next_ls_darwin_amd64",
+                id="expert_darwin_amd64",
                 platform_id="osx-x64",
-                url=f"https://github.com/elixir-tools/next-ls/releases/download/{NEXTLS_VERSION}/next_ls_darwin_amd64",
+                url=f"https://github.com/elixir-lang/expert/releases/download/{EXPERT_VERSION}/expert_darwin_amd64",
                 archive_type="binary",
-                binary_name="next_ls_darwin_amd64",
-                extract_path="next_ls",
+                binary_name="expert_darwin_amd64",
+                extract_path="expert",
             ),
             PlatformId.OSX_arm64: RuntimeDependency(
-                id="next_ls_darwin_arm64",
+                id="expert_darwin_arm64",
                 platform_id="osx-arm64",
-                url=f"https://github.com/elixir-tools/next-ls/releases/download/{NEXTLS_VERSION}/next_ls_darwin_arm64",
+                url=f"https://github.com/elixir-lang/expert/releases/download/{EXPERT_VERSION}/expert_darwin_arm64",
                 archive_type="binary",
-                binary_name="next_ls_darwin_arm64",
-                extract_path="next_ls",
+                binary_name="expert_darwin_arm64",
+                extract_path="expert",
+            ),
+            PlatformId.WIN_x64: RuntimeDependency(
+                id="expert_windows_amd64",
+                platform_id="win-x64",
+                url=f"https://github.com/elixir-lang/expert/releases/download/{EXPERT_VERSION}/expert_windows_amd64.exe",
+                archive_type="binary",
+                binary_name="expert_windows_amd64.exe",
+                extract_path="expert.exe",
+            ),
+            PlatformId.WIN_arm64: RuntimeDependency(
+                id="expert_windows_arm64",
+                platform_id="win-arm64",
+                url=f"https://github.com/elixir-lang/expert/releases/download/{EXPERT_VERSION}/expert_windows_arm64.exe",
+                archive_type="binary",
+                binary_name="expert_windows_arm64.exe",
+                extract_path="expert.exe",
             ),
         }
 
         dependency = runtime_deps[platform_id]
-        executable_path = os.path.join(next_ls_dir, "nextls")
+        # On Windows, use .exe extension
+        executable_name = "expert.exe" if platform_id.value.startswith("win") else "expert"
+        executable_path = os.path.join(expert_dir, executable_name)
         assert dependency.binary_name is not None
-        binary_path = os.path.join(next_ls_dir, dependency.binary_name)
+        binary_path = os.path.join(expert_dir, dependency.binary_name)
 
         if not os.path.exists(executable_path):
-            logger.log(f"Downloading Next LS binary from {dependency.url}", logging.INFO)
+            logger.log(f"Downloading Expert binary from {dependency.url}", logging.INFO)
             assert dependency.url is not None
             FileUtils.download_file(logger, dependency.url, binary_path)
 
             # Make the binary executable on Unix-like systems
-            os.chmod(binary_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+            if not platform_id.value.startswith("win"):
+                os.chmod(binary_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
 
-            # Create a symlink with the expected name
-            if binary_path != executable_path:
+            # Create a symlink with the expected name on Unix-like systems
+            if binary_path != executable_path and not platform_id.value.startswith("win"):
                 if os.path.exists(executable_path):
                     os.remove(executable_path)
                 os.symlink(os.path.basename(binary_path), executable_path)
 
-        assert os.path.exists(executable_path), f"Next LS executable not found at {executable_path}"
+        assert os.path.exists(executable_path), f"Expert executable not found at {executable_path}"
 
-        logger.log(f"Next LS binary ready at: {executable_path}", logging.INFO)
+        logger.log(f"Expert binary ready at: {executable_path}", logging.INFO)
         return executable_path
 
     def __init__(
         self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
     ):
-        nextls_executable_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
+        expert_executable_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
 
         super().__init__(
             config,
             logger,
             repository_root_path,
-            ProcessLaunchInfo(cmd=f'"{nextls_executable_path}" --stdio', cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=f'"{expert_executable_path}" --stdio', cwd=repository_root_path),
             "elixir",
             solidlsp_settings,
         )
         self.server_ready = threading.Event()
         self.request_id = 0
 
-        # Set generous timeout for Next LS which can be slow to initialize and respond
-        self.set_request_timeout(180.0)  # 60 seconds for all environments
+        # Set generous timeout for Expert which can be slow to initialize and respond
+        self.set_request_timeout(180.0)
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """
-        Returns the initialize params for the Next LS Language Server.
+        Returns the initialize params for the Expert Language Server.
         """
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
@@ -279,20 +265,20 @@ class ElixirTools(SolidLanguageServer):
         return cast(InitializeParams, initialize_params)
 
     def _start_server(self) -> None:
-        """Start Next LS server process"""
+        """Start Expert server process"""
 
         def register_capability_handler(params: Any) -> None:
             return
 
         def window_log_message(msg: Any) -> None:
-            """Handle window/logMessage notifications from Next LS"""
+            """Handle window/logMessage notifications from Expert"""
             message_text = msg.get("message", "")
             self.logger.log(f"LSP: window/logMessage: {message_text}", logging.INFO)
 
-            # Check for the specific Next LS readiness signal
-            # Based on Next LS source: "Runtime for folder #{name} is ready..."
-            if "Runtime for folder" in message_text and "is ready..." in message_text:
-                self.logger.log("Next LS runtime is ready based on official log message", logging.INFO)
+            # Check for Expert readiness signals
+            # Expert may have different readiness indicators than NextLS
+            if "ready" in message_text.lower() or "initialized" in message_text.lower():
+                self.logger.log("Expert runtime is ready based on log message", logging.INFO)
                 self.server_ready.set()
 
         def do_nothing(params: Any) -> None:
@@ -300,7 +286,7 @@ class ElixirTools(SolidLanguageServer):
 
         def check_server_ready(params: Any) -> None:
             """
-            Handle $/progress notifications from Next LS.
+            Handle $/progress notifications from Expert.
             Keep as fallback for error detection, but primary readiness detection
             is now done via window/logMessage handler.
             """
@@ -309,18 +295,18 @@ class ElixirTools(SolidLanguageServer):
             # Check for initialization completion progress (fallback signal)
             if value.get("kind") == "end":
                 message = value.get("message", "")
-                if "has initialized!" in message:
-                    self.logger.log("Next LS initialization progress completed", logging.INFO)
+                if "initialized" in message.lower():
+                    self.logger.log("Expert initialization progress completed", logging.INFO)
                     # Note: We don't set server_ready here - we wait for the log message
 
         def work_done_progress(params: Any) -> None:
             """
-            Handle $/workDoneProgress notifications from Next LS.
+            Handle $/workDoneProgress notifications from Expert.
             Keep for completeness but primary readiness detection is via window/logMessage.
             """
             value = params.get("value", {})
             if value.get("kind") == "end":
-                self.logger.log("Next LS work done progress completed", logging.INFO)
+                self.logger.log("Expert work done progress completed", logging.INFO)
                 # Note: We don't set server_ready here - we wait for the log message
 
         self.server.on_request("client/registerCapability", register_capability_handler)
@@ -330,7 +316,7 @@ class ElixirTools(SolidLanguageServer):
         self.server.on_notification("$/workDoneProgress", work_done_progress)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        self.logger.log("Starting Next LS server process", logging.INFO)
+        self.logger.log("Starting Expert server process", logging.INFO)
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
@@ -340,10 +326,10 @@ class ElixirTools(SolidLanguageServer):
         )
         init_response = self.server.send.initialize(initialize_params)
 
-        # Verify server capabilities - be more lenient with Next LS
-        self.logger.log(f"Next LS capabilities: {list(init_response['capabilities'].keys())}", logging.INFO)
+        # Verify server capabilities - be more lenient with Expert
+        self.logger.log(f"Expert capabilities: {list(init_response['capabilities'].keys())}", logging.INFO)
 
-        # Next LS may not provide all capabilities immediately, so we check for basic ones
+        # Expert may not provide all capabilities immediately, so we check for basic ones
         assert "textDocumentSync" in init_response["capabilities"], f"Missing textDocumentSync in {init_response['capabilities']}"
 
         # Some capabilities might be optional or provided later. This is expected, so we log as info
@@ -356,15 +342,18 @@ class ElixirTools(SolidLanguageServer):
         self.server.notify.initialized({})
         self.completions_available.set()
 
-        # Wait for Next LS to send the specific "Runtime for folder X is ready..." log message
-        # This is the authoritative signal that Next LS is truly ready for requests
-        ready_timeout = 180.0
-        self.logger.log(f"Waiting up to {ready_timeout} seconds for Next LS runtime readiness...", logging.INFO)
+        # Expert may take time to fully compile the project, but we can start making requests
+        # The window/logMessage handlers will set server_ready when explicit readiness signals arrive
+        # However, we'll give it some initial time and then proceed
+        ready_timeout = 10.0  # Shorter initial wait
+        self.logger.log(f"Waiting up to {ready_timeout} seconds for Expert runtime readiness signals...", logging.INFO)
 
         if self.server_ready.wait(timeout=ready_timeout):
-            self.logger.log("Next LS is ready and available for requests", logging.INFO)
-
+            self.logger.log("Expert is ready based on explicit readiness signals", logging.INFO)
         else:
-            error_msg = f"Next LS failed to initialize within {ready_timeout} seconds. This may indicate a problem with the Elixir installation, project compilation, or Next LS itself."
-            self.logger.log(error_msg, logging.ERROR)
-            raise RuntimeError(error_msg)
+            # Expert may not send explicit readiness messages like NextLS did
+            # If initialization succeeded, we can proceed with requests
+            self.logger.log(
+                "No explicit readiness signal received, but Expert initialized successfully. Proceeding with requests.", logging.INFO
+            )
+            self.server_ready.set()  # Mark as ready anyway

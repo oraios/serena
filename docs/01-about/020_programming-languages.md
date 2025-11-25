@@ -20,7 +20,7 @@ With Serena, we provide direct, out-of-the-box support for:
 * **Clojure**
 * **Dart**
 * **Elixir**  
-  (requires installation of NextLS and Elixir; Windows not supported)
+  (requires Elixir installation; Expert language server is downloaded automatically)
 * **Elm**  
   (requires Elm compiler)
 * **Erlang**  
