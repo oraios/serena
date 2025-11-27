@@ -1,5 +1,3 @@
-import json
-
 from serena.tools import Tool, ToolMarkerOptional, ToolMarkerSymbolicRead
 from serena.tools.jetbrains_plugin_client import JetBrainsPluginClient
 
@@ -55,7 +53,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
                 depth=depth,
                 include_body=include_body,
             )
-            result = json.dumps(response_dict)
+            result = self._to_json(response_dict)
         return self._limit_length(result, max_answer_chars)
 
 
@@ -86,7 +84,7 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
                 name_path=name_path,
                 relative_path=relative_path,
             )
-            result = json.dumps(response_dict)
+            result = self._to_json(response_dict)
         return self._limit_length(result, max_answer_chars)
 
 
@@ -116,5 +114,5 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
             response_dict = client.get_symbols_overview(
                 relative_path=relative_path,
             )
-            result = json.dumps(response_dict)
+            result = self._to_json(response_dict)
         return self._limit_length(result, max_answer_chars)

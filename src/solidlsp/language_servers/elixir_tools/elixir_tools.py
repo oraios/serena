@@ -10,13 +10,14 @@ from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 from ..common import RuntimeDependency
+
+log = logging.getLogger(__name__)
 
 
 class ElixirTools(SolidLanguageServer):
@@ -60,9 +61,7 @@ class ElixirTools(SolidLanguageServer):
         return None
 
     @classmethod
-    def _setup_runtime_dependencies(
-        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> str:
+    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> str:
         """
         Setup runtime dependencies for Expert.
         Downloads the Expert binary for the current platform and returns the path to the executable.
@@ -74,14 +73,14 @@ class ElixirTools(SolidLanguageServer):
                 "Elixir is not installed. Please install Elixir from https://elixir-lang.org/install.html and make sure it is added to your PATH."
             )
 
-        logger.log(f"Found Elixir: {elixir_version}", logging.INFO)
+        log.info(f"Found Elixir: {elixir_version}")
 
         # First, check if expert is already in PATH (user may have installed it manually)
         import shutil
 
         expert_in_path = shutil.which("expert")
         if expert_in_path:
-            logger.log(f"Found Expert in PATH: {expert_in_path}", logging.INFO)
+            log.info(f"Found Expert in PATH: {expert_in_path}")
             return expert_in_path
 
         platform_id = PlatformUtils.get_platform_id()
@@ -160,9 +159,9 @@ class ElixirTools(SolidLanguageServer):
         binary_path = os.path.join(expert_dir, dependency.binary_name)
 
         if not os.path.exists(executable_path):
-            logger.log(f"Downloading Expert binary from {dependency.url}", logging.INFO)
+            log.info(f"Downloading Expert binary from {dependency.url}")
             assert dependency.url is not None
-            FileUtils.download_file(logger, dependency.url, binary_path)
+            FileUtils.download_file(dependency.url, binary_path)
 
             # Make the binary executable on Unix-like systems
             if not platform_id.value.startswith("win"):
@@ -176,17 +175,14 @@ class ElixirTools(SolidLanguageServer):
 
         assert os.path.exists(executable_path), f"Expert executable not found at {executable_path}"
 
-        logger.log(f"Expert binary ready at: {executable_path}", logging.INFO)
+        log.info(f"Expert binary ready at: {executable_path}")
         return executable_path
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
-        expert_executable_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
+        expert_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
 
         super().__init__(
             config,
-            logger,
             repository_root_path,
             ProcessLaunchInfo(cmd=f'"{expert_executable_path}" --stdio', cwd=repository_root_path),
             "elixir",
@@ -273,12 +269,12 @@ class ElixirTools(SolidLanguageServer):
         def window_log_message(msg: Any) -> None:
             """Handle window/logMessage notifications from Expert"""
             message_text = msg.get("message", "")
-            self.logger.log(f"LSP: window/logMessage: {message_text}", logging.INFO)
+            log.info(f"LSP: window/logMessage: {message_text}")
 
             # Check for Expert readiness signals
             # Expert may have different readiness indicators than NextLS
             if "ready" in message_text.lower() or "initialized" in message_text.lower():
-                self.logger.log("Expert runtime is ready based on log message", logging.INFO)
+                log.info("Expert runtime is ready based on log message")
                 self.server_ready.set()
 
         def do_nothing(params: Any) -> None:
@@ -296,7 +292,7 @@ class ElixirTools(SolidLanguageServer):
             if value.get("kind") == "end":
                 message = value.get("message", "")
                 if "initialized" in message.lower():
-                    self.logger.log("Expert initialization progress completed", logging.INFO)
+                    log.info("Expert initialization progress completed")
                     # Note: We don't set server_ready here - we wait for the log message
 
         def work_done_progress(params: Any) -> None:
@@ -306,7 +302,7 @@ class ElixirTools(SolidLanguageServer):
             """
             value = params.get("value", {})
             if value.get("kind") == "end":
-                self.logger.log("Expert work done progress completed", logging.INFO)
+                log.info("Expert work done progress completed")
                 # Note: We don't set server_ready here - we wait for the log message
 
         self.server.on_request("client/registerCapability", register_capability_handler)
@@ -316,28 +312,25 @@ class ElixirTools(SolidLanguageServer):
         self.server.on_notification("$/workDoneProgress", work_done_progress)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        self.logger.log("Starting Expert server process", logging.INFO)
+        log.info("Starting Expert server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
 
         # Verify server capabilities - be more lenient with Expert
-        self.logger.log(f"Expert capabilities: {list(init_response['capabilities'].keys())}", logging.INFO)
+        log.info(f"Expert capabilities: {list(init_response['capabilities'].keys())}")
 
         # Expert may not provide all capabilities immediately, so we check for basic ones
         assert "textDocumentSync" in init_response["capabilities"], f"Missing textDocumentSync in {init_response['capabilities']}"
 
         # Some capabilities might be optional or provided later. This is expected, so we log as info
         if "completionProvider" not in init_response["capabilities"]:
-            self.logger.log("completionProvider not available in initial capabilities", logging.INFO)
+            log.info("completionProvider not available in initial capabilities")
 
         if "definitionProvider" not in init_response["capabilities"]:
-            self.logger.log("definitionProvider not available in initial capabilities", logging.INFO)
+            log.info("definitionProvider not available in initial capabilities")
 
         self.server.notify.initialized({})
         self.completions_available.set()
@@ -346,14 +339,12 @@ class ElixirTools(SolidLanguageServer):
         # The window/logMessage handlers will set server_ready when explicit readiness signals arrive
         # However, we'll give it some initial time and then proceed
         ready_timeout = 10.0  # Shorter initial wait
-        self.logger.log(f"Waiting up to {ready_timeout} seconds for Expert runtime readiness signals...", logging.INFO)
+        log.info(f"Waiting up to {ready_timeout} seconds for Expert runtime readiness signals...")
 
         if self.server_ready.wait(timeout=ready_timeout):
-            self.logger.log("Expert is ready based on explicit readiness signals", logging.INFO)
+            log.info("Expert is ready based on explicit readiness signals")
         else:
             # Expert may not send explicit readiness messages like NextLS did
             # If initialization succeeded, we can proceed with requests
-            self.logger.log(
-                "No explicit readiness signal received, but Expert initialized successfully. Proceeding with requests.", logging.INFO
-            )
+            log.info("No explicit readiness signal received, but Expert initialized successfully. Proceeding with requests.")
             self.server_ready.set()  # Mark as ready anyway

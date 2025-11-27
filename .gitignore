@@ -202,19 +202,11 @@ pylint.html
 /agent-ui
 /test/**/.serena
 
-# dynamic LS installations
-/src/multilspy/language_servers/*/static
-/src/solidlsp/language_servers/*/static
-/src/solidlsp/language_servers/static
-
 # clojure-lsp temporary files
 .calva/
 .clj-kondo/
 .cpcache/
 .lsp/
-
-# Cache is in .multilspy 
-**/.multilspy/**
 
 # temporary and backup files
 *.bak

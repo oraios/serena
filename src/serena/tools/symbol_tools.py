@@ -3,7 +3,6 @@ Language server-related tools
 """
 
 import dataclasses
-import json
 import os
 from collections.abc import Sequence
 from copy import copy
@@ -73,7 +72,7 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
         if os.path.isdir(file_path):
             raise ValueError(f"Expected a file path, but got a directory path: {relative_path}. ")
         result = symbol_retriever.get_symbol_overview(relative_path)[relative_path]
-        result_json_str = json.dumps([dataclasses.asdict(i) for i in result])
+        result_json_str = self._to_json([dataclasses.asdict(i) for i in result])
         return self._limit_length(result_json_str, max_answer_chars)
 
 
@@ -145,7 +144,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             within_relative_path=relative_path,
         )
         symbol_dicts = [_sanitize_symbol_dict(s.to_dict(kind=True, location=True, depth=depth, include_body=include_body)) for s in symbols]
-        result = json.dumps(symbol_dicts)
+        result = self._to_json(symbol_dicts)
         return self._limit_length(result, max_answer_chars)
 
 
@@ -198,7 +197,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
                 )
                 ref_dict["content_around_reference"] = content_around_ref.to_display_string()
             reference_dicts.append(ref_dict)
-        result = json.dumps(reference_dicts)
+        result = self._to_json(reference_dicts)
         return self._limit_length(result, max_answer_chars)
 
 

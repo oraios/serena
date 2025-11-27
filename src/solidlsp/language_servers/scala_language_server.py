@@ -12,7 +12,6 @@ from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -22,21 +21,21 @@ if not PlatformUtils.get_platform_id().value.startswith("win"):
     pass
 
 
+log = logging.getLogger(__name__)
+
+
 class ScalaLanguageServer(SolidLanguageServer):
     """
     Provides Scala specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Scala.
     """
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a ScalaLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        scala_lsp_executable_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
+        scala_lsp_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
         super().__init__(
             config,
-            logger,
             repository_root_path,
             ProcessLaunchInfo(cmd=scala_lsp_executable_path, cwd=repository_root_path),
             config.code_language.value,
@@ -52,9 +51,7 @@ class ScalaLanguageServer(SolidLanguageServer):
         ]
 
     @classmethod
-    def _setup_runtime_dependencies(
-        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> list[str]:
+    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> list[str]:
         """
         Setup runtime dependencies for Scala Language Server and return the command to start the server.
         """
@@ -69,9 +66,9 @@ class ScalaLanguageServer(SolidLanguageServer):
 
         if not os.path.exists(metals_executable):
             if not cs_command_path:
-                logger.log("'cs' command not found. Trying to install it using 'coursier'.", logging.INFO)
+                log.info("'cs' command not found. Trying to install it using 'coursier'.")
                 try:
-                    logger.log("Running 'coursier setup --yes' to install 'cs'...", logging.INFO)
+                    log.info("Running 'coursier setup --yes' to install 'cs'...")
                     subprocess.run([coursier_command_path, "setup", "--yes"], check=True, capture_output=True, text=True)
                 except subprocess.CalledProcessError as e:
                     raise RuntimeError(f"Failed to set up 'cs' command with 'coursier setup'. Stderr: {e.stderr}")
@@ -81,9 +78,9 @@ class ScalaLanguageServer(SolidLanguageServer):
                     raise RuntimeError(
                         "'cs' command not found after running 'coursier setup'. Please check your PATH or install it manually."
                     )
-                logger.log("'cs' command installed successfully.", logging.INFO)
+                log.info("'cs' command installed successfully.")
 
-            logger.log(f"metals executable not found at {metals_executable}, bootstrapping...", logging.INFO)
+            log.info(f"metals executable not found at {metals_executable}, bootstrapping...")
             artifact = "org.scalameta:metals_2.13:1.6.2"
             cmd = [
                 cs_command_path,
@@ -103,9 +100,9 @@ class ScalaLanguageServer(SolidLanguageServer):
                 metals_executable,
                 "-f",
             ]
-            logger.log("Bootstrapping metals...", logging.INFO)
+            log.info("Bootstrapping metals...")
             subprocess.run(cmd, cwd=metals_home, check=True)
-            logger.log("Bootstrapping metals finished.", logging.INFO)
+            log.info("Bootstrapping metals finished.")
         return [metals_executable]
 
     @staticmethod
@@ -159,13 +156,10 @@ class ScalaLanguageServer(SolidLanguageServer):
         """
         Starts the Scala Language Server
         """
-        self.logger.log("Starting Scala server process", logging.INFO)
+        log.info("Starting Scala server process")
         self.server.start()
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
 
         initialize_params = self._get_initialize_params(self.repository_root_path)
         self.server.send.initialize(initialize_params)

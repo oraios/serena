@@ -1,11 +1,9 @@
-import logging
 import os
 
 import pytest
 
 from solidlsp.language_servers.scala_language_server import ScalaLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.settings import SolidLSPSettings
 
 pytest.skip("Scala must be compiled for these tests to run through, which is a huge hassle", allow_module_level=True)
@@ -18,10 +16,9 @@ pytestmark = pytest.mark.scala
 @pytest.fixture(scope="module")
 def scala_ls():
     repo_root = os.path.abspath("test/resources/repos/scala")
-    logger = LanguageServerLogger(json_format=False, log_level=logging.INFO)
     config = LanguageServerConfig(code_language=Language.SCALA)
     solidlsp_settings = SolidLSPSettings()
-    ls = ScalaLanguageServer(config, logger, repo_root, solidlsp_settings)
+    ls = ScalaLanguageServer(config, repo_root, solidlsp_settings)
 
     with ls.start_server():
         yield ls

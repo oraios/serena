@@ -12,7 +12,6 @@ from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, InitializeParams, LocationLink
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -20,6 +19,8 @@ from solidlsp.settings import SolidLSPSettings
 
 from ..lsp_protocol_handler import lsp_types
 from .common import RuntimeDependency, RuntimeDependencyCollection
+
+log = logging.getLogger(__name__)
 
 
 class Intelephense(SolidLanguageServer):
@@ -37,7 +38,7 @@ class Intelephense(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in self._ignored_dirnames
 
     @classmethod
-    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, solidlsp_settings: SolidLSPSettings) -> list[str]:
+    def _setup_runtime_dependencies(cls, solidlsp_settings: SolidLSPSettings) -> list[str]:
         """
         Setup runtime dependencies for Intelephense and return the command to start the server.
         """
@@ -52,7 +53,7 @@ class Intelephense(SolidLanguageServer):
             PlatformId.WIN_x64,
             PlatformId.WIN_arm64,
         ]
-        assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy PHP at the moment"
+        assert platform_id in valid_platforms, f"Platform {platform_id} is not supported by {cls.__name__} at the moment"
 
         # Verify both node and npm are installed
         is_node_installed = shutil.which("node") is not None
@@ -74,7 +75,7 @@ class Intelephense(SolidLanguageServer):
                     )
                 ]
             )
-            deps.install(logger, intelephense_ls_dir)
+            deps.install(intelephense_ls_dir)
 
         assert os.path.exists(
             intelephense_executable_path
@@ -82,19 +83,12 @@ class Intelephense(SolidLanguageServer):
 
         return [intelephense_executable_path, "--stdio"]
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         # Setup runtime dependencies before initializing
-        intelephense_cmd = self._setup_runtime_dependencies(logger, solidlsp_settings)
+        intelephense_cmd = self._setup_runtime_dependencies(solidlsp_settings)
 
         super().__init__(
-            config,
-            logger,
-            repository_root_path,
-            ProcessLaunchInfo(cmd=intelephense_cmd, cwd=repository_root_path),
-            "php",
-            solidlsp_settings,
+            config, repository_root_path, ProcessLaunchInfo(cmd=intelephense_cmd, cwd=repository_root_path), "php", solidlsp_settings
         )
         self.request_id = 0
 
@@ -105,10 +99,7 @@ class Intelephense(SolidLanguageServer):
         self._ignored_dirnames = {"node_modules", "cache"}
         if self._custom_settings.get("ignore_vendor", True):
             self._ignored_dirnames.add("vendor")
-        self.logger.log(
-            f"Ignoring the following directories for PHP projects: {', '.join(sorted(self._ignored_dirnames))}",
-            logging.INFO,
-        )
+        log.info(f"Ignoring the following directories for PHP projects: {', '.join(sorted(self._ignored_dirnames))}")
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
@@ -157,7 +148,7 @@ class Intelephense(SolidLanguageServer):
             return
 
         def window_log_message(msg: dict) -> None:
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+            log.info(f"LSP: window/logMessage: {msg}")
 
         def do_nothing(params: dict) -> None:
             return
@@ -167,19 +158,13 @@ class Intelephense(SolidLanguageServer):
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        self.logger.log("Starting Intelephense server process", logging.INFO)
+        log.info("Starting Intelephense server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
-        self.logger.log(
-            "After sent initialize params",
-            logging.INFO,
-        )
+        log.info("After sent initialize params")
 
         # Verify server capabilities
         assert "textDocumentSync" in init_response["capabilities"]

@@ -28,7 +28,7 @@ class FilenameMatcher:
 
 class Language(str, Enum):
     """
-    Possible languages with Multilspy.
+    Enumeration of language servers supported by SolidLSP.
     """
 
     CSHARP = "csharp"
@@ -351,9 +351,6 @@ class LanguageServerConfig:
 
     @classmethod
     def from_dict(cls, env: dict) -> Self:
-        """
-        Create a MultilspyConfig instance from a dictionary
-        """
         import inspect
 
         return cls(**{k: v for k, v in env.items() if k in inspect.signature(cls).parameters})

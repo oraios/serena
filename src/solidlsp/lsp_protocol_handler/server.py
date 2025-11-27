@@ -46,17 +46,25 @@ log = logging.getLogger(__name__)
 @dataclasses.dataclass
 class ProcessLaunchInfo:
     """
-    This class is used to store the information required to launch a process.
+    This class is used to store the information required to launch a (language server) process.
     """
 
-    # The command to launch the process
     cmd: str | list[str]
+    """
+    the command used to launch the process.
+    Specification as a list is preferred (as it is more robust and avoids incorrect quoting of arguments);
+    the string variant is supported for backward compatibility only
+    """
 
-    # The environment variables to set for the process
     env: dict[str, str] = dataclasses.field(default_factory=dict)
+    """
+    the environment variables to set for the process
+    """
 
-    # The working directory for the process
     cwd: str = os.getcwd()
+    """
+    the working directory for the process
+    """
 
 
 class LSPError(Exception):

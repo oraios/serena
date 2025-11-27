@@ -4,7 +4,6 @@ import pathlib
 from typing import cast
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -12,30 +11,25 @@ from ..ls_config import LanguageServerConfig
 from ..lsp_protocol_handler.lsp_types import InitializeParams
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
+log = logging.getLogger(__name__)
+
 
 class DartLanguageServer(SolidLanguageServer):
     """
     Provides Dart specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Dart.
     """
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ) -> None:
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings) -> None:
         """
         Creates a DartServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        executable_path = self._setup_runtime_dependencies(logger, solidlsp_settings)
+        executable_path = self._setup_runtime_dependencies(solidlsp_settings)
         super().__init__(
-            config,
-            logger,
-            repository_root_path,
-            ProcessLaunchInfo(cmd=executable_path, cwd=repository_root_path),
-            "dart",
-            solidlsp_settings,
+            config, repository_root_path, ProcessLaunchInfo(cmd=executable_path, cwd=repository_root_path), "dart", solidlsp_settings
         )
 
     @classmethod
-    def _setup_runtime_dependencies(cls, logger: "LanguageServerLogger", solidlsp_settings: SolidLSPSettings) -> str:
+    def _setup_runtime_dependencies(cls, solidlsp_settings: SolidLSPSettings) -> str:
         deps = RuntimeDependencyCollection(
             [
                 RuntimeDependency(
@@ -85,7 +79,7 @@ class DartLanguageServer(SolidLanguageServer):
         dart_executable_path = deps.binary_path(dart_ls_dir)
 
         if not os.path.exists(dart_executable_path):
-            deps.install(logger, dart_ls_dir)
+            deps.install(dart_ls_dir)
 
         assert os.path.exists(dart_executable_path)
         os.chmod(dart_executable_path, 0o755)
@@ -136,7 +130,7 @@ class DartLanguageServer(SolidLanguageServer):
             pass
 
         def window_log_message(msg: dict) -> None:
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+            log.info(f"LSP: window/logMessage: {msg}")
 
         self.server.on_request("client/registerCapability", do_nothing)
         self.server.on_notification("language/status", do_nothing)
@@ -147,17 +141,11 @@ class DartLanguageServer(SolidLanguageServer):
         self.server.on_notification("language/actionableNotification", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
-        self.logger.log("Starting dart-language-server server process", logging.INFO)
+        log.info("Starting dart-language-server server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
-        self.logger.log(
-            "Sending initialize request to dart-language-server",
-            logging.DEBUG,
-        )
+        log.debug("Sending initialize request to dart-language-server")
         init_response = self.server.send_request("initialize", initialize_params)  # type: ignore
-        self.logger.log(
-            f"Received initialize response from dart-language-server: {init_response}",
-            logging.INFO,
-        )
+        log.info(f"Received initialize response from dart-language-server: {init_response}")
 
         self.server.notify.initialized({})

@@ -11,11 +11,12 @@ from typing import cast
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
@@ -34,13 +35,11 @@ class KotlinLanguageServer(SolidLanguageServer):
     Provides Kotlin specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Kotlin.
     """
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a Kotlin Language Server instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        runtime_dependency_paths = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
+        runtime_dependency_paths = self._setup_runtime_dependencies(config, solidlsp_settings)
         self.runtime_dependency_paths = runtime_dependency_paths
 
         # Create command to execute the Kotlin Language Server script
@@ -50,18 +49,11 @@ class KotlinLanguageServer(SolidLanguageServer):
         proc_env = {"JAVA_HOME": self.runtime_dependency_paths.java_home_path}
 
         super().__init__(
-            config,
-            logger,
-            repository_root_path,
-            ProcessLaunchInfo(cmd=cmd, env=proc_env, cwd=repository_root_path),
-            "kotlin",
-            solidlsp_settings,
+            config, repository_root_path, ProcessLaunchInfo(cmd=cmd, env=proc_env, cwd=repository_root_path), "kotlin", solidlsp_settings
         )
 
     @classmethod
-    def _setup_runtime_dependencies(
-        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> KotlinRuntimeDependencyPaths:
+    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> KotlinRuntimeDependencyPaths:
         """
         Setup runtime dependencies for Kotlin Language Server and return the paths.
         """
@@ -130,8 +122,8 @@ class KotlinLanguageServer(SolidLanguageServer):
 
         # Download and extract Java if not exists
         if not os.path.exists(java_path):
-            logger.log(f"Downloading Java for {platform_id.value}...", logging.INFO)
-            FileUtils.download_and_extract_archive(logger, java_dependency["url"], java_dir, java_dependency["archiveType"])
+            log.info(f"Downloading Java for {platform_id.value}...")
+            FileUtils.download_and_extract_archive(java_dependency["url"], java_dir, java_dependency["archiveType"])
             # Make Java executable
             if not platform_id.value.startswith("win-"):
                 os.chmod(java_path, 0o755)
@@ -149,8 +141,8 @@ class KotlinLanguageServer(SolidLanguageServer):
 
         # Download and extract Kotlin Language Server if script doesn't exist
         if not os.path.exists(kotlin_script):
-            logger.log("Downloading Kotlin Language Server...", logging.INFO)
-            FileUtils.download_and_extract_archive(logger, kotlin_dependency["url"], static_dir, kotlin_dependency["archiveType"])  # type: ignore
+            log.info("Downloading Kotlin Language Server...")
+            FileUtils.download_and_extract_archive(kotlin_dependency["url"], static_dir, kotlin_dependency["archiveType"])  # type: ignore
 
             # Make script executable on Unix platforms
             if os.path.exists(kotlin_script) and not platform_id.value.startswith("win-"):
@@ -161,7 +153,7 @@ class KotlinLanguageServer(SolidLanguageServer):
         # Use script file
         if os.path.exists(kotlin_script):
             kotlin_executable_path = kotlin_script
-            logger.log(f"Using Kotlin Language Server script at {kotlin_script}", logging.INFO)
+            log.info(f"Using Kotlin Language Server script at {kotlin_script}")
         else:
             raise FileNotFoundError(f"Kotlin Language Server script not found at {kotlin_script}")
 
@@ -435,7 +427,7 @@ class KotlinLanguageServer(SolidLanguageServer):
             return
 
         def window_log_message(msg: dict) -> None:
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+            log.info(f"LSP: window/logMessage: {msg}")
 
         self.server.on_request("client/registerCapability", do_nothing)
         self.server.on_notification("language/status", do_nothing)
@@ -445,14 +437,11 @@ class KotlinLanguageServer(SolidLanguageServer):
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("language/actionableNotification", do_nothing)
 
-        self.logger.log("Starting Kotlin server process", logging.INFO)
+        log.info("Starting Kotlin server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
 
         capabilities = init_response["capabilities"]

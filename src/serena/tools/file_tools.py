@@ -6,7 +6,6 @@ File and file system-related tools, specifically for
   * editing at the file level
 """
 
-import json
 import os
 import re
 from collections import defaultdict
@@ -79,7 +78,7 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
         answer = f"File created: {relative_path}."
         if will_overwrite_existing:
             answer += " Overwrote existing file."
-        return json.dumps(answer)
+        return answer
 
 
 class ListDirTool(Tool):
@@ -106,7 +105,7 @@ class ListDirTool(Tool):
                 "project_root": self.get_project_root(),
                 "hint": "Check if the path is correct relative to the project root",
             }
-            return json.dumps(error_info)
+            return self._to_json(error_info)
 
         self.project.validate_relative_path(relative_path, require_not_ignored=skip_ignored_files)
 
@@ -118,7 +117,7 @@ class ListDirTool(Tool):
             is_ignored_file=self.project.is_ignored_path if skip_ignored_files else None,
         )
 
-        result = json.dumps({"dirs": dirs, "files": files})
+        result = self._to_json({"dirs": dirs, "files": files})
         return self._limit_length(result, max_answer_chars)
 
 
@@ -154,7 +153,7 @@ class FindFileTool(Tool):
             relative_to=self.get_project_root(),
         )
 
-        result = json.dumps({"files": files})
+        result = self._to_json({"files": files})
         return result
 
 
@@ -440,5 +439,5 @@ class SearchForPatternTool(Tool):
         for match in matches:
             assert match.source_file_path is not None
             file_to_matches[match.source_file_path].append(match.to_display_string())
-        result = json.dumps(file_to_matches)
+        result = self._to_json(file_to_matches)
         return self._limit_length(result, max_answer_chars)

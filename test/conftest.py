@@ -9,7 +9,6 @@ from serena.project import Project
 from serena.util.file_system import GitignoreParser
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.settings import SolidLSPSettings
 
 configure(level=logging.ERROR)
@@ -44,10 +43,8 @@ def create_ls(
     for spec in gitignore_parser.get_ignore_specs():
         ignored_paths.extend(spec.patterns)
     config = LanguageServerConfig(code_language=language, ignored_paths=ignored_paths, trace_lsp_communication=trace_lsp_communication)
-    logger = LanguageServerLogger(log_level=log_level)
     return SolidLanguageServer.create(
         config,
-        logger,
         repo_path,
         solidlsp_settings=SolidLSPSettings(solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME, project_data_relative_path=SERENA_MANAGED_DIR_NAME),
     )
