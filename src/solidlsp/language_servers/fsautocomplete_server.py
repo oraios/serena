@@ -9,11 +9,11 @@ import shutil
 import subprocess
 import threading
 import time
-from collections.abc import Generator
-from typing import Any, Callable, cast
+from collections.abc import Callable, Generator
+from typing import Any, cast
 
-from packaging.version import Version
 from overrides import override
+from packaging.version import Version
 
 from solidlsp import ls_types
 from solidlsp.ls import DocumentSymbols, LSPFileBuffer, SolidLanguageServer
@@ -26,9 +26,7 @@ from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 
-def breadth_first_file_scan(
-    root_dir: str, ignore_dirname: Callable[[str], bool] | None = None
-) -> Generator[str, None, None]:
+def breadth_first_file_scan(root_dir: str, ignore_dirname: Callable[[str], bool] | None = None) -> Generator[str, None, None]:
     """
     Perform a breadth-first scan of files in the given directory.
     Yields file paths in breadth-first order.
@@ -52,9 +50,7 @@ def breadth_first_file_scan(
             pass
 
 
-def find_solution_or_project_file(
-    root_dir: str, ignore_dirname: Callable[[str], bool] | None = None
-) -> str | None:
+def find_solution_or_project_file(root_dir: str, ignore_dirname: Callable[[str], bool] | None = None) -> str | None:
     """
     Find the first .sln file in breadth-first order.
     If no .sln file is found, look for a .fsproj file.
@@ -76,9 +72,7 @@ def find_solution_or_project_file(
     return fsproj_file
 
 
-def find_all_project_files(
-    root_dir: str, ignore_dirname: Callable[[str], bool] | None = None
-) -> list[str]:
+def find_all_project_files(root_dir: str, ignore_dirname: Callable[[str], bool] | None = None) -> list[str]:
     """
     Find all .fsproj files in breadth-first order under the root.
     """
@@ -131,9 +125,7 @@ class FsAutoCompleteServer(SolidLanguageServer):
 
         raise RuntimeError(
             "FsAutoComplete is not installed or not in PATH.\n"
-            "Searched locations:\n"
-            + "\n".join(f"  - {p}" for p in common_paths if p)
-            + "\n"
+            "Searched locations:\n" + "\n".join(f"  - {p}" for p in common_paths if p) + "\n"
             "Please install FsAutoComplete via:\n"
             "  - .NET tool: dotnet tool install --global fsautocomplete\n"
             "  - From source: https://github.com/ionide/FsAutoComplete"
@@ -195,9 +187,7 @@ class FsAutoCompleteServer(SolidLanguageServer):
                 "capabilities": {
                     "window": {
                         "workDoneProgress": True,
-                        "showMessage": {
-                            "messageActionItem": {"additionalPropertiesSupport": True}
-                        },
+                        "showMessage": {"messageActionItem": {"additionalPropertiesSupport": True}},
                         "showDocument": {"support": True},
                     },
                     "workspace": {
@@ -332,9 +322,7 @@ class FsAutoCompleteServer(SolidLanguageServer):
                         "EnableReferenceCodeLens": True,
                         "UseSdkScripts": True,
                     }
-                    result.append(
-                        fsharp_config.get(section.replace("FSharp.", ""), None)
-                    )
+                    result.append(fsharp_config.get(section.replace("FSharp.", ""), None))
                 else:
                     result.append(None)
 
@@ -360,14 +348,10 @@ class FsAutoCompleteServer(SolidLanguageServer):
                     data = content.get("Data", {})
                     status = data.get("Status")
                     if status == "finished":
-                        self.logger.log(
-                            "FsAutoComplete workspace loading finished", logging.INFO
-                        )
+                        self.logger.log("FsAutoComplete workspace loading finished", logging.INFO)
                         self.workspace_loaded.set()
             except Exception as e:
-                self.logger.log(
-                    f"Error parsing fsharp/notifyWorkspace: {e}", logging.WARNING
-                )
+                self.logger.log(f"Error parsing fsharp/notifyWorkspace: {e}", logging.WARNING)
 
         # Set up notification and request handlers
         self.server.on_notification("window/logMessage", window_log_message)
@@ -375,21 +359,15 @@ class FsAutoCompleteServer(SolidLanguageServer):
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("fsharp/notifyWorkspace", handle_notify_workspace)
         self.server.on_notification("fsharp/notifyWorkspacePeek", do_nothing)
-        self.server.on_request(
-            "workspace/configuration", handle_workspace_configuration
-        )
-        self.server.on_request(
-            "window/workDoneProgress/create", handle_work_done_progress_create
-        )
+        self.server.on_request("workspace/configuration", handle_workspace_configuration)
+        self.server.on_request("window/workDoneProgress/create", handle_work_done_progress_create)
 
         self.logger.log("Starting FsAutoComplete language server process", logging.INFO)
 
         try:
             self.server.start()
         except Exception as e:
-            self.logger.log(
-                f"Failed to start language server process: {e}", logging.ERROR
-            )
+            self.logger.log(f"Failed to start language server process: {e}", logging.ERROR)
             raise SolidLSPException(f"Failed to start F# language server: {e}")
 
         # Send initialization
@@ -398,13 +376,9 @@ class FsAutoCompleteServer(SolidLanguageServer):
         self.logger.log("Sending initialize request to language server", logging.INFO)
         try:
             init_response = self.server.send.initialize(initialize_params)
-            self.fsac_version = (
-                init_response.get("result", {}).get("serverInfo", {}).get("version")
-            )
+            self.fsac_version = init_response.get("result", {}).get("serverInfo", {}).get("version")
             if self.fsac_version:
-                self.logger.log(
-                    f"FsAutoComplete server version: {self.fsac_version}", logging.INFO
-                )
+                self.logger.log(f"FsAutoComplete server version: {self.fsac_version}", logging.INFO)
             else:
                 self.logger.log(
                     "Could not determine FsAutoComplete server version.",
@@ -412,9 +386,7 @@ class FsAutoCompleteServer(SolidLanguageServer):
                 )
             self.logger.log("Received initialize response", logging.DEBUG)
         except Exception as e:
-            raise SolidLSPException(
-                f"Failed to initialize F# language server for {self.repository_root_path}: {e}"
-            ) from e
+            raise SolidLSPException(f"Failed to initialize F# language server for {self.repository_root_path}: {e}") from e
 
         # Verify required capabilities
         capabilities = init_response.get("capabilities", {})
@@ -436,16 +408,10 @@ class FsAutoCompleteServer(SolidLanguageServer):
         self.completions_available.set()
 
         # Open solution or project files, mirroring C# behavior
-        solution_or_project = find_solution_or_project_file(
-            self.repository_root_path, ignore_dirname=self.is_ignored_dirname
-        )
-        project_files = find_all_project_files(
-            self.repository_root_path, ignore_dirname=self.is_ignored_dirname
-        )
+        solution_or_project = find_solution_or_project_file(self.repository_root_path, ignore_dirname=self.is_ignored_dirname)
+        project_files = find_all_project_files(self.repository_root_path, ignore_dirname=self.is_ignored_dirname)
         if solution_or_project:
-            self.logger.log(
-                f"Opening solution/project file: {solution_or_project}", logging.INFO
-            )
+            self.logger.log(f"Opening solution/project file: {solution_or_project}", logging.INFO)
             self.server.notify.send_notification(
                 "solution/open",
                 {"solution": PathUtils.path_to_uri(solution_or_project)},
@@ -453,9 +419,7 @@ class FsAutoCompleteServer(SolidLanguageServer):
         if project_files:
             self.logger.log(f"Opening project files: {project_files}", logging.DEBUG)
             project_uris = [PathUtils.path_to_uri(p) for p in project_files]
-            self.server.notify.send_notification(
-                "project/open", {"projects": project_uris}
-            )
+            self.server.notify.send_notification("project/open", {"projects": project_uris})
 
         # Wait for workspace load signal instead of polling
         if not self.workspace_loaded.wait(timeout=10):
@@ -464,41 +428,25 @@ class FsAutoCompleteServer(SolidLanguageServer):
                 logging.WARNING,
             )
 
-        self.logger.log(
-            "FsAutoComplete language server initialized and ready", logging.INFO
-        )
+        self.logger.log("FsAutoComplete language server initialized and ready", logging.INFO)
 
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
         return 3
 
-    def request_hover(
-        self, relative_file_path: str, line: int, column: int
-    ) -> ls_types.Hover | None:
+    def request_hover(self, relative_file_path: str, line: int, column: int) -> ls_types.Hover | None:
         """
         Retry hover briefly if FsAutoComplete hasn't produced check results yet.
         """
-        return self._retry_no_check_results(
-            lambda: SolidLanguageServer.request_hover(
-                self, relative_file_path, line, column
-            )
-        )
+        return self._retry_no_check_results(lambda: SolidLanguageServer.request_hover(self, relative_file_path, line, column))
 
-    def request_definition(
-        self, relative_file_path: str, line: int, column: int
-    ) -> list[Any] | None:
+    def request_definition(self, relative_file_path: str, line: int, column: int) -> list[Any] | None:
         """
         Retry definition briefly if FsAutoComplete hasn't produced check results yet.
         """
-        return self._retry_no_check_results(
-            lambda: SolidLanguageServer.request_definition(
-                self, relative_file_path, line, column
-            )
-        )
+        return self._retry_no_check_results(lambda: SolidLanguageServer.request_definition(self, relative_file_path, line, column))
 
-    def _retry_no_check_results(
-        self, func: Callable[[], Any], attempts: int = 3, delay: float = 0.5
-    ) -> Any:
+    def _retry_no_check_results(self, func: Callable[[], Any], attempts: int = 3, delay: float = 0.5) -> Any:
         for attempt in range(attempts):
             try:
                 return func()
@@ -533,9 +481,7 @@ class FsAutoCompleteServer(SolidLanguageServer):
 
         selection = symbol.get("selectionRange")
         rng = symbol.get("range")
-        loc_rng = (
-            symbol.get("location", {}).get("range") if "location" in symbol else None
-        )
+        loc_rng = symbol.get("location", {}).get("range") if "location" in symbol else None
 
         if selection is None:
             return symbol
@@ -554,9 +500,7 @@ class FsAutoCompleteServer(SolidLanguageServer):
         ):
             shift = 1
         # Case 2: FSAC anchored to type line, doc comment directly above
-        elif start_line - 1 >= 0 and file_lines[start_line - 1].lstrip().startswith(
-            "///"
-        ):
+        elif start_line - 1 >= 0 and file_lines[start_line - 1].lstrip().startswith("///"):
             shift = -1
 
         if shift != 0:
@@ -587,13 +531,9 @@ class FsAutoCompleteServer(SolidLanguageServer):
                 if stripped == "}" or stripped.startswith("member "):
                     rng["end"]["line"] += 1
                     if selection:
-                        selection["end"]["line"] = max(
-                            selection["end"]["line"], rng["end"]["line"]
-                        )
+                        selection["end"]["line"] = max(selection["end"]["line"], rng["end"]["line"])
                     if loc_rng:
-                        loc_rng["end"]["line"] = max(
-                            loc_rng["end"]["line"], rng["end"]["line"]
-                        )
+                        loc_rng["end"]["line"] = max(loc_rng["end"]["line"], rng["end"]["line"])
 
         return symbol
 
@@ -664,31 +604,23 @@ class FsAutoCompleteServer(SolidLanguageServer):
         for sym in symbols:
             fixed_sym = self._fix_selection_range(sym, file_lines, self.fsac_version)
             if fixed_sym.get("children"):
-                fixed_sym["children"] = self._fix_selection_ranges(
-                    fixed_sym["children"], file_lines
-                )
+                fixed_sym["children"] = self._fix_selection_ranges(fixed_sym["children"], file_lines)
             fixed.append(fixed_sym)
         return fixed
 
     @override
-    def request_document_symbols(
-        self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None
-    ) -> DocumentSymbols:
+    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
         # Clear caches for this file to ensure fresh post-processing (ranges depend on FsAC quirks).
         self._raw_document_symbols_cache.pop(relative_file_path, None)
         self._document_symbols_cache.pop(relative_file_path, None)
         # First get the symbols from the base implementation
-        document_symbols = super().request_document_symbols(
-            relative_file_path, file_buffer=file_buffer
-        )
+        document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
 
         # Load file content for aligning selection ranges
         with self.open_file(relative_file_path) as file_data:
             file_lines = file_data.split_lines()
 
-        fixed_root_symbols = self._fix_selection_ranges(
-            document_symbols.root_symbols, file_lines
-        )
+        fixed_root_symbols = self._fix_selection_ranges(document_symbols.root_symbols, file_lines)
         one_based = self._convert_ranges_to_one_based(fixed_root_symbols)
         aligned = self._align_ranges_to_selection(one_based)
         return DocumentSymbols(aligned)
@@ -709,20 +641,10 @@ class FsAutoCompleteServer(SolidLanguageServer):
             rng["start"]["line"] = max(0, rng["start"]["line"] - 1)
             rng["end"]["line"] = max(0, rng["end"]["line"] - 1)
         if "range" in sym_copy:
-            sym_copy["range"]["start"]["line"] = max(
-                0, sym_copy["range"]["start"]["line"] - 1
-            )
-            sym_copy["range"]["end"]["line"] = max(
-                0, sym_copy["range"]["end"]["line"] - 1
-            )
+            sym_copy["range"]["start"]["line"] = max(0, sym_copy["range"]["start"]["line"] - 1)
+            sym_copy["range"]["end"]["line"] = max(0, sym_copy["range"]["end"]["line"] - 1)
         if "selectionRange" in sym_copy:
-            sym_copy["selectionRange"]["start"]["line"] = max(
-                0, sym_copy["selectionRange"]["start"]["line"] - 1
-            )
-            sym_copy["selectionRange"]["end"]["line"] = max(
-                0, sym_copy["selectionRange"]["end"]["line"] - 1
-            )
+            sym_copy["selectionRange"]["start"]["line"] = max(0, sym_copy["selectionRange"]["start"]["line"] - 1)
+            sym_copy["selectionRange"]["end"]["line"] = max(0, sym_copy["selectionRange"]["end"]["line"] - 1)
 
-        return super().retrieve_symbol_body(
-            sym_copy, file_lines=file_lines, file_buffer=file_buffer
-        )
+        return super().retrieve_symbol_body(sym_copy, file_lines=file_lines, file_buffer=file_buffer)
