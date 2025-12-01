@@ -135,7 +135,8 @@ class VueLanguageServer(SolidLanguageServer):
 
     TS_SERVER_READY_TIMEOUT = 5.0
     VUE_SERVER_READY_TIMEOUT = 3.0
-    VUE_INDEXING_WAIT_TIME = 2.0
+    # Windows requires more time due to slower I/O and process operations.
+    VUE_INDEXING_WAIT_TIME = 4.0 if os.name == "nt" else 2.0
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         vue_lsp_executable_path, self.tsdk_path, self._ts_ls_cmd = self._setup_runtime_dependencies(config, solidlsp_settings)
