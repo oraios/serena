@@ -1,4 +1,5 @@
 import os
+import sys
 
 import pytest
 
@@ -6,6 +7,24 @@ from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 
 pytestmark = pytest.mark.vue
+
+IS_WINDOWS = sys.platform == "win32"
+
+
+class TypeScriptServerBehavior:
+    """Platform-specific TypeScript language server behavior for invalid positions.
+
+    On Windows: TS server returns empty results for invalid positions
+    On macOS/Linux: TS server raises exceptions with "Bad line number" or "Debug Failure"
+    """
+
+    @staticmethod
+    def raises_on_invalid_position() -> bool:
+        return not IS_WINDOWS
+
+    @staticmethod
+    def returns_empty_on_invalid_position() -> bool:
+        return IS_WINDOWS
 
 
 class TestVueInvalidPositions:
@@ -64,43 +83,33 @@ class TestVueInvalidPositions:
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_references_at_negative_line(self, language_server: SolidLanguageServer) -> None:
-        """Test requesting references with negative line number.
-
-        Expected behavior: TypeScript server raises exception for negative line numbers.
-        """
+        """Test requesting references with negative line number."""
         from solidlsp.ls_exceptions import SolidLSPException
 
         file_path = os.path.join("src", "components", "CalculatorInput.vue")
 
-        # Request references at invalid negative line
-        # TypeScript server will raise an exception for this
-        with pytest.raises(SolidLSPException) as exc_info:
-            language_server.request_references(file_path, -1, 0)
-
-        # Verify it's the expected error
-        assert "Bad line number" in str(exc_info.value) or "Debug Failure" in str(
-            exc_info.value
-        ), f"Expected TypeScript 'Bad line number' error, got: {exc_info.value}"
+        if TypeScriptServerBehavior.returns_empty_on_invalid_position():
+            result = language_server.request_references(file_path, -1, 0)
+            assert result == [], f"Expected empty list on Windows, got: {result}"
+        else:
+            with pytest.raises(SolidLSPException) as exc_info:
+                language_server.request_references(file_path, -1, 0)
+            assert "Bad line number" in str(exc_info.value) or "Debug Failure" in str(exc_info.value)
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_definition_at_invalid_position(self, language_server: SolidLanguageServer) -> None:
-        """Test requesting definition at invalid position.
-
-        Expected behavior: TypeScript server raises exception for negative line numbers.
-        """
+        """Test requesting definition at invalid position."""
         from solidlsp.ls_exceptions import SolidLSPException
 
         file_path = os.path.join("src", "components", "CalculatorInput.vue")
 
-        # Request definition at invalid position (negative line)
-        # TypeScript server will raise an exception for this
-        with pytest.raises(SolidLSPException) as exc_info:
-            language_server.request_definition(file_path, -1, 0)
-
-        # Verify it's the expected error
-        assert "Bad line number" in str(exc_info.value) or "Debug Failure" in str(
-            exc_info.value
-        ), f"Expected TypeScript 'Bad line number' error, got: {exc_info.value}"
+        if TypeScriptServerBehavior.returns_empty_on_invalid_position():
+            result = language_server.request_definition(file_path, -1, 0)
+            assert result == [], f"Expected empty list on Windows, got: {result}"
+        else:
+            with pytest.raises(SolidLSPException) as exc_info:
+                language_server.request_definition(file_path, -1, 0)
+            assert "Bad line number" in str(exc_info.value) or "Debug Failure" in str(exc_info.value)
 
 
 class TestVueNonExistentFiles:
@@ -369,60 +378,45 @@ class TestVueReferenceEdgeCases:
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_referencing_symbols_at_invalid_position(self, language_server: SolidLanguageServer) -> None:
-        """Test requesting referencing symbols at invalid position.
-
-        Expected behavior: TypeScript server raises exception for negative positions.
-        """
+        """Test requesting referencing symbols at invalid position."""
         from solidlsp.ls_exceptions import SolidLSPException
 
         file_path = os.path.join("src", "stores", "calculator.ts")
 
-        # Request referencing symbols at invalid position
-        # TypeScript server will raise an exception for this
-        with pytest.raises(SolidLSPException) as exc_info:
-            list(language_server.request_referencing_symbols(file_path, -1, -1, include_self=False))
-
-        # Verify it's the expected error
-        assert "Bad line number" in str(exc_info.value) or "Debug Failure" in str(
-            exc_info.value
-        ), f"Expected TypeScript 'Bad line number' error, got: {exc_info.value}"
+        if TypeScriptServerBehavior.returns_empty_on_invalid_position():
+            result = list(language_server.request_referencing_symbols(file_path, -1, -1, include_self=False))
+            assert result == [], f"Expected empty list on Windows, got: {result}"
+        else:
+            with pytest.raises(SolidLSPException) as exc_info:
+                list(language_server.request_referencing_symbols(file_path, -1, -1, include_self=False))
+            assert "Bad line number" in str(exc_info.value) or "Debug Failure" in str(exc_info.value)
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_defining_symbol_at_invalid_position(self, language_server: SolidLanguageServer) -> None:
-        """Test requesting defining symbol at invalid position.
-
-        Expected behavior: TypeScript server raises exception for negative positions.
-        """
+        """Test requesting defining symbol at invalid position."""
         from solidlsp.ls_exceptions import SolidLSPException
 
         file_path = os.path.join("src", "components", "CalculatorInput.vue")
 
-        # Request defining symbol at invalid position
-        # TypeScript server will raise an exception for this
-        with pytest.raises(SolidLSPException) as exc_info:
-            language_server.request_defining_symbol(file_path, -1, -1)
-
-        # Verify it's the expected error
-        assert "Bad line number" in str(exc_info.value) or "Debug Failure" in str(
-            exc_info.value
-        ), f"Expected TypeScript 'Bad line number' error, got: {exc_info.value}"
+        if TypeScriptServerBehavior.returns_empty_on_invalid_position():
+            result = language_server.request_defining_symbol(file_path, -1, -1)
+            assert result is None, f"Expected None on Windows, got: {result}"
+        else:
+            with pytest.raises(SolidLSPException) as exc_info:
+                language_server.request_defining_symbol(file_path, -1, -1)
+            assert "Bad line number" in str(exc_info.value) or "Debug Failure" in str(exc_info.value)
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_referencing_symbols_beyond_file_bounds(self, language_server: SolidLanguageServer) -> None:
-        """Test requesting referencing symbols beyond file bounds.
-
-        Expected behavior: TypeScript server raises exception for positions far beyond file bounds.
-        """
+        """Test requesting referencing symbols beyond file bounds."""
         from solidlsp.ls_exceptions import SolidLSPException
 
         file_path = os.path.join("src", "stores", "calculator.ts")
 
-        # Request referencing symbols beyond file bounds
-        # TypeScript server will raise an exception for this
-        with pytest.raises(SolidLSPException) as exc_info:
-            list(language_server.request_referencing_symbols(file_path, 99999, 99999, include_self=False))
-
-        # Verify it's the expected error
-        assert "Bad line number" in str(exc_info.value) or "Debug Failure" in str(
-            exc_info.value
-        ), f"Expected TypeScript 'Bad line number' error, got: {exc_info.value}"
+        if TypeScriptServerBehavior.returns_empty_on_invalid_position():
+            result = list(language_server.request_referencing_symbols(file_path, 99999, 99999, include_self=False))
+            assert result == [], f"Expected empty list on Windows, got: {result}"
+        else:
+            with pytest.raises(SolidLSPException) as exc_info:
+                list(language_server.request_referencing_symbols(file_path, 99999, 99999, include_self=False))
+            assert "Bad line number" in str(exc_info.value) or "Debug Failure" in str(exc_info.value)
