@@ -62,11 +62,11 @@ def prefer_non_node_modules_definition(definitions: list[ls_types.Location]) -> 
 class TypeScriptLanguageServer(SolidLanguageServer):
     """
     Provides TypeScript specific instantiation of the LanguageServer class. Contains various configurations and settings specific to TypeScript.
-    """
 
-    # Version constants - subclasses can override these if needed
-    TYPESCRIPT_VERSION = "5.9.3"
-    TYPESCRIPT_LANGUAGE_SERVER_VERSION = "5.1.3"
+    You can pass the following entries in ls_specific_settings["typescript"]:
+        - typescript_version: Version of TypeScript to install (default: "5.9.3")
+        - typescript_language_server_version: Version of typescript-language-server to install (default: "5.1.3")
+    """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
@@ -115,18 +115,23 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy javascript/typescript at the moment"
 
+        # Get version settings from ls_specific_settings or use defaults
+        language_specific_config = solidlsp_settings.get_ls_specific_settings(cls.get_language_enum_instance())
+        typescript_version = language_specific_config.get("typescript_version", "5.9.3")
+        typescript_language_server_version = language_specific_config.get("typescript_language_server_version", "5.1.3")
+
         deps = RuntimeDependencyCollection(
             [
                 RuntimeDependency(
                     id="typescript",
                     description="typescript package",
-                    command=["npm", "install", "--prefix", "./", f"typescript@{cls.TYPESCRIPT_VERSION}"],
+                    command=["npm", "install", "--prefix", "./", f"typescript@{typescript_version}"],
                     platform_id="any",
                 ),
                 RuntimeDependency(
                     id="typescript-language-server",
                     description="typescript-language-server package",
-                    command=["npm", "install", "--prefix", "./", f"typescript-language-server@{cls.TYPESCRIPT_LANGUAGE_SERVER_VERSION}"],
+                    command=["npm", "install", "--prefix", "./", f"typescript-language-server@{typescript_language_server_version}"],
                     platform_id="any",
                 ),
             ]
@@ -144,7 +149,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
 
         # Check if installation is needed based on executable AND version
         version_file = os.path.join(tsserver_ls_dir, ".installed_version")
-        expected_version = f"{cls.TYPESCRIPT_VERSION}_{cls.TYPESCRIPT_LANGUAGE_SERVER_VERSION}"
+        expected_version = f"{typescript_version}_{typescript_language_server_version}"
 
         needs_install = False
         if not os.path.exists(tsserver_executable_path):

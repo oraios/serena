@@ -50,6 +50,31 @@ class TestVueRename:
                 assert "line" in edit["range"]["start"], "Start position should have line number"
                 assert "character" in edit["range"]["start"], "Start position should have character offset"
 
+        elif has_document_changes:
+            document_changes = workspace_edit["documentChanges"]
+            assert isinstance(document_changes, list), "documentChanges should be a list"
+            assert len(document_changes) > 0, "Should have at least one document change"
+
+            calculator_input_changes = [dc for dc in document_changes if "CalculatorInput.vue" in dc.get("textDocument", {}).get("uri", "")]
+            assert len(calculator_input_changes) > 0, "Should have edits for CalculatorInput.vue"
+
+            for change in calculator_input_changes:
+                assert "textDocument" in change, "Document change should have textDocument"
+                assert "edits" in change, "Document change should have edits"
+
+                edits = change["edits"]
+                assert len(edits) > 0, "Should have at least one TextEdit for the renamed symbol"
+
+                for edit in edits:
+                    assert "range" in edit, "TextEdit should have a range"
+                    assert "newText" in edit, "TextEdit should have newText"
+                    assert edit["newText"] == "processDigit", f"newText should be 'processDigit', got {edit['newText']}"
+
+                    assert "start" in edit["range"], "Range should have start position"
+                    assert "end" in edit["range"], "Range should have end position"
+                    assert "line" in edit["range"]["start"], "Start position should have line number"
+                    assert "character" in edit["range"]["start"], "Start position should have character offset"
+
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_rename_composable_function_cross_file(self, language_server: SolidLanguageServer) -> None:
         composable_file = os.path.join("src", "composables", "useFormatter.ts")
@@ -81,6 +106,31 @@ class TestVueRename:
             assert len(composable_files) > 0, f"Should have edits for useFormatter.ts (definition). Found edits for: {list(changes.keys())}"
 
             for uri, edits in changes.items():
+                assert len(edits) > 0, f"File {uri} should have at least one edit"
+
+                for edit in edits:
+                    assert "range" in edit, f"TextEdit in {uri} should have a range"
+                    assert "newText" in edit, f"TextEdit in {uri} should have newText"
+                    assert edit["newText"] == "useNumberFormatter", f"newText should be 'useNumberFormatter', got {edit['newText']}"
+                    assert "start" in edit["range"], f"Range in {uri} should have start position"
+                    assert "end" in edit["range"], f"Range in {uri} should have end position"
+
+        elif has_document_changes:
+            document_changes = workspace_edit["documentChanges"]
+            assert isinstance(document_changes, list), "documentChanges should be a list"
+            assert len(document_changes) > 0, "Should have at least one document change"
+
+            composable_changes = [dc for dc in document_changes if "useFormatter.ts" in dc.get("textDocument", {}).get("uri", "")]
+            assert (
+                len(composable_changes) > 0
+            ), f"Should have edits for useFormatter.ts (definition). Found changes for: {[dc.get('textDocument', {}).get('uri', '') for dc in document_changes]}"
+
+            for change in document_changes:
+                assert "textDocument" in change, "Document change should have textDocument"
+                assert "edits" in change, "Document change should have edits"
+
+                uri = change["textDocument"]["uri"]
+                edits = change["edits"]
                 assert len(edits) > 0, f"File {uri} should have at least one edit"
 
                 for edit in edits:
@@ -167,3 +217,25 @@ class TestVueRename:
                 edits = change["edits"]
                 assert isinstance(edits, list), "edits should be a list"
                 assert len(edits) > 0, "Should have at least one edit"
+
+                for idx, edit in enumerate(edits):
+                    assert isinstance(edit, dict), f"Edit {idx} in {text_doc['uri']} should be a dict, got {type(edit)}"
+
+                    assert "range" in edit, f"Edit {idx} in {text_doc['uri']} missing 'range'"
+                    assert "newText" in edit, f"Edit {idx} in {text_doc['uri']} missing 'newText'"
+
+                    range_obj = edit["range"]
+                    assert "start" in range_obj, f"Edit {idx} range in {text_doc['uri']} missing 'start'"
+                    assert "end" in range_obj, f"Edit {idx} range in {text_doc['uri']} missing 'end'"
+
+                    for pos_name in ["start", "end"]:
+                        pos = range_obj[pos_name]
+                        assert "line" in pos, f"Edit {idx} range {pos_name} in {text_doc['uri']} missing 'line'"
+                        assert "character" in pos, f"Edit {idx} range {pos_name} in {text_doc['uri']} missing 'character'"
+                        assert isinstance(pos["line"], int), f"Line should be int, got {type(pos['line'])}"
+                        assert isinstance(pos["character"], int), f"Character should be int, got {type(pos['character'])}"
+                        assert pos["line"] >= 0, f"Line number should be >= 0, got {pos['line']}"
+                        assert pos["character"] >= 0, f"Character offset should be >= 0, got {pos['character']}"
+
+                    assert isinstance(edit["newText"], str), f"newText should be string, got {type(edit['newText'])}"
+                    assert edit["newText"] == "applicationTitle", f"newText should be 'applicationTitle', got {edit['newText']}"
