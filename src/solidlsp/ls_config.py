@@ -82,6 +82,14 @@ class Language(str, Enum):
     """YAML language server (experimental).
     Must be explicitly specified as the main language, not auto-detected.
     """
+    TOML = "toml"
+    """TOML language server using Taplo.
+    Supports TOML validation, formatting, and schema support.
+    """
+    TOON = "toon"
+    """TOON (Token-Oriented Object Notation) format support (experimental).
+    Uses Taplo server for basic validation. TOON is a compact JSON alternative for LLM prompts.
+    """
 
     @classmethod
     def iter_all(cls, include_experimental: bool = False) -> Iterable[Self]:
@@ -93,7 +101,15 @@ class Language(str, Enum):
         """
         Check if the language server is experimental or deprecated.
         """
-        return self in {self.TYPESCRIPT_VTS, self.PYTHON_JEDI, self.CSHARP_OMNISHARP, self.RUBY_SOLARGRAPH, self.MARKDOWN, self.YAML}
+        return self in {
+            self.TYPESCRIPT_VTS,
+            self.PYTHON_JEDI,
+            self.CSHARP_OMNISHARP,
+            self.RUBY_SOLARGRAPH,
+            self.MARKDOWN,
+            self.YAML,
+            self.TOON,
+        }
 
     def __str__(self) -> str:
         return self.value
@@ -148,6 +164,10 @@ class Language(str, Enum):
                 return FilenameMatcher("*.sh", "*.bash")
             case self.YAML:
                 return FilenameMatcher("*.yaml", "*.yml")
+            case self.TOML:
+                return FilenameMatcher("*.toml")
+            case self.TOON:
+                return FilenameMatcher("*.toon")
             case self.ZIG:
                 return FilenameMatcher("*.zig", "*.zon")
             case self.LUA:
@@ -269,6 +289,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.yaml_language_server import YamlLanguageServer
 
                 return YamlLanguageServer
+            case self.TOML | self.TOON:
+                from solidlsp.language_servers.taplo_server import TaploServer
+
+                return TaploServer
             case self.ZIG:
                 from solidlsp.language_servers.zls import ZigLanguageServer
 

@@ -1,0 +1,30 @@
+[package]
+name = "test_project"
+version = "0.1.0"
+edition = "2021"
+description = "A test TOML file for Serena TOML language support"
+authors = ["Test Author <test@example.com>"]
+license = "MIT"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1.0", features = ["full"] }
+
+[dev-dependencies]
+proptest = "1.0"
+
+[features]
+default = ["feature1"]
+feature1 = []
+feature2 = ["feature1"]
+
+[profile.release]
+lto = true
+opt-level = 3
+
+[[bin]]
+name = "main"
+path = "src/main.rs"
+
+[workspace]
+members = ["crates/*"]

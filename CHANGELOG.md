@@ -46,6 +46,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   * **Add support for Lua** via lua-language-server
   * **Add support for Nix** requires nixd installation (Windows not supported)
   * **Add experimental support for YAML** via yaml-language-server with LSP integration for .yaml and .yml files
+  * **Add support for TOML** via Taplo language server with automatic binary download, validation, formatting, and schema support for .toml files
+  * **Add experimental support for TOON** (Token-Oriented Object Notation) format via Taplo, a compact JSON alternative for LLM prompts (.toon files)
   * **Dart now officially supported**: Dart was always working, but now tests were added, and it is promoted to "officially supported"
   * **Rust now uses already installed rustup**: The rust-analyzer is no longer bundled with Serena. Instead, it uses the rust-analyzer from your Rust toolchain managed by rustup. This ensures compatibility with your Rust version and eliminates outdated bundled binaries.
   * **Kotlin now officially supported**: We now use the official Kotlin LS, tests run through and performance is good, even though the LS is in an early development stage.
