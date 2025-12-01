@@ -520,12 +520,54 @@ class SerenaAgent:
             with LogTime("Language server initialization", logger=log):
                 self.reset_language_server_manager()
 
+            # run auto-indexing if enabled (after LS is ready)
+            if project.project_config.auto_index_on_activate:
+                self._auto_index_project(project)
+
         # initialize the language server in the background (if in language server mode)
         if self.is_using_language_server():
             self.issue_task(init_language_server_manager)
 
         if self._project_activation_callback is not None:
             self._project_activation_callback()
+
+    def _auto_index_project(self, project: Project) -> None:
+        """
+        Automatically indexes the project by requesting document symbols for all source files.
+        This pre-populates the language server caches for faster subsequent queries.
+
+        :param project: the project to index
+        """
+        log.info(f"Auto-indexing project {project.project_name}...")
+        ls_mgr = self.get_language_server_manager()
+        if ls_mgr is None:
+            log.warning("Cannot auto-index: language server manager not initialized")
+            return
+
+        files = project.gather_source_files()
+        indexed_count = 0
+        failed_count = 0
+
+        for i, filepath in enumerate(files):
+            try:
+                ls = ls_mgr.get_language_server(filepath)
+                ls.request_document_symbols(filepath)
+                indexed_count += 1
+            except Exception as e:
+                log.debug(f"Failed to index {filepath}: {e}")
+                failed_count += 1
+
+            # save caches periodically
+            if (i + 1) % 10 == 0:
+                ls_mgr.save_all_caches()
+
+        # final cache save
+        ls_mgr.save_all_caches()
+
+        if failed_count > 0:
+            log.info(f"Auto-indexed {indexed_count} files ({failed_count} failed) for {project.project_name}")
+        else:
+            log.info(f"Auto-indexed {indexed_count} files for {project.project_name}")
 
     def load_project_from_path_or_name(self, project_root_or_name: str, autogenerate: bool) -> Project | None:
         """
