@@ -1,0 +1,66 @@
+# Configuration file with various TOML features for testing
+
+[server]
+host = "localhost"
+port = 8080
+debug = false
+timeout = 30.5
+
+# Inline table example
+endpoint = { url = "https://api.example.com", version = "v1" }
+
+[server.ssl]
+enabled = true
+cert_path = "/etc/ssl/cert.pem"
+key_path = "/etc/ssl/key.pem"
+
+[database]
+connection_string = """
+    postgresql://user:password@localhost:5432/mydb?
+    sslmode=require&
+    pool_size=10
+"""
+
+[database.pool]
+min_connections = 5
+max_connections = 20
+idle_timeout = 300
+
+[logging]
+level = "info"
+format = "json"
+outputs = ["stdout", "file"]
+
+[logging.file]
+path = "/var/log/app.log"
+max_size = 10485760  # 10MB
+max_backups = 5
+compress = true
+
+# Array of inline tables
+[[endpoints]]
+name = "users"
+path = "/api/users"
+methods = ["GET", "POST", "PUT", "DELETE"]
+auth_required = true
+
+[[endpoints]]
+name = "health"
+path = "/health"
+methods = ["GET"]
+auth_required = false
+
+# Datetime values
+[metadata]
+created = 1979-05-27T07:32:00Z
+updated = 2024-01-15T10:30:00-05:00
+
+# Special characters in strings
+[messages]
+welcome = "Hello, World!"
+multiline = '''
+This is a
+multiline literal
+string.
+'''
+with_escapes = "Line1\nLine2\tTabbed"
