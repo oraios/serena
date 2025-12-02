@@ -199,11 +199,13 @@ class ElixirTools(SolidLanguageServer):
         """
         Returns the initialize params for the Expert Language Server.
         """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+        # Ensure the path is absolute
+        abs_path = os.path.abspath(repository_absolute_path)
+        root_uri = pathlib.Path(abs_path).as_uri()
         initialize_params = {
             "processId": os.getpid(),
             "locale": "en",
-            "rootPath": repository_absolute_path,
+            "rootPath": abs_path,
             "rootUri": root_uri,
             "initializationOptions": {
                 "mix_env": "dev",
