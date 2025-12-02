@@ -15,7 +15,7 @@ pytestmark = [pytest.mark.elixir, pytest.mark.skipif(EXPERT_UNAVAILABLE, reason=
 @pytest.fixture(scope="session")
 def ls_with_ignored_dirs() -> Generator[SolidLanguageServer, None, None]:
     """Fixture to set up an LS for the elixir test repo with the 'scripts' directory ignored.
-    
+
     Uses session scope to avoid restarting Expert for each test.
     """
     ignored_paths = ["scripts", "ignored_dir"]
@@ -30,7 +30,7 @@ def ls_with_ignored_dirs() -> Generator[SolidLanguageServer, None, None]:
 @pytest.fixture(scope="session")
 def ls_with_glob_patterns() -> Generator[SolidLanguageServer, None, None]:
     """Fixture to set up an LS for the elixir test repo with glob pattern ignored paths.
-    
+
     Uses session scope to avoid restarting Expert for each test.
     """
     ignored_paths = ["*cripts", "ignored_*"]  # codespell:ignore cripts
@@ -45,7 +45,7 @@ def ls_with_glob_patterns() -> Generator[SolidLanguageServer, None, None]:
 @pytest.mark.slow
 def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     """Tests that request_full_symbol_tree ignores the configured directory.
-    
+
     Note: This test uses a separate Expert instance with custom ignored paths,
     which adds ~60-90s startup time.
     """
@@ -63,7 +63,7 @@ def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
 @pytest.mark.slow
 def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     """Tests that find_references ignores the configured directory.
-    
+
     Note: This test uses a separate Expert instance with custom ignored paths,
     which adds ~60-90s startup time.
     """
@@ -92,7 +92,7 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
 @pytest.mark.slow
 def test_refs_and_symbols_with_glob_patterns(ls_with_glob_patterns: SolidLanguageServer) -> None:
     """Tests that refs and symbols with glob patterns are ignored.
-    
+
     Note: This test uses a separate Expert instance with custom ignored paths,
     which adds ~60-90s startup time.
     """

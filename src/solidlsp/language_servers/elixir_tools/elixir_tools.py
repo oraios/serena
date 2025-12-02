@@ -338,8 +338,5 @@ class ElixirTools(SolidLanguageServer):
         if self.server_ready.wait(timeout=ready_timeout):
             log.debug("Expert is ready for requests")
         else:
-            log.warning(
-                f"Expert did not signal readiness within {ready_timeout}s. "
-                "Proceeding with requests anyway."
-            )
+            log.warning(f"Expert did not signal readiness within {ready_timeout}s. Proceeding with requests anyway.")
             self.server_ready.set()  # Mark as ready anyway to allow requests
