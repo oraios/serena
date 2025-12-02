@@ -24,6 +24,9 @@ pytestmark = [pytest.mark.elixir, pytest.mark.skipif(EXPERT_UNAVAILABLE, reason=
 class TestElixirLanguageServerSymbols:
     """Test the Elixir language server's symbol-related functionality."""
 
+    @pytest.mark.xfail(
+        reason="Expert 0.1.0 bug: document_symbols returns nil for some files (FunctionClauseError in XPExpert.EngineApi.document_symbols/2)"
+    )
     @pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)
     def test_request_containing_symbol_function(self, language_server: SolidLanguageServer) -> None:
         """Test request_containing_symbol for a function."""
@@ -159,6 +162,9 @@ class TestElixirLanguageServerSymbols:
             pass
 
     # Tests for request_defining_symbol
+    @pytest.mark.xfail(
+        reason="Expert 0.1.0 bug: definition request crashes (FunctionClauseError in XPExpert.Protocol.Conversions.to_elixir/2)"
+    )
     @pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)
     def test_request_defining_symbol_function_call(self, language_server: SolidLanguageServer) -> None:
         """Test request_defining_symbol for a function call."""
@@ -183,6 +189,9 @@ class TestElixirLanguageServerSymbols:
             if "location" in defining_symbol and "uri" in defining_symbol["location"]:
                 assert "models.ex" in defining_symbol["location"]["uri"]
 
+    @pytest.mark.xfail(
+        reason="Expert 0.1.0 bug: definition request crashes (FunctionClauseError in XPExpert.Protocol.Conversions.to_elixir/2)"
+    )
     @pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)
     def test_request_defining_symbol_struct_usage(self, language_server: SolidLanguageServer) -> None:
         """Test request_defining_symbol for a struct usage."""
@@ -204,6 +213,9 @@ class TestElixirLanguageServerSymbols:
         if defining_symbol:
             assert "User" in defining_symbol.get("name", "")
 
+    @pytest.mark.xfail(
+        reason="Expert 0.1.0 bug: definition request crashes (FunctionClauseError in XPExpert.Protocol.Conversions.to_elixir/2)"
+    )
     @pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)
     def test_request_defining_symbol_none(self, language_server: SolidLanguageServer) -> None:
         """Test request_defining_symbol for a position with no symbol."""

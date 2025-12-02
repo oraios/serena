@@ -1,5 +1,4 @@
 from collections.abc import Generator
-from pathlib import Path
 
 import pytest
 
@@ -13,9 +12,12 @@ from . import EXPERT_UNAVAILABLE, EXPERT_UNAVAILABLE_REASON
 pytestmark = [pytest.mark.elixir, pytest.mark.skipif(EXPERT_UNAVAILABLE, reason=f"Next LS not available: {EXPERT_UNAVAILABLE_REASON}")]
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def ls_with_ignored_dirs() -> Generator[SolidLanguageServer, None, None]:
-    """Fixture to set up an LS for the elixir test repo with the 'scripts' directory ignored."""
+    """Fixture to set up an LS for the elixir test repo with the 'scripts' directory ignored.
+    
+    Uses session scope to avoid restarting Expert for each test.
+    """
     ignored_paths = ["scripts", "ignored_dir"]
     ls = create_ls(ignored_paths=ignored_paths, language=Language.ELIXIR)
     ls.start()
@@ -25,9 +27,28 @@ def ls_with_ignored_dirs() -> Generator[SolidLanguageServer, None, None]:
         ls.stop()
 
 
-@pytest.mark.parametrize("ls_with_ignored_dirs", [Language.ELIXIR], indirect=True)
+@pytest.fixture(scope="session")
+def ls_with_glob_patterns() -> Generator[SolidLanguageServer, None, None]:
+    """Fixture to set up an LS for the elixir test repo with glob pattern ignored paths.
+    
+    Uses session scope to avoid restarting Expert for each test.
+    """
+    ignored_paths = ["*cripts", "ignored_*"]  # codespell:ignore cripts
+    ls = create_ls(ignored_paths=ignored_paths, language=Language.ELIXIR)
+    ls.start()
+    try:
+        yield ls
+    finally:
+        ls.stop()
+
+
+@pytest.mark.slow
 def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
-    """Tests that request_full_symbol_tree ignores the configured directory."""
+    """Tests that request_full_symbol_tree ignores the configured directory.
+    
+    Note: This test uses a separate Expert instance with custom ignored paths,
+    which adds ~60-90s startup time.
+    """
     root = ls_with_ignored_dirs.request_full_symbol_tree()[0]
     root_children = root["children"]
     children_names = {child["name"] for child in root_children}
@@ -39,9 +60,13 @@ def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     assert "ignored_dir" not in children_names, f"ignored_dir should not be in {children_names}"
 
 
-@pytest.mark.parametrize("ls_with_ignored_dirs", [Language.ELIXIR], indirect=True)
+@pytest.mark.slow
 def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
-    """Tests that find_references ignores the configured directory."""
+    """Tests that find_references ignores the configured directory.
+    
+    Note: This test uses a separate Expert instance with custom ignored paths,
+    which adds ~60-90s startup time.
+    """
     # Location of User struct, which is referenced in scripts and ignored_dir
     definition_file = "lib/models.ex"
 
@@ -64,45 +89,42 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     assert not any("ignored_dir" in ref["relativePath"] for ref in references), "ignored_dir should be ignored"
 
 
-@pytest.mark.parametrize("repo_path", [Language.ELIXIR], indirect=True)
-def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
-    """Tests that refs and symbols with glob patterns are ignored."""
-    ignored_paths = ["*cripts", "ignored_*"]  # codespell:ignore cripts
-    ls = create_ls(ignored_paths=ignored_paths, repo_path=str(repo_path), language=Language.ELIXIR)
-    ls.start()
+@pytest.mark.slow
+def test_refs_and_symbols_with_glob_patterns(ls_with_glob_patterns: SolidLanguageServer) -> None:
+    """Tests that refs and symbols with glob patterns are ignored.
+    
+    Note: This test uses a separate Expert instance with custom ignored paths,
+    which adds ~60-90s startup time.
+    """
+    # Same as in the above tests
+    root = ls_with_glob_patterns.request_full_symbol_tree()[0]
+    root_children = root["children"]
+    children_names = {child["name"] for child in root_children}
 
-    try:
-        # Same as in the above tests
-        root = ls.request_full_symbol_tree()[0]
-        root_children = root["children"]
-        children_names = {child["name"] for child in root_children}
+    # Should have lib and test directories, but not scripts or ignored_dir
+    expected_dirs = {"lib", "test"}
+    assert expected_dirs.issubset(children_names), f"Expected {expected_dirs} to be in {children_names}"
+    assert "scripts" not in children_names, f"scripts should not be in {children_names} (glob pattern)"
+    assert "ignored_dir" not in children_names, f"ignored_dir should not be in {children_names} (glob pattern)"
 
-        # Should have lib and test directories, but not scripts or ignored_dir
-        expected_dirs = {"lib", "test"}
-        assert expected_dirs.issubset(children_names), f"Expected {expected_dirs} to be in {children_names}"
-        assert "scripts" not in children_names, f"scripts should not be in {children_names} (glob pattern)"
-        assert "ignored_dir" not in children_names, f"ignored_dir should not be in {children_names} (glob pattern)"
+    # Test that the refs and symbols with glob patterns are ignored
+    definition_file = "lib/models.ex"
 
-        # Test that the refs and symbols with glob patterns are ignored
-        definition_file = "lib/models.ex"
+    # Find the User struct definition
+    symbols = ls_with_glob_patterns.request_document_symbols(definition_file).get_all_symbols_and_roots()
+    user_symbol = None
+    for symbol_group in symbols:
+        user_symbol = next((s for s in symbol_group if "User" in s.get("name", "")), None)
+        if user_symbol:
+            break
 
-        # Find the User struct definition
-        symbols = ls.request_document_symbols(definition_file).get_all_symbols_and_roots()
-        user_symbol = None
-        for symbol_group in symbols:
-            user_symbol = next((s for s in symbol_group if "User" in s.get("name", "")), None)
-            if user_symbol:
-                break
+    if user_symbol and "selectionRange" in user_symbol:
+        sel_start = user_symbol["selectionRange"]["start"]
+        references = ls_with_glob_patterns.request_references(definition_file, sel_start["line"], sel_start["character"])
 
-        if user_symbol and "selectionRange" in user_symbol:
-            sel_start = user_symbol["selectionRange"]["start"]
-            references = ls.request_references(definition_file, sel_start["line"], sel_start["character"])
-
-            # Assert that scripts and ignored_dir do not appear in references
-            assert not any("scripts" in ref["relativePath"] for ref in references), "scripts should be ignored (glob)"
-            assert not any("ignored_dir" in ref["relativePath"] for ref in references), "ignored_dir should be ignored (glob)"
-    finally:
-        ls.stop()
+        # Assert that scripts and ignored_dir do not appear in references
+        assert not any("scripts" in ref["relativePath"] for ref in references), "scripts should be ignored (glob)"
+        assert not any("ignored_dir" in ref["relativePath"] for ref in references), "ignored_dir should be ignored (glob)"
 
 
 @pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)
