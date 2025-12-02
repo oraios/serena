@@ -309,7 +309,7 @@ class ElixirTools(SolidLanguageServer):
 
         def publish_diagnostics(params: Any) -> None:
             """Handle textDocument/publishDiagnostics notifications."""
-            pass
+            return
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
