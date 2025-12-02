@@ -266,17 +266,29 @@ class ElixirTools(SolidLanguageServer):
         """Start Expert server process"""
 
         def register_capability_handler(params: Any) -> None:
+            log.debug(f"LSP: client/registerCapability: {params}")
             return
 
         def window_log_message(msg: Any) -> None:
             """Handle window/logMessage notifications from Expert"""
+            message_type = msg.get("type", 4)  # 1=Error, 2=Warning, 3=Info, 4=Log
             message_text = msg.get("message", "")
-            log.info(f"LSP: window/logMessage: {message_text}")
+
+            # Log at appropriate level based on message type
+            if message_type == 1:
+                log.error(f"Expert: {message_text}")
+            elif message_type == 2:
+                log.warning(f"Expert: {message_text}")
+            elif message_type == 3:
+                log.info(f"Expert: {message_text}")
+            else:
+                log.debug(f"Expert: {message_text}")
 
             # Check for Expert readiness signals
-            # Expert may have different readiness indicators than NextLS
-            if "ready" in message_text.lower() or "initialized" in message_text.lower():
-                log.info("Expert runtime is ready based on log message")
+            # Expert sends "Compile completed" and indexing messages during startup
+            message_lower = message_text.lower()
+            if any(signal in message_lower for signal in ["ready", "compile completed", "indexing complete"]):
+                log.info(f"Expert readiness signal detected: {message_text}")
                 self.server_ready.set()
 
         def do_nothing(params: Any) -> None:
@@ -285,34 +297,46 @@ class ElixirTools(SolidLanguageServer):
         def check_server_ready(params: Any) -> None:
             """
             Handle $/progress notifications from Expert.
-            Keep as fallback for error detection, but primary readiness detection
-            is now done via window/logMessage handler.
+            Expert sends progress updates during compilation and indexing.
             """
+            token = params.get("token", "")
             value = params.get("value", {})
+            kind = value.get("kind", "")
+            title = value.get("title", "")
+            message = value.get("message", "")
+            percentage = value.get("percentage")
 
-            # Check for initialization completion progress (fallback signal)
-            if value.get("kind") == "end":
-                message = value.get("message", "")
-                if "initialized" in message.lower():
-                    log.info("Expert initialization progress completed")
-                    # Note: We don't set server_ready here - we wait for the log message
+            # Log progress updates to help debug startup
+            if kind == "begin":
+                log.info(f"Expert progress [{token}]: BEGIN - {title}")
+            elif kind == "report":
+                progress_str = f"{percentage}%" if percentage is not None else ""
+                log.debug(f"Expert progress [{token}]: {message} {progress_str}")
+            elif kind == "end":
+                log.info(f"Expert progress [{token}]: END - {message or title}")
+                # Check if this is the indexing completion
+                if "index" in str(token).lower() or "index" in message.lower():
+                    log.info("Expert indexing completed - server should be ready")
+                    self.server_ready.set()
 
-        def work_done_progress(params: Any) -> None:
-            """
-            Handle $/workDoneProgress notifications from Expert.
-            Keep for completeness but primary readiness detection is via window/logMessage.
-            """
-            value = params.get("value", {})
-            if value.get("kind") == "end":
-                log.info("Expert work done progress completed")
-                # Note: We don't set server_ready here - we wait for the log message
+        def work_done_progress_create(params: Any) -> None:
+            """Handle window/workDoneProgress/create requests from Expert."""
+            token = params.get("token", "")
+            log.debug(f"Expert creating work done progress token: {token}")
+            return
+
+        def publish_diagnostics(params: Any) -> None:
+            """Handle textDocument/publishDiagnostics notifications."""
+            uri = params.get("uri", "")
+            diagnostics = params.get("diagnostics", [])
+            if diagnostics:
+                log.debug(f"Expert diagnostics for {uri}: {len(diagnostics)} items")
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", check_server_ready)
-        self.server.on_request("window/workDoneProgress/create", do_nothing)
-        self.server.on_notification("$/workDoneProgress", work_done_progress)
-        self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
+        self.server.on_request("window/workDoneProgress/create", work_done_progress_create)
+        self.server.on_notification("textDocument/publishDiagnostics", publish_diagnostics)
 
         log.info("Starting Expert server process")
         self.server.start()
@@ -329,24 +353,28 @@ class ElixirTools(SolidLanguageServer):
 
         # Some capabilities might be optional or provided later. This is expected, so we log as info
         if "completionProvider" not in init_response["capabilities"]:
-            log.info("completionProvider not available in initial capabilities")
+            log.debug("completionProvider not available in initial capabilities")
 
         if "definitionProvider" not in init_response["capabilities"]:
-            log.info("definitionProvider not available in initial capabilities")
+            log.debug("definitionProvider not available in initial capabilities")
 
         self.server.notify.initialized({})
         self.completions_available.set()
 
-        # Expert may take time to fully compile the project, but we can start making requests
-        # The window/logMessage handlers will set server_ready when explicit readiness signals arrive
-        # However, we'll give it some initial time and then proceed
-        ready_timeout = 10.0  # Shorter initial wait
-        log.info(f"Waiting up to {ready_timeout} seconds for Expert runtime readiness signals...")
+        # Expert needs time to compile the project and build indexes on first run.
+        # This can take 2-3+ minutes for mid-sized codebases.
+        # After the first run, subsequent startups are much faster.
+        ready_timeout = 300.0  # 5 minutes - Expert can take a while to compile and index
+        log.info(
+            f"Waiting up to {ready_timeout}s for Expert to compile and index the project. " "This may take several minutes on first run..."
+        )
 
         if self.server_ready.wait(timeout=ready_timeout):
-            log.info("Expert is ready based on explicit readiness signals")
+            log.info("Expert is ready for requests")
         else:
-            # Expert may not send explicit readiness messages like NextLS did
-            # If initialization succeeded, we can proceed with requests
-            log.info("No explicit readiness signal received, but Expert initialized successfully. Proceeding with requests.")
-            self.server_ready.set()  # Mark as ready anyway
+            # If we timeout, Expert may still work but might be slow
+            log.warning(
+                f"Expert did not signal readiness within {ready_timeout}s. "
+                "The server may still be compiling/indexing. Proceeding with requests anyway."
+            )
+            self.server_ready.set()  # Mark as ready anyway to allow requests
