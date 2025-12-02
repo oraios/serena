@@ -309,13 +309,22 @@ class ElixirTools(SolidLanguageServer):
             # Log progress updates to help debug startup
             if kind == "begin":
                 log.info(f"Expert progress [{token}]: BEGIN - {title}")
+                # Track when building starts
+                if title.startswith("Building ") and not title.startswith("Building engine"):
+                    self._building_project = True
             elif kind == "report":
                 progress_str = f"{percentage}%" if percentage is not None else ""
                 log.debug(f"Expert progress [{token}]: {message} {progress_str}")
             elif kind == "end":
                 log.info(f"Expert progress [{token}]: END - {message or title}")
-                # Check if this is the indexing completion
-                if "index" in str(token).lower() or "index" in message.lower():
+                # Check if building the project completed - this is the main readiness signal
+                # Expert sends "Building {project_name}" when compiling the actual project
+                if getattr(self, "_building_project", False):
+                    log.info("Expert project build completed - server is ready")
+                    self._building_project = False
+                    self.server_ready.set()
+                # Also check for explicit indexing completion
+                elif "index" in str(token).lower() or "index" in message.lower():
                     log.info("Expert indexing completed - server should be ready")
                     self.server_ready.set()
 
@@ -365,10 +374,7 @@ class ElixirTools(SolidLanguageServer):
         # This can take 2-3+ minutes for mid-sized codebases.
         # After the first run, subsequent startups are much faster.
         ready_timeout = 300.0  # 5 minutes - Expert can take a while to compile and index
-        log.info(
-            f"Waiting up to {ready_timeout}s for Expert to compile and index the project. " "This may take several minutes on first run..."
-        )
-
+        log.info(f"Waiting up to {ready_timeout}s for Expert to compile and index. This may take several minutes on first run...")
         if self.server_ready.wait(timeout=ready_timeout):
             log.info("Expert is ready for requests")
         else:
