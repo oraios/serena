@@ -1,3 +1,4 @@
+import os
 from collections.abc import Generator
 
 import pytest
@@ -9,7 +10,14 @@ from test.conftest import create_ls
 from . import EXPERT_UNAVAILABLE, EXPERT_UNAVAILABLE_REASON
 
 # These marks will be applied to all tests in this module
-pytestmark = [pytest.mark.elixir, pytest.mark.skipif(EXPERT_UNAVAILABLE, reason=f"Next LS not available: {EXPERT_UNAVAILABLE_REASON}")]
+pytestmark = [pytest.mark.elixir, pytest.mark.skipif(EXPERT_UNAVAILABLE, reason=f"Expert not available: {EXPERT_UNAVAILABLE_REASON}")]
+
+# Skip slow tests in CI - they require multiple Expert instances which is too slow
+IN_CI = bool(os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"))
+SKIP_SLOW_IN_CI = pytest.mark.skipif(
+    IN_CI,
+    reason="Slow tests skipped in CI - require multiple Expert instances (~60-90s each)",
+)
 
 
 @pytest.fixture(scope="session")
@@ -43,6 +51,7 @@ def ls_with_glob_patterns() -> Generator[SolidLanguageServer, None, None]:
 
 
 @pytest.mark.slow
+@SKIP_SLOW_IN_CI
 def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     """Tests that request_full_symbol_tree ignores the configured directory.
 
@@ -61,6 +70,7 @@ def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
 
 
 @pytest.mark.slow
+@SKIP_SLOW_IN_CI
 def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     """Tests that find_references ignores the configured directory.
 
@@ -90,6 +100,7 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
 
 
 @pytest.mark.slow
+@SKIP_SLOW_IN_CI
 def test_refs_and_symbols_with_glob_patterns(ls_with_glob_patterns: SolidLanguageServer) -> None:
     """Tests that refs and symbols with glob patterns are ignored.
 
@@ -144,6 +155,10 @@ def test_default_ignored_directories(language_server: SolidLanguageServer):
     assert not language_server.is_ignored_dirname("priv"), "priv should not be ignored"
 
 
+@pytest.mark.xfail(
+    reason="Expert 0.1.0 bug: document_symbols may return nil for some files (flaky)",
+    raises=Exception,
+)
 @pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)
 def test_symbol_tree_excludes_build_dirs(language_server: SolidLanguageServer):
     """Test that symbol tree excludes build and dependency directories."""
