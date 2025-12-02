@@ -279,67 +279,37 @@ class ElixirTools(SolidLanguageServer):
                 log.error(f"Expert: {message_text}")
             elif message_type == 2:
                 log.warning(f"Expert: {message_text}")
-            elif message_type == 3:
-                log.info(f"Expert: {message_text}")
             else:
                 log.debug(f"Expert: {message_text}")
-
-            # Check for Expert readiness signals
-            # Expert sends "Compile completed" and indexing messages during startup
-            message_lower = message_text.lower()
-            if any(signal in message_lower for signal in ["ready", "compile completed", "indexing complete"]):
-                log.info(f"Expert readiness signal detected: {message_text}")
-                self.server_ready.set()
-
-        def do_nothing(params: Any) -> None:
-            return
 
         def check_server_ready(params: Any) -> None:
             """
             Handle $/progress notifications from Expert.
             Expert sends progress updates during compilation and indexing.
+            The server is considered ready when project build completes.
             """
-            token = params.get("token", "")
             value = params.get("value", {})
             kind = value.get("kind", "")
             title = value.get("title", "")
-            message = value.get("message", "")
-            percentage = value.get("percentage")
 
-            # Log progress updates to help debug startup
             if kind == "begin":
-                log.info(f"Expert progress [{token}]: BEGIN - {title}")
-                # Track when building starts
+                # Track when building the project starts (not "Building engine")
                 if title.startswith("Building ") and not title.startswith("Building engine"):
                     self._building_project = True
-            elif kind == "report":
-                progress_str = f"{percentage}%" if percentage is not None else ""
-                log.debug(f"Expert progress [{token}]: {message} {progress_str}")
             elif kind == "end":
-                log.info(f"Expert progress [{token}]: END - {message or title}")
-                # Check if building the project completed - this is the main readiness signal
-                # Expert sends "Building {project_name}" when compiling the actual project
+                # Project build completion is the main readiness signal
                 if getattr(self, "_building_project", False):
-                    log.info("Expert project build completed - server is ready")
+                    log.debug("Expert project build completed - server is ready")
                     self._building_project = False
-                    self.server_ready.set()
-                # Also check for explicit indexing completion
-                elif "index" in str(token).lower() or "index" in message.lower():
-                    log.info("Expert indexing completed - server should be ready")
                     self.server_ready.set()
 
         def work_done_progress_create(params: Any) -> None:
             """Handle window/workDoneProgress/create requests from Expert."""
-            token = params.get("token", "")
-            log.debug(f"Expert creating work done progress token: {token}")
             return
 
         def publish_diagnostics(params: Any) -> None:
             """Handle textDocument/publishDiagnostics notifications."""
-            uri = params.get("uri", "")
-            diagnostics = params.get("diagnostics", [])
-            if diagnostics:
-                log.debug(f"Expert diagnostics for {uri}: {len(diagnostics)} items")
+            pass
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
@@ -347,25 +317,15 @@ class ElixirTools(SolidLanguageServer):
         self.server.on_request("window/workDoneProgress/create", work_done_progress_create)
         self.server.on_notification("textDocument/publishDiagnostics", publish_diagnostics)
 
-        log.info("Starting Expert server process")
+        log.debug("Starting Expert server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
+        log.debug("Sending initialize request to Expert")
         init_response = self.server.send.initialize(initialize_params)
 
-        # Verify server capabilities - be more lenient with Expert
-        log.info(f"Expert capabilities: {list(init_response['capabilities'].keys())}")
-
-        # Expert may not provide all capabilities immediately, so we check for basic ones
+        # Verify basic server capabilities
         assert "textDocumentSync" in init_response["capabilities"], f"Missing textDocumentSync in {init_response['capabilities']}"
-
-        # Some capabilities might be optional or provided later. This is expected, so we log as info
-        if "completionProvider" not in init_response["capabilities"]:
-            log.debug("completionProvider not available in initial capabilities")
-
-        if "definitionProvider" not in init_response["capabilities"]:
-            log.debug("definitionProvider not available in initial capabilities")
 
         self.server.notify.initialized({})
         self.completions_available.set()
@@ -373,14 +333,13 @@ class ElixirTools(SolidLanguageServer):
         # Expert needs time to compile the project and build indexes on first run.
         # This can take 2-3+ minutes for mid-sized codebases.
         # After the first run, subsequent startups are much faster.
-        ready_timeout = 300.0  # 5 minutes - Expert can take a while to compile and index
-        log.info(f"Waiting up to {ready_timeout}s for Expert to compile and index. This may take several minutes on first run...")
+        ready_timeout = 300.0  # 5 minutes
+        log.debug(f"Waiting up to {ready_timeout}s for Expert to compile and index...")
         if self.server_ready.wait(timeout=ready_timeout):
-            log.info("Expert is ready for requests")
+            log.debug("Expert is ready for requests")
         else:
-            # If we timeout, Expert may still work but might be slow
             log.warning(
                 f"Expert did not signal readiness within {ready_timeout}s. "
-                "The server may still be compiling/indexing. Proceeding with requests anyway."
+                "Proceeding with requests anyway."
             )
             self.server_ready.set()  # Mark as ready anyway to allow requests
