@@ -4,15 +4,17 @@ import pathlib
 import platform
 import shutil
 import subprocess
+from typing import Any
 
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 class JuliaLanguageServer(SolidLanguageServer):
@@ -20,16 +22,11 @@ class JuliaLanguageServer(SolidLanguageServer):
     Language server implementation for Julia using LanguageServer.jl.
     """
 
-    def __init__(
-        self,
-        config: LanguageServerConfig,
-        logger: LanguageServerLogger,
-        repository_root_path: str,
-        solidlsp_settings: SolidLSPSettings,
-    ):
-        julia_executable = self._setup_runtime_dependency(logger)  # PASS LOGGER
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
+        julia_executable = self._setup_runtime_dependency()  # PASS LOGGER
         julia_code = "using LanguageServer; runserver()"
 
+        julia_ls_cmd: str | list[str]
         if platform.system() == "Windows":
             # On Windows, pass as list (Serena handles shell=True differently)
             julia_ls_cmd = [julia_executable, "--startup-file=no", "--history-file=no", "-e", julia_code, repository_root_path]
@@ -45,19 +42,14 @@ class JuliaLanguageServer(SolidLanguageServer):
                 f"{shlex.quote(repository_root_path)}"
             )
 
-        logger.log(f"[JULIA DEBUG] Command: {julia_ls_cmd}", logging.INFO)
+        log.info(f"[JULIA DEBUG] Command: {julia_ls_cmd}")
 
         super().__init__(
-            config,
-            logger,
-            repository_root_path,
-            ProcessLaunchInfo(cmd=julia_ls_cmd, cwd=repository_root_path),
-            "julia",
-            solidlsp_settings,
+            config, repository_root_path, ProcessLaunchInfo(cmd=julia_ls_cmd, cwd=repository_root_path), "julia", solidlsp_settings
         )
 
     @staticmethod
-    def _setup_runtime_dependency(logger: LanguageServerLogger) -> str:
+    def _setup_runtime_dependency() -> str:
         """
         Check if the Julia runtime is available and return its full path.
         Raises RuntimeError with a helpful message if the dependency is missing.
@@ -92,17 +84,17 @@ class JuliaLanguageServer(SolidLanguageServer):
             result = subprocess.run(check_cmd, check=False, capture_output=True, text=True, timeout=10)
             if result.returncode != 0:
                 # LanguageServer.jl not found, install it
-                JuliaLanguageServer._install_language_server(julia_path, logger)
+                JuliaLanguageServer._install_language_server(julia_path)
         except subprocess.TimeoutExpired:
             # Assume it needs installation
-            JuliaLanguageServer._install_language_server(julia_path, logger)
+            JuliaLanguageServer._install_language_server(julia_path)
 
         return julia_path
 
     @staticmethod
-    def _install_language_server(julia_path: str, logger: LanguageServerLogger) -> None:
+    def _install_language_server(julia_path: str) -> None:
         """Install LanguageServer.jl package."""
-        logger.log("LanguageServer.jl not found. Installing... (this may take a minute)", logging.INFO)
+        log.info("LanguageServer.jl not found. Installing... (this may take a minute)")
 
         install_cmd = [julia_path, "-e", 'using Pkg; Pkg.add("LanguageServer")']
 
@@ -110,7 +102,7 @@ class JuliaLanguageServer(SolidLanguageServer):
             result = subprocess.run(install_cmd, check=False, capture_output=True, text=True, timeout=300)  # 5 minutes for installation
 
             if result.returncode == 0:
-                logger.log("LanguageServer.jl installed successfully!", logging.INFO)
+                log.info("LanguageServer.jl installed successfully!")
             else:
                 raise RuntimeError(f"Failed to install LanguageServer.jl: {result.stderr}")
         except subprocess.TimeoutExpired:
@@ -147,29 +139,26 @@ class JuliaLanguageServer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return initialize_params  # type: ignore
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """Start the LanguageServer.jl server process."""
 
-        def do_nothing(params):
+        def do_nothing(params: Any) -> None:
             return
 
-        def window_log_message(msg):
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"LSP: window/logMessage: {msg}")
 
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        self.logger.log("Starting LanguageServer.jl server process", logging.INFO)
+        log.info("Starting LanguageServer.jl server process")
         self.server.start()
 
         initialize_params = self._get_initialize_params(self.repository_root_path)
-        self.logger.log(
-            "Sending initialize request to Julia Language Server",
-            logging.INFO,
-        )
+        log.info("Sending initialize request to Julia Language Server")
 
         init_response = self.server.send.initialize(initialize_params)
         assert "definitionProvider" in init_response["capabilities"]
@@ -178,4 +167,4 @@ class JuliaLanguageServer(SolidLanguageServer):
 
         self.server.notify.initialized({})
         self.completions_available.set()
-        self.logger.log("Julia Language Server is initialized and ready.", logging.INFO)
+        log.info("Julia Language Server is initialized and ready.")

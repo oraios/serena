@@ -1,6 +1,6 @@
-import json
+from typing import Literal
 
-from serena.tools import ReplaceRegexTool, Tool
+from serena.tools import ReplaceContentTool, Tool
 
 
 class WriteMemoryTool(Tool):
@@ -49,7 +49,7 @@ class ListMemoriesTool(Tool):
         """
         List available memories. Any memory can be read using the `read_memory` tool.
         """
-        return json.dumps(self.memories_manager.list_memories())
+        return self._to_json(self.memories_manager.list_memories())
 
 
 class DeleteMemoryTool(Tool):
@@ -70,20 +70,21 @@ class EditMemoryTool(Tool):
     def apply(
         self,
         memory_file_name: str,
-        regex: str,
+        needle: str,
         repl: str,
+        mode: Literal["literal", "regex"],
     ) -> str:
         r"""
         Replaces content matching a regular expression in a memory.
 
         :param memory_file_name: the name of the memory
-        :param regex: a Python-style regular expression (flags DOTALL and MULTILINE enabled, i.e.
-            '.' matches all characters, multi-line matching is enabled).
-            Apply the usual escaping as needed for reserved characters in Python-style regex.
-        :param repl: the string to replace the matched content with, which may contain
-            backreferences like \1, \2, etc. for groups matched by the regex.
-            Insert new content verbatim, except for backslashes, which have to be escaped.
+        :param needle: the string or regex pattern to search for.
+            If `mode` is "literal", this string will be matched exactly.
+            If `mode` is "regex", this string will be treated as a regular expression (syntax of Python's `re` module,
+            with flags DOTALL and MULTILINE enabled).
+        :param repl: the replacement string (verbatim).
+        :param mode: either "literal" or "regex", specifying how the `needle` parameter is to be interpreted.
         """
-        replace_regex_tool = self.agent.get_tool(ReplaceRegexTool)
+        replace_content_tool = self.agent.get_tool(ReplaceContentTool)
         rel_path = self.memories_manager.get_memory_file_path(memory_file_name).relative_to(self.get_project_root())
-        return replace_regex_tool.replace_regex(str(rel_path), regex, repl, require_not_ignored=False)
+        return replace_content_tool.replace_content(str(rel_path), needle, repl, mode=mode, require_not_ignored=False)

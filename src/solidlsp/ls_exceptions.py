@@ -6,7 +6,7 @@ from solidlsp.ls_config import Language
 
 
 class SolidLSPException(Exception):
-    def __init__(self, message: str, cause: Exception | None = None):
+    def __init__(self, message: str, cause: Exception | None = None) -> None:
         """
         Initializes the exception with the given message.
 
@@ -19,7 +19,7 @@ class SolidLSPException(Exception):
         self.cause = cause
         super().__init__(message)
 
-    def is_language_server_terminated(self):
+    def is_language_server_terminated(self) -> bool:
         """
         :return: True if the exception is caused by the language server having terminated as indicated
             by the causing exception being an instance of LanguageServerTerminatedException.

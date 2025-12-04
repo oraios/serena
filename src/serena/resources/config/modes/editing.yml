@@ -8,14 +8,12 @@ prompt: |
   When writing new code, think about where it belongs best. Don't generate new files if you don't plan on actually
   integrating them into the codebase, instead use the editing tools to insert the code directly into the existing files in that case.
 
-  You have two main approaches for editing code - editing by regex and editing by symbol.
+  You have two main approaches for editing code - editing at the symbol level and more file-based editing.
   The symbol-based approach is appropriate if you need to adjust an entire symbol, e.g. a method, a class, a function, etc.
-  But it is not appropriate if you need to adjust just a few lines of code within a symbol, for that you should
-  use the regex-based approach that is described below.
+  But it is not appropriate if you need to adjust just a few lines of code within a symbol.
 
   Let us first discuss the symbol-based approach.
-  Symbols are identified by their name path and relative file path, see the description of the `find_symbol` tool for more details
-  on how the `name_path` matches symbols.
+  Symbols are identified by their name path and relative file path (description of the `find_symbol` tool).
   You can get information about available symbols by using the `get_symbols_overview` tool for finding top-level symbols in a file,
   or by using `find_symbol` if you already know the symbol's name path. You generally try to read as little code as possible
   while still solving your task, meaning you only read the bodies when you need to, and after you have found the symbol you want to edit.
@@ -34,77 +32,12 @@ prompt: |
   You will generally be able to use the info from the snippets and the regex-based approach to adjust the references as well.
   You can assume that all symbol editing tools are reliable, so you don't need to verify the results if the tool returns without error.
 
-  {% if 'replace_regex' in available_tools %}
-  Let us discuss the regex-based approach.
-  The regex-based approach is your primary tool for editing code whenever replacing or deleting a whole symbol would be a more expensive operation.
-  This is the case if you need to adjust just a few lines of code within a method, or a chunk that is much smaller than a whole symbol.
-  You use other tools to find the relevant content and
-  then use your knowledge of the codebase to write the regex, if you haven't collected enough information of this content yet.
+  {% if 'replace_content' in available_tools %}
+  The `replace_content` tool allows you to perform regex-based replacements within files.
+  This is your primary tool for editing code whenever replacing or deleting a whole symbol would be a more expensive operation,
+  e.g. if you need to adjust just a few lines of code within a method.
   You are extremely good at regex, so you never need to check whether the replacement produced the correct result.
-  In particular, you know what to escape and what not to escape, and you know how to use wildcards.
-  Also, the regex tool never adds any indentation (contrary to the symbolic editing tools), so you have to take care to add the correct indentation
-  when using it to insert code.
-  Moreover, the replacement tool will fail if it can't perform the desired replacement, and this is all the feedback you need.
-  Your overall goal for replacement operations is to use relatively short regexes, since I want you to minimize the number
-  of output tokens. For replacements of larger chunks of code, this means you intelligently make use of wildcards for the middle part 
-  and of characteristic snippets for the before/after parts that uniquely identify the chunk.
-  
-  For small replacements, up to a single line, you follow the following rules:
-
-    1. If the snippet to be replaced is likely to be unique within the file, you perform the replacement by directly using the escaped version of the 
-       original.
-    2. If the snippet is probably not unique, and you want to replace all occurrences, you use the `allow_multiple_occurrences` flag.
-    3. If the snippet is not unique, and you want to replace a specific occurrence, you make use of the code surrounding the snippet
-       to extend the regex with content before/after such that the regex will have exactly one match.
-    4. You generally assume that a snippet is unique, knowing that the tool will return an error on multiple matches. You only read more file content
-       (for crafvarting a more specific regex) if such a failure unexpectedly occurs. 
-
-  Examples:
-
-  1 Small replacement
-  You have read code like
-    
-    ```python
-    ...
-    x = linear(x)
-    x = relu(x)
-    return x
-    ...
-    ```
-
-  and you want to replace `x = relu(x)` with `x = gelu(x)`.
-  You first try `replace_regex()` with the regex `x = relu\(x\)` and the replacement `x = gelu(x)`.
-  If this fails due to multiple matches, you will try `(linear\(x\)\s*)x = relu\(x\)(\s*return)` with the replacement `\1x = gelu(x)\2`.
-
-  2 Larger replacement
-
-  You have read code like
-
-  ```python
-  def my_func():
-    ...
-    # a comment before the snippet
-    x = add_fifteen(x)
-    # beginning of long section within my_func
-    ....
-    # end of long section
-    call_subroutine(z)
-    call_second_subroutine(z)
-  ```
-  and you want to replace the code starting with `x = add_fifteen(x)` until (including) `call_subroutine(z)`, but not `call_second_subroutine(z)`.
-  Initially, you assume that the the beginning and end of the chunk uniquely determine it within the file.
-  Therefore, you perform the replacement by using the regex `x = add_fifteen\(x\)\s*.*?call_subroutine\(z\)`
-  and the replacement being the new code you want to insert.
-
-  If this fails due to multiple matches, you will try to extend the regex with the content before/after the snippet and match groups. 
-  The matching regex becomes:
-  `(before the snippet\s*)x = add_fifteen\(x\)\s*.*?call_subroutine\(z\)` 
-  and the replacement includes the group as (schematically):
-  `\1<new_code>`
-
-  Generally, I remind you that you rely on the regex tool with providing you the correct feedback, no need for more verification!
-
-  IMPORTANT: REMEMBER TO USE WILDCARDS WHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE LONG REGEXES WITHOUT USING WILDCARDS INSTEAD!
+  In particular, you know how to use wildcards effectively in order to avoid specifying the full original text to be replaced!
   {% endif %}
 excluded_tools:
  - replace_lines

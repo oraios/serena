@@ -1,4 +1,5 @@
 import os
+import platform
 
 import pytest
 
@@ -6,8 +7,13 @@ from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
 
+# These marks will be applied to all tests in this module.
+# We skip the tests if not on Windows (CI hangs on Ubuntu for unknown reasons; testing on Windows is sufficient)
+is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
+java_tests_enabled = not is_ci or platform.system() == "Windows"
+pytestmark = [pytest.mark.java, pytest.mark.skipif(not java_tests_enabled, reason="Java tests are only run on Windows in CI")]
 
-@pytest.mark.java
+
 class TestJavaLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.JAVA], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
@@ -25,7 +31,7 @@ class TestJavaLanguageServer:
 
         # Dynamically determine the correct line/column for the 'Model' class name
         file_path = os.path.join("src", "main", "java", "test_repo", "Model.java")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         model_symbol = None
         for sym in symbols[0]:
             if sym.get("name") == "Model" and sym.get("kind") == 5:  # 5 = Class

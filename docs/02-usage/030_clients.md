@@ -1,4 +1,4 @@
-# Configuring Your MCP Client
+# Connecting Your MCP Client
 
 In the following, we provide default configurations for popular MCP-enabled clients.
 
@@ -123,6 +123,16 @@ For more information on MCP servers with Claude Desktop, see [the official quick
 
 ## Other Clients
 
+In general, Serena can be used with any MCP-enabled client.
+To connect Serena to your favourite client, simply
+
+1. determine how to add a custom MCP server to your client (refer to the client's documentation).
+2. add a new MCP server entry by specifying either
+    * a [run command](start-mcp-server) that allows the client to start the MCP server in stdio mode as a subprocess, or
+    * the URL of the HTTP/SSE endpoint, having started the [Serena MCP server in HTTP/SSE mode](streamable-http) beforehand.
+
+Below, we list some popular categories of clients that Serena can be used with.
+
 ### Terminal-Based Clients
 
 There are many terminal-based coding assistants that support MCP servers, such as
@@ -138,8 +148,7 @@ by writing your own context, modes or prompts to adjust it to the client's respe
 
 ### MCP-Enabled IDEs and Coding Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)
 
-Being an MCP Server, Serena can be included in any MCP Client. Most of the popular
-existing coding assistants (e.g. IDE extensions) and AI-enabled IDEs themselves support connections
+Most of the popular existing coding assistants (e.g. IDE extensions) and AI-enabled IDEs themselves support connections
 to MCP Servers. Serena generally boosts performance by providing efficient tools for symbolic operations.
 
 We generally **recommend to use the `ide-assistant` context** for these integrations by adding the arguments `--context ide-assistant` 

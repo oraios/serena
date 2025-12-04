@@ -125,14 +125,29 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
     """
 
     name: str
+    """the name of the context"""
+
     prompt: str
     """
     a Jinja2 template for the generation of the system prompt.
     It is formatted by the agent (see SerenaAgent._format_prompt()).
     """
+
     description: str = ""
+
     tool_description_overrides: dict[str, str] = field(default_factory=dict)
-    """Maps tool names to custom descriptions, default descriptions are extracted from the tool docstrings."""
+    """
+    maps tool names to custom descriptions, default descriptions are extracted from the tool docstrings.
+    """
+
+    single_project: bool = False
+    """
+    whether to assume that Serena shall only work on a single project in this context (provided that a project is given
+    when Serena is started).
+    If set to true and a project is provided at startup, the set of tools is limited to those required by the project's
+    concrete configuration, and other tools are excluded completely, allowing the set of tools to be minimal.
+    The `activate_project` tool will, therefore, be disabled in this case, as project switching is not allowed.
+    """
 
     def _tostring_includes(self) -> list[str]:
         return ["name"]

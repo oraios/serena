@@ -57,7 +57,7 @@ class TestProjectCreate:
         """Test basic project creation with explicit language."""
         result = cli_runner.invoke(ProjectCommands.create, [temp_project_dir, "--language", "python"])
         assert result.exit_code == 0, f"Command failed: {result.output}"
-        assert "Generated project.yml" in result.output
+        assert "Generated project" in result.output
         assert "python" in result.output.lower()
 
         # Verify project.yml was created
@@ -68,7 +68,7 @@ class TestProjectCreate:
         """Test project creation with auto-detected language."""
         result = cli_runner.invoke(ProjectCommands.create, [temp_project_dir_with_python_file])
         assert result.exit_code == 0, f"Command failed: {result.output}"
-        assert "Generated project.yml" in result.output
+        assert "Generated project" in result.output
         assert "python" in result.output.lower()
 
         # Verify project.yml was created
@@ -79,7 +79,7 @@ class TestProjectCreate:
         """Test project creation with custom name and explicit language."""
         result = cli_runner.invoke(ProjectCommands.create, [temp_project_dir, "--name", "my-custom-project", "--language", "python"])
         assert result.exit_code == 0, f"Command failed: {result.output}"
-        assert "Generated project.yml" in result.output
+        assert "Generated project" in result.output
 
         # Verify project.yml was created
         yml_path = os.path.join(temp_project_dir, ".serena", "project.yml")
@@ -89,7 +89,7 @@ class TestProjectCreate:
         """Test project creation with specified language."""
         result = cli_runner.invoke(ProjectCommands.create, [temp_project_dir, "--language", "python"])
         assert result.exit_code == 0, f"Command failed: {result.output}"
-        assert "Generated project.yml" in result.output
+        assert "Generated project" in result.output
         assert "python" in result.output.lower()
 
     def test_create_with_multiple_languages(self, cli_runner, temp_project_dir):
@@ -99,7 +99,7 @@ class TestProjectCreate:
             [temp_project_dir, "--language", "python", "--language", "typescript"],
         )
         assert result.exit_code == 0, f"Command failed: {result.output}"
-        assert "Generated project.yml" in result.output
+        assert "Generated project" in result.output
 
     def test_create_with_invalid_language(self, cli_runner, temp_project_dir):
         """Test project creation with invalid language raises error."""
@@ -129,7 +129,7 @@ class TestProjectCreate:
             [temp_project_dir_with_python_file, "--language", "python", "--index", "--log-level", "ERROR", "--timeout", "5"],
         )
         assert result.exit_code == 0, f"Command failed: {result.output}"
-        assert "Generated project.yml" in result.output
+        assert "Generated project" in result.output
         assert "Indexing project" in result.output
 
         # Verify project.yml was created
@@ -144,7 +144,7 @@ class TestProjectCreate:
         """Test that project creation without --index does NOT perform indexing."""
         result = cli_runner.invoke(ProjectCommands.create, [temp_project_dir, "--language", "python"])
         assert result.exit_code == 0
-        assert "Generated project.yml" in result.output
+        assert "Generated project" in result.output
         assert "Indexing" not in result.output
 
         # Verify cache directory was NOT created

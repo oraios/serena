@@ -20,7 +20,7 @@ class TestElmLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.ELM], indirect=True)
     def test_find_references_within_file(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("Main.elm")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         greet_symbol = None
         for sym in symbols[0]:
             if sym.get("name") == "greet":
@@ -35,7 +35,7 @@ class TestElmLanguageServer:
     def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:
         # Test formatMessage function which is defined in Utils.elm and used in Main.elm
         utils_path = os.path.join("Utils.elm")
-        symbols = language_server.request_document_symbols(utils_path)
+        symbols = language_server.request_document_symbols(utils_path).get_all_symbols_and_roots()
         formatMessage_symbol = None
         for sym in symbols[0]:
             if sym.get("name") == "formatMessage":

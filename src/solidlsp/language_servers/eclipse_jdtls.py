@@ -10,16 +10,19 @@ import shutil
 import threading
 import uuid
 from pathlib import PurePath
+from typing import cast
 
 from overrides import override
 
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils, PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, InitializeParams, SymbolInformation
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
@@ -59,14 +62,12 @@ class EclipseJDTLS(SolidLanguageServer):
     ```
     """
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a new EclipseJDTLS instance initializing the language server settings appropriately.
         This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        runtime_dependency_paths = self._setupRuntimeDependencies(logger, config, solidlsp_settings)
+        runtime_dependency_paths = self._setupRuntimeDependencies(config, solidlsp_settings)
         self.runtime_dependency_paths = runtime_dependency_paths
 
         # ws_dir is the workspace directory for the EclipseJDTLS server
@@ -109,48 +110,46 @@ class EclipseJDTLS(SolidLanguageServer):
         # TODO: Add "self.runtime_dependency_paths.jre_home_path"/bin to $PATH as well
         proc_env = {"syntaxserver": "false", "JAVA_HOME": self.runtime_dependency_paths.jre_home_path}
         proc_cwd = repository_root_path
-        cmd = " ".join(
-            [
-                jre_path,
-                "--add-modules=ALL-SYSTEM",
-                "--add-opens",
-                "java.base/java.util=ALL-UNNAMED",
-                "--add-opens",
-                "java.base/java.lang=ALL-UNNAMED",
-                "--add-opens",
-                "java.base/sun.nio.fs=ALL-UNNAMED",
-                "-Declipse.application=org.eclipse.jdt.ls.core.id1",
-                "-Dosgi.bundles.defaultStartLevel=4",
-                "-Declipse.product=org.eclipse.jdt.ls.core.product",
-                "-Djava.import.generatesMetadataFilesAtProjectRoot=false",
-                "-Dfile.encoding=utf8",
-                "-noverify",
-                "-XX:+UseParallelGC",
-                "-XX:GCTimeRatio=4",
-                "-XX:AdaptiveSizePolicyWeight=90",
-                "-Dsun.zip.disableMemoryMapping=true",
-                "-Djava.lsp.joinOnCompletion=true",
-                "-Xmx3G",
-                "-Xms100m",
-                "-Xlog:disable",
-                "-Dlog.level=ALL",
-                f'"-javaagent:{lombok_jar_path}"',
-                f'"-Djdt.core.sharedIndexLocation={shared_cache_location}"',
-                "-jar",
-                f'"{jdtls_launcher_jar}"',
-                "-configuration",
-                f'"{jdtls_config_path}"',
-                "-data",
-                f'"{data_dir}"',
-            ]
-        )
+        cmd = [
+            jre_path,
+            "--add-modules=ALL-SYSTEM",
+            "--add-opens",
+            "java.base/java.util=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.lang=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/sun.nio.fs=ALL-UNNAMED",
+            "-Declipse.application=org.eclipse.jdt.ls.core.id1",
+            "-Dosgi.bundles.defaultStartLevel=4",
+            "-Declipse.product=org.eclipse.jdt.ls.core.product",
+            "-Djava.import.generatesMetadataFilesAtProjectRoot=false",
+            "-Dfile.encoding=utf8",
+            "-noverify",
+            "-XX:+UseParallelGC",
+            "-XX:GCTimeRatio=4",
+            "-XX:AdaptiveSizePolicyWeight=90",
+            "-Dsun.zip.disableMemoryMapping=true",
+            "-Djava.lsp.joinOnCompletion=true",
+            "-Xmx3G",
+            "-Xms100m",
+            "-Xlog:disable",
+            "-Dlog.level=ALL",
+            f"-javaagent:{lombok_jar_path}",
+            f"-Djdt.core.sharedIndexLocation={shared_cache_location}",
+            "-jar",
+            f"{jdtls_launcher_jar}",
+            "-configuration",
+            f"{jdtls_config_path}",
+            "-data",
+            f"{data_dir}",
+        ]
 
         self.service_ready_event = threading.Event()
         self.intellicode_enable_command_available = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
 
         super().__init__(
-            config, logger, repository_root_path, ProcessLaunchInfo(cmd, proc_env, proc_cwd), "java", solidlsp_settings=solidlsp_settings
+            config, repository_root_path, ProcessLaunchInfo(cmd, proc_env, proc_cwd), "java", solidlsp_settings=solidlsp_settings
         )
 
     @override
@@ -172,9 +171,7 @@ class EclipseJDTLS(SolidLanguageServer):
         ]
 
     @classmethod
-    def _setupRuntimeDependencies(
-        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> RuntimeDependencyPaths:
+    def _setupRuntimeDependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> RuntimeDependencyPaths:
         """
         Setup runtime dependencies for EclipseJDTLS and return the paths.
         """
@@ -266,7 +263,6 @@ class EclipseJDTLS(SolidLanguageServer):
 
         if not os.path.exists(gradle_path):
             FileUtils.download_and_extract_archive(
-                logger,
                 runtime_dependencies["gradle"]["platform-agnostic"]["url"],
                 str(PurePath(gradle_path).parent),
                 runtime_dependencies["gradle"]["platform-agnostic"]["archiveType"],
@@ -292,7 +288,7 @@ class EclipseJDTLS(SolidLanguageServer):
                 os.path.exists(jdtls_readonly_config_path),
             ]
         ):
-            FileUtils.download_and_extract_archive(logger, dependency["url"], vscode_java_path, dependency["archiveType"])
+            FileUtils.download_and_extract_archive(dependency["url"], vscode_java_path, dependency["archiveType"])
 
         os.chmod(jre_path, 0o755)
 
@@ -315,7 +311,7 @@ class EclipseJDTLS(SolidLanguageServer):
                 os.path.exists(intellisense_members_path),
             ]
         ):
-            FileUtils.download_and_extract_archive(logger, dependency["url"], intellicode_directory_path, dependency["archiveType"])
+            FileUtils.download_and_extract_archive(dependency["url"], intellicode_directory_path, dependency["archiveType"])
 
         assert os.path.exists(intellicode_directory_path)
         assert os.path.exists(intellicode_jar_path)
@@ -355,18 +351,16 @@ class EclipseJDTLS(SolidLanguageServer):
                     f"Fix: create the file, update path in ~/.serena/serena_config.yml (ls_specific_settings -> java -> maven_user_settings), "
                     f"or remove the setting to use default ({default_maven_settings_path})"
                 )
-                self.logger.log(error_msg, logging.ERROR)
+                log.error(error_msg)
                 raise FileNotFoundError(error_msg)
             maven_settings_path = custom_maven_settings_path
-            self.logger.log(f"Using Maven settings from custom location: {maven_settings_path}", logging.INFO)
+            log.info(f"Using Maven settings from custom location: {maven_settings_path}")
         elif os.path.exists(default_maven_settings_path):
             maven_settings_path = default_maven_settings_path
-            self.logger.log(f"Using Maven settings from default location: {maven_settings_path}", logging.INFO)
+            log.info(f"Using Maven settings from default location: {maven_settings_path}")
         else:
             maven_settings_path = None
-            self.logger.log(
-                f"Maven settings not found at default location ({default_maven_settings_path}), will use JDTLS defaults", logging.INFO
-            )
+            log.info(f"Maven settings not found at default location ({default_maven_settings_path}), will use JDTLS defaults")
 
         # Gradle user home: default to ~/.gradle
         default_gradle_home = os.path.join(os.path.expanduser("~"), ".gradle")
@@ -379,18 +373,16 @@ class EclipseJDTLS(SolidLanguageServer):
                     f"Fix: create the directory, update path in ~/.serena/serena_config.yml (ls_specific_settings -> java -> gradle_user_home), "
                     f"or remove the setting to use default (~/.gradle)"
                 )
-                self.logger.log(error_msg, logging.ERROR)
+                log.error(error_msg)
                 raise FileNotFoundError(error_msg)
             gradle_user_home = custom_gradle_home
-            self.logger.log(f"Using Gradle user home from custom location: {gradle_user_home}", logging.INFO)
+            log.info(f"Using Gradle user home from custom location: {gradle_user_home}")
         elif os.path.exists(default_gradle_home):
             gradle_user_home = default_gradle_home
-            self.logger.log(f"Using Gradle user home from default location: {gradle_user_home}", logging.INFO)
+            log.info(f"Using Gradle user home from default location: {gradle_user_home}")
         else:
             gradle_user_home = None
-            self.logger.log(
-                f"Gradle user home not found at default location ({default_gradle_home}), will use JDTLS defaults", logging.INFO
-            )
+            log.info(f"Gradle user home not found at default location ({default_gradle_home}), will use JDTLS defaults")
 
         initialize_params = {
             "locale": "en",
@@ -692,29 +684,29 @@ class EclipseJDTLS(SolidLanguageServer):
             ],
         }
 
-        initialize_params["initializationOptions"]["workspaceFolders"] = [repo_uri]
+        initialize_params["initializationOptions"]["workspaceFolders"] = [repo_uri]  # type: ignore
         bundles = [self.runtime_dependency_paths.intellicode_jar_path]
-        initialize_params["initializationOptions"]["bundles"] = bundles
-        initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"] = [
+        initialize_params["initializationOptions"]["bundles"] = bundles  # type: ignore
+        initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"] = [  # type: ignore
             {"name": "JavaSE-21", "path": self.runtime_dependency_paths.jre_home_path, "default": True}
         ]
 
-        for runtime in initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"]:
+        for runtime in initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"]:  # type: ignore
             assert "name" in runtime
             assert "path" in runtime
             assert os.path.exists(runtime["path"]), f"Runtime required for eclipse_jdtls at path {runtime['path']} does not exist"
 
-        gradle_settings = initialize_params["initializationOptions"]["settings"]["java"]["import"]["gradle"]
+        gradle_settings = initialize_params["initializationOptions"]["settings"]["java"]["import"]["gradle"]  # type: ignore
         gradle_settings["home"] = self.runtime_dependency_paths.gradle_path
         gradle_settings["java"]["home"] = self.runtime_dependency_paths.jre_path
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Eclipse JDTLS Language Server
         """
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "textDocument/completion":
@@ -732,22 +724,22 @@ class EclipseJDTLS(SolidLanguageServer):
                         self.intellicode_enable_command_available.set()
             return
 
-        def lang_status_handler(params):
+        def lang_status_handler(params: dict) -> None:
             # TODO: Should we wait for
             # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
             # Before proceeding?
             if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
                 self.service_ready_event.set()
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: dict) -> list:
             assert params["command"] == "_java.reloadBundles.command"
             assert params["arguments"] == []
             return []
 
-        def window_log_message(msg):
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"LSP: window/logMessage: {msg}")
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)
@@ -758,22 +750,19 @@ class EclipseJDTLS(SolidLanguageServer):
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("language/actionableNotification", do_nothing)
 
-        self.logger.log("Starting EclipseJDTLS server process", logging.INFO)
+        log.info("Starting EclipseJDTLS server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
-        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2
+        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2  # type: ignore
         assert "completionProvider" not in init_response["capabilities"]
         assert "executeCommandProvider" not in init_response["capabilities"]
 
         self.server.notify.initialized({})
 
-        self.server.notify.workspace_did_change_configuration({"settings": initialize_params["initializationOptions"]["settings"]})
+        self.server.notify.workspace_did_change_configuration({"settings": initialize_params["initializationOptions"]["settings"]})  # type: ignore
 
         self.intellicode_enable_command_available.wait()
 
@@ -789,3 +778,27 @@ class EclipseJDTLS(SolidLanguageServer):
 
         # TODO: Add comments about why we wait here, and how this can be optimized
         self.service_ready_event.wait()
+
+    def _request_document_symbols(
+        self, relative_file_path: str, file_data: LSPFileBuffer | None
+    ) -> list[SymbolInformation] | list[DocumentSymbol] | None:
+        result = super()._request_document_symbols(relative_file_path, file_data=file_data)
+        if result is None:
+            return None
+
+        # JDTLS sometimes returns symbol names with type information to handle overloads,
+        # e.g. "myMethod(int) <T>", but we want overloads to be handled via overload_idx,
+        # which requires the name to be just "myMethod".
+
+        def fix_name(symbol: SymbolInformation | DocumentSymbol | UnifiedSymbolInformation) -> None:
+            if "(" in symbol["name"]:
+                symbol["name"] = symbol["name"][: symbol["name"].index("(")]
+            children = symbol.get("children")
+            if children:
+                for child in children:  # type: ignore
+                    fix_name(child)
+
+        for root_symbol in result:
+            fix_name(root_symbol)
+
+        return result

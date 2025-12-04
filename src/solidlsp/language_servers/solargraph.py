@@ -16,10 +16,11 @@ from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 class Solargraph(SolidLanguageServer):
@@ -28,17 +29,14 @@ class Solargraph(SolidLanguageServer):
     Contains various configurations and settings specific to Ruby.
     """
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a Solargraph instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        solargraph_executable_path = self._setup_runtime_dependencies(logger, config, repository_root_path)
+        solargraph_executable_path = self._setup_runtime_dependencies(config, repository_root_path)
         super().__init__(
             config,
-            logger,
             repository_root_path,
             ProcessLaunchInfo(cmd=f"{solargraph_executable_path} stdio", cwd=repository_root_path),
             "ruby",
@@ -73,7 +71,7 @@ class Solargraph(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in ruby_ignored_dirs
 
     @staticmethod
-    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig, repository_root_path: str) -> str:
+    def _setup_runtime_dependencies(config: LanguageServerConfig, repository_root_path: str) -> str:
         """
         Setup runtime dependencies for Solargraph and return the command to start the server.
         """
@@ -81,14 +79,14 @@ class Solargraph(SolidLanguageServer):
         try:
             result = subprocess.run(["ruby", "--version"], check=True, capture_output=True, cwd=repository_root_path, text=True)
             ruby_version = result.stdout.strip()
-            logger.log(f"Ruby version: {ruby_version}", logging.INFO)
+            log.info(f"Ruby version: {ruby_version}")
 
             # Extract version number for compatibility checks
             version_match = re.search(r"ruby (\d+)\.(\d+)\.(\d+)", ruby_version)
             if version_match:
                 major, minor, patch = map(int, version_match.groups())
                 if major < 2 or (major == 2 and minor < 6):
-                    logger.log(f"Warning: Ruby {major}.{minor}.{patch} detected. Solargraph works best with Ruby 2.6+", logging.WARNING)
+                    log.warning(f"Warning: Ruby {major}.{minor}.{patch} detected. Solargraph works best with Ruby 2.6+")
 
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr.decode() if e.stderr else "Unknown error"
@@ -124,7 +122,7 @@ class Solargraph(SolidLanguageServer):
         is_bundler_project = os.path.exists(gemfile_path)
 
         if is_bundler_project:
-            logger.log("Detected Bundler project (Gemfile found)", logging.INFO)
+            log.info("Detected Bundler project (Gemfile found)")
 
             # Check if bundle command is available
             bundle_path = find_executable_with_extensions("bundle")
@@ -134,7 +132,7 @@ class Solargraph(SolidLanguageServer):
                     if bundle_cmd.startswith("bin/"):
                         bundle_full_path = os.path.join(repository_root_path, bundle_cmd)
                     else:
-                        bundle_full_path = find_executable_with_extensions(bundle_cmd)
+                        bundle_full_path = find_executable_with_extensions(bundle_cmd)  # type: ignore[assignment]
                     if bundle_full_path and os.path.exists(bundle_full_path):
                         bundle_path = bundle_full_path if bundle_cmd.startswith("bin/") else bundle_cmd
                         break
@@ -155,15 +153,14 @@ class Solargraph(SolidLanguageServer):
                         content = f.read()
                         solargraph_in_bundle = "solargraph" in content.lower()
                 except Exception as e:
-                    logger.log(f"Warning: Could not read Gemfile.lock: {e}", logging.WARNING)
+                    log.warning(f"Warning: Could not read Gemfile.lock: {e}")
 
             if solargraph_in_bundle:
-                logger.log("Found solargraph in Gemfile.lock", logging.INFO)
+                log.info("Found solargraph in Gemfile.lock")
                 return f"{bundle_path} exec solargraph"
             else:
-                logger.log(
+                log.warning(
                     "solargraph not found in Gemfile.lock. Please add 'gem \"solargraph\"' to your Gemfile and run 'bundle install'",
-                    logging.WARNING,
                 )
                 # Fall through to global installation check
 
@@ -171,7 +168,7 @@ class Solargraph(SolidLanguageServer):
         # First, try to find solargraph in PATH (includes asdf shims) with Windows support
         solargraph_path = find_executable_with_extensions("solargraph")
         if solargraph_path:
-            logger.log(f"Found solargraph at: {solargraph_path}", logging.INFO)
+            log.info(f"Found solargraph at: {solargraph_path}")
             return solargraph_path
 
         # Fallback to gem exec (for non-Bundler projects or when global solargraph not found)
@@ -191,7 +188,7 @@ class Solargraph(SolidLanguageServer):
                     ["gem", "list", "^solargraph$", "-i"], check=False, capture_output=True, text=True, cwd=repository_root_path
                 )
                 if result.stdout.strip() == "false":
-                    logger.log("Installing Solargraph...", logging.INFO)
+                    log.info("Installing Solargraph...")
                     subprocess.run(dependency["installCommand"].split(), check=True, capture_output=True, cwd=repository_root_path)
 
                 return "gem exec solargraph"
@@ -282,7 +279,7 @@ class Solargraph(SolidLanguageServer):
             "rootPath": repository_absolute_path,
             "rootUri": root_uri,
             "initializationOptions": {
-                "exclude": exclude_patterns,
+                "exclude": exclude_patterns,  # type: ignore[dict-item]
             },
             "capabilities": {
                 "workspace": {
@@ -291,11 +288,11 @@ class Solargraph(SolidLanguageServer):
                 "textDocument": {
                     "documentSymbol": {
                         "hierarchicalDocumentSymbolSupport": True,
-                        "symbolKind": {"valueSet": list(range(1, 27))},
+                        "symbolKind": {"valueSet": list(range(1, 27))},  # type: ignore[arg-type]
                     },
                 },
             },
-            "trace": "verbose",
+            "trace": "verbose",  # type: ignore[typeddict-item]
             "workspaceFolders": [
                 {
                     "uri": root_uri,
@@ -303,14 +300,14 @@ class Solargraph(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return initialize_params  # type: ignore[return-value]
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Solargraph Language Server for Ruby
         """
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "workspace/executeCommand":
@@ -318,21 +315,21 @@ class Solargraph(SolidLanguageServer):
                     self.resolve_main_method_available.set()
             return
 
-        def lang_status_handler(params):
-            self.logger.log(f"LSP: language/status: {params}", logging.INFO)
+        def lang_status_handler(params: dict) -> None:
+            log.info(f"LSP: language/status: {params}")
             if params.get("type") == "ServiceReady" and params.get("message") == "Service is ready.":
-                self.logger.log("Solargraph service is ready.", logging.INFO)
+                log.info("Solargraph service is ready.")
                 self.analysis_complete.set()
                 self.completions_available.set()
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: dict) -> list:
             return []
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def window_log_message(msg):
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"LSP: window/logMessage: {msg}")
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("language/status", lang_status_handler)
@@ -342,17 +339,14 @@ class Solargraph(SolidLanguageServer):
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("language/actionableNotification", do_nothing)
 
-        self.logger.log("Starting solargraph server process", logging.INFO)
+        log.info("Starting solargraph server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
-        self.logger.log(f"Sending init params: {json.dumps(initialize_params, indent=4)}", logging.INFO)
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
+        log.info(f"Sending init params: {json.dumps(initialize_params, indent=4)}")
         init_response = self.server.send.initialize(initialize_params)
-        self.logger.log(f"Received init response: {init_response}", logging.INFO)
+        log.info(f"Received init response: {init_response}")
         assert init_response["capabilities"]["textDocumentSync"] == 2
         assert "completionProvider" in init_response["capabilities"]
         assert init_response["capabilities"]["completionProvider"] == {
@@ -363,11 +357,11 @@ class Solargraph(SolidLanguageServer):
 
         # Wait for Solargraph to complete its initial workspace analysis
         # This prevents issues by ensuring background tasks finish
-        self.logger.log("Waiting for Solargraph to complete initial workspace analysis...", logging.INFO)
+        log.info("Waiting for Solargraph to complete initial workspace analysis...")
         if self.analysis_complete.wait(timeout=60.0):
-            self.logger.log("Solargraph initial analysis complete, server ready", logging.INFO)
+            log.info("Solargraph initial analysis complete, server ready")
         else:
-            self.logger.log("Timeout waiting for Solargraph analysis completion, proceeding anyway", logging.WARNING)
+            log.warning("Timeout waiting for Solargraph analysis completion, proceeding anyway")
             # Fallback: assume analysis is complete after timeout
             self.analysis_complete.set()
             self.completions_available.set()

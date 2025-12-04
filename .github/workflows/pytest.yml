@@ -38,6 +38,27 @@ jobs:
           mkdir -p $HOME/.serena/language_servers/static
           mkdir -p $HOME/.cache/go-build
           mkdir -p $HOME/go/bin
+      - name: Install uv
+        shell: bash
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Cache uv virtualenv
+        id: cache-uv
+        uses: actions/cache@v3
+        with:
+          path: .venv
+          key: uv-venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}
+      - name: Create virtual environment
+        shell: bash
+        run: |
+          if [ ! -d ".venv" ]; then
+            uv venv
+          fi
+      - name: Install dependencies
+        shell: bash
+        run: uv pip install -e ".[dev]"
+      - name: Check formatting
+        shell: bash
+        run: uv run poe lint
       # Add Go bin directory to PATH for this workflow
       # GITHUB_PATH is a special file that GitHub Actions uses to modify PATH
       # Writing to this file adds the directory to the PATH for subsequent steps
@@ -330,15 +351,6 @@ jobs:
             mv regal.exe "$HOME/bin/"
             echo "$HOME/bin" >> $GITHUB_PATH
           fi
-      - name: Install uv
-        shell: bash
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      - name: Cache uv virtualenv
-        id: cache-uv
-        uses: actions/cache@v3
-        with:
-          path: .venv
-          key: uv-venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}
       - name: Cache language servers
         id: cache-language-servers
         uses: actions/cache@v3
@@ -347,18 +359,9 @@ jobs:
           key: language-servers-${{ runner.os }}-v1
           restore-keys: |
             language-servers-${{ runner.os }}-
-      - name: Create virtual environment
-        shell: bash
-        run: |
-          if [ ! -d ".venv" ]; then
-            uv venv
-          fi
-      - name: Install dependencies
-        shell: bash
-        run: uv pip install -e ".[dev]"
-      - name: Check formatting
-        shell: bash
-        run: uv run poe lint
       - name: Test with pytest
         shell: bash
         run: uv run poe test
+      - name: Type-checking with mypy
+        shell: bash
+        run: uv run poe type-check

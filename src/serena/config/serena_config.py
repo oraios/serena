@@ -34,6 +34,7 @@ from solidlsp.ls_config import Language
 
 from ..analytics import RegisteredTokenCountEstimator
 from ..util.class_decorators import singleton
+from ..util.cli_util import ask_yes_no
 
 if TYPE_CHECKING:
     from ..project import Project
@@ -67,72 +68,6 @@ class SerenaPaths:
         return os.path.join(log_dir, prefix + "_" + datetime_tag() + ".txt")
 
     # TODO: Paths from constants.py should be moved here
-
-
-class ToolSet:
-    def __init__(self, tool_names: set[str]) -> None:
-        self._tool_names = tool_names
-
-    @classmethod
-    def default(cls) -> "ToolSet":
-        """
-        :return: the default tool set, which contains all tools that are enabled by default
-        """
-        from serena.tools import ToolRegistry
-
-        return cls(set(ToolRegistry().get_tool_names_default_enabled()))
-
-    def apply(self, *tool_inclusion_definitions: "ToolInclusionDefinition") -> "ToolSet":
-        """
-        :param tool_inclusion_definitions: the definitions to apply
-        :return: a new tool set with the definitions applied
-        """
-        from serena.tools import ToolRegistry
-
-        registry = ToolRegistry()
-        tool_names = set(self._tool_names)
-        for definition in tool_inclusion_definitions:
-            included_tools = []
-            excluded_tools = []
-            for included_tool in definition.included_optional_tools:
-                if not registry.is_valid_tool_name(included_tool):
-                    raise ValueError(f"Invalid tool name '{included_tool}' provided for inclusion")
-                if included_tool not in tool_names:
-                    tool_names.add(included_tool)
-                    included_tools.append(included_tool)
-            for excluded_tool in definition.excluded_tools:
-                if not registry.is_valid_tool_name(excluded_tool):
-                    raise ValueError(f"Invalid tool name '{excluded_tool}' provided for exclusion")
-                if excluded_tool in tool_names:
-                    tool_names.remove(excluded_tool)
-                    excluded_tools.append(excluded_tool)
-            if included_tools:
-                log.info(f"{definition} included {len(included_tools)} tools: {', '.join(included_tools)}")
-            if excluded_tools:
-                log.info(f"{definition} excluded {len(excluded_tools)} tools: {', '.join(excluded_tools)}")
-        return ToolSet(tool_names)
-
-    def without_editing_tools(self) -> "ToolSet":
-        """
-        :return: a new tool set that excludes all tools that can edit
-        """
-        from serena.tools import ToolRegistry
-
-        registry = ToolRegistry()
-        tool_names = set(self._tool_names)
-        for tool_name in self._tool_names:
-            if registry.get_tool_class_by_name(tool_name).can_edit():
-                tool_names.remove(tool_name)
-        return ToolSet(tool_names)
-
-    def get_tool_names(self) -> set[str]:
-        """
-        Returns the names of the tools that are currently included in the tool set.
-        """
-        return self._tool_names
-
-    def includes_name(self, tool_name: str) -> bool:
-        return tool_name in self._tool_names
 
 
 @dataclass
@@ -179,7 +114,12 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
 
     @classmethod
     def autogenerate(
-        cls, project_root: str | Path, project_name: str | None = None, languages: list[Language] | None = None, save_to_disk: bool = True
+        cls,
+        project_root: str | Path,
+        project_name: str | None = None,
+        languages: list[Language] | None = None,
+        save_to_disk: bool = True,
+        interactive: bool = False,
     ) -> Self:
         """
         Autogenerate a project configuration for a given project root.
@@ -189,6 +129,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
             containing the project
         :param languages: the languages of the project; if None, they will be determined automatically
         :param save_to_disk: whether to save the project configuration to disk
+        :param interactive: whether to run in interactive CLI mode, asking the user for input where appropriate
         :return: the project configuration
         """
         project_root = Path(project_root).resolve()
@@ -197,29 +138,52 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         with LogTime("Project configuration auto-generation", logger=log):
             project_name = project_name or project_root.name
             if languages is None:
+                # determine languages automatically
                 language_composition = determine_programming_language_composition(str(project_root))
                 if len(language_composition) == 0:
+                    language_values = ", ".join([lang.value for lang in Language])
                     raise ValueError(
                         f"No source files found in {project_root}\n\n"
-                        f"To use Serena with this project, you need to either:\n"
-                        f"1. Add source files in one of the supported languages (Python, JavaScript/TypeScript, Java, C#, Rust, Go, Ruby, C++, PHP, Swift, Elixir, Terraform, Bash)\n"
-                        f"2. Create a project configuration file manually at:\n"
-                        f"   {os.path.join(project_root, cls.rel_path_to_project_yml())}\n\n"
-                        f"Example project.yml:\n"
-                        f"  project_name: {project_name}\n"
-                        f"  language: python  # or typescript, java, csharp, rust, go, ruby, cpp, php, swift, elixir, terraform, bash\n"
+                        f"To use Serena with this project, you need to either\n"
+                        f"  1. specify a programming language by adding parameters --language <language>\n"
+                        f"     when creating the project via the Serena CLI command OR\n"
+                        f"  2. add source files in one of the supported languages first.\n\n"
+                        f"Supported languages are: {language_values}\n"
+                        f"Read the documentation for more information."
                     )
-                # find the language with the highest percentage
-                dominant_language = max(language_composition.keys(), key=lambda lang: language_composition[lang])
-                languages_to_use = [dominant_language]
+                # sort languages by number of files found
+                languages_and_percentages = sorted(language_composition.items(), key=lambda item: item[1], reverse=True)
+                # find the language with the highest percentage and enable it
+                top_language_pair = languages_and_percentages[0]
+                other_language_pairs = languages_and_percentages[1:]
+                languages_to_use = [top_language_pair[0]]
+                # if in interactive mode, ask the user which other languages to enable
+                if len(other_language_pairs) > 0 and interactive:
+                    print(
+                        "Detected and enabled main language '%s' (%.2f%% of source files)." % (top_language_pair[0], top_language_pair[1])
+                    )
+                    print(f"Additionally detected {len(other_language_pairs)} other language(s).\n")
+                    print("Note: Enable only languages you need symbolic retrieval/editing capabilities for.")
+                    print("      Additional language servers use resources and some languages may require additional")
+                    print("      system-level installations/configuration (see Serena documentation).")
+                    print("\nWhich additional languages do you want to enable?")
+                    for lang, perc in other_language_pairs:
+                        enable = ask_yes_no("Enable %s (%.2f%% of source files)?" % (lang, perc), default=False)
+                        if enable:
+                            languages_to_use.append(lang)
+                    print()
             else:
                 languages_to_use = [lang.value for lang in languages]
             config_with_comments = cls.load_commented_map(PROJECT_TEMPLATE_FILE)
             config_with_comments["project_name"] = project_name
             config_with_comments["languages"] = languages_to_use
             if save_to_disk:
-                save_yaml(str(project_root / cls.rel_path_to_project_yml()), config_with_comments, preserve_comments=True)
+                save_yaml(cls.path_to_project_yml(project_root), config_with_comments, preserve_comments=True)
             return cls._from_dict(config_with_comments)
+
+    @classmethod
+    def path_to_project_yml(cls, project_root: str | Path) -> str:
+        return os.path.join(project_root, cls.rel_path_to_project_yml())
 
     @classmethod
     def rel_path_to_project_yml(cls) -> str:
@@ -266,6 +230,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         lang_name_mapping = {"javascript": "typescript"}
         languages: list[Language] = []
         for language_str in data["languages"]:
+            orig_language_str = language_str
             try:
                 language_str = language_str.lower()
                 if language_str in lang_name_mapping:
@@ -273,7 +238,9 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                 language = Language(language_str)
                 languages.append(language)
             except ValueError as e:
-                raise ValueError(f"Invalid language: {data['language']}.\nValid language_strings are: {[l.value for l in Language]}") from e
+                raise ValueError(
+                    f"Invalid language: {orig_language_str}.\nValid language_strings are: {[l.value for l in Language]}"
+                ) from e
 
         return cls(
             project_name=data["project_name"],

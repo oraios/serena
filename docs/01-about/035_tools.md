@@ -35,7 +35,7 @@ Note that in most configurations, only a subset of these tools will be enabled s
 * `remove_project`: Removes a project from the Serena configuration.
 * `rename_symbol`: Renames a symbol throughout the codebase using language server refactoring capabilities.
 * `replace_lines`: Replaces a range of lines within a file with new content.
-* `replace_regex`: Replaces content in a file by using regular expressions.
+* `replace_content`: Replaces content in a file (optionally using regular expressions).
 * `replace_symbol_body`: Replaces the full definition of a symbol.
 * `restart_language_server`: Restarts the language server, may be necessary when edits not through Serena happen.
 * `search_for_pattern`: Performs a search for a pattern in the project.

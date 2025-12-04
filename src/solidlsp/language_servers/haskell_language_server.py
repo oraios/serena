@@ -7,15 +7,17 @@ import os
 import pathlib
 import shutil
 import time
+from typing import Any
 
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 class HaskellLanguageServer(SolidLanguageServer):
@@ -25,7 +27,7 @@ class HaskellLanguageServer(SolidLanguageServer):
     """
 
     @staticmethod
-    def _ensure_hls_installed():
+    def _ensure_hls_installed() -> str:
         """Ensure haskell-language-server-wrapper is available."""
         # Try common locations
         common_paths = [
@@ -70,14 +72,12 @@ class HaskellLanguageServer(SolidLanguageServer):
             "  - Homebrew (macOS): brew install haskell-language-server"
         )
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a HaskellLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
         hls_executable_path = self._ensure_hls_installed()
-        logger.log(f"Using haskell-language-server at: {hls_executable_path}", logging.INFO)
+        log.info(f"Using haskell-language-server at: {hls_executable_path}")
 
         # Check if there's a haskell subdirectory with Stack/Cabal project
         haskell_subdir = os.path.join(repository_root_path, "haskell")
@@ -85,7 +85,7 @@ class HaskellLanguageServer(SolidLanguageServer):
             os.path.exists(os.path.join(haskell_subdir, "stack.yaml")) or os.path.exists(os.path.join(haskell_subdir, "cabal.project"))
         ):
             working_dir = haskell_subdir
-            logger.log(f"Using Haskell project directory: {working_dir}", logging.INFO)
+            log.info(f"Using Haskell project directory: {working_dir}")
         else:
             working_dir = repository_root_path
 
@@ -97,7 +97,6 @@ class HaskellLanguageServer(SolidLanguageServer):
 
         super().__init__(
             config,
-            logger,
             repository_root_path,
             ProcessLaunchInfo(cmd=[hls_executable_path, "--lsp", "--cwd", working_dir], cwd=working_dir, env=env),
             "haskell",
@@ -310,30 +309,30 @@ class HaskellLanguageServer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return initialize_params  # type: ignore
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Haskell Language Server
         """
 
-        def do_nothing(params):
+        def do_nothing(params: Any) -> None:
             return
 
-        def window_log_message(msg):
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"LSP: window/logMessage: {msg}")
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             """Handle dynamic capability registration from HLS"""
             if "registrations" in params:
                 for registration in params.get("registrations", []):
                     method = registration.get("method", "")
-                    self.logger.log(f"HLS registered capability: {method}", logging.INFO)
+                    log.info(f"HLS registered capability: {method}")
             return
 
-        def workspace_configuration_handler(params):
+        def workspace_configuration_handler(params: dict) -> Any:
             """Handle workspace/configuration requests from HLS"""
-            self.logger.log(f"HLS requesting configuration: {params}", logging.INFO)
+            log.info(f"HLS requesting configuration: {params}")
 
             # Configuration matching VS Code settings and initialization options
             haskell_config = {
@@ -351,7 +350,7 @@ class HaskellLanguageServer(SolidLanguageServer):
                         result.append(haskell_config)
                     else:
                         result.append({})
-                self.logger.log(f"Returning configuration: {result}", logging.INFO)
+                log.info(f"Returning configuration: {result}")
                 return result
 
             # Fallback: return single config
@@ -363,26 +362,23 @@ class HaskellLanguageServer(SolidLanguageServer):
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_request("workspace/configuration", workspace_configuration_handler)
 
-        self.logger.log("Starting Haskell Language Server process", logging.INFO)
+        log.info("Starting Haskell Language Server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
 
         # Log capabilities returned by HLS
         capabilities = init_response.get("capabilities", {})
-        self.logger.log(f"HLS capabilities: {list(capabilities.keys())}", logging.INFO)
+        log.info(f"HLS capabilities: {list(capabilities.keys())}")
 
         self.server.notify.initialized({})
         self.completions_available.set()
 
         # Give HLS time to index the project
         # HLS can be slow to index, especially on first run
-        self.logger.log("Waiting for HLS to index project...", logging.INFO)
+        log.info("Waiting for HLS to index project...")
         time.sleep(5)
 
-        self.logger.log("Haskell Language Server initialized successfully", logging.INFO)
+        log.info("Haskell Language Server initialized successfully")

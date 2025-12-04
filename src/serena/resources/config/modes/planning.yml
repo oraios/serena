@@ -12,4 +12,4 @@ excluded_tools:
   - replace_lines
   - insert_at_line
   - execute_shell_command
-  - replace_regex
+  - replace_content

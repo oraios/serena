@@ -7,7 +7,6 @@ from sensai.util.logging import LogTime
 from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -21,7 +20,6 @@ class LanguageServerFactory:
         ignored_patterns: list[str],
         ls_timeout: float | None = None,
         ls_specific_settings: dict | None = None,
-        log_level: int = logging.INFO,
         trace_lsp_communication: bool = False,
     ):
         self.project_root = project_root
@@ -29,7 +27,6 @@ class LanguageServerFactory:
         self.ignored_patterns = ignored_patterns
         self.ls_timeout = ls_timeout
         self.ls_specific_settings = ls_specific_settings
-        self.log_level = log_level
         self.trace_lsp_communication = trace_lsp_communication
 
     def create_language_server(self, language: Language) -> SolidLanguageServer:
@@ -39,12 +36,10 @@ class LanguageServerFactory:
             trace_lsp_communication=self.trace_lsp_communication,
             encoding=self.encoding,
         )
-        ls_logger = LanguageServerLogger(log_level=self.log_level)
 
         log.info(f"Creating language server instance for {self.project_root}, language={language}.")
         return SolidLanguageServer.create(
             ls_config,
-            ls_logger,
             self.project_root,
             timeout=self.ls_timeout,
             solidlsp_settings=SolidLSPSettings(

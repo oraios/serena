@@ -2,18 +2,20 @@ import logging
 import os
 import shutil
 import threading
+from typing import cast
 
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import PathUtils, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
+
+log = logging.getLogger(__name__)
 
 
 class TerraformLS(SolidLanguageServer):
@@ -26,13 +28,41 @@ class TerraformLS(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in [".terraform", "terraform.tfstate.d"]
 
     @staticmethod
-    def _ensure_tf_command_available(logger: LanguageServerLogger):
-        logger.log("Starting terraform version detection...", logging.DEBUG)
+    def _determine_log_level(line: str) -> int:
+        """Classify terraform-ls stderr output to avoid false-positive errors."""
+        line_lower = line.lower()
+
+        # File discovery messages that are not actual errors
+        if any(
+            [
+                "discover.go:" in line_lower,
+                "walker.go:" in line_lower,
+                "walking of {file://" in line_lower,
+                "bus: -> discover" in line_lower,
+            ]
+        ):
+            return logging.DEBUG
+
+        # Known informational messages from terraform-ls that contain "error" but aren't errors
+        # Note: pattern match is flexible to handle file paths between keywords
+        if any(
+            [
+                "loading module metadata returned error:" in line_lower and "state not changed" in line_lower,
+                "incoming notification for" in line_lower,
+            ]
+        ):
+            return logging.DEBUG
+
+        return SolidLanguageServer._determine_log_level(line)
+
+    @staticmethod
+    def _ensure_tf_command_available() -> None:
+        log.debug("Starting terraform version detection...")
 
         # 1. Try to find terraform using shutil.which
         terraform_cmd = shutil.which("terraform")
         if terraform_cmd is not None:
-            logger.log(f"Found terraform via shutil.which: {terraform_cmd}", logging.DEBUG)
+            log.debug(f"Found terraform via shutil.which: {terraform_cmd}")
             return
 
         # TODO: is this needed?
@@ -40,7 +70,7 @@ class TerraformLS(SolidLanguageServer):
         if not terraform_cmd:
             terraform_cli_path = os.environ.get("TERRAFORM_CLI_PATH")
             if terraform_cli_path:
-                logger.log(f"Trying TERRAFORM_CLI_PATH: {terraform_cli_path}", logging.DEBUG)
+                log.debug(f"Trying TERRAFORM_CLI_PATH: {terraform_cli_path}")
                 # TODO: use binary name from runtime dependencies if we keep this code
                 if os.name == "nt":
                     terraform_binary = os.path.join(terraform_cli_path, "terraform.exe")
@@ -48,7 +78,7 @@ class TerraformLS(SolidLanguageServer):
                     terraform_binary = os.path.join(terraform_cli_path, "terraform")
                 if os.path.exists(terraform_binary):
                     terraform_cmd = terraform_binary
-                    logger.log(f"Found terraform via TERRAFORM_CLI_PATH: {terraform_cmd}", logging.DEBUG)
+                    log.debug(f"Found terraform via TERRAFORM_CLI_PATH: {terraform_cmd}")
                     return
 
         raise RuntimeError(
@@ -57,12 +87,12 @@ class TerraformLS(SolidLanguageServer):
         )
 
     @classmethod
-    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, solidlsp_settings: SolidLSPSettings) -> str:
+    def _setup_runtime_dependencies(cls, solidlsp_settings: SolidLSPSettings) -> str:
         """
         Setup runtime dependencies for terraform-ls.
         Downloads and installs terraform-ls if not already present.
         """
-        cls._ensure_tf_command_available(logger)
+        cls._ensure_tf_command_available()
         platform_id = PlatformUtils.get_platform_id()
         deps = RuntimeDependencyCollection(
             [
@@ -112,8 +142,8 @@ class TerraformLS(SolidLanguageServer):
 
         terraform_ls_executable_path = deps.binary_path(cls.ls_resources_dir(solidlsp_settings))
         if not os.path.exists(terraform_ls_executable_path):
-            logger.log(f"Downloading terraform-ls from {dependency.url}", logging.INFO)
-            deps.install(logger, cls.ls_resources_dir(solidlsp_settings))
+            log.info(f"Downloading terraform-ls from {dependency.url}")
+            deps.install(cls.ls_resources_dir(solidlsp_settings))
 
         assert os.path.exists(terraform_ls_executable_path), f"terraform-ls executable not found at {terraform_ls_executable_path}"
 
@@ -123,17 +153,14 @@ class TerraformLS(SolidLanguageServer):
 
         return terraform_ls_executable_path
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a TerraformLS instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        terraform_ls_executable_path = self._setup_runtime_dependencies(logger, solidlsp_settings)
+        terraform_ls_executable_path = self._setup_runtime_dependencies(solidlsp_settings)
 
         super().__init__(
             config,
-            logger,
             repository_root_path,
             ProcessLaunchInfo(cmd=f"{terraform_ls_executable_path} serve", cwd=repository_root_path),
             "terraform",
@@ -148,7 +175,7 @@ class TerraformLS(SolidLanguageServer):
         Returns the initialize params for the Terraform Language Server.
         """
         root_uri = PathUtils.path_to_uri(repository_absolute_path)
-        return {
+        result = {
             "processId": os.getpid(),
             "locale": "en",
             "rootPath": repository_absolute_path,
@@ -173,17 +200,18 @@ class TerraformLS(SolidLanguageServer):
                 }
             ],
         }
+        return cast(InitializeParams, result)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """Start terraform-ls server process"""
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             return
 
-        def window_log_message(msg):
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"LSP: window/logMessage: {msg}")
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)
@@ -191,14 +219,11 @@ class TerraformLS(SolidLanguageServer):
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        self.logger.log("Starting terraform-ls server process", logging.INFO)
+        log.info("Starting terraform-ls server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
 
         # Verify server capabilities

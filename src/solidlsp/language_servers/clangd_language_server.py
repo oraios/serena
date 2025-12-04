@@ -6,15 +6,17 @@ import logging
 import os
 import pathlib
 import threading
+from typing import Any, cast
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
+
+log = logging.getLogger(__name__)
 
 
 class ClangdLanguageServer(SolidLanguageServer):
@@ -24,20 +26,13 @@ class ClangdLanguageServer(SolidLanguageServer):
     Also make sure compile_commands.json is created at root of the source directory. Check clangd test case for example.
     """
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a ClangdLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        clangd_executable_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
+        clangd_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
         super().__init__(
-            config,
-            logger,
-            repository_root_path,
-            ProcessLaunchInfo(cmd=clangd_executable_path, cwd=repository_root_path),
-            "cpp",
-            solidlsp_settings,
+            config, repository_root_path, ProcessLaunchInfo(cmd=clangd_executable_path, cwd=repository_root_path), "cpp", solidlsp_settings
         )
         self.server_ready = threading.Event()
         self.service_ready_event = threading.Event()
@@ -45,9 +40,7 @@ class ClangdLanguageServer(SolidLanguageServer):
         self.resolve_main_method_available = threading.Event()
 
     @classmethod
-    def _setup_runtime_dependencies(
-        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> str:
+    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> str:
         """
         Setup runtime dependencies for ClangdLanguageServer and return the command to start the server.
         """
@@ -109,16 +102,13 @@ class ClangdLanguageServer(SolidLanguageServer):
                     + "  Arch Linux: sudo pacman -S clang\n"
                     + "See https://clangd.llvm.org/installation for more details."
                 )
-            logger.log(f"Using system-installed clangd at {clangd_executable_path}", logging.INFO)
+            log.info(f"Using system-installed clangd at {clangd_executable_path}")
         else:
             # Standard download and install for platforms with prebuilt binaries
             clangd_executable_path = deps.binary_path(clangd_ls_dir)
             if not os.path.exists(clangd_executable_path):
-                logger.log(
-                    f"Clangd executable not found at {clangd_executable_path}. Downloading from {dep.url}",
-                    logging.INFO,
-                )
-                _ = deps.install(logger, clangd_ls_dir)
+                log.info(f"Clangd executable not found at {clangd_executable_path}. Downloading from {dep.url}")
+                _ = deps.install(clangd_ls_dir)
             if not os.path.exists(clangd_executable_path):
                 raise FileNotFoundError(
                     f"Clangd executable not found at {clangd_executable_path}.\n"
@@ -154,9 +144,9 @@ class ClangdLanguageServer(SolidLanguageServer):
             ],
         }
 
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Clangd Language Server, waits for the server to be ready and yields the LanguageServer instance.
 
@@ -170,7 +160,7 @@ class ClangdLanguageServer(SolidLanguageServer):
         # LanguageServer has been shutdown
         """
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: Any) -> None:
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "workspace/executeCommand":
@@ -178,25 +168,25 @@ class ClangdLanguageServer(SolidLanguageServer):
                     self.resolve_main_method_available.set()
             return
 
-        def lang_status_handler(params):
+        def lang_status_handler(params: Any) -> None:
             # TODO: Should we wait for
             # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
             # Before proceeding?
             if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
                 self.service_ready_event.set()
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: Any) -> list:
             return []
 
-        def do_nothing(params):
+        def do_nothing(params: Any) -> None:
             return
 
-        def check_experimental_status(params):
+        def check_experimental_status(params: Any) -> None:
             if params["quiescent"] == True:
                 self.server_ready.set()
 
-        def window_log_message(msg):
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"LSP: window/logMessage: {msg}")
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("language/status", lang_status_handler)
@@ -207,16 +197,13 @@ class ClangdLanguageServer(SolidLanguageServer):
         self.server.on_notification("language/actionableNotification", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
-        self.logger.log("Starting Clangd server process", logging.INFO)
+        log.info("Starting Clangd server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
-        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2
+        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2  # type: ignore
         assert "completionProvider" in init_response["capabilities"]
         assert init_response["capabilities"]["completionProvider"] == {
             "triggerCharacters": [".", "<", ">", ":", '"', "/", "*"],

@@ -388,7 +388,6 @@ class Project(ToStringMixin):
             ignored_patterns=self._ignored_patterns,
             ls_timeout=ls_timeout,
             ls_specific_settings=ls_specific_settings,
-            log_level=log_level,
             trace_lsp_communication=trace_lsp_communication,
         )
         self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory)

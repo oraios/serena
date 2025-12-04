@@ -3,20 +3,34 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 
 * General:
+    * Add monorepo/multi-language support
+        * Project configuration files (`project.yml`) can now define multiple languages.
+          Auto-detection adds only the most prominent language by default.
+        * Additional languages can be conveniently added via the Dashboard while a project is already activated. 
+    * Support overloaded symbols in `FindSymbolTool` and related tools
+        * Name paths of overloaded symbols now include an index (e.g., `myOverloadedFunction[2]`)
+        * Responses of the Java language server, which handled this in its own way, are now adapted accordingly,
+          solving several issues related to retrieval problems in Java projects
     * Major extensions to the dashboard, which now serves as a central web interface for Serena
         * View current configuration
-        * View the executions, with the possibility to cancel running/scheduled executions
+        * View the executions, with the possibility to cancel running/scheduled executions 
         * View tool usage statistics
         * View and create memories and edit the serena configuration file
-    * Various fixes related to indexing, special paths and determation of ignored paths
+    * New two-tier caching of language server document symbols and considerable performance improvements surrounding symbol retrieval/indexing
+    * Various fixes related to indexing, special paths and determination of ignored paths
     * Decreased `TOOL_DEFAULT_MAX_ANSWER_LENGTH` to be in accordance with (below) typical max-tokens configurations
     * Allow passing language server specific settings through `ls_specific_settings` field (in `serena_config.yml`)
+    * Add notion of a "single-project context" (flag `single_project`), allowing user-defined contexts to behave 
+      like the built-in `ide-assistant` context (where the available tools are restricted to ones required by the active 
+      project and project changes are disabled)
 
 * Client support:
-    * New mode `oaicompat-agent` and extensions in the openai tool compatibility, **permitting Serena to work with llama.cpp**
+    * New mode `oaicompat-agent` and extensions enhancing OpenAI tool compatibility, permitting Serena to work with llama.cpp
 
 * Tools:
   * Added `RenameSymbolTool` for renaming symbols across the codebase (if LS supports this operation).
+  * Replaced `ReplaceRegexTool` with `ReplaceContentTool`, which supports both plain text and regex-based replacements
+    (and which requires no escaping in the replacement text, making it more robust) 
 
 * Language support:
 
@@ -31,9 +45,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   * **Add support for Zig** via ZLS (cross-file references may not fully work on Windows)
   * **Add support for Lua** via lua-language-server
   * **Add support for Nix** requires nixd installation (Windows not supported)
+  * **Add experimental support for YAML** via yaml-language-server with LSP integration for .yaml and .yml files
   * **Dart now officially supported**: Dart was always working, but now tests were added, and it is promoted to "officially supported"
   * **Rust now uses already installed rustup**: The rust-analyzer is no longer bundled with Serena. Instead, it uses the rust-analyzer from your Rust toolchain managed by rustup. This ensures compatibility with your Rust version and eliminates outdated bundled binaries.
-  * **Kotlin now officially supported**: We now use the official Kotlin LS, tests run through and performance is good, even though the LS is in an early development stage. 
+  * **Kotlin now officially supported**: We now use the official Kotlin LS, tests run through and performance is good, even though the LS is in an early development stage.
   * **Add support for Erlang** experimental, may hang or be slow, uses the recently archived [erlang_ls](https://github.com/erlang-ls/erlang_ls)
   * **Ruby dual language server support**: Added ruby-lsp as the modern primary Ruby language server. Solargraph remains available as an experimental legacy option. ruby-lsp supports both .rb and .erb files, while Solargraph supports .rb files only.
 

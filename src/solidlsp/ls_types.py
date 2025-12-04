@@ -1,5 +1,5 @@
 """
-Defines wrapper objects around the types returned by LSP to ensure decoupling between LSP versions and multilspy
+Defines wrapper objects around the types returned by LSP to ensure decoupling between LSP versions and SolidLSP
 """
 
 from __future__ import annotations
@@ -8,6 +8,8 @@ from enum import Enum, IntEnum
 from typing import NotRequired, Union
 
 from typing_extensions import TypedDict
+
+from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticSeverity
 
 URI = str
 DocumentUri = str
@@ -144,6 +146,8 @@ class CompletionItem(TypedDict):
 class SymbolKind(IntEnum):
     """A symbol kind."""
 
+    # TODO: This is a duplicate of SymbolKind in lsp_types.
+
     File = 1
     Module = 2
     Namespace = 3
@@ -243,6 +247,14 @@ class UnifiedSymbolInformation(TypedDict):
     All symbols except the root packages will have a parent.
     """
 
+    overload_idx: NotRequired[int]
+    """
+    The overload index of the symbol, if applicable. If a symbol does not have overloads, this field is omitted.
+    If the symbol is an overloaded function or method (same symbol name with the same parent), 
+    this index indicates which overload it is. The index is 0-based.
+    Added for Serena, not part of the LSP.
+    """
+
 
 class MarkupKind(Enum):
     """Describes the content type that a client supports in various
@@ -319,13 +331,6 @@ class Hover(TypedDict):
     visualize the hover, e.g. by changing the background color. """
 
 
-class DiagnosticsSeverity(IntEnum):
-    ERROR = 1
-    WARNING = 2
-    INFORMATION = 3
-    HINT = 4
-
-
 class TextDocumentIdentifier(TypedDict):
     """A literal to identify a text document in the client."""
 
@@ -351,17 +356,6 @@ class WorkspaceEdit(TypedDict):
     """ Document changes array for versioned edits. """
 
 
-class RenameParams(TypedDict):
-    """The parameters of a RenameRequest."""
-
-    textDocument: TextDocumentIdentifier
-    """ The document to rename. """
-    position: Position
-    """ The position at which this request was sent. """
-    newName: str
-    """ The new name of the symbol. """
-
-
 class Diagnostic(TypedDict):
     """Diagnostic information for a text document."""
 
@@ -369,7 +363,7 @@ class Diagnostic(TypedDict):
     """ The URI of the text document to which the diagnostics apply. """
     range: Range
     """ The range of the text document to which the diagnostics apply. """
-    severity: NotRequired[DiagnosticsSeverity]
+    severity: NotRequired[DiagnosticSeverity]
     """ The severity of the diagnostic. """
     message: str
     """ The diagnostic message. """
@@ -401,4 +395,4 @@ def extract_text_edits(workspace_edit: WorkspaceEdit) -> dict[str, list[TextEdit
                 changes[uri] = edits
         return changes
     else:
-        raise f"Invalid WorkspaceEdit (expected 'changes' or 'documentChanges' key):\n{workspace_edit}"
+        raise Exception(f"Invalid WorkspaceEdit (expected 'changes' or 'documentChanges' key):\n{workspace_edit}")

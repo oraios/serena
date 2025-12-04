@@ -24,7 +24,7 @@ With Serena, we provide direct, out-of-the-box support for:
 * **Elm**  
   (requires Elm compiler)
 * **Erlang**  
-  (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls), experimental, might be slow or hang)
+  (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls); experimental, might be slow or hang)
 * **Fortran**  
   (requires installation of fortls: `pip install fortls`)
 * **Go**  
@@ -32,7 +32,6 @@ With Serena, we provide direct, out-of-the-box support for:
 * **Haskell**  
   (automatically locates HLS via ghcup, stack, or system PATH; supports Stack and Cabal projects)
 * **Java**  
-  (_Note_: Uses quirky symbol names for methods that include the full method signature; this causes a variety of problems!)
 * **JavaScript**
 * **Julia**
 * **Kotlin**  

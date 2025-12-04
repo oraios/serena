@@ -1,4 +1,5 @@
 import inspect
+import json
 import os
 from abc import ABC
 from collections.abc import Iterable
@@ -294,6 +295,10 @@ class Tool(Component):
             msg = f"Error: {e.__class__.__name__} - {e}"
             log.error(msg)
             return msg
+
+    @staticmethod
+    def _to_json(x: Any) -> str:
+        return json.dumps(x, ensure_ascii=False)
 
 
 class EditedFileContext:

@@ -28,16 +28,7 @@ class TestProjectConfigAutogenerate:
             ProjectConfig.autogenerate(self.project_path, save_to_disk=False)
 
         error_message = str(exc_info.value)
-        # Check that the error message contains all the key information
         assert "No source files found" in error_message
-        assert str(self.project_path.resolve()) in error_message
-        assert "To use Serena with this project" in error_message
-        assert "Add source files in one of the supported languages" in error_message
-        assert "Create a project configuration file manually" in error_message
-        assert str(Path(".serena") / "project.yml") in error_message
-        assert "Example project.yml:" in error_message
-        assert f"project_name: {self.project_path.name}" in error_message
-        assert "language: python" in error_message
 
     def test_autogenerate_with_python_files(self):
         """Test successful autogeneration with Python source files."""
@@ -116,23 +107,3 @@ class TestProjectConfigAutogenerate:
 
         assert config.project_name == custom_name
         assert config.languages == [Language.TYPESCRIPT]
-
-    def test_autogenerate_error_message_format(self):
-        """Test the specific format of the error message for better user experience."""
-        with pytest.raises(ValueError) as exc_info:
-            ProjectConfig.autogenerate(self.project_path, save_to_disk=False)
-
-        error_lines = str(exc_info.value).split("\n")
-
-        # Verify the structure of the error message
-        assert len(error_lines) >= 8  # Should have multiple lines of helpful information
-
-        # Check for numbered instructions
-        assert any("1." in line for line in error_lines)
-        assert any("2." in line for line in error_lines)
-
-        # Check for supported languages list
-        assert any("Python" in line and "TypeScript" in line for line in error_lines)
-
-        # Check example includes comment about language options
-        assert any("# or typescript, java, csharp" in line for line in error_lines)

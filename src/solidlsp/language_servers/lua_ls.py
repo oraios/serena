@@ -17,10 +17,11 @@ from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 class LuaLanguageServer(SolidLanguageServer):
@@ -37,7 +38,7 @@ class LuaLanguageServer(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in [".luarocks", "lua_modules", "node_modules", "build", "dist", ".cache"]
 
     @staticmethod
-    def _get_lua_ls_path():
+    def _get_lua_ls_path() -> str | None:
         """Get the path to lua-language-server executable."""
         # First check if it's in PATH
         lua_ls = shutil.which("lua-language-server")
@@ -69,7 +70,7 @@ class LuaLanguageServer(SolidLanguageServer):
         return None
 
     @staticmethod
-    def _download_lua_ls():
+    def _download_lua_ls() -> str:
         """Download and install lua-language-server if not present."""
         system = platform.system()
         machine = platform.machine().lower()
@@ -140,7 +141,7 @@ class LuaLanguageServer(SolidLanguageServer):
         raise RuntimeError("Failed to find lua-language-server executable after extraction")
 
     @staticmethod
-    def _setup_runtime_dependency():
+    def _setup_runtime_dependency() -> str:
         """
         Check if required Lua runtime dependencies are available.
         Downloads lua-language-server if not present.
@@ -154,18 +155,11 @@ class LuaLanguageServer(SolidLanguageServer):
 
         return lua_ls_path
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         lua_ls_path = self._setup_runtime_dependency()
 
         super().__init__(
-            config,
-            logger,
-            repository_root_path,
-            ProcessLaunchInfo(cmd=lua_ls_path, cwd=repository_root_path),
-            "lua",
-            solidlsp_settings,
+            config, repository_root_path, ProcessLaunchInfo(cmd=lua_ls_path, cwd=repository_root_path), "lua", solidlsp_settings
         )
         self.server_ready = threading.Event()
         self.request_id = 0
@@ -254,18 +248,18 @@ class LuaLanguageServer(SolidLanguageServer):
                 },
             },
         }
-        return initialize_params
+        return initialize_params  # type: ignore[return-value]
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """Start Lua Language Server process"""
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             return
 
-        def window_log_message(msg):
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"LSP: window/logMessage: {msg}")
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)
@@ -273,14 +267,11 @@ class LuaLanguageServer(SolidLanguageServer):
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        self.logger.log("Starting Lua Language Server process", logging.INFO)
+        log.info("Starting Lua Language Server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
 
         # Verify server capabilities

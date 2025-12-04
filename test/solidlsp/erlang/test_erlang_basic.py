@@ -29,7 +29,7 @@ class TestErlangLanguageServerBasics:
         """Test document symbols retrieval for Erlang files."""
         try:
             file_path = "hello.erl"
-            symbols_tuple = language_server.request_document_symbols(file_path)
+            symbols_tuple = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
             assert isinstance(symbols_tuple, tuple)
             assert len(symbols_tuple) == 2
 

@@ -13,12 +13,13 @@ from sensai.util.logging import LogTime
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
+
+log = logging.getLogger(__name__)
 
 
 class ElmLanguageServer(SolidLanguageServer):
@@ -26,20 +27,13 @@ class ElmLanguageServer(SolidLanguageServer):
     Provides Elm specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Elm.
     """
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates an ElmLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        elm_lsp_executable_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
+        elm_lsp_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
         super().__init__(
-            config,
-            logger,
-            repository_root_path,
-            ProcessLaunchInfo(cmd=elm_lsp_executable_path, cwd=repository_root_path),
-            "elm",
-            solidlsp_settings,
+            config, repository_root_path, ProcessLaunchInfo(cmd=elm_lsp_executable_path, cwd=repository_root_path), "elm", solidlsp_settings
         )
         self.server_ready = threading.Event()
 
@@ -53,16 +47,14 @@ class ElmLanguageServer(SolidLanguageServer):
         ]
 
     @classmethod
-    def _setup_runtime_dependencies(
-        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> list[str]:
+    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> list[str]:
         """
         Setup runtime dependencies for Elm Language Server and return the command to start the server.
         """
         # Check if elm-language-server is already installed globally
         system_elm_ls = shutil.which("elm-language-server")
         if system_elm_ls:
-            logger.log(f"Found system-installed elm-language-server at {system_elm_ls}", logging.INFO)
+            log.info(f"Found system-installed elm-language-server at {system_elm_ls}")
             return [system_elm_ls, "--stdio"]
 
         # Verify node and npm are installed
@@ -86,9 +78,9 @@ class ElmLanguageServer(SolidLanguageServer):
         elm_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "elm-lsp")
         elm_ls_executable_path = os.path.join(elm_ls_dir, "node_modules", ".bin", "elm-language-server")
         if not os.path.exists(elm_ls_executable_path):
-            logger.log(f"Elm Language Server executable not found at {elm_ls_executable_path}. Installing...", logging.INFO)
-            with LogTime("Installation of Elm language server dependencies", logger=logger.logger):
-                deps.install(logger, elm_ls_dir)
+            log.info(f"Elm Language Server executable not found at {elm_ls_executable_path}. Installing...")
+            with LogTime("Installation of Elm language server dependencies", logger=log):
+                deps.install(elm_ls_dir)
 
         if not os.path.exists(elm_ls_executable_path):
             raise FileNotFoundError(
@@ -143,31 +135,28 @@ class ElmLanguageServer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return initialize_params  # type: ignore[return-value]
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Elm Language Server, waits for the server to be ready and yields the LanguageServer instance.
         """
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def window_log_message(msg):
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"LSP: window/logMessage: {msg}")
 
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        self.logger.log("Starting Elm server process", logging.INFO)
+        log.info("Starting Elm server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
 
         # Elm-specific capability checks
@@ -178,11 +167,11 @@ class ElmLanguageServer(SolidLanguageServer):
         assert "documentSymbolProvider" in init_response["capabilities"]
 
         self.server.notify.initialized({})
-        self.logger.log("Elm server initialized successfully, waiting for workspace scan...", logging.INFO)
+        log.info("Elm server initialized successfully, waiting for workspace scan...")
 
         self.server_ready.set()
         self.completions_available.set()
-        self.logger.log("Elm server ready", logging.INFO)
+        log.info("Elm server ready")
 
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:

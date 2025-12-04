@@ -35,12 +35,12 @@ class SolidLSPSettings:
     No documentation on options means no options are available.
     """
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         os.makedirs(str(self.solidlsp_dir), exist_ok=True)
         os.makedirs(str(self.ls_resources_dir), exist_ok=True)
 
     @property
-    def ls_resources_dir(self):
+    def ls_resources_dir(self) -> str:
         return os.path.join(str(self.solidlsp_dir), "language_servers", "static")
 
     class CustomLSSettings(ToStringMixin):

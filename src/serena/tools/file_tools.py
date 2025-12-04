@@ -6,12 +6,12 @@ File and file system-related tools, specifically for
   * editing at the file level
 """
 
-import json
 import os
 import re
 from collections import defaultdict
 from fnmatch import fnmatch
 from pathlib import Path
+from typing import Literal
 
 from serena.text_utils import search_files
 from serena.tools import SUCCESS_RESULT, EditedFileContext, Tool, ToolMarkerCanEdit, ToolMarkerOptional
@@ -78,7 +78,7 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
         answer = f"File created: {relative_path}."
         if will_overwrite_existing:
             answer += " Overwrote existing file."
-        return json.dumps(answer)
+        return answer
 
 
 class ListDirTool(Tool):
@@ -105,7 +105,7 @@ class ListDirTool(Tool):
                 "project_root": self.get_project_root(),
                 "hint": "Check if the path is correct relative to the project root",
             }
-            return json.dumps(error_info)
+            return self._to_json(error_info)
 
         self.project.validate_relative_path(relative_path, require_not_ignored=skip_ignored_files)
 
@@ -117,7 +117,7 @@ class ListDirTool(Tool):
             is_ignored_file=self.project.is_ignored_path if skip_ignored_files else None,
         )
 
-        result = json.dumps({"dirs": dirs, "files": files})
+        result = self._to_json({"dirs": dirs, "files": files})
         return self._limit_length(result, max_answer_chars)
 
 
@@ -153,76 +153,96 @@ class FindFileTool(Tool):
             relative_to=self.get_project_root(),
         )
 
-        result = json.dumps({"files": files})
+        result = self._to_json({"files": files})
         return result
 
 
-class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
+class ReplaceContentTool(Tool, ToolMarkerCanEdit):
     """
-    Replaces content in a file by using regular expressions.
+    Replaces content in a file (optionally using regular expressions).
     """
 
     def apply(
         self,
         relative_path: str,
-        regex: str,
+        needle: str,
         repl: str,
+        mode: Literal["literal", "regex"],
         allow_multiple_occurrences: bool = False,
     ) -> str:
         r"""
-        Replaces one or more occurrences of the given regular expression.
-        Works exactly like Python's re.subn function with flags DOTALL and MULTILINE enabled.
+        Replaces one or more occurrences of a given pattern in a file with new content.
 
         This is the preferred way to replace content in a file whenever the symbol-level
         tools are not appropriate.
-        Even large sections of code can be replaced by providing a concise regular expression of
-        the form "beginning.*?end-of-text-to-be-replaced".
-        Always try to use wildcards to avoid specifying the exact content of the code to be replaced,
-        especially if it spans several lines.
 
-        IMPORTANT: REMEMBER TO USE WILDCARDS WHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE UNNECESSARILY LONG REGEXES WITHOUT USING WILDCARDS!
+        VERY IMPORTANT: The "regex" mode allows very large sections of code to be replaced without fully quoting them!
+        Use a regex of the form "beginning.*?end-of-text-to-be-replaced" to be faster and more economical!
+        ALWAYS try to use wildcards to avoid specifying the exact content to be replaced,
+        especially if it spans several lines. Note that you cannot make mistakes, because if the regex should match
+        multiple occurrences while you disabled `allow_multiple_occurrences`, an error will be returned, and you can retry
+        with a revised regex.
+        Therefore, using regex mode with suitable wildcards is usually the best choice!
 
         :param relative_path: the relative path to the file
-        :param regex: a Python-style regular expression, matches of which will be replaced.
-            Dot matches all characters, multi-line matching is enabled.
-            Apply the usual escaping as needed for reserved characters in Python-style regex.
-        :param repl: the string to replace the matched content with, which may contain
-            backreferences like \1, \2, etc. for groups matched by the regex.
-            Insert new content verbatim, except for backslashes, which have to be escaped.
-            IMPORTANT: When inserting a quoted string with newlines encoded as backslash followed by n, don't forget to insert double backslashes (i.e., \\n).
+        :param needle: the string or regex pattern to search for.
+            If `mode` is "literal", this string will be matched exactly.
+            If `mode` is "regex", this string will be treated as a regular expression (syntax of Python's `re` module,
+            with flags DOTALL and MULTILINE enabled).
+        :param repl: the replacement string (verbatim).
+            If mode is "regex", the string can contain backreferences to matched groups in the needle regex,
+            specified using the syntax $!1, $!2, etc. for groups 1, 2, etc.
+        :param mode: either "literal" or "regex", specifying how the `needle` parameter is to be interpreted.
         :param allow_multiple_occurrences: if True, the regex may match multiple occurrences in the file
             and all of them will be replaced.
             If this is set to False and the regex matches multiple occurrences, an error will be returned
             (and you may retry with a revised, more specific regex).
         """
-        return self.replace_regex(
-            relative_path, regex, repl, allow_multiple_occurrences=allow_multiple_occurrences, require_not_ignored=True
+        return self.replace_content(
+            relative_path, needle, repl, mode=mode, allow_multiple_occurrences=allow_multiple_occurrences, require_not_ignored=True
         )
 
-    def replace_regex(
+    def replace_content(
         self,
         relative_path: str,
-        regex: str,
+        needle: str,
         repl: str,
+        mode: Literal["literal", "regex"],
         allow_multiple_occurrences: bool = False,
         require_not_ignored: bool = True,
     ) -> str:
         """
-        Performs the regex replacement, with additional options not exposed in the tool.
+        Performs the replacement, with additional options not exposed in the tool.
         This function can be used internally by other tools.
         """
         self.project.validate_relative_path(relative_path, require_not_ignored=require_not_ignored)
         with EditedFileContext(relative_path, self.agent) as context:
             original_content = context.get_original_content()
+
+            if mode == "literal":
+                regex = re.escape(needle)
+            elif mode == "regex":
+                regex = needle
+            else:
+                raise ValueError(f"Invalid mode: '{mode}', expected 'literal' or 'regex'.")
+
+            # escape backslashes in repl
+            repl = repl.replace("\\", "\\\\")
+            # convert $!1, $!2, etc. to \1, \2, etc. for backreferences
+            repl = re.sub(r"\$!(\d+)", "\\\\1", repl)
+
+            # perform replacement
             updated_content, n = re.subn(regex, repl, original_content, flags=re.DOTALL | re.MULTILINE)
+
             if n == 0:
-                return f"Error: No matches found for regex '{regex}' in file '{relative_path}'."
+                return f"Error: No matches of search expression found in file '{relative_path}'."
             if not allow_multiple_occurrences and n > 1:
                 return (
-                    f"Error: Regex '{regex}' matches {n} occurrences in file '{relative_path}'. "
-                    "Please revise the regex to be more specific or enable allow_multiple_occurrences if this is expected."
+                    f"Error: Expression matches {n} occurrences in file '{relative_path}'. "
+                    "Please revise the expression to be more specific or enable allow_multiple_occurrences if this is expected."
                 )
             context.set_updated_content(updated_content)
+
         return SUCCESS_RESULT
 
 
@@ -419,5 +439,5 @@ class SearchForPatternTool(Tool):
         for match in matches:
             assert match.source_file_path is not None
             file_to_matches[match.source_file_path].append(match.to_display_string())
-        result = json.dumps(file_to_matches)
+        result = self._to_json(file_to_matches)
         return self._limit_length(result, max_answer_chars)

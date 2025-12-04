@@ -1,3 +1,4 @@
+# type: ignore
 """
 Provides Nix specific instantiation of the LanguageServer class using nixd (Nix Language Server).
 
@@ -16,12 +17,13 @@ from pathlib import Path
 from overrides import override
 
 from solidlsp import ls_types
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import DocumentSymbols, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 class NixLanguageServer(SolidLanguageServer):
@@ -70,17 +72,13 @@ class NixLanguageServer(SolidLanguageServer):
         return symbol
 
     @override
-    def request_document_symbols(
-        self, relative_file_path: str, include_body: bool = False
-    ) -> tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]:
-        """
-        Override to extend Nix symbol ranges to include trailing semicolons.
+    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
+        # Override to extend Nix symbol ranges to include trailing semicolons.
+        # nixd provides expression-level ranges (excluding semicolons) but serena needs
+        # statement-level ranges (including semicolons) for proper symbol replacement.
 
-        nixd provides expression-level ranges (excluding semicolons) but serena needs
-        statement-level ranges (including semicolons) for proper symbol replacement.
-        """
         # Get symbols from parent implementation
-        all_symbols, root_symbols = super().request_document_symbols(relative_file_path, include_body)
+        document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
 
         # Get file content for range extension
         file_content = self.language_server.retrieve_full_file_content(relative_file_path)
@@ -97,10 +95,9 @@ class NixLanguageServer(SolidLanguageServer):
             return extended
 
         # Apply range extension to all symbols
-        extended_all_symbols = [extend_symbol_and_children(sym) for sym in all_symbols]
-        extended_root_symbols = [extend_symbol_and_children(sym) for sym in root_symbols]
+        extended_root_symbols = [extend_symbol_and_children(sym) for sym in document_symbols.root_symbols]
 
-        return extended_all_symbols, extended_root_symbols
+        return DocumentSymbols(extended_root_symbols)
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -248,19 +245,10 @@ class NixLanguageServer(SolidLanguageServer):
 
         return nixd_path
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         nixd_path = self._setup_runtime_dependency()
 
-        super().__init__(
-            config,
-            logger,
-            repository_root_path,
-            ProcessLaunchInfo(cmd=nixd_path, cwd=repository_root_path),
-            "nix",
-            solidlsp_settings,
-        )
+        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=nixd_path, cwd=repository_root_path), "nix", solidlsp_settings)
         self.server_ready = threading.Event()
         self.request_id = 0
 
@@ -362,7 +350,7 @@ class NixLanguageServer(SolidLanguageServer):
             return
 
         def window_log_message(msg):
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+            log.info(f"LSP: window/logMessage: {msg}")
 
         def do_nothing(params):
             return
@@ -372,14 +360,11 @@ class NixLanguageServer(SolidLanguageServer):
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        self.logger.log("Starting nixd server process", logging.INFO)
+        log.info("Starting nixd server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
 
         # Verify server capabilities

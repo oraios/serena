@@ -10,10 +10,11 @@ from overrides import override
 from solidlsp import ls_types
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 class SourceKitLSP(SolidLanguageServer):
@@ -45,24 +46,17 @@ class SourceKitLSP(SolidLanguageServer):
                 "And make sure it is available on your PATH."
             ) from e
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         sourcekit_version = self._get_sourcekit_lsp_version()
-        logger.log(f"Starting sourcekit lsp with version: {sourcekit_version}", logging.INFO)
+        log.info(f"Starting sourcekit lsp with version: {sourcekit_version}")
 
         super().__init__(
-            config,
-            logger,
-            repository_root_path,
-            ProcessLaunchInfo(cmd="sourcekit-lsp", cwd=repository_root_path),
-            "swift",
-            solidlsp_settings,
+            config, repository_root_path, ProcessLaunchInfo(cmd="sourcekit-lsp", cwd=repository_root_path), "swift", solidlsp_settings
         )
         self.server_ready = threading.Event()
         self.request_id = 0
         self._did_sleep_before_requesting_references = False
-        self._initialization_timestamp = None
+        self._initialization_timestamp: float | None = None
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
@@ -305,18 +299,18 @@ class SourceKitLSP(SolidLanguageServer):
             ],
         }
 
-        return initialize_params
+        return initialize_params  # type: ignore[return-value]
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """Start sourcekit-lsp server process"""
 
-        def register_capability_handler(_params):
+        def register_capability_handler(_params: dict) -> None:
             return
 
-        def window_log_message(msg):
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"LSP: window/logMessage: {msg}")
 
-        def do_nothing(_params):
+        def do_nothing(_params: dict) -> None:
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)
@@ -324,18 +318,15 @@ class SourceKitLSP(SolidLanguageServer):
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        self.logger.log("Starting sourcekit-lsp server process", logging.INFO)
+        log.info("Starting sourcekit-lsp server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
 
         capabilities = init_response["capabilities"]
-        self.logger.log(f"SourceKit LSP capabilities: {list(capabilities.keys())}", logging.INFO)
+        log.info(f"SourceKit LSP capabilities: {list(capabilities.keys())}")
 
         assert "textDocumentSync" in capabilities, "textDocumentSync capability missing"
         assert "definitionProvider" in capabilities, "definitionProvider capability missing"
@@ -366,10 +357,7 @@ class SourceKitLSP(SolidLanguageServer):
                 # Fallback if initialization timestamp is missing
                 remaining_delay = 15 if os.getenv("CI") else 5
 
-            self.logger.log(
-                f"Sleeping {remaining_delay:.1f}s before requesting references for the first time (CI needs extra indexing time)",
-                logging.INFO,
-            )
+            log.info(f"Sleeping {remaining_delay:.1f}s before requesting references for the first time (CI needs extra indexing time)")
             time.sleep(remaining_delay)
             self._did_sleep_before_requesting_references = True
 
@@ -378,7 +366,7 @@ class SourceKitLSP(SolidLanguageServer):
 
         # In CI, if no references found, retry once after additional delay
         if os.getenv("CI") and not references:
-            self.logger.log("No references found in CI - retrying after additional 5s delay", logging.INFO)
+            log.info("No references found in CI - retrying after additional 5s delay")
             time.sleep(5)
             references = super().request_references(relative_file_path, line, column)
 

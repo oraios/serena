@@ -36,14 +36,13 @@ prompts:
     {% endif %}
 
     {% if 'ToolMarkerSymbolicRead' in available_markers %}
-    Symbols are identified by their `name_path and `relative_path`, see the description of the `find_symbol` tool for more details
-    on how the `name_path` matches symbols.
+    Symbols are identified by their `name_path` and `relative_path` (see the description of the `find_symbol` tool).
     You can get information about available symbols by using the `get_symbols_overview` tool for finding top-level symbols in a file,
     or by using `find_symbol` if you already know the symbol's name path. You generally try to read as little code as possible
     while still solving your task, meaning you only read the bodies when you need to, and after you have found the symbol you want to edit.
     For example, if you are working with python code and already know that you need to read the body of the constructor of the class Foo, you can directly
-    use `find_symbol` with the name path `Foo/__init__` and `include_body=True`. If you don't know yet which methods in `Foo` you need to read or edit,
-    you can use `find_symbol` with the name path `Foo`, `include_body=False` and `depth=1` to get all (top-level) methods of `Foo` before proceeding
+    use `find_symbol` with name path pattern `Foo/__init__` and `include_body=True`. If you don't know yet which methods in `Foo` you need to read or edit,
+    you can use `find_symbol` with name path pattern `Foo`, `include_body=False` and `depth=1` to get all (top-level) methods of `Foo` before proceeding
     to read the desired methods with `include_body=True`
     You can understand relationships between symbols by using the `find_referencing_symbols` tool.
     {% endif %}

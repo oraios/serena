@@ -4,7 +4,7 @@ gui_log_window: False
 # If you want to see the logs in a web browser, use the `web_dashboard` option instead.
 # Limitations: doesn't seem to work with the community version of Claude Desktop for Linux
 # Might also cause problems with some MCP clients - if you have any issues, try disabling this
-
+#
 # Being able to inspect logs is useful both for troubleshooting and for monitoring the tool calls,
 # especially when using the agno playground, since the tool calls are not always shown,
 # and the input params are never shown in the agno UI.

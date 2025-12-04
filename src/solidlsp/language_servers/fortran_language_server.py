@@ -12,12 +12,13 @@ import threading
 from overrides import override
 
 from solidlsp import ls_types
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import DocumentSymbols, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 class FortranLanguageServer(SolidLanguageServer):
@@ -125,12 +126,9 @@ class FortranLanguageServer(SolidLanguageServer):
 
             # Create modified symbol with corrected selectionRange
             corrected_symbol = symbol.copy()
-            corrected_symbol["selectionRange"] = new_sel_range
+            corrected_symbol["selectionRange"] = new_sel_range  # type: ignore[typeddict-item]
 
-            self.logger.log(
-                f"Fixed fortls selectionRange for {identifier_name}: char {start_char} -> {identifier_start}",
-                logging.DEBUG,
-            )
+            log.debug(f"Fixed fortls selectionRange for {identifier_name}: char {start_char} -> {identifier_start}")
 
             return corrected_symbol
 
@@ -138,24 +136,20 @@ class FortranLanguageServer(SolidLanguageServer):
         return symbol
 
     @override
-    def request_document_symbols(
-        self, relative_file_path: str, include_body: bool = False
-    ) -> tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]:
-        """
-        Override to fix fortls's incorrect selectionRange bug.
+    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
+        # Override to fix fortls's incorrect selectionRange bug.
+        #
+        # fortls returns selectionRange pointing to line start (character 0) instead of the
+        # identifier name position. This breaks MCP server features that rely on exact positions.
+        #
+        # This override:
+        # 1. Gets symbols from fortls via parent implementation
+        # 2. Parses each symbol's line to find the correct identifier position
+        # 3. Fixes selectionRange for all symbols recursively
+        # 4. Returns corrected symbols
 
-        fortls returns selectionRange pointing to line start (character 0) instead of the
-        identifier name position. This breaks MCP server features that rely on exact positions.
-
-        This override:
-        1. Gets symbols from fortls via parent implementation
-        2. Parses each symbol's line to find the correct identifier position
-        3. Fixes selectionRange for all symbols recursively
-        4. Returns corrected symbols
-
-        """
         # Get symbols from fortls (with incorrect selectionRange)
-        all_symbols, root_symbols = super().request_document_symbols(relative_file_path, include_body)
+        document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
 
         # Get file content for parsing
         with self.open_file(relative_file_path) as file_data:
@@ -173,26 +167,19 @@ class FortranLanguageServer(SolidLanguageServer):
             return fixed
 
         # Apply fix to all symbols
-        fixed_all_symbols = [fix_symbol_and_children(sym) for sym in all_symbols]
-        fixed_root_symbols = [fix_symbol_and_children(sym) for sym in root_symbols]
+        fixed_root_symbols = [fix_symbol_and_children(sym) for sym in document_symbols.root_symbols]
 
-        return fixed_all_symbols, fixed_root_symbols
+        return DocumentSymbols(fixed_root_symbols)
 
     @staticmethod
-    def _check_fortls_installation():
+    def _check_fortls_installation() -> str:
         """Check if fortls is available."""
         fortls_path = shutil.which("fortls")
         if fortls_path is None:
             raise RuntimeError("fortls is not installed or not in PATH.\nInstall it with: pip install fortls")
         return fortls_path
 
-    def __init__(
-        self,
-        config: LanguageServerConfig,
-        logger: LanguageServerLogger,
-        repository_root_path: str,
-        solidlsp_settings: SolidLSPSettings,
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         # Check fortls installation
         fortls_path = self._check_fortls_installation()
 
@@ -201,12 +188,7 @@ class FortranLanguageServer(SolidLanguageServer):
         fortls_cmd = f"{fortls_path}"
 
         super().__init__(
-            config,
-            logger,
-            repository_root_path,
-            ProcessLaunchInfo(cmd=fortls_cmd, cwd=repository_root_path),
-            "fortran",  # Language ID for LSP
-            solidlsp_settings,
+            config, repository_root_path, ProcessLaunchInfo(cmd=fortls_cmd, cwd=repository_root_path), "fortran", solidlsp_settings
         )
         self.server_ready = threading.Event()
 
@@ -260,18 +242,18 @@ class FortranLanguageServer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return initialize_params  # type: ignore[return-value]
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """Start Fortran Language Server process."""
 
-        def window_log_message(msg):
-            self.logger.log(f"Fortran LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"Fortran LSP: window/logMessage: {msg}")
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             return
 
         # Register LSP message handlers
@@ -280,14 +262,11 @@ class FortranLanguageServer(SolidLanguageServer):
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        self.logger.log("Starting Fortran Language Server (fortls) process", logging.INFO)
+        log.info("Starting Fortran Language Server (fortls) process")
         self.server.start()
 
         initialize_params = self._get_initialize_params(self.repository_root_path)
-        self.logger.log(
-            "Sending initialize request to Fortran Language Server",
-            logging.INFO,
-        )
+        log.info("Sending initialize request to Fortran Language Server")
 
         init_response = self.server.send.initialize(initialize_params)
 
@@ -295,17 +274,17 @@ class FortranLanguageServer(SolidLanguageServer):
         capabilities = init_response.get("capabilities", {})
         assert "textDocumentSync" in capabilities
         if "completionProvider" in capabilities:
-            self.logger.log("Fortran LSP completion provider available", logging.INFO)
+            log.info("Fortran LSP completion provider available")
         if "definitionProvider" in capabilities:
-            self.logger.log("Fortran LSP definition provider available", logging.INFO)
+            log.info("Fortran LSP definition provider available")
         if "referencesProvider" in capabilities:
-            self.logger.log("Fortran LSP references provider available", logging.INFO)
+            log.info("Fortran LSP references provider available")
         if "documentSymbolProvider" in capabilities:
-            self.logger.log("Fortran LSP document symbol provider available", logging.INFO)
+            log.info("Fortran LSP document symbol provider available")
 
         self.server.notify.initialized({})
         self.completions_available.set()
 
         # Fortran Language Server is ready after initialization
         self.server_ready.set()
-        self.logger.log("Fortran Language Server initialization complete", logging.INFO)
+        log.info("Fortran Language Server initialization complete")

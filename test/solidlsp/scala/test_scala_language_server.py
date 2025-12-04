@@ -1,11 +1,9 @@
-import logging
 import os
 
 import pytest
 
 from solidlsp.language_servers.scala_language_server import ScalaLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.settings import SolidLSPSettings
 
 pytest.skip("Scala must be compiled for these tests to run through, which is a huge hassle", allow_module_level=True)
@@ -18,10 +16,9 @@ pytestmark = pytest.mark.scala
 @pytest.fixture(scope="module")
 def scala_ls():
     repo_root = os.path.abspath("test/resources/repos/scala")
-    logger = LanguageServerLogger(json_format=False, log_level=logging.INFO)
     config = LanguageServerConfig(code_language=Language.SCALA)
     solidlsp_settings = SolidLSPSettings()
-    ls = ScalaLanguageServer(config, logger, repo_root, solidlsp_settings)
+    ls = ScalaLanguageServer(config, repo_root, solidlsp_settings)
 
     with ls.start_server():
         yield ls
@@ -29,7 +26,7 @@ def scala_ls():
 
 def test_scala_document_symbols(scala_ls):
     """Test document symbols for Main.scala"""
-    symbols, _ = scala_ls.request_document_symbols(MAIN_FILE_PATH)
+    symbols, _ = scala_ls.request_document_symbols(MAIN_FILE_PATH).get_all_symbols_and_roots()
     symbol_names = [s["name"] for s in symbols]
     assert symbol_names[0] == "com.example"
     assert symbol_names[1] == "Main"

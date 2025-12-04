@@ -48,6 +48,8 @@ Serena comes with pre-defined contexts:
 * `ide-assistant`: Optimized for integration into IDEs like VSCode, Cursor, or Cline, focusing on in-editor coding assistance.
   Choose the context that best matches the type of integration you are using.
 
+Find the concrete definitions of these modes [here](https://github.com/oraios/serena/tree/main/src/serena/resources/config/contexts).
+
 When launching Serena, specify the context using `--context <context-name>`.
 Note that for cases where parameter lists are specified (e.g. Claude Desktop), you must add two parameters to the list.
 
@@ -75,17 +77,22 @@ Examples of built-in modes include:
 * `interactive`: Suitable for a conversational, back-and-forth interaction style.
 * `one-shot`: Configures Serena for tasks that should be completed in a single response, often used with `planning` for generating reports or initial plans.
 * `no-onboarding`: Skips the initial onboarding process if it's not needed for a particular session.
-* `onboarding`: (Usually triggered automatically) Focuses on the project onboarding process.
+* `onboarding`: Focuses on the project onboarding process.
+* `no-memories`: Disables all memory tools (and tools building on memories auch as onboarding tools)  
+
+Find the concrete definitions of these modes [here](https://github.com/oraios/serena/tree/main/src/serena/resources/config/modes).
 
 Modes can be set at startup (similar to contexts) but can also be _switched dynamically_ during a session. 
 You can instruct the LLM to use the `switch_modes` tool to activate a different set of modes (e.g., "Switch to planning and one-shot modes").
 
 When launching Serena, specify modes using `--mode <mode-name>`; multiple modes can be specified, e.g. `--mode planning --mode no-onboarding`.
 
-:warning: **Mode Compatibility**: While you can combine modes, some may be semantically incompatible (e.g., `interactive` and `one-shot`). 
+:::{attention}
+**Mode Compatibility**: While you can combine modes, some may be semantically incompatible (e.g., `interactive` and `one-shot`). 
 Serena currently does not prevent incompatible combinations; it is up to the user to choose sensible mode configurations.
+:::
 
-You can manage contexts using the `mode` command,
+You can manage modes using the `mode` command,
 
     <serena> mode --help
     <serena> mode list
