@@ -78,8 +78,8 @@ jobs:
         if: runner.os != 'Windows'
         uses: erlef/setup-beam@v1
         with:
-          elixir-version: "1.18.4"
-          otp-version: "26.1"
+          elixir-version: "1.19.3"
+          otp-version: "28"
 #      Erlang currently not tested in CI, random hangings on macos, always hangs on ubuntu
 #      In local tests, erlang seems to work though
 #      - name: Install Erlang Language Server

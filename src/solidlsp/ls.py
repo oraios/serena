@@ -227,6 +227,9 @@ class SolidLanguageServer(ABC):
         if solidlsp_settings is None:
             solidlsp_settings = SolidLSPSettings()
 
+        # Ensure repository_root_path is absolute to avoid issues with file URIs
+        repository_root_path = os.path.abspath(repository_root_path)
+
         ls_class = config.code_language.get_ls_class()
         # For now, we assume that all language server implementations have the same signature of the constructor
         # (which, unfortunately, differs from the signature of the base class).

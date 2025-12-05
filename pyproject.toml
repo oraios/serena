@@ -299,6 +299,7 @@ markers = [
   "fortran: language server running for Fortran",
   "haskell: Haskell language server tests",
   "yaml: language server running for YAML",
+  "slow: tests that require additional Expert instances and have long startup times (~60-90s each)",
 ]
 
 [tool.codespell]
