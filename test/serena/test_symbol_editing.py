@@ -509,3 +509,142 @@ def test_rename_symbol(snapshot: SnapshotAssertion):
         "renamed_typed_module_var",
     )
     test_case.run_test(content_after_ground_truth=snapshot)
+
+
+# ===== VUE WRITE OPERATIONS TESTS =====
+
+VUE_TEST_FILE = os.path.join("src", "components", "CalculatorButton.vue")
+VUE_STORE_FILE = os.path.join("src", "stores", "calculator.ts")
+
+NEW_VUE_HANDLER = """const handleDoubleClick = () => {
+    pressCount.value++;
+    emit('click', props.label);
+}"""
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        pytest.param(
+            DeleteSymbolTest(
+                Language.VUE,
+                VUE_TEST_FILE,
+                "handleMouseEnter",
+            ),
+            marks=pytest.mark.vue,
+        ),
+    ],
+)
+def test_delete_symbol_vue(test_case: DeleteSymbolTest, snapshot: SnapshotAssertion) -> None:
+    test_case.run_test(content_after_ground_truth=snapshot)
+
+
+@pytest.mark.parametrize("mode", ["before", "after"])
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        pytest.param(
+            InsertInRelToSymbolTest(
+                Language.VUE,
+                VUE_TEST_FILE,
+                "handleClick",
+                NEW_VUE_HANDLER,
+            ),
+            marks=pytest.mark.vue,
+        ),
+    ],
+)
+def test_insert_in_rel_to_symbol_vue(
+    test_case: InsertInRelToSymbolTest,
+    mode: Literal["before", "after"],
+    snapshot: SnapshotAssertion,
+) -> None:
+    test_case.set_mode(mode)
+    test_case.run_test(content_after_ground_truth=snapshot)
+
+
+VUE_REPLACED_HANDLECLICK_BODY = """const handleClick = () => {
+    if (!props.disabled) {
+        pressCount.value = 0;  // Reset instead of incrementing
+        emit('click', props.label);
+    }
+}"""
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        pytest.param(
+            ReplaceBodyTest(
+                Language.VUE,
+                VUE_TEST_FILE,
+                "handleClick",
+                VUE_REPLACED_HANDLECLICK_BODY,
+            ),
+            marks=pytest.mark.vue,
+        ),
+    ],
+)
+def test_replace_body_vue(test_case: ReplaceBodyTest, snapshot: SnapshotAssertion) -> None:
+    test_case.run_test(content_after_ground_truth=snapshot)
+
+
+VUE_REPLACED_PRESSCOUNT_BODY = """const pressCount = ref(100)"""
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        pytest.param(
+            ReplaceBodyTest(
+                Language.VUE,
+                VUE_TEST_FILE,
+                "pressCount",
+                VUE_REPLACED_PRESSCOUNT_BODY,
+            ),
+            marks=pytest.mark.vue,
+        ),
+    ],
+)
+def test_replace_body_vue_with_disambiguation(test_case: ReplaceBodyTest, snapshot: SnapshotAssertion) -> None:
+    """Test symbol disambiguation when replacing body in Vue files.
+
+    This test verifies the fix for the Vue LSP symbol duplication issue.
+    When the LSP returns two symbols with the same name (e.g., pressCount appears both as
+    a definition `const pressCount = ref(0)` and as a shorthand property in `defineExpose({ pressCount })`),
+    the _find_unique_symbol method should prefer the symbol with the larger range (the definition).
+
+    The test exercises this by calling replace_body on 'pressCount', which internally calls
+    _find_unique_symbol and should correctly select the definition (line 40, 19 chars) over
+    the reference (line 97, 10 chars).
+    """
+    test_case.run_test(content_after_ground_truth=snapshot)
+
+
+VUE_STORE_REPLACED_CLEAR_BODY = """function clear() {
+    // Modified: Reset to initial state with a log
+    console.log('Clearing calculator state');
+    displayValue.value = '0';
+    expression.value = '';
+    operationHistory.value = [];
+    lastResult.value = undefined;
+}"""
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        pytest.param(
+            ReplaceBodyTest(
+                Language.VUE,
+                VUE_STORE_FILE,
+                "clear",
+                VUE_STORE_REPLACED_CLEAR_BODY,
+            ),
+            marks=pytest.mark.vue,
+        ),
+    ],
+)
+def test_replace_body_vue_ts_file(test_case: ReplaceBodyTest, snapshot: SnapshotAssertion) -> None:
+    """Test that TypeScript files within Vue projects can be edited."""
+    test_case.run_test(content_after_ground_truth=snapshot)

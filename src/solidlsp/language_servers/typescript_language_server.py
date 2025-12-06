@@ -12,6 +12,7 @@ from typing import Any, cast
 from overrides import override
 from sensai.util.logging import LogTime
 
+from solidlsp import ls_types
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_utils import PlatformId, PlatformUtils
@@ -39,9 +40,32 @@ if not PlatformUtils.get_platform_id().value.startswith("win"):
     pass
 
 
+def prefer_non_node_modules_definition(definitions: list[ls_types.Location]) -> ls_types.Location:
+    """
+    Select the preferred definition, preferring source files over type definitions.
+
+    TypeScript language servers often return both type definitions (.d.ts files
+    in node_modules) and source definitions. This function prefers:
+    1. Files not in node_modules
+    2. Falls back to first definition if all are in node_modules
+
+    :param definitions: A non-empty list of definition locations.
+    :return: The preferred definition location.
+    """
+    for d in definitions:
+        rel_path = d.get("relativePath", "")
+        if rel_path and "node_modules" not in rel_path:
+            return d
+    return definitions[0]
+
+
 class TypeScriptLanguageServer(SolidLanguageServer):
     """
     Provides TypeScript specific instantiation of the LanguageServer class. Contains various configurations and settings specific to TypeScript.
+
+    You can pass the following entries in ls_specific_settings["typescript"]:
+        - typescript_version: Version of TypeScript to install (default: "5.9.3")
+        - typescript_language_server_version: Version of typescript-language-server to install (default: "5.1.3")
     """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
@@ -91,18 +115,23 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy javascript/typescript at the moment"
 
+        # Get version settings from ls_specific_settings or use defaults
+        language_specific_config = solidlsp_settings.get_ls_specific_settings(cls.get_language_enum_instance())
+        typescript_version = language_specific_config.get("typescript_version", "5.9.3")
+        typescript_language_server_version = language_specific_config.get("typescript_language_server_version", "5.1.3")
+
         deps = RuntimeDependencyCollection(
             [
                 RuntimeDependency(
                     id="typescript",
                     description="typescript package",
-                    command=["npm", "install", "--prefix", "./", "typescript@5.5.4"],
+                    command=["npm", "install", "--prefix", "./", f"typescript@{typescript_version}"],
                     platform_id="any",
                 ),
                 RuntimeDependency(
                     id="typescript-language-server",
                     description="typescript-language-server package",
-                    command=["npm", "install", "--prefix", "./", "typescript-language-server@4.3.3"],
+                    command=["npm", "install", "--prefix", "./", f"typescript-language-server@{typescript_language_server_version}"],
                     platform_id="any",
                 ),
             ]
@@ -114,19 +143,39 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         is_npm_installed = shutil.which("npm") is not None
         assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
-        # Verify both node and npm are installed
-        is_node_installed = shutil.which("node") is not None
-        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which("npm") is not None
-        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
-
-        # Install typescript and typescript-language-server if not already installed
+        # Install typescript and typescript-language-server if not already installed or version mismatch
         tsserver_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "ts-lsp")
         tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
+
+        # Check if installation is needed based on executable AND version
+        version_file = os.path.join(tsserver_ls_dir, ".installed_version")
+        expected_version = f"{typescript_version}_{typescript_language_server_version}"
+
+        needs_install = False
         if not os.path.exists(tsserver_executable_path):
-            log.info(f"Typescript Language Server executable not found at {tsserver_executable_path}. Installing...")
+            log.info(f"Typescript Language Server executable not found at {tsserver_executable_path}.")
+            needs_install = True
+        elif os.path.exists(version_file):
+            with open(version_file) as f:
+                installed_version = f.read().strip()
+            if installed_version != expected_version:
+                log.info(
+                    f"TypeScript Language Server version mismatch: installed={installed_version}, expected={expected_version}. Reinstalling..."
+                )
+                needs_install = True
+        else:
+            # No version file exists, assume old installation needs refresh
+            log.info("TypeScript Language Server version file not found. Reinstalling to ensure correct version...")
+            needs_install = True
+
+        if needs_install:
+            log.info("Installing TypeScript Language Server dependencies...")
             with LogTime("Installation of TypeScript language server dependencies", logger=log):
                 deps.install(tsserver_ls_dir)
+            # Write version marker file
+            with open(version_file, "w") as f:
+                f.write(expected_version)
+            log.info("TypeScript language server dependencies installed successfully")
 
         if not os.path.exists(tsserver_executable_path):
             raise FileNotFoundError(
@@ -134,8 +183,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             )
         return [tsserver_executable_path, "--stdio"]
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the TypeScript Language Server.
         """
@@ -156,6 +204,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                     "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
                     "signatureHelp": {"dynamicRegistration": True},
                     "codeAction": {"dynamicRegistration": True},
+                    "rename": {"dynamicRegistration": True, "prepareSupport": True},
                 },
                 "workspace": {
                     "workspaceFolders": True,
@@ -252,3 +301,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
         return 1
+
+    @override
+    def _get_preferred_definition(self, definitions: list[ls_types.Location]) -> ls_types.Location:
+        return prefer_non_node_modules_definition(definitions)
