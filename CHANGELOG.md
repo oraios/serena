@@ -34,6 +34,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Language support:
 
+  * **Add experimental support for OpenSCAD** via openscad-lsp. Requires Rust toolchain for automatic installation via `cargo install openscad-lsp`.
   * **Add support for Fortran** via fortls language server (requires `pip install fortls`)
   * **Add support for Julia** via LanguageServer.jl
   * **Add support for Haskell** via Haskell Language Server (HLS) with automatic discovery via ghcup, stack, or system PATH; supports both Stack and Cabal projects

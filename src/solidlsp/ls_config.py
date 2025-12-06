@@ -82,6 +82,10 @@ class Language(str, Enum):
     """YAML language server (experimental).
     Must be explicitly specified as the main language, not auto-detected.
     """
+    OPENSCAD = "openscad"
+    """OpenSCAD language server (experimental).
+    Must be explicitly specified as the main language, not auto-detected.
+    """
 
     @classmethod
     def iter_all(cls, include_experimental: bool = False) -> Iterable[Self]:
@@ -93,7 +97,15 @@ class Language(str, Enum):
         """
         Check if the language server is experimental or deprecated.
         """
-        return self in {self.TYPESCRIPT_VTS, self.PYTHON_JEDI, self.CSHARP_OMNISHARP, self.RUBY_SOLARGRAPH, self.MARKDOWN, self.YAML}
+        return self in {
+            self.TYPESCRIPT_VTS,
+            self.PYTHON_JEDI,
+            self.CSHARP_OMNISHARP,
+            self.RUBY_SOLARGRAPH,
+            self.MARKDOWN,
+            self.YAML,
+            self.OPENSCAD,
+        }
 
     def __str__(self) -> str:
         return self.value
@@ -172,6 +184,8 @@ class Language(str, Enum):
                 )
             case self.HASKELL:
                 return FilenameMatcher("*.hs", "*.lhs")
+            case self.OPENSCAD:
+                return FilenameMatcher("*.scad")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -317,6 +331,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.haskell_language_server import HaskellLanguageServer
 
                 return HaskellLanguageServer
+            case self.OPENSCAD:
+                from solidlsp.language_servers.openscad_language_server import OpenSCADLanguageServer
+
+                return OpenSCADLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

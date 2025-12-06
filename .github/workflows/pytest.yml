@@ -351,6 +351,9 @@ jobs:
             mv regal.exe "$HOME/bin/"
             echo "$HOME/bin" >> $GITHUB_PATH
           fi
+      - name: Install OpenSCAD Language Server
+        shell: bash
+        run: cargo install openscad-lsp
       - name: Cache language servers
         id: cache-language-servers
         uses: actions/cache@v3
