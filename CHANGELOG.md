@@ -34,6 +34,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Language support:
 
+  * **Add support for F#** via FsAutoComplete (Ionide's F# LSP server); requires .NET SDK and FsAutoComplete installed via `dotnet tool install --global fsautocomplete`
   * **Add support for Fortran** via fortls language server (requires `pip install fortls`)
   * **Add support for Julia** via LanguageServer.jl
   * **Add support for Haskell** via Haskell Language Server (HLS) with automatic discovery via ghcup, stack, or system PATH; supports both Stack and Cabal projects

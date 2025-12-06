@@ -1,0 +1,242 @@
+[
+  {
+    "name": "Calculator",
+    "kind": 5,
+    "range": {
+      "start": {
+        "line": 5,
+        "character": 0
+      },
+      "end": {
+        "line": 26,
+        "character": 57
+      }
+    },
+    "selectionRange": {
+      "start": {
+        "line": 5,
+        "character": 0
+      },
+      "end": {
+        "line": 26,
+        "character": 57
+      }
+    }
+  },
+  {
+    "name": "Add",
+    "kind": 6,
+    "range": {
+      "start": {
+        "line": 9,
+        "character": 16
+      },
+      "end": {
+        "line": 9,
+        "character": 35
+      }
+    },
+    "selectionRange": {
+      "start": {
+        "line": 9,
+        "character": 16
+      },
+      "end": {
+        "line": 9,
+        "character": 35
+      }
+    }
+  },
+  {
+    "name": "Divide",
+    "kind": 6,
+    "range": {
+      "start": {
+        "line": 18,
+        "character": 16
+      },
+      "end": {
+        "line": 18,
+        "character": 41
+      }
+    },
+    "selectionRange": {
+      "start": {
+        "line": 18,
+        "character": 16
+      },
+      "end": {
+        "line": 18,
+        "character": 41
+      }
+    }
+  },
+  {
+    "name": "Multiply",
+    "kind": 6,
+    "range": {
+      "start": {
+        "line": 15,
+        "character": 16
+      },
+      "end": {
+        "line": 15,
+        "character": 45
+      }
+    },
+    "selectionRange": {
+      "start": {
+        "line": 15,
+        "character": 16
+      },
+      "end": {
+        "line": 15,
+        "character": 45
+      }
+    }
+  },
+  {
+    "name": "Product",
+    "kind": 6,
+    "range": {
+      "start": {
+        "line": 25,
+        "character": 16
+      },
+      "end": {
+        "line": 26,
+        "character": 57
+      }
+    },
+    "selectionRange": {
+      "start": {
+        "line": 25,
+        "character": 16
+      },
+      "end": {
+        "line": 26,
+        "character": 57
+      }
+    }
+  },
+  {
+    "name": "Subtract",
+    "kind": 6,
+    "range": {
+      "start": {
+        "line": 12,
+        "character": 16
+      },
+      "end": {
+        "line": 12,
+        "character": 45
+      }
+    },
+    "selectionRange": {
+      "start": {
+        "line": 12,
+        "character": 16
+      },
+      "end": {
+        "line": 12,
+        "character": 45
+      }
+    }
+  },
+  {
+    "name": "Sum",
+    "kind": 6,
+    "range": {
+      "start": {
+        "line": 21,
+        "character": 16
+      },
+      "end": {
+        "line": 22,
+        "character": 52
+      }
+    },
+    "selectionRange": {
+      "start": {
+        "line": 21,
+        "character": 16
+      },
+      "end": {
+        "line": 22,
+        "character": 52
+      }
+    }
+  },
+  {
+    "name": "TestProject.Calculator",
+    "kind": 2,
+    "range": {
+      "start": {
+        "line": 0,
+        "character": 0
+      },
+      "end": {
+        "line": 38,
+        "character": 39
+      }
+    },
+    "selectionRange": {
+      "start": {
+        "line": 0,
+        "character": 0
+      },
+      "end": {
+        "line": 38,
+        "character": 39
+      }
+    }
+  },
+  {
+    "name": "createCalculator",
+    "kind": 8,
+    "range": {
+      "start": {
+        "line": 29,
+        "character": 4
+      },
+      "end": {
+        "line": 29,
+        "character": 37
+      }
+    },
+    "selectionRange": {
+      "start": {
+        "line": 29,
+        "character": 4
+      },
+      "end": {
+        "line": 29,
+        "character": 37
+      }
+    }
+  },
+  {
+    "name": "evaluate",
+    "kind": 8,
+    "range": {
+      "start": {
+        "line": 32,
+        "character": 4
+      },
+      "end": {
+        "line": 38,
+        "character": 39
+      }
+    },
+    "selectionRange": {
+      "start": {
+        "line": 32,
+        "character": 4
+      },
+      "end": {
+        "line": 38,
+        "character": 39
+      }
+    }
+  }
+]
