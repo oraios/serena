@@ -1,0 +1,11 @@
+description: Excludes Serena's memory tools (and onboarding tools, which rely on memory)
+prompt: |
+  Serena's memory tools are not available and the onboarding workflow is not being applied.
+excluded_tools:
+  - write_memory
+  - read_memory
+  - delete_memory
+  - edit_memory
+  - list_memories
+  - onboarding
+  - check_onboarding_performed

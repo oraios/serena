@@ -5,7 +5,7 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from test.conftest import create_ls
+from test.conftest import start_ls_context
 
 from . import ERLANG_LS_UNAVAILABLE, ERLANG_LS_UNAVAILABLE_REASON
 
@@ -20,21 +20,8 @@ pytestmark = [
 def ls_with_ignored_dirs() -> Generator[SolidLanguageServer, None, None]:
     """Fixture to set up an LS for the erlang test repo with the 'ignored_dir' directory ignored."""
     ignored_paths = ["_build", "ignored_dir"]
-    ls = create_ls(ignored_paths=ignored_paths, language=Language.ERLANG)
-    ls.start()
-    try:
+    with start_ls_context(language=Language.ERLANG, ignored_paths=ignored_paths) as ls:
         yield ls
-    finally:
-        try:
-            ls.stop(shutdown_timeout=1.0)  # Shorter timeout for CI
-        except Exception as e:
-            print(f"Warning: Error stopping language server: {e}")
-            # Force cleanup if needed
-            if hasattr(ls, "server") and hasattr(ls.server, "process"):
-                try:
-                    ls.server.process.terminate()
-                except:
-                    pass
 
 
 @pytest.mark.timeout(60)  # Add 60 second timeout
@@ -87,10 +74,7 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
 def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
     """Tests that refs and symbols with glob patterns are ignored."""
     ignored_paths = ["_build*", "ignored_*", "*.tmp"]
-    ls = create_ls(ignored_paths=ignored_paths, repo_path=str(repo_path), language=Language.ERLANG)
-    ls.start()
-
-    try:
+    with start_ls_context(language=Language.ERLANG, repo_path=str(repo_path), ignored_paths=ignored_paths) as ls:
         # Same as in the above tests
         root = ls.request_full_symbol_tree()[0]
         root_children = root["children"]
@@ -121,17 +105,6 @@ def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
             # Assert that _build and ignored_dir do not appear in references
             assert not any("_build" in ref["relativePath"] for ref in references), "_build should be ignored (glob)"
             assert not any("ignored_dir" in ref["relativePath"] for ref in references), "ignored_dir should be ignored (glob)"
-    finally:
-        try:
-            ls.stop(shutdown_timeout=1.0)  # Shorter timeout for CI
-        except Exception as e:
-            print(f"Warning: Error stopping glob pattern test LS: {e}")
-            # Force cleanup if needed
-            if hasattr(ls, "server") and hasattr(ls.server, "process"):
-                try:
-                    ls.server.process.terminate()
-                except:
-                    pass
 
 
 @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)

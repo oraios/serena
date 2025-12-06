@@ -675,18 +675,22 @@ class SerenaAgent:
         ToolRegistry().print_tool_overview(self._active_tools.values())
 
     def __del__(self) -> None:
+        self.shutdown()
+
+    def shutdown(self, timeout: float = 2.0) -> None:
         """
-        Destructor to clean up the language server instance and GUI logger
+        Shuts down the agent, freeing resources and stopping background tasks.
         """
         if not hasattr(self, "_is_initialized"):
             return
         log.info("SerenaAgent is shutting down ...")
         if self._active_project is not None:
-            self._active_project.shutdown()
+            self._active_project.shutdown(timeout=timeout)
             self._active_project = None
         if self._gui_log_viewer:
             log.info("Stopping the GUI log window ...")
             self._gui_log_viewer.stop()
+            self._gui_log_viewer = None
 
     def get_tool_by_name(self, tool_name: str) -> Tool:
         tool_class = ToolRegistry().get_tool_class_by_name(tool_name)

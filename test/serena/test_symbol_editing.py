@@ -24,7 +24,7 @@ from syrupy import SnapshotAssertion
 from serena.code_editor import CodeEditor, LanguageServerCodeEditor
 from solidlsp.ls_config import Language
 from src.serena.symbol import LanguageServerSymbolRetriever
-from test.conftest import create_ls, get_repo_path
+from test.conftest import get_repo_path, start_ls_context
 
 pytestmark = pytest.mark.snapshot
 
@@ -201,19 +201,9 @@ class EditingTest(ABC):
             if os.name == "nt":
                 time.sleep(0.1)
             log.info(f"Creating language server for {self.language} {self.rel_path}")
-            language_server = create_ls(self.language, str(self.repo_path))
-            log.info(f"Starting language server for {self.language} {self.rel_path}")
-            language_server.start()
-            log.info(f"Language server started for {self.language} {self.rel_path}")
-            yield LanguageServerSymbolRetriever(ls=language_server)
+            with start_ls_context(self.language, str(self.repo_path)) as language_server:
+                yield LanguageServerSymbolRetriever(ls=language_server)
         finally:
-            if language_server is not None and language_server.is_running():
-                log.info(f"Stopping language server for {self.language} {self.rel_path}")
-                language_server.stop()
-                # attempt at trigger of garbage collection
-                language_server = None
-                log.info(f"Language server stopped for {self.language} {self.rel_path}")
-
             # prevent deadlock on Windows due to lingering file locks
             if os.name == "nt":
                 time.sleep(0.1)

@@ -4,7 +4,6 @@ Context and Mode configuration loader
 
 import os
 from dataclasses import dataclass, field
-from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
@@ -182,6 +181,16 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
     @classmethod
     def from_name(cls, name: str) -> Self:
         """Load a registered Serena context."""
+        legacy_name_mapping = {
+            "ide-assistant": "claude-code",
+        }
+        if name in legacy_name_mapping:
+            log.warning(
+                f"Context name '{name}' is deprecated and has been renamed to '{legacy_name_mapping[name]}'. "
+                f"Please update your configuration; refer to the configuration guide for more details: "
+                "https://oraios.github.io/serena/02-usage/050_configuration.html#contexts"
+            )
+            name = legacy_name_mapping[name]
         context_path = cls.get_path(name)
         return cls.from_yaml(context_path)
 
@@ -214,35 +223,3 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
         print(f"{self.name}:\n {self.description}")
         if self.excluded_tools:
             print(" excluded tools:\n  " + ", ".join(sorted(self.excluded_tools)))
-
-
-class RegisteredContext(Enum):
-    """A registered context."""
-
-    IDE_ASSISTANT = "ide-assistant"
-    """For Serena running within an assistant that already has basic tools, like Claude Code, Cline, Cursor, etc."""
-    DESKTOP_APP = "desktop-app"
-    """For Serena running within Claude Desktop or a similar app which does not have built-in tools for code editing."""
-    AGENT = "agent"
-    """For Serena running as a standalone agent, e.g. through agno."""
-
-    def load(self) -> SerenaAgentContext:
-        """Load the context."""
-        return SerenaAgentContext.from_name(self.value)
-
-
-class RegisteredMode(Enum):
-    """A registered mode."""
-
-    INTERACTIVE = "interactive"
-    """Interactive mode, for multi-turn interactions."""
-    EDITING = "editing"
-    """Editing tools are activated."""
-    PLANNING = "planning"
-    """Editing tools are deactivated."""
-    ONE_SHOT = "one-shot"
-    """Non-interactive mode, where the goal is to finish a task autonomously."""
-
-    def load(self) -> SerenaAgentMode:
-        """Load the mode."""
-        return SerenaAgentMode.from_name(self.value)

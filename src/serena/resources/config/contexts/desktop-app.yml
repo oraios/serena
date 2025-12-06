@@ -1,15 +1,13 @@
-description: All tools included for desktop app context
+description: Desktop application context (chat application detached from code) where Serena's full toolset is provided
 prompt: |
-  You are running in desktop app context where the tools give you access to the code base as well as some
-  access to the file system, if configured. You interact with the user through a chat interface that is separated
-  from the code base. As a consequence, if you are in interactive mode, your communication with the user should
+  You are running in a desktop application context.
+  Serena's tools give you access to the code base as well as some access to the file system (if enabled). 
+  You interact with the user through a chat interface that is separated from the code base. 
+  As a consequence, if you are in interactive mode, your communication with the user should
   involve high-level thinking and planning as well as some summarization of any code edits that you make.
-  For viewing the code edits the user will view them in a separate code editor window, and the back-and-forth
-  between the chat and the code editor should be minimized as well as facilitated by you.
-  If complex changes have been made, advise the user on how to review them in the code editor.
-  If complex relationships that the user asked for should be visualized or explained, consider creating
-  a diagram in addition to your text-based communication. Note that in the chat interface you have various rendering
-  options for text, html, and mermaid diagrams, as has been explained to you in your initial instructions.
+  To view the code edits you make, the user will have switch to a separate application.
+  To illustrate complex relationships, consider creating diagrams in addition to your text-based communication
+  (depending on the options for text, html, mermaid diagrams, etc. that you are provided with in your initial instructions).
 excluded_tools: []
 included_optional_tools:
   - switch_modes

@@ -5,7 +5,7 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from test.conftest import create_ls
+from test.conftest import start_ls_context
 
 from . import NEXTLS_UNAVAILABLE, NEXTLS_UNAVAILABLE_REASON
 
@@ -17,12 +17,8 @@ pytestmark = [pytest.mark.elixir, pytest.mark.skipif(NEXTLS_UNAVAILABLE, reason=
 def ls_with_ignored_dirs() -> Generator[SolidLanguageServer, None, None]:
     """Fixture to set up an LS for the elixir test repo with the 'scripts' directory ignored."""
     ignored_paths = ["scripts", "ignored_dir"]
-    ls = create_ls(ignored_paths=ignored_paths, language=Language.ELIXIR)
-    ls.start()
-    try:
+    with start_ls_context(language=Language.ELIXIR, ignored_paths=ignored_paths) as ls:
         yield ls
-    finally:
-        ls.stop()
 
 
 @pytest.mark.parametrize("ls_with_ignored_dirs", [Language.ELIXIR], indirect=True)
@@ -68,10 +64,8 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
 def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
     """Tests that refs and symbols with glob patterns are ignored."""
     ignored_paths = ["*cripts", "ignored_*"]  # codespell:ignore cripts
-    ls = create_ls(ignored_paths=ignored_paths, repo_path=str(repo_path), language=Language.ELIXIR)
-    ls.start()
+    with start_ls_context(language=Language.ELIXIR, repo_path=str(repo_path), ignored_paths=ignored_paths) as ls:
 
-    try:
         # Same as in the above tests
         root = ls.request_full_symbol_tree()[0]
         root_children = root["children"]
@@ -101,8 +95,6 @@ def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
             # Assert that scripts and ignored_dir do not appear in references
             assert not any("scripts" in ref["relativePath"] for ref in references), "scripts should be ignored (glob)"
             assert not any("ignored_dir" in ref["relativePath"] for ref in references), "ignored_dir should be ignored (glob)"
-    finally:
-        ls.stop()
 
 
 @pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)

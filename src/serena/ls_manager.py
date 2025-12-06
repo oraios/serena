@@ -182,25 +182,26 @@ class LanguageServerManager:
         self._stop_language_server(ls, save_cache=save_cache)
 
     @staticmethod
-    def _stop_language_server(ls: SolidLanguageServer, save_cache: bool = False) -> None:
+    def _stop_language_server(ls: SolidLanguageServer, save_cache: bool = False, timeout: float = 2.0) -> None:
         if ls.is_running():
             if save_cache:
                 ls.save_cache()
             log.info(f"Stopping language server for language {ls.language} ...")
-            ls.stop()
+            ls.stop(shutdown_timeout=timeout)
 
     def iter_language_servers(self) -> Iterator[SolidLanguageServer]:
         for ls in self._language_servers.values():
             yield self._ensure_functional_ls(ls)
 
-    def stop_all(self, save_cache: bool = False) -> None:
+    def stop_all(self, save_cache: bool = False, timeout: float = 2.0) -> None:
         """
         Stops all managed language servers.
 
         :param save_cache: whether to save the cache before stopping
+        :param timeout: timeout for shutdown of each language server
         """
         for ls in self.iter_language_servers():
-            self._stop_language_server(ls, save_cache=save_cache)
+            self._stop_language_server(ls, save_cache=save_cache, timeout=timeout)
 
     def save_all_caches(self) -> None:
         """

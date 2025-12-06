@@ -21,6 +21,18 @@ jobs:
         python-version: ["3.11"]
     steps:
       - uses: actions/checkout@v3
+      - name: Free disk space
+        if: runner.os == 'Linux'
+        run: |
+          df -h
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache
+          sudo apt-get clean
+          sudo apt-get autoremove -y
+          docker system prune -af || true
+          df -h
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
@@ -359,6 +371,11 @@ jobs:
           key: language-servers-${{ runner.os }}-v1
           restore-keys: |
             language-servers-${{ runner.os }}-
+      - name: Report free disk space
+        if: runner.os == 'Linux'
+        run: |
+          echo "Free disk space before tests:"
+          df -h
       - name: Test with pytest
         shell: bash
         run: uv run poe test
