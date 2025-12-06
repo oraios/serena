@@ -107,3 +107,57 @@ class TestProjectConfigAutogenerate:
 
         assert config.project_name == custom_name
         assert config.languages == [Language.TYPESCRIPT]
+
+    def test_auto_index_on_activate_default_false(self):
+        """Test that auto_index_on_activate defaults to False."""
+        # Create a Python file
+        python_file = self.project_path / "main.py"
+        python_file.write_text("def hello(): pass\n")
+
+        config = ProjectConfig.autogenerate(self.project_path, save_to_disk=False)
+
+        assert config.auto_index_on_activate is False
+
+    def test_auto_index_on_activate_from_yaml(self):
+        """Test loading auto_index_on_activate from YAML configuration."""
+        # Create a Python file
+        python_file = self.project_path / "main.py"
+        python_file.write_text("def hello(): pass\n")
+
+        # Create .serena directory and project.yml with auto_index_on_activate enabled
+        serena_dir = self.project_path / ".serena"
+        serena_dir.mkdir()
+        project_yml = serena_dir / "project.yml"
+        project_yml.write_text(
+            """project_name: test-project
+languages:
+  - python
+auto_index_on_activate: true
+"""
+        )
+
+        config = ProjectConfig.load(self.project_path)
+
+        assert config.auto_index_on_activate is True
+        assert config.project_name == "test-project"
+
+    def test_auto_index_on_activate_missing_from_yaml(self):
+        """Test that auto_index_on_activate defaults to False when not in YAML."""
+        # Create a Python file
+        python_file = self.project_path / "main.py"
+        python_file.write_text("def hello(): pass\n")
+
+        # Create .serena directory and project.yml without auto_index_on_activate
+        serena_dir = self.project_path / ".serena"
+        serena_dir.mkdir()
+        project_yml = serena_dir / "project.yml"
+        project_yml.write_text(
+            """project_name: test-project
+languages:
+  - python
+"""
+        )
+
+        config = ProjectConfig.load(self.project_path)
+
+        assert config.auto_index_on_activate is False
