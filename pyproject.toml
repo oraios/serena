@@ -299,6 +299,7 @@ markers = [
   "fortran: language server running for Fortran",
   "haskell: Haskell language server tests",
   "yaml: language server running for YAML",
+  "openscad: language server running for OpenSCAD",
 ]
 
 [tool.codespell]
