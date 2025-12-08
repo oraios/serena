@@ -270,41 +270,12 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         symbol_candidates = self._symbol_retriever.find_by_name(name_path, within_relative_path=relative_file_path)
         if len(symbol_candidates) == 0:
             raise ValueError(f"No symbol with name {name_path} found in file {relative_file_path}")
-        if len(symbol_candidates) == 1:
-            return symbol_candidates[0]
-
-        # Multiple candidates found - prefer the definition (symbol with larger range)
-        # This handles cases like Vue's defineExpose({ pressCount }) where the same
-        # symbol appears both as a definition and as a shorthand property reference
-        def get_range_size(symbol: LanguageServerSymbol) -> tuple[int, int]:
-            """
-            Calculate range size in (lines, characters).
-            Definitions typically have larger ranges.
-            Returns tuple (line_size, char_size) for multi-level comparison.
-            """
-            range_data = symbol.symbol_root.get("range", {})
-            start_line = range_data.get("start", {}).get("line", 0)
-            end_line = range_data.get("end", {}).get("line", 0)
-            start_char = range_data.get("start", {}).get("character", 0)
-            end_char = range_data.get("end", {}).get("character", 0)
-            return (end_line - start_line, end_char - start_char)
-
-        # Sort by range size descending - larger ranges are typically definitions
-        sorted_candidates = sorted(symbol_candidates, key=get_range_size, reverse=True)
-
-        # If the top candidate has a strictly larger range, it's likely the definition
-        if get_range_size(sorted_candidates[0]) > get_range_size(sorted_candidates[1]):
-            return sorted_candidates[0]
-
-        # If the top two have equal ranges, we can't disambiguate - raise error with details
-        top_range = get_range_size(sorted_candidates[0])
-        second_range = get_range_size(sorted_candidates[1])
-        raise ValueError(
-            f"Found {len(symbol_candidates)} symbols with name '{name_path}' in file {relative_file_path}. "
-            f"Cannot disambiguate: the top candidates have equal ranges "
-            f"(top: {top_range[0]} lines, {top_range[1]} chars; second: {second_range[0]} lines, {second_range[1]} chars). "
-            "Their locations are:\n" + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
-        )
+        if len(symbol_candidates) > 1:
+            raise ValueError(
+                f"Found multiple {len(symbol_candidates)} symbols with name {name_path} in file {relative_file_path}. "
+                "Their locations are: \n " + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
+            )
+        return symbol_candidates[0]
 
     def _apply_workspace_edit(self, workspace_edit: ls_types.WorkspaceEdit) -> list[str]:
         """

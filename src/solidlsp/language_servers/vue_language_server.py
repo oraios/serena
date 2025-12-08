@@ -20,13 +20,13 @@ from solidlsp.language_servers.typescript_language_server import (
     TypeScriptLanguageServer,
     prefer_non_node_modules_definition,
 )
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_types import Location
 from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler import lsp_types
-from solidlsp.lsp_protocol_handler.lsp_types import ExecuteCommandParams, InitializeParams
+from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, ExecuteCommandParams, InitializeParams, SymbolInformation
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -723,3 +723,87 @@ class VueLanguageServer(SolidLanguageServer):
     @override
     def _get_preferred_definition(self, definitions: list[ls_types.Location]) -> ls_types.Location:
         return prefer_non_node_modules_definition(definitions)
+
+    @override
+    def _request_document_symbols(
+        self, relative_file_path: str, file_data: LSPFileBuffer | None
+    ) -> list[SymbolInformation] | list[DocumentSymbol] | None:
+        """
+        Override to filter out shorthand property references in Vue files.
+
+        In Vue, when using shorthand syntax in defineExpose like `defineExpose({ pressCount })`,
+        the Vue LSP returns both:
+        - The Variable definition (e.g., `const pressCount = ref(0)`)
+        - A Property symbol for the shorthand reference (e.g., `pressCount` in defineExpose)
+
+        This causes duplicate symbols with the same name, which breaks symbol lookup.
+        We filter out Property symbols that have a matching Variable with the same name
+        at a different location (the definition), keeping only the definition.
+        """
+        symbols = super()._request_document_symbols(relative_file_path, file_data)
+
+        if symbols is None or len(symbols) == 0:
+            return symbols
+
+        # Only process DocumentSymbol format (hierarchical symbols with children)
+        # SymbolInformation format doesn't have the same issue
+        if not isinstance(symbols[0], dict) or "range" not in symbols[0]:
+            return symbols
+
+        return self._filter_shorthand_property_duplicates(symbols)
+
+    def _filter_shorthand_property_duplicates(
+        self, symbols: list[DocumentSymbol] | list[SymbolInformation]
+    ) -> list[DocumentSymbol] | list[SymbolInformation]:
+        """
+        Filter out Property symbols that have a matching Variable symbol with the same name.
+
+        This handles Vue's shorthand property syntax in defineExpose, where the same
+        identifier appears as both a Variable definition and a Property reference.
+        """
+        VARIABLE_KIND = 13  # SymbolKind.Variable
+        PROPERTY_KIND = 7  # SymbolKind.Property
+
+        def filter_symbols(syms: list[dict]) -> list[dict]:
+            # Collect all Variable symbol names with their line numbers
+            variable_names: dict[str, set[int]] = {}
+            for sym in syms:
+                if sym.get("kind") == VARIABLE_KIND:
+                    name = sym.get("name", "")
+                    line = sym.get("range", {}).get("start", {}).get("line", -1)
+                    if name not in variable_names:
+                        variable_names[name] = set()
+                    variable_names[name].add(line)
+
+            # Filter: keep symbols that are either:
+            # 1. Not a Property, or
+            # 2. A Property without a matching Variable name at a different location
+            filtered = []
+            for sym in syms:
+                name = sym.get("name", "")
+                kind = sym.get("kind")
+                line = sym.get("range", {}).get("start", {}).get("line", -1)
+
+                # If it's a Property with a matching Variable name at a DIFFERENT line, skip it
+                if kind == PROPERTY_KIND and name in variable_names:
+                    # Check if there's a Variable definition at a different line
+                    var_lines = variable_names[name]
+                    if any(var_line != line for var_line in var_lines):
+                        # This is a shorthand reference, skip it
+                        log.debug(
+                            f"Filtering shorthand property reference '{name}' at line {line} "
+                            f"(Variable definition exists at line(s) {var_lines})"
+                        )
+                        continue
+
+                # Recursively filter children
+                children = sym.get("children", [])
+                if children:
+                    sym = dict(sym)  # Create a copy to avoid mutating the original
+                    sym["children"] = filter_symbols(children)
+
+                filtered.append(sym)
+
+            return filtered
+
+        return filter_symbols(list(symbols))  # type: ignore
