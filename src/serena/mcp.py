@@ -215,8 +215,6 @@ class SerenaMCPFactory:
             return tool.apply_ex(log_call=True, catch_exceptions=True, **kwargs)
 
         annotations = ToolAnnotations(readOnlyHint=not tool.can_edit())
-        if annotations.readOnlyHint:
-            annotations.destructiveHint = False
 
         return MCPTool(
             fn=execute_fn,
