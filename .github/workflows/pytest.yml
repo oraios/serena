@@ -115,6 +115,10 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+      - name: Setup .NET SDK (for F# and C# languages)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
         with:

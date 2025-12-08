@@ -25,7 +25,6 @@ from serena.constants import (
     REPO_ROOT,
     SERENA_CONFIG_TEMPLATE_FILE,
     SERENA_FILE_ENCODING,
-    SERENA_MANAGED_DIR_IN_HOME,
     SERENA_MANAGED_DIR_NAME,
 )
 from serena.util.general import load_yaml, save_yaml
@@ -53,9 +52,32 @@ class SerenaPaths:
     """
 
     def __init__(self) -> None:
-        self.user_config_dir: str = SERENA_MANAGED_DIR_IN_HOME
+        home_dir = os.getenv("SERENA_HOME")
+        if home_dir is None or home_dir.strip() == "":
+            home_dir = str(Path.home() / SERENA_MANAGED_DIR_NAME)
+        else:
+            home_dir = home_dir.strip()
+        self.serena_user_home_dir: str = home_dir
         """
-        the path to the user's Serena configuration directory, which is typically ~/.serena
+        the path to the Serena home directory, where the user's configuration/data is stored.
+        This is ~/.serena by default, but it can be overridden via the SERENA_HOME environment variable.
+        """
+        self.user_prompt_templates_dir: str = os.path.join(self.serena_user_home_dir, "prompt_templates")
+        """
+        directory containing prompt templates defined by the user.
+        Prompts defined by the user take precedence over Serena's built-in prompt templates.
+        """
+        self.user_contexts_dir: str = os.path.join(self.serena_user_home_dir, "contexts")
+        """
+        directory containing contexts defined by the user. 
+        If a name of a context matches a name of a context in SERENAS_OWN_CONTEXT_YAMLS_DIR, 
+        the user context will override the default context definition.
+        """
+        self.user_modes_dir: str = os.path.join(self.serena_user_home_dir, "modes")
+        """
+        directory containing modes defined by the user.
+        If a name of a mode matches a name of a mode in SERENAS_OWN_MODES_YAML_DIR,
+        the user mode will override the default mode definition.
         """
 
     def get_next_log_file_path(self, prefix: str) -> str:
@@ -63,7 +85,7 @@ class SerenaPaths:
         :param prefix: the filename prefix indicating the type of the log file
         :return: the full path to the log file to use
         """
-        log_dir = os.path.join(self.user_config_dir, "logs", datetime.now().strftime("%Y-%m-%d"))
+        log_dir = os.path.join(self.serena_user_home_dir, "logs", datetime.now().strftime("%Y-%m-%d"))
         os.makedirs(log_dir, exist_ok=True)
         return os.path.join(log_dir, prefix + "_" + datetime_tag() + ".txt")
 
@@ -377,7 +399,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         return ["config_file_path"]
 
     @classmethod
-    def generate_config_file(cls, config_file_path: str) -> None:
+    def _generate_config_file(cls, config_file_path: str) -> None:
         """
         Generates a Serena configuration file at the specified path from the template file.
 
@@ -395,7 +417,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         if is_running_in_docker():
             return os.path.join(REPO_ROOT, cls.CONFIG_FILE_DOCKER)
         else:
-            config_path = os.path.join(SERENA_MANAGED_DIR_IN_HOME, cls.CONFIG_FILE)
+            config_path = os.path.join(SerenaPaths().serena_user_home_dir, cls.CONFIG_FILE)
 
             # if the config file does not exist, check if we can migrate it from the old location
             if not os.path.exists(config_path):
@@ -419,7 +441,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
             if not generate_if_missing:
                 raise FileNotFoundError(f"Serena configuration file not found: {config_file_path}")
             log.info(f"Serena configuration file not found at {config_file_path}, autogenerating...")
-            cls.generate_config_file(config_file_path)
+            cls._generate_config_file(config_file_path)
 
         # load the configuration
         log.info(f"Loading Serena configuration from {config_file_path}")

@@ -294,6 +294,7 @@ markers = [
   "erlang: language server running for Erlang",
   "scala: language server running for Scala",
   "al: language server running for AL (Microsoft Dynamics 365 Business Central)",
+  "fsharp: language server running for F#",
   "rego: language server running for Rego",
   "markdown: language server running for Markdown",
   "julia: Julia language server tests",
@@ -307,4 +308,4 @@ markers = [
 skip = '.git*,*.svg,*.lock,*.min.*'
 check-hidden = true
 # ignore-regex = ''
-# ignore-words-list = ''
+ignore-words-list = 'paket'

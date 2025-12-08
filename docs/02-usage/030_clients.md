@@ -111,7 +111,21 @@ Add the `serena` MCP server configuration, using a [run command](020_running.md)
 If you are using paths containing backslashes for paths on Windows
 (note that you can also just use forward slashes), be sure to escape them correctly (`\\`).
 
-That's it! Save the config and then restart Claude Desktop. You are ready for activating your first project.
+:::{note}
+Some language servers may require additional environment variables to be set (e.g. F# on macOS with Homebrew),
+which you may need to explicitly add to the MCP server configuration.
+Note that the spawned processes will not inherit environment variables that are only configured in your shell 
+profile (e.g. `.bashrc`, `.zshrc`, etc.); they would need to be set system-wide instead.
+An easy fix is to add them explicitly to the MCP server entry: Simply add an `env` key to the `serena` object, e.g.
+
+```
+"env": {
+    "DOTNET_ROOT": "/opt/homebrew/Cellar/dotnet/9.0.8/libexec"
+}
+```
+:::
+
+Once you have created the new MCP server entry, save the config and then restart Claude Desktop. 
 
 :::{attention}
 Be sure to fully quit the Claude Desktop application via File / Exit, as regularly closing the application will just minimize it.

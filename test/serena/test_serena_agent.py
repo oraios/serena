@@ -30,6 +30,7 @@ def serena_config():
         Language.PHP,
         Language.CSHARP,
         Language.CLOJURE,
+        Language.FSHARP,
     ]:
         repo_path = get_repo_path(language)
         if repo_path.exists():
@@ -81,6 +82,7 @@ class TestSerenaAgent:
             pytest.param(Language.PHP, "helperFunction", "Function", "helper.php", marks=pytest.mark.php),
             pytest.param(Language.CLOJURE, "greet", "Function", clj.CORE_PATH, marks=pytest.mark.clojure),
             pytest.param(Language.CSHARP, "Calculator", "Class", "Program.cs", marks=pytest.mark.csharp),
+            pytest.param(Language.FSHARP, "Calculator", "Module", "Calculator.fs", marks=pytest.mark.fsharp),
         ],
         indirect=["serena_agent"],
     )
@@ -131,6 +133,7 @@ class TestSerenaAgent:
                 marks=pytest.mark.clojure,
             ),
             pytest.param(Language.CSHARP, "Calculator", "Program.cs", "Program.cs", marks=pytest.mark.csharp),
+            pytest.param(Language.FSHARP, "add", "Calculator.fs", "Program.fs", marks=pytest.mark.fsharp),
         ],
         indirect=["serena_agent"],
     )

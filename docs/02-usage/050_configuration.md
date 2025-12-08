@@ -106,3 +106,30 @@ You can manage modes using the `mode` command,
     <serena> mode delete <mode-name>
 
 where `<serena>` is [your way of running Serena](020_running).
+
+## Advanced Configuration
+
+For advanced users, Serena's configuration can be further customized.
+
+### Serena Data Directory
+
+The Serena user data directory (where configuration, language server files, logs, etc. are stored) defaults to `~/.serena`.
+You can change this location by setting the `SERENA_HOME` environment variable to your desired path.
+
+### Custom Prompts
+
+All of Serena's prompts can be fully customized.
+We define prompt as jinja templates in yaml files, and you can inspect our default prompts [here](https://github.com/oraios/serena/tree/main/src/serena/resources/config/prompt_templates).
+
+To override a prompt, simply add a .yml file to the `prompt_templates` folder in your Serena data directory
+which defines the prompt with the same name as the default prompt you want to override.
+For example, to override the `system_prompt`, you could create a file `~/.serena/prompt_templates/system_prompt.yml` (assuming default Serena data folder location) 
+with content like:
+
+```yaml
+prompts:
+  system_prompt: |
+    Whatever you want ...
+```
+
+It is advisable to use the default prompt as a starting point and modify it to suit your needs.

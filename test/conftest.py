@@ -7,7 +7,8 @@ import pytest
 from blib2to3.pgen2.parse import contextmanager
 from sensai.util.logging import configure
 
-from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
+from serena.config.serena_config import SerenaPaths
+from serena.constants import SERENA_MANAGED_DIR_NAME
 from serena.project import Project
 from serena.util.file_system import GitignoreParser
 from solidlsp.ls import SolidLanguageServer
@@ -49,7 +50,9 @@ def _create_ls(
     return SolidLanguageServer.create(
         config,
         repo_path,
-        solidlsp_settings=SolidLSPSettings(solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME, project_data_relative_path=SERENA_MANAGED_DIR_NAME),
+        solidlsp_settings=SolidLSPSettings(
+            solidlsp_dir=SerenaPaths().serena_user_home_dir, project_data_relative_path=SERENA_MANAGED_DIR_NAME
+        ),
     )
 
 
