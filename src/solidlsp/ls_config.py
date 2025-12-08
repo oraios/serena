@@ -56,6 +56,7 @@ class Language(str, Enum):
     NIX = "nix"
     ERLANG = "erlang"
     AL = "al"
+    FSHARP = "fsharp"
     REGO = "rego"
     SCALA = "scala"
     JULIA = "julia"
@@ -161,6 +162,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.erl", "*.hrl", "*.escript", "*.config", "*.app", "*.app.src")
             case self.AL:
                 return FilenameMatcher("*.al", "*.dal")
+            case self.FSHARP:
+                return FilenameMatcher("*.fs", "*.fsx", "*.fsi")
             case self.REGO:
                 return FilenameMatcher("*.rego")
             case self.MARKDOWN:
@@ -324,6 +327,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.haskell_language_server import HaskellLanguageServer
 
                 return HaskellLanguageServer
+            case self.FSHARP:
+                from solidlsp.language_servers.fsharp_language_server import FSharpLanguageServer
+
+                return FSharpLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

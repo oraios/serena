@@ -21,14 +21,10 @@ from serena.config.serena_config import ProjectConfig, SerenaConfig, SerenaPaths
 from serena.constants import (
     DEFAULT_CONTEXT,
     DEFAULT_MODES,
-    PROMPT_TEMPLATES_DIR_IN_USER_HOME,
     PROMPT_TEMPLATES_DIR_INTERNAL,
     SERENA_LOG_FORMAT,
-    SERENA_MANAGED_DIR_IN_HOME,
     SERENAS_OWN_CONTEXT_YAMLS_DIR,
     SERENAS_OWN_MODE_YAMLS_DIR,
-    USER_CONTEXT_YAMLS_DIR,
-    USER_MODE_YAMLS_DIR,
 )
 from serena.mcp import SerenaMCPFactory, SerenaMCPFactorySingleProcess
 from serena.project import Project
@@ -270,7 +266,7 @@ class ModeCommands(AutoRegisteringGroup):
         if not (name or from_internal):
             raise click.UsageError("Provide at least one of --name or --from-internal.")
         mode_name = name or from_internal
-        dest = os.path.join(USER_MODE_YAMLS_DIR, f"{mode_name}.yml")
+        dest = os.path.join(SerenaPaths().user_modes_dir, f"{mode_name}.yml")
         src = (
             os.path.join(SERENAS_OWN_MODE_YAMLS_DIR, f"{from_internal}.yml")
             if from_internal
@@ -289,7 +285,7 @@ class ModeCommands(AutoRegisteringGroup):
     @click.command("edit", help="Edit a custom mode YAML file.")
     @click.argument("mode_name")
     def edit(mode_name: str) -> None:
-        path = os.path.join(USER_MODE_YAMLS_DIR, f"{mode_name}.yml")
+        path = os.path.join(SerenaPaths().user_modes_dir, f"{mode_name}.yml")
         if not os.path.exists(path):
             if mode_name in SerenaAgentMode.list_registered_mode_names(include_user_modes=False):
                 click.echo(
@@ -305,7 +301,7 @@ class ModeCommands(AutoRegisteringGroup):
     @click.command("delete", help="Delete a custom mode file.")
     @click.argument("mode_name")
     def delete(mode_name: str) -> None:
-        path = os.path.join(USER_MODE_YAMLS_DIR, f"{mode_name}.yml")
+        path = os.path.join(SerenaPaths().user_modes_dir, f"{mode_name}.yml")
         if not os.path.exists(path):
             click.echo(f"Custom mode '{mode_name}' not found.")
             return
@@ -347,7 +343,7 @@ class ContextCommands(AutoRegisteringGroup):
         if not (name or from_internal):
             raise click.UsageError("Provide at least one of --name or --from-internal.")
         ctx_name = name or from_internal
-        dest = os.path.join(USER_CONTEXT_YAMLS_DIR, f"{ctx_name}.yml")
+        dest = os.path.join(SerenaPaths().user_contexts_dir, f"{ctx_name}.yml")
         src = (
             os.path.join(SERENAS_OWN_CONTEXT_YAMLS_DIR, f"{from_internal}.yml")
             if from_internal
@@ -366,7 +362,7 @@ class ContextCommands(AutoRegisteringGroup):
     @click.command("edit", help="Edit a custom context YAML file.")
     @click.argument("context_name")
     def edit(context_name: str) -> None:
-        path = os.path.join(USER_CONTEXT_YAMLS_DIR, f"{context_name}.yml")
+        path = os.path.join(SerenaPaths().user_contexts_dir, f"{context_name}.yml")
         if not os.path.exists(path):
             if context_name in SerenaAgentContext.list_registered_context_names(include_user_contexts=False):
                 click.echo(
@@ -382,7 +378,7 @@ class ContextCommands(AutoRegisteringGroup):
     @click.command("delete", help="Delete a custom context file.")
     @click.argument("context_name")
     def delete(context_name: str) -> None:
-        path = os.path.join(USER_CONTEXT_YAMLS_DIR, f"{context_name}.yml")
+        path = os.path.join(SerenaPaths().user_contexts_dir, f"{context_name}.yml")
         if not os.path.exists(path):
             click.echo(f"Custom context '{context_name}' not found.")
             return
@@ -401,10 +397,9 @@ class SerenaConfigCommands(AutoRegisteringGroup):
         "edit", help="Edit serena_config.yml in your default editor. Will create a config file from the template if no config is found."
     )
     def edit() -> None:
-        config_path = os.path.join(SERENA_MANAGED_DIR_IN_HOME, "serena_config.yml")
-        if not os.path.exists(config_path):
-            SerenaConfig.generate_config_file(config_path)
-        _open_in_editor(config_path)
+        serena_config = SerenaConfig.from_config_file()
+        assert serena_config.config_file_path is not None
+        _open_in_editor(serena_config.config_file_path)
 
 
 class ProjectCommands(AutoRegisteringGroup):
@@ -811,8 +806,9 @@ class PromptCommands(AutoRegisteringGroup):
 
     @staticmethod
     def _get_user_prompt_yaml_path(prompt_yaml_name: str) -> str:
-        os.makedirs(PROMPT_TEMPLATES_DIR_IN_USER_HOME, exist_ok=True)
-        return os.path.join(PROMPT_TEMPLATES_DIR_IN_USER_HOME, prompt_yaml_name)
+        templates_dir = SerenaPaths().user_prompt_templates_dir
+        os.makedirs(templates_dir, exist_ok=True)
+        return os.path.join(templates_dir, prompt_yaml_name)
 
     @staticmethod
     @click.command("list", help="Lists yamls that are used for defining prompts.")
@@ -863,9 +859,10 @@ class PromptCommands(AutoRegisteringGroup):
     @staticmethod
     @click.command("list-overrides", help="List existing prompt override files")
     def list_overrides() -> None:
-        os.makedirs(PROMPT_TEMPLATES_DIR_IN_USER_HOME, exist_ok=True)
+        user_templates_dir = SerenaPaths().user_prompt_templates_dir
+        os.makedirs(user_templates_dir, exist_ok=True)
         serena_prompt_yaml_names = [os.path.basename(f) for f in glob.glob(PROMPT_TEMPLATES_DIR_INTERNAL + "/*.yml")]
-        override_files = glob.glob(os.path.join(PROMPT_TEMPLATES_DIR_IN_USER_HOME, "*.yml"))
+        override_files = glob.glob(os.path.join(user_templates_dir, "*.yml"))
         for file_path in override_files:
             if os.path.basename(file_path) in serena_prompt_yaml_names:
                 click.echo(file_path)

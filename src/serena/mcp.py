@@ -14,6 +14,7 @@ import docstring_parser
 from mcp.server.fastmcp import server
 from mcp.server.fastmcp.server import FastMCP, Settings
 from mcp.server.fastmcp.tools.base import Tool as MCPTool
+from mcp.types import ToolAnnotations
 from pydantic_settings import SettingsConfigDict
 from sensai.util import logging
 
@@ -213,6 +214,8 @@ class SerenaMCPFactory:
         def execute_fn(**kwargs) -> str:  # type: ignore
             return tool.apply_ex(log_call=True, catch_exceptions=True, **kwargs)
 
+        annotations = ToolAnnotations(readOnlyHint=not tool.can_edit())
+
         return MCPTool(
             fn=execute_fn,
             name=func_name,
@@ -221,7 +224,7 @@ class SerenaMCPFactory:
             fn_metadata=func_arg_metadata,
             is_async=is_async,
             context_kwarg=None,
-            annotations=None,
+            annotations=annotations,
             title=None,
         )
 

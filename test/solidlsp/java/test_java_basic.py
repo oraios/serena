@@ -1,17 +1,13 @@
 import os
-import platform
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
+from test.conftest import language_tests_enabled
 
-# These marks will be applied to all tests in this module.
-# We skip the tests if not on Windows (CI hangs on Ubuntu for unknown reasons; testing on Windows is sufficient)
-is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
-java_tests_enabled = not is_ci or platform.system() == "Windows"
-pytestmark = [pytest.mark.java, pytest.mark.skipif(not java_tests_enabled, reason="Java tests are only run on Windows in CI")]
+pytestmark = [pytest.mark.java, pytest.mark.skipif(not language_tests_enabled(Language.JAVA), reason="Java tests disabled")]
 
 
 class TestJavaLanguageServer:

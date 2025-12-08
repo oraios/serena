@@ -1,17 +1,25 @@
 import logging
+import os
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from blib2to3.pgen2.parse import contextmanager
 from sensai.util.logging import configure
 
-from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
+from serena.config.serena_config import SerenaPaths
+from serena.constants import SERENA_MANAGED_DIR_NAME
 from serena.project import Project
 from serena.util.file_system import GitignoreParser
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
 
-configure(level=logging.ERROR)
+from .solidlsp.clojure import is_clojure_cli_available
+
+configure(level=logging.INFO)
+
+log = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="session")
@@ -29,12 +37,8 @@ def get_repo_path(language: Language) -> Path:
     return Path(__file__).parent / "resources" / "repos" / language / "test_repo"
 
 
-def create_ls(
-    language: Language,
-    repo_path: str | None = None,
-    ignored_paths: list[str] | None = None,
-    trace_lsp_communication: bool = False,
-    log_level: int = logging.ERROR,
+def _create_ls(
+    language: Language, repo_path: str | None = None, ignored_paths: list[str] | None = None, trace_lsp_communication: bool = False
 ) -> SolidLanguageServer:
     ignored_paths = ignored_paths or []
     if repo_path is None:
@@ -46,16 +50,43 @@ def create_ls(
     return SolidLanguageServer.create(
         config,
         repo_path,
-        solidlsp_settings=SolidLSPSettings(solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME, project_data_relative_path=SERENA_MANAGED_DIR_NAME),
+        solidlsp_settings=SolidLSPSettings(
+            solidlsp_dir=SerenaPaths().serena_user_home_dir, project_data_relative_path=SERENA_MANAGED_DIR_NAME
+        ),
     )
 
 
-def create_default_ls(language: Language) -> SolidLanguageServer:
-    repo_path = str(get_repo_path(language))
-    return create_ls(language, repo_path)
+@contextmanager
+def start_ls_context(
+    language: Language, repo_path: str | None = None, ignored_paths: list[str] | None = None, trace_lsp_communication: bool = False
+) -> Iterator[SolidLanguageServer]:
+    ls = _create_ls(language, repo_path, ignored_paths, trace_lsp_communication)
+    log.info(f"Starting language server for {language} {repo_path}")
+    ls.start()
+    try:
+        log.info(f"Language server started for {language} {repo_path}")
+        yield ls
+    finally:
+        log.info(f"Stopping language server for {language} {repo_path}")
+        try:
+            ls.stop(shutdown_timeout=5)
+        except Exception as e:
+            log.warning(f"Warning: Error stopping language server: {e}")
+            # try to force cleanup
+            if hasattr(ls, "server") and hasattr(ls.server, "process"):
+                try:
+                    ls.server.process.terminate()
+                except:
+                    pass
 
 
-def create_default_project(language: Language) -> Project:
+@contextmanager
+def start_default_ls_context(language: Language) -> Iterator[SolidLanguageServer]:
+    with start_ls_context(language) as ls:
+        yield ls
+
+
+def _create_default_project(language: Language) -> Project:
     repo_path = str(get_repo_path(language))
     return Project.load(repo_path)
 
@@ -81,7 +112,8 @@ def repo_path(request: LanguageParamRequest) -> Path:
     return get_repo_path(language)
 
 
-@pytest.fixture(scope="session")
+# Note: using module scope here to avoid restarting LS for each test function but still terminate between test modules
+@pytest.fixture(scope="module")
 def language_server(request: LanguageParamRequest):
     """Create a language server instance configured for the specified language.
 
@@ -108,15 +140,11 @@ def language_server(request: LanguageParamRequest):
         raise ValueError("Language parameter must be provided via pytest.mark.parametrize")
 
     language = request.param
-    server = create_default_ls(language)
-    server.start()
-    try:
-        yield server
-    finally:
-        server.stop()
+    with start_default_ls_context(language) as ls:
+        yield ls
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def project(request: LanguageParamRequest):
     """Create a Project for the specified language.
 
@@ -143,4 +171,48 @@ def project(request: LanguageParamRequest):
         raise ValueError("Language parameter must be provided via pytest.mark.parametrize")
 
     language = request.param
-    yield create_default_project(language)
+    project = _create_default_project(language)
+    yield project
+    project.shutdown(timeout=5)
+
+
+is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
+"""
+Flag indicating whether the tests are running in the GitHub CI environment.
+"""
+
+
+def _determine_disabled_languages() -> list[Language]:
+    """
+    Determine which language tests should be disabled (based on the environment)
+
+    :return: the list of disabled languages
+    """
+    result: list[Language] = []
+
+    java_tests_enabled = True
+    if not java_tests_enabled:
+        result.append(Language.JAVA)
+
+    clojure_tests_enabled = is_clojure_cli_available()
+    if not clojure_tests_enabled:
+        result.append(Language.CLOJURE)
+
+    al_tests_enabled = True
+    if not al_tests_enabled:
+        result.append(Language.AL)
+
+    return result
+
+
+_disabled_languages = _determine_disabled_languages()
+
+
+def language_tests_enabled(language: Language) -> bool:
+    """
+    Check if tests for the given language are enabled in the current environment.
+
+    :param language: the language to check
+    :return: True if tests for the language are enabled, False otherwise
+    """
+    return language not in _disabled_languages

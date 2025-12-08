@@ -1,4 +1,4 @@
-description: A configuration specific for chatgpt, which has a limit of 30 tools and requires short descriptions.
+description: A configuration specific for ChatGPT, which has a limit of 30 tools and requires short descriptions.
 prompt: |
   You are running in desktop app context where the tools give you access to the code base as well as some
   access to the file system, if configured. You interact with the user through a chat interface that is separated

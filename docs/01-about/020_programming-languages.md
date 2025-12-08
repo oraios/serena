@@ -25,7 +25,9 @@ With Serena, we provide direct, out-of-the-box support for:
   (requires Elm compiler)
 * **Erlang**  
   (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls); experimental, might be slow or hang)
-* **Fortran**  
+* **F#**  
+  (requires .NET SDK 8.0+; uses FsAutoComplete/Ionide, which is auto-installed; for Homebrew .NET on macOS, set DOTNET_ROOT in your environment)
+* **Fortran**   
   (requires installation of fortls: `pip install fortls`)
 * **Go**  
   (requires installation of `gopls`)

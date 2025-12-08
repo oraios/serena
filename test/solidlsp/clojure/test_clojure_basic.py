@@ -4,12 +4,13 @@ from serena.project import Project
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import UnifiedSymbolInformation
+from test.conftest import language_tests_enabled
 
-from . import CLI_FAIL, CORE_PATH, UTILS_PATH
+from . import CORE_PATH, UTILS_PATH
 
 
+@pytest.mark.skipif(not language_tests_enabled(Language.CLOJURE), reason="Clojure tests are disabled")
 @pytest.mark.clojure
-@pytest.mark.skipif(CLI_FAIL, reason=f"Clojure CLI not available: {CLI_FAIL}")
 class TestLanguageServerBasics:
     @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
     def test_basic_definition(self, language_server: SolidLanguageServer):

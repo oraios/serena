@@ -16,8 +16,7 @@ class CheckOnboardingPerformedTool(Tool):
     def apply(self) -> str:
         """
         Checks whether project onboarding was already performed.
-        You should always call this tool before beginning to actually work on the project/after activating a project,
-        but after calling the initial instructions tool.
+        You should always call this tool before beginning to actually work on the project/after activating a project.
         """
         from .memory_tools import ListMemoriesTool
 
@@ -133,6 +132,7 @@ class InitialInstructionsTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     def apply(self) -> str:
         """
         Provides the 'Serena Instructions Manual', which contains essential information on how to use the Serena toolbox.
-        Call this tool if you have not yet read this very important manual!
+        IMPORTANT: If you have not yet read the manual, call this tool immediately after you are given your task by the user,
+        as it will critically inform you!
         """
         return self.agent.create_system_prompt()
