@@ -70,35 +70,8 @@ Language servers provide support for a wide range of programming languages.
 With Serena's LSP library, we provide **support for over 30 programming languages**, including
 AL, Bash, C#, C/C++, Clojure, Dart, Elixir, Elm, Erlang, Fortran, Go, Haskell, Java, Javascript, Julia, Kotlin, Lua, Markdown, Nix, Perl, PHP, Python, R, Ruby, Rust, Scala, Swift, TypeScript, YAML and Zig.
 
-  * Python
-  * TypeScript/Javascript
-  * Vue (3.x with TypeScript; requires Node.js v18+ and npm; supports .vue Single File Components with monorepo detection)
-  * PHP (uses Intelephense LSP; set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features)
-  * Go (requires installation of gopls)
-  * R (requires installation of the `languageserver` R package)
-  * Rust (requires [rustup](https://rustup.rs/) - uses rust-analyzer from your toolchain)
-  * C/C++ (you may experience issues with finding references, we are working on it)
-  * Zig (requires installation of ZLS - Zig Language Server)
-  * C#
-  * Ruby (by default, uses [ruby-lsp](https://github.com/Shopify/ruby-lsp), specify ruby_solargraph as your language to use the previous solargraph based implementation)
-  * Swift
-  * Kotlin (uses the pre-alpha [official kotlin LS](https://github.com/Kotlin/kotlin-lsp), some issues may appear)
-  * Java (_Note_: startup is slow, initial startup especially so. There may be issues with java on macos and linux, we are working on it.)
-  * Clojure
-  * Dart
-  * Bash
-  * Lua (automatically downloads lua-language-server if not installed)
-  * Nix (requires nixd installation)
-  * Elixir (requires installation of NextLS and Elixir; **Windows not supported**)
-  * Elm (automatically downloads elm-language-server if not installed; requires Elm compiler)
-  * Scala (requires some [manual setup](docs/scala_setup_guide_for_serena.md); uses Metals LSP)
-  * Erlang (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls), experimental, might be slow or hang)
-  * Perl (requires installation of Perl::LanguageServer)
-  * Fortran (requires installation of fortls: `pip install fortls`)
-  * Haskell (automatically locates HLS via ghcup, stack, or system PATH; supports Stack and Cabal projects)
-  * Julia
-  * AL
-  * Markdown (must be explicitly specified via `--language markdown` when generating project config, primarily useful for documentation-heavy projects)
+> [!IMPORTANT]
+> Some languages require additional dependencies to be installed; see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
 
 ## Quick Start
 
