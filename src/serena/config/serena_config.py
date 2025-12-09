@@ -174,15 +174,18 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                         f"Read the documentation for more information."
                     )
                 # sort languages by number of files found
-                languages_and_percentages = sorted(language_composition.items(), key=lambda item: item[1], reverse=True)
+                languages_and_percentages = sorted(
+                    language_composition.items(), key=lambda item: (item[1], item[0].get_priority()), reverse=True
+                )
                 # find the language with the highest percentage and enable it
                 top_language_pair = languages_and_percentages[0]
                 other_language_pairs = languages_and_percentages[1:]
-                languages_to_use = [top_language_pair[0]]
+                languages_to_use: list[str] = [top_language_pair[0].value]
                 # if in interactive mode, ask the user which other languages to enable
                 if len(other_language_pairs) > 0 and interactive:
                     print(
-                        "Detected and enabled main language '%s' (%.2f%% of source files)." % (top_language_pair[0], top_language_pair[1])
+                        "Detected and enabled main language '%s' (%.2f%% of source files)."
+                        % (top_language_pair[0].value, top_language_pair[1])
                     )
                     print(f"Additionally detected {len(other_language_pairs)} other language(s).\n")
                     print("Note: Enable only languages you need symbolic retrieval/editing capabilities for.")
@@ -190,9 +193,9 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                     print("      system-level installations/configuration (see Serena documentation).")
                     print("\nWhich additional languages do you want to enable?")
                     for lang, perc in other_language_pairs:
-                        enable = ask_yes_no("Enable %s (%.2f%% of source files)?" % (lang, perc), default=False)
+                        enable = ask_yes_no("Enable %s (%.2f%% of source files)?" % (lang.value, perc), default=False)
                         if enable:
-                            languages_to_use.append(lang)
+                            languages_to_use.append(lang.value)
                     print()
             else:
                 languages_to_use = [lang.value for lang in languages]

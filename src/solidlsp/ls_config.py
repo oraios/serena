@@ -100,6 +100,23 @@ class Language(str, Enum):
     def __str__(self) -> str:
         return self.value
 
+    def get_priority(self) -> int:
+        """
+        :return: priority of the language for breaking ties between languages; higher is more important.
+        """
+        # experimental languages have the lowest priority
+        if self.is_experimental():
+            return 0
+        # We assign lower priority to languages that are supersets of others, such that
+        # the "larger" language is only chosen when it matches more strongly
+        match self:
+            # languages that are supersets of others (Vue is superset of TypeScript/JavaScript)
+            case self.VUE:
+                return 1
+            # regular languages
+            case _:
+                return 2
+
     def get_source_fn_matcher(self) -> FilenameMatcher:
         match self:
             case self.PYTHON | self.PYTHON_JEDI:
