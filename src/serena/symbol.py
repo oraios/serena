@@ -621,24 +621,72 @@ class LanguageServerSymbolRetriever:
 
         return [ReferenceInLanguageServerSymbol.from_lsp_reference(r) for r in references]
 
-    @dataclass
-    class SymbolOverviewElement:
-        name_path: str
-        kind: int
 
-        @classmethod
-        def from_symbol(cls, symbol: LanguageServerSymbol) -> Self:
-            return cls(name_path=symbol.get_name_path(), kind=int(symbol.symbol_kind))
+    def get_symbol_overview(
+        self,
+        relative_path: str,
+        depth: int = 0,
+        include_kind: bool = True,
+        include_location: bool = True,
+        exclude_kinds: Sequence[SymbolKind] | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """
+        Get an overview of symbols in a file or directory, with optional depth for nested symbols.
 
-    def get_symbol_overview(self, relative_path: str) -> dict[str, list[SymbolOverviewElement]]:
+        :param relative_path: The relative path to the file or directory.
+        :param depth: Depth of symbol tree to retrieve (0 = top-level only, 1 = include immediate children, etc.)
+        :param include_kind: Whether to include symbol kind information in the result.
+        :param include_location: Whether to include location information in the result.
+        :param exclude_kinds: Optional sequence of SymbolKind values to exclude from results.
+            By default, excludes Variable symbols to reduce noise when depth > 0.
+        :return: A mapping of file paths to lists of symbol dictionaries.
+        """
+        # Default: exclude variables when retrieving nested symbols to reduce noise
+        if exclude_kinds is None and depth > 0:
+            exclude_kinds = [SymbolKind.Variable]
+
         lang_server = self.get_language_server(relative_path)
         path_to_unified_symbols = lang_server.request_overview(relative_path)
         result = {}
         for file_path, unified_symbols in path_to_unified_symbols.items():
-            # TODO: maybe include not just top-level symbols? We could filter by kind to exclude variables
-            #  The language server methods would need to be adjusted for this.
-            result[file_path] = [self.SymbolOverviewElement.from_symbol(LanguageServerSymbol(s)) for s in unified_symbols]
+            symbols_list = []
+            for unified_symbol in unified_symbols:
+                symbol = LanguageServerSymbol(unified_symbol)
+                if exclude_kinds and symbol.symbol_kind in exclude_kinds:
+                    continue
+                symbol_dict = symbol.to_dict(kind=include_kind, location=include_location, depth=depth)
+                if depth > 0 and exclude_kinds:
+                    symbol_dict = self._filter_children_by_kind(symbol_dict, exclude_kinds)
+                symbols_list.append(symbol_dict)
+            result[file_path] = symbols_list
         return result
+
+    def _filter_children_by_kind(self, symbol_dict: dict[str, Any], exclude_kinds: Sequence[SymbolKind]) -> dict[str, Any]:
+        """
+        Recursively filter out children symbols based on their kind.
+
+        :param symbol_dict: The symbol dictionary to filter.
+        :param exclude_kinds: Sequence of SymbolKind values to exclude.
+        :return: Filtered symbol dictionary.
+        """
+        if "children" not in symbol_dict:
+            return symbol_dict
+
+        filtered_children = []
+        for child in symbol_dict["children"]:
+            child_kind_str = child.get("kind")
+            if child_kind_str:
+                try:
+                    child_kind = SymbolKind[child_kind_str]
+                    if child_kind in exclude_kinds:
+                        continue
+                except (KeyError, ValueError):
+                    pass
+            filtered_child = self._filter_children_by_kind(child, exclude_kinds)
+            filtered_children.append(filtered_child)
+
+        symbol_dict["children"] = filtered_children
+        return symbol_dict
 
 
 class JetBrainsSymbol(Symbol):

@@ -50,18 +50,26 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
     Gets an overview of the top-level symbols defined in a given file.
     """
 
-    def apply(self, relative_path: str, max_answer_chars: int = -1) -> str:
+    def apply(self, relative_path: str, depth: int = 0, exclude_variable_symbols: bool = True, max_answer_chars: int = -1) -> str:
         """
         Use this tool to get a high-level understanding of the code symbols in a file.
         This should be the first tool to call when you want to understand a new file, unless you already know
         what you are looking for.
 
         :param relative_path: the relative path to the file to get the overview of
+        :param depth: depth up to which child symbols shall be retrieved (e.g. use 1 to also retrieve immediate children;
+            for the case where the symbol is a class, this will return its methods).
+            Use 2 to get nested children (e.g., methods and their local functions).
+            Default 0 (only top-level symbols).
+        :param exclude_variable_symbols: if True (default), excludes variable symbols from nested results to reduce noise.
+            Has no effect when depth=0.
         :param max_answer_chars: if the overview is longer than this number of characters,
             no content will be returned. -1 means the default value from the config will be used.
             Don't adjust unless there is really no other way to get the content required for the task.
-        :return: a JSON object containing info about top-level symbols in the file
+        :return: a JSON object containing info about top-level symbols (and their children if depth > 0) in the file
         """
+        from serena.symbol import SymbolKind
+
         symbol_retriever = self.create_language_server_symbol_retriever()
         file_path = os.path.join(self.project.project_root, relative_path)
 
@@ -71,8 +79,19 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
             raise FileNotFoundError(f"File or directory {relative_path} does not exist in the project.")
         if os.path.isdir(file_path):
             raise ValueError(f"Expected a file path, but got a directory path: {relative_path}. ")
-        result = symbol_retriever.get_symbol_overview(relative_path)[relative_path]
-        result_json_str = self._to_json([dataclasses.asdict(i) for i in result])
+
+        # Use the enhanced get_symbol_overview method with filtering
+        exclude_kinds = [SymbolKind.Variable] if exclude_variable_symbols else None
+        overview_data = symbol_retriever.get_symbol_overview(
+            relative_path=relative_path,
+            depth=depth,
+            include_kind=True,
+            include_location=True,
+            exclude_kinds=exclude_kinds,
+        )
+        result = overview_data[relative_path]
+
+        result_json_str = self._to_json(result)
         return self._limit_length(result_json_str, max_answer_chars)
 
 
