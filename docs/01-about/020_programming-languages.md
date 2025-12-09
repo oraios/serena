@@ -58,7 +58,9 @@ With Serena, we provide direct, out-of-the-box support for:
   (requires some [manual setup](../03-special-guides/scala_setup_guide_for_serena); uses Metals LSP)
 * **Swift**
 * **TypeScript**
-* **Vue** (3.x with TypeScript; requires Node.js v18+ and npm; supports .vue Single File Components with monorepo detection)
+* **Vue**    
+  (3.x with TypeScript; requires Node.js v18+ and npm; supports .vue Single File Components with monorepo detection)
+* **YAML**
 * **Zig**  
   (requires installation of ZLS - Zig Language Server)
 

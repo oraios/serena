@@ -115,16 +115,31 @@ class Symbol(ToStringMixin, ABC):
 
 
 class NamePathMatcher(ToStringMixin):
-    def __init__(self, name_path_expr: str, substring_matching: bool) -> None:
+    """
+    Matches name paths of symbols against search patterns.
+
+    A name path is a path in the symbol tree *within a source file*.
+    For example, the method `my_method` defined in class `MyClass` would have the name path `MyClass/my_method`.
+    If a symbol is overloaded (e.g., in Java), a 0-based index is appended (e.g. "MyClass/my_method[0]") to
+    uniquely identify it.
+
+    A matching pattern can be:
+     * a simple name (e.g. "method"), which will match any symbol with that name
+     * a relative path like "class/method", which will match any symbol with that name path suffix
+     * an absolute name path "/class/method" (absolute name path), which requires an exact match of the full name path within the source file.
+    Append an index `[i]` to match a specific overload only, e.g. "MyClass/my_method[1]".
+    """
+
+    def __init__(self, name_path_pattern: str, substring_matching: bool) -> None:
         """
-        :param name_path_expr: the name path expression to match against
+        :param name_path_pattern: the name path expression to match against
         :param substring_matching: whether to use substring matching for the last segment
         """
-        assert name_path_expr, "name_path must not be empty"
-        self._expr = name_path_expr
+        assert name_path_pattern, "name_path must not be empty"
+        self._expr = name_path_pattern
         self._substring_matching = substring_matching
-        self._is_absolute_pattern = name_path_expr.startswith(NAME_PATH_SEP)
-        self._pattern_parts = name_path_expr.lstrip(NAME_PATH_SEP).rstrip(NAME_PATH_SEP).split(NAME_PATH_SEP)
+        self._is_absolute_pattern = name_path_pattern.startswith(NAME_PATH_SEP)
+        self._pattern_parts = name_path_pattern.lstrip(NAME_PATH_SEP).rstrip(NAME_PATH_SEP).split(NAME_PATH_SEP)
 
         # extract overload index "[idx]" if present at end of last part
         self._overload_idx: int | None = None
@@ -323,34 +338,15 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
 
     def find(
         self,
-        name_path: str,
+        name_path_pattern: str,
         substring_matching: bool = False,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
     ) -> list[Self]:
         """
-        Find all symbols within the symbol's subtree that match the given `name_path`.
-        The matching behavior is determined by the structure of `name_path`, which can
-        either be a simple name (e.g. "method") or a name path like "class/method" (relative name path)
-        or "/class/method" (absolute name path).
+        Find all symbols within the symbol's subtree that match the given name path pattern.
 
-        Key aspects of the name path matching behavior:
-        - Trailing slashes in `name_path` play no role and are ignored.
-        - The name of the retrieved symbols will match (either exactly or as a substring)
-          the last segment of `name_path`, while other segments will restrict the search to symbols that
-          have a desired sequence of ancestors.
-        - If there is no starting or intermediate slash in `name_path`, there is no
-          restriction on the ancestor symbols. For example, passing `method` will match
-          against symbols with name paths like `method`, `class/method`, `class/nested_class/method`, etc.
-        - If `name_path` contains a `/` but doesn't start with a `/`, the matching is restricted to symbols
-          with the same ancestors as the last segment of `name_path`. For example, passing `class/method` will match against
-          `class/method` as well as `nested_class/class/method` but not `method`.
-        - If `name_path` starts with a `/`, it will be treated as an absolute name path pattern, meaning
-          that the first segment of it must match the first segment of the symbol's name path.
-          For example, passing `/class` will match only against top-level symbols like `class` but not against `nested_class/class`.
-          Passing `/class/method` will match against `class/method` but not `nested_class/class/method` or `method`.
-
-        :param name_path: the name path expression to match against
+        :param name_path_pattern: the name path pattern to match against (see class :class:`NamePathMatcher` for details)
         :param substring_matching: whether to use substring matching (as opposed to exact matching)
             of the last segment of `name_path` against the symbol name.
         :param include_kinds: an optional sequence of ints representing the LSP symbol kind.
@@ -358,7 +354,7 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         :param exclude_kinds: If provided, symbols of the given kinds will be excluded from the result.
         """
         result = []
-        name_path_matcher = NamePathMatcher(name_path, substring_matching)
+        name_path_matcher = NamePathMatcher(name_path_pattern, substring_matching)
 
         def should_include(s: "LanguageServerSymbol") -> bool:
             if include_kinds is not None and s.symbol_kind not in include_kinds:
@@ -488,18 +484,17 @@ class LanguageServerSymbolRetriever:
     def get_language_server(self, relative_path: str) -> SolidLanguageServer:
         return self._ls_manager.get_language_server(relative_path)
 
-    def find_by_name(
+    def find(
         self,
-        name_path: str,
+        name_path_pattern: str,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
         substring_matching: bool = False,
         within_relative_path: str | None = None,
     ) -> list[LanguageServerSymbol]:
         """
-        Find all symbols that match the given name. See docstring of `Symbol.find` for more details.
-        The only parameter not mentioned there is `within_relative_path`, which can be used to restrict the search
-        to symbols within a specific file or directory.
+        Finds all symbols that match the given name path pattern (see class :class:`NamePathMatcher` for details),
+        optionally limited to a specific file and filtered by kind.
         """
         symbols: list[LanguageServerSymbol] = []
         for lang_server in self._ls_manager.iter_language_servers():
@@ -507,10 +502,43 @@ class LanguageServerSymbolRetriever:
             for root in symbol_roots:
                 symbols.extend(
                     LanguageServerSymbol(root).find(
-                        name_path, include_kinds=include_kinds, exclude_kinds=exclude_kinds, substring_matching=substring_matching
+                        name_path_pattern, include_kinds=include_kinds, exclude_kinds=exclude_kinds, substring_matching=substring_matching
                     )
                 )
         return symbols
+
+    def find_unique(
+        self,
+        name_path_pattern: str,
+        include_kinds: Sequence[SymbolKind] | None = None,
+        exclude_kinds: Sequence[SymbolKind] | None = None,
+        substring_matching: bool = False,
+        within_relative_path: str | None = None,
+    ) -> LanguageServerSymbol:
+        symbol_candidates = self.find(
+            name_path_pattern,
+            include_kinds=include_kinds,
+            exclude_kinds=exclude_kinds,
+            substring_matching=substring_matching,
+            within_relative_path=within_relative_path,
+        )
+        if len(symbol_candidates) == 1:
+            return symbol_candidates[0]
+        elif len(symbol_candidates) == 0:
+            raise ValueError(f"No symbol matching '{name_path_pattern}' found")
+        else:
+            # There are multiple candidates.
+            # If only one of the candidates has the given pattern as its exact name path, return that one
+            exact_matches = [s for s in symbol_candidates if s.get_name_path() == name_path_pattern]
+            if len(exact_matches) == 1:
+                return exact_matches[0]
+            # otherwise, raise an error
+            include_rel_path = within_relative_path is not None
+            raise ValueError(
+                f"Found multiple {len(symbol_candidates)} symbols matching '{name_path_pattern}'. "
+                "They are: \n"
+                + json.dumps([s.to_dict(kind=True, include_relative_path=include_rel_path) for s in symbol_candidates], indent=2)
+            )
 
     def find_by_location(self, location: LanguageServerSymbolLocation) -> LanguageServerSymbol | None:
         if location.relative_path is None:
@@ -532,28 +560,17 @@ class LanguageServerSymbolRetriever:
         exclude_kinds: Sequence[SymbolKind] | None = None,
     ) -> list[ReferenceInLanguageServerSymbol]:
         """
-        Find all symbols that reference the symbol with the given name.
-        If multiple symbols fit the name (e.g. for variables that are overwritten), will use the first one.
+        Find all symbols that reference the specified symbol, which is assumed to be unique.
 
-        :param name_path: the name path of the symbol to find
+        :param name_path: the name path of the symbol to find. (While this can be a matching pattern, it should
+            usually be the full path to ensure uniqueness.)
         :param relative_file_path: the relative path of the file in which the referenced symbol is defined.
         :param include_body: whether to include the body of all symbols in the result.
             Not recommended, as the referencing symbols will often be files, and thus the bodies will be very long.
         :param include_kinds: which kinds of symbols to include in the result.
         :param exclude_kinds: which kinds of symbols to exclude from the result.
         """
-        symbol_candidates = self.find_by_name(name_path, substring_matching=False, within_relative_path=relative_file_path)
-        if len(symbol_candidates) == 0:
-            log.warning(f"No symbol with name {name_path} found in file {relative_file_path}")
-            return []
-        if len(symbol_candidates) > 1:
-            log.error(
-                f"Found {len(symbol_candidates)} symbols with name {name_path} in file {relative_file_path}."
-                f"May be an overwritten variable, in which case you can ignore this error. Proceeding with the first one. "
-                f"Found symbols for {name_path=} in {relative_file_path=}: \n"
-                f"{json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)}"
-            )
-        symbol = symbol_candidates[0]
+        symbol = self.find_unique(name_path, substring_matching=False, within_relative_path=relative_file_path)
         return self.find_referencing_symbols_by_location(
             symbol.location, include_body=include_body, include_kinds=include_kinds, exclude_kinds=exclude_kinds
         )

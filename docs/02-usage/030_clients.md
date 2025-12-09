@@ -24,7 +24,7 @@ claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena 
 ```
 
 Note:
-  * We use the `ide-assistant` context to disable unnecessary tools (avoiding duplication
+  * We use the `claude-code` context to disable unnecessary tools (avoiding duplication
     with Claude Code's built-in capabilities).
   * We specify the current directory as the project directory with `--project "$(pwd)"`, such 
     that Serena is configured to work on the current project from the get-go, following 
@@ -165,7 +165,7 @@ by writing your own context, modes or prompts to adjust it to the client's respe
 Most of the popular existing coding assistants (e.g. IDE extensions) and AI-enabled IDEs themselves support connections
 to MCP Servers. Serena generally boosts performance by providing efficient tools for symbolic operations.
 
-We generally **recommend to use the `ide-assistant` context** for these integrations by adding the arguments `--context ide-assistant` 
+We generally **recommend to use the `ide` context** for these integrations by adding the arguments `--context ide` 
 in order to reduce tool duplication.
 
 ### Local GUIs and Agent Frameworks

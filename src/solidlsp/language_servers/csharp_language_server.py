@@ -532,7 +532,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             # Map LSP message types to Python logging levels
             level_map = {1: logging.ERROR, 2: logging.WARNING, 3: logging.INFO, 4: logging.DEBUG}  # Error  # Warning  # Info  # Log
 
-            log.info(f"LSP: {message_text}", level_map.get(level, logging.DEBUG))
+            log.log(level_map.get(level, logging.DEBUG), f"LSP: {message_text}")
 
         def handle_progress(params: dict) -> None:
             """Handle progress notifications from the language server."""
@@ -627,10 +627,14 @@ class CSharpLanguageServer(SolidLanguageServer):
         def handle_project_needs_restore(params: dict) -> None:
             return
 
+        def handle_workspace_indexing_complete(params: dict) -> None:
+            self.completions_available.set()
+
         # Set up notification handlers
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", handle_progress)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
+        self.server.on_notification("workspace/projectInitializationComplete", handle_workspace_indexing_complete)
         self.server.on_request("workspace/configuration", handle_workspace_configuration)
         self.server.on_request("window/workDoneProgress/create", handle_work_done_progress_create)
         self.server.on_request("client/registerCapability", handle_register_capability)
@@ -679,13 +683,18 @@ class CSharpLanguageServer(SolidLanguageServer):
         self._open_solution_and_projects()
 
         self.initialization_complete.set()
-        self.completions_available.set()
 
         log.info(
             "Microsoft.CodeAnalysis.LanguageServer initialized and ready\n"
             "Waiting for language server to index project files...\n"
             "This may take a while for large projects"
         )
+
+        if self.completions_available.wait(30):  # Wait up to 30 seconds for indexing
+            log.info("Indexing complete")
+        else:
+            log.warning("Timeout waiting for indexing to complete, proceeding anyway")
+            self.completions_available.set()
 
     def _force_pull_diagnostics(self, init_response: dict | InitializeResult) -> None:
         """

@@ -267,15 +267,7 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         return lang_server.language_server.retrieve_full_file_content(relative_path)
 
     def _find_unique_symbol(self, name_path: str, relative_file_path: str) -> LanguageServerSymbol:
-        symbol_candidates = self._symbol_retriever.find_by_name(name_path, within_relative_path=relative_file_path)
-        if len(symbol_candidates) == 0:
-            raise ValueError(f"No symbol with name {name_path} found in file {relative_file_path}")
-        if len(symbol_candidates) > 1:
-            raise ValueError(
-                f"Found multiple {len(symbol_candidates)} symbols with name {name_path} in file {relative_file_path}. "
-                "Their locations are: \n " + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
-            )
-        return symbol_candidates[0]
+        return self._symbol_retriever.find_unique(name_path, within_relative_path=relative_file_path)
 
     def _apply_workspace_edit(self, workspace_edit: ls_types.WorkspaceEdit) -> list[str]:
         """

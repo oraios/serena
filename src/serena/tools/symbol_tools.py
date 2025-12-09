@@ -136,7 +136,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
         symbol_retriever = self.create_language_server_symbol_retriever()
-        symbols = symbol_retriever.find_by_name(
+        symbols = symbol_retriever.find(
             name_path_pattern,
             include_kinds=parsed_include_kinds,
             exclude_kinds=parsed_exclude_kinds,
