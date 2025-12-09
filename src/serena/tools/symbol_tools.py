@@ -2,7 +2,6 @@
 Language server-related tools
 """
 
-import dataclasses
 import os
 from collections.abc import Sequence
 from copy import copy
