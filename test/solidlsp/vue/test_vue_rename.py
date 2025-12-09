@@ -1,3 +1,10 @@
+"""
+Vue language server rename tests.
+
+Tests symbol renaming functionality including single-file and
+cross-file rename operations for Vue components and TypeScript files.
+"""
+
 import os
 
 import pytest
@@ -9,6 +16,8 @@ pytestmark = pytest.mark.vue
 
 
 class TestVueRename:
+    """Tests for Vue symbol rename operations."""
+
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_rename_function_within_single_file(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "components", "CalculatorInput.vue")
