@@ -621,7 +621,6 @@ class LanguageServerSymbolRetriever:
 
         return [ReferenceInLanguageServerSymbol.from_lsp_reference(r) for r in references]
 
-
     def get_symbol_overview(
         self,
         relative_path: str,
