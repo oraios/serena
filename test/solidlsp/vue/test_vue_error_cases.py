@@ -1,3 +1,10 @@
+"""
+Vue language server error case tests.
+
+Tests error handling for invalid positions, non-existent files,
+undefined symbols, and other edge cases.
+"""
+
 import os
 import sys
 
@@ -28,6 +35,8 @@ class TypeScriptServerBehavior:
 
 
 class TestVueInvalidPositions:
+    """Tests for handling invalid positions in Vue files."""
+
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_negative_line_number(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "components", "CalculatorInput.vue")

@@ -1,3 +1,10 @@
+"""
+Basic Vue language server tests.
+
+Tests core functionality including symbol tree parsing, cross-file references,
+and TypeScript coordination through the dual LSP architecture.
+"""
+
 import os
 
 import pytest
@@ -9,6 +16,8 @@ from solidlsp.ls_utils import SymbolUtils
 
 @pytest.mark.vue
 class TestVueLanguageServer:
+    """Tests for basic Vue language server operations."""
+
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_vue_files_in_symbol_tree(self, language_server: SolidLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
@@ -45,6 +54,8 @@ class TestVueLanguageServer:
 
 @pytest.mark.vue
 class TestVueDualLspArchitecture:
+    """Tests for Vue + TypeScript dual language server coordination."""
+
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_typescript_server_coordination(self, language_server: SolidLanguageServer) -> None:
         ts_file = os.path.join("src", "stores", "calculator.ts")
@@ -180,6 +191,8 @@ class TestVueDualLspArchitecture:
 
 @pytest.mark.vue
 class TestVueEdgeCases:
+    """Tests for edge cases in Vue symbol handling."""
+
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_symbol_tree_structure(self, language_server: SolidLanguageServer) -> None:
         full_tree = language_server.request_full_symbol_tree()
