@@ -2,16 +2,17 @@ import json
 import logging
 import os
 import time
+from collections.abc import Iterator
 
 import pytest
 
-import test.solidlsp.clojure as clj
 from serena.agent import SerenaAgent
 from serena.config.serena_config import ProjectConfig, RegisteredProject, SerenaConfig
 from serena.project import Project
-from serena.tools import FindReferencingSymbolsTool, FindSymbolTool
+from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, ReplaceSymbolBodyTool
 from solidlsp.ls_config import Language
-from test.conftest import get_repo_path
+from test.conftest import get_repo_path, language_tests_enabled
+from test.solidlsp import clojure as clj
 
 
 @pytest.fixture
@@ -29,6 +30,7 @@ def serena_config():
         Language.PHP,
         Language.CSHARP,
         Language.CLOJURE,
+        Language.FSHARP,
     ]:
         repo_path = get_repo_path(language)
         if repo_path.exists():
@@ -54,11 +56,21 @@ def serena_config():
 
 
 @pytest.fixture
-def serena_agent(request: pytest.FixtureRequest, serena_config):
+def serena_agent(request: pytest.FixtureRequest, serena_config) -> Iterator[SerenaAgent]:
     language = Language(request.param)
+    if not language_tests_enabled(language):
+        pytest.skip(f"Tests for language {language} are not enabled.")
+
     project_name = f"test_repo_{language}"
 
-    return SerenaAgent(project=project_name, serena_config=serena_config)
+    agent = SerenaAgent(project=project_name, serena_config=serena_config)
+
+    # wait for agent to be ready
+    agent.execute_task(lambda: None)
+
+    yield agent
+    # explicitly delete to free resources
+    agent.shutdown(timeout=5)
 
 
 class TestSerenaAgent:
@@ -72,14 +84,9 @@ class TestSerenaAgent:
             pytest.param(Language.RUST, "add", "Function", "lib.rs", marks=pytest.mark.rust),
             pytest.param(Language.TYPESCRIPT, "DemoClass", "Class", "index.ts", marks=pytest.mark.typescript),
             pytest.param(Language.PHP, "helperFunction", "Function", "helper.php", marks=pytest.mark.php),
-            pytest.param(
-                Language.CLOJURE,
-                "greet",
-                "Function",
-                clj.CORE_PATH,
-                marks=[pytest.mark.clojure, pytest.mark.skipif(clj.CLI_FAIL, reason=f"Clojure CLI not available: {clj.CLI_FAIL}")],
-            ),
+            pytest.param(Language.CLOJURE, "greet", "Function", clj.CORE_PATH, marks=pytest.mark.clojure),
             pytest.param(Language.CSHARP, "Calculator", "Class", "Program.cs", marks=pytest.mark.csharp),
+            pytest.param(Language.FSHARP, "Calculator", "Module", "Calculator.fs", marks=pytest.mark.fsharp),
         ],
         indirect=["serena_agent"],
     )
@@ -127,9 +134,10 @@ class TestSerenaAgent:
                 "multiply",
                 clj.CORE_PATH,
                 clj.UTILS_PATH,
-                marks=[pytest.mark.clojure, pytest.mark.skipif(clj.CLI_FAIL, reason=f"Clojure CLI not available: {clj.CLI_FAIL}")],
+                marks=pytest.mark.clojure,
             ),
             pytest.param(Language.CSHARP, "Calculator", "Program.cs", "Program.cs", marks=pytest.mark.csharp),
+            pytest.param(Language.FSHARP, "add", "Calculator.fs", "Program.fs", marks=pytest.mark.fsharp),
         ],
         indirect=["serena_agent"],
     )
@@ -284,3 +292,63 @@ class TestSerenaAgent:
 
         symbols = json.loads(result)
         assert not symbols, f"Expected to find no symbols for {name_path}. Symbols found: {symbols}"
+
+    @pytest.mark.parametrize(
+        "serena_agent,name_path,num_expected",
+        [
+            pytest.param(
+                Language.JAVA,
+                "Model/getName",
+                2,
+                id="overloaded_java_method",
+                marks=pytest.mark.java,
+            ),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_find_symbol_overloaded_function(self, serena_agent: SerenaAgent, name_path: str, num_expected: int):
+        """
+        Tests whether the FindSymbolTool can find all overloads of a function/method
+        (provided that the overload id remains unspecified in the name path)
+        """
+        agent = serena_agent
+
+        find_symbol_tool = agent.get_tool(FindSymbolTool)
+        result = find_symbol_tool.apply_ex(
+            name_path_pattern=name_path,
+            depth=0,
+            substring_matching=False,
+        )
+
+        symbols = json.loads(result)
+        assert (
+            len(symbols) == num_expected
+        ), f"Expected to find {num_expected} symbols for overloaded function {name_path}. Symbols found: {symbols}"
+
+    @pytest.mark.parametrize(
+        "serena_agent,name_path,relative_path",
+        [
+            pytest.param(
+                Language.JAVA,
+                "Model/getName",
+                os.path.join("src", "main", "java", "test_repo", "Model.java"),
+                id="overloaded_java_method",
+                marks=pytest.mark.java,
+            ),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_non_unique_symbol_reference_error(self, serena_agent: SerenaAgent, name_path: str, relative_path: str):
+        """
+        Tests whether the tools operating on a well-defined symbol raises an error when the symbol reference is non-unique.
+        We exemplarily test a retrieval tool (FindReferencingSymbolsTool) and an editing tool (ReplaceSymbolBodyTool).
+        """
+        match_text = "multiple"
+
+        find_refs_tool = serena_agent.get_tool(FindReferencingSymbolsTool)
+        with pytest.raises(ValueError, match=match_text):
+            find_refs_tool.apply(name_path=name_path, relative_path=relative_path)
+
+        replace_symbol_body_tool = serena_agent.get_tool(ReplaceSymbolBodyTool)
+        with pytest.raises(ValueError, match=match_text):
+            replace_symbol_body_tool.apply(name_path=name_path, relative_path=relative_path, body="")

@@ -61,11 +61,12 @@ class ScalaLanguageServer(SolidLanguageServer):
         os.makedirs(metals_home, exist_ok=True)
         metals_executable = os.path.join(metals_home, "metals")
         coursier_command_path = shutil.which("coursier")
-        assert coursier_command_path is not None, "coursier is not installed or not in PATH."
         cs_command_path = shutil.which("cs")
+        assert cs_command_path is not None or coursier_command_path is not None, "coursier is not installed or not in PATH."
 
         if not os.path.exists(metals_executable):
             if not cs_command_path:
+                assert coursier_command_path is not None
                 log.info("'cs' command not found. Trying to install it using 'coursier'.")
                 try:
                     log.info("Running 'coursier setup --yes' to install 'cs'...")

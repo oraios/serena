@@ -4,7 +4,8 @@ from collections.abc import Iterator
 
 from sensai.util.logging import LogTime
 
-from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
+from serena.config.serena_config import SerenaPaths
+from serena.constants import SERENA_MANAGED_DIR_NAME
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
@@ -43,7 +44,7 @@ class LanguageServerFactory:
             self.project_root,
             timeout=self.ls_timeout,
             solidlsp_settings=SolidLSPSettings(
-                solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME,
+                solidlsp_dir=SerenaPaths().serena_user_home_dir,
                 project_data_relative_path=SERENA_MANAGED_DIR_NAME,
                 ls_specific_settings=self.ls_specific_settings or {},
             ),
@@ -182,25 +183,26 @@ class LanguageServerManager:
         self._stop_language_server(ls, save_cache=save_cache)
 
     @staticmethod
-    def _stop_language_server(ls: SolidLanguageServer, save_cache: bool = False) -> None:
+    def _stop_language_server(ls: SolidLanguageServer, save_cache: bool = False, timeout: float = 2.0) -> None:
         if ls.is_running():
             if save_cache:
                 ls.save_cache()
             log.info(f"Stopping language server for language {ls.language} ...")
-            ls.stop()
+            ls.stop(shutdown_timeout=timeout)
 
     def iter_language_servers(self) -> Iterator[SolidLanguageServer]:
         for ls in self._language_servers.values():
             yield self._ensure_functional_ls(ls)
 
-    def stop_all(self, save_cache: bool = False) -> None:
+    def stop_all(self, save_cache: bool = False, timeout: float = 2.0) -> None:
         """
         Stops all managed language servers.
 
         :param save_cache: whether to save the cache before stopping
+        :param timeout: timeout for shutdown of each language server
         """
         for ls in self.iter_language_servers():
-            self._stop_language_server(ls, save_cache=save_cache)
+            self._stop_language_server(ls, save_cache=save_cache, timeout=timeout)
 
     def save_all_caches(self) -> None:
         """

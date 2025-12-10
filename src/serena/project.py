@@ -438,7 +438,7 @@ class Project(ToStringMixin):
             log.info("Removing and stopping the language server for language %s ...", language.value)
             self.language_server_manager.remove_language_server(language)
 
-    def shutdown(self) -> None:
+    def shutdown(self, timeout: float = 2.0) -> None:
         if self.language_server_manager is not None:
-            self.language_server_manager.stop_all(save_cache=True)
+            self.language_server_manager.stop_all(save_cache=True, timeout=timeout)
             self.language_server_manager = None

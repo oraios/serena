@@ -19,13 +19,13 @@ def iter_subclasses(cls: type[T], recursive: bool = True) -> Generator[type[T], 
             yield from iter_subclasses(subclass, recursive)
 
 
-def determine_programming_language_composition(repo_path: str) -> dict[str, float]:
+def determine_programming_language_composition(repo_path: str) -> dict[Language, float]:
     """
     Determine the programming language composition of a repository.
 
     :param repo_path: Path to the repository to analyze
 
-    :return: Dictionary mapping language names to percentages of files matching each language
+    :return: Dictionary mapping languages to percentages of files matching each language
     """
     all_files = find_all_non_ignored_files(repo_path)
 
@@ -33,7 +33,7 @@ def determine_programming_language_composition(repo_path: str) -> dict[str, floa
         return {}
 
     # Count files for each language
-    language_counts: dict[str, int] = {}
+    language_counts: dict[Language, int] = {}
     total_files = len(all_files)
 
     for language in Language.iter_all(include_experimental=False):
@@ -47,12 +47,12 @@ def determine_programming_language_composition(repo_path: str) -> dict[str, floa
                 count += 1
 
         if count > 0:
-            language_counts[str(language)] = count
+            language_counts[language] = count
 
     # Convert counts to percentages
-    language_percentages: dict[str, float] = {}
-    for language_name, count in language_counts.items():
+    language_percentages: dict[Language, float] = {}
+    for language, count in language_counts.items():
         percentage = (count / total_files) * 100
-        language_percentages[language_name] = round(percentage, 2)
+        language_percentages[language] = round(percentage, 2)
 
     return language_percentages

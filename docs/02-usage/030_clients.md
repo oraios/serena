@@ -13,18 +13,18 @@ Serena is a great way to make Claude Code both cheaper and more powerful!
 From your project directory, add serena with a command like this,
 
 ```shell
-claude mcp add serena -- <serena> start-mcp-server --context ide-assistant --project "$(pwd)"
+claude mcp add serena -- <serena> start-mcp-server --context claude-code --project "$(pwd)"
 ```
 
 where `<serena>` is [your way of running Serena](020_running).  
 For example, when using `uvx`, the above command becomes
 
 ```shell
-claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context ide-assistant --project "$(pwd)"
+claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context claude-code --project "$(pwd)"
 ```
 
 Note:
-  * We use the `ide-assistant` context to disable unnecessary tools (avoiding duplication
+  * We use the `claude-code` context to disable unnecessary tools (avoiding duplication
     with Claude Code's built-in capabilities).
   * We specify the current directory as the project directory with `--project "$(pwd)"`, such 
     that Serena is configured to work on the current project from the get-go, following 
@@ -111,7 +111,21 @@ Add the `serena` MCP server configuration, using a [run command](020_running.md)
 If you are using paths containing backslashes for paths on Windows
 (note that you can also just use forward slashes), be sure to escape them correctly (`\\`).
 
-That's it! Save the config and then restart Claude Desktop. You are ready for activating your first project.
+:::{note}
+Some language servers may require additional environment variables to be set (e.g. F# on macOS with Homebrew),
+which you may need to explicitly add to the MCP server configuration.
+Note that the spawned processes will not inherit environment variables that are only configured in your shell 
+profile (e.g. `.bashrc`, `.zshrc`, etc.); they would need to be set system-wide instead.
+An easy fix is to add them explicitly to the MCP server entry: Simply add an `env` key to the `serena` object, e.g.
+
+```
+"env": {
+    "DOTNET_ROOT": "/opt/homebrew/Cellar/dotnet/9.0.8/libexec"
+}
+```
+:::
+
+Once you have created the new MCP server entry, save the config and then restart Claude Desktop. 
 
 :::{attention}
 Be sure to fully quit the Claude Desktop application via File / Exit, as regularly closing the application will just minimize it.
@@ -151,7 +165,7 @@ by writing your own context, modes or prompts to adjust it to the client's respe
 Most of the popular existing coding assistants (e.g. IDE extensions) and AI-enabled IDEs themselves support connections
 to MCP Servers. Serena generally boosts performance by providing efficient tools for symbolic operations.
 
-We generally **recommend to use the `ide-assistant` context** for these integrations by adding the arguments `--context ide-assistant` 
+We generally **recommend to use the `ide` context** for these integrations by adding the arguments `--context ide` 
 in order to reduce tool duplication.
 
 ### Local GUIs and Agent Frameworks
