@@ -13,6 +13,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         depth: int = 0,
         relative_path: str | None = None,
         include_body: bool = False,
+        search_deps: bool = False,
         max_answer_chars: int = -1,
     ) -> str:
         """
@@ -42,6 +43,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
             If you have some knowledge about the codebase, you should use this parameter, as it will significantly
             speed up the search as well as reduce the number of results.
         :param include_body: If True, include the symbol's source code. Use judiciously.
+        :param search_deps: If True, also search in project dependencies (e.g., libraries).
         :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
             -1 means the default value from the config will be used.
         :return: JSON string: a list of symbols (with locations) matching the name.
@@ -52,6 +54,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
                 relative_path=relative_path,
                 depth=depth,
                 include_body=include_body,
+                search_deps=search_deps,
             )
             result = self._to_json(response_dict)
         return self._limit_length(result, max_answer_chars)

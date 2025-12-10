@@ -133,7 +133,13 @@ class JetBrainsPluginClient(ToStringMixin):
         return response["project_root"]
 
     def find_symbol(
-        self, name_path: str, relative_path: str | None = None, include_body: bool = False, depth: int = 0, include_location: bool = False
+        self,
+        name_path: str,
+        relative_path: str | None = None,
+        include_body: bool = False,
+        depth: int = 0,
+        include_location: bool = False,
+        search_deps: bool = False,
     ) -> dict[str, Any]:
         """
         Finds symbols by name.
@@ -142,6 +148,8 @@ class JetBrainsPluginClient(ToStringMixin):
         :param relative_path: the relative path to which to restrict the search
         :param include_body: whether to include symbol body content
         :param depth: depth of children to include (0 = no children)
+        :param include_location: whether to include symbol location information
+        :param search_deps: whether to also search in dependencies
 
         :return: Dictionary containing 'symbols' list with matching symbols
         """
@@ -151,6 +159,7 @@ class JetBrainsPluginClient(ToStringMixin):
             "includeBody": include_body,
             "depth": depth,
             "includeLocation": include_location,
+            "searchDeps": search_deps,
         }
         return self._make_request("POST", "/findSymbol", request_data)
 
