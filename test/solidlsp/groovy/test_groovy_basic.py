@@ -3,11 +3,11 @@ import os
 from pathlib import Path
 
 import pytest
+from solidlsp.ls_logger import LanguageServerLogger
 
 from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import SymbolUtils
 from solidlsp.settings import SolidLSPSettings
 
