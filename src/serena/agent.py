@@ -25,6 +25,7 @@ from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.task_executor import TaskExecutor
 from serena.tools import ActivateProjectTool, GetCurrentConfigTool, ReplaceContentTool, Tool, ToolMarker, ToolRegistry
+from serena.util.gui import system_has_usable_display
 from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
@@ -278,11 +279,14 @@ class SerenaAgent:
             dashboard_url = f"http://{dashboard_host}:{port}/dashboard/index.html"
             log.info("Serena web dashboard started at %s", dashboard_url)
             if self.serena_config.web_dashboard_open_on_launch:
-                # open the dashboard URL in the default web browser (using a separate process to control
-                # output redirection)
-                process = multiprocessing.Process(target=self._open_dashboard, args=(dashboard_url,))
-                process.start()
-                process.join(timeout=1)
+                if not system_has_usable_display():
+                    log.warning("Not opening the Serena web dashboard automatically because no usable display was detected.")
+                else:
+                    # open the dashboard URL in the default web browser (using a separate process to control
+                    # output redirection)
+                    process = multiprocessing.Process(target=self._open_dashboard, args=(dashboard_url,))
+                    process.start()
+                    process.join(timeout=1)
             # inform the GUI window (if any)
             if self._gui_log_viewer is not None:
                 self._gui_log_viewer.set_dashboard_url(dashboard_url)
