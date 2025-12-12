@@ -36,12 +36,11 @@ class GroovyLanguageServer(SolidLanguageServer):
     """
 
     def __init__(
-            self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
     ):
         """
         Creates a Groovy Language Server instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-
         runtime_dependency_paths = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
         self.runtime_dependency_paths = runtime_dependency_paths
 
@@ -53,9 +52,9 @@ class GroovyLanguageServer(SolidLanguageServer):
             ls_jar_options = shlex.split(env_jar_options)
             logger.log(f"Using Groovy LS JAR options from environment variable GROOVY_LS_JAR_OPTIONS: {env_jar_options}", logging.INFO)
         else:
-            if hasattr(solidlsp_settings, 'ls_specific_settings') and solidlsp_settings.ls_specific_settings:
+            if hasattr(solidlsp_settings, "ls_specific_settings") and solidlsp_settings.ls_specific_settings:
                 groovy_settings = solidlsp_settings.get_ls_specific_settings(Language.GROOVY)
-                jar_options_str = groovy_settings.get('ls_jar_options', '')
+                jar_options_str = groovy_settings.get("ls_jar_options", "")
                 if jar_options_str:
                     ls_jar_options = shlex.split(jar_options_str)
                     logger.log(f"Using Groovy LS JAR options from configuration: {jar_options_str}", logging.INFO)
@@ -80,7 +79,7 @@ class GroovyLanguageServer(SolidLanguageServer):
 
     @classmethod
     def _setup_runtime_dependencies(
-            cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
+        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
     ) -> GroovyRuntimeDependencyPaths:
         """
         Setup runtime dependencies for Groovy Language Server and return paths.
@@ -89,7 +88,7 @@ class GroovyLanguageServer(SolidLanguageServer):
 
         # Verify platform support
         assert (
-                platform_id.value.startswith("win-") or platform_id.value.startswith("linux-") or platform_id.value.startswith("osx-")
+            platform_id.value.startswith("win-") or platform_id.value.startswith("linux-") or platform_id.value.startswith("osx-")
         ), "Only Windows, Linux and macOS platforms are supported for Groovy in multilspy at the moment"
 
         # Runtime dependency information
@@ -150,26 +149,21 @@ class GroovyLanguageServer(SolidLanguageServer):
 
         ls_jar_path = cls._find_groovy_ls_jar(logger, static_dir, solidlsp_settings)
 
-        return GroovyRuntimeDependencyPaths(
-            java_path=java_path,
-            java_home_path=java_home_path,
-            ls_jar_path=ls_jar_path
-        )
+        return GroovyRuntimeDependencyPaths(java_path=java_path, java_home_path=java_home_path, ls_jar_path=ls_jar_path)
 
     @classmethod
     def _find_groovy_ls_jar(cls, logger: LanguageServerLogger, static_dir: str, solidlsp_settings: SolidLSPSettings = None) -> str:
         """
         Find Groovy Language Server JAR file
         """
-
         env_jar_path = os.environ.get("GROOVY_LS_JAR_PATH")
         if env_jar_path and os.path.exists(env_jar_path):
             logger.log(f"Using Groovy LS JAR from environment variable GROOVY_LS_JAR_PATH: {env_jar_path}", logging.INFO)
             return env_jar_path
 
-        if solidlsp_settings and hasattr(solidlsp_settings, 'ls_specific_settings') and solidlsp_settings.ls_specific_settings:
+        if solidlsp_settings and hasattr(solidlsp_settings, "ls_specific_settings") and solidlsp_settings.ls_specific_settings:
             groovy_settings = solidlsp_settings.get_ls_specific_settings(Language.GROOVY)
-            config_jar_path = groovy_settings.get('ls_jar_path')
+            config_jar_path = groovy_settings.get("ls_jar_path")
             if config_jar_path and os.path.exists(config_jar_path):
                 logger.log(f"Using Groovy LS JAR from configuration: {config_jar_path}", logging.INFO)
                 return config_jar_path
@@ -191,7 +185,6 @@ class GroovyLanguageServer(SolidLanguageServer):
         """
         Returns the initialize params for the Groovy Language Server.
         """
-
         if not os.path.isabs(repository_absolute_path):
             repository_absolute_path = os.path.abspath(repository_absolute_path)
 
@@ -233,7 +226,7 @@ class GroovyLanguageServer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params # type: ignore
+        return initialize_params  # type: ignore
 
     def _start_server(self) -> None:
         """

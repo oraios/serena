@@ -1,14 +1,16 @@
 import logging
 import os
+from pathlib import Path
+
 import pytest
 
-from pathlib import Path
 from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import SymbolUtils
 from solidlsp.settings import SolidLSPSettings
+
 
 @pytest.mark.groovy
 class TestGroovyLanguageServer:
@@ -17,7 +19,6 @@ class TestGroovyLanguageServer:
         """
         Set up the test class with the Groovy test repository.
         """
-
         cls.test_repo_path = Path(__file__).parent.parent.parent / "resources" / "repos" / "groovy" / "test_repo"
 
         if not cls.test_repo_path.exists():
@@ -26,7 +27,10 @@ class TestGroovyLanguageServer:
         # Use JAR path from environment variable
         ls_jar_path = os.environ.get("GROOVY_LS_JAR_PATH")
         if not ls_jar_path or not os.path.exists(ls_jar_path):
-            pytest.skip("Groovy Language Server JAR not found. Set GROOVY_LS_JAR_PATH environment variable to run tests.", allow_module_level=True)
+            pytest.skip(
+                "Groovy Language Server JAR not found. Set GROOVY_LS_JAR_PATH environment variable to run tests.",
+                allow_module_level=True,
+            )
 
         groovy_settings = {
             "ls_jar_path": ls_jar_path,
@@ -40,7 +44,7 @@ class TestGroovyLanguageServer:
         solidlsp_settings = SolidLSPSettings(
             solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME,
             project_data_relative_path=SERENA_MANAGED_DIR_NAME,
-            ls_specific_settings={Language.GROOVY: groovy_settings}
+            ls_specific_settings={Language.GROOVY: groovy_settings},
         )
 
         cls.language_server = SolidLanguageServer.create(config, logger, repo_path, solidlsp_settings=solidlsp_settings)
@@ -51,7 +55,6 @@ class TestGroovyLanguageServer:
         """
         Clean up the language server.
         """
-
         if hasattr(cls, "language_server"):
             cls.language_server.stop()
 
