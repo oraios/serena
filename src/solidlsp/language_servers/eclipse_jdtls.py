@@ -49,7 +49,7 @@ class EclipseJDTLS(SolidLanguageServer):
         - maven_user_settings: Path to Maven settings.xml file (default: ~/.m2/settings.xml)
         - gradle_user_home: Path to Gradle user home directory (default: ~/.gradle)
 
-    Note: Gradle wrapper is disabled by default. Projects will use the bundled Gradle distribution.
+    Note: Gradle wrapper is ENABLED by default to support projects with custom plugins/repositories.
 
     Example configuration in ~/.serena/serena_config.yml:
     ```yaml
@@ -58,6 +58,7 @@ class EclipseJDTLS(SolidLanguageServer):
         maven_user_settings: "/home/user/.m2/settings.xml"  # Unix/Linux/Mac
         # maven_user_settings: 'C:\\Users\\YourName\\.m2\\settings.xml'  # Windows (use single quotes!)
         gradle_user_home: "/home/user/.gradle"  # Unix/Linux/Mac
+        gradle_wrapper_enabled: true  # Enable gradle wrapper (default: true)
         # gradle_user_home: 'C:\\Users\\YourName\\.gradle'  # Windows (use single quotes!)
     ```
     """
@@ -384,6 +385,16 @@ class EclipseJDTLS(SolidLanguageServer):
             gradle_user_home = None
             log.info(f"Gradle user home not found at default location ({default_gradle_home}), will use JDTLS defaults")
 
+        # Gradle wrapper: default to True (enabled) to support projects with custom plugins/repositories
+        # Note: When enabled, projects use their own gradlew which knows about custom repositories
+        gradle_wrapper_enabled = self._custom_settings.get("gradle_wrapper_enabled")
+        if gradle_wrapper_enabled is None:
+            # Default to True to support projects with custom plugins like 'com.indeed.common'
+            gradle_wrapper_enabled = True
+            log.info("Gradle wrapper enabled by default (use ls_specific_settings -> java -> gradle_wrapper_enabled: false to disable)")
+        else:
+            log.info(f"Gradle wrapper {'enabled' if gradle_wrapper_enabled else 'disabled'} via configuration")
+
         initialize_params = {
             "locale": "en",
             "rootPath": repository_absolute_path,
@@ -589,7 +600,7 @@ class EclipseJDTLS(SolidLanguageServer):
                             },
                             "gradle": {
                                 "enabled": True,
-                                "wrapper": {"enabled": False},
+                                "wrapper": {"enabled": gradle_wrapper_enabled},
                                 "version": None,
                                 "home": "abs(static/gradle-7.3.3)",
                                 "java": {"home": "abs(static/launch_jres/21.0.7-linux-x86_64)"},
