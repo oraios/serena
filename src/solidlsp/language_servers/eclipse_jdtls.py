@@ -51,6 +51,7 @@ class EclipseJDTLS(SolidLanguageServer):
 
     Note: Gradle wrapper is ENABLED by default to support projects with custom plugins/repositories.
           Gradle uses system JAVA_HOME by default (not bundled JRE) to support custom JDK requirements.
+          The JDTLS process itself also uses system JAVA_HOME when available.
 
     Example configuration in ~/.serena/serena_config.yml:
     ```yaml
@@ -111,7 +112,15 @@ class EclipseJDTLS(SolidLanguageServer):
             assert os.path.exists(static_path), static_path
 
         # TODO: Add "self.runtime_dependency_paths.jre_home_path"/bin to $PATH as well
-        proc_env = {"syntaxserver": "false", "JAVA_HOME": self.runtime_dependency_paths.jre_home_path}
+        # Use system JAVA_HOME if available (important for Gradle wrapper JDK checks)
+        # Otherwise fall back to bundled JRE for JDTLS itself
+        system_java_home = os.environ.get("JAVA_HOME")
+        java_home_for_jdtls = system_java_home if system_java_home else self.runtime_dependency_paths.jre_home_path
+        if system_java_home:
+            log.info(f"Using system JAVA_HOME for JDTLS and Gradle: {system_java_home}")
+        else:
+            log.info(f"Using bundled JRE for JDTLS (no system JAVA_HOME found): {java_home_for_jdtls}")
+        proc_env = {"syntaxserver": "false", "JAVA_HOME": java_home_for_jdtls}
         proc_cwd = repository_root_path
         cmd = [
             jre_path,
