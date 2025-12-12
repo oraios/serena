@@ -2,7 +2,9 @@
 
 This guide explains how to prepare a Groovy project so that Serena can provide reliable code intelligence via Groovy Language Server and how to configure the server properly.
 
-Serena automatically downloads and manages Java runtime dependencies for Groovy Language Server. However, you need to provide Groovy Language Server JAR file and optionally configure JAR options for optimal performance.
+Serena provides flexible Java runtime management for Groovy Language Server.  
+You can either use your system Java installation or let Serena download a bundled Java distribution.  
+You need to provide Groovy Language Server JAR file and optionally configure JAR options for optimal performance.
 
 ---
 ## Prerequisites
@@ -12,36 +14,11 @@ Serena automatically downloads and manages Java runtime dependencies for Groovy 
     - The JAR must be compatible with standard LSP protocol
 
 ---
-## Quick Start (Environment Variables)
+## Configuration
 
-The easiest way to configure Groovy Language Server is using environment variables:
+Configure Groovy Language Server by adding settings to your `~/.serena/serena_config.yml`:
 
-1. **Set JAR path** (required):
-   ```bash
-   # Unix/Linux/Mac
-   export GROOVY_LS_JAR_PATH='/path/to/groovy-language-server.jar'
-   
-   # Windows (Command Prompt)
-   set GROOVY_LS_JAR_PATH="C:\path\to\groovy-language-server.jar"
-   ```
-
-2. **Set JAR options** (optional):
-   ```bash
-   # Example with memory settings
-   export GROOVY_LS_JAR_OPTIONS="-Xmx2G -Xms512m"
-   ```
-
-3. **Start Serena** in your Groovy project root:
-   ```bash
-   serena
-   ```
-
-Serena will automatically detect Groovy files and start the language server using the specified JAR file and options.
-
----
-## Manual Setup (Configuration File)
-
-If you prefer permanent configuration, add settings to your `~/.serena/serena_config.yml`:
+### Basic Configuration
 
 ```yaml
 ls_specific_settings:
@@ -50,10 +27,28 @@ ls_specific_settings:
     ls_jar_options: '-Xmx2G -Xms512m'
 ```
 
+### Custom Java Paths
+
+If you have specific Java installations:
+
+```yaml
+ls_specific_settings:
+  groovy:
+    ls_jar_path: '/path/to/groovy-language-server.jar'
+    ls_java_home_path: '/usr/lib/jvm/java-21-openjdk'  # Custom JAVA_HOME directory
+    ls_jar_options: '-Xmx2G -Xms512m'                  # Optional JVM options
+```
+
 ### Configuration Options
 
 - `ls_jar_path`: Absolute path to your Groovy Language Server JAR file (required)
-- `ls_jar_options`: JVM options for the language server (optional)
+- `ls_java_home_path`: Custom JAVA_HOME directory for Java installation (optional)
+    - When specified, Serena will use this Java installation instead of downloading bundled Java
+    - Java executable path is automatically determined based on platform:
+        - Windows: `{ls_java_home_path}/bin/java.exe`
+        - Linux/macOS: `{ls_java_home_path}/bin/java`
+    - Validates that Java executable exists at the expected location
+- `ls_jar_options`: JVM options for language server (optional)
     - Common options:
         - `-Xmx<size>`: Maximum heap size (e.g., `-Xmx2G` for 2GB)
         - `-Xms<size>`: Initial heap size (e.g., `-Xms512m` for 512MB)

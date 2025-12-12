@@ -1,11 +1,9 @@
-import logging
 import os
 from pathlib import Path
 
 import pytest
-from solidlsp.ls_logger import LanguageServerLogger
 
-from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
+from serena.constants import SERENA_MANAGED_DIR_NAME
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import SymbolUtils
@@ -17,7 +15,7 @@ class TestGroovyLanguageServer:
     @classmethod
     def setup_class(cls):
         """
-        Set up the test class with the Groovy test repository.
+        Set up test class with Groovy test repository.
         """
         cls.test_repo_path = Path(__file__).parent.parent.parent / "resources" / "repos" / "groovy" / "test_repo"
 
@@ -32,28 +30,31 @@ class TestGroovyLanguageServer:
                 allow_module_level=True,
             )
 
-        groovy_settings = {
-            "ls_jar_path": ls_jar_path,
-        }
+        # Get JAR options from environment variable
+        ls_jar_options = os.environ.get("GROOVY_LS_JAR_OPTIONS", "")
+        ls_java_home_path = os.environ.get("GROOVY_LS_JAVA_HOME_PATH")
+
+        groovy_settings = {"ls_jar_path": ls_jar_path, "ls_jar_options": ls_jar_options}
+        if ls_java_home_path:
+            groovy_settings["ls_java_home_path"] = ls_java_home_path
 
         # Create language server directly with Groovy-specific settings
         repo_path = str(cls.test_repo_path)
         config = LanguageServerConfig(code_language=Language.GROOVY, ignored_paths=[], trace_lsp_communication=False)
-        logger = LanguageServerLogger(log_level=logging.ERROR)
 
         solidlsp_settings = SolidLSPSettings(
-            solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME,
+            solidlsp_dir=str(Path.home() / ".serena"),
             project_data_relative_path=SERENA_MANAGED_DIR_NAME,
             ls_specific_settings={Language.GROOVY: groovy_settings},
         )
 
-        cls.language_server = SolidLanguageServer.create(config, logger, repo_path, solidlsp_settings=solidlsp_settings)
+        cls.language_server = SolidLanguageServer.create(config, repo_path, solidlsp_settings=solidlsp_settings)
         cls.language_server.start()
 
     @classmethod
     def teardown_class(cls):
         """
-        Clean up the language server.
+        Clean up language server.
         """
         if hasattr(cls, "language_server"):
             cls.language_server.stop()
