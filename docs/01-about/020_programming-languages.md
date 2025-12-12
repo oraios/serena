@@ -31,6 +31,8 @@ With Serena, we provide direct, out-of-the-box support for:
   (requires installation of fortls: `pip install fortls`)
 * **Go**  
   (requires installation of `gopls`)
+* **Groovy**  
+  (requires local groovy-language-server.jar setup via GROOVY_LS_JAR_PATH or configuration)
 * **Haskell**  
   (automatically locates HLS via ghcup, stack, or system PATH; supports Stack and Cabal projects)
 * **Java**  
