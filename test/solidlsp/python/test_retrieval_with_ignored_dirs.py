@@ -5,7 +5,7 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from test.conftest import create_ls
+from test.conftest import start_ls_context
 
 # This mark will be applied to all tests in this module
 pytestmark = pytest.mark.python
@@ -15,12 +15,8 @@ pytestmark = pytest.mark.python
 def ls_with_ignored_dirs() -> Generator[SolidLanguageServer, None, None]:
     """Fixture to set up an LS for the python test repo with the 'scripts' directory ignored."""
     ignored_paths = ["scripts", "custom_test"]
-    ls = create_ls(ignored_paths=ignored_paths, language=Language.PYTHON)
-    ls.start()
-    try:
+    with start_ls_context(language=Language.PYTHON, ignored_paths=ignored_paths) as ls:
         yield ls
-    finally:
-        ls.stop()
 
 
 @pytest.mark.parametrize("ls_with_ignored_dirs", [Language.PYTHON], indirect=True)
@@ -50,18 +46,17 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
 def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
     """Tests that refs and symbols with glob patterns are ignored."""
     ignored_paths = ["*ipts", "custom_t*"]
-    ls = create_ls(ignored_paths=ignored_paths, repo_path=str(repo_path), language=Language.PYTHON)
-    ls.start()
-    # same as in the above tests
-    root = ls.request_full_symbol_tree()[0]
-    root_children = root["children"]
-    children_names = {child["name"] for child in root_children}
-    assert children_names == {"test_repo", "examples"}
+    with start_ls_context(language=Language.PYTHON, repo_path=str(repo_path), ignored_paths=ignored_paths) as ls:
+        # same as in the above tests
+        root = ls.request_full_symbol_tree()[0]
+        root_children = root["children"]
+        children_names = {child["name"] for child in root_children}
+        assert children_names == {"test_repo", "examples"}
 
-    # test that the refs and symbols with glob patterns are ignored
-    definition_file = "test_repo/models.py"
-    definition_line = 56
-    definition_col = 6
+        # test that the refs and symbols with glob patterns are ignored
+        definition_file = "test_repo/models.py"
+        definition_line = 56
+        definition_col = 6
 
-    references = ls.request_references(definition_file, definition_line, definition_col)
-    assert not any("scripts" in ref["relativePath"] for ref in references)
+        references = ls.request_references(definition_file, definition_line, definition_col)
+        assert not any("scripts" in ref["relativePath"] for ref in references)

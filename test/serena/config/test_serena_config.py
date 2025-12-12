@@ -28,16 +28,7 @@ class TestProjectConfigAutogenerate:
             ProjectConfig.autogenerate(self.project_path, save_to_disk=False)
 
         error_message = str(exc_info.value)
-        # Check that the error message contains all the key information
         assert "No source files found" in error_message
-        assert str(self.project_path.resolve()) in error_message
-        assert "To use Serena with this project" in error_message
-        assert "Add source files in one of the supported languages" in error_message
-        assert "Create a project configuration file manually" in error_message
-        assert str(Path(".serena") / "project.yml") in error_message
-        assert "Example project.yml:" in error_message
-        assert f"project_name: {self.project_path.name}" in error_message
-        assert "language: python" in error_message
 
     def test_autogenerate_with_python_files(self):
         """Test successful autogeneration with Python source files."""
@@ -50,7 +41,17 @@ class TestProjectConfigAutogenerate:
 
         # Verify the configuration
         assert config.project_name == self.project_path.name
-        assert config.language == Language.PYTHON
+        assert config.languages == [Language.PYTHON]
+
+    def test_autogenerate_with_js_files(self):
+        """Test successful autogeneration with JavaScript source files."""
+        # Create files for multiple languages
+        (self.project_path / "small.js").write_text("console.log('JS');")
+
+        # Run autogenerate - should pick Python as dominant
+        config = ProjectConfig.autogenerate(self.project_path, save_to_disk=False)
+
+        assert config.languages == [Language.TYPESCRIPT]
 
     def test_autogenerate_with_multiple_languages(self):
         """Test autogeneration picks dominant language when multiple are present."""
@@ -62,7 +63,7 @@ class TestProjectConfigAutogenerate:
         # Run autogenerate - should pick Python as dominant
         config = ProjectConfig.autogenerate(self.project_path, save_to_disk=False)
 
-        assert config.language == Language.PYTHON
+        assert config.languages == [Language.PYTHON]
 
     def test_autogenerate_saves_to_disk(self):
         """Test that autogenerate can save the configuration to disk."""
@@ -78,7 +79,7 @@ class TestProjectConfigAutogenerate:
         assert config_path.exists()
 
         # Verify the content
-        assert config.language == Language.GO
+        assert config.languages == [Language.GO]
 
     def test_autogenerate_nonexistent_path(self):
         """Test that autogenerate raises FileNotFoundError for non-existent path."""
@@ -115,24 +116,4 @@ class TestProjectConfigAutogenerate:
         config = ProjectConfig.autogenerate(self.project_path, project_name=custom_name, save_to_disk=False)
 
         assert config.project_name == custom_name
-        assert config.language == Language.TYPESCRIPT
-
-    def test_autogenerate_error_message_format(self):
-        """Test the specific format of the error message for better user experience."""
-        with pytest.raises(ValueError) as exc_info:
-            ProjectConfig.autogenerate(self.project_path, save_to_disk=False)
-
-        error_lines = str(exc_info.value).split("\n")
-
-        # Verify the structure of the error message
-        assert len(error_lines) >= 8  # Should have multiple lines of helpful information
-
-        # Check for numbered instructions
-        assert any("1." in line for line in error_lines)
-        assert any("2." in line for line in error_lines)
-
-        # Check for supported languages list
-        assert any("Python" in line and "TypeScript" in line for line in error_lines)
-
-        # Check example includes comment about language options
-        assert any("# or typescript, java, csharp" in line for line in error_lines)
+        assert config.languages == [Language.TYPESCRIPT]

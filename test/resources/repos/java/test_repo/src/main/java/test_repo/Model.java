@@ -10,4 +10,12 @@ public class Model {
     public String getName() {
         return name;
     }
+
+    public String getName(int maxChars) {
+        if (name.length() <= maxChars) {
+            return name;
+        } else {
+            return name.substring(0, maxChars) + "...";
+        }
+    }
 }

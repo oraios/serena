@@ -1,5 +1,5 @@
 """
-Defines wrapper objects around the types returned by LSP to ensure decoupling between LSP versions and multilspy
+Defines wrapper objects around the types returned by LSP to ensure decoupling between LSP versions and SolidLSP
 """
 
 from __future__ import annotations
@@ -8,6 +8,8 @@ from enum import Enum, IntEnum
 from typing import NotRequired, Union
 
 from typing_extensions import TypedDict
+
+from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticSeverity
 
 URI = str
 DocumentUri = str
@@ -144,6 +146,8 @@ class CompletionItem(TypedDict):
 class SymbolKind(IntEnum):
     """A symbol kind."""
 
+    # TODO: This is a duplicate of SymbolKind in lsp_types.
+
     File = 1
     Module = 2
     Namespace = 3
@@ -243,6 +247,14 @@ class UnifiedSymbolInformation(TypedDict):
     All symbols except the root packages will have a parent.
     """
 
+    overload_idx: NotRequired[int]
+    """
+    The overload index of the symbol, if applicable. If a symbol does not have overloads, this field is omitted.
+    If the symbol is an overloaded function or method (same symbol name with the same parent), 
+    this index indicates which overload it is. The index is 0-based.
+    Added for Serena, not part of the LSP.
+    """
+
 
 class MarkupKind(Enum):
     """Describes the content type that a client supports in various
@@ -319,11 +331,29 @@ class Hover(TypedDict):
     visualize the hover, e.g. by changing the background color. """
 
 
-class DiagnosticsSeverity(IntEnum):
-    ERROR = 1
-    WARNING = 2
-    INFORMATION = 3
-    HINT = 4
+class TextDocumentIdentifier(TypedDict):
+    """A literal to identify a text document in the client."""
+
+    uri: DocumentUri
+    """ The text document's uri. """
+
+
+class TextEdit(TypedDict):
+    """A textual edit applicable to a text document."""
+
+    range: Range
+    """ The range of the text document to be manipulated. """
+    newText: str
+    """ The string to be inserted. For delete operations use an empty string. """
+
+
+class WorkspaceEdit(TypedDict):
+    """A workspace edit represents changes to many resources managed in the workspace."""
+
+    changes: NotRequired[dict[DocumentUri, list[TextEdit]]]
+    """ Holds changes to existing resources. """
+    documentChanges: NotRequired[list]
+    """ Document changes array for versioned edits. """
 
 
 class Diagnostic(TypedDict):
@@ -333,7 +363,7 @@ class Diagnostic(TypedDict):
     """ The URI of the text document to which the diagnostics apply. """
     range: Range
     """ The range of the text document to which the diagnostics apply. """
-    severity: NotRequired[DiagnosticsSeverity]
+    severity: NotRequired[DiagnosticSeverity]
     """ The severity of the diagnostic. """
     message: str
     """ The diagnostic message. """
@@ -341,3 +371,28 @@ class Diagnostic(TypedDict):
     """ The code of the diagnostic. """
     source: NotRequired[str]
     """ The source of the diagnostic, e.g. the name of the tool that produced it. """
+
+
+def extract_text_edits(workspace_edit: WorkspaceEdit) -> dict[str, list[TextEdit]]:
+    """
+    Extracts the text changes from a WorkspaceEdit object.
+
+    Args:
+        workspace_edit (WorkspaceEdit): The WorkspaceEdit object to extract text changes from.
+
+    Returns:
+        dict[str, list[TextEdit]]: A dictionary mapping document URIs to lists of TextEdit objects.
+
+    """
+    if "changes" in workspace_edit:
+        return workspace_edit["changes"]
+    elif "documentChanges" in workspace_edit:
+        changes = {}
+        for change in workspace_edit["documentChanges"]:
+            if "textDocument" in change and "edits" in change:
+                uri = change["textDocument"]["uri"]
+                edits = change["edits"]
+                changes[uri] = edits
+        return changes
+    else:
+        raise Exception(f"Invalid WorkspaceEdit (expected 'changes' or 'documentChanges' key):\n{workspace_edit}")

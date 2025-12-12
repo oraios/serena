@@ -5,9 +5,11 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
+from test.conftest import language_tests_enabled
+
+pytestmark = [pytest.mark.java, pytest.mark.skipif(not language_tests_enabled(Language.JAVA), reason="Java tests disabled")]
 
 
-@pytest.mark.java
 class TestJavaLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.JAVA], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
@@ -25,7 +27,7 @@ class TestJavaLanguageServer:
 
         # Dynamically determine the correct line/column for the 'Model' class name
         file_path = os.path.join("src", "main", "java", "test_repo", "Model.java")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         model_symbol = None
         for sym in symbols[0]:
             if sym.get("name") == "Model" and sym.get("kind") == 5:  # 5 = Class

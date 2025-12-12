@@ -1,4 +1,4 @@
-description: A configuration specific for chatgpt, which has a limit of 30 tools and requires short descriptions.
+description: A configuration specific for ChatGPT, which has a limit of 30 tools and requires short descriptions.
 prompt: |
   You are running in desktop app context where the tools give you access to the code base as well as some
   access to the file system, if configured. You interact with the user through a chat interface that is separated
@@ -16,11 +16,11 @@ included_optional_tools:
 
 tool_description_overrides:
   find_symbol: |
-    Retrieves symbols matching `name_path` in a file.
-    Use `depth > 0` to include children. `name_path` can be: "foo": any symbol named "foo"; "foo/bar": "bar" within "foo"; "/foo/bar": only top-level "foo/bar"
-  replace_regex: |
-    Replaces text using regular expressions. Preferred for smaller edits where symbol-level tools aren't appropriate.
-    Use wildcards (.*?) to match large sections efficiently: "beginning.*?end" instead of specifying exact content.
+    Retrieves symbols matching `name_path_pattern` in a file.
+    Use `depth > 0` to include children. `name_path_pattern` can be: "foo": any symbol named "foo"; "foo/bar": "bar" within "foo"; "/foo/bar": only top-level "foo/bar"
+  replace_content: |
+    Replaces content in files. Preferred for smaller edits where symbol-level tools aren't appropriate.
+    Use mode "regex" with wildcards (.*?) to match large sections efficiently: "beginning.*?end" instead of specifying exact content.
     Essential for multi-line replacements.
   search_for_pattern: |
     Flexible pattern search across codebase. Prefer symbolic operations when possible.

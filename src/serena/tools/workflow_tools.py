@@ -16,8 +16,7 @@ class CheckOnboardingPerformedTool(Tool):
     def apply(self) -> str:
         """
         Checks whether project onboarding was already performed.
-        You should always call this tool before beginning to actually work on the project/after activating a project,
-        but after calling the initial instructions tool.
+        You should always call this tool before beginning to actually work on the project/after activating a project.
         """
         from .memory_tools import ListMemoriesTool
 
@@ -122,18 +121,18 @@ class PrepareForNewConversationTool(Tool):
         return self.prompt_factory.create_prepare_for_new_conversation()
 
 
-class InitialInstructionsTool(Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional):
+class InitialInstructionsTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     """
-    Gets the initial instructions for the current project.
-    Should only be used in settings where the system prompt cannot be set,
-    e.g. in clients you have no control over, like Claude Desktop.
+    Provides instructions on how to use the Serena toolbox.
+    Should only be used in settings where the system prompt is not read automatically by the client.
+
+    NOTE: Some MCP clients (including Claude Desktop) do not read the system prompt automatically!
     """
 
     def apply(self) -> str:
         """
-        Get the initial instructions for the current coding project.
-        If you haven't received instructions on how to use Serena's tools in the system prompt,
-        you should always call this tool before starting to work (including using any other tool) on any programming task,
-        the only exception being when you are asked to call `activate_project`, which you should then call before.
+        Provides the 'Serena Instructions Manual', which contains essential information on how to use the Serena toolbox.
+        IMPORTANT: If you have not yet read the manual, call this tool immediately after you are given your task by the user,
+        as it will critically inform you!
         """
         return self.agent.create_system_prompt()

@@ -14,6 +14,7 @@ from typing import Any
 import psutil
 from sensai.util.string import ToStringMixin
 
+from solidlsp.ls_config import Language
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_request import LanguageServerRequest
 from solidlsp.lsp_protocol_handler.lsp_requests import LspNotification
@@ -32,7 +33,7 @@ from solidlsp.lsp_protocol_handler.server import (
     make_request,
     make_response,
 )
-from solidlsp.util.subprocess_util import subprocess_kwargs
+from solidlsp.util.subprocess_util import quote_arg, subprocess_kwargs
 
 log = logging.getLogger(__name__)
 
@@ -42,9 +43,10 @@ class LanguageServerTerminatedException(Exception):
     Exception raised when the language server process has terminated unexpectedly.
     """
 
-    def __init__(self, message: str, cause: Exception | None = None) -> None:
+    def __init__(self, message: str, language: Language, cause: Exception | None = None) -> None:
         super().__init__(message)
         self.message = message
+        self.language = language
         self.cause = cause
 
     def __str__(self) -> str:
@@ -52,7 +54,6 @@ class LanguageServerTerminatedException(Exception):
 
 
 class Request(ToStringMixin):
-
     @dataclass
     class Result:
         payload: PayloadLike | None = None
@@ -65,7 +66,7 @@ class Request(ToStringMixin):
         self._request_id = request_id
         self._method = method
         self._status = "pending"
-        self._result_queue = Queue()
+        self._result_queue: Queue[Request.Result] = Queue()
 
     def _tostring_includes(self) -> list[str]:
         return ["_request_id", "_status", "_method"]
@@ -132,23 +133,27 @@ class SolidLanguageServerHandler:
     def __init__(
         self,
         process_launch_info: ProcessLaunchInfo,
+        language: Language,
+        determine_log_level: Callable[[str], int],
         logger: Callable[[str, str, StringDict | str], None] | None = None,
-        start_independent_lsp_process=True,
+        start_independent_lsp_process: bool = True,
         request_timeout: float | None = None,
     ) -> None:
+        self.language = language
+        self._determine_log_level = determine_log_level
         self.send = LanguageServerRequest(self)
         self.notify = LspNotification(self.send_notification)
 
         self.process_launch_info = process_launch_info
-        self.process: subprocess.Popen | None = None
+        self.process: subprocess.Popen[bytes] | None = None
         self._is_shutting_down = False
 
         self.request_id = 1
         self._pending_requests: dict[Any, Request] = {}
-        self.on_request_handlers = {}
-        self.on_notification_handlers = {}
+        self.on_request_handlers: dict[str, Callable[[Any], Any]] = {}
+        self.on_notification_handlers: dict[str, Callable[[Any], None]] = {}
         self.logger = logger
-        self.tasks = {}
+        self.tasks: dict[int, Any] = {}
         self.task_counter = 0
         self.loop = None
         self.start_independent_lsp_process = start_independent_lsp_process
@@ -185,7 +190,7 @@ class SolidLanguageServerHandler:
         if not isinstance(cmd, str) and not is_windows:
             # Since we are using the shell, we need to convert the command list to a single string
             # on Linux/macOS
-            cmd = " ".join(cmd)
+            cmd = " ".join(map(quote_arg, cmd))
         log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
         kwargs = subprocess_kwargs()
         kwargs["start_new_session"] = self.start_independent_lsp_process
@@ -204,19 +209,19 @@ class SolidLanguageServerHandler:
         if self.process.returncode is not None:
             log.error("Language server has already terminated/could not be started")
             # Process has already terminated
-            stderr_data = self.process.stderr.read()
+            stderr_data = self.process.stderr.read() if self.process.stderr else b""
             error_message = stderr_data.decode("utf-8", errors="replace")
             raise RuntimeError(f"Process terminated immediately with code {self.process.returncode}. Error: {error_message}")
 
         # start threads to read stdout and stderr of the process
         threading.Thread(
             target=self._read_ls_process_stdout,
-            name="LSP-stdout-reader",
+            name=f"LSP-stdout-reader:{self.language.value}",
             daemon=True,
         ).start()
         threading.Thread(
             target=self._read_ls_process_stderr,
-            name="LSP-stderr-reader",
+            name=f"LSP-stderr-reader:{self.language.value}",
             daemon=True,
         ).start()
 
@@ -229,7 +234,7 @@ class SolidLanguageServerHandler:
         if process:
             self._cleanup_process(process)
 
-    def _cleanup_process(self, process):
+    def _cleanup_process(self, process: subprocess.Popen[bytes]) -> None:
         """Clean up a process: close stdin, terminate/kill process, close stdout/stderr."""
         # Close stdin first to prevent deadlocks
         # See: https://bugs.python.org/issue35539
@@ -246,7 +251,7 @@ class SolidLanguageServerHandler:
         self._safely_close_pipe(process.stdout)
         self._safely_close_pipe(process.stderr)
 
-    def _safely_close_pipe(self, pipe):
+    def _safely_close_pipe(self, pipe: Any) -> None:
         """Safely close a pipe, ignoring any exceptions."""
         if pipe:
             try:
@@ -254,12 +259,12 @@ class SolidLanguageServerHandler:
             except Exception:
                 pass
 
-    def _terminate_or_kill_process(self, process):
+    def _terminate_or_kill_process(self, process: subprocess.Popen[bytes]) -> None:
         """Try to terminate the process gracefully, then forcefully if necessary."""
         # First try to terminate the process tree gracefully
         self._signal_process_tree(process, terminate=True)
 
-    def _signal_process_tree(self, process, terminate=True):
+    def _signal_process_tree(self, process: subprocess.Popen[bytes], terminate: bool = True) -> None:
         """Send signal (terminate or kill) to the process and all its children."""
         signal_method = "terminate" if terminate else "kill"
 
@@ -310,8 +315,7 @@ class SolidLanguageServerHandler:
         if self.logger is not None:
             self.logger("client", "logger", message)
 
-    @staticmethod
-    def _read_bytes_from_process(process, stream, num_bytes):
+    def _read_bytes_from_process(self, process, stream, num_bytes) -> bytes:  # type: ignore
         """Read exactly num_bytes from process stdout"""
         data = b""
         while len(data) < num_bytes:
@@ -319,7 +323,8 @@ class SolidLanguageServerHandler:
             if not chunk:
                 if process.poll() is not None:
                     raise LanguageServerTerminatedException(
-                        f"Process terminated while trying to read response (read {num_bytes} of {len(data)} bytes before termination)"
+                        f"Process terminated while trying to read response (read {num_bytes} of {len(data)} bytes before termination)",
+                        language=self.language,
                     )
                 # Process still running but no data available yet, retry after a short delay
                 time.sleep(0.01)
@@ -356,13 +361,15 @@ class SolidLanguageServerHandler:
         except LanguageServerTerminatedException as e:
             exception = e
         except (BrokenPipeError, ConnectionResetError) as e:
-            exception = LanguageServerTerminatedException("Language server process terminated while reading stdout", cause=e)
+            exception = LanguageServerTerminatedException("Language server process terminated while reading stdout", self.language, cause=e)
         except Exception as e:
-            exception = LanguageServerTerminatedException("Unexpected error while reading stdout from language server process", cause=e)
+            exception = LanguageServerTerminatedException(
+                "Unexpected error while reading stdout from language server process", self.language, cause=e
+            )
         log.info("Language server stdout reader thread has terminated")
         if not self._is_shutting_down:
             if exception is None:
-                exception = LanguageServerTerminatedException("Language server stdout read process terminated unexpectedly")
+                exception = LanguageServerTerminatedException("Language server stdout read process terminated unexpectedly", self.language)
             log.error(str(exception))
             self._cancel_pending_requests(exception)
 
@@ -378,13 +385,9 @@ class SolidLanguageServerHandler:
                 line = self.process.stderr.readline()
                 if not line:
                     continue
-                line = line.decode(ENCODING, errors="replace")
-                line_lower = line.lower()
-                if "error" in line_lower or "exception" in line_lower or line.startswith("E["):
-                    level = logging.ERROR
-                else:
-                    level = logging.INFO
-                log.log(level, line)
+                line_str = line.decode(ENCODING, errors="replace")
+                level = self._determine_log_level(line_str)
+                log.log(level, line_str)
         except Exception as e:
             log.error("Error while reading stderr from language server process: %s", e, exc_info=e)
         if not self._is_shutting_down:
@@ -501,13 +504,13 @@ class SolidLanguageServerHandler:
                     self.logger("client", "logger", f"Failed to write to stdin: {e}")
                 return
 
-    def on_request(self, method: str, cb) -> None:
+    def on_request(self, method: str, cb: Callable[[Any], Any]) -> None:
         """
         Register the callback function to handle requests from the server to the client for the given method
         """
         self.on_request_handlers[method] = cb
 
-    def on_notification(self, method: str, cb) -> None:
+    def on_notification(self, method: str, cb: Callable[[Any], None]) -> None:
         """
         Register the callback function to handle notifications from the server to the client for the given method
         """
@@ -517,8 +520,15 @@ class SolidLanguageServerHandler:
         """
         Handle the response received from the server for a request, using the id to determine the request
         """
+        response_id = response["id"]
         with self._response_handlers_lock:
-            request = self._pending_requests.pop(response["id"])
+            request = self._pending_requests.pop(response_id, None)
+            if request is None and isinstance(response_id, str) and response_id.isdigit():
+                request = self._pending_requests.pop(int(response_id), None)
+
+            if request is None:  # need to convert response_id to the right type
+                log.debug("Request interrupted by user or not found for ID %s", response_id)
+                return
 
         if "result" in response and "error" not in response:
             request.on_result(response["result"])

@@ -13,11 +13,13 @@ import zipfile
 from enum import Enum
 from pathlib import Path, PurePath
 
+import charset_normalizer
 import requests
 
 from solidlsp.ls_exceptions import SolidLSPException
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_types import UnifiedSymbolInformation
+
+log = logging.getLogger(__name__)
 
 
 class InvalidTextLocationError(Exception):
@@ -126,10 +128,15 @@ class PathUtils:
             from urllib.parse import unquote, urlparse
             from urllib.request import url2pathname
         except ImportError:
-            # backwards compatibility
-            from urllib import unquote, url2pathname
+            # backwards compatibility (Python 2)
+            from urllib.parse import unquote as unquote_py2
+            from urllib.request import url2pathname as url2pathname_py2
 
-            from urlparse import urlparse
+            from urlparse import urlparse as urlparse_py2
+
+            unquote = unquote_py2
+            url2pathname = url2pathname_py2
+            urlparse = urlparse_py2
         parsed = urlparse(uri)
         host = f"{os.path.sep}{os.path.sep}{parsed.netloc}{os.path.sep}"
         path = os.path.normpath(os.path.join(host, url2pathname(unquote(parsed.path))))
@@ -165,22 +172,35 @@ class FileUtils:
     """
 
     @staticmethod
-    def read_file(logger: LanguageServerLogger, file_path: str) -> str:
+    def read_file(file_path: str, encoding: str) -> str:
         """
-        Reads the file at the given path and returns the contents as a string.
+        Reads the file at the given path using the given encoding and returns the contents as a string.
+        If decoding fails, tries to detect the encoding using charset_normalizer.
+
+        Raises FileNotFoundError if the file does not exist.
         """
         if not os.path.exists(file_path):
-            logger.log(f"File read '{file_path}' failed: File does not exist.", logging.ERROR)
-            raise SolidLSPException(f"File read '{file_path}' failed: File does not exist.")
+            log.error(f"Failed to read '{file_path}': File does not exist.")
+            raise FileNotFoundError(f"File read '{file_path}' failed: File does not exist.")
         try:
-            with open(file_path, encoding="utf-8") as inp_file:
-                return inp_file.read()
+            try:
+                with open(file_path, encoding=encoding) as inp_file:
+                    return inp_file.read()
+            except UnicodeDecodeError as ude:
+                results = charset_normalizer.from_path(file_path)
+                match = results.best()
+                if match:
+                    log.warning(
+                        f"Could not decode {file_path} with encoding='{encoding}'; using best match '{match.encoding}' instead",
+                    )
+                    return match.raw.decode(match.encoding)
+                raise ude
         except Exception as exc:
-            logger.log(f"File read '{file_path}' failed to read with encoding 'utf-8': {exc}", logging.ERROR)
-            raise SolidLSPException("File read failed.") from None
+            log.error(f"Failed to read '{file_path}' with encoding '{encoding}': {exc}")
+            raise exc
 
     @staticmethod
-    def download_file(logger: LanguageServerLogger, url: str, target_path: str) -> None:
+    def download_file(url: str, target_path: str) -> None:
         """
         Downloads the file from the given URL to the given {target_path}
         """
@@ -188,25 +208,25 @@ class FileUtils:
         try:
             response = requests.get(url, stream=True, timeout=60)
             if response.status_code != 200:
-                logger.log(f"Error downloading file '{url}': {response.status_code} {response.text}", logging.ERROR)
+                log.error(f"Error downloading file '{url}': {response.status_code} {response.text}")
                 raise SolidLSPException("Error downloading file.")
             with open(target_path, "wb") as f:
                 shutil.copyfileobj(response.raw, f)
         except Exception as exc:
-            logger.log(f"Error downloading file '{url}': {exc}", logging.ERROR)
+            log.error(f"Error downloading file '{url}': {exc}")
             raise SolidLSPException("Error downloading file.") from None
 
     @staticmethod
-    def download_and_extract_archive(logger: LanguageServerLogger, url: str, target_path: str, archive_type: str) -> None:
+    def download_and_extract_archive(url: str, target_path: str, archive_type: str) -> None:
         """
         Downloads the archive from the given URL having format {archive_type} and extracts it to the given {target_path}
         """
         try:
             tmp_files = []
-            tmp_file_name = str(PurePath(os.path.expanduser("~"), "multilspy_tmp", uuid.uuid4().hex))
+            tmp_file_name = str(PurePath(os.path.expanduser("~"), "solidlsp_tmp", uuid.uuid4().hex))
             tmp_files.append(tmp_file_name)
             os.makedirs(os.path.dirname(tmp_file_name), exist_ok=True)
-            FileUtils.download_file(logger, url, tmp_file_name)
+            FileUtils.download_file(url, tmp_file_name)
             if archive_type in ["tar", "gztar", "bztar", "xztar"]:
                 os.makedirs(target_path, exist_ok=True)
                 shutil.unpack_archive(tmp_file_name, target_path, archive_type)
@@ -233,11 +253,14 @@ class FileUtils:
             elif archive_type == "gz":
                 with gzip.open(tmp_file_name, "rb") as f_in, open(target_path, "wb") as f_out:
                     shutil.copyfileobj(f_in, f_out)
+            elif archive_type == "binary":
+                # For single binary files, just move to target without extraction
+                shutil.move(tmp_file_name, target_path)
             else:
-                logger.log(f"Unknown archive type '{archive_type}' for extraction", logging.ERROR)
+                log.error(f"Unknown archive type '{archive_type}' for extraction")
                 raise SolidLSPException(f"Unknown archive type '{archive_type}'")
         except Exception as exc:
-            logger.log(f"Error extracting archive '{tmp_file_name}' obtained from '{url}': {exc}", logging.ERROR)
+            log.error(f"Error extracting archive '{tmp_file_name}' obtained from '{url}': {exc}")
             raise SolidLSPException("Error extracting archive.") from exc
         finally:
             for tmp_file_name in tmp_files:
@@ -246,10 +269,6 @@ class FileUtils:
 
 
 class PlatformId(str, Enum):
-    """
-    multilspy supported platforms
-    """
-
     WIN_x86 = "win-x86"
     WIN_x64 = "win-x64"
     WIN_arm64 = "win-arm64"
@@ -262,15 +281,11 @@ class PlatformId(str, Enum):
     LINUX_MUSL_x64 = "linux-musl-x64"
     LINUX_MUSL_arm64 = "linux-musl-arm64"
 
-    def is_windows(self):
+    def is_windows(self) -> bool:
         return self.value.startswith("win")
 
 
 class DotnetVersion(str, Enum):
-    """
-    multilspy supported dotnet versions
-    """
-
     V4 = "4"
     V6 = "6"
     V7 = "7"
@@ -315,7 +330,7 @@ class PlatformUtils:
             raise SolidLSPException(f"Unknown platform: {system=}, {machine=}, {bitness=}")
 
     @staticmethod
-    def _determine_windows_machine_type():
+    def _determine_windows_machine_type() -> str:
         import ctypes
         from ctypes import wintypes
 
@@ -342,7 +357,7 @@ class PlatformUtils:
             _anonymous_ = ("u",)
 
         sys_info = SYSTEM_INFO()
-        ctypes.windll.kernel32.GetNativeSystemInfo(ctypes.byref(sys_info))
+        ctypes.windll.kernel32.GetNativeSystemInfo(ctypes.byref(sys_info))  # type: ignore
 
         arch_map = {
             9: "AMD64",

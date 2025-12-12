@@ -14,10 +14,10 @@ from serena.project import Project
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 
-from . import NEXTLS_UNAVAILABLE, NEXTLS_UNAVAILABLE_REASON
+from . import EXPERT_UNAVAILABLE, EXPERT_UNAVAILABLE_REASON
 
 # These marks will be applied to all tests in this module
-pytestmark = [pytest.mark.elixir, pytest.mark.skipif(NEXTLS_UNAVAILABLE, reason=f"Next LS not available: {NEXTLS_UNAVAILABLE_REASON}")]
+pytestmark = [pytest.mark.elixir, pytest.mark.skipif(EXPERT_UNAVAILABLE, reason=f"Next LS not available: {EXPERT_UNAVAILABLE_REASON}")]
 
 
 class TestElixirIntegration:
@@ -72,7 +72,7 @@ class TestElixirIntegration:
     def test_module_hierarchy_understanding(self, language_server: SolidLanguageServer):
         """Test that the language server understands Elixir module hierarchy."""
         models_file = os.path.join("lib", "models.ex")
-        symbols = language_server.request_document_symbols(models_file)
+        symbols = language_server.request_document_symbols(models_file).get_all_symbols_and_roots()
 
         if symbols:
             # Flatten symbol structure

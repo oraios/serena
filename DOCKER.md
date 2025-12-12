@@ -1,6 +1,6 @@
 # Docker Setup for Serena (Experimental)
 
-⚠️ **EXPERIMENTAL FEATURE**: The Docker setup for Serena is currently experimental and has several limitations. Please read this entire document before using Docker with Serena.
+⚠️ **EXPERIMENTAL FEATURE**: The Docker setup for Serena is still experimental and has some limitations. Please read this entire document before using Docker with Serena.
 
 ## Overview
 
@@ -12,27 +12,40 @@ Docker support allows you to run Serena in an isolated container environment, wh
 - **Consistent dependencies**: No need to manage language servers and dependencies on your host system
 - **Cross-platform support**: Works consistently across Windows, macOS, and Linux
 
-## Important Limitations and Caveats
+## Important Usage Pointers
 
-### 1. Configuration File Conflicts
+### Configuration
 
-⚠️ **Critical**: Docker uses a separate configuration file (`serena_config.docker.yml`) to avoid path conflicts. When running in Docker:
-- Container paths will be stored in the configuration (e.g., `/workspaces/serena/...`)
-- These paths are incompatible with non-Docker usage
-- After using Docker, you cannot directly switch back to non-Docker usage without manual configuration adjustment
+Serena's configuration and log files are stored in the container in `/workspaces/serena/config/`.
+Any local configuration you may have for Serena will not apply; the container uses its own separate configuration.
 
-### 2. Project Activation Limitations
+You can mount a local configuration/data directory to persist settings across container restarts
+(which will also contain session log files).
+Simply mount your local directory to `/workspaces/serena/config` in the container.
+Initially, be sure to add a `serena_config.yml` file to the mounted directory which applies the following
+special settings for Docker usage:
+```
+# Disable the GUI log window since it's not supported in Docker
+gui_log_window: False
+# Disable opening the web dashboard on launch (not possible within the container)
+web_dashboard_open_on_launch: False
+```
+Set other configuration options as needed.
+
+### Project Activation Limitations
 
 - **Only mounted directories work**: Projects must be mounted as volumes to be accessible
 - Projects outside the mounted directories cannot be activated or accessed
-- Default setup only mounts the current directory
+- Since projects are not remembered across container restarts (unless you mount a local configuration as described above), 
+  activate them using the full path (e.g. `/workspaces/projects/my-project`) when using dynamic project activation
 
-### 3. GUI Window Disabled
+### Language Support Limitations
 
-- The GUI log window option is automatically disabled in Docker environments
-- Use the web dashboard instead (see below)
+The default Docker image does not include dependencies for languages that
+require explicit system-level installations.
+Only languages that install their requirements on the fly will work out of the box.
 
-### 4. Dashboard Port Configuration
+### Dashboard Port Configuration
 
 The web dashboard runs on port 24282 (0x5EDA) by default. You can configure this using environment variables:
 
@@ -46,7 +59,7 @@ SERENA_DASHBOARD_PORT=8080 docker-compose up serena
 
 ⚠️ **Note**: If the local port is occupied, you'll need to specify a different port using the environment variable.
 
-### 5. Line Ending Issues on Windows
+### Line Ending Issues on Windows
 
 ⚠️ **Windows Users**: Be aware of potential line ending inconsistencies:
 - Files edited within the Docker container may use Unix line endings (LF)
@@ -70,7 +83,7 @@ SERENA_DASHBOARD_PORT=8080 docker-compose up serena
 
 Note: Edit the `compose.yaml` file to customize volume mounts for your projects.
 
-### Using Docker directly
+### Building the Docker Image Manually
 
 ```bash
 # Build the image
@@ -98,7 +111,7 @@ services:
       - /path/to/another/project:/workspace/another-project
     # Add the context for the IDE assistant option:
     command:
-      - "uv run --directory . serena-mcp-server --transport sse --port 9121 --host 0.0.0.0 --context ide-assistant"
+      - "uv run --directory . serena-mcp-server --transport sse --port 9121 --host 0.0.0.0 --context claude-code"
 ```
 
 See the [Docker Merge Compose files documentation](https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/) for more details on using merge files.
@@ -157,24 +170,3 @@ Ensure projects are properly mounted:
 - Check volume mounts in `docker-compose.yaml`
 - Use absolute paths for external projects
 - Verify permissions on mounted directories
-
-## Migration Path
-
-To switch between Docker and non-Docker usage:
-
-1. **Docker to Non-Docker**:
-   - Manually edit project paths in `serena_config.yml`
-   - Change container paths to host paths
-   - Or use separate config files for each environment
-
-2. **Non-Docker to Docker**:
-   - Projects will be re-registered with container paths
-   - Original config remains unchanged
-
-## Future Improvements
-
-We're working on:
-- Automatic config migration between environments
-- Better project path handling
-- Dynamic port allocation
-- Windows line-ending handling.

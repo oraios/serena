@@ -200,11 +200,7 @@ pylint.html
 /*.yml
 !*.template.yml
 /agent-ui
-
-# dynamic LS installations
-/src/multilspy/language_servers/*/static
-/src/solidlsp/language_servers/*/static
-/src/solidlsp/language_servers/static
+/test/**/.serena
 
 # clojure-lsp temporary files
 .calva/
@@ -212,12 +208,11 @@ pylint.html
 .cpcache/
 .lsp/
 
-# Cache is in .multilspy 
-**/.multilspy/**
-
+# temporary and backup files
+*.bak
+*.tmp
 tmp/
 
-.serena/
 .vscode/
 
 # Claude settings
@@ -234,9 +229,35 @@ tmp/
 # Exception: Don't ignore OCaml test repository lib directory (contains source code)
 !/test/resources/repos/ocaml/test_repo/lib
 
+# Exception: Don't ignore Julia test repository lib directory (contains source code)
+!/test/resources/repos/julia/test_repo/lib
+
 # Swift
 /test/resources/repos/swift/test_repo/.build
 /test/resources/repos/swift/test_repo/.swiftpm
 
 # OCaml
 /test/resources/repos/ocaml/test_repo/_build
+
+# Elm
+/test/resources/repos/elm/test_repo/.elm/
+/test/resources/repos/elm/test_repo/elm-stuff/
+
+# Scala
+.metals/
+.bsp/
+.scala-build/
+.bloop/
+bootstrap
+test/resources/repos/scala/.bloop/
+
+# Haskell
+.stack-work/
+*.cabal
+stack.yaml.lock
+dist-newstyle/
+cabal.project.local*
+.ghc.environment.*
+
+zz-misc/
+vue-implementation/

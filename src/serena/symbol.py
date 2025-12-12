@@ -2,9 +2,9 @@ import json
 import logging
 import os
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import asdict, dataclass
-from typing import TYPE_CHECKING, Any, Self, Union
+from typing import TYPE_CHECKING, Any, NotRequired, Self, TypedDict, Union
 
 from sensai.util.string import ToStringMixin
 
@@ -12,12 +12,14 @@ from solidlsp import SolidLanguageServer
 from solidlsp.ls import ReferenceInSymbol as LSPReferenceInSymbol
 from solidlsp.ls_types import Position, SymbolKind, UnifiedSymbolInformation
 
+from .ls_manager import LanguageServerManager
 from .project import Project
 
 if TYPE_CHECKING:
     from .agent import SerenaAgent
 
 log = logging.getLogger(__name__)
+NAME_PATH_SEP = "/"
 
 
 @dataclass
@@ -77,7 +79,7 @@ class PositionInFile:
         return Position(line=self.line, character=self.col)
 
 
-class Symbol(ABC):
+class Symbol(ToStringMixin, ABC):
     @abstractmethod
     def get_body_start_position(self) -> PositionInFile | None:
         pass
@@ -112,45 +114,80 @@ class Symbol(ABC):
         """
 
 
-class LanguageServerSymbol(Symbol, ToStringMixin):
-    _NAME_PATH_SEP = "/"
+class NamePathMatcher(ToStringMixin):
+    """
+    Matches name paths of symbols against search patterns.
 
-    @staticmethod
-    def match_name_path(
-        name_path: str,
-        symbol_name_path_parts: list[str],
-        substring_matching: bool,
-    ) -> bool:
+    A name path is a path in the symbol tree *within a source file*.
+    For example, the method `my_method` defined in class `MyClass` would have the name path `MyClass/my_method`.
+    If a symbol is overloaded (e.g., in Java), a 0-based index is appended (e.g. "MyClass/my_method[0]") to
+    uniquely identify it.
+
+    A matching pattern can be:
+     * a simple name (e.g. "method"), which will match any symbol with that name
+     * a relative path like "class/method", which will match any symbol with that name path suffix
+     * an absolute name path "/class/method" (absolute name path), which requires an exact match of the full name path within the source file.
+    Append an index `[i]` to match a specific overload only, e.g. "MyClass/my_method[1]".
+    """
+
+    def __init__(self, name_path_pattern: str, substring_matching: bool) -> None:
         """
-        Checks if a given `name_path` matches a symbol's qualified name parts.
-        See docstring of `Symbol.find` for more details.
+        :param name_path_pattern: the name path expression to match against
+        :param substring_matching: whether to use substring matching for the last segment
         """
-        assert name_path, "name_path must not be empty"
-        assert symbol_name_path_parts, "symbol_name_path_parts must not be empty"
-        name_path_sep = LanguageServerSymbol._NAME_PATH_SEP
+        assert name_path_pattern, "name_path must not be empty"
+        self._expr = name_path_pattern
+        self._substring_matching = substring_matching
+        self._is_absolute_pattern = name_path_pattern.startswith(NAME_PATH_SEP)
+        self._pattern_parts = name_path_pattern.lstrip(NAME_PATH_SEP).rstrip(NAME_PATH_SEP).split(NAME_PATH_SEP)
 
-        is_absolute_pattern = name_path.startswith(name_path_sep)
-        pattern_parts = name_path.lstrip(name_path_sep).rstrip(name_path_sep).split(name_path_sep)
+        # extract overload index "[idx]" if present at end of last part
+        self._overload_idx: int | None = None
+        last_part = self._pattern_parts[-1]
+        if last_part.endswith("]") and "[" in last_part:
+            bracket_idx = last_part.rfind("[")
+            index_part = last_part[bracket_idx + 1 : -1]
+            if index_part.isdigit():
+                self._pattern_parts[-1] = last_part[:bracket_idx]
+                self._overload_idx = int(index_part)
 
+    def _tostring_includes(self) -> list[str]:
+        return ["_expr"]
+
+    def matches_ls_symbol(self, symbol: "LanguageServerSymbol") -> bool:
+        return self.matches_components(symbol.get_name_path_parts(), symbol.overload_idx)
+
+    def matches_components(self, symbol_name_path_parts: list[str], overload_idx: int | None) -> bool:
         # filtering based on ancestors
-        if len(pattern_parts) > len(symbol_name_path_parts):
+        if len(self._pattern_parts) > len(symbol_name_path_parts):
             # can't possibly match if pattern has more parts than symbol
             return False
-        if is_absolute_pattern and len(pattern_parts) != len(symbol_name_path_parts):
+        if self._is_absolute_pattern and len(self._pattern_parts) != len(symbol_name_path_parts):
             # for absolute patterns, the number of parts must match exactly
             return False
-        if symbol_name_path_parts[-len(pattern_parts) : -1] != pattern_parts[:-1]:
+        if symbol_name_path_parts[-len(self._pattern_parts) : -1] != self._pattern_parts[:-1]:
             # ancestors must match
             return False
 
         # matching the last part of the symbol name
-        name_to_match = pattern_parts[-1]
+        name_to_match = self._pattern_parts[-1]
         symbol_name = symbol_name_path_parts[-1]
-        if substring_matching:
-            return name_to_match in symbol_name
+        if self._substring_matching:
+            if name_to_match not in symbol_name:
+                return False
         else:
-            return name_to_match == symbol_name
+            if name_to_match != symbol_name:
+                return False
 
+        # check for matching overload index
+        if self._overload_idx is not None:
+            if overload_idx != self._overload_idx:
+                return False
+
+        return True
+
+
+class LanguageServerSymbol(Symbol, ToStringMixin):
     def __init__(self, symbol_root_from_ls: UnifiedSymbolInformation) -> None:
         self.symbol_root = symbol_root_from_ls
 
@@ -171,6 +208,17 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
     @property
     def symbol_kind(self) -> SymbolKind:
         return self.symbol_root["kind"]
+
+    def is_low_level(self) -> bool:
+        """
+        :return: whether the symbol is a low-level symbol (variable, constant, etc.), which typically represents data
+            rather than structure and therefore is not relevant in a high-level overview of the code.
+        """
+        return self.symbol_kind >= SymbolKind.Variable.value
+
+    @property
+    def overload_idx(self) -> int | None:
+        return self.symbol_root.get("overload_idx")
 
     def is_neighbouring_definition_separated_by_empty_line(self) -> bool:
         return self.symbol_kind in (SymbolKind.Function, SymbolKind.Method, SymbolKind.Class, SymbolKind.Interface, SymbolKind.Struct)
@@ -255,9 +303,13 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
 
     def get_name_path(self) -> str:
         """
-        Get the name path of the symbol (e.g. "class/method/inner_function").
+        Get the name path of the symbol, e.g. "class/method/inner_function" or
+        "class/method[1]" (overloaded method with identifying index).
         """
-        return self._NAME_PATH_SEP.join(self.get_name_path_parts())
+        name_path = NAME_PATH_SEP.join(self.get_name_path_parts())
+        if "overload_idx" in self.symbol_root:
+            name_path += f"[{self.symbol_root['overload_idx']}]"
+        return name_path
 
     def get_name_path_parts(self) -> list[str]:
         """
@@ -293,34 +345,15 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
 
     def find(
         self,
-        name_path: str,
+        name_path_pattern: str,
         substring_matching: bool = False,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
     ) -> list[Self]:
         """
-        Find all symbols within the symbol's subtree that match the given `name_path`.
-        The matching behavior is determined by the structure of `name_path`, which can
-        either be a simple name (e.g. "method") or a name path like "class/method" (relative name path)
-        or "/class/method" (absolute name path).
+        Find all symbols within the symbol's subtree that match the given name path pattern.
 
-        Key aspects of the name path matching behavior:
-        - Trailing slashes in `name_path` play no role and are ignored.
-        - The name of the retrieved symbols will match (either exactly or as a substring)
-          the last segment of `name_path`, while other segments will restrict the search to symbols that
-          have a desired sequence of ancestors.
-        - If there is no starting or intermediate slash in `name_path`, there is no
-          restriction on the ancestor symbols. For example, passing `method` will match
-          against symbols with name paths like `method`, `class/method`, `class/nested_class/method`, etc.
-        - If `name_path` contains a `/` but doesn't start with a `/`, the matching is restricted to symbols
-          with the same ancestors as the last segment of `name_path`. For example, passing `class/method` will match against
-          `class/method` as well as `nested_class/class/method` but not `method`.
-        - If `name_path` starts with a `/`, it will be treated as an absolute name path pattern, meaning
-          that the first segment of it must match the first segment of the symbol's name path.
-          For example, passing `/class` will match only against top-level symbols like `class` but not against `nested_class/class`.
-          Passing `/class/method` will match against `class/method` but not `nested_class/class/method` or `method`.
-
-        :param name_path: the name path to match against
+        :param name_path_pattern: the name path pattern to match against (see class :class:`NamePathMatcher` for details)
         :param substring_matching: whether to use substring matching (as opposed to exact matching)
             of the last segment of `name_path` against the symbol name.
         :param include_kinds: an optional sequence of ints representing the LSP symbol kind.
@@ -328,17 +361,14 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         :param exclude_kinds: If provided, symbols of the given kinds will be excluded from the result.
         """
         result = []
+        name_path_matcher = NamePathMatcher(name_path_pattern, substring_matching)
 
         def should_include(s: "LanguageServerSymbol") -> bool:
             if include_kinds is not None and s.symbol_kind not in include_kinds:
                 return False
             if exclude_kinds is not None and s.symbol_kind in exclude_kinds:
                 return False
-            return LanguageServerSymbol.match_name_path(
-                name_path=name_path,
-                symbol_name_path_parts=s.get_name_path_parts(),
-                substring_matching=substring_matching,
-            )
+            return name_path_matcher.matches_ls_symbol(s)
 
         def traverse(s: "LanguageServerSymbol") -> None:
             if should_include(s):
@@ -357,13 +387,14 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         include_body: bool = False,
         include_children_body: bool = False,
         include_relative_path: bool = True,
+        child_inclusion_predicate: Callable[[Self], bool] | None = None,
     ) -> dict[str, Any]:
         """
         Converts the symbol to a dictionary.
 
         :param kind: whether to include the kind of the symbol
         :param location: whether to include the location of the symbol
-        :param depth: the depth of the symbol
+        :param depth: the depth up to which to include child symbols (0 = do not include children)
         :param include_body: whether to include the body of the top-level symbol.
         :param include_children_body: whether to also include the body of the children.
             Note that the body of the children is part of the body of the parent symbol,
@@ -371,6 +402,8 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
             and pass the children without passing the parent body to the LM.
         :param include_relative_path: whether to include the relative path of the symbol in the location
             entry. Relative paths of the symbol's children are always excluded.
+        :param child_inclusion_predicate: an optional predicate that decides whether a child symbol
+            should be included.
         :return: a dictionary representation of the symbol
         """
         result: dict[str, Any] = {"name": self.name, "name_path": self.get_name_path()}
@@ -388,14 +421,20 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
                 log.warning("Requested body for symbol, but it is not present. The symbol might have been loaded with include_body=False.")
             result["body"] = self.body
 
-        def add_children(s: Self) -> list[dict[str, Any]]:
+        if child_inclusion_predicate is None:
+            child_inclusion_predicate = lambda s: True
+
+        def included_children(s: Self) -> list[dict[str, Any]]:
             children = []
             for c in s.iter_children():
+                if not child_inclusion_predicate(c):
+                    continue
                 children.append(
                     c.to_dict(
                         kind=kind,
                         location=location,
                         depth=depth - 1,
+                        child_inclusion_predicate=child_inclusion_predicate,
                         include_body=include_children_body,
                         include_children_body=include_children_body,
                         # all children have the same relative path as the parent
@@ -405,7 +444,9 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
             return children
 
         if depth > 0:
-            result["children"] = add_children(self)
+            children = included_children(self)
+            if len(children) > 0:
+                result["children"] = included_children(self)
 
         return result
 
@@ -441,59 +482,88 @@ class ReferenceInLanguageServerSymbol(ToStringMixin):
 
 
 class LanguageServerSymbolRetriever:
-    def __init__(self, lang_server: SolidLanguageServer, agent: Union["SerenaAgent", None] = None) -> None:
+    def __init__(self, ls: SolidLanguageServer | LanguageServerManager, agent: Union["SerenaAgent", None] = None) -> None:
         """
-        :param lang_server: the language server to use for symbol retrieval as well as editing operations.
+        :param ls: the language server or language server manager to use for symbol retrieval and editing operations.
         :param agent: the agent to use (only needed for marking files as modified). You can pass None if you don't
             need an agent to be aware of file modifications performed by the symbol manager.
         """
-        self._lang_server = lang_server
+        if isinstance(ls, SolidLanguageServer):
+            ls_manager = LanguageServerManager({ls.language: ls})
+        else:
+            ls_manager = ls
+        assert isinstance(ls_manager, LanguageServerManager)
+        self._ls_manager: LanguageServerManager = ls_manager
         self.agent = agent
 
-    def set_language_server(self, lang_server: SolidLanguageServer) -> None:
-        """
-        Set the language server to use for symbol retrieval and editing operations.
-        This is useful if you want to change the language server after initializing the SymbolManager.
-        """
-        self._lang_server = lang_server
+    def get_root_path(self) -> str:
+        return self._ls_manager.get_root_path()
 
-    def get_language_server(self) -> SolidLanguageServer:
-        return self._lang_server
+    def get_language_server(self, relative_path: str) -> SolidLanguageServer:
+        return self._ls_manager.get_language_server(relative_path)
 
-    def find_by_name(
+    def find(
         self,
-        name_path: str,
-        include_body: bool = False,
+        name_path_pattern: str,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
         substring_matching: bool = False,
         within_relative_path: str | None = None,
     ) -> list[LanguageServerSymbol]:
         """
-        Find all symbols that match the given name. See docstring of `Symbol.find` for more details.
-        The only parameter not mentioned there is `within_relative_path`, which can be used to restrict the search
-        to symbols within a specific file or directory.
+        Finds all symbols that match the given name path pattern (see class :class:`NamePathMatcher` for details),
+        optionally limited to a specific file and filtered by kind.
         """
         symbols: list[LanguageServerSymbol] = []
-        symbol_roots = self._lang_server.request_full_symbol_tree(within_relative_path=within_relative_path, include_body=include_body)
-        for root in symbol_roots:
-            symbols.extend(
-                LanguageServerSymbol(root).find(
-                    name_path, include_kinds=include_kinds, exclude_kinds=exclude_kinds, substring_matching=substring_matching
+        for lang_server in self._ls_manager.iter_language_servers():
+            symbol_roots = lang_server.request_full_symbol_tree(within_relative_path=within_relative_path)
+            for root in symbol_roots:
+                symbols.extend(
+                    LanguageServerSymbol(root).find(
+                        name_path_pattern, include_kinds=include_kinds, exclude_kinds=exclude_kinds, substring_matching=substring_matching
+                    )
                 )
-            )
         return symbols
 
-    def get_document_symbols(self, relative_path: str) -> list[LanguageServerSymbol]:
-        symbol_dicts, roots = self._lang_server.request_document_symbols(relative_path, include_body=False)
-        symbols = [LanguageServerSymbol(s) for s in symbol_dicts]
-        return symbols
+    def find_unique(
+        self,
+        name_path_pattern: str,
+        include_kinds: Sequence[SymbolKind] | None = None,
+        exclude_kinds: Sequence[SymbolKind] | None = None,
+        substring_matching: bool = False,
+        within_relative_path: str | None = None,
+    ) -> LanguageServerSymbol:
+        symbol_candidates = self.find(
+            name_path_pattern,
+            include_kinds=include_kinds,
+            exclude_kinds=exclude_kinds,
+            substring_matching=substring_matching,
+            within_relative_path=within_relative_path,
+        )
+        if len(symbol_candidates) == 1:
+            return symbol_candidates[0]
+        elif len(symbol_candidates) == 0:
+            raise ValueError(f"No symbol matching '{name_path_pattern}' found")
+        else:
+            # There are multiple candidates.
+            # If only one of the candidates has the given pattern as its exact name path, return that one
+            exact_matches = [s for s in symbol_candidates if s.get_name_path() == name_path_pattern]
+            if len(exact_matches) == 1:
+                return exact_matches[0]
+            # otherwise, raise an error
+            include_rel_path = within_relative_path is not None
+            raise ValueError(
+                f"Found multiple {len(symbol_candidates)} symbols matching '{name_path_pattern}'. "
+                "They are: \n"
+                + json.dumps([s.to_dict(kind=True, include_relative_path=include_rel_path) for s in symbol_candidates], indent=2)
+            )
 
     def find_by_location(self, location: LanguageServerSymbolLocation) -> LanguageServerSymbol | None:
         if location.relative_path is None:
             return None
-        symbol_dicts, roots = self._lang_server.request_document_symbols(location.relative_path, include_body=False)
-        for symbol_dict in symbol_dicts:
+        lang_server = self.get_language_server(location.relative_path)
+        document_symbols = lang_server.request_document_symbols(location.relative_path)
+        for symbol_dict in document_symbols.iter_symbols():
             symbol = LanguageServerSymbol(symbol_dict)
             if symbol.location == location:
                 return symbol
@@ -508,28 +578,17 @@ class LanguageServerSymbolRetriever:
         exclude_kinds: Sequence[SymbolKind] | None = None,
     ) -> list[ReferenceInLanguageServerSymbol]:
         """
-        Find all symbols that reference the symbol with the given name.
-        If multiple symbols fit the name (e.g. for variables that are overwritten), will use the first one.
+        Find all symbols that reference the specified symbol, which is assumed to be unique.
 
-        :param name_path: the name path of the symbol to find
+        :param name_path: the name path of the symbol to find. (While this can be a matching pattern, it should
+            usually be the full path to ensure uniqueness.)
         :param relative_file_path: the relative path of the file in which the referenced symbol is defined.
         :param include_body: whether to include the body of all symbols in the result.
             Not recommended, as the referencing symbols will often be files, and thus the bodies will be very long.
         :param include_kinds: which kinds of symbols to include in the result.
         :param exclude_kinds: which kinds of symbols to exclude from the result.
         """
-        symbol_candidates = self.find_by_name(name_path, substring_matching=False, within_relative_path=relative_file_path)
-        if len(symbol_candidates) == 0:
-            log.warning(f"No symbol with name {name_path} found in file {relative_file_path}")
-            return []
-        if len(symbol_candidates) > 1:
-            log.error(
-                f"Found {len(symbol_candidates)} symbols with name {name_path} in file {relative_file_path}."
-                f"May be an overwritten variable, in which case you can ignore this error. Proceeding with the first one. "
-                f"Found symbols for {name_path=} in {relative_file_path=}: \n"
-                f"{json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)}"
-            )
-        symbol = symbol_candidates[0]
+        symbol = self.find_unique(name_path, substring_matching=False, within_relative_path=relative_file_path)
         return self.find_referencing_symbols_by_location(
             symbol.location, include_body=include_body, include_kinds=include_kinds, exclude_kinds=exclude_kinds
         )
@@ -561,7 +620,8 @@ class LanguageServerSymbolRetriever:
         assert symbol_location.relative_path is not None
         assert symbol_location.line is not None
         assert symbol_location.column is not None
-        references = self._lang_server.request_referencing_symbols(
+        lang_server = self.get_language_server(symbol_location.relative_path)
+        references = lang_server.request_referencing_symbols(
             relative_file_path=symbol_location.relative_path,
             line=symbol_location.line,
             column=symbol_location.column,
@@ -579,27 +639,48 @@ class LanguageServerSymbolRetriever:
 
         return [ReferenceInLanguageServerSymbol.from_lsp_reference(r) for r in references]
 
-    @dataclass
-    class SymbolOverviewElement:
-        name_path: str
-        kind: int
+    def get_symbol_overview(self, relative_path: str, depth: int = 0) -> dict[str, list[dict]]:
+        """
+        :param relative_path: the path of the file or directory for which to get the symbol overview
+        :param depth: the depth up to which to include child symbols (0 = only top-level symbols)
+        :return: a mapping from file paths to lists of symbol dictionaries.
+            For the case where a file is passed, the mapping will contain a single entry.
+        """
+        lang_server = self.get_language_server(relative_path)
+        path_to_unified_symbols = lang_server.request_overview(relative_path)
 
-        @classmethod
-        def from_symbol(cls, symbol: LanguageServerSymbol) -> Self:
-            return cls(name_path=symbol.get_name_path(), kind=int(symbol.symbol_kind))
+        def child_inclusion_predicate(s: LanguageServerSymbol) -> bool:
+            return not s.is_low_level()
 
-    def get_symbol_overview(self, relative_path: str) -> dict[str, list[SymbolOverviewElement]]:
-        path_to_unified_symbols = self._lang_server.request_overview(relative_path)
         result = {}
         for file_path, unified_symbols in path_to_unified_symbols.items():
-            # TODO: maybe include not just top-level symbols? We could filter by kind to exclude variables
-            #  The language server methods would need to be adjusted for this.
-            result[file_path] = [self.SymbolOverviewElement.from_symbol(LanguageServerSymbol(s)) for s in unified_symbols]
+            symbols_in_file = []
+            for us in unified_symbols:
+                symbol = LanguageServerSymbol(us)
+                symbols_in_file.append(
+                    symbol.to_dict(
+                        depth=depth,
+                        kind=True,
+                        include_relative_path=False,
+                        location=False,
+                        child_inclusion_predicate=child_inclusion_predicate,
+                    )
+                )
+            result[file_path] = symbols_in_file
+
         return result
 
 
 class JetBrainsSymbol(Symbol):
-    def __init__(self, symbol_dict: dict, project: Project) -> None:
+    class SymbolDict(TypedDict):
+        name_path: str
+        relative_path: str
+        type: str
+        text_range: NotRequired[dict]
+        body: NotRequired[str]
+        children: NotRequired[list["JetBrainsSymbol.SymbolDict"]]
+
+    def __init__(self, symbol_dict: SymbolDict, project: Project) -> None:
         """
         :param symbol_dict: dictionary as returned by the JetBrains plugin client.
         """
@@ -608,6 +689,15 @@ class JetBrainsSymbol(Symbol):
         self._cached_file_content: str | None = None
         self._cached_body_start_position: PositionInFile | None = None
         self._cached_body_end_position: PositionInFile | None = None
+
+    def _tostring_includes(self) -> list[str]:
+        return []
+
+    def _tostring_additional_entries(self) -> dict[str, Any]:
+        return dict(name_path=self.get_name_path(), relative_path=self.get_relative_path(), type=self._dict["type"])
+
+    def get_name_path(self) -> str:
+        return self._dict["name_path"]
 
     def get_relative_path(self) -> str:
         return self._dict["relative_path"]

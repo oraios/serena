@@ -23,8 +23,8 @@ def scan_directory(
     path: str,
     recursive: bool = False,
     relative_to: str | None = None,
-    is_ignored_dir: Callable[[str], bool] = lambda x: False,
-    is_ignored_file: Callable[[str], bool] = lambda x: False,
+    is_ignored_dir: Callable[[str], bool] | None = None,
+    is_ignored_file: Callable[[str], bool] | None = None,
 ) -> ScanResult:
     """
     :param path: the path to scan
@@ -34,6 +34,11 @@ def scan_directory(
     :param is_ignored_file: a function with which to determine whether the given file (abs. path) shall be ignored
     :return: the list of directories and files
     """
+    if is_ignored_file is None:
+        is_ignored_file = lambda x: False
+    if is_ignored_dir is None:
+        is_ignored_dir = lambda x: False
+
     files = []
     directories = []
 
@@ -154,7 +159,7 @@ class GitignoreParser:
         """
         queue: list[str] = [self.repo_root]
 
-        def scan(abs_path: str | None):
+        def scan(abs_path: str | None) -> Iterator[str]:
             for entry in os.scandir(abs_path):
                 if entry.is_dir(follow_symlinks=follow_symlinks):
                     queue.append(entry.path)

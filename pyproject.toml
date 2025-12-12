@@ -16,9 +16,10 @@ classifiers = [
 dependencies = [
   "requests>=2.32.3,<3",
   "pyright>=1.1.396,<2",
+  "fortls>=3.2.2",
   "overrides>=7.7.0,<8",
   "python-dotenv>=1.0.0, <2",
-  "mcp==1.12.3",
+  "mcp==1.23.0",
   "flask>=3.0.0",
   "sensai-utils>=1.5.0",
   "pydantic>=2.10.6",
@@ -63,8 +64,16 @@ dev = [
   "toml-sort>=0.24.2",
   "types-pyyaml>=6.0.12.20241230",
   "syrupy>=4.9.1",
+  "types-requests>=2.32.4.20241230",
+  # docs
+  "sphinx>=7,<8",
+  "sphinx_rtd_theme>=0.5.1",
+  "sphinx-toolbox==3.7.0",
+  "jupyter-book>=1,<2",
+  "nbsphinx",
+  "pyinstrument",
 ]
-agno = ["agno>=1.2.6", "sqlalchemy>=2.0.40"]
+agno = ["agno>=2.2.1", "sqlalchemy>=2.0.40"]
 google = ["google-genai>=1.8.0"]
 
 [project.urls]
@@ -112,15 +121,23 @@ PYDEVD_DISABLE_FILE_VALIDATION = "1"
 # Uses PYTEST_MARKERS env var for default markers
 # For custom markers, one can either adjust the env var or just use -m option in the command line,
 # as the second -m option will override the first one.
-test = "pytest test -vv -m \"${PYTEST_MARKERS:-not java and not rust and not erlang}\""
+test = "pytest test -vv"
 _black_check = "black --check src scripts test"
 _ruff_check = "ruff check src scripts test"
 _black_format = "black src scripts test"
 _ruff_format = "ruff check --fix src scripts test"
 lint = ["_black_check", "_ruff_check"]
 format = ["_ruff_format", "_black_format"]
-_mypy = "mypy src/serena"
+_mypy = "mypy src/serena src/solidlsp"
 type-check = ["_mypy"]
+# docs
+_autogen_rst = "python docs/autogen_rst.py"
+_sphinx_build = "sphinx-build -b html docs docs/_build -W --keep-going"
+_jb_generate_toc = "python docs/create_toc.py"
+_jb_generate_config = "jupyter-book config sphinx docs/"
+doc-clean = "rm -rf docs/_build docs/03_api"
+doc-generate-files = ["_autogen_rst", "_jb_generate_toc", "_jb_generate_config"]
+doc-build = ["doc-clean", "doc-generate-files", "_sphinx_build"]
 
 [tool.ruff]
 target-version = "py311"
@@ -166,6 +183,7 @@ ignore = [
   "PLC0415",
   "RUF002",
   "RUF005",
+  "RUF059",
   "SIM118",
   "SIM108",
   "E501",
@@ -208,7 +226,6 @@ ignore = [
   "COM812",
   "RET503",
   "RET504",
-  "UP038",
   "F403",
   "F405",
   "C401",
@@ -236,6 +253,7 @@ ignore = [
   "C400",     # wants to unnecessarily force use of list comprehension
   "UP037",    # can incorrectly (!) convert quoted type to unquoted type, causing an error
   "UP045",    # imposes T | None instead of Optional[T]
+  "UP031",    # forbids % operator to format strings
 ]
 unfixable = ["F841", "F601", "F602", "B018"]
 extend-fixable = ["F401", "B905", "W291"]
@@ -257,12 +275,16 @@ markers = [
   "kotlin: language server running for kotlin",
   "rust: language server running for Rust",
   "typescript: language server running for TypeScript",
+  "vue: language server running for Vue (uses TypeScript LSP)",
   "php: language server running for PHP",
+  "perl: language server running for Perl",
   "csharp: language server running for C#",
   "elixir: language server running for Elixir",
+  "elm: language server running for Elm",
   "terraform: language server running for Terraform",
   "swift: language server running for Swift",
   "bash: language server running for Bash",
+  "r: language server running for R",
   "snapshot: snapshot tests for symbolic editing operations",
   "ruby: language server running for Ruby (uses ruby-lsp)",
   "zig: language server running for Zig",
@@ -271,6 +293,18 @@ markers = [
   "dart: language server running for Dart",
   "erlang: language server running for Erlang",
   "ocaml: language server running for OCaml and Reason",
+  "scala: language server running for Scala",
+  "al: language server running for AL (Microsoft Dynamics 365 Business Central)",
+  "fsharp: language server running for F#",
+  "rego: language server running for Rego",
+  "markdown: language server running for Markdown",
+  "julia: Julia language server tests",
+  "fortran: language server running for Fortran",
+  "haskell: Haskell language server tests",
+  "yaml: language server running for YAML",
+  "powershell: language server running for PowerShell",
+  "slow: tests that require additional Expert instances and have long startup times (~60-90s each)",
+  "toml: language server running for TOML",
 ]
 
 [tool.codespell]
@@ -278,4 +312,4 @@ markers = [
 skip = '.git*,*.svg,*.lock,*.min.*'
 check-hidden = true
 # ignore-regex = ''
-# ignore-words-list = ''
+ignore-words-list = 'paket'

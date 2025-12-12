@@ -50,7 +50,14 @@
         sourcePreference = "wheel"; # or sourcePreference = "sdist";
       };
 
-      pyprojectOverrides = _final: _prev: {};
+      pyprojectOverrides = final: prev: {
+        # Add setuptools for packages that need it during build
+        ruamel-yaml-clib = prev.ruamel-yaml-clib.overrideAttrs (old: {
+          nativeBuildInputs = (old.nativeBuildInputs or []) ++ [
+            final.setuptools
+          ];
+        });
+      };
 
       python = pkgs.python311;
 
@@ -69,7 +76,11 @@
       formatter = pkgs.alejandra;
 
       packages = {
-        serena = pythonSet.mkVirtualEnv "serena" workspace.deps.default;
+        serena-env = pythonSet.mkVirtualEnv "serena-env" workspace.deps.default;
+        serena = pkgs.runCommand "serena" {} ''
+          mkdir -p $out/bin
+          ln -s ${packages.serena-env}/bin/serena $out/bin/serena
+        '';
         default = packages.serena;
       };
 
