@@ -99,9 +99,6 @@ class GroovyLanguageServer(SolidLanguageServer):
                 else:
                     java_path = os.path.join(java_home_path, "bin", "java")
 
-                assert os.path.exists(java_path), f"Java executable not found at {java_path}"
-                log.info(f"Using Java executable at: {java_path}")
-
         # If no custom Java home path, download and use bundled Java
         if java_home_path is None:
             # Runtime dependency information
@@ -158,14 +155,14 @@ class GroovyLanguageServer(SolidLanguageServer):
                 if not platform_id.value.startswith("win-"):
                     os.chmod(java_path, 0o755)
 
-            assert os.path.exists(java_path), f"Java executable not found at {java_path}"
+        assert java_path and os.path.exists(java_path), f"Java executable not found at {java_path}"
 
         ls_jar_path = cls._find_groovy_ls_jar(solidlsp_settings)
 
         return GroovyRuntimeDependencyPaths(java_path=java_path, java_home_path=java_home_path, ls_jar_path=ls_jar_path)
 
     @classmethod
-    def _find_groovy_ls_jar(cls, solidlsp_settings: SolidLSPSettings = None) -> str:
+    def _find_groovy_ls_jar(cls, solidlsp_settings: SolidLSPSettings) -> str:
         """
         Find Groovy Language Server JAR file
         """
