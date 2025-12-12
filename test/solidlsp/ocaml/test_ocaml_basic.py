@@ -31,7 +31,7 @@ class TestOCamlLanguageServer:
         assert len(refs) >= 3, f"Expected at least 3 references to fib (definition + 2 recursive), found {len(refs)}"
 
         # All references should be in lib/test_repo.ml (same file as definition)
-        lib_refs = [ref for ref in refs if "lib/test_repo.ml" in ref.get("uri", "")]
+        lib_refs = [ref for ref in refs if ref.get("uri", "").endswith("test_repo.ml")]
         assert len(lib_refs) >= 3, f"Expected at least 3 references in lib/test_repo.ml, found {len(lib_refs)}"
 
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
@@ -67,7 +67,7 @@ class TestOCamlLanguageServer:
 
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:
-        """Test finding references across .ml, .mli, and usage files."""
+        """Test finding references across .ml files in lib, bin, and test directories."""
         file_path = os.path.join("lib", "test_repo.ml")
 
         # Use correct position for 'fib' function name (line 8, char 8)
@@ -76,12 +76,24 @@ class TestOCamlLanguageServer:
 
         refs = language_server.request_references(file_path, fib_line, fib_char)
 
-        # Should find at least 3 references in the definition file
+        # fib is used in:
+        # - lib/test_repo.ml: definition (line 8) + 2 recursive calls (line 10) = 3 refs
+        # - bin/main.ml: line 6 (let res = fib n)
+        # - test/test_test_repo.ml: lines 4-7 (4 assertions using fib)
+        # Total: at least 3 in lib + 1 in bin + 4 in test = 8+ references
         assert len(refs) >= 3, f"Expected at least 3 references to fib, found {len(refs)}"
 
-        # Check that references are found in lib/test_repo.ml (where fib is defined and called recursively)
-        lib_refs = [ref for ref in refs if "lib/test_repo.ml" in ref.get("uri", "")]
+        # Check references in lib/test_repo.ml (definition + recursive calls)
+        lib_refs = [ref for ref in refs if ref.get("uri", "").endswith("test_repo.ml")]
         assert len(lib_refs) >= 3, f"Expected at least 3 references in lib/test_repo.ml, found {len(lib_refs)}"
+
+        # Check for cross-file references in bin/main.ml
+        bin_refs = [ref for ref in refs if ref.get("uri", "").endswith("main.ml")]
+        assert len(bin_refs) >= 1, f"Expected at least 1 cross-file reference in bin/main.ml, found {len(bin_refs)}"
+
+        # Check for cross-file references in test/test_test_repo.ml
+        test_refs = [ref for ref in refs if ref.get("uri", "").endswith("test_test_repo.ml")]
+        assert len(test_refs) >= 1, f"Expected at least 1 cross-file reference in test/test_test_repo.ml, found {len(test_refs)}"
 
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
     def test_module_hierarchy_navigation(self, language_server: SolidLanguageServer) -> None:
@@ -99,7 +111,7 @@ class TestOCamlLanguageServer:
         assert len(refs) >= 1, f"Expected at least 1 reference to DemoModule, found {len(refs)}"
 
         # Check that references are found
-        lib_refs = [ref for ref in refs if "lib/test_repo.ml" in ref.get("uri", "")]
+        lib_refs = [ref for ref in refs if ref.get("uri", "").endswith("test_repo.ml")]
         assert len(lib_refs) >= 1, f"Expected at least 1 reference in lib/test_repo.ml, found {len(lib_refs)}"
 
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
@@ -118,12 +130,12 @@ class TestOCamlLanguageServer:
         assert len(refs) >= 1, f"Expected at least 1 reference to num_domains, found {len(refs)}"
 
         # Check that reference is found in the definition file
-        ml_refs = [ref for ref in refs if "lib/test_repo.ml" in ref.get("uri", "")]
+        ml_refs = [ref for ref in refs if ref.get("uri", "").endswith("test_repo.ml")]
         assert len(ml_refs) >= 1, f"Expected at least 1 reference in lib/test_repo.ml, found {len(ml_refs)}"
 
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
     def test_recursive_function_analysis(self, language_server: SolidLanguageServer) -> None:
-        """Test that recursive function calls are properly identified."""
+        """Test that recursive function calls are properly identified within the definition file."""
         file_path = os.path.join("lib", "test_repo.ml")
 
         # Use correct position for 'fib' function name (line 8, char 8)
@@ -132,12 +144,11 @@ class TestOCamlLanguageServer:
 
         refs = language_server.request_references(file_path, fib_line, fib_char)
 
-        # Should find exactly 3 references: definition + 2 recursive calls
-        assert len(refs) == 3, f"Expected exactly 3 references for recursive fib, found {len(refs)}"
+        # Filter to references within the definition file only
+        same_file_refs = [ref for ref in refs if ref.get("uri", "").endswith("test_repo.ml")]
 
-        # All references should be in the same file
-        same_file_refs = [ref for ref in refs if "lib/test_repo.ml" in ref.get("uri", "")]
-        assert len(same_file_refs) == 3, f"All references should be in same file, found {len(same_file_refs)}"
+        # Should find exactly 3 references in test_repo.ml: definition + 2 recursive calls
+        assert len(same_file_refs) == 3, f"Expected exactly 3 references in test_repo.ml (definition + 2 recursive), found {len(same_file_refs)}"
 
         # Verify references are on different lines (definition + recursive calls)
         ref_lines = [ref.get("range", {}).get("start", {}).get("line", -1) for ref in same_file_refs]
@@ -163,5 +174,5 @@ class TestOCamlLanguageServer:
 
         # Test that the language server recognizes the open statement context
         file_path = os.path.join("bin", "main.ml")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols, _roots = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         assert len(symbols) > 0, "Should find symbols in main.ml that use opened modules"
