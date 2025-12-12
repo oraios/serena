@@ -121,6 +121,7 @@ class EclipseJDTLS(SolidLanguageServer):
         else:
             log.info(f"Using bundled JRE for JDTLS (no system JAVA_HOME found): {java_home_for_jdtls}")
         proc_env = {"syntaxserver": "false", "JAVA_HOME": java_home_for_jdtls}
+
         proc_cwd = repository_root_path
         cmd = [
             jre_path,
@@ -736,6 +737,9 @@ class EclipseJDTLS(SolidLanguageServer):
         gradle_settings = initialize_params["initializationOptions"]["settings"]["java"]["import"]["gradle"]  # type: ignore
         gradle_settings["home"] = self.runtime_dependency_paths.gradle_path
         if gradle_java_home is not None:
+            # Create java dict if it doesn't exist, then set home
+            if "java" not in gradle_settings:
+                gradle_settings["java"] = {}
             gradle_settings["java"]["home"] = gradle_java_home
         # If gradle_java_home is None, don't set it - Gradle will use system JAVA_HOME
         return cast(InitializeParams, initialize_params)
