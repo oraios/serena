@@ -19,6 +19,7 @@ from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.typescript_companion import prefer_non_node_modules_definition
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
@@ -40,25 +41,6 @@ if not PlatformUtils.get_platform_id().value.startswith("win"):
     pass
 
 
-def prefer_non_node_modules_definition(definitions: list[ls_types.Location]) -> ls_types.Location:
-    """
-    Select the preferred definition, preferring source files over type definitions.
-
-    TypeScript language servers often return both type definitions (.d.ts files
-    in node_modules) and source definitions. This function prefers:
-    1. Files not in node_modules
-    2. Falls back to first definition if all are in node_modules
-
-    :param definitions: A non-empty list of definition locations.
-    :return: The preferred definition location.
-    """
-    for d in definitions:
-        rel_path = d.get("relativePath", "")
-        if rel_path and "node_modules" not in rel_path:
-            return d
-    return definitions[0]
-
-
 class TypeScriptLanguageServer(SolidLanguageServer):
     """
     Provides TypeScript specific instantiation of the LanguageServer class. Contains various configurations and settings specific to TypeScript.
@@ -68,11 +50,24 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         - typescript_language_server_version: Version of typescript-language-server to install (default: "5.1.3")
     """
 
-    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
+    def __init__(
+        self,
+        config: LanguageServerConfig,
+        repository_root_path: str,
+        solidlsp_settings: SolidLSPSettings,
+        executable_path: list[str] | None = None,
+    ):
         """
         Creates a TypeScriptLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
+
+        :param config: Language server configuration
+        :param repository_root_path: Root path of the repository
+        :param solidlsp_settings: SolidLSP settings
+        :param executable_path: Optional custom executable path. If None, uses default from _setup_runtime_dependencies
         """
-        ts_lsp_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
+        ts_lsp_executable_path = (
+            executable_path if executable_path is not None else self._setup_runtime_dependencies(config, solidlsp_settings)
+        )
         super().__init__(
             config,
             repository_root_path,
