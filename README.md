@@ -3,6 +3,22 @@
   <img src="resources/serena-logo-dark-mode.svg#gh-dark-mode-only" style="width:500px">
 </p>
 
+> **Note:** This is a patched fork that fixes Gradle/JDTLS integration for Java projects with custom build configurations.
+>
+> **Key changes:**
+> - Gradle wrapper enabled by default (supports custom plugins/repositories)
+> - Configurable `gradle_java_home` for JDK vendor requirements
+> - JDTLS inherits system `JAVA_HOME` for proper Gradle integration
+>
+> **Configuration (`~/.serena/serena_config.yml`):**
+> ```yaml
+> ls_specific_settings:
+>   java:
+>     gradle_wrapper_enabled: true  # default: true
+>     gradle_java_home: "/path/to/jdk"  # optional: override system JAVA_HOME
+> ```
+
+
 * :rocket: Serena is a powerful **coding agent toolkit** capable of turning an LLM into a fully-featured agent that works **directly on your codebase**.
   Unlike most other tools, it is not tied to an LLM, framework or an interface, making it easy to use it in a variety of ways.
 * :wrench: Serena provides essential **semantic code retrieval and editing tools** that are akin to an IDE's capabilities, extracting code entities at the symbol level and exploiting relational structure. When combined with an existing coding agent, these tools greatly enhance (token) efficiency.
