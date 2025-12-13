@@ -8,7 +8,7 @@ import time
 import pytest
 from click.testing import CliRunner
 
-from serena.cli import ProjectCommands
+from serena.cli import ProjectCommands, TopLevelCommands, find_project_root
 from serena.config.serena_config import ProjectConfig
 
 pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
@@ -260,6 +260,81 @@ class TestProjectCreateHelper:
         # Try to create again - should raise FileExistsError
         with pytest.raises(FileExistsError):
             ProjectCommands._create_project(temp_project_dir, None, ("python",))
+
+
+class TestFindProjectRoot:
+    """Tests for find_project_root helper with virtual chroot boundary."""
+
+    def test_finds_serena_from_subdirectory(self, temp_project_dir):
+        """Test that .serena is found when searching from a subdirectory."""
+        os.makedirs(os.path.join(temp_project_dir, ".serena"))
+        subdir = os.path.join(temp_project_dir, "src", "nested")
+        os.makedirs(subdir)
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(subdir)
+            result = find_project_root(root=temp_project_dir)
+            assert result is not None
+            assert os.path.samefile(result, temp_project_dir)
+        finally:
+            os.chdir(original_cwd)
+
+    def test_serena_preferred_over_git(self, temp_project_dir):
+        """Test that .serena takes priority over .git at the same level."""
+        os.makedirs(os.path.join(temp_project_dir, ".serena"))
+        os.makedirs(os.path.join(temp_project_dir, ".git"))
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(temp_project_dir)
+            result = find_project_root(root=temp_project_dir)
+            assert result is not None
+            assert os.path.isdir(os.path.join(result, ".serena"))
+            assert os.path.samefile(result, temp_project_dir)
+        finally:
+            os.chdir(original_cwd)
+
+    def test_git_used_as_fallback(self, temp_project_dir):
+        """Test that .git is found when no .serena exists."""
+        os.makedirs(os.path.join(temp_project_dir, ".git"))
+        subdir = os.path.join(temp_project_dir, "src")
+        os.makedirs(subdir)
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(subdir)
+            result = find_project_root(root=temp_project_dir)
+            assert result is not None
+            assert os.path.samefile(result, temp_project_dir)
+        finally:
+            os.chdir(original_cwd)
+
+    def test_returns_none_when_no_markers(self, temp_project_dir):
+        """Test returns None when no markers exist within boundary."""
+        subdir = os.path.join(temp_project_dir, "src")
+        os.makedirs(subdir)
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(subdir)
+            result = find_project_root(root=temp_project_dir)
+            assert result is None
+        finally:
+            os.chdir(original_cwd)
+
+
+class TestProjectFromCwdMutualExclusivity:
+    """Tests for --project-from-cwd mutual exclusivity."""
+
+    def test_project_from_cwd_with_project_flag_fails(self, cli_runner):
+        """Test that --project-from-cwd with --project raises error."""
+        result = cli_runner.invoke(
+            TopLevelCommands.start_mcp_server,
+            ["--project-from-cwd", "--project", "/some/path"],
+        )
+        assert result.exit_code != 0
+        assert "cannot be used with" in result.output
 
 
 if __name__ == "__main__":

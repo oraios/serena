@@ -150,6 +150,7 @@ to get a list of all available options.
 Some useful options include:
 
   * `--project <path|name>`: specify the project to work on by name or path.
+  * `--project-from-cwd`: auto-detect project from current working directory (searches up for `.serena` or `.git`). Intended only for CLI-based agents like Claude Code, Gemini and Codex.
   * `--context <context>`: specify the operation [context](contexts) in which Serena shall operate
   * `--mode <mode>`: specify one or more [modes](modes) to enable (can be passed several times)
   * `--enable-web-dashboard <true|false>`: enable or disable the web dashboard (enabled by default)
