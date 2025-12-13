@@ -30,6 +30,16 @@ Note:
     that Serena is configured to work on the current project from the get-go, following 
     Claude Code's mode of operation.
     
+
+Alternatively, use `--auto-project` for user-level configuration that works across all projects:
+
+```shell
+claude mcp add --scope user serena -- <serena> start-mcp-server --context=claude-code --auto-project
+```
+
+This searches up from the current directory for `.serena` or `.git` markers, making it suitable
+for a single global MCP configuration.
+
 Be sure to use at least `v1.0.52` of Claude Code (as earlier versions do not read MCP server system prompts upon startup). 
 
 ## Codex
