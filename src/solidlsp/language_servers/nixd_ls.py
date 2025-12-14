@@ -331,14 +331,13 @@ class NixLanguageServer(SolidLanguageServer):
             ],
             "initializationOptions": {
                 # nixd specific options
+                # See: https://github.com/nix-community/nixd/blob/main/nixd/docs/configuration.md
                 "nixpkgs": {"expr": "import <nixpkgs> { }"},
-                "formatting": {"command": ["nixpkgs-fmt"]},  # or ["alejandra"] or ["nixfmt"]
-                "options": {
-                    "enable": True,
-                    "target": {
-                        "installable": "",  # Will be auto-detected from flake.nix if present
-                    },
-                },
+                "formatting": {"command": ["nixfmt"]},  # or ["alejandra"] or ["nixpkgs-fmt"]
+                # Options is a map of named option providers, each with an "expr" field
+                # that evaluates to an options attribute set (e.g., nixos, home-manager)
+                "options": {"nixos": {"expr": "(import <nixpkgs/nixos> { configuration = {}; }).options"}},
+                "diagnostic": {"suppress": []},
             },
         }
         return initialize_params
@@ -381,11 +380,14 @@ class NixLanguageServer(SolidLanguageServer):
                     # Nixpkgs expression for evaluation
                     result.append({"expr": "import <nixpkgs> { }"})
                 elif section == "nixd.formatting":
-                    # Formatting command - nixpkgs-fmt, alejandra, or nixfmt
-                    result.append({"command": ["nixpkgs-fmt"]})
+                    # Formatting command - nixfmt, alejandra, or nixpkgs-fmt
+                    result.append({"command": ["nixfmt"]})
                 elif section == "nixd.options":
-                    # Options evaluation settings
-                    result.append({"enable": True, "target": {"installable": ""}})
+                    # Options is a map of named option providers
+                    # Each provider has an "expr" field with a Nix expression
+                    # that evaluates to an options attribute set
+                    # See: https://github.com/nix-community/nixd/blob/main/nixd/docs/configuration.md
+                    result.append({"nixos": {"expr": "(import <nixpkgs/nixos> { configuration = {}; }).options"}})
                 elif section == "nixd.diagnostic":
                     # Diagnostic suppression settings
                     result.append({"suppress": []})
@@ -394,8 +396,8 @@ class NixLanguageServer(SolidLanguageServer):
                     result.append(
                         {
                             "nixpkgs": {"expr": "import <nixpkgs> { }"},
-                            "formatting": {"command": ["nixpkgs-fmt"]},
-                            "options": {"enable": True, "target": {"installable": ""}},
+                            "formatting": {"command": ["nixfmt"]},
+                            "options": {"nixos": {"expr": "(import <nixpkgs/nixos> { configuration = {}; }).options"}},
                             "diagnostic": {"suppress": []},
                         }
                     )
