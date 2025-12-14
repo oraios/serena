@@ -57,7 +57,7 @@ class ScalaLanguageServer(SolidLanguageServer):
         """
         assert shutil.which("java") is not None, "JDK is not installed or not in PATH."
 
-        metals_version = "1.6.2"
+        metals_version = "1.6.4"
 
         metals_home = os.path.join(cls.ls_resources_dir(solidlsp_settings), "metals-lsp")
         os.makedirs(metals_home, exist_ok=True)
