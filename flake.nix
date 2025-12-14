@@ -87,6 +87,10 @@
       apps.default = {
         type = "app";
         program = "${packages.default}/bin/serena";
+        meta = {
+          description = "A powerful coding agent toolkit providing semantic retrieval and editing capabilities";
+          mainProgram = "serena";
+        };
       };
 
       devShells = {

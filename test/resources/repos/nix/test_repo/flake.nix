@@ -7,6 +7,7 @@
   };
 
   outputs = { self, nixpkgs, flake-utils }:
+    # System-specific outputs (packages, apps, devShells)
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -90,11 +91,19 @@
           default = {
             type = "app";
             program = "${hello-custom}/bin/hello-custom";
+            meta = {
+              description = "Default app - runs hello-custom";
+              mainProgram = "hello-custom";
+            };
           };
           
           hello = {
             type = "app";
             program = "${hello-custom}/bin/hello-custom";
+            meta = {
+              description = "Hello world greeting app";
+              mainProgram = "hello-custom";
+            };
           };
         };
         
@@ -110,37 +119,69 @@
             ];
           };
         };
-        
-        # Overlay
-        overlays.default = final: prev: {
-          inherit hello-custom;
+      }
+    )
+    # System-agnostic outputs (overlays, nixosModules) - merged with //
+    // {
+      # Overlay - must be a function, not per-system
+      overlays.default = final: prev: {
+        hello-custom = prev.stdenv.mkDerivation {
+          pname = "hello-custom";
+          version = "1.0.0";
+          src = ./.;
+          buildInputs = with prev; [ bash coreutils ];
+          installPhase = ''
+            mkdir -p $out/bin
+            cp ${./scripts/hello.sh} $out/bin/hello-custom
+            chmod +x $out/bin/hello-custom
+          '';
+          meta = with prev.lib; {
+            description = "A custom hello world script";
+            license = licenses.mit;
+            platforms = platforms.all;
+          };
         };
-        
-        # NixOS module
-        nixosModules.default = { config, lib, pkgs, ... }:
-          with lib;
-          {
-            options.services.hello-custom = {
-              enable = mkEnableOption "hello-custom service";
-              
-              message = mkOption {
-                type = types.str;
-                default = "Hello from NixOS!";
-                description = "Message to display";
-              };
-            };
+      };
+
+      # NixOS module - system-agnostic, works across all architectures
+      nixosModules.default = { config, lib, pkgs, ... }:
+        with lib;
+        let
+          cfg = config.services.hello-custom;
+          # Build hello-custom for the target system
+          hello-custom = pkgs.stdenv.mkDerivation {
+            pname = "hello-custom";
+            version = "1.0.0";
+            src = ./.;
+            buildInputs = with pkgs; [ bash coreutils ];
+            installPhase = ''
+              mkdir -p $out/bin
+              cp ${./scripts/hello.sh} $out/bin/hello-custom
+              chmod +x $out/bin/hello-custom
+            '';
+          };
+        in
+        {
+          options.services.hello-custom = {
+            enable = mkEnableOption "hello-custom service";
             
-            config = mkIf config.services.hello-custom.enable {
-              systemd.services.hello-custom = {
-                description = "Hello Custom Service";
-                wantedBy = [ "multi-user.target" ];
-                serviceConfig = {
-                  ExecStart = "${hello-custom}/bin/hello-custom";
-                  Type = "oneshot";
-                };
+            message = mkOption {
+              type = types.str;
+              default = "Hello from NixOS!";
+              description = "Message to display";
+            };
+          };
+          
+          config = mkIf cfg.enable {
+            systemd.services.hello-custom = {
+              description = "Hello Custom Service";
+              wantedBy = [ "multi-user.target" ];
+              serviceConfig = {
+                ExecStart = "${hello-custom}/bin/hello-custom";
+                Type = "oneshot";
               };
             };
           };
-      }
-    );
+        };
+    };
 }
