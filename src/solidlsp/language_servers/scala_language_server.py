@@ -57,9 +57,11 @@ class ScalaLanguageServer(SolidLanguageServer):
         """
         assert shutil.which("java") is not None, "JDK is not installed or not in PATH."
 
+        metals_version = "1.6.2"
+
         metals_home = os.path.join(cls.ls_resources_dir(solidlsp_settings), "metals-lsp")
         os.makedirs(metals_home, exist_ok=True)
-        metals_executable = os.path.join(metals_home, "metals")
+        metals_executable = os.path.join(metals_home, metals_version, "metals")
         coursier_command_path = shutil.which("coursier")
         cs_command_path = shutil.which("cs")
         assert cs_command_path is not None or coursier_command_path is not None, "coursier is not installed or not in PATH."
@@ -82,7 +84,8 @@ class ScalaLanguageServer(SolidLanguageServer):
                 log.info("'cs' command installed successfully.")
 
             log.info(f"metals executable not found at {metals_executable}, bootstrapping...")
-            artifact = "org.scalameta:metals_2.13:1.6.2"
+            subprocess.run(["mkdir", "-p", os.path.join(metals_home, metals_version)], check=True)
+            artifact = f"org.scalameta:metals_2.13:{metals_version}"
             cmd = [
                 cs_command_path,
                 "bootstrap",
