@@ -251,6 +251,79 @@ class NixLanguageServer(SolidLanguageServer):
         super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=nixd_path, cwd=repository_root_path), "nix", solidlsp_settings)
         self.server_ready = threading.Event()
         self.request_id = 0
+        # Cache flake detection and configuration
+        self._is_flake_project = self._detect_flake_project(repository_root_path)
+        self._nixd_options_config = self._build_options_config(repository_root_path, self._is_flake_project)
+
+    @staticmethod
+    def _detect_flake_project(repository_path: str) -> bool:
+        """
+        Detect if the repository is a flake-based Nix project.
+
+        A flake project is identified by the presence of a flake.nix file
+        at the repository root.
+
+        Args:
+            repository_path: Absolute path to the repository root
+
+        Returns:
+            True if flake.nix exists at the repository root
+
+        """
+        flake_path = Path(repository_path) / "flake.nix"
+        return flake_path.exists()
+
+    @staticmethod
+    def _build_options_config(repository_path: str, is_flake: bool) -> dict:
+        """
+        Build the nixd options configuration based on project type.
+
+        For flake-based projects, uses builtins.getFlake expressions that
+        provide better completions for flake-specific configurations.
+        For non-flake projects, uses traditional import expressions.
+
+        Supports three option providers:
+        - nixos: NixOS system options
+        - home-manager: Home Manager options (when integrated with NixOS)
+        - flake-parts: Flake-parts module options (for flake projects only)
+
+        See: https://github.com/nix-community/nixd/blob/main/nixd/docs/configuration.md
+
+        Args:
+            repository_path: Absolute path to the repository root
+            is_flake: Whether this is a flake-based project
+
+        Returns:
+            Dictionary of option providers with their Nix expressions
+
+        """
+        if is_flake:
+            # Flake-based expressions provide better completions for flake projects
+            # These use builtins.getFlake which evaluates the local flake
+            return {
+                # NixOS options from flake's nixosConfigurations
+                # Users should replace "<hostname>" with their actual hostname
+                # e.g., "global-pc" for the user's configuration
+                "nixos": {"expr": f'(builtins.getFlake (builtins.toString {repository_path})).nixosConfigurations."<hostname>".options'},
+                # Home-manager options when used as a NixOS module
+                # Provides completions for home.* options
+                "home-manager": {
+                    "expr": f'(builtins.getFlake (builtins.toString {repository_path})).nixosConfigurations."<hostname>".options.home-manager.users.type.getSubOptions []'
+                },
+                # Flake-parts options for projects using flake-parts
+                # Provides completions for perSystem, flake, etc.
+                "flake-parts": {"expr": f"(builtins.getFlake (builtins.toString {repository_path})).debug.options"},
+            }
+        else:
+            # Traditional non-flake expressions
+            # These work without a flake.nix and use the system's nixpkgs
+            return {
+                "nixos": {"expr": "(import <nixpkgs/nixos> { configuration = {}; }).options"},
+                # Home-manager options for non-flake setups
+                "home-manager": {
+                    "expr": "(import <nixpkgs/nixos> { configuration = {}; }).options.home-manager.users.type.getSubOptions []"
+                },
+            }
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
@@ -334,9 +407,15 @@ class NixLanguageServer(SolidLanguageServer):
                 # See: https://github.com/nix-community/nixd/blob/main/nixd/docs/configuration.md
                 "nixpkgs": {"expr": "import <nixpkgs> { }"},
                 "formatting": {"command": ["nixfmt"]},  # or ["alejandra"] or ["nixpkgs-fmt"]
-                # Options is a map of named option providers, each with an "expr" field
-                # that evaluates to an options attribute set (e.g., nixos, home-manager)
-                "options": {"nixos": {"expr": "(import <nixpkgs/nixos> { configuration = {}; }).options"}},
+                # Options providers are configured dynamically based on project type
+                # (flake vs non-flake) in workspace_configuration_handler
+                # Default here provides basic NixOS completions
+                "options": {
+                    "nixos": {"expr": "(import <nixpkgs/nixos> { configuration = {}; }).options"},
+                    "home-manager": {
+                        "expr": "(import <nixpkgs/nixos> { configuration = {}; }).options.home-manager.users.type.getSubOptions []"
+                    },
+                },
                 "diagnostic": {"suppress": []},
             },
         }
@@ -354,6 +433,10 @@ class NixLanguageServer(SolidLanguageServer):
         def do_nothing(params):
             return
 
+        # Use closure to capture self for accessing cached config
+        cached_options = self._nixd_options_config
+        is_flake = self._is_flake_project
+
         def workspace_configuration_handler(params):
             """
             Handle workspace/configuration requests from nixd.
@@ -362,12 +445,18 @@ class NixLanguageServer(SolidLanguageServer):
             specific configuration sections. This handler returns appropriate
             configuration for each requested section.
 
+            For flake-based projects, returns enhanced options configuration
+            including NixOS, home-manager, and flake-parts providers.
+            For non-flake projects, returns standard NixOS and home-manager options.
+
             Args:
                 params: Configuration request parameters containing 'items' array
                         with scopeUri and section for each requested config
 
             Returns:
                 List of configuration objects, one for each requested item
+
+            See: https://github.com/nix-community/nixd/blob/main/nixd/docs/configuration.md
 
             """
             items = params.get("items", [])
@@ -383,21 +472,20 @@ class NixLanguageServer(SolidLanguageServer):
                     # Formatting command - nixfmt, alejandra, or nixpkgs-fmt
                     result.append({"command": ["nixfmt"]})
                 elif section == "nixd.options":
-                    # Options is a map of named option providers
-                    # Each provider has an "expr" field with a Nix expression
-                    # that evaluates to an options attribute set
-                    # See: https://github.com/nix-community/nixd/blob/main/nixd/docs/configuration.md
-                    result.append({"nixos": {"expr": "(import <nixpkgs/nixos> { configuration = {}; }).options"}})
+                    # Options providers configured based on project type
+                    # Flake projects get: nixos, home-manager, flake-parts
+                    # Non-flake projects get: nixos, home-manager
+                    result.append(cached_options)
                 elif section == "nixd.diagnostic":
                     # Diagnostic suppression settings
                     result.append({"suppress": []})
                 elif section == "nixd":
-                    # Full nixd configuration (fallback)
+                    # Full nixd configuration
                     result.append(
                         {
                             "nixpkgs": {"expr": "import <nixpkgs> { }"},
                             "formatting": {"command": ["nixfmt"]},
-                            "options": {"nixos": {"expr": "(import <nixpkgs/nixos> { configuration = {}; }).options"}},
+                            "options": cached_options,
                             "diagnostic": {"suppress": []},
                         }
                     )
@@ -405,6 +493,7 @@ class NixLanguageServer(SolidLanguageServer):
                     # Unknown section - return empty config
                     result.append({})
 
+            log.debug(f"workspace/configuration response for {[i.get('section') for i in items]}: flake={is_flake}")
             return result
 
         self.server.on_request("client/registerCapability", register_capability_handler)
