@@ -282,10 +282,13 @@ class NixLanguageServer(SolidLanguageServer):
         provide better completions for flake-specific configurations.
         For non-flake projects, uses traditional import expressions.
 
-        Supports three option providers:
-        - nixos: NixOS system options
+        Supports option providers:
+        - nixos: NixOS system options (auto-detects first nixosConfiguration)
         - home-manager: Home Manager options (when integrated with NixOS)
-        - flake-parts: Flake-parts module options (for flake projects only)
+
+        Note: flake-parts is intentionally excluded by default because most
+        flakes don't use it, and including it causes errors. Users who use
+        flake-parts can configure this manually in their editor settings.
 
         See: https://github.com/nix-community/nixd/blob/main/nixd/docs/configuration.md
 
@@ -300,19 +303,26 @@ class NixLanguageServer(SolidLanguageServer):
         if is_flake:
             # Flake-based expressions provide better completions for flake projects
             # These use builtins.getFlake which evaluates the local flake
+            #
+            # We use a let-binding to:
+            # 1. Get the flake once
+            # 2. Auto-detect the first nixosConfiguration name (no hardcoded hostname)
+            #
+            # The expression uses `builtins.head (builtins.attrNames ...)` to get
+            # the first available configuration name dynamically.
+            flake_let = f"let flake = builtins.getFlake (builtins.toString {repository_path}); "
+            first_config = "hostname = builtins.head (builtins.attrNames flake.nixosConfigurations); "
+
             return {
-                # NixOS options from flake's nixosConfigurations
-                # Users should replace "<hostname>" with their actual hostname
-                # e.g., "global-pc" for the user's configuration
-                "nixos": {"expr": f'(builtins.getFlake (builtins.toString {repository_path})).nixosConfigurations."<hostname>".options'},
+                # NixOS options from flake's first nixosConfiguration
+                # Auto-detects the configuration name using builtins.attrNames
+                "nixos": {"expr": f"{flake_let}{first_config}in flake.nixosConfigurations.${{hostname}}.options"},
                 # Home-manager options when used as a NixOS module
                 # Provides completions for home.* options
+                # Uses the same auto-detected hostname
                 "home-manager": {
-                    "expr": f'(builtins.getFlake (builtins.toString {repository_path})).nixosConfigurations."<hostname>".options.home-manager.users.type.getSubOptions []'
+                    "expr": f"{flake_let}{first_config}in flake.nixosConfigurations.${{hostname}}.options.home-manager.users.type.getSubOptions []"
                 },
-                # Flake-parts options for projects using flake-parts
-                # Provides completions for perSystem, flake, etc.
-                "flake-parts": {"expr": f"(builtins.getFlake (builtins.toString {repository_path})).debug.options"},
             }
         else:
             # Traditional non-flake expressions
