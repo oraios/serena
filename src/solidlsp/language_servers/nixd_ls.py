@@ -355,10 +355,61 @@ class NixLanguageServer(SolidLanguageServer):
         def do_nothing(params):
             return
 
+        def workspace_configuration_handler(params):
+            """
+            Handle workspace/configuration requests from nixd.
+
+            nixd sends workspace/configuration requests to fetch settings for
+            specific configuration sections. This handler returns appropriate
+            configuration for each requested section.
+
+            Args:
+                params: Configuration request parameters containing 'items' array
+                        with scopeUri and section for each requested config
+
+            Returns:
+                List of configuration objects, one for each requested item
+
+            """
+            items = params.get("items", [])
+            result = []
+
+            for item in items:
+                section = item.get("section", "")
+
+                if section == "nixd.nixpkgs":
+                    # Nixpkgs expression for evaluation
+                    result.append({"expr": "import <nixpkgs> { }"})
+                elif section == "nixd.formatting":
+                    # Formatting command - nixpkgs-fmt, alejandra, or nixfmt
+                    result.append({"command": ["nixpkgs-fmt"]})
+                elif section == "nixd.options":
+                    # Options evaluation settings
+                    result.append({"enable": True, "target": {"installable": ""}})
+                elif section == "nixd.diagnostic":
+                    # Diagnostic suppression settings
+                    result.append({"suppress": []})
+                elif section == "nixd":
+                    # Full nixd configuration (fallback)
+                    result.append(
+                        {
+                            "nixpkgs": {"expr": "import <nixpkgs> { }"},
+                            "formatting": {"command": ["nixpkgs-fmt"]},
+                            "options": {"enable": True, "target": {"installable": ""}},
+                            "diagnostic": {"suppress": []},
+                        }
+                    )
+                else:
+                    # Unknown section - return empty config
+                    result.append({})
+
+            return result
+
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
+        self.server.on_request("workspace/configuration", workspace_configuration_handler)
 
         log.info("Starting nixd server process")
         self.server.start()
