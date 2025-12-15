@@ -34,9 +34,9 @@ class TestCrossFileReferences:
         refs = language_server.request_references(file_path, fib_line, fib_char)
 
         # Get counts per file
-        lib_refs = [ref for ref in refs if ref.get("uri", "").endswith("test_repo.ml")]
-        bin_refs = [ref for ref in refs if ref.get("uri", "").endswith("main.ml")]
-        test_refs = [ref for ref in refs if ref.get("uri", "").endswith("test_test_repo.ml")]
+        lib_refs = [ref for ref in refs if ref.get("uri", "").endswith(os.path.join("lib", "test_repo.ml"))]
+        bin_refs = [ref for ref in refs if ref.get("uri", "").endswith(os.path.join("bin", "main.ml"))]
+        test_refs = [ref for ref in refs if ref.get("uri", "").endswith(os.path.join("test", "test_test_repo.ml"))]
 
         # Print what we got for debugging
         print("\n=== Cross-file references result ===")
@@ -57,9 +57,7 @@ class TestCrossFileReferences:
             f"but got {len(refs)}. Cross-file references are NOT working!"
         )
 
-        assert len(lib_refs) >= 3, (
-            f"Expected at least 3 references in lib/test_repo.ml (definition + 2 recursive), " f"but got {len(lib_refs)}"
-        )
+        assert len(lib_refs) >= 3, f"Expected at least 3 references in lib/test_repo.ml (definition + 2 recursive), but got {len(lib_refs)}"
 
         assert len(bin_refs) >= 1, (
             f"Expected at least 1 reference in bin/main.ml, but got {len(bin_refs)}. "
