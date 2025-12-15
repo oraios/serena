@@ -193,8 +193,8 @@ class TestNixLanguageServer:
     def test_definition_navigation_in_flake(self, language_server: SolidLanguageServer) -> None:
         """Test definition navigation in flake.nix."""
         # Test that we can navigate to definitions within flake.nix
-        # Line 69: default = hello-custom;
-        definitions = language_server.request_definition("flake.nix", 68, 20)  # Position of 'hello-custom'
+        # Line 73: default = hello-custom;
+        definitions = language_server.request_definition("flake.nix", 72, 20)  # Position of 'hello-custom'
 
         assert definitions is not None
         assert isinstance(definitions, list)

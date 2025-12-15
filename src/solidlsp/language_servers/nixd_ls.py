@@ -255,6 +255,10 @@ class NixLanguageServer(SolidLanguageServer):
         self._is_flake_project = self._detect_flake_project(repository_root_path)
         self._nixd_options_config = self._build_options_config(repository_root_path, self._is_flake_project)
 
+        # Set request timeout for nixd - Nix evaluation can be slow, especially
+        # for hover requests that need to evaluate expressions from nixpkgs
+        self.set_request_timeout(120.0)  # 120 seconds for Nix expression evaluation
+
     @staticmethod
     def _detect_flake_project(repository_path: str) -> bool:
         """
@@ -306,23 +310,45 @@ class NixLanguageServer(SolidLanguageServer):
             #
             # We use a let-binding to:
             # 1. Get the flake once
-            # 2. Auto-detect the first nixosConfiguration name (no hardcoded hostname)
+            # 2. Check if nixosConfigurations exists (not all flakes have them)
+            # 3. Auto-detect the first nixosConfiguration name (no hardcoded hostname)
             #
             # The expression uses `builtins.head (builtins.attrNames ...)` to get
             # the first available configuration name dynamically.
+            #
+            # If flake doesn't have nixosConfigurations, we return an empty attrset
+            # to avoid errors. nixd handles this gracefully.
             flake_let = f"let flake = builtins.getFlake (builtins.toString {repository_path}); "
-            first_config = "hostname = builtins.head (builtins.attrNames flake.nixosConfigurations); "
+
+            # NixOS options expression that safely checks for nixosConfigurations
+            # Returns {} if the flake doesn't export nixosConfigurations
+            nixos_expr = (
+                f"{flake_let}"
+                "in if flake ? nixosConfigurations && flake.nixosConfigurations != {} "
+                "then let hostname = builtins.head (builtins.attrNames flake.nixosConfigurations); "
+                "in flake.nixosConfigurations.${hostname}.options "
+                "else {}"
+            )
+
+            # Home-manager options expression with same safety check
+            home_manager_expr = (
+                f"{flake_let}"
+                "in if flake ? nixosConfigurations && flake.nixosConfigurations != {} "
+                "then let hostname = builtins.head (builtins.attrNames flake.nixosConfigurations); "
+                "in flake.nixosConfigurations.${hostname}.options.home-manager.users.type.getSubOptions [] "
+                "else {}"
+            )
 
             return {
                 # NixOS options from flake's first nixosConfiguration
                 # Auto-detects the configuration name using builtins.attrNames
-                "nixos": {"expr": f"{flake_let}{first_config}in flake.nixosConfigurations.${{hostname}}.options"},
+                # Falls back to {} if flake doesn't have nixosConfigurations
+                "nixos": {"expr": nixos_expr},
                 # Home-manager options when used as a NixOS module
                 # Provides completions for home.* options
                 # Uses the same auto-detected hostname
-                "home-manager": {
-                    "expr": f"{flake_let}{first_config}in flake.nixosConfigurations.${{hostname}}.options.home-manager.users.type.getSubOptions []"
-                },
+                # Falls back to {} if flake doesn't have nixosConfigurations
+                "home-manager": {"expr": home_manager_expr},
             }
         else:
             # Traditional non-flake expressions
@@ -506,11 +532,48 @@ class NixLanguageServer(SolidLanguageServer):
             log.debug(f"workspace/configuration response for {[i.get('section') for i in items]}: flake={is_flake}")
             return result
 
+        # Handler for nixd custom RPC: attrset/evalExpr
+        # nixd sends this to evaluate Nix expressions asynchronously
+        def attrset_eval_expr_handler(params: dict) -> dict | None:
+            """Handle nixd's attrset/evalExpr request.
+
+            nixd uses this to evaluate Nix expressions for completion/hover.
+            We return None to indicate no result (nixd will fall back to local evaluation).
+            """
+            log.debug(f"attrset/evalExpr request: {params}")
+            return None
+
+        # Handler for nixd custom RPC: attrset/optionInfo
+        # nixd sends this to get NixOS option documentation
+        def attrset_option_info_handler(params: dict) -> dict | None:
+            """Handle nixd's attrset/optionInfo request.
+
+            nixd uses this to get option documentation for hover/completion.
+            We return None to indicate no option info available.
+            """
+            log.debug(f"attrset/optionInfo request: {params}")
+            return None
+
+        # Handler for nixd custom RPC: attrset/attrpathInfo
+        # nixd sends this to get attribute path information
+        def attrset_attrpath_info_handler(params: dict) -> dict | None:
+            """Handle nixd's attrset/attrpathInfo request.
+
+            nixd uses this to resolve attribute paths.
+            We return None to indicate no info available.
+            """
+            log.debug(f"attrset/attrpathInfo request: {params}")
+            return None
+
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_request("workspace/configuration", workspace_configuration_handler)
+        # Register nixd-specific custom RPC handlers
+        self.server.on_request("attrset/evalExpr", attrset_eval_expr_handler)
+        self.server.on_request("attrset/optionInfo", attrset_option_info_handler)
+        self.server.on_request("attrset/attrpathInfo", attrset_attrpath_info_handler)
 
         log.info("Starting nixd server process")
         self.server.start()
