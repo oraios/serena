@@ -7,6 +7,16 @@ from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
 
 
+def supports_cross_file_refs(language_server: SolidLanguageServer) -> bool:
+    """Check if this OCaml environment supports cross-file references.
+
+    Cross-file references require OCaml 5.2+ with project-wide occurrences.
+    The OcamlLanguageServer automatically builds the index during init.
+    """
+    ocaml_version = getattr(language_server, "_ocaml_version", (0, 0, 0))
+    return ocaml_version >= (5, 2, 0)
+
+
 @pytest.mark.ocaml
 class TestOCamlLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
@@ -67,7 +77,11 @@ class TestOCamlLanguageServer:
 
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:
-        """Test finding references across .ml files in lib, bin, and test directories."""
+        """Test finding references across .ml files in lib, bin, and test directories.
+
+        Cross-file references require OCaml 5.2+ with project-wide occurrences.
+        The server automatically builds the index during init via `dune build @ocaml-index`.
+        """
         file_path = os.path.join("lib", "test_repo.ml")
 
         # Use correct position for 'fib' function name (line 8, char 8)
@@ -76,24 +90,18 @@ class TestOCamlLanguageServer:
 
         refs = language_server.request_references(file_path, fib_line, fib_char)
 
-        # fib is used in:
-        # - lib/test_repo.ml: definition (line 8) + 2 recursive calls (line 10) = 3 refs
-        # - bin/main.ml: line 6 (let res = fib n)
-        # - test/test_test_repo.ml: lines 4-7 (4 assertions using fib)
-        # Total: at least 3 in lib + 1 in bin + 4 in test = 8+ references
-        assert len(refs) >= 3, f"Expected at least 3 references to fib, found {len(refs)}"
-
-        # Check references in lib/test_repo.ml (definition + recursive calls)
+        # Same-file references should always work (definition + 2 recursive calls)
         lib_refs = [ref for ref in refs if ref.get("uri", "").endswith("test_repo.ml")]
         assert len(lib_refs) >= 3, f"Expected at least 3 references in lib/test_repo.ml, found {len(lib_refs)}"
 
-        # Check for cross-file references in bin/main.ml
-        bin_refs = [ref for ref in refs if ref.get("uri", "").endswith("main.ml")]
-        assert len(bin_refs) >= 1, f"Expected at least 1 cross-file reference in bin/main.ml, found {len(bin_refs)}"
+        # Cross-file refs work on OCaml 5.2+ with opam exec
+        if supports_cross_file_refs(language_server):
+            bin_refs = [ref for ref in refs if ref.get("uri", "").endswith("main.ml")]
+            test_refs = [ref for ref in refs if ref.get("uri", "").endswith("test_test_repo.ml")]
 
-        # Check for cross-file references in test/test_test_repo.ml
-        test_refs = [ref for ref in refs if ref.get("uri", "").endswith("test_test_repo.ml")]
-        assert len(test_refs) >= 1, f"Expected at least 1 cross-file reference in test/test_test_repo.ml, found {len(test_refs)}"
+            # fib is used in bin/main.ml and test/test_test_repo.ml
+            assert len(bin_refs) >= 1, f"Expected at least 1 reference in bin/main.ml, found {len(bin_refs)}"
+            assert len(test_refs) >= 1, f"Expected at least 1 reference in test/test_test_repo.ml, found {len(test_refs)}"
 
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
     def test_module_hierarchy_navigation(self, language_server: SolidLanguageServer) -> None:
@@ -147,10 +155,11 @@ class TestOCamlLanguageServer:
         # Filter to references within the definition file only
         same_file_refs = [ref for ref in refs if ref.get("uri", "").endswith("test_repo.ml")]
 
-        # Should find exactly 3 references in test_repo.ml: definition + 2 recursive calls
+        # Should find at least 3 references in test_repo.ml: definition + 2 recursive calls
+        # On OCaml 5.2+ with cross-file refs, there may be more total refs but same-file count stays the same
         assert (
-            len(same_file_refs) == 3
-        ), f"Expected exactly 3 references in test_repo.ml (definition + 2 recursive), found {len(same_file_refs)}"
+            len(same_file_refs) >= 3
+        ), f"Expected at least 3 references in test_repo.ml (definition + 2 recursive), found {len(same_file_refs)}"
 
         # Verify references are on different lines (definition + recursive calls)
         ref_lines = [ref.get("range", {}).get("start", {}).get("line", -1) for ref in same_file_refs]

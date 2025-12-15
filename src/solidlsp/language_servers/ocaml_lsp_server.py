@@ -32,6 +32,9 @@ class OcamlLanguageServer(SolidLanguageServer):
     Contains various configurations and settings specific to OCaml and Reason.
     """
 
+    _ocaml_version: tuple[int, int, int]
+    _index_built: bool
+
     @staticmethod
     def _ensure_opam_installed() -> None:
         """Ensure OPAM is installed and available."""
@@ -49,8 +52,12 @@ class OcamlLanguageServer(SolidLanguageServer):
             )
 
     @staticmethod
-    def _check_ocaml_version(repository_root_path: str) -> None:
-        """Check OCaml version compatibility."""
+    def _detect_ocaml_version(repository_root_path: str) -> tuple[int, int, int]:
+        """
+        Detect and return the OCaml version as a tuple (major, minor, patch).
+        Also checks for version compatibility with ocaml-lsp-server.
+        Returns (0, 0, 0) if version cannot be determined.
+        """
         try:
             result = subprocess.run(
                 ["opam", "exec", "--", "ocaml", "-version"],
@@ -60,21 +67,28 @@ class OcamlLanguageServer(SolidLanguageServer):
                 cwd=repository_root_path,
                 **subprocess_kwargs(),
             )
-            version_match = re.search(r"(\d+\.\d+\.\d+)", result.stdout)
+            version_match = re.search(r"(\d+)\.(\d+)\.(\d+)", result.stdout)
             if version_match:
-                version = version_match.group(1)
-                log.info(f"OCaml version: {version}")
-                if version == "5.1.0":
+                major = int(version_match.group(1))
+                minor = int(version_match.group(2))
+                patch = int(version_match.group(3))
+                version_tuple = (major, minor, patch)
+                version_str = f"{major}.{minor}.{patch}"
+                log.info(f"OCaml version: {version_str}")
+
+                if version_tuple == (5, 1, 0):
                     raise RuntimeError(
-                        f"OCaml {version} is incompatible with ocaml-lsp-server.\n"
+                        f"OCaml {version_str} is incompatible with ocaml-lsp-server.\n"
                         "Please use OCaml < 5.1 or >= 5.1.1.\n"
                         "Consider creating a new opam switch:\n"
                         "  opam switch create <name> ocaml-base-compiler.4.14.2"
                     )
+                return version_tuple
         except subprocess.CalledProcessError as e:
             log.warning(f"Could not check OCaml version: {e.stderr}")
         except FileNotFoundError:
             log.warning("OCaml not found in PATH, version check skipped")
+        return (0, 0, 0)
 
     @staticmethod
     def _ensure_ocaml_lsp_installed(repository_root_path: str) -> str:
@@ -153,6 +167,62 @@ class OcamlLanguageServer(SolidLanguageServer):
                 "  3. Ensure opam env is activated: eval $(opam env)"
             )
 
+    @property
+    def supports_cross_file_references(self) -> bool:
+        """
+        Check if this OCaml environment supports cross-file references.
+
+        Cross-file references require OCaml >= 5.2 with project-wide occurrences.
+        Full requirements:
+        - OCaml 5.2+
+        - merlin >= 5.1-502 (provides ocaml-index tool)
+        - dune >= 3.16.0
+        - Index built via `dune build @ocaml-index`
+        - For best results: `dune build -w` running (enables dune RPC)
+
+        Note: Even when this returns True, cross-file refs may not work in all
+        cases. The LSP server needs dune's RPC server (via -w flag) to be fully
+        aware of the index. Without watch mode, cross-file refs are best-effort.
+
+        See: https://discuss.ocaml.org/t/ann-project-wide-occurrences-in-merlin-and-lsp/14847
+        """
+        return self._ocaml_version >= (5, 2, 0)
+
+    @staticmethod
+    def _build_ocaml_index_static(repository_root_path: str) -> bool:
+        """
+        Build the OCaml index for project-wide occurrences.
+        This enables cross-file reference finding on OCaml 5.2+.
+        Must be called BEFORE starting the LSP server.
+        Returns True if successful, False otherwise.
+        """
+        log.info("Building OCaml index for cross-file references (dune build @ocaml-index)...")
+        try:
+            result = subprocess.run(
+                ["opam", "exec", "--", "dune", "build", "@ocaml-index"],
+                cwd=repository_root_path,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=False,
+                **subprocess_kwargs(),
+            )
+            if result.returncode == 0:
+                log.info("OCaml index built successfully")
+                return True
+            else:
+                log.warning(f"Failed to build OCaml index: {result.stderr}")
+                return False
+        except subprocess.TimeoutExpired:
+            log.warning("OCaml index build timed out after 120 seconds")
+            return False
+        except FileNotFoundError:
+            log.warning("opam not found, cannot build OCaml index")
+            return False
+        except Exception as e:
+            log.warning(f"Error building OCaml index: {e}")
+            return False
+
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates an OcamlLanguageServer instance.
@@ -160,13 +230,22 @@ class OcamlLanguageServer(SolidLanguageServer):
         """
         # Ensure dependencies are available
         self._ensure_opam_installed()
-        self._check_ocaml_version(repository_root_path)
-        ocaml_lsp_executable_path = self._ensure_ocaml_lsp_installed(repository_root_path)
 
-        log.info(f"Using ocaml-lsp-server at: {ocaml_lsp_executable_path}")
+        # Detect OCaml version for feature gating
+        self._ocaml_version = self._detect_ocaml_version(repository_root_path)
+        self._index_built = False
 
-        # Configure OCaml LSP server with .merlin file support
-        ocaml_lsp_cmd = [ocaml_lsp_executable_path, "--fallback-read-dot-merlin"]
+        # Build OCaml index BEFORE starting server (required for cross-file refs on OCaml 5.2+)
+        if self._ocaml_version >= (5, 2, 0):
+            self._index_built = self._build_ocaml_index_static(repository_root_path)
+
+        # Verify ocaml-lsp-server is installed (we don't need the path, just validation)
+        self._ensure_ocaml_lsp_installed(repository_root_path)
+
+        # Use opam exec to run ocamllsp - this ensures correct opam environment
+        # which is required for project-wide occurrences (cross-file references) to work
+        ocaml_lsp_cmd = ["opam", "exec", "--", "ocamllsp", "--fallback-read-dot-merlin"]
+        log.info(f"Using ocaml-lsp-server via: {' '.join(ocaml_lsp_cmd)}")
 
         super().__init__(
             config,
