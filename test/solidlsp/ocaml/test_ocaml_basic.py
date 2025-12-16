@@ -3,18 +3,9 @@ import os
 import pytest
 
 from solidlsp import SolidLanguageServer
+from solidlsp.language_servers.ocaml_lsp_server import OcamlLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
-
-
-def supports_cross_file_refs(language_server: SolidLanguageServer) -> bool:
-    """Check if this OCaml environment supports cross-file references.
-
-    Cross-file references require OCaml 5.2+ with project-wide occurrences.
-    The OcamlLanguageServer automatically builds the index during init.
-    """
-    ocaml_version = getattr(language_server, "_ocaml_version", (0, 0, 0))
-    return ocaml_version >= (5, 2, 0)
 
 
 @pytest.mark.ocaml
@@ -41,7 +32,8 @@ class TestOCamlLanguageServer:
         assert len(refs) >= 3, f"Expected at least 3 references to fib (definition + 2 recursive), found {len(refs)}"
 
         # All references should be in lib/test_repo.ml (same file as definition)
-        lib_refs = [ref for ref in refs if ref.get("uri", "").endswith(os.path.join("lib", "test_repo.ml"))]
+        # Use forward slashes for URI matching (URIs always use /)
+        lib_refs = [ref for ref in refs if "lib/test_repo.ml" in ref.get("uri", "")]
         assert len(lib_refs) >= 3, f"Expected at least 3 references in lib/test_repo.ml, found {len(lib_refs)}"
 
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
@@ -79,7 +71,8 @@ class TestOCamlLanguageServer:
     def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:
         """Test finding references across .ml files in lib, bin, and test directories.
 
-        Cross-file references require OCaml 5.2+ with project-wide occurrences.
+        Cross-file references require OCaml 5.2+ with project-wide occurrences
+        and ocaml-lsp-server >= 1.23.0 for reliable cross-file reference support.
         The server automatically builds the index during init via `dune build @ocaml-index`.
         """
         file_path = os.path.join("lib", "test_repo.ml")
@@ -91,13 +84,14 @@ class TestOCamlLanguageServer:
         refs = language_server.request_references(file_path, fib_line, fib_char)
 
         # Same-file references should always work (definition + 2 recursive calls)
-        lib_refs = [ref for ref in refs if ref.get("uri", "").endswith(os.path.join("lib", "test_repo.ml"))]
+        # Use forward slashes for URI matching (URIs always use /)
+        lib_refs = [ref for ref in refs if "lib/test_repo.ml" in ref.get("uri", "")]
         assert len(lib_refs) >= 3, f"Expected at least 3 references in lib/test_repo.ml, found {len(lib_refs)}"
 
-        # Cross-file refs work on OCaml 5.2+ with opam exec
-        if supports_cross_file_refs(language_server):
-            bin_refs = [ref for ref in refs if ref.get("uri", "").endswith(os.path.join("bin", "main.ml"))]
-            test_refs = [ref for ref in refs if ref.get("uri", "").endswith(os.path.join("test", "test_test_repo.ml"))]
+        # Cross-file refs work on OCaml 5.2+ with ocaml-lsp-server >= 1.23.0
+        if isinstance(language_server, OcamlLanguageServer) and language_server.supports_cross_file_references:
+            bin_refs = [ref for ref in refs if "bin/main.ml" in ref.get("uri", "")]
+            test_refs = [ref for ref in refs if "test/test_test_repo.ml" in ref.get("uri", "")]
 
             # fib is used in bin/main.ml and test/test_test_repo.ml
             assert len(bin_refs) >= 1, f"Expected at least 1 reference in bin/main.ml, found {len(bin_refs)}"
@@ -118,8 +112,8 @@ class TestOCamlLanguageServer:
         # Should find at least 1 reference (the definition)
         assert len(refs) >= 1, f"Expected at least 1 reference to DemoModule, found {len(refs)}"
 
-        # Check that references are found
-        lib_refs = [ref for ref in refs if ref.get("uri", "").endswith(os.path.join("lib", "test_repo.ml"))]
+        # Check that references are found - use forward slashes for URI matching
+        lib_refs = [ref for ref in refs if "lib/test_repo.ml" in ref.get("uri", "")]
         assert len(lib_refs) >= 1, f"Expected at least 1 reference in lib/test_repo.ml, found {len(lib_refs)}"
 
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
@@ -137,8 +131,8 @@ class TestOCamlLanguageServer:
         # Should find at least 1 reference (the definition)
         assert len(refs) >= 1, f"Expected at least 1 reference to num_domains, found {len(refs)}"
 
-        # Check that reference is found in the definition file
-        ml_refs = [ref for ref in refs if ref.get("uri", "").endswith(os.path.join("lib", "test_repo.ml"))]
+        # Check that reference is found in the definition file - use forward slashes
+        ml_refs = [ref for ref in refs if "lib/test_repo.ml" in ref.get("uri", "")]
         assert len(ml_refs) >= 1, f"Expected at least 1 reference in lib/test_repo.ml, found {len(ml_refs)}"
 
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
@@ -152,8 +146,8 @@ class TestOCamlLanguageServer:
 
         refs = language_server.request_references(file_path, fib_line, fib_char)
 
-        # Filter to references within the definition file only
-        same_file_refs = [ref for ref in refs if ref.get("uri", "").endswith(os.path.join("lib", "test_repo.ml"))]
+        # Filter to references within the definition file only - use forward slashes
+        same_file_refs = [ref for ref in refs if "lib/test_repo.ml" in ref.get("uri", "")]
 
         # Should find at least 3 references in test_repo.ml: definition + 2 recursive calls
         # On OCaml 5.2+ with cross-file refs, there may be more total refs but same-file count stays the same

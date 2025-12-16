@@ -33,7 +33,11 @@ class OcamlLanguageServer(SolidLanguageServer):
     """
 
     _ocaml_version: tuple[int, int, int]
+    _lsp_version: tuple[int, int, int]
     _index_built: bool
+
+    # Minimum LSP version for reliable cross-file references
+    MIN_LSP_VERSION_FOR_CROSS_FILE_REFS: tuple[int, int, int] = (1, 23, 0)
 
     @staticmethod
     def _ensure_opam_installed() -> None:
@@ -88,6 +92,36 @@ class OcamlLanguageServer(SolidLanguageServer):
             log.warning(f"Could not check OCaml version: {e.stderr}")
         except FileNotFoundError:
             log.warning("OCaml not found in PATH, version check skipped")
+        return (0, 0, 0)
+
+    @staticmethod
+    def _detect_lsp_version(repository_root_path: str) -> tuple[int, int, int]:
+        """
+        Detect and return the ocaml-lsp-server version as a tuple (major, minor, patch).
+        Returns (0, 0, 0) if version cannot be determined.
+        """
+        try:
+            result = subprocess.run(
+                ["opam", "list", "-i", "ocaml-lsp-server", "--columns=version", "--short"],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=repository_root_path,
+                **subprocess_kwargs(),
+            )
+            version_str = result.stdout.strip()
+            version_match = re.search(r"(\d+)\.(\d+)\.(\d+)", version_str)
+            if version_match:
+                major = int(version_match.group(1))
+                minor = int(version_match.group(2))
+                patch = int(version_match.group(3))
+                version_tuple = (major, minor, patch)
+                log.info(f"ocaml-lsp-server version: {major}.{minor}.{patch}")
+                return version_tuple
+        except subprocess.CalledProcessError as e:
+            log.warning(f"Could not detect ocaml-lsp-server version: {e.stderr}")
+        except FileNotFoundError:
+            log.warning("opam not found in PATH, LSP version check skipped")
         return (0, 0, 0)
 
     @staticmethod
@@ -172,9 +206,11 @@ class OcamlLanguageServer(SolidLanguageServer):
         """
         Check if this OCaml environment supports cross-file references.
 
-        Cross-file references require OCaml >= 5.2 with project-wide occurrences.
+        Cross-file references require OCaml >= 5.2 with project-wide occurrences
+        AND ocaml-lsp-server >= 1.23.0 for reliable cross-file reference support.
         Full requirements:
         - OCaml 5.2+
+        - ocaml-lsp-server >= 1.23.0 (earlier versions have unreliable cross-file refs)
         - merlin >= 5.1-502 (provides ocaml-index tool)
         - dune >= 3.16.0
         - Index built via `dune build @ocaml-index`
@@ -186,7 +222,9 @@ class OcamlLanguageServer(SolidLanguageServer):
 
         See: https://discuss.ocaml.org/t/ann-project-wide-occurrences-in-merlin-and-lsp/14847
         """
-        return self._ocaml_version >= (5, 2, 0)
+        ocaml_ok = self._ocaml_version >= (5, 2, 0)
+        lsp_ok = self._lsp_version >= self.MIN_LSP_VERSION_FOR_CROSS_FILE_REFS
+        return ocaml_ok and lsp_ok
 
     @staticmethod
     def _build_ocaml_index_static(repository_root_path: str) -> bool:
@@ -235,12 +273,15 @@ class OcamlLanguageServer(SolidLanguageServer):
         self._ocaml_version = self._detect_ocaml_version(repository_root_path)
         self._index_built = False
 
+        # Verify ocaml-lsp-server is installed (we don't need the path, just validation)
+        self._ensure_ocaml_lsp_installed(repository_root_path)
+
+        # Detect LSP version for cross-file reference support
+        self._lsp_version = self._detect_lsp_version(repository_root_path)
+
         # Build OCaml index BEFORE starting server (required for cross-file refs on OCaml 5.2+)
         if self._ocaml_version >= (5, 2, 0):
             self._index_built = self._build_ocaml_index_static(repository_root_path)
-
-        # Verify ocaml-lsp-server is installed (we don't need the path, just validation)
-        self._ensure_ocaml_lsp_installed(repository_root_path)
 
         # Use opam exec to run ocamllsp - this ensures correct opam environment
         # which is required for project-wide occurrences (cross-file references) to work

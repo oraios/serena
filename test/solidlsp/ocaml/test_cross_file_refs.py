@@ -7,6 +7,7 @@ import os
 import pytest
 
 from solidlsp import SolidLanguageServer
+from solidlsp.language_servers.ocaml_lsp_server import OcamlLanguageServer
 from solidlsp.ls_config import Language
 
 
@@ -25,6 +26,17 @@ class TestCrossFileReferences:
 
         This test WILL FAIL if cross-file references aren't working!
         """
+        # Skip if cross-file references aren't supported
+        if isinstance(language_server, OcamlLanguageServer):
+            if not language_server.supports_cross_file_references:
+                ocaml_ver = ".".join(map(str, language_server._ocaml_version))
+                lsp_ver = ".".join(map(str, language_server._lsp_version))
+                min_lsp = ".".join(map(str, OcamlLanguageServer.MIN_LSP_VERSION_FOR_CROSS_FILE_REFS))
+                pytest.skip(
+                    f"Cross-file references require OCaml >= 5.2.0 and ocaml-lsp-server >= {min_lsp}. "
+                    f"Current: OCaml {ocaml_ver}, ocaml-lsp-server {lsp_ver}"
+                )
+
         file_path = os.path.join("lib", "test_repo.ml")
 
         # Find references to `fib` at line 8, char 8 (0-indexed)
@@ -33,10 +45,10 @@ class TestCrossFileReferences:
 
         refs = language_server.request_references(file_path, fib_line, fib_char)
 
-        # Get counts per file
-        lib_refs = [ref for ref in refs if ref.get("uri", "").endswith(os.path.join("lib", "test_repo.ml"))]
-        bin_refs = [ref for ref in refs if ref.get("uri", "").endswith(os.path.join("bin", "main.ml"))]
-        test_refs = [ref for ref in refs if ref.get("uri", "").endswith(os.path.join("test", "test_test_repo.ml"))]
+        # Get counts per file - use forward slashes for URI matching (URIs always use /)
+        lib_refs = [ref for ref in refs if "lib/test_repo.ml" in ref.get("uri", "")]
+        bin_refs = [ref for ref in refs if "bin/main.ml" in ref.get("uri", "")]
+        test_refs = [ref for ref in refs if "test/test_test_repo.ml" in ref.get("uri", "")]
 
         # Print what we got for debugging
         print("\n=== Cross-file references result ===")
@@ -51,7 +63,7 @@ class TestCrossFileReferences:
             line = ref.get("range", {}).get("start", {}).get("line", -1)
             print(f"    {filename}:{line}")
 
-        # ASSERTIONS - These will FAIL without OCaml 5.2+
+        # ASSERTIONS - These will FAIL without OCaml 5.2+ and ocaml-lsp-server >= 1.23.0
         assert len(refs) >= 9, (
             f"Expected at least 9 total references (3 in lib + 1 in bin + 5 in test), "
             f"but got {len(refs)}. Cross-file references are NOT working!"
