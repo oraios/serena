@@ -1,10 +1,12 @@
 # Groovy Setup Guide for Serena
 
-This guide explains how to prepare a Groovy project so that Serena can provide reliable code intelligence via Groovy Language Server and how to configure the server properly.
+The Groovy support in Serena is incomplete and requires the user to provide a functioning,
+JVM-based Groovy language server as a jar. This intermediate state allows the contributors
+of Groovy support to use Serena internally and hopefully to accelerate their open-source
+release of a Groovy language server in the future.
 
-Serena provides flexible Java runtime management for Groovy Language Server.  
-You can either use your system Java installation or let Serena download a bundled Java distribution.  
-You need to provide Groovy Language Server JAR file and optionally configure JAR options for optimal performance.
+If you happen to have a Groovy language server JAR file, you can configure Serena to use it
+by following the instructions below.
 
 ---
 ## Prerequisites

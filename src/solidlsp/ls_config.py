@@ -113,6 +113,7 @@ class Language(str, Enum):
             self.MARKDOWN,
             self.YAML,
             self.TOML,
+            self.GROOVY,
         }
 
     def __str__(self) -> str:
