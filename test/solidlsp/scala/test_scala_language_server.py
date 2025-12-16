@@ -34,6 +34,10 @@ def test_scala_document_symbols(scala_ls):
     assert symbol_names[3] == "result"
     assert symbol_names[4] == "sum"
     assert symbol_names[5] == "add"
+    assert symbol_names[6] == "someMethod"
+    assert symbol_names[7] == "str"
+    assert symbol_names[8] == "Config"
+    assert symbol_names[9] == "field1"  # confirm https://github.com/oraios/serena/issues/688
 
 
 def test_scala_references_within_same_file(scala_ls):

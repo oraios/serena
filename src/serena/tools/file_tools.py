@@ -9,6 +9,7 @@ File and file system-related tools, specifically for
 import os
 import re
 from collections import defaultdict
+from collections.abc import Callable
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Literal
@@ -202,6 +203,45 @@ class ReplaceContentTool(Tool, ToolMarkerCanEdit):
             relative_path, needle, repl, mode=mode, allow_multiple_occurrences=allow_multiple_occurrences, require_not_ignored=True
         )
 
+    @staticmethod
+    def _create_replacement_function(regex_pattern: str, repl_template: str, regex_flags: int) -> Callable[[re.Match], str]:
+        """
+        Creates a replacement function that validates for ambiguity and handles backreferences.
+
+        :param regex_pattern: The regex pattern being used for matching
+        :param repl_template: The replacement template with $!1, $!2, etc. for backreferences
+        :param regex_flags: The flags to use when searching (e.g., re.DOTALL | re.MULTILINE)
+        :return: A function suitable for use with re.sub() or re.subn()
+        """
+
+        def validate_and_replace(match: re.Match) -> str:
+            matched_text = match.group(0)
+
+            # For multi-line match, check if the same pattern matches again within the already-matched text,
+            # rendering the match ambiguous. Typical pattern in the code:
+            #    <start><other-stuff><start><stuff><end>
+            # When matching
+            #    <start>.*?<end>
+            # this will match the entire span above, while only the suffix may have been intended.
+            # (See test case for a practical example.)
+            # To detect this, we check if the same pattern matches again within the matched text,
+            if "\n" in matched_text and re.search(regex_pattern, matched_text[1:], flags=regex_flags):
+                raise ValueError(
+                    "Match is ambiguous: the search pattern matches multiple overlapping occurrences. "
+                    "Please revise the search pattern to be more specific to avoid ambiguity."
+                )
+
+            # Handle backreferences: replace $!1, $!2, etc. with actual matched groups
+            def expand_backreference(m: re.Match) -> str:
+                group_num = int(m.group(1))
+                group_value = match.group(group_num)
+                return group_value if group_value is not None else m.group(0)
+
+            result = re.sub(r"\$!(\d+)", expand_backreference, repl_template)
+            return result
+
+        return validate_and_replace
+
     def replace_content(
         self,
         relative_path: str,
@@ -226,19 +266,19 @@ class ReplaceContentTool(Tool, ToolMarkerCanEdit):
             else:
                 raise ValueError(f"Invalid mode: '{mode}', expected 'literal' or 'regex'.")
 
-            # escape backslashes in repl
-            repl = repl.replace("\\", "\\\\")
-            # convert $!1, $!2, etc. to \1, \2, etc. for backreferences
-            repl = re.sub(r"\$!(\d+)", "\\\\1", repl)
+            regex_flags = re.DOTALL | re.MULTILINE
+
+            # create replacement function with validation and backreference handling
+            repl_fn = self._create_replacement_function(regex, repl, regex_flags=regex_flags)
 
             # perform replacement
-            updated_content, n = re.subn(regex, repl, original_content, flags=re.DOTALL | re.MULTILINE)
+            updated_content, n = re.subn(regex, repl_fn, original_content, flags=regex_flags)
 
             if n == 0:
-                return f"Error: No matches of search expression found in file '{relative_path}'."
+                raise ValueError(f"Error: No matches of search expression found in file '{relative_path}'.")
             if not allow_multiple_occurrences and n > 1:
-                return (
-                    f"Error: Expression matches {n} occurrences in file '{relative_path}'. "
+                raise ValueError(
+                    f"Expression matches {n} occurrences in file '{relative_path}'. "
                     "Please revise the expression to be more specific or enable allow_multiple_occurrences if this is expected."
                 )
             context.set_updated_content(updated_content)

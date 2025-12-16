@@ -273,6 +273,7 @@ markers = [
   "go: language server running for Go",
   "java: language server running for Java",
   "kotlin: language server running for kotlin",
+  "groovy: language server running for Groovy",
   "rust: language server running for Rust",
   "typescript: language server running for TypeScript",
   "vue: language server running for Vue (uses TypeScript LSP)",

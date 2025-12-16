@@ -38,6 +38,9 @@ class CodeEditor(Generic[TSymbol], ABC):
         self.encoding = encoding
 
     class EditedFile(ABC):
+        def __init__(self, relative_path: str) -> None:
+            self.relative_path = relative_path
+
         @abstractmethod
         def get_contents(self) -> str:
             """
@@ -67,9 +70,12 @@ class CodeEditor(Generic[TSymbol], ABC):
         with self._open_file_context(relative_path) as edited_file:
             yield edited_file
             # save the file
-            abs_path = os.path.join(self.project_root, relative_path)
-            with open(abs_path, "w", encoding=self.encoding) as f:
-                f.write(edited_file.get_contents())
+            self._save_edited_file(edited_file)
+
+    def _save_edited_file(self, edited_file: "CodeEditor.EditedFile") -> None:
+        abs_path = os.path.join(self.project_root, edited_file.relative_path)
+        with open(abs_path, "w", encoding=self.encoding) as f:
+            f.write(edited_file.get_contents())
 
     @abstractmethod
     def _find_unique_symbol(self, name_path: str, relative_file_path: str) -> TSymbol:
@@ -239,21 +245,21 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
 
     class EditedFile(CodeEditor.EditedFile):
         def __init__(self, lang_server: SolidLanguageServer, relative_path: str, file_buffer: LSPFileBuffer):
+            super().__init__(relative_path)
             self._lang_server = lang_server
-            self._relative_path = relative_path
             self._file_buffer = file_buffer
 
         def get_contents(self) -> str:
             return self._file_buffer.contents
 
         def delete_text_between_positions(self, start_pos: PositionInFile, end_pos: PositionInFile) -> None:
-            self._lang_server.delete_text_between_positions(self._relative_path, start_pos.to_lsp_position(), end_pos.to_lsp_position())
+            self._lang_server.delete_text_between_positions(self.relative_path, start_pos.to_lsp_position(), end_pos.to_lsp_position())
 
         def insert_text_at_position(self, pos: PositionInFile, text: str) -> None:
-            self._lang_server.insert_text_at_position(self._relative_path, pos.line, pos.col, text)
+            self._lang_server.insert_text_at_position(self.relative_path, pos.line, pos.col, text)
 
         def apply_text_edits(self, text_edits: list[ls_types.TextEdit]) -> None:
-            return self._lang_server.apply_text_edits_to_file(self._relative_path, text_edits)
+            return self._lang_server.apply_text_edits_to_file(self.relative_path, text_edits)
 
     @contextmanager
     def _open_file_context(self, relative_path: str) -> Iterator["CodeEditor.EditedFile"]:
@@ -319,6 +325,7 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
 
     class EditedFile(CodeEditor.EditedFile):
         def __init__(self, relative_path: str, project: Project):
+            super().__init__(relative_path)
             path = os.path.join(project.project_root, relative_path)
             log.info("Editing file: %s", path)
             with open(path, encoding=project.project_config.encoding) as f:
@@ -338,6 +345,11 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
     @contextmanager
     def _open_file_context(self, relative_path: str) -> Iterator["CodeEditor.EditedFile"]:
         yield self.EditedFile(relative_path, self._project)
+
+    def _save_edited_file(self, edited_file: "CodeEditor.EditedFile") -> None:
+        super()._save_edited_file(edited_file)
+        with JetBrainsPluginClient.from_project(self._project) as client:
+            client.refresh_file(edited_file.relative_path)
 
     def _find_unique_symbol(self, name_path: str, relative_file_path: str) -> JetBrainsSymbol:
         with JetBrainsPluginClient.from_project(self._project) as client:

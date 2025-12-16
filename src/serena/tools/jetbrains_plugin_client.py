@@ -202,6 +202,17 @@ class JetBrainsPluginClient(ToStringMixin):
         }
         self._make_request("POST", "/renameSymbol", request_data)
 
+    def refresh_file(self, relative_path: str) -> None:
+        """
+        Triggers a refresh of the given file in the IDE.
+
+        :param relative_path: the relative path
+        """
+        request_data = {
+            "relativePath": relative_path,
+        }
+        self._make_request("POST", "/refreshFile", request_data)
+
     def is_service_available(self) -> bool:
         try:
             self.project_root()

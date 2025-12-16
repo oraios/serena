@@ -464,11 +464,13 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
             )
             instance.projects.append(project)
 
-        # set other configuration parameters
-        def get_value_or_default(field_name: str) -> Any:
-            return loaded_commented_yaml.get(field_name, get_dataclass_default(SerenaConfig, field_name))
+        def get_value_or_default(key: str, field_name: str | None = None) -> Any:
+            if field_name is None:
+                field_name = key
+            return loaded_commented_yaml.get(key, get_dataclass_default(SerenaConfig, field_name))
 
-        instance.gui_log_window_enabled = get_value_or_default("gui_log_window_enabled")
+        # set other configuration parameters
+        instance.gui_log_window_enabled = get_value_or_default("gui_log_window", "gui_log_window_enabled")
         instance.web_dashboard_listen_address = get_value_or_default("web_dashboard_listen_address")
         instance.log_level = loaded_commented_yaml.get("log_level", loaded_commented_yaml.get("gui_log_level", logging.INFO))
         instance.web_dashboard = get_value_or_default("web_dashboard")

@@ -6,7 +6,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     * Add monorepo/multi-language support
         * Project configuration files (`project.yml`) can now define multiple languages.
           Auto-detection adds only the most prominent language by default.
-        * Additional languages can be conveniently added via the Dashboard while a project is already activated. 
+        * Additional languages can be conveniently added via the Dashboard while a project is already activated.
+    * The current project can be activated automatically even when the MCP configuration is global (through the --project-from-cwd flag)
     * Support overloaded symbols in `FindSymbolTool` and related tools
         * Name paths of overloaded symbols now include an index (e.g., `myOverloadedFunction[2]`)
         * Responses of the Java language server, which handled this in its own way, are now adapted accordingly,
@@ -35,6 +36,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Language support:
 
   * **Add support for Fortran** via fortls language server (requires `pip install fortls`)
+  * **Add partial support for Groovy** requires user-provided Groovy language server JAR (see [setup guide](docs/03-special-guides/groovy_setup_guide_for_serena.md))
   * **Add support for Julia** via LanguageServer.jl
   * **Add support for Haskell** via Haskell Language Server (HLS) with automatic discovery via ghcup, stack, or system PATH; supports both Stack and Cabal projects
   * **Add support for Scala** via Metals language server (requires some [manual setup](docs/03-special-guides/scala_setup_guide_for_serena.md))

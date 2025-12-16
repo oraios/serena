@@ -70,7 +70,7 @@ class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
         own_yaml_path = os.path.join(SERENAS_OWN_MODE_YAMLS_DIR, fname)
         if not os.path.exists(own_yaml_path):
             raise FileNotFoundError(
-                f"Mode {name} not found in {SerenaPaths().user_modes_dir} or in {SERENAS_OWN_MODE_YAMLS_DIR}."
+                f"Mode {name} not found in {SerenaPaths().user_modes_dir} or in {SERENAS_OWN_MODE_YAMLS_DIR}. "
                 f"Available modes:\n{cls.list_registered_mode_names()}"
             )
         return own_yaml_path
@@ -78,8 +78,16 @@ class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
     @classmethod
     def from_name(cls, name: str) -> Self:
         """Load a registered Serena mode."""
-        mode_path = cls.get_path(name)
-        return cls.from_yaml(mode_path)
+        try:
+            mode_path = cls.get_path(name)
+            return cls.from_yaml(mode_path)
+        except:
+            try:
+                # Allow loading an internal mode if it is explicitly requested
+                return cls.from_name_internal(name)
+            except:
+                pass
+            raise
 
     @classmethod
     def from_name_internal(cls, name: str) -> Self:

@@ -195,6 +195,7 @@ class SerenaAgent:
         # open GUI log window if enabled
         self._gui_log_viewer: Optional["GuiLogViewer"] = None
         if self.serena_config.gui_log_window_enabled:
+            log.info("Opening GUI window")
             if platform.system() == "Darwin":
                 log.warning("GUI log window is not supported on macOS")
             else:
@@ -204,6 +205,8 @@ class SerenaAgent:
 
                 self._gui_log_viewer = GuiLogViewer("dashboard", title="Serena Logs", memory_log_handler=get_memory_log_handler())
                 self._gui_log_viewer.start()
+        else:
+            log.debug("GUI window is disabled")
 
         # set the agent context
         if context is None:

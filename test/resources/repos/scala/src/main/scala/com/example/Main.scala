@@ -17,4 +17,13 @@ object Main {
   def add(a: Int, b: Int): Int = {
     a + b
   }
+
+  // https://github.com/oraios/serena/issues/688
+  def someMethod(config: Config): Unit = {
+    val str = config.field1
+
+    println(str)
+  }
+  
+  case class Config(field1:String)
 }
