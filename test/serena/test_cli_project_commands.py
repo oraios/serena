@@ -4,6 +4,7 @@ import os
 import shutil
 import tempfile
 import time
+from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
@@ -266,8 +267,10 @@ class TestFindProjectRoot:
     """Tests for find_project_root helper with virtual chroot boundary."""
 
     def test_finds_serena_from_subdirectory(self, temp_project_dir):
-        """Test that .serena is found when searching from a subdirectory."""
-        os.makedirs(os.path.join(temp_project_dir, ".serena"))
+        """Test that .serena/project.yml is found when searching from a subdirectory."""
+        serena_dir = os.path.join(temp_project_dir, ".serena")
+        os.makedirs(serena_dir)
+        Path(os.path.join(serena_dir, "project.yml")).touch()
         subdir = os.path.join(temp_project_dir, "src", "nested")
         os.makedirs(subdir)
 
@@ -281,8 +284,10 @@ class TestFindProjectRoot:
             os.chdir(original_cwd)
 
     def test_serena_preferred_over_git(self, temp_project_dir):
-        """Test that .serena takes priority over .git at the same level."""
-        os.makedirs(os.path.join(temp_project_dir, ".serena"))
+        """Test that .serena/project.yml takes priority over .git at the same level."""
+        serena_dir = os.path.join(temp_project_dir, ".serena")
+        os.makedirs(serena_dir)
+        Path(os.path.join(serena_dir, "project.yml")).touch()
         os.makedirs(os.path.join(temp_project_dir, ".git"))
 
         original_cwd = os.getcwd()
@@ -310,8 +315,8 @@ class TestFindProjectRoot:
         finally:
             os.chdir(original_cwd)
 
-    def test_returns_none_when_no_markers(self, temp_project_dir):
-        """Test returns None when no markers exist within boundary."""
+    def test_falls_back_to_cwd_when_no_markers(self, temp_project_dir):
+        """Test falls back to CWD when no markers exist within boundary."""
         subdir = os.path.join(temp_project_dir, "src")
         os.makedirs(subdir)
 
@@ -319,7 +324,7 @@ class TestFindProjectRoot:
         try:
             os.chdir(subdir)
             result = find_project_root(root=temp_project_dir)
-            assert result is None
+            assert os.path.samefile(result, subdir)
         finally:
             os.chdir(original_cwd)
 

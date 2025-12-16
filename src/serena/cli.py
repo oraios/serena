@@ -37,17 +37,18 @@ from solidlsp.util.subprocess_util import subprocess_kwargs
 log = logging.getLogger(__name__)
 
 
-def find_project_root(root: str | Path | None = None) -> str | None:
+def find_project_root(root: str | Path | None = None) -> str:
     """Find project root by walking up from CWD.
 
-    Checks for .serena first (explicit Serena project), then .git (git root).
+    Checks for .serena/project.yml first (explicit Serena project), then .git (git root).
+    Falls back to CWD if no marker is found.
 
     :param root: If provided, constrains the search to this directory and below
                  (acts as a virtual filesystem root). Search stops at this boundary.
-    :return: absolute path to project root, or None if not found
+    :return: absolute path to project root (falls back to CWD if no marker found)
     """
     current = Path.cwd().resolve()
-    boundary = Path(root).resolve() if root else None
+    boundary = Path(root).resolve() if root is not None else None
 
     def ancestors() -> Iterator[Path]:
         """Yield current directory and ancestors up to boundary."""
@@ -59,7 +60,7 @@ def find_project_root(root: str | Path | None = None) -> str | None:
 
     # First pass: look for .serena
     for directory in ancestors():
-        if (directory / ".serena").is_dir():
+        if (directory / ".serena" / "project.yml").is_file():
             return str(directory)
 
     # Second pass: look for .git
@@ -67,7 +68,8 @@ def find_project_root(root: str | Path | None = None) -> str | None:
         if (directory / ".git").exists():  # .git can be file (worktree) or dir
             return str(directory)
 
-    return None
+    # Fall back to CWD
+    return str(current)
 
 
 # --------------------- Utilities -------------------------------------
@@ -175,7 +177,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         "--project-from-cwd",
         is_flag=True,
         default=False,
-        help="Auto-detect project from current working directory (searches for .serena or .git). Intended for CLI-based agents like Claude Code, Gemini and Codex.",
+        help="Auto-detect project from current working directory (searches for .serena/project.yml or .git, falls back to CWD). Intended for CLI-based agents like Claude Code, Gemini and Codex.",
     )
     def start_mcp_server(
         project: str | None,
@@ -217,8 +219,7 @@ class TopLevelCommands(AutoRegisteringGroup):
             if project is not None or project_file_arg is not None:
                 raise click.UsageError("--project-from-cwd cannot be used with --project or positional project argument")
             project = find_project_root()
-            if project:
-                log.info("Auto-detected project root: %s", project)
+            log.info("Auto-detected project root: %s", project)
 
         project_file = project_file_arg or project
         factory = SerenaMCPFactorySingleProcess(context=context, project=project_file, memory_log_handler=memory_log_handler)
