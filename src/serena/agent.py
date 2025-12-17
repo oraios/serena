@@ -18,13 +18,14 @@ from interprompt.jinja_template import JinjaTemplate
 from serena import serena_version
 from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
-from serena.config.serena_config import SerenaConfig, ToolInclusionDefinition
+from serena.config.serena_config import LanguageBackend, SerenaConfig, ToolInclusionDefinition
 from serena.dashboard import SerenaDashboardAPI
 from serena.ls_manager import LanguageServerManager
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.task_executor import TaskExecutor
 from serena.tools import ActivateProjectTool, GetCurrentConfigTool, ReplaceContentTool, Tool, ToolMarker, ToolRegistry
+from serena.util.gui import system_has_usable_display
 from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
@@ -226,7 +227,10 @@ class SerenaAgent:
         self._tool_usage_stats = ToolUsageStats(token_count_estimator)
 
         # log fundamental information
-        log.info(f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()})")
+        log.info(
+            f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()}; "
+            f"language backend={self.serena_config.language_backend.name})"
+        )
         log.info("Configuration file: %s", self.serena_config.config_file_path)
         log.info("Available projects: {}".format(", ".join(self.serena_config.project_names)))
         log.info(f"Loaded tools ({len(self._all_tools)}): {', '.join([tool.get_name_from_cls() for tool in self._all_tools.values()])}")
@@ -238,7 +242,7 @@ class SerenaAgent:
         tool_inclusion_definitions: list[ToolInclusionDefinition] = [self.serena_config, self._context]
         if self._context.single_project:
             tool_inclusion_definitions.extend(self._single_project_context_tool_inclusion_definitions(project))
-        if self.serena_config.jetbrains:
+        if self.serena_config.language_backend == LanguageBackend.JETBRAINS:
             tool_inclusion_definitions.append(SerenaAgentMode.from_name_internal("jetbrains"))
 
         self._base_tool_set = ToolSet.default().apply(*tool_inclusion_definitions)
@@ -281,11 +285,14 @@ class SerenaAgent:
             dashboard_url = f"http://{dashboard_host}:{port}/dashboard/index.html"
             log.info("Serena web dashboard started at %s", dashboard_url)
             if self.serena_config.web_dashboard_open_on_launch:
-                # open the dashboard URL in the default web browser (using a separate process to control
-                # output redirection)
-                process = multiprocessing.Process(target=self._open_dashboard, args=(dashboard_url,))
-                process.start()
-                process.join(timeout=1)
+                if not system_has_usable_display():
+                    log.warning("Not opening the Serena web dashboard automatically because no usable display was detected.")
+                else:
+                    # open the dashboard URL in the default web browser (using a separate process to control
+                    # output redirection)
+                    process = multiprocessing.Process(target=self._open_dashboard, args=(dashboard_url,))
+                    process.start()
+                    process.join(timeout=1)
             # inform the GUI window (if any)
             if self._gui_log_viewer is not None:
                 self._gui_log_viewer.set_dashboard_url(dashboard_url)
@@ -514,7 +521,7 @@ class SerenaAgent:
         """
         :return: whether this agent uses language server-based code analysis
         """
-        return not self.serena_config.jetbrains
+        return self.serena_config.language_backend == LanguageBackend.LSP
 
     def _activate_project(self, project: Project) -> None:
         log.info(f"Activating {project.project_name} at {project.project_root}")

@@ -92,11 +92,15 @@ def make_error_response(request_id: Any, err: LSPError) -> StringDict:
 
 
 def make_notification(method: str, params: PayloadLike) -> StringDict:
-    return {"jsonrpc": "2.0", "method": method, "params": params}
+    # JSON-RPC 2.0: params must be object or array if present, cannot be null
+    # Some language servers require params to be present, so we send empty object instead of omitting
+    return {"jsonrpc": "2.0", "method": method, "params": params if params is not None else {}}
 
 
 def make_request(method: str, request_id: Any, params: PayloadLike) -> StringDict:
-    return {"jsonrpc": "2.0", "method": method, "id": request_id, "params": params}
+    # JSON-RPC 2.0: params must be object or array if present, cannot be null
+    # Some language servers require params to be present, so we send empty object instead of omitting
+    return {"jsonrpc": "2.0", "method": method, "id": request_id, "params": params if params is not None else {}}
 
 
 class StopLoopException(Exception):

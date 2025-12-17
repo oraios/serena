@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 from serena.agent import SerenaAgent
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
-from serena.config.serena_config import ProjectConfig, SerenaConfig, SerenaPaths
+from serena.config.serena_config import LanguageBackend, ProjectConfig, SerenaConfig, SerenaPaths
 from serena.constants import (
     DEFAULT_CONTEXT,
     DEFAULT_MODES,
@@ -155,14 +155,28 @@ class TopLevelCommands(AutoRegisteringGroup):
         help="Built-in mode names or paths to custom mode YAMLs.",
     )
     @click.option(
+        "--language-backend",
+        type=click.Choice([lb.value for lb in LanguageBackend]),
+        default=None,
+        help="Override the configured language backend.",
+    )
+    @click.option(
         "--transport",
         type=click.Choice(["stdio", "sse", "streamable-http"]),
         default="stdio",
         show_default=True,
         help="Transport protocol.",
     )
-    @click.option("--host", type=str, default="0.0.0.0", show_default=True)
-    @click.option("--port", type=int, default=8000, show_default=True)
+    @click.option(
+        "--host",
+        type=str,
+        default="0.0.0.0",
+        show_default=True,
+        help="Listen address for the MCP server (when using corresponding transport).",
+    )
+    @click.option(
+        "--port", type=int, default=8000, show_default=True, help="Listen port for the MCP server (when using corresponding transport)."
+    )
     @click.option("--enable-web-dashboard", type=bool, is_flag=False, default=None, help="Override dashboard setting in config.")
     @click.option("--enable-gui-log-window", type=bool, is_flag=False, default=None, help="Override GUI log window setting in config.")
     @click.option(
@@ -185,6 +199,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         project_from_cwd: bool | None,
         context: str,
         modes: tuple[str, ...],
+        language_backend: str | None,
         transport: Literal["stdio", "sse", "streamable-http"],
         host: str,
         port: int,
@@ -227,6 +242,7 @@ class TopLevelCommands(AutoRegisteringGroup):
             host=host,
             port=port,
             modes=modes,
+            language_backend=LanguageBackend.from_str(language_backend) if language_backend else None,
             enable_web_dashboard=enable_web_dashboard,
             enable_gui_log_window=enable_gui_log_window,
             log_level=log_level,

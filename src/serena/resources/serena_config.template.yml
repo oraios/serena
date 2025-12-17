@@ -1,3 +1,12 @@
+language_backend: LSP
+# the language backend to use for code understanding and manipulation.
+# Possible values are:
+#  * LSP: Use the language server protocol (LSP), spawning freely available language servers
+#      via the SolidLSP library that is part of Serena.
+#  * JetBrains: Use the Serena plugin in your JetBrains IDE.
+#      (requires the plugin to be installed and the project being worked on to be open
+#      in your IDE).
+
 gui_log_window: False
 # whether to open a graphical window with Serena's logs.
 # This is mainly supported on Windows and (partly) on Linux; not available on macOS.
@@ -42,7 +51,6 @@ ls_specific_settings: {}
 # (same entry as in project.yml) to the options.
 # Have a look at the docstring of the constructors of the LS implementations within solidlsp (e.g., for C# or PHP) to see which options are available.
 # No documentation on options means no options are available.
-#
 
 tool_timeout: 240
 # timeout, in seconds, after which tool executions are terminated
@@ -52,12 +60,6 @@ excluded_tools: []
 
 included_optional_tools: []
 # list of optional tools (which are disabled by default) to be included
-
-jetbrains: False
-# whether to enable JetBrains mode and use tools based on the Serena JetBrains IDE plugin
-# instead of language server-based tools
-# NOTE: The plugin is yet unreleased. This is for Serena developers only.
-
 
 default_max_tool_answer_chars: 150000
 # Used as default for tools where the apply method has a default maximal answer length.
@@ -73,14 +75,5 @@ token_count_estimator: CHAR_COUNT
 # data files on first run), or ANTHROPIC_CLAUDE_SONNET_4 which will use the (free of cost) Anthropic API to
 # estimate the token count using the Claude Sonnet 4 tokenizer.
 
-
-# MANAGED BY SERENA, KEEP AT THE BOTTOM OF THE YAML AND DON'T EDIT WITHOUT NEED
-# The list of registered projects.
-# To add a project, within a chat, simply ask Serena to "activate the project /path/to/project" or,
-# if the project was previously added, "activate the project <project name>".
-# By default, the project's name will be the name of the directory containing the project, but you may change it
-# by editing the (auto-generated) project configuration file `/path/project/project/.serena/project.yml` file.
-# If you want to maintain full control of the project configuration, create the project.yml file manually and then
-# instruct Serena to activate the project by its path for first-time activation.
-# NOTE: Make sure there are no name collisions in the names of registered projects.
+# The list of registered project paths (updated automatically).
 projects: []
