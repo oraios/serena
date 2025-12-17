@@ -396,12 +396,7 @@ jobs:
           df -h
       - name: Test with pytest
         shell: bash
-        run: |
-          if command -v opam &> /dev/null; then
-            # Activate OPAM environment for OCaml support
-            eval $(opam env)
-          fi
-          uv run poe test
+        run: uv run poe test
       - name: Type-checking with mypy
         shell: bash
         run: uv run poe type-check
