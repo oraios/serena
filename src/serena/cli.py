@@ -29,7 +29,14 @@ from serena.constants import (
 )
 from serena.mcp import SerenaMCPFactory, SerenaMCPFactorySingleProcess
 from serena.project import Project
-from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsOverviewTool, SearchForPatternTool, ToolRegistry
+from serena.tools import (
+    ExecuteSerenaCodeTool,
+    FindReferencingSymbolsTool,
+    FindSymbolTool,
+    GetSymbolsOverviewTool,
+    SearchForPatternTool,
+    ToolRegistry,
+)
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
 from solidlsp.util.subprocess_util import subprocess_kwargs
@@ -300,6 +307,87 @@ class TopLevelCommands(AutoRegisteringGroup):
             print(instr)
         else:
             print(f"{prefix}\n{instr}\n{postfix}")
+
+    @staticmethod
+    @click.command("execute-code", help="Execute Python code with access to Serena tools.")
+    @click.option(
+        "--project",
+        type=click.Path(exists=True),
+        default=None,
+        help="Path to the project directory. If not provided, uses current directory or attempts auto-detection.",
+    )
+    @click.option(
+        "--code",
+        "-c",
+        type=str,
+        default=None,
+        help="Python code to execute. If not provided, reads from stdin.",
+    )
+    @click.option(
+        "--file",
+        "-f",
+        type=click.Path(exists=True),
+        default=None,
+        help="Path to a Python file to execute.",
+    )
+    @click.option(
+        "--log-level",
+        type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+        default="WARNING",
+        help="Log level for code execution.",
+    )
+    def execute_code(project: str | None, code: str | None, file: str | None, log_level: str) -> None:
+        """
+        Execute Python code with access to Serena's tools and print the captured stdout.
+        The code can be provided via the --code option, the --file option, or piped via stdin.
+
+        This command allows you to run Python code that uses Serena's agent and tools
+        programmatically without needing to set up an MCP server.
+
+        Examples:
+            # Execute code from command line
+            serena execute-code -c "from serena.agent import SerenaAgent; print('hello')"
+
+            # Execute code from a file
+            serena execute-code -f my_script.py
+
+            # Execute code from stdin
+            echo "print('hello')" | serena execute-code
+
+            # Specify a project
+            serena execute-code --project /path/to/project -c "..."
+
+        :param project: Path to the project directory. If not provided, uses current directory or attempts auto-detection.
+        :param code: Python code to execute as string.
+        :param file: Path to a Python file to execute.
+        :param log_level: Log level for code execution.
+
+        """
+        # Set up logging
+        lvl = logging.getLevelNamesMapping()[log_level.upper()]
+        logging.configure(level=lvl)
+
+        # Determine code source
+        if sum([code is not None, file is not None, not sys.stdin.isatty()]) > 1:
+            raise click.UsageError("Provide exactly one of: --code, --file, or stdin")
+
+        if code is None and file is None and sys.stdin.isatty():
+            raise click.UsageError("No code provided. Use --code, --file, or pipe to stdin")
+
+        # Read code
+        if code is not None:
+            code_to_execute = code
+        elif file is not None:
+            with open(file) as f:
+                code_to_execute = f.read()
+        else:
+            code_to_execute = sys.stdin.read()
+
+        if project is None:
+            project = find_project_root()
+
+        result = ExecuteSerenaCodeTool.execute_code(code_to_execute, project_path=project, log_level=lvl)
+        click.echo(result)
 
 
 class ModeCommands(AutoRegisteringGroup):

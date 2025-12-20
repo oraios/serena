@@ -205,7 +205,9 @@ class Tool(Component):
                 params[param] = value
         log.info(f"{self.get_name_from_cls()}: {dict_string(params)}")
 
-    def _limit_length(self, result: str, max_answer_chars: int) -> str:
+    def _limit_length(self, result: str, max_answer_chars: int | None) -> str:
+        if max_answer_chars is None:
+            return result
         if max_answer_chars == -1:
             max_answer_chars = self.agent.serena_config.default_max_tool_answer_chars
         if max_answer_chars <= 0:
