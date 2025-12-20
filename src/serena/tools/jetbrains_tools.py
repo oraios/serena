@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from serena.tools import Tool, ToolMarkerOptional, ToolMarkerSymbolicRead
 from serena.tools.jetbrains_plugin_client import JetBrainsPluginClient
 
@@ -117,5 +119,15 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
             response_dict = client.get_symbols_overview(
                 relative_path=relative_path,
             )
-            result = self._to_json(response_dict)
+        symbols = response_dict["symbols"]
+        # symbols come with name_path and type, we group them by type for token efficiency
+        grouped_symbols = defaultdict(list)
+        for symbol in symbols:
+            type = symbol.pop("type", "unknown")
+            if len(symbol) == 1:
+                # we only have the name_path key, no need to repeat it in each entry
+                symbol = symbol["name_path"]
+            grouped_symbols[type].append(symbol)
+        response_dict["symbols"] = grouped_symbols
+        result = self._to_json(response_dict)
         return self._limit_length(result, max_answer_chars)
