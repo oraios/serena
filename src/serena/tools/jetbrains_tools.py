@@ -98,6 +98,8 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
     Retrieves an overview of the top-level symbols within a specified file using the JetBrains backend
     """
 
+    # TODO: support depth param, structure output in the same way as in GetSymbolsOverviewTool (by extracting
+    #   the post-processing logic used there into a shared utility function)
     def apply(
         self,
         relative_path: str,
