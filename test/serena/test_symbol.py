@@ -1,6 +1,6 @@
 import pytest
 
-from src.serena.symbol import LanguageServerSymbol
+from serena.symbol import NamePathMatcher
 
 
 class TestSymbolNameMatching:
@@ -77,7 +77,7 @@ class TestSymbolNameMatching:
     )
     def test_match_simple_name(self, name_path_pattern, symbol_name_path_parts, is_substring_match, expected):
         """Tests matching for simple names (no '/' in pattern)."""
-        result = LanguageServerSymbol.match_name_path(name_path_pattern, symbol_name_path_parts, is_substring_match)
+        result = NamePathMatcher(name_path_pattern, is_substring_match).matches_components(symbol_name_path_parts, None)
         error_msg = self._create_assertion_error_message(name_path_pattern, symbol_name_path_parts, is_substring_match, expected, result)
         assert result == expected, error_msg
 
@@ -157,6 +157,22 @@ class TestSymbolNameMatching:
     )
     def test_match_name_path_pattern_path_len_2(self, name_path_pattern, symbol_name_path_parts, is_substring_match, expected):
         """Tests matching for qualified names (e.g. 'module/class/func')."""
-        result = LanguageServerSymbol.match_name_path(name_path_pattern, symbol_name_path_parts, is_substring_match)
+        result = NamePathMatcher(name_path_pattern, is_substring_match).matches_components(symbol_name_path_parts, None)
         error_msg = self._create_assertion_error_message(name_path_pattern, symbol_name_path_parts, is_substring_match, expected, result)
+        assert result == expected, error_msg
+
+    @pytest.mark.parametrize(
+        "name_path_pattern, symbol_name_path_parts, symbol_overload_idx, expected",
+        [
+            pytest.param("bar/foo", ["bar", "foo"], 0, True, id="R: 'bar/foo' matches ['bar', 'foo'] with overload_index=0"),
+            pytest.param("bar/foo", ["bar", "foo"], 1, True, id="R: 'bar/foo' matches ['bar', 'foo'] with overload_index=1"),
+            pytest.param("bar/foo[0]", ["bar", "foo"], 0, True, id="R: 'bar/foo[0]' matches ['bar', 'foo'] with overload_index=0"),
+            pytest.param("bar/foo[1]", ["bar", "foo"], 0, False, id="R: 'bar/foo[1]' does not match ['bar', 'foo'] with overload_index=0"),
+        ],
+    )
+    def test_match_name_path_pattern_with_overload_idx(self, name_path_pattern, symbol_name_path_parts, symbol_overload_idx, expected):
+        """Tests matching for qualified names (e.g. 'module/class/func')."""
+        matcher = NamePathMatcher(name_path_pattern, False)
+        result = matcher.matches_components(symbol_name_path_parts, symbol_overload_idx)
+        error_msg = self._create_assertion_error_message(name_path_pattern, symbol_name_path_parts, False, expected, result)
         assert result == expected, error_msg

@@ -115,7 +115,7 @@ class SafeZipExtractor:
         """
         if sys.platform.startswith("win"):
             return Path(rf"\\?\{os.path.abspath(path)}")
-        return path
+        return path  # type: ignore
 
 
 # Example usage:

@@ -89,7 +89,7 @@ class TestRubyLanguageServerSymbols:
         """Test request_containing_symbol for a module context."""
         # Test that we can find the Services module in document symbols
         file_path = os.path.join("services.rb")
-        symbols, roots = language_server.request_document_symbols(file_path)
+        symbols, _roots = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Verify Services module appears in document symbols
         services_module = None
@@ -141,7 +141,7 @@ class TestRubyLanguageServerSymbols:
         # Test referencing symbols for create_user method
         file_path = os.path.join("services.rb")
         # Line containing the create_user method definition
-        symbols, roots = language_server.request_document_symbols(file_path)
+        symbols, _roots = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         create_user_symbol = None
 
         # Find create_user method in the document symbols (Ruby returns flat list)
@@ -169,7 +169,7 @@ class TestRubyLanguageServerSymbols:
         # Test referencing symbols for User class
         file_path = os.path.join("models.rb")
         # Find User class in document symbols
-        symbols, roots = language_server.request_document_symbols(file_path)
+        symbols, _roots = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         user_symbol = None
 
         for symbol in symbols:
@@ -285,7 +285,7 @@ class TestRubyLanguageServerSymbols:
     def test_document_symbols_detailed(self, language_server: SolidLanguageServer) -> None:
         """Test document symbols for detailed Ruby file structure."""
         file_path = os.path.join("models.rb")
-        symbols, roots = language_server.request_document_symbols(file_path)
+        symbols, roots = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Verify we have symbols
         assert len(symbols) > 0 or len(roots) > 0
@@ -310,7 +310,7 @@ class TestRubyLanguageServerSymbols:
     def test_module_and_class_hierarchy(self, language_server: SolidLanguageServer) -> None:
         """Test symbol detection for modules and nested class hierarchies."""
         file_path = os.path.join("nested.rb")
-        symbols, roots = language_server.request_document_symbols(file_path)
+        symbols, roots = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Verify we can detect the nested structure
         assert len(symbols) > 0 or len(roots) > 0
@@ -363,7 +363,7 @@ class TestRubyLanguageServerSymbols:
         # Test referencing symbols for a method parameter in get_user method
         file_path = os.path.join("services.rb")
         # Find get_user method and test parameter references
-        symbols, roots = language_server.request_document_symbols(file_path)
+        symbols, _roots = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         get_user_symbol = None
 
         for symbol in symbols:

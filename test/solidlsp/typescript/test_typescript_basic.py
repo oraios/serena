@@ -19,7 +19,7 @@ class TestTypescriptLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.TYPESCRIPT], indirect=True)
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("index.ts")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         helper_symbol = None
         for sym in symbols[0]:
             if sym.get("name") == "helperFunction":

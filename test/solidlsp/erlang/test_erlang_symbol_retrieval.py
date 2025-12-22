@@ -126,7 +126,7 @@ class TestErlangLanguageServerSymbols:
         # Test referencing symbols for user record
         file_path = os.path.join("include", "records.hrl")
 
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         user_symbol = None
         for symbol_group in symbols:
             user_symbol = next((s for s in symbol_group if "user" in s.get("name", "")), None)
@@ -156,7 +156,7 @@ class TestErlangLanguageServerSymbols:
         # Test referencing symbols for create_user function
         file_path = os.path.join("src", "models.erl")
 
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         create_user_symbol = None
         for symbol_group in symbols:
             create_user_symbol = next((s for s in symbol_group if "create_user" in s.get("name", "")), None)
@@ -306,7 +306,7 @@ class TestErlangLanguageServerSymbols:
                 # We should find some references or none (both are valid outcomes)
                 assert isinstance(refs, list)
 
-    @pytest.mark.timeout(120)  # Add explicit timeout for this complex test
+    @pytest.mark.timeout(60)  # Add 60 second timeout
     @pytest.mark.xfail(
         reason="Known intermittent timeout issue in Erlang LS in CI environments. "
         "May pass locally but can timeout on slower CI systems.",
@@ -405,7 +405,7 @@ class TestErlangLanguageServerSymbols:
             expected_names = ["models", "create_user"]
             assert any(name in containing_symbol["name"] for name in expected_names)
 
-    @pytest.mark.timeout(90)  # Add explicit timeout
+    @pytest.mark.timeout(60)  # Add 60 second timeout
     @pytest.mark.xfail(
         reason="Known intermittent timeout issue in Erlang LS in CI environments. "
         "May pass locally but can timeout on slower CI systems, especially macOS. "
@@ -418,7 +418,7 @@ class TestErlangLanguageServerSymbols:
         # Test that we can find references to models module functions in services.erl
         file_path = os.path.join("src", "models.erl")
 
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         create_user_symbol = None
         for symbol_group in symbols:
             create_user_symbol = next((s for s in symbol_group if "create_user" in s.get("name", "")), None)

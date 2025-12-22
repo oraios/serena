@@ -1,10 +1,19 @@
+language_backend: LSP
+# the language backend to use for code understanding and manipulation.
+# Possible values are:
+#  * LSP: Use the language server protocol (LSP), spawning freely available language servers
+#      via the SolidLSP library that is part of Serena.
+#  * JetBrains: Use the Serena plugin in your JetBrains IDE.
+#      (requires the plugin to be installed and the project being worked on to be open
+#      in your IDE).
+
 gui_log_window: False
 # whether to open a graphical window with Serena's logs.
 # This is mainly supported on Windows and (partly) on Linux; not available on macOS.
 # If you want to see the logs in a web browser, use the `web_dashboard` option instead.
 # Limitations: doesn't seem to work with the community version of Claude Desktop for Linux
 # Might also cause problems with some MCP clients - if you have any issues, try disabling this
-
+#
 # Being able to inspect logs is useful both for troubleshooting and for monitoring the tool calls,
 # especially when using the agno playground, since the tool calls are not always shown,
 # and the input params are never shown in the agno UI.
@@ -19,6 +28,9 @@ web_dashboard: True
 # whether to open the Serena web dashboard (which will be accessible through your web browser) that
 # shows Serena's current session logs - as an alternative to the GUI log window which
 # is supported on all platforms.
+
+web_dashboard_listen_address: 127.0.0.1
+# The address where the web dashboard will listen on
 
 web_dashboard_open_on_launch: True
 # whether to open a browser window with the web dashboard when Serena starts (provided that web_dashboard
@@ -37,8 +49,8 @@ ls_specific_settings: {}
 # Added on 23.08.2025
 # Advanced configuration option allowing to configure language server implementation specific options. Maps the language
 # (same entry as in project.yml) to the options.
-# Have a look at the docstring of the constructors of the LS implementations within solidlsp to see which options are available.
-# No documentation on options means no options are available
+# Have a look at the docstring of the constructors of the LS implementations within solidlsp (e.g., for C# or PHP) to see which options are available.
+# No documentation on options means no options are available.
 
 tool_timeout: 240
 # timeout, in seconds, after which tool executions are terminated
@@ -49,36 +61,19 @@ excluded_tools: []
 included_optional_tools: []
 # list of optional tools (which are disabled by default) to be included
 
-jetbrains: False
-# whether to enable JetBrains mode and use tools based on the Serena JetBrains IDE plugin
-# instead of language server-based tools
-# NOTE: The plugin is yet unreleased. This is for Serena developers only.
-
-
 default_max_tool_answer_chars: 150000
 # Used as default for tools where the apply method has a default maximal answer length.
 # Even though the value of the max_answer_chars can be changed when calling the tool, it may make sense to adjust this default
 # through the global configuration.
 
-record_tool_usage_stats:  False
-# whether to record tool usage statistics, they will be shown in the web dashboard if recording is active.
-
-token_count_estimator: TIKTOKEN_GPT4O
-# Only relevant if `record_tool_usage` is True; the name of the token count estimator to use for tool usage statistics.
+token_count_estimator: CHAR_COUNT
+# the name of the token count estimator to use for tool usage statistics.
 # See the `RegisteredTokenCountEstimator` enum for available options.
 #
-# Note: some token estimators (like tiktoken) may require downloading data files
-# on the first run, which can take some time and require internet access. Others, like the Anthropic ones, may require an API key
-# and rate limits may apply.
+# By default, a very naive character count estimator is used, which simply counts the number of characters.
+# You can configure this to TIKTOKEN_GPT4 to use a local tiktoken-based estimator for GPT-4 (will download tiktoken
+# data files on first run), or ANTHROPIC_CLAUDE_SONNET_4 which will use the (free of cost) Anthropic API to
+# estimate the token count using the Claude Sonnet 4 tokenizer.
 
-
-# MANAGED BY SERENA, KEEP AT THE BOTTOM OF THE YAML AND DON'T EDIT WITHOUT NEED
-# The list of registered projects.
-# To add a project, within a chat, simply ask Serena to "activate the project /path/to/project" or,
-# if the project was previously added, "activate the project <project name>".
-# By default, the project's name will be the name of the directory containing the project, but you may change it
-# by editing the (auto-generated) project configuration file `/path/project/project/.serena/project.yml` file.
-# If you want to maintain full control of the project configuration, create the project.yml file manually and then
-# instruct Serena to activate the project by its path for first-time activation.
-# NOTE: Make sure there are no name collisions in the names of registered projects.
+# The list of registered project paths (updated automatically).
 projects: []

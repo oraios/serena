@@ -3,15 +3,17 @@ import os
 import pathlib
 import subprocess
 import threading
+from typing import Any
 
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 class RLanguageServer(SolidLanguageServer):
@@ -32,7 +34,7 @@ class RLanguageServer(SolidLanguageServer):
         ]
 
     @staticmethod
-    def _check_r_installation():
+    def _check_r_installation() -> None:
         """Check if R and languageserver are available."""
         try:
             # Check R installation
@@ -56,9 +58,7 @@ class RLanguageServer(SolidLanguageServer):
         except FileNotFoundError:
             raise RuntimeError("R is not installed. Please install R from https://www.r-project.org/")
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         # Check R installation
         self._check_r_installation()
 
@@ -67,14 +67,7 @@ class RLanguageServer(SolidLanguageServer):
         # Set specific options to improve parsing stability
         r_cmd = 'R --vanilla --quiet --slave -e "options(languageserver.debug_mode = FALSE); languageserver::run()"'
 
-        super().__init__(
-            config,
-            logger,
-            repository_root_path,
-            ProcessLaunchInfo(cmd=r_cmd, cwd=repository_root_path),
-            "r",
-            solidlsp_settings,
-        )
+        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=r_cmd, cwd=repository_root_path), "r", solidlsp_settings)
         self.server_ready = threading.Event()
 
     @staticmethod
@@ -126,18 +119,18 @@ class RLanguageServer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return initialize_params  # type: ignore
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """Start R Language Server process."""
 
-        def window_log_message(msg):
-            self.logger.log(f"R LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"R LSP: window/logMessage: {msg}")
 
-        def do_nothing(params):
+        def do_nothing(params: Any) -> None:
             return
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: Any) -> None:
             return
 
         # Register LSP message handlers
@@ -146,13 +139,12 @@ class RLanguageServer(SolidLanguageServer):
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        self.logger.log("Starting R Language Server process", logging.INFO)
+        log.info("Starting R Language Server process")
         self.server.start()
 
         initialize_params = self._get_initialize_params(self.repository_root_path)
-        self.logger.log(
+        log.info(
             "Sending initialize request to R Language Server",
-            logging.INFO,
         )
 
         init_response = self.server.send.initialize(initialize_params)
@@ -161,9 +153,9 @@ class RLanguageServer(SolidLanguageServer):
         capabilities = init_response.get("capabilities", {})
         assert "textDocumentSync" in capabilities
         if "completionProvider" in capabilities:
-            self.logger.log("R LSP completion provider available", logging.INFO)
+            log.info("R LSP completion provider available")
         if "definitionProvider" in capabilities:
-            self.logger.log("R LSP definition provider available", logging.INFO)
+            log.info("R LSP definition provider available")
 
         self.server.notify.initialized({})
         self.completions_available.set()

@@ -7,13 +7,14 @@ import os
 import pathlib
 import shutil
 import threading
+from typing import Any, cast
 
 from overrides import override
 from sensai.util.logging import LogTime
 
+from solidlsp import ls_types
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -21,14 +22,16 @@ from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
+log = logging.getLogger(__name__)
+
 # Platform-specific imports
 if os.name != "nt":  # Unix-like systems
     import pwd
 else:
     # Dummy pwd module for Windows
-    class pwd:
+    class pwd:  # type: ignore
         @staticmethod
-        def getpwuid(uid):
+        def getpwuid(uid: Any) -> Any:
             return type("obj", (), {"pw_name": os.environ.get("USERNAME", "unknown")})()
 
 
@@ -37,21 +40,41 @@ if not PlatformUtils.get_platform_id().value.startswith("win"):
     pass
 
 
+def prefer_non_node_modules_definition(definitions: list[ls_types.Location]) -> ls_types.Location:
+    """
+    Select the preferred definition, preferring source files over type definitions.
+
+    TypeScript language servers often return both type definitions (.d.ts files
+    in node_modules) and source definitions. This function prefers:
+    1. Files not in node_modules
+    2. Falls back to first definition if all are in node_modules
+
+    :param definitions: A non-empty list of definition locations.
+    :return: The preferred definition location.
+    """
+    for d in definitions:
+        rel_path = d.get("relativePath", "")
+        if rel_path and "node_modules" not in rel_path:
+            return d
+    return definitions[0]
+
+
 class TypeScriptLanguageServer(SolidLanguageServer):
     """
     Provides TypeScript specific instantiation of the LanguageServer class. Contains various configurations and settings specific to TypeScript.
+
+    You can pass the following entries in ls_specific_settings["typescript"]:
+        - typescript_version: Version of TypeScript to install (default: "5.9.3")
+        - typescript_language_server_version: Version of typescript-language-server to install (default: "5.1.3")
     """
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a TypeScriptLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        ts_lsp_executable_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
+        ts_lsp_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
         super().__init__(
             config,
-            logger,
             repository_root_path,
             ProcessLaunchInfo(cmd=ts_lsp_executable_path, cwd=repository_root_path),
             "typescript",
@@ -69,10 +92,13 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             "coverage",
         ]
 
+    @staticmethod
+    def _determine_log_level(line: str) -> int:
+        """Classify typescript-language-server stderr output to avoid false-positive errors."""
+        return SolidLanguageServer._determine_log_level(line)
+
     @classmethod
-    def _setup_runtime_dependencies(
-        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> list[str]:
+    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> list[str]:
         """
         Setup runtime dependencies for TypeScript Language Server and return the command to start the server.
         """
@@ -89,18 +115,23 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy javascript/typescript at the moment"
 
+        # Get version settings from ls_specific_settings or use defaults
+        language_specific_config = solidlsp_settings.get_ls_specific_settings(cls.get_language_enum_instance())
+        typescript_version = language_specific_config.get("typescript_version", "5.9.3")
+        typescript_language_server_version = language_specific_config.get("typescript_language_server_version", "5.1.3")
+
         deps = RuntimeDependencyCollection(
             [
                 RuntimeDependency(
                     id="typescript",
                     description="typescript package",
-                    command=["npm", "install", "--prefix", "./", "typescript@5.5.4"],
+                    command=["npm", "install", "--prefix", "./", f"typescript@{typescript_version}"],
                     platform_id="any",
                 ),
                 RuntimeDependency(
                     id="typescript-language-server",
                     description="typescript-language-server package",
-                    command=["npm", "install", "--prefix", "./", "typescript-language-server@4.3.3"],
+                    command=["npm", "install", "--prefix", "./", f"typescript-language-server@{typescript_language_server_version}"],
                     platform_id="any",
                 ),
             ]
@@ -112,19 +143,39 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         is_npm_installed = shutil.which("npm") is not None
         assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
-        # Verify both node and npm are installed
-        is_node_installed = shutil.which("node") is not None
-        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which("npm") is not None
-        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
-
-        # Install typescript and typescript-language-server if not already installed
+        # Install typescript and typescript-language-server if not already installed or version mismatch
         tsserver_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "ts-lsp")
         tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
+
+        # Check if installation is needed based on executable AND version
+        version_file = os.path.join(tsserver_ls_dir, ".installed_version")
+        expected_version = f"{typescript_version}_{typescript_language_server_version}"
+
+        needs_install = False
         if not os.path.exists(tsserver_executable_path):
-            logger.log(f"Typescript Language Server executable not found at {tsserver_executable_path}. Installing...", logging.INFO)
-            with LogTime("Installation of TypeScript language server dependencies", logger=logger.logger):
-                deps.install(logger, tsserver_ls_dir)
+            log.info(f"Typescript Language Server executable not found at {tsserver_executable_path}.")
+            needs_install = True
+        elif os.path.exists(version_file):
+            with open(version_file) as f:
+                installed_version = f.read().strip()
+            if installed_version != expected_version:
+                log.info(
+                    f"TypeScript Language Server version mismatch: installed={installed_version}, expected={expected_version}. Reinstalling..."
+                )
+                needs_install = True
+        else:
+            # No version file exists, assume old installation needs refresh
+            log.info("TypeScript Language Server version file not found. Reinstalling to ensure correct version...")
+            needs_install = True
+
+        if needs_install:
+            log.info("Installing TypeScript Language Server dependencies...")
+            with LogTime("Installation of TypeScript language server dependencies", logger=log):
+                deps.install(tsserver_ls_dir)
+            # Write version marker file
+            with open(version_file, "w") as f:
+                f.write(expected_version)
+            log.info("TypeScript language server dependencies installed successfully")
 
         if not os.path.exists(tsserver_executable_path):
             raise FileNotFoundError(
@@ -132,8 +183,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             )
         return [tsserver_executable_path, "--stdio"]
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the TypeScript Language Server.
         """
@@ -154,6 +204,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                     "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
                     "signatureHelp": {"dynamicRegistration": True},
                     "codeAction": {"dynamicRegistration": True},
+                    "rename": {"dynamicRegistration": True, "prepareSupport": True},
                 },
                 "workspace": {
                     "workspaceFolders": True,
@@ -171,9 +222,9 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the TypeScript Language Server, waits for the server to be ready and yields the LanguageServer instance.
 
@@ -187,7 +238,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         # LanguageServer has been shutdown
         """
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "workspace/executeCommand":
@@ -197,16 +248,16 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                     # self.resolve_main_method_available.set()
             return
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: dict) -> list:
             return []
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def window_log_message(msg):
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"LSP: window/logMessage: {msg}")
 
-        def check_experimental_status(params):
+        def check_experimental_status(params: dict) -> None:
             """
             Also listen for experimental/serverStatus as a backup signal
             """
@@ -221,13 +272,12 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
-        self.logger.log("Starting TypeScript server process", logging.INFO)
+        log.info("Starting TypeScript server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
+        log.info(
             "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
         )
         init_response = self.server.send.initialize(initialize_params)
 
@@ -241,9 +291,9 @@ class TypeScriptLanguageServer(SolidLanguageServer):
 
         self.server.notify.initialized({})
         if self.server_ready.wait(timeout=1.0):
-            self.logger.log("TypeScript server is ready", logging.INFO)
+            log.info("TypeScript server is ready")
         else:
-            self.logger.log("Timeout waiting for TypeScript server to become ready, proceeding anyway", logging.INFO)
+            log.info("Timeout waiting for TypeScript server to become ready, proceeding anyway")
             # Fallback: assume server is ready after timeout
             self.server_ready.set()
         self.completions_available.set()
@@ -251,3 +301,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
         return 1
+
+    @override
+    def _get_preferred_definition(self, definitions: list[ls_types.Location]) -> ls_types.Location:
+        return prefer_non_node_modules_definition(definitions)

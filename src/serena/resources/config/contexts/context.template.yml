@@ -9,3 +9,10 @@ included_optional_tools: []
 # mapping of tool names to an override of their descriptions (the default description is the docstring of the Tool's apply method).
 # Sometimes, tool descriptions are too long (e.g., for ChatGPT), or users may want to override them for another reason.
 tool_description_overrides: {}
+
+# whether to assume that Serena shall only work on a single project in this context (provided that a project is given
+# when Serena is started).
+# If set to true and a project is provided at startup, the set of tools is limited to those required by the project's
+# concrete configuration, and other tools are excluded completely, allowing the set of tools to be minimal.
+# The `activate_project` tool will, therefore, be disabled in this case, as project switching is not allowed.
+single_project: false

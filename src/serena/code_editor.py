@@ -4,13 +4,14 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Reversible
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Generic, Optional, TypeVar
+from typing import TYPE_CHECKING, Generic, Optional, TypeVar, cast
 
 from serena.symbol import JetBrainsSymbol, LanguageServerSymbol, LanguageServerSymbolRetriever, PositionInFile, Symbol
-from solidlsp import SolidLanguageServer
+from solidlsp import SolidLanguageServer, ls_types
 from solidlsp.ls import LSPFileBuffer
-from solidlsp.ls_utils import TextUtils
+from solidlsp.ls_utils import PathUtils, TextUtils
 
+from .constants import DEFAULT_SOURCE_FILE_ENCODING
 from .project import Project
 from .tools.jetbrains_plugin_client import JetBrainsPluginClient
 
@@ -27,7 +28,18 @@ class CodeEditor(Generic[TSymbol], ABC):
         self.project_root = project_root
         self.agent = agent
 
+        # set encoding based on active project, if available
+        encoding = DEFAULT_SOURCE_FILE_ENCODING
+        if agent is not None:
+            project = agent.get_active_project()
+            if project is not None:
+                encoding = project.project_config.encoding
+        self.encoding = encoding
+
     class EditedFile(ABC):
+        def __init__(self, relative_path: str) -> None:
+            self.relative_path = relative_path
+
         @abstractmethod
         def get_contents(self) -> str:
             """
@@ -57,12 +69,12 @@ class CodeEditor(Generic[TSymbol], ABC):
         with self._open_file_context(relative_path) as edited_file:
             yield edited_file
             # save the file
-            abs_path = os.path.join(self.project_root, relative_path)
-            with open(abs_path, "w", encoding="utf-8") as f:
-                f.write(edited_file.get_contents())
-            # notify agent (if provided)
-            if self.agent is not None:
-                self.agent.mark_file_modified(relative_path)
+            self._save_edited_file(edited_file)
+
+    def _save_edited_file(self, edited_file: "CodeEditor.EditedFile") -> None:
+        abs_path = os.path.join(self.project_root, edited_file.relative_path)
+        with open(abs_path, "w", encoding=self.encoding) as f:
+            f.write(edited_file.get_contents())
 
     @abstractmethod
     def _find_unique_symbol(self, name_path: str, relative_file_path: str) -> TSymbol:
@@ -210,50 +222,148 @@ class CodeEditor(Generic[TSymbol], ABC):
         with self._edited_file_context(relative_file_path) as edited_file:
             edited_file.delete_text_between_positions(start_pos, end_pos)
 
+    @abstractmethod
+    def rename_symbol(self, name_path: str, relative_file_path: str, new_name: str) -> str:
+        """
+        Renames the symbol with the given name throughout the codebase.
+
+        :param name_path: the name path of the symbol to rename
+        :param relative_file_path: the relative path of the file containing the symbol
+        :param new_name: the new name for the symbol
+        :return: a status message
+        """
+
 
 class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
     def __init__(self, symbol_retriever: LanguageServerSymbolRetriever, agent: Optional["SerenaAgent"] = None):
-        super().__init__(project_root=symbol_retriever.get_language_server().repository_root_path, agent=agent)
+        super().__init__(project_root=symbol_retriever.get_root_path(), agent=agent)
         self._symbol_retriever = symbol_retriever
 
-    @property
-    def _lang_server(self) -> SolidLanguageServer:
-        return self._symbol_retriever.get_language_server()
+    def _get_language_server(self, relative_path: str) -> SolidLanguageServer:
+        return self._symbol_retriever.get_language_server(relative_path)
 
     class EditedFile(CodeEditor.EditedFile):
         def __init__(self, lang_server: SolidLanguageServer, relative_path: str, file_buffer: LSPFileBuffer):
+            super().__init__(relative_path)
             self._lang_server = lang_server
-            self._relative_path = relative_path
             self._file_buffer = file_buffer
 
         def get_contents(self) -> str:
             return self._file_buffer.contents
 
         def delete_text_between_positions(self, start_pos: PositionInFile, end_pos: PositionInFile) -> None:
-            self._lang_server.delete_text_between_positions(self._relative_path, start_pos.to_lsp_position(), end_pos.to_lsp_position())
+            self._lang_server.delete_text_between_positions(self.relative_path, start_pos.to_lsp_position(), end_pos.to_lsp_position())
 
         def insert_text_at_position(self, pos: PositionInFile, text: str) -> None:
-            self._lang_server.insert_text_at_position(self._relative_path, pos.line, pos.col, text)
+            self._lang_server.insert_text_at_position(self.relative_path, pos.line, pos.col, text)
+
+        def apply_text_edits(self, text_edits: list[ls_types.TextEdit]) -> None:
+            return self._lang_server.apply_text_edits_to_file(self.relative_path, text_edits)
 
     @contextmanager
     def _open_file_context(self, relative_path: str) -> Iterator["CodeEditor.EditedFile"]:
-        with self._lang_server.open_file(relative_path) as file_buffer:
-            yield self.EditedFile(self._lang_server, relative_path, file_buffer)
+        lang_server = self._get_language_server(relative_path)
+        with lang_server.open_file(relative_path) as file_buffer:
+            yield self.EditedFile(lang_server, relative_path, file_buffer)
 
     def _get_code_file_content(self, relative_path: str) -> str:
         """Get the content of a file using the language server."""
-        return self._lang_server.language_server.retrieve_full_file_content(relative_path)
+        lang_server = self._get_language_server(relative_path)
+        return lang_server.language_server.retrieve_full_file_content(relative_path)
 
     def _find_unique_symbol(self, name_path: str, relative_file_path: str) -> LanguageServerSymbol:
-        symbol_candidates = self._symbol_retriever.find_by_name(name_path, within_relative_path=relative_file_path)
-        if len(symbol_candidates) == 0:
-            raise ValueError(f"No symbol with name {name_path} found in file {relative_file_path}")
-        if len(symbol_candidates) > 1:
+        return self._symbol_retriever.find_unique(name_path, within_relative_path=relative_file_path)
+
+    def _relative_path_from_uri(self, uri: str) -> str:
+        return os.path.relpath(PathUtils.uri_to_path(uri), self.project_root)
+
+    class EditOperation(ABC):
+        @abstractmethod
+        def apply(self) -> None:
+            pass
+
+    class EditOperationFileTextEdits(EditOperation):
+        def __init__(self, code_editor: "LanguageServerCodeEditor", file_uri: str, text_edits: list[ls_types.TextEdit]):
+            self._code_editor = code_editor
+            self._relative_path = code_editor._relative_path_from_uri(file_uri)
+            self._text_edits = text_edits
+
+        def apply(self) -> None:
+            with self._code_editor._edited_file_context(self._relative_path) as edited_file:
+                edited_file = cast(LanguageServerCodeEditor.EditedFile, edited_file)
+                edited_file.apply_text_edits(self._text_edits)
+
+    class EditOperationRenameFile(EditOperation):
+        def __init__(self, code_editor: "LanguageServerCodeEditor", old_uri: str, new_uri: str):
+            self._code_editor = code_editor
+            self._old_relative_path = code_editor._relative_path_from_uri(old_uri)
+            self._new_relative_path = code_editor._relative_path_from_uri(new_uri)
+
+        def apply(self) -> None:
+            old_abs_path = os.path.join(self._code_editor.project_root, self._old_relative_path)
+            new_abs_path = os.path.join(self._code_editor.project_root, self._new_relative_path)
+            os.rename(old_abs_path, new_abs_path)
+
+    def _workspace_edit_to_edit_operations(self, workspace_edit: ls_types.WorkspaceEdit) -> list["LanguageServerCodeEditor.EditOperation"]:
+        operations: list[LanguageServerCodeEditor.EditOperation] = []
+
+        if "changes" in workspace_edit:
+            for uri, edits in workspace_edit["changes"].items():
+                operations.append(self.EditOperationFileTextEdits(self, uri, edits))
+
+        if "documentChanges" in workspace_edit:
+            for change in workspace_edit["documentChanges"]:
+                if "textDocument" in change and "edits" in change:
+                    operations.append(self.EditOperationFileTextEdits(self, change["textDocument"]["uri"], change["edits"]))
+                elif "kind" in change:
+                    if change["kind"] == "rename":
+                        operations.append(self.EditOperationRenameFile(self, change["oldUri"], change["newUri"]))
+                    else:
+                        raise ValueError(f"Unhandled document change kind: {change}; Please report to Serena developers.")
+                else:
+                    raise ValueError(f"Unhandled document change format: {change}; Please report to Serena developers.")
+
+        return operations
+
+    def _apply_workspace_edit(self, workspace_edit: ls_types.WorkspaceEdit) -> int:
+        """
+        Applies a WorkspaceEdit
+
+        :param workspace_edit: the edit to apply
+        :return: number of edit operations applied
+        """
+        operations = self._workspace_edit_to_edit_operations(workspace_edit)
+        for operation in operations:
+            operation.apply()
+        return len(operations)
+
+    def rename_symbol(self, name_path: str, relative_file_path: str, new_name: str) -> str:
+        symbol = self._find_unique_symbol(name_path, relative_file_path)
+        if not symbol.location.has_position_in_file():
+            raise ValueError(f"Symbol '{name_path}' does not have a valid position in file for renaming")
+
+        # After has_position_in_file check, line and column are guaranteed to be non-None
+        assert symbol.location.line is not None
+        assert symbol.location.column is not None
+
+        lang_server = self._get_language_server(relative_file_path)
+        rename_result = lang_server.request_rename_symbol_edit(
+            relative_file_path=relative_file_path, line=symbol.location.line, column=symbol.location.column, new_name=new_name
+        )
+        if rename_result is None:
             raise ValueError(
-                f"Found multiple {len(symbol_candidates)} symbols with name {name_path} in file {relative_file_path}. "
-                "Their locations are: \n " + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
+                f"Language server for {lang_server.language_id} returned no rename edits for symbol '{name_path}'. "
+                f"The symbol might not support renaming."
             )
-        return symbol_candidates[0]
+        num_changes = self._apply_workspace_edit(rename_result)
+
+        if num_changes == 0:
+            raise ValueError(
+                f"Renaming symbol '{name_path}' to '{new_name}' resulted in no changes being applied; renaming may not be supported."
+            )
+
+        msg = f"Successfully renamed '{name_path}' to '{new_name}' ({num_changes} changes applied)"
+        return msg
 
 
 class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
@@ -263,6 +373,7 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
 
     class EditedFile(CodeEditor.EditedFile):
         def __init__(self, relative_path: str, project: Project):
+            super().__init__(relative_path)
             path = os.path.join(project.project_root, relative_path)
             log.info("Editing file: %s", path)
             with open(path, encoding=project.project_config.encoding) as f:
@@ -283,6 +394,11 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
     def _open_file_context(self, relative_path: str) -> Iterator["CodeEditor.EditedFile"]:
         yield self.EditedFile(relative_path, self._project)
 
+    def _save_edited_file(self, edited_file: "CodeEditor.EditedFile") -> None:
+        super()._save_edited_file(edited_file)
+        with JetBrainsPluginClient.from_project(self._project) as client:
+            client.refresh_file(edited_file.relative_path)
+
     def _find_unique_symbol(self, name_path: str, relative_file_path: str) -> JetBrainsSymbol:
         with JetBrainsPluginClient.from_project(self._project) as client:
             result = client.find_symbol(name_path, relative_path=relative_file_path, include_body=False, depth=0, include_location=True)
@@ -295,3 +411,14 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
                     "Their locations are: \n " + json.dumps([s["location"] for s in symbols], indent=2)
                 )
             return JetBrainsSymbol(symbols[0], self._project)
+
+    def rename_symbol(self, name_path: str, relative_file_path: str, new_name: str) -> str:
+        with JetBrainsPluginClient.from_project(self._project) as client:
+            client.rename_symbol(
+                name_path=name_path,
+                relative_path=relative_file_path,
+                new_name=new_name,
+                rename_in_comments=False,
+                rename_in_text_occurrences=False,
+            )
+            return "Success"

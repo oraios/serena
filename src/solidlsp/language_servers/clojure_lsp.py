@@ -8,15 +8,17 @@ import pathlib
 import shutil
 import subprocess
 import threading
+from typing import cast
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
+
+log = logging.getLogger(__name__)
 
 
 def run_command(cmd: list, capture_output: bool = True) -> subprocess.CompletedProcess:
@@ -25,7 +27,7 @@ def run_command(cmd: list, capture_output: bool = True) -> subprocess.CompletedP
     )
 
 
-def verify_clojure_cli():
+def verify_clojure_cli() -> None:
     install_msg = "Please install the official Clojure CLI from:\n  https://clojure.org/guides/getting_started"
     if shutil.which("clojure") is None:
         raise FileNotFoundError("`clojure` not found.\n" + install_msg)
@@ -85,16 +87,13 @@ class ClojureLSP(SolidLanguageServer):
         ]
     )
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a ClojureLSP instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        clojure_lsp_executable_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
+        clojure_lsp_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
         super().__init__(
             config,
-            logger,
             repository_root_path,
             ProcessLaunchInfo(cmd=clojure_lsp_executable_path, cwd=repository_root_path),
             "clojure",
@@ -106,22 +105,19 @@ class ClojureLSP(SolidLanguageServer):
         self.service_ready_event = threading.Event()
 
     @classmethod
-    def _setup_runtime_dependencies(
-        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> str:
+    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> str:
         """Setup runtime dependencies for clojure-lsp and return the command to start the server."""
         verify_clojure_cli()
         deps = ClojureLSP.runtime_dependencies
-        dependency = deps.single_for_current_platform()
+        dependency = deps.get_single_dep_for_current_platform()
 
         clojurelsp_ls_dir = cls.ls_resources_dir(solidlsp_settings)
         clojurelsp_executable_path = deps.binary_path(clojurelsp_ls_dir)
         if not os.path.exists(clojurelsp_executable_path):
-            logger.log(
+            log.info(
                 f"Downloading and extracting clojure-lsp from {dependency.url} to {clojurelsp_ls_dir}",
-                logging.INFO,
             )
-            deps.install(logger, clojurelsp_ls_dir)
+            deps.install(clojurelsp_ls_dir)
         if not os.path.exists(clojurelsp_executable_path):
             raise FileNotFoundError(f"Download failed? Could not find clojure-lsp executable at {clojurelsp_executable_path}")
         os.chmod(clojurelsp_executable_path, 0o755)
@@ -131,7 +127,7 @@ class ClojureLSP(SolidLanguageServer):
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """Returns the init params for clojure-lsp."""
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
-        return {  # type: ignore
+        result = {  # type: ignore
             "processId": os.getpid(),
             "rootPath": repository_absolute_path,
             "rootUri": root_uri,
@@ -159,9 +155,10 @@ class ClojureLSP(SolidLanguageServer):
             "trace": "off",
             "workspaceFolders": [{"uri": root_uri, "name": os.path.basename(repository_absolute_path)}],
         }
+        return cast(InitializeParams, result)
 
-    def _start_server(self):
-        def register_capability_handler(params):
+    def _start_server(self) -> None:
+        def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "workspace/executeCommand":
@@ -169,25 +166,25 @@ class ClojureLSP(SolidLanguageServer):
                     self.resolve_main_method_available.set()
             return
 
-        def lang_status_handler(params):
+        def lang_status_handler(params: dict) -> None:
             # TODO: Should we wait for
             # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
             # Before proceeding?
             if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
                 self.service_ready_event.set()
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: dict) -> list:
             return []
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def check_experimental_status(params):
-            if params["quiescent"] == True:
+        def check_experimental_status(params: dict) -> None:
+            if params["quiescent"] is True:
                 self.server_ready.set()
 
-        def window_log_message(msg):
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"LSP: window/logMessage: {msg}")
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("language/status", lang_status_handler)
@@ -198,21 +195,18 @@ class ClojureLSP(SolidLanguageServer):
         self.server.on_notification("language/actionableNotification", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
-        self.logger.log("Starting clojure-lsp server process", logging.INFO)
+        log.info("Starting clojure-lsp server process")
         self.server.start()
 
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
-        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2
+        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2  # type: ignore
         assert "completionProvider" in init_response["capabilities"]
         # Clojure-lsp completion provider capabilities are more flexible than other servers'
         completion_provider = init_response["capabilities"]["completionProvider"]
-        assert completion_provider["resolveProvider"] == True
+        assert completion_provider["resolveProvider"] is True
         assert "triggerCharacters" in completion_provider
         self.server.notify.initialized({})
         # after initialize, Clojure-lsp is ready to serve

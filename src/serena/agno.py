@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Any
 
 from agno.agent import Agent
-from agno.memory import AgentMemory
+from agno.db.sqlite import SqliteDb
+from agno.memory import MemoryManager
 from agno.models.base import Model
-from agno.storage.sqlite import SqliteStorage
 from agno.tools.function import Function
 from agno.tools.toolkit import Toolkit
 from dotenv import load_dotenv
@@ -111,10 +111,9 @@ class SerenaAgnoAgentProvider:
                     raise
 
             # Even though we don't want to keep history between sessions,
-            # for agno-ui to work as a conversation, we use a persistent storage on disk.
-            # This storage should be deleted between sessions.
+            # for agno-ui to work as a conversation, we use a persistent database on disk.
+            # This database should be deleted between sessions.
             # Note that this might collide with custom options for the agent, like adding vector-search based tools.
-            # See here for an explanation: https://www.reddit.com/r/agno/comments/1jk6qea/regarding_the_built_in_memory/
             sql_db_path = (Path("temp") / "agno_agent_storage.db").absolute()
             sql_db_path.parent.mkdir(exist_ok=True)
             # delete the db file if it exists
@@ -125,19 +124,18 @@ class SerenaAgnoAgentProvider:
             agno_agent = Agent(
                 name="Serena",
                 model=model,
-                # See explanation above on why storage is needed
-                storage=SqliteStorage(table_name="serena_agent_sessions", db_file=str(sql_db_path)),
+                # See explanation above on why database is needed
+                db=SqliteDb(db_file=str(sql_db_path)),
                 description="A fully-featured coding assistant",
                 tools=[SerenaAgnoToolkit(serena_agent)],
-                # The tool calls will be shown in the UI anyway since whether to show them is configurable per tool
+                # Tool calls will be shown in the UI since that's configurable per tool
                 # To see detailed logs, you should use the serena logger (configure it in the project file path)
-                show_tool_calls=False,
                 markdown=True,
                 system_message=serena_agent.create_system_prompt(),
                 telemetry=False,
-                memory=AgentMemory(),
-                add_history_to_messages=True,
-                num_history_responses=100,  # you might want to adjust this (expense vs. history awareness)
+                memory_manager=MemoryManager(),
+                add_history_to_context=True,
+                num_history_runs=100,  # you might want to adjust this (expense vs. history awareness)
             )
             cls._agent = agno_agent
             log.info(f"Agent instantiated: {agno_agent}")

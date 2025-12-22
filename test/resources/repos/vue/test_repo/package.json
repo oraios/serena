@@ -1,0 +1,14 @@
+{
+  "name": "vue-calculator-test-fixture",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Vue 3 + Pinia + TypeScript test fixtures for Serena LSP testing",
+  "dependencies": {
+    "vue": "^3.4.0",
+    "pinia": "^2.1.0"
+  },
+  "devDependencies": {
+    "@vue/language-server": "^2.0.0",
+    "typescript": "~5.5.4"
+  }
+}

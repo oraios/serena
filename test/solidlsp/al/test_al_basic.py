@@ -5,6 +5,9 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
+from test.conftest import language_tests_enabled
+
+pytestmark = [pytest.mark.al, pytest.mark.skipif(not language_tests_enabled(Language.AL), reason="AL tests are disabled")]
 
 
 @pytest.mark.al
@@ -43,11 +46,11 @@ class TestALLanguageServer:
     def test_find_table_fields(self, language_server: SolidLanguageServer) -> None:
         """Test that AL Language Server can find fields within a table."""
         file_path = os.path.join("src", "Tables", "Customer.Table.al")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # AL tables should have their fields as child symbols
         customer_table = None
-        all_symbols, root_symbols = symbols
+        _all_symbols, root_symbols = symbols
         for sym in root_symbols:
             if "TEST Customer" in sym.get("name", ""):
                 customer_table = sym
@@ -76,11 +79,11 @@ class TestALLanguageServer:
     def test_find_procedures(self, language_server: SolidLanguageServer) -> None:
         """Test that AL Language Server can find procedures in codeunits."""
         file_path = os.path.join("src", "Codeunits", "CustomerMgt.Codeunit.al")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Find the codeunit symbol - AL returns 'Codeunit 50000 CustomerMgt'
         codeunit_symbol = None
-        all_symbols, root_symbols = symbols
+        _all_symbols, root_symbols = symbols
         for sym in root_symbols:
             if "CustomerMgt" in sym.get("name", ""):
                 codeunit_symbol = sym
@@ -100,11 +103,11 @@ class TestALLanguageServer:
         """Test that AL Language Server can find references to symbols."""
         # Find references to the Customer table from the CustomerMgt codeunit
         table_file = os.path.join("src", "Tables", "Customer.Table.al")
-        symbols = language_server.request_document_symbols(table_file)
+        symbols = language_server.request_document_symbols(table_file).get_all_symbols_and_roots()
 
         # Find the Customer table symbol
         customer_symbol = None
-        all_symbols, root_symbols = symbols
+        _all_symbols, root_symbols = symbols
         for sym in root_symbols:
             if "TEST Customer" in sym.get("name", ""):
                 customer_symbol = sym

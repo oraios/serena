@@ -5,7 +5,9 @@ from typing import cast
 from unittest.mock import Mock, patch
 
 import pytest
+from sensai.util import logging
 
+from serena.util.logging import SuspendedLoggersContext
 from solidlsp import SolidLanguageServer
 from solidlsp.language_servers.csharp_language_server import (
     CSharpLanguageServer,
@@ -31,7 +33,7 @@ class TestCSharpLanguageServer:
     def test_get_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test getting document symbols from a C# file."""
         file_path = os.path.join("Program.cs")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Check that we have symbols
         assert len(symbols) > 0
@@ -49,7 +51,7 @@ class TestCSharpLanguageServer:
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test finding references using symbol selection range."""
         file_path = os.path.join("Program.cs")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         add_symbol = None
         # Handle nested symbol structure
         symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
@@ -68,7 +70,7 @@ class TestCSharpLanguageServer:
     def test_nested_namespace_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test getting symbols from nested namespace."""
         file_path = os.path.join("Models", "Person.cs")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Check that we have symbols
         assert len(symbols) > 0
@@ -93,7 +95,7 @@ class TestCSharpLanguageServer:
         """Test finding references to Calculator.Subtract method across files."""
         # First, find the Subtract method in Program.cs
         file_path = os.path.join("Program.cs")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Flatten the symbols if they're nested
         symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
@@ -247,8 +249,6 @@ class TestCSharpSolutionProjectOpening:
             solution_file = temp_path / "TestSolution.sln"
             solution_file.touch()
 
-            # Mock logger to capture log messages
-            mock_logger = Mock()
             mock_config = Mock(spec=LanguageServerConfig)
             mock_config.ignored_paths = []
 
@@ -256,10 +256,15 @@ class TestCSharpSolutionProjectOpening:
             mock_settings = Mock(spec=SolidLSPSettings)
             mock_settings.ls_resources_dir = "/tmp/test_ls_resources"
             mock_settings.project_data_relative_path = "project_data"
-            CSharpLanguageServer(mock_config, mock_logger, str(temp_path), mock_settings)
 
-            # Verify that logger was called with solution file discovery
-            mock_logger.log.assert_any_call(f"Found solution/project file: {solution_file}", 20)  # logging.INFO
+            with SuspendedLoggersContext():
+                logging.getLogger().setLevel(logging.DEBUG)
+                with logging.MemoryLoggerContext() as mem_log:
+                    CSharpLanguageServer(mock_config, str(temp_path), mock_settings)
+
+                    # Verify that logger was called with solution file discovery
+                    expected_log_msg = f"Found solution/project file: {solution_file}"
+                    assert expected_log_msg in mem_log.get_log()
 
     @patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed")
     @patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._start_server")
@@ -273,20 +278,22 @@ class TestCSharpSolutionProjectOpening:
             temp_path = Path(temp_dir)
 
             # Mock logger to capture log messages
-            mock_logger = Mock()
             mock_config = Mock(spec=LanguageServerConfig)
             mock_config.ignored_paths = []
 
-            # Create CSharpLanguageServer instance
             mock_settings = Mock(spec=SolidLSPSettings)
             mock_settings.ls_resources_dir = "/tmp/test_ls_resources"
             mock_settings.project_data_relative_path = "project_data"
-            CSharpLanguageServer(mock_config, mock_logger, str(temp_path), mock_settings)
 
-            # Verify that logger was called with warning about no solution/project files
-            mock_logger.log.assert_any_call(
-                "No .sln or .csproj file found, language server will attempt auto-discovery", 30  # logging.WARNING
-            )
+            # Create CSharpLanguageServer instance
+            with SuspendedLoggersContext():
+                logging.getLogger().setLevel(logging.DEBUG)
+                with logging.MemoryLoggerContext() as mem_log:
+                    CSharpLanguageServer(mock_config, str(temp_path), mock_settings)
+
+                    # Verify that logger was called with warning about no solution/project files
+                    expected_log_msg = "No .sln or .csproj file found, language server will attempt auto-discovery"
+                    assert expected_log_msg in mem_log.get_log()
 
     def test_solution_and_project_opening_with_real_test_repo(self):
         """Test solution and project opening with the actual C# test repository."""

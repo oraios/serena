@@ -29,13 +29,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-from typing import Union
+from typing import Any, Union
 
 from solidlsp.lsp_protocol_handler import lsp_types
 
 
 class LspRequest:
-    def __init__(self, send_request):
+    def __init__(self, send_request: Any) -> None:
         self.send_request = send_request
 
     async def implementation(
@@ -421,7 +421,7 @@ class LspRequest:
 
 
 class LspNotification:
-    def __init__(self, send_notification):
+    def __init__(self, send_notification: Any) -> None:
         self.send_notification = send_notification
 
     def did_change_workspace_folders(self, params: lsp_types.DidChangeWorkspaceFoldersParams) -> None:

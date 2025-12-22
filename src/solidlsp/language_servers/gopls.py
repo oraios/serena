@@ -3,15 +3,17 @@ import os
 import pathlib
 import subprocess
 import threading
+from typing import cast
 
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 class Gopls(SolidLanguageServer):
@@ -28,7 +30,25 @@ class Gopls(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in ["vendor", "node_modules", "dist", "build"]
 
     @staticmethod
-    def _get_go_version():
+    def _determine_log_level(line: str) -> int:
+        """Classify gopls stderr output to avoid false-positive errors."""
+        line_lower = line.lower()
+
+        # File discovery messages that are not actual errors
+        if any(
+            [
+                "discover.go:" in line_lower,
+                "walker.go:" in line_lower,
+                "walking of {file://" in line_lower,
+                "bus: -> discover" in line_lower,
+            ]
+        ):
+            return logging.DEBUG
+
+        return SolidLanguageServer._determine_log_level(line)
+
+    @staticmethod
+    def _get_go_version() -> str | None:
         """Get the installed Go version or None if not found."""
         try:
             result = subprocess.run(["go", "version"], capture_output=True, text=True, check=False)
@@ -39,7 +59,7 @@ class Gopls(SolidLanguageServer):
         return None
 
     @staticmethod
-    def _get_gopls_version():
+    def _get_gopls_version() -> str | None:
         """Get the installed gopls version or None if not found."""
         try:
             result = subprocess.run(["gopls", "version"], capture_output=True, text=True, check=False)
@@ -50,7 +70,7 @@ class Gopls(SolidLanguageServer):
         return None
 
     @staticmethod
-    def _setup_runtime_dependency():
+    def _setup_runtime_dependency() -> bool:
         """
         Check if required Go runtime dependencies are available.
         Raises RuntimeError with helpful message if dependencies are missing.
@@ -71,19 +91,10 @@ class Gopls(SolidLanguageServer):
 
         return True
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         self._setup_runtime_dependency()
 
-        super().__init__(
-            config,
-            logger,
-            repository_root_path,
-            ProcessLaunchInfo(cmd="gopls", cwd=repository_root_path),
-            "go",
-            solidlsp_settings,
-        )
+        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd="gopls", cwd=repository_root_path), "go", solidlsp_settings)
         self.server_ready = threading.Event()
         self.request_id = 0
 
@@ -117,18 +128,18 @@ class Gopls(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """Start gopls server process"""
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             return
 
-        def window_log_message(msg):
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"LSP: window/logMessage: {msg}")
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)
@@ -136,14 +147,11 @@ class Gopls(SolidLanguageServer):
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        self.logger.log("Starting gopls server process", logging.INFO)
+        log.info("Starting gopls server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
 
         # Verify server capabilities

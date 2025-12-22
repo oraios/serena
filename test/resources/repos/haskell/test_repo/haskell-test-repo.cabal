@@ -1,0 +1,45 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.38.1.
+--
+-- see: https://github.com/sol/hpack
+
+name:           haskell-test-repo
+version:        0.1.0.0
+homepage:       https://github.com/test/haskell-test-repo#readme
+bug-reports:    https://github.com/test/haskell-test-repo/issues
+author:         Test Author
+maintainer:     test@example.com
+license:        BSD3
+build-type:     Simple
+
+source-repository head
+  type: git
+  location: https://github.com/test/haskell-test-repo
+
+library
+  exposed-modules:
+      Calculator
+      Helper
+  other-modules:
+      Paths_haskell_test_repo
+  hs-source-dirs:
+      src
+  default-extensions:
+      OverloadedStrings
+  build-depends:
+      base >=4.7 && <5
+  default-language: Haskell2010
+
+executable haskell-test-repo-exe
+  main-is: Main.hs
+  other-modules:
+      Paths_haskell_test_repo
+  hs-source-dirs:
+      app
+  default-extensions:
+      OverloadedStrings
+  build-depends:
+      base >=4.7 && <5
+    , haskell-test-repo
+  default-language: Haskell2010

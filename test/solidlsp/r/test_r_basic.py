@@ -27,7 +27,7 @@ class TestRLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.R], indirect=True)
     def test_symbol_retrieval(self, language_server: SolidLanguageServer):
         """Test R document symbol extraction."""
-        all_symbols, root_symbols = language_server.request_document_symbols(os.path.join("R", "utils.R"))
+        all_symbols, _root_symbols = language_server.request_document_symbols(os.path.join("R", "utils.R")).get_all_symbols_and_roots()
 
         # Should find the three exported functions
         function_symbols = [s for s in all_symbols if s.get("kind") == 12]  # Function kind

@@ -78,6 +78,229 @@
   
   '''
 # ---
+# name: test_delete_symbol_vue[test_case0]
+  '''
+  <script setup lang="ts">
+  import { computed, ref } from 'vue'
+  
+  /**
+   * Props interface for CalculatorButton.
+   * Demonstrates: defineProps with TypeScript interface
+   */
+  interface Props {
+    label: string | number
+    variant?: 'digit' | 'operation' | 'equals' | 'clear'
+    disabled?: boolean
+    active?: boolean
+    size?: 'small' | 'medium' | 'large'
+  }
+  
+  /**
+   * Emits interface for CalculatorButton.
+   * Demonstrates: defineEmits with TypeScript
+   */
+  interface Emits {
+    click: [value: string | number]
+    hover: [isHovering: boolean]
+    focus: []
+    blur: []
+  }
+  
+  // Define props with defaults
+  const props = withDefaults(defineProps<Props>(), {
+    variant: 'digit',
+    disabled: false,
+    active: false,
+    size: 'medium'
+  })
+  
+  // Define emits
+  const emit = defineEmits<Emits>()
+  
+  // Local state
+  const isHovered = ref(false)
+  const isFocused = ref(false)
+  const pressCount = ref(0)
+  
+  // Computed classes based on props and state
+  const buttonClass = computed(() => {
+    const classes = ['calc-button', `calc-button--${props.variant}`, `calc-button--${props.size}`]
+  
+    if (props.active) classes.push('calc-button--active')
+    if (props.disabled) classes.push('calc-button--disabled')
+    if (isHovered.value) classes.push('calc-button--hovered')
+    if (isFocused.value) classes.push('calc-button--focused')
+  
+    return classes.join(' ')
+  })
+  
+  // Computed aria label for accessibility
+  const ariaLabel = computed(() => {
+    const variantText = {
+      digit: 'Number',
+      operation: 'Operation',
+      equals: 'Equals',
+      clear: 'Clear'
+    }[props.variant]
+  
+    return `${variantText}: ${props.label}`
+  })
+  
+  // Event handlers that emit events
+  const handleClick = () => {
+    if (!props.disabled) {
+      pressCount.value++
+      emit('click', props.label)
+    }
+  }
+  
+  const 
+  
+  const handleMouseLeave = () => {
+    isHovered.value = false
+    emit('hover', false)
+  }
+  
+  const handleFocus = () => {
+    isFocused.value = true
+    emit('focus')
+  }
+  
+  const handleBlur = () => {
+    isFocused.value = false
+    emit('blur')
+  }
+  
+  // Expose internal state for parent access via template refs
+  // Demonstrates: defineExpose
+  defineExpose({
+    pressCount,
+    isHovered,
+    isFocused,
+    simulateClick: handleClick
+  })
+  </script>
+  
+  <template>
+    <button
+      :class="buttonClass"
+      :disabled="disabled"
+      :aria-label="ariaLabel"
+      @click="handleClick"
+      @mouseenter="handleMouseEnter"
+      @mouseleave="handleMouseLeave"
+      @focus="handleFocus"
+      @blur="handleBlur"
+    >
+      <span class="calc-button__label">{{ label }}</span>
+      <span v-if="pressCount > 0" class="calc-button__badge">{{ pressCount }}</span>
+    </button>
+  </template>
+  
+  <style scoped>
+  .calc-button {
+    position: relative;
+    padding: 1rem;
+    font-size: 1.2rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+  }
+  
+  .calc-button--small {
+    padding: 0.5rem;
+    font-size: 1rem;
+  }
+  
+  .calc-button--medium {
+    padding: 1rem;
+    font-size: 1.2rem;
+  }
+  
+  .calc-button--large {
+    padding: 1.5rem;
+    font-size: 1.5rem;
+  }
+  
+  .calc-button--digit {
+    background: white;
+    color: #333;
+  }
+  
+  .calc-button--digit:hover:not(:disabled) {
+    background: #e0e0e0;
+  }
+  
+  .calc-button--operation {
+    background: #2196f3;
+    color: white;
+  }
+  
+  .calc-button--operation:hover:not(:disabled) {
+    background: #1976d2;
+  }
+  
+  .calc-button--operation.calc-button--active {
+    background: #1565c0;
+  }
+  
+  .calc-button--equals {
+    background: #4caf50;
+    color: white;
+  }
+  
+  .calc-button--equals:hover:not(:disabled) {
+    background: #45a049;
+  }
+  
+  .calc-button--clear {
+    background: #f44336;
+    color: white;
+  }
+  
+  .calc-button--clear:hover:not(:disabled) {
+    background: #da190b;
+  }
+  
+  .calc-button--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .calc-button--hovered {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+  
+  .calc-button--focused {
+    outline: 2px solid #2196f3;
+    outline-offset: 2px;
+  }
+  
+  .calc-button__label {
+    display: block;
+  }
+  
+  .calc-button__badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #ff5722;
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 0.7rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  </style>
+  
+  '''
+# ---
 # name: test_insert_in_rel_to_symbol[test_case0-after]
   '''
   """
@@ -590,6 +813,466 @@
   
   '''
 # ---
+# name: test_insert_in_rel_to_symbol_vue[test_case0-after]
+  '''
+  <script setup lang="ts">
+  import { computed, ref } from 'vue'
+  
+  /**
+   * Props interface for CalculatorButton.
+   * Demonstrates: defineProps with TypeScript interface
+   */
+  interface Props {
+    label: string | number
+    variant?: 'digit' | 'operation' | 'equals' | 'clear'
+    disabled?: boolean
+    active?: boolean
+    size?: 'small' | 'medium' | 'large'
+  }
+  
+  /**
+   * Emits interface for CalculatorButton.
+   * Demonstrates: defineEmits with TypeScript
+   */
+  interface Emits {
+    click: [value: string | number]
+    hover: [isHovering: boolean]
+    focus: []
+    blur: []
+  }
+  
+  // Define props with defaults
+  const props = withDefaults(defineProps<Props>(), {
+    variant: 'digit',
+    disabled: false,
+    active: false,
+    size: 'medium'
+  })
+  
+  // Define emits
+  const emit = defineEmits<Emits>()
+  
+  // Local state
+  const isHovered = ref(false)
+  const isFocused = ref(false)
+  const pressCount = ref(0)
+  
+  // Computed classes based on props and state
+  const buttonClass = computed(() => {
+    const classes = ['calc-button', `calc-button--${props.variant}`, `calc-button--${props.size}`]
+  
+    if (props.active) classes.push('calc-button--active')
+    if (props.disabled) classes.push('calc-button--disabled')
+    if (isHovered.value) classes.push('calc-button--hovered')
+    if (isFocused.value) classes.push('calc-button--focused')
+  
+    return classes.join(' ')
+  })
+  
+  // Computed aria label for accessibility
+  const ariaLabel = computed(() => {
+    const variantText = {
+      digit: 'Number',
+      operation: 'Operation',
+      equals: 'Equals',
+      clear: 'Clear'
+    }[props.variant]
+  
+    return `${variantText}: ${props.label}`
+  })
+  
+  // Event handlers that emit events
+  const handleClick = () => {
+    if (!props.disabled) {
+      pressCount.value++
+      emit('click', props.label)
+    }
+  }
+  const handleDoubleClick = () => {
+      pressCount.value++;
+      emit('click', props.label);
+  }
+  
+  const handleMouseEnter = () => {
+    isHovered.value = true
+    emit('hover', true)
+  }
+  
+  const handleMouseLeave = () => {
+    isHovered.value = false
+    emit('hover', false)
+  }
+  
+  const handleFocus = () => {
+    isFocused.value = true
+    emit('focus')
+  }
+  
+  const handleBlur = () => {
+    isFocused.value = false
+    emit('blur')
+  }
+  
+  // Expose internal state for parent access via template refs
+  // Demonstrates: defineExpose
+  defineExpose({
+    pressCount,
+    isHovered,
+    isFocused,
+    simulateClick: handleClick
+  })
+  </script>
+  
+  <template>
+    <button
+      :class="buttonClass"
+      :disabled="disabled"
+      :aria-label="ariaLabel"
+      @click="handleClick"
+      @mouseenter="handleMouseEnter"
+      @mouseleave="handleMouseLeave"
+      @focus="handleFocus"
+      @blur="handleBlur"
+    >
+      <span class="calc-button__label">{{ label }}</span>
+      <span v-if="pressCount > 0" class="calc-button__badge">{{ pressCount }}</span>
+    </button>
+  </template>
+  
+  <style scoped>
+  .calc-button {
+    position: relative;
+    padding: 1rem;
+    font-size: 1.2rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+  }
+  
+  .calc-button--small {
+    padding: 0.5rem;
+    font-size: 1rem;
+  }
+  
+  .calc-button--medium {
+    padding: 1rem;
+    font-size: 1.2rem;
+  }
+  
+  .calc-button--large {
+    padding: 1.5rem;
+    font-size: 1.5rem;
+  }
+  
+  .calc-button--digit {
+    background: white;
+    color: #333;
+  }
+  
+  .calc-button--digit:hover:not(:disabled) {
+    background: #e0e0e0;
+  }
+  
+  .calc-button--operation {
+    background: #2196f3;
+    color: white;
+  }
+  
+  .calc-button--operation:hover:not(:disabled) {
+    background: #1976d2;
+  }
+  
+  .calc-button--operation.calc-button--active {
+    background: #1565c0;
+  }
+  
+  .calc-button--equals {
+    background: #4caf50;
+    color: white;
+  }
+  
+  .calc-button--equals:hover:not(:disabled) {
+    background: #45a049;
+  }
+  
+  .calc-button--clear {
+    background: #f44336;
+    color: white;
+  }
+  
+  .calc-button--clear:hover:not(:disabled) {
+    background: #da190b;
+  }
+  
+  .calc-button--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .calc-button--hovered {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+  
+  .calc-button--focused {
+    outline: 2px solid #2196f3;
+    outline-offset: 2px;
+  }
+  
+  .calc-button__label {
+    display: block;
+  }
+  
+  .calc-button__badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #ff5722;
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 0.7rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  </style>
+  
+  '''
+# ---
+# name: test_insert_in_rel_to_symbol_vue[test_case0-before]
+  '''
+  <script setup lang="ts">
+  import { computed, ref } from 'vue'
+  
+  /**
+   * Props interface for CalculatorButton.
+   * Demonstrates: defineProps with TypeScript interface
+   */
+  interface Props {
+    label: string | number
+    variant?: 'digit' | 'operation' | 'equals' | 'clear'
+    disabled?: boolean
+    active?: boolean
+    size?: 'small' | 'medium' | 'large'
+  }
+  
+  /**
+   * Emits interface for CalculatorButton.
+   * Demonstrates: defineEmits with TypeScript
+   */
+  interface Emits {
+    click: [value: string | number]
+    hover: [isHovering: boolean]
+    focus: []
+    blur: []
+  }
+  
+  // Define props with defaults
+  const props = withDefaults(defineProps<Props>(), {
+    variant: 'digit',
+    disabled: false,
+    active: false,
+    size: 'medium'
+  })
+  
+  // Define emits
+  const emit = defineEmits<Emits>()
+  
+  // Local state
+  const isHovered = ref(false)
+  const isFocused = ref(false)
+  const pressCount = ref(0)
+  
+  // Computed classes based on props and state
+  const buttonClass = computed(() => {
+    const classes = ['calc-button', `calc-button--${props.variant}`, `calc-button--${props.size}`]
+  
+    if (props.active) classes.push('calc-button--active')
+    if (props.disabled) classes.push('calc-button--disabled')
+    if (isHovered.value) classes.push('calc-button--hovered')
+    if (isFocused.value) classes.push('calc-button--focused')
+  
+    return classes.join(' ')
+  })
+  
+  // Computed aria label for accessibility
+  const ariaLabel = computed(() => {
+    const variantText = {
+      digit: 'Number',
+      operation: 'Operation',
+      equals: 'Equals',
+      clear: 'Clear'
+    }[props.variant]
+  
+    return `${variantText}: ${props.label}`
+  })
+  
+  // Event handlers that emit events
+  const handleDoubleClick = () => {
+      pressCount.value++;
+      emit('click', props.label);
+  }
+  const handleClick = () => {
+    if (!props.disabled) {
+      pressCount.value++
+      emit('click', props.label)
+    }
+  }
+  
+  const handleMouseEnter = () => {
+    isHovered.value = true
+    emit('hover', true)
+  }
+  
+  const handleMouseLeave = () => {
+    isHovered.value = false
+    emit('hover', false)
+  }
+  
+  const handleFocus = () => {
+    isFocused.value = true
+    emit('focus')
+  }
+  
+  const handleBlur = () => {
+    isFocused.value = false
+    emit('blur')
+  }
+  
+  // Expose internal state for parent access via template refs
+  // Demonstrates: defineExpose
+  defineExpose({
+    pressCount,
+    isHovered,
+    isFocused,
+    simulateClick: handleClick
+  })
+  </script>
+  
+  <template>
+    <button
+      :class="buttonClass"
+      :disabled="disabled"
+      :aria-label="ariaLabel"
+      @click="handleClick"
+      @mouseenter="handleMouseEnter"
+      @mouseleave="handleMouseLeave"
+      @focus="handleFocus"
+      @blur="handleBlur"
+    >
+      <span class="calc-button__label">{{ label }}</span>
+      <span v-if="pressCount > 0" class="calc-button__badge">{{ pressCount }}</span>
+    </button>
+  </template>
+  
+  <style scoped>
+  .calc-button {
+    position: relative;
+    padding: 1rem;
+    font-size: 1.2rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+  }
+  
+  .calc-button--small {
+    padding: 0.5rem;
+    font-size: 1rem;
+  }
+  
+  .calc-button--medium {
+    padding: 1rem;
+    font-size: 1.2rem;
+  }
+  
+  .calc-button--large {
+    padding: 1.5rem;
+    font-size: 1.5rem;
+  }
+  
+  .calc-button--digit {
+    background: white;
+    color: #333;
+  }
+  
+  .calc-button--digit:hover:not(:disabled) {
+    background: #e0e0e0;
+  }
+  
+  .calc-button--operation {
+    background: #2196f3;
+    color: white;
+  }
+  
+  .calc-button--operation:hover:not(:disabled) {
+    background: #1976d2;
+  }
+  
+  .calc-button--operation.calc-button--active {
+    background: #1565c0;
+  }
+  
+  .calc-button--equals {
+    background: #4caf50;
+    color: white;
+  }
+  
+  .calc-button--equals:hover:not(:disabled) {
+    background: #45a049;
+  }
+  
+  .calc-button--clear {
+    background: #f44336;
+    color: white;
+  }
+  
+  .calc-button--clear:hover:not(:disabled) {
+    background: #da190b;
+  }
+  
+  .calc-button--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .calc-button--hovered {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+  
+  .calc-button--focused {
+    outline: 2px solid #2196f3;
+    outline-offset: 2px;
+  }
+  
+  .calc-button__label {
+    display: block;
+  }
+  
+  .calc-button__badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #ff5722;
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 0.7rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  </style>
+  
+  '''
+# ---
 # name: test_insert_python_class_after
   '''
   """
@@ -983,6 +1666,107 @@
   
   '''
 # ---
+# name: test_rename_symbol
+  '''
+  """
+  Test module for variable declarations and usage.
+  
+  This module tests various types of variable declarations and usages including:
+  - Module-level variables
+  - Class-level variables
+  - Instance variables
+  - Variable reassignments
+  """
+  
+  from dataclasses import dataclass, field
+  
+  # Module-level variables
+  module_var = "Initial module value"
+  
+  reassignable_module_var = 10
+  reassignable_module_var = 20  # Reassigned
+  
+  # Module-level variable with type annotation
+  renamed_typed_module_var: int = 42
+  
+  
+  # Regular class with class and instance variables
+  class VariableContainer:
+      """Class that contains various variables."""
+  
+      # Class-level variables
+      class_var = "Initial class value"
+  
+      reassignable_class_var = True
+      reassignable_class_var = False  # Reassigned #noqa: PIE794
+  
+      # Class-level variable with type annotation
+      typed_class_var: str = "typed value"
+  
+      def __init__(self):
+          # Instance variables
+          self.instance_var = "Initial instance value"
+          self.reassignable_instance_var = 100
+  
+          # Instance variable with type annotation
+          self.typed_instance_var: list[str] = ["item1", "item2"]
+  
+      def modify_instance_var(self):
+          # Reassign instance variable
+          self.instance_var = "Modified instance value"
+          self.reassignable_instance_var = 200  # Reassigned
+  
+      def use_module_var(self):
+          # Use module-level variables
+          result = module_var + " used in method"
+          other_result = reassignable_module_var + 5
+          return result, other_result
+  
+      def use_class_var(self):
+          # Use class-level variables
+          result = VariableContainer.class_var + " used in method"
+          other_result = VariableContainer.reassignable_class_var
+          return result, other_result
+  
+  
+  # Dataclass with variables
+  @dataclass
+  class VariableDataclass:
+      """Dataclass that contains various fields."""
+  
+      # Field variables with type annotations
+      id: int
+      name: str
+      items: list[str] = field(default_factory=list)
+      metadata: dict[str, str] = field(default_factory=dict)
+      optional_value: float | None = None
+  
+      # This will be reassigned in various places
+      status: str = "pending"
+  
+  
+  # Function that uses the module variables
+  def use_module_variables():
+      """Function that uses module-level variables."""
+      result = module_var + " used in function"
+      other_result = reassignable_module_var * 2
+      return result, other_result
+  
+  
+  # Create instances and use variables
+  dataclass_instance = VariableDataclass(id=1, name="Test")
+  dataclass_instance.status = "active"  # Reassign dataclass field
+  
+  # Use variables at module level
+  module_result = module_var + " used at module level"
+  other_module_result = reassignable_module_var + 30
+  
+  # Create a second dataclass instance with different status
+  second_dataclass = VariableDataclass(id=2, name="Another Test")
+  second_dataclass.status = "completed"  # Another reassignment of status
+  
+  '''
+# ---
 # name: test_replace_body[test_case0]
   '''
   """
@@ -1103,6 +1887,644 @@
   }
   
   helperFunction();
+  
+  '''
+# ---
+# name: test_replace_body_vue[test_case0]
+  '''
+  <script setup lang="ts">
+  import { computed, ref } from 'vue'
+  
+  /**
+   * Props interface for CalculatorButton.
+   * Demonstrates: defineProps with TypeScript interface
+   */
+  interface Props {
+    label: string | number
+    variant?: 'digit' | 'operation' | 'equals' | 'clear'
+    disabled?: boolean
+    active?: boolean
+    size?: 'small' | 'medium' | 'large'
+  }
+  
+  /**
+   * Emits interface for CalculatorButton.
+   * Demonstrates: defineEmits with TypeScript
+   */
+  interface Emits {
+    click: [value: string | number]
+    hover: [isHovering: boolean]
+    focus: []
+    blur: []
+  }
+  
+  // Define props with defaults
+  const props = withDefaults(defineProps<Props>(), {
+    variant: 'digit',
+    disabled: false,
+    active: false,
+    size: 'medium'
+  })
+  
+  // Define emits
+  const emit = defineEmits<Emits>()
+  
+  // Local state
+  const isHovered = ref(false)
+  const isFocused = ref(false)
+  const pressCount = ref(0)
+  
+  // Computed classes based on props and state
+  const buttonClass = computed(() => {
+    const classes = ['calc-button', `calc-button--${props.variant}`, `calc-button--${props.size}`]
+  
+    if (props.active) classes.push('calc-button--active')
+    if (props.disabled) classes.push('calc-button--disabled')
+    if (isHovered.value) classes.push('calc-button--hovered')
+    if (isFocused.value) classes.push('calc-button--focused')
+  
+    return classes.join(' ')
+  })
+  
+  // Computed aria label for accessibility
+  const ariaLabel = computed(() => {
+    const variantText = {
+      digit: 'Number',
+      operation: 'Operation',
+      equals: 'Equals',
+      clear: 'Clear'
+    }[props.variant]
+  
+    return `${variantText}: ${props.label}`
+  })
+  
+  // Event handlers that emit events
+  const const handleClick = () => {
+      if (!props.disabled) {
+          pressCount.value = 0;  // Reset instead of incrementing
+          emit('click', props.label);
+      }
+  }
+  
+  const handleMouseEnter = () => {
+    isHovered.value = true
+    emit('hover', true)
+  }
+  
+  const handleMouseLeave = () => {
+    isHovered.value = false
+    emit('hover', false)
+  }
+  
+  const handleFocus = () => {
+    isFocused.value = true
+    emit('focus')
+  }
+  
+  const handleBlur = () => {
+    isFocused.value = false
+    emit('blur')
+  }
+  
+  // Expose internal state for parent access via template refs
+  // Demonstrates: defineExpose
+  defineExpose({
+    pressCount,
+    isHovered,
+    isFocused,
+    simulateClick: handleClick
+  })
+  </script>
+  
+  <template>
+    <button
+      :class="buttonClass"
+      :disabled="disabled"
+      :aria-label="ariaLabel"
+      @click="handleClick"
+      @mouseenter="handleMouseEnter"
+      @mouseleave="handleMouseLeave"
+      @focus="handleFocus"
+      @blur="handleBlur"
+    >
+      <span class="calc-button__label">{{ label }}</span>
+      <span v-if="pressCount > 0" class="calc-button__badge">{{ pressCount }}</span>
+    </button>
+  </template>
+  
+  <style scoped>
+  .calc-button {
+    position: relative;
+    padding: 1rem;
+    font-size: 1.2rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+  }
+  
+  .calc-button--small {
+    padding: 0.5rem;
+    font-size: 1rem;
+  }
+  
+  .calc-button--medium {
+    padding: 1rem;
+    font-size: 1.2rem;
+  }
+  
+  .calc-button--large {
+    padding: 1.5rem;
+    font-size: 1.5rem;
+  }
+  
+  .calc-button--digit {
+    background: white;
+    color: #333;
+  }
+  
+  .calc-button--digit:hover:not(:disabled) {
+    background: #e0e0e0;
+  }
+  
+  .calc-button--operation {
+    background: #2196f3;
+    color: white;
+  }
+  
+  .calc-button--operation:hover:not(:disabled) {
+    background: #1976d2;
+  }
+  
+  .calc-button--operation.calc-button--active {
+    background: #1565c0;
+  }
+  
+  .calc-button--equals {
+    background: #4caf50;
+    color: white;
+  }
+  
+  .calc-button--equals:hover:not(:disabled) {
+    background: #45a049;
+  }
+  
+  .calc-button--clear {
+    background: #f44336;
+    color: white;
+  }
+  
+  .calc-button--clear:hover:not(:disabled) {
+    background: #da190b;
+  }
+  
+  .calc-button--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .calc-button--hovered {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+  
+  .calc-button--focused {
+    outline: 2px solid #2196f3;
+    outline-offset: 2px;
+  }
+  
+  .calc-button__label {
+    display: block;
+  }
+  
+  .calc-button__badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #ff5722;
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 0.7rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  </style>
+  
+  '''
+# ---
+# name: test_replace_body_vue_ts_file[test_case0]
+  '''
+  import { defineStore } from 'pinia'
+  import type { HistoryEntry, Operation, CalculatorState } from '@/types'
+  
+  export const useCalculatorStore = defineStore('calculator', {
+    state: (): CalculatorState => ({
+      currentValue: 0,
+      previousValue: null,
+      operation: null,
+      history: [],
+      displayValue: '0'
+    }),
+  
+    getters: {
+      /**
+       * Get the most recent history entries (last 10)
+       */
+      recentHistory: (state): HistoryEntry[] => {
+        return state.history.slice(-10).reverse()
+      },
+  
+      /**
+       * Check if calculator has any history
+       */
+      hasHistory: (state): boolean => {
+        return state.history.length > 0
+      },
+  
+      /**
+       * Get the current display text
+       */
+      display: (state): string => {
+        return state.displayValue
+      }
+    },
+  
+    actions: {
+      /**
+       * Set a number value
+       */
+      setNumber(value: number) {
+        this.currentValue = value
+        this.displayValue = value.toString()
+      },
+  
+      /**
+       * Append a digit to the current value
+       */
+      appendDigit(digit: number) {
+        if (this.displayValue === '0') {
+          this.displayValue = digit.toString()
+        } else {
+          this.displayValue += digit.toString()
+        }
+        this.currentValue = parseFloat(this.displayValue)
+      },
+  
+      /**
+       * Add two numbers
+       */
+      add() {
+        if (this.previousValue !== null && this.operation) {
+          this.executeOperation()
+        }
+        this.previousValue = this.currentValue
+        this.operation = 'add'
+        this.displayValue = '0'
+      },
+  
+      /**
+       * Subtract two numbers
+       */
+      subtract() {
+        if (this.previousValue !== null && this.operation) {
+          this.executeOperation()
+        }
+        this.previousValue = this.currentValue
+        this.operation = 'subtract'
+        this.displayValue = '0'
+      },
+  
+      /**
+       * Multiply two numbers
+       */
+      multiply() {
+        if (this.previousValue !== null && this.operation) {
+          this.executeOperation()
+        }
+        this.previousValue = this.currentValue
+        this.operation = 'multiply'
+        this.displayValue = '0'
+      },
+  
+      /**
+       * Divide two numbers
+       */
+      divide() {
+        if (this.previousValue !== null && this.operation) {
+          this.executeOperation()
+        }
+        this.previousValue = this.currentValue
+        this.operation = 'divide'
+        this.displayValue = '0'
+      },
+  
+      /**
+       * Execute the pending operation
+       */
+      executeOperation() {
+        if (this.previousValue === null || this.operation === null) {
+          return
+        }
+  
+        let result = 0
+        const prev = this.previousValue
+        const current = this.currentValue
+        let expression = ''
+  
+        switch (this.operation) {
+          case 'add':
+            result = prev + current
+            expression = `${prev} + ${current}`
+            break
+          case 'subtract':
+            result = prev - current
+            expression = `${prev} - ${current}`
+            break
+          case 'multiply':
+            result = prev * current
+            expression = `${prev} × ${current}`
+            break
+          case 'divide':
+            if (current === 0) {
+              this.displayValue = 'Error'
+              this.clear()
+              return
+            }
+            result = prev / current
+            expression = `${prev} ÷ ${current}`
+            break
+        }
+  
+        // Add to history
+        this.history.push({
+          expression,
+          result,
+          timestamp: new Date()
+        })
+  
+        this.currentValue = result
+        this.displayValue = result.toString()
+        this.previousValue = null
+        this.operation = null
+      },
+  
+      /**
+       * Calculate the equals operation
+       */
+      equals() {
+        this.executeOperation()
+      },
+  
+      /**
+       * Clear the calculator state
+       */
+      function clear() {
+      // Modified: Reset to initial state with a log
+      console.log('Clearing calculator state');
+      displayValue.value = '0';
+      expression.value = '';
+      operationHistory.value = [];
+      lastResult.value = undefined;
+  },
+  
+      /**
+       * Clear all history
+       */
+      clearHistory() {
+        this.history = []
+      }
+    }
+  })
+  
+  '''
+# ---
+# name: test_replace_body_vue_with_disambiguation[test_case0]
+  '''
+  <script setup lang="ts">
+  import { computed, ref } from 'vue'
+  
+  /**
+   * Props interface for CalculatorButton.
+   * Demonstrates: defineProps with TypeScript interface
+   */
+  interface Props {
+    label: string | number
+    variant?: 'digit' | 'operation' | 'equals' | 'clear'
+    disabled?: boolean
+    active?: boolean
+    size?: 'small' | 'medium' | 'large'
+  }
+  
+  /**
+   * Emits interface for CalculatorButton.
+   * Demonstrates: defineEmits with TypeScript
+   */
+  interface Emits {
+    click: [value: string | number]
+    hover: [isHovering: boolean]
+    focus: []
+    blur: []
+  }
+  
+  // Define props with defaults
+  const props = withDefaults(defineProps<Props>(), {
+    variant: 'digit',
+    disabled: false,
+    active: false,
+    size: 'medium'
+  })
+  
+  // Define emits
+  const emit = defineEmits<Emits>()
+  
+  // Local state
+  const isHovered = ref(false)
+  const isFocused = ref(false)
+  const const pressCount = ref(100)
+  
+  // Computed classes based on props and state
+  const buttonClass = computed(() => {
+    const classes = ['calc-button', `calc-button--${props.variant}`, `calc-button--${props.size}`]
+  
+    if (props.active) classes.push('calc-button--active')
+    if (props.disabled) classes.push('calc-button--disabled')
+    if (isHovered.value) classes.push('calc-button--hovered')
+    if (isFocused.value) classes.push('calc-button--focused')
+  
+    return classes.join(' ')
+  })
+  
+  // Computed aria label for accessibility
+  const ariaLabel = computed(() => {
+    const variantText = {
+      digit: 'Number',
+      operation: 'Operation',
+      equals: 'Equals',
+      clear: 'Clear'
+    }[props.variant]
+  
+    return `${variantText}: ${props.label}`
+  })
+  
+  // Event handlers that emit events
+  const handleClick = () => {
+    if (!props.disabled) {
+      pressCount.value++
+      emit('click', props.label)
+    }
+  }
+  
+  const handleMouseEnter = () => {
+    isHovered.value = true
+    emit('hover', true)
+  }
+  
+  const handleMouseLeave = () => {
+    isHovered.value = false
+    emit('hover', false)
+  }
+  
+  const handleFocus = () => {
+    isFocused.value = true
+    emit('focus')
+  }
+  
+  const handleBlur = () => {
+    isFocused.value = false
+    emit('blur')
+  }
+  
+  // Expose internal state for parent access via template refs
+  // Demonstrates: defineExpose
+  defineExpose({
+    pressCount,
+    isHovered,
+    isFocused,
+    simulateClick: handleClick
+  })
+  </script>
+  
+  <template>
+    <button
+      :class="buttonClass"
+      :disabled="disabled"
+      :aria-label="ariaLabel"
+      @click="handleClick"
+      @mouseenter="handleMouseEnter"
+      @mouseleave="handleMouseLeave"
+      @focus="handleFocus"
+      @blur="handleBlur"
+    >
+      <span class="calc-button__label">{{ label }}</span>
+      <span v-if="pressCount > 0" class="calc-button__badge">{{ pressCount }}</span>
+    </button>
+  </template>
+  
+  <style scoped>
+  .calc-button {
+    position: relative;
+    padding: 1rem;
+    font-size: 1.2rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+  }
+  
+  .calc-button--small {
+    padding: 0.5rem;
+    font-size: 1rem;
+  }
+  
+  .calc-button--medium {
+    padding: 1rem;
+    font-size: 1.2rem;
+  }
+  
+  .calc-button--large {
+    padding: 1.5rem;
+    font-size: 1.5rem;
+  }
+  
+  .calc-button--digit {
+    background: white;
+    color: #333;
+  }
+  
+  .calc-button--digit:hover:not(:disabled) {
+    background: #e0e0e0;
+  }
+  
+  .calc-button--operation {
+    background: #2196f3;
+    color: white;
+  }
+  
+  .calc-button--operation:hover:not(:disabled) {
+    background: #1976d2;
+  }
+  
+  .calc-button--operation.calc-button--active {
+    background: #1565c0;
+  }
+  
+  .calc-button--equals {
+    background: #4caf50;
+    color: white;
+  }
+  
+  .calc-button--equals:hover:not(:disabled) {
+    background: #45a049;
+  }
+  
+  .calc-button--clear {
+    background: #f44336;
+    color: white;
+  }
+  
+  .calc-button--clear:hover:not(:disabled) {
+    background: #da190b;
+  }
+  
+  .calc-button--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .calc-button--hovered {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+  
+  .calc-button--focused {
+    outline: 2px solid #2196f3;
+    outline-offset: 2px;
+  }
+  
+  .calc-button__label {
+    display: block;
+  }
+  
+  .calc-button__badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #ff5722;
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 0.7rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  </style>
   
   '''
 # ---
