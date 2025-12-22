@@ -147,7 +147,7 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
         :param depth: depth up to which descendants shall be retrieved (e.g., use 1 to also retrieve immediate children).
         :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
             -1 means the default value from the config will be used.
-        :return: a JSON object containing the symbols
+        :return: a JSON object containing the symbols grouped by kind in a compact format.
         """
         with JetBrainsPluginClient.from_project(self.project) as client:
             response_dict = client.get_symbols_overview(relative_path=relative_path, depth=depth)

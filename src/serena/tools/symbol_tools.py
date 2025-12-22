@@ -3,11 +3,10 @@ Language server-related tools
 """
 
 import os
+from collections import defaultdict
 from collections.abc import Sequence
 from copy import copy
 from typing import Any
-
-from black.trans import defaultdict
 
 from serena.tools import (
     SUCCESS_RESULT,
@@ -64,14 +63,6 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
             no content will be returned. -1 means the default value from the config will be used.
             Don't adjust unless there is really no other way to get the content required for the task.
         :return: a JSON object containing symbols grouped by kind in a compact format.
-
-            For depth=0, the structure is: {"Kind1": ["name1", "name2"], "Kind2": ["name3"]}
-            For depth>0, symbols with children use nested dicts: {"Class": [{"ClassName": {"Method": ["method1", "method2"]}}]}
-
-            The name_path for any symbol can be inferred from the structure:
-            - Top-level symbols: name_path = name
-            - Nested symbols: name_path = parent_name + "/" + name
-            Example: "method1" under class "ClassName" has name_path "ClassName/method1"
         """
         symbol_retriever = self.create_language_server_symbol_retriever()
         file_path = os.path.join(self.project.project_root, relative_path)

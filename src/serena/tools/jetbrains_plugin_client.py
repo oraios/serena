@@ -174,13 +174,12 @@ class JetBrainsPluginClient(ToStringMixin):
         request_data = {"namePath": name_path, "relativePath": relative_path}
         return self._make_request("POST", "/findReferences", request_data)
 
-    def get_symbols_overview(self, relative_path: str, depth: int, exclude_imports: bool = True) -> dict[str, Any]:
+    def get_symbols_overview(self, relative_path: str, depth: int) -> dict[str, Any]:
         """
         :param relative_path: the relative path to a source file
         :param depth: the depth of children to include (0 = no children)
-        :param exclude_imports: whether to exclude import statements from the overview
         """
-        request_data = {"relativePath": relative_path, "depth": depth, "excludeImports": exclude_imports}
+        request_data = {"relativePath": relative_path, "depth": depth}
         return self._make_request("POST", "/getSymbolsOverview", request_data)
 
     def rename_symbol(
