@@ -1,4 +1,5 @@
 from collections import defaultdict
+from typing import Any
 
 from serena.tools import Tool, ToolMarkerOptional, ToolMarkerSymbolicRead
 from serena.tools.jetbrains_plugin_client import JetBrainsPluginClient
@@ -98,11 +99,41 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
     Retrieves an overview of the top-level symbols within a specified file using the JetBrains backend
     """
 
-    # TODO: support depth param, structure output in the same way as in GetSymbolsOverviewTool (by extracting
-    #   the post-processing logic used there into a shared utility function)
+    @staticmethod
+    def _transform_symbols_to_compact_format(symbols: list[dict[str, Any]]) -> dict[str, list]:
+        """
+        Transform symbol overview from verbose format to compact grouped format.
+
+        Groups symbols by kind and uses names instead of full symbol objects.
+        For symbols with children, creates nested dictionaries.
+
+        The name_path can be inferred from the hierarchical structure:
+        - Top-level symbols: name_path = name
+        - Nested symbols: name_path = parent_name + "/" + name
+        For example, "convert" under class "ProjectType" has name_path "ProjectType/convert".
+        """
+        result = defaultdict(list)
+
+        for symbol in symbols:
+            kind = symbol.get("type", "Unknown")
+            name_path = symbol["name_path"]
+            name = name_path.split("/")[-1]
+            children = symbol.get("children", [])
+
+            if children:
+                # Symbol has children: create nested dict {name: children_dict}
+                children_dict = JetBrainsGetSymbolsOverviewTool._transform_symbols_to_compact_format(children)
+                result[kind].append({name: children_dict})
+            else:
+                # Symbol has no children: just add the name
+                result[kind].append(name)
+
+        return result
+
     def apply(
         self,
         relative_path: str,
+        depth: int = 0,
         max_answer_chars: int = -1,
     ) -> str:
         """
@@ -113,23 +144,14 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
         or by using the `list_dir` and `find_file` tools (or similar).
 
         :param relative_path: the relative path to the file to get the overview of
+        :param depth: depth up to which descendants shall be retrieved (e.g., use 1 to also retrieve immediate children).
         :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
             -1 means the default value from the config will be used.
         :return: a JSON object containing the symbols
         """
         with JetBrainsPluginClient.from_project(self.project) as client:
-            response_dict = client.get_symbols_overview(
-                relative_path=relative_path,
-            )
+            response_dict = client.get_symbols_overview(relative_path=relative_path, depth=depth)
         symbols = response_dict["symbols"]
-        # symbols come with name_path and type, we group them by type for token efficiency
-        grouped_symbols = defaultdict(list)
-        for symbol in symbols:
-            type = symbol.pop("type", "unknown")
-            if len(symbol) == 1:
-                # we only have the name_path key, no need to repeat it in each entry
-                symbol = symbol["name_path"]
-            grouped_symbols[type].append(symbol)
-        response_dict["symbols"] = grouped_symbols
-        result = self._to_json(response_dict)
+        compact_symbols = self._transform_symbols_to_compact_format(symbols)
+        result = self._to_json(compact_symbols)
         return self._limit_length(result, max_answer_chars)
