@@ -1,0 +1,9 @@
+lib/
+backup/
+*.o
+*.ppu
+*.exe
+*.lps
+*.compiled
+__history/
+__recovery/

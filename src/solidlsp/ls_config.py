@@ -64,6 +64,8 @@ class Language(str, Enum):
     GROOVY = "groovy"
     VUE = "vue"
     POWERSHELL = "powershell"
+    PASCAL = "pascal"
+    DELPHI = "delphi"
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -225,6 +227,10 @@ class Language(str, Enum):
                 return FilenameMatcher("*.ps1", "*.psm1", "*.psd1")
             case self.GROOVY:
                 return FilenameMatcher("*.groovy", "*.gvy")
+            case self.PASCAL:
+                return FilenameMatcher("*.pas", "*.pp", "*.lpr", "*.lfm", "*.inc")
+            case self.DELPHI:
+                return FilenameMatcher("*.pas", "*.dpr", "*.dfm", "*.dpk", "*.inc")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -390,6 +396,14 @@ class Language(str, Enum):
                 from solidlsp.language_servers.groovy_language_server import GroovyLanguageServer
 
                 return GroovyLanguageServer
+            case self.PASCAL:
+                from solidlsp.language_servers.pascal_server import PascalLanguageServer
+
+                return PascalLanguageServer
+            case self.DELPHI:
+                from solidlsp.language_servers.delphi_server import DelphiLanguageServer
+
+                return DelphiLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

@@ -304,6 +304,8 @@ markers = [
   "haskell: Haskell language server tests",
   "yaml: language server running for YAML",
   "powershell: language server running for PowerShell",
+  "pascal: language server running for Pascal/Free Pascal",
+  "delphi: language server running for Delphi",
   "slow: tests that require additional Expert instances and have long startup times (~60-90s each)",
   "toml: language server running for TOML",
 ]
