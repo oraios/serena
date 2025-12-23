@@ -740,24 +740,35 @@ class ProjectCommands(AutoRegisteringGroup):
                     click.echo(f"Log saved to: {log_file}")
                     return
 
-                # Extract suitable symbol (prefer class or function over variables)
-                # LSP symbol kinds: 5=class, 12=function, 6=method, 9=constructor
-                preferred_kinds = [5, 12, 6, 9]  # class, function, method, constructor
+                # Extract suitable symbol (prefer class or function over variables/namespaces)
+                # Use string kind names as returned by GetSymbolsOverviewTool
+                preferred_kinds = ["Class", "Function", "Method", "Constructor"]
+                # Namespace is often a language keyword (e.g., Pascal's "interface" section)
+                excluded_kinds = ["Namespace"]
 
                 selected_symbol = None
                 for symbol in overview_data:
-                    if symbol.get("kind") in preferred_kinds:
+                    kind = symbol.get("kind")
+                    if kind in preferred_kinds:
                         selected_symbol = symbol
                         break
 
-                # If no preferred symbol found, use first available
+                # If no preferred symbol found, use first non-excluded symbol
+                if not selected_symbol:
+                    for symbol in overview_data:
+                        if symbol.get("kind") not in excluded_kinds:
+                            selected_symbol = symbol
+                            log.info("No class or function found, using first non-namespace symbol")
+                            break
+
+                # Last resort: use first available
                 if not selected_symbol:
                     selected_symbol = overview_data[0]
-                    log.info("No class or function found, using first available symbol")
+                    log.info("Only namespace symbols found, using first available symbol")
 
                 symbol_name = selected_symbol.get("name_path", "unknown")
                 symbol_kind = selected_symbol.get("kind", "unknown")
-                log.info("Using symbol for testing: %s (kind: %d)", symbol_name, symbol_kind)
+                log.info("Using symbol for testing: %s (kind: %s)", symbol_name, symbol_kind)
 
                 # Test 2: FindSymbolTool
                 log.info("Testing FindSymbolTool for symbol: %s", symbol_name)
