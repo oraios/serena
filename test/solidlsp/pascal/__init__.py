@@ -28,7 +28,7 @@ def _check_delphi_available() -> bool:
         return True
 
     # Check common RAD Studio installation paths
-    program_files = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+    program_files = os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)")
     rad_studio_base = os.path.join(program_files, "Embarcadero", "Studio")
 
     if os.path.isdir(rad_studio_base):
