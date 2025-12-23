@@ -757,7 +757,7 @@ class ProjectCommands(AutoRegisteringGroup):
 
                 symbol_name = selected_symbol.get("name_path", "unknown")
                 symbol_kind = selected_symbol.get("kind", "unknown")
-                log.info("Using symbol for testing: %s (kind: %d)", symbol_name, symbol_kind)
+                log.info("Using symbol for testing: %s (kind: %s)", symbol_name, symbol_kind)
 
                 # Test 2: FindSymbolTool
                 log.info("Testing FindSymbolTool for symbol: %s", symbol_name)
