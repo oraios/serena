@@ -283,19 +283,27 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         """
         :return: the line in which the symbol identifier is defined.
         """
+        # Try selectionRange first (DocumentSymbol format)
         if "selectionRange" in self.symbol_root:
             return self.symbol_root["selectionRange"]["start"]["line"]
-        else:
-            # line is expected to be undefined for some types of symbols (e.g. SymbolKind.File)
-            return None
+        # Fallback to location.range (SymbolInformation format, used by pasls)
+        start_pos = self.body_start_position
+        if start_pos:
+            return start_pos["line"]
+        # line is expected to be undefined for some types of symbols (e.g. SymbolKind.File)
+        return None
 
     @property
     def column(self) -> int | None:
+        # Try selectionRange first (DocumentSymbol format)
         if "selectionRange" in self.symbol_root:
             return self.symbol_root["selectionRange"]["start"]["character"]
-        else:
-            # precise location is expected to be undefined for some types of symbols (e.g. SymbolKind.File)
-            return None
+        # Fallback to location.range (SymbolInformation format, used by pasls)
+        start_pos = self.body_start_position
+        if start_pos:
+            return start_pos["character"]
+        # precise location is expected to be undefined for some types of symbols (e.g. SymbolKind.File)
+        return None
 
     @property
     def body(self) -> str | None:

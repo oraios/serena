@@ -464,3 +464,48 @@ class TestSerenaAgent:
                 relative_path="ws_manager.js",
                 mode="regex",
             )
+
+    @pytest.mark.parametrize(
+        "serena_agent,symbol_name,expected_doc_substring",
+        [
+            pytest.param(
+                Language.PYTHON,
+                "User",
+                "User",  # Python docstrings should be included
+                marks=pytest.mark.python,
+            ),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_find_symbol_with_documentation(self, serena_agent: SerenaAgent, symbol_name: str, expected_doc_substring: str):
+        """
+        Tests that FindSymbolTool returns documentation when include_documentation=True.
+        This verifies that hover information is correctly extracted from TypedDict responses.
+        """
+        agent = serena_agent
+        find_symbol_tool = agent.get_tool(FindSymbolTool)
+
+        # Test with include_documentation=True (default)
+        result_with_docs = find_symbol_tool.apply_ex(
+            name_path_pattern=symbol_name,
+            include_documentation=True,
+        )
+        symbols_with_docs = json.loads(result_with_docs)
+
+        # Verify we found symbols
+        assert len(symbols_with_docs) > 0, f"Expected to find symbol {symbol_name}"
+
+        # Verify documentation field exists and is not empty for at least one symbol
+        docs_found = [s.get("documentation", "") for s in symbols_with_docs]
+        assert any(doc for doc in docs_found), f"Expected at least one symbol to have non-empty documentation. Got docs: {docs_found}"
+
+        # Test with include_documentation=False
+        result_without_docs = find_symbol_tool.apply_ex(
+            name_path_pattern=symbol_name,
+            include_documentation=False,
+        )
+        symbols_without_docs = json.loads(result_without_docs)
+
+        # Verify documentation field is not present when disabled
+        for symbol in symbols_without_docs:
+            assert "documentation" not in symbol, f"Expected no documentation field when include_documentation=False. Got: {symbol}"
