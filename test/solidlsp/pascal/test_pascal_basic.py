@@ -14,6 +14,12 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.conftest import language_tests_enabled
+
+pytestmark = [
+    pytest.mark.pascal,
+    pytest.mark.skipif(not language_tests_enabled(Language.PASCAL), reason="Pascal tests are disabled (pasls/fpc not available)"),
+]
 
 # SymbolKind constants from LSP specification
 SYMBOL_KIND_CLASS = 5
