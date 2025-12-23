@@ -16,7 +16,7 @@ from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
 
 from .solidlsp.clojure import is_clojure_cli_available
-from .solidlsp.pascal import is_pascal_available
+from .solidlsp.pascal import is_delphi_available, is_pascal_available
 
 configure(level=logging.INFO)
 
@@ -206,6 +206,10 @@ def _determine_disabled_languages() -> list[Language]:
     pascal_tests_enabled = is_pascal_available()
     if not pascal_tests_enabled:
         result.append(Language.PASCAL)
+
+    delphi_tests_enabled = is_delphi_available()
+    if not delphi_tests_enabled:
+        result.append(Language.DELPHI)
 
     return result
 
