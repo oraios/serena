@@ -51,6 +51,8 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
             -1 means the default value from the config will be used.
         :return: JSON string: a list of symbols (with locations) matching the name.
         """
+        if relative_path == ".":
+            relative_path = None
         with JetBrainsPluginClient.from_project(self.project) as client:
             response_dict = client.find_symbol(
                 name_path=name_path_pattern,

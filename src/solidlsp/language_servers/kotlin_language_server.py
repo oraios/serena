@@ -1,5 +1,17 @@
 """
 Provides Kotlin specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Kotlin.
+
+You can configure the following options in ls_specific_settings (in serena_config.yml):
+
+    ls_specific_settings:
+      kotlin:
+        jvm_options: '-Xmx4G'  # JVM options for Kotlin Language Server (default: -Xmx4G)
+
+Example configuration for large projects:
+
+    ls_specific_settings:
+      kotlin:
+        jvm_options: '-Xmx8G -XX:+UseG1GC'
 """
 
 import dataclasses
@@ -10,13 +22,17 @@ import stat
 from typing import cast
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import FileUtils, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
+
+# Default JVM options for Kotlin Language Server
+# -Xmx4G: Limit max heap to 4GB to prevent OOM on large projects
+DEFAULT_KOTLIN_JVM_OPTIONS = "-Xmx4G"
 
 
 @dataclasses.dataclass
@@ -45,8 +61,21 @@ class KotlinLanguageServer(SolidLanguageServer):
         # Create command to execute the Kotlin Language Server script
         cmd = [self.runtime_dependency_paths.kotlin_executable_path, "--stdio"]
 
-        # Set environment variables including JAVA_HOME
-        proc_env = {"JAVA_HOME": self.runtime_dependency_paths.java_home_path}
+        # Get JVM options from settings or use default
+        jvm_options = DEFAULT_KOTLIN_JVM_OPTIONS
+        if solidlsp_settings.ls_specific_settings:
+            kotlin_settings = solidlsp_settings.get_ls_specific_settings(Language.KOTLIN)
+            custom_jvm_options = kotlin_settings.get("jvm_options", "")
+            if custom_jvm_options:
+                jvm_options = custom_jvm_options
+                log.info(f"Using custom JVM options for Kotlin Language Server: {jvm_options}")
+
+        # Set environment variables including JAVA_HOME and JVM options
+        # JAVA_TOOL_OPTIONS is automatically picked up by any Java process
+        proc_env = {
+            "JAVA_HOME": self.runtime_dependency_paths.java_home_path,
+            "JAVA_TOOL_OPTIONS": jvm_options,
+        }
 
         super().__init__(
             config, repository_root_path, ProcessLaunchInfo(cmd=cmd, env=proc_env, cwd=repository_root_path), "kotlin", solidlsp_settings

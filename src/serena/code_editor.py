@@ -47,6 +47,14 @@ class CodeEditor(Generic[TSymbol], ABC):
             """
 
         @abstractmethod
+        def set_contents(self, contents: str) -> None:
+            """
+            Fully resets the contents of the file.
+
+            :param contents: the new contents
+            """
+
+        @abstractmethod
         def delete_text_between_positions(self, start_pos: PositionInFile, end_pos: PositionInFile) -> None:
             pass
 
@@ -62,7 +70,7 @@ class CodeEditor(Generic[TSymbol], ABC):
         raise NotImplementedError("This method must be overridden for each subclass")
 
     @contextmanager
-    def _edited_file_context(self, relative_path: str) -> Iterator["CodeEditor.EditedFile"]:
+    def edited_file_context(self, relative_path: str) -> Iterator["CodeEditor.EditedFile"]:
         """
         Context manager for editing a file.
         """
@@ -99,7 +107,7 @@ class CodeEditor(Generic[TSymbol], ABC):
         start_pos = symbol.get_body_start_position_or_raise()
         end_pos = symbol.get_body_end_position_or_raise()
 
-        with self._edited_file_context(relative_file_path) as edited_file:
+        with self.edited_file_context(relative_file_path) as edited_file:
             # make sure the replacement adds no additional newlines (before or after) - all newlines
             # and whitespace before/after should remain the same, so we strip it entirely
             body = body.strip()
@@ -154,7 +162,7 @@ class CodeEditor(Generic[TSymbol], ABC):
         # `line += 1`, is replaced
         body = body.rstrip("\r\n") + "\n"
 
-        with self._edited_file_context(relative_file_path) as edited_file:
+        with self.edited_file_context(relative_file_path) as edited_file:
             edited_file.insert_text_at_position(PositionInFile(line, col), body)
 
     def insert_before_symbol(self, name_path: str, relative_file_path: str, body: str) -> None:
@@ -182,7 +190,7 @@ class CodeEditor(Generic[TSymbol], ABC):
         body += "\n" * num_trailing_newlines
 
         # apply edit
-        with self._edited_file_context(relative_file_path) as edited_file:
+        with self.edited_file_context(relative_file_path) as edited_file:
             edited_file.insert_text_at_position(PositionInFile(line=line, col=col), body)
 
     def insert_at_line(self, relative_path: str, line: int, content: str) -> None:
@@ -193,7 +201,7 @@ class CodeEditor(Generic[TSymbol], ABC):
         :param line: the 0-based index of the line to insert content at
         :param content: the content to insert
         """
-        with self._edited_file_context(relative_path) as edited_file:
+        with self.edited_file_context(relative_path) as edited_file:
             edited_file.insert_text_at_position(PositionInFile(line, 0), content)
 
     def delete_lines(self, relative_path: str, start_line: int, end_line: int) -> None:
@@ -207,7 +215,7 @@ class CodeEditor(Generic[TSymbol], ABC):
         start_col = 0
         end_line_for_delete = end_line + 1
         end_col = 0
-        with self._edited_file_context(relative_path) as edited_file:
+        with self.edited_file_context(relative_path) as edited_file:
             start_pos = PositionInFile(line=start_line, col=start_col)
             end_pos = PositionInFile(line=end_line_for_delete, col=end_col)
             edited_file.delete_text_between_positions(start_pos, end_pos)
@@ -219,7 +227,7 @@ class CodeEditor(Generic[TSymbol], ABC):
         symbol = self._find_unique_symbol(name_path, relative_file_path)
         start_pos = symbol.get_body_start_position_or_raise()
         end_pos = symbol.get_body_end_position_or_raise()
-        with self._edited_file_context(relative_file_path) as edited_file:
+        with self.edited_file_context(relative_file_path) as edited_file:
             edited_file.delete_text_between_positions(start_pos, end_pos)
 
     @abstractmethod
@@ -250,6 +258,9 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
 
         def get_contents(self) -> str:
             return self._file_buffer.contents
+
+        def set_contents(self, contents: str) -> None:
+            self._file_buffer.contents = contents
 
         def delete_text_between_positions(self, start_pos: PositionInFile, end_pos: PositionInFile) -> None:
             self._lang_server.delete_text_between_positions(self.relative_path, start_pos.to_lsp_position(), end_pos.to_lsp_position())
@@ -289,7 +300,7 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
             self._text_edits = text_edits
 
         def apply(self) -> None:
-            with self._code_editor._edited_file_context(self._relative_path) as edited_file:
+            with self._code_editor.edited_file_context(self._relative_path) as edited_file:
                 edited_file = cast(LanguageServerCodeEditor.EditedFile, edited_file)
                 edited_file.apply_text_edits(self._text_edits)
 
@@ -381,6 +392,9 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
 
         def get_contents(self) -> str:
             return self._content
+
+        def set_contents(self, contents: str) -> None:
+            self._content = contents
 
         def delete_text_between_positions(self, start_pos: PositionInFile, end_pos: PositionInFile) -> None:
             self._content, _ = TextUtils.delete_text_between_positions(

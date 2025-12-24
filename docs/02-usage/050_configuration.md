@@ -87,12 +87,23 @@ Examples of built-in modes include:
 
 Find the concrete definitions of these modes [here](https://github.com/oraios/serena/tree/main/src/serena/resources/config/modes).
 
+:::{important}
+By default, Serena activates the two modes `interactive` and `editing`.  
+
+As soon as you start to specify modes, only the modes you explicitly specify will be active, however.
+Therefore, if you want to keep the default modes, you must specify them as well.  
+For example, to add mode `no-memories` to the default behaviour, specify
+```shell
+--mode interactive --mode editing --mode no-memories
+```
+:::
+
 Modes can be set at startup (similar to contexts) but can also be _switched dynamically_ during a session. 
 You can instruct the LLM to use the `switch_modes` tool to activate a different set of modes (e.g., "Switch to planning and one-shot modes").
 
 When launching Serena, specify modes using `--mode <mode-name>`; multiple modes can be specified, e.g. `--mode planning --mode no-onboarding`.
 
-:::{attention}
+:::{note}
 **Mode Compatibility**: While you can combine modes, some may be semantically incompatible (e.g., `interactive` and `one-shot`). 
 Serena currently does not prevent incompatible combinations; it is up to the user to choose sensible mode configurations.
 :::

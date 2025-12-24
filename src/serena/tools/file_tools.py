@@ -256,7 +256,7 @@ class ReplaceContentTool(Tool, ToolMarkerCanEdit):
         This function can be used internally by other tools.
         """
         self.project.validate_relative_path(relative_path, require_not_ignored=require_not_ignored)
-        with EditedFileContext(relative_path, self.agent) as context:
+        with EditedFileContext(relative_path, self.create_code_editor()) as context:
             original_content = context.get_original_content()
 
             if mode == "literal":
