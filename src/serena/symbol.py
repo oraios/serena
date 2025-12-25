@@ -188,7 +188,9 @@ class NamePathMatcher(ToStringMixin):
 
 
 class LanguageServerSymbol(Symbol, ToStringMixin):
-    def __init__(self, symbol_root_from_ls: UnifiedSymbolInformation) -> None:
+    def __init__(
+        self, symbol_root_from_ls: UnifiedSymbolInformation, docstring: str | None = None, signature_string: str | None = None
+    ) -> None:
         self.symbol_root = symbol_root_from_ls
 
     def _tostring_includes(self) -> list[str]:
@@ -495,6 +497,52 @@ class LanguageServerSymbolRetriever:
         assert isinstance(ls_manager, LanguageServerManager)
         self._ls_manager: LanguageServerManager = ls_manager
         self.agent = agent
+
+    def request_info(self, relative_file_path: str, line: int, column: int) -> str | None:
+        """Retrieves information (in a sanitized format) about the symbol at the desired location,
+        typically containing the docstring and signature.
+
+        Returns None if no information is available.
+        """
+        lang_server = self.get_language_server(relative_file_path)
+        hover_info = lang_server.request_hover(relative_file_path=relative_file_path, line=line, column=column)
+        if hover_info is None:
+            return None
+        contents = hover_info["contents"]
+        try:
+            # Handle various response formats
+            if isinstance(contents, list):
+                # Array format: extract all parts and join them
+                stripped_parts = []
+                for part in contents:
+                    if isinstance(part, str) and (stripped_part := part.strip()):
+                        stripped_parts.append(stripped_part)
+                    else:
+                        # should be a dict with "value" key
+                        stripped_parts.append(part["value"].strip())  # type: ignore
+                return "\n".join(stripped_parts) if stripped_parts else None
+            if isinstance(contents, dict) and (stripped_contents := contents.get("value", "").strip()):
+                return stripped_contents
+            if isinstance(contents, str) and (stripped_contents := contents.strip()):
+                return stripped_contents
+        except (KeyError, IndexError, TypeError):
+            pass
+        return None
+
+    def request_info_for_us(self, us: UnifiedSymbolInformation) -> str | None:
+        relative_path = us["location"]["relativePath"]
+        if relative_path is None:
+            return None
+        return self.request_info(
+            relative_file_path=relative_path,
+            # we need to use selectionRange for hover,
+            # as range typically starts at the symbol definition (at def, class, etc.) where no hover info is available
+            line=us["selectionRange"]["start"]["line"],
+            column=us["selectionRange"]["start"]["character"],
+        )
+
+    def request_info_for_symbol(self, symbol: LanguageServerSymbol) -> str | None:
+        return self.request_info_for_us(symbol.symbol_root)
 
     def get_root_path(self) -> str:
         return self._ls_manager.get_root_path()

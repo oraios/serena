@@ -10,10 +10,12 @@ import shutil
 import threading
 import uuid
 from pathlib import PurePath
+from time import sleep
 from typing import cast
 
 from overrides import override
 
+from solidlsp import ls_types
 from solidlsp.ls import LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_types import UnifiedSymbolInformation
@@ -144,9 +146,9 @@ class EclipseJDTLS(SolidLanguageServer):
             f"{data_dir}",
         ]
 
-        self.service_ready_event = threading.Event()
-        self.intellicode_enable_command_available = threading.Event()
-        self.initialize_searcher_command_available = threading.Event()
+        self._service_ready_event = threading.Event()
+        self._project_ready_event = threading.Event()
+        self._intellicode_enable_command_available = threading.Event()
 
         super().__init__(
             config, repository_root_path, ProcessLaunchInfo(cmd, proc_env, proc_cwd), "java", solidlsp_settings=solidlsp_settings
@@ -612,6 +614,7 @@ class EclipseJDTLS(SolidLanguageServer):
                         "maven": {"downloadSources": True, "updateSnapshots": False},
                         "eclipse": {"downloadSources": True},
                         "signatureHelp": {"enabled": True, "description": {"enabled": True}},
+                        "hover": {"javadoc": {"enabled": True}},
                         "implementationsCodeLens": {"enabled": True},
                         "format": {
                             "enabled": True,
@@ -721,15 +724,15 @@ class EclipseJDTLS(SolidLanguageServer):
                     self.completions_available.set()
                 if registration["method"] == "workspace/executeCommand":
                     if "java.intellicode.enable" in registration["registerOptions"]["commands"]:
-                        self.intellicode_enable_command_available.set()
+                        self._intellicode_enable_command_available.set()
             return
 
         def lang_status_handler(params: dict) -> None:
-            # TODO: Should we wait for
-            # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
-            # Before proceeding?
             if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
-                self.service_ready_event.set()
+                self._service_ready_event.set()
+            if params["type"] == "ProjectStatus":
+                if params["message"] == "OK":
+                    self._project_ready_event.set()
 
         def execute_client_command_handler(params: dict) -> list:
             assert params["command"] == "_java.reloadBundles.command"
@@ -764,7 +767,7 @@ class EclipseJDTLS(SolidLanguageServer):
 
         self.server.notify.workspace_did_change_configuration({"settings": initialize_params["initializationOptions"]["settings"]})  # type: ignore
 
-        self.intellicode_enable_command_available.wait()
+        self._intellicode_enable_command_available.wait()
 
         java_intellisense_members_path = self.runtime_dependency_paths.intellisense_members_path
         assert os.path.exists(java_intellisense_members_path)
@@ -776,8 +779,50 @@ class EclipseJDTLS(SolidLanguageServer):
         )
         assert intellicode_enable_result
 
-        # TODO: Add comments about why we wait here, and how this can be optimized
-        self.service_ready_event.wait()
+        self._service_ready_event.wait()
+        self._project_ready_event.wait()
+
+    @override
+    def _request_hover(self, uri: str, line: int, column: int) -> ls_types.Hover | None:
+        # Eclipse JDTLS is flaky on request_hover, sometimes ignoring the javadoc of a symbol, and on top of that changes the output format
+        # depending on whether javadoc is present or not (contents: list[...] if present, contents: {value: info} if not)
+        # The following is a rather hacky way to keep calling _request_hover until "a larger" response comes back or we run out of retries
+        # Note: The file is kept open by the caller (request_hover), so retries don't cause repeated open/close cycles
+        max_retries = 5
+        last_result = super()._request_hover(uri, line, column)
+        for _ in range(max_retries):
+            sleep(0.05)
+            new_result = super()._request_hover(uri, line, column)
+            if new_result:
+                if not last_result:
+                    last_result = new_result
+                    continue
+                last_contents = last_result["contents"]
+                new_contents = new_result["contents"]
+                if last_contents == new_contents:
+                    continue
+                if isinstance(new_contents, list) and isinstance(last_contents, dict):
+                    return new_result
+                if isinstance(last_contents, list) and isinstance(new_contents, dict):
+                    return last_result
+                # Get comparable values - prefer list (full javadoc) over dict/str
+                if isinstance(last_contents, list):
+                    last_value: list | str = last_contents
+                elif isinstance(last_contents, dict):
+                    last_value = last_contents["value"]
+                else:
+                    last_value = last_contents
+                if isinstance(new_contents, list):
+                    new_value: list | str = new_contents
+                elif isinstance(new_contents, dict):
+                    new_value = new_contents["value"]
+                else:
+                    new_value = new_contents
+                if len(last_value) > len(new_value):
+                    return last_result
+                else:
+                    return new_result
+        return last_result
 
     def _request_document_symbols(
         self, relative_file_path: str, file_data: LSPFileBuffer | None

@@ -89,6 +89,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         depth: int = 0,
         relative_path: str = "",
         include_body: bool = False,
+        include_info: bool = True,
         include_kinds: list[int] = [],  # noqa: B006
         exclude_kinds: list[int] = [],  # noqa: B006
         substring_matching: bool = False,
@@ -114,17 +115,14 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         :param name_path_pattern: the name path matching pattern (see above)
         :param depth: depth up to which descendants shall be retrieved (e.g. use 1 to also retrieve immediate children;
             for the case where the symbol is a class, this will return its methods).
-            Default 0.
         :param relative_path: Optional. Restrict search to this file or directory. If None, searches entire codebase.
             If a directory is passed, the search will be restricted to the files in that directory.
             If a file is passed, the search will be restricted to that file.
             If you have some knowledge about the codebase, you should use this parameter, as it will significantly
             speed up the search as well as reduce the number of results.
-        :param include_body: If True, include the symbol's source code. Use judiciously.
-        :param include_kinds: Optional. List of LSP symbol kind integers to include. (e.g., 5 for Class, 12 for Function).
-            Valid kinds: 1=file, 2=module, 3=namespace, 4=package, 5=class, 6=method, 7=property, 8=field, 9=constructor, 10=enum,
-            11=interface, 12=function, 13=variable, 14=constant, 15=string, 16=number, 17=boolean, 18=array, 19=object,
-            20=key, 21=null, 22=enum member, 23=struct, 24=event, 25=operator, 26=type parameter.
+        :param include_body: whether to include the symbol's source code. Use judiciously.
+        :param include_info: whether to include additional info about the symbol (ignored if include_body is True).
+        :param include_kinds: List of LSP symbol kind integers to include.
             If not provided, all kinds are included.
         :param exclude_kinds: Optional. List of LSP symbol kind integers to exclude. Takes precedence over `include_kinds`.
             If not provided, no kinds are excluded.
@@ -145,6 +143,12 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             within_relative_path=relative_path,
         )
         symbol_dicts = [_sanitize_symbol_dict(s.to_dict(kind=True, location=True, depth=depth, include_body=include_body)) for s in symbols]
+        if not include_body and include_info:
+            # we add an info field to the symbol dicts if requested
+            for s, s_dict in zip(symbols, symbol_dicts, strict=True):
+                if symbol_info := symbol_retriever.request_info_for_symbol(s):
+                    s_dict["info"] = symbol_info
+                s_dict.pop("name", None)  # name is included in the info
         result = self._to_json(symbol_dicts)
         return self._limit_length(result, max_answer_chars)
 
