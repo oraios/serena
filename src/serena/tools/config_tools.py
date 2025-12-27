@@ -2,6 +2,19 @@ from serena.config.context_mode import SerenaAgentMode
 from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional
 
 
+class OpenDashboardTool(Tool, ToolMarkerDoesNotRequireActiveProject):
+    """
+    Opens the Serena web dashboard in the default web browser.
+    The dashboard provides logs, session information, and tool usage statistics.
+    """
+
+    def apply(self) -> str:
+        """
+        Opens the Serena web dashboard in the default web browser.
+        """
+        return self.agent.open_dashboard()
+
+
 class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     """
     Activates a project based on the project name or path.
