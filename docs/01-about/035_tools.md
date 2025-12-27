@@ -28,6 +28,7 @@ Note that in most configurations, only a subset of these tools will be enabled s
 * `list_dir`: Lists files and directories in the given directory (optionally with recursion).
 * `list_memories`: Lists memories in Serena's project-specific memory store.
 * `onboarding`: Performs onboarding (identifying the project structure and essential tasks, e.g. for testing or building).
+* `open_dashboard`: Opens the Serena web dashboard in the default web browser.
 * `prepare_for_new_conversation`: Provides instructions for preparing for a new conversation (in order to continue with th
   e necessary context).
 * `read_file`: Reads a file within the project directory.

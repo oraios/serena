@@ -20,3 +20,12 @@ Serena comes with built-in tools for monitoring and managing the current session
 
 Both can be configured in Serena's [configuration](050_configuration) file (`serena_config.yml`).
 If enabled, they will automatically be opened as soon as the Serena agent/MCP server is started.
+
+## Disabling Automatic Browser Opening
+
+If you prefer not to have the dashboard open automatically (e.g., to avoid focus stealing), you can disable it
+by setting `web_dashboard_open_on_launch: False` in your `serena_config.yml`.
+
+When automatic opening is disabled, you can still access the dashboard by:
+* Navigating directly to `http://localhost:24282/dashboard/index.html` in your browser
+* Asking the AI to use the `open_dashboard` tool, which will open the dashboard in your default browser

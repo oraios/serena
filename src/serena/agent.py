@@ -189,6 +189,9 @@ class SerenaAgent:
         # project-specific instances, which will be initialized upon project activation
         self._active_project: Project | None = None
 
+        # dashboard URL (set when dashboard is started)
+        self._dashboard_url: str | None = None
+
         # adjust log level
         serena_log_level = self.serena_config.log_level
         if Logger.root.level != serena_log_level:
@@ -292,6 +295,7 @@ class SerenaAgent:
             if dashboard_host == "0.0.0.0":
                 dashboard_host = "localhost"
             dashboard_url = f"http://{dashboard_host}:{port}/dashboard/index.html"
+            self._dashboard_url = dashboard_url
             log.info("Serena web dashboard started at %s", dashboard_url)
             if self.serena_config.web_dashboard_open_on_launch:
                 if not system_has_usable_display():
@@ -404,6 +408,31 @@ class SerenaAgent:
 
         # open the dashboard URL in the default web browser
         webbrowser.open(url)
+
+    def get_dashboard_url(self) -> str | None:
+        """
+        :return: the URL of the web dashboard, or None if the dashboard is not running
+        """
+        return self._dashboard_url
+
+    def open_dashboard(self) -> str:
+        """
+        Opens the Serena web dashboard in the default web browser.
+
+        :return: a message indicating success or failure
+        """
+        if self._dashboard_url is None:
+            return "Error: The web dashboard is not running. Enable it in the Serena configuration."
+
+        if not system_has_usable_display():
+            return f"Error: No usable display detected. You can open the dashboard manually at: {self._dashboard_url}"
+
+        # open the dashboard URL in the default web browser (using a separate process to control
+        # output redirection)
+        process = multiprocessing.Process(target=self._open_dashboard, args=(self._dashboard_url,))
+        process.start()
+        process.join(timeout=1)
+        return f"Dashboard opened in the default web browser: {self._dashboard_url}"
 
     def get_project_root(self) -> str:
         """

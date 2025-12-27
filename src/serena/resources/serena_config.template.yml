@@ -35,7 +35,8 @@ web_dashboard_listen_address: 127.0.0.1
 web_dashboard_open_on_launch: True
 # whether to open a browser window with the web dashboard when Serena starts (provided that web_dashboard
 # is enabled). If set to False, you can still open the dashboard manually by navigating to
-# http://localhost:24282/dashboard/ in your web browser (24282 = 0x5EDA, SErena DAshboard).
+# http://localhost:24282/dashboard/ in your web browser (24282 = 0x5EDA, SErena DAshboard),
+# or by asking the AI to use the open_dashboard tool.
 # If you have multiple instances running, a higher port will be used; try port 24283, 24284, etc.
 
 log_level: 20
