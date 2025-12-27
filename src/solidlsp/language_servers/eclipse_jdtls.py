@@ -784,45 +784,47 @@ class EclipseJDTLS(SolidLanguageServer):
 
     @override
     def _request_hover(self, uri: str, line: int, column: int) -> ls_types.Hover | None:
-        # Eclipse JDTLS is flaky on request_hover, sometimes ignoring the javadoc of a symbol, and on top of that changes the output format
-        # depending on whether javadoc is present or not (contents: list[...] if present, contents: {value: info} if not)
-        # The following is a rather hacky way to keep calling _request_hover until "a larger" response comes back or we run out of retries
-        # Note: The file is kept open by the caller (request_hover), so retries don't cause repeated open/close cycles
+        # Eclipse JDTLS lazily loads javadocs on first hover request, then caches them.
+        # This means the first request often returns incomplete info (just the signature),
+        # while subsequent requests return the full javadoc.
+        #
+        # The response format also differs based on javadoc presence:
+        #   - contents: list[...] when javadoc IS present (preferred, richer format)
+        #   - contents: {value: info} when javadoc is NOT present
+        #
+        # There's no LSP signal for "javadoc fully loaded" and no way to request
+        # hover with "wait for complete info". The retry approach is the only viable
+        # workaround - we keep requesting until we get the richer list format or
+        # the content stops growing.
+        #
+        # The file is kept open by the caller (request_hover), so retries are cheap
+        # and don't cause repeated didOpen/didClose cycles.
+
+        def content_score(result: ls_types.Hover | None) -> tuple[int, int]:
+            """Return (format_priority, length) for comparison. Higher is better."""
+            if result is None:
+                return (0, 0)
+            contents = result["contents"]
+            if isinstance(contents, list):
+                return (2, len(contents))  # List format (has javadoc) is best
+            elif isinstance(contents, dict):
+                return (1, len(contents.get("value", "")))
+            else:
+                return (1, len(contents))
+
         max_retries = 5
-        last_result = super()._request_hover(uri, line, column)
+        best_result = super()._request_hover(uri, line, column)
+        best_score = content_score(best_result)
+
         for _ in range(max_retries):
             sleep(0.05)
             new_result = super()._request_hover(uri, line, column)
-            if new_result:
-                if not last_result:
-                    last_result = new_result
-                    continue
-                last_contents = last_result["contents"]
-                new_contents = new_result["contents"]
-                if last_contents == new_contents:
-                    continue
-                if isinstance(new_contents, list) and isinstance(last_contents, dict):
-                    return new_result
-                if isinstance(last_contents, list) and isinstance(new_contents, dict):
-                    return last_result
-                # Get comparable values - prefer list (full javadoc) over dict/str
-                if isinstance(last_contents, list):
-                    last_value: list | str = last_contents
-                elif isinstance(last_contents, dict):
-                    last_value = last_contents["value"]
-                else:
-                    last_value = last_contents
-                if isinstance(new_contents, list):
-                    new_value: list | str = new_contents
-                elif isinstance(new_contents, dict):
-                    new_value = new_contents["value"]
-                else:
-                    new_value = new_contents
-                if len(last_value) > len(new_value):
-                    return last_result
-                else:
-                    return new_result
-        return last_result
+            new_score = content_score(new_result)
+            if new_score > best_score:
+                best_result = new_result
+                best_score = new_score
+
+        return best_result
 
     def _request_document_symbols(
         self, relative_file_path: str, file_data: LSPFileBuffer | None
