@@ -92,6 +92,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         include_kinds: list[int] = [],  # noqa: B006
         exclude_kinds: list[int] = [],  # noqa: B006
         substring_matching: bool = False,
+        include_documentation: bool = True,
         max_answer_chars: int = -1,
     ) -> str:
         """
@@ -130,6 +131,9 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             If not provided, no kinds are excluded.
         :param substring_matching: If True, use substring matching for the last element of the pattern, such that
             "Foo/get" would match "Foo/getValue" and "Foo/getData".
+        :param include_documentation: If True (default), include documentation comments from hover information.
+            This provides doc comments (e.g., /// style comments in Pascal, docstrings in Python) for each symbol.
+            Set to False to skip hover requests and improve performance when documentation is not needed.
         :param max_answer_chars: Max characters for the JSON result. If exceeded, no content is returned.
             -1 means the default value from the config will be used.
         :return: a list of symbols (with locations) matching the name.
@@ -145,6 +149,56 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             within_relative_path=relative_path,
         )
         symbol_dicts = [_sanitize_symbol_dict(s.to_dict(kind=True, location=True, depth=depth, include_body=include_body)) for s in symbols]
+
+        # Add documentation from hover information if requested
+        if include_documentation:
+            import logging
+
+            _log = logging.getLogger(__name__)
+            for symbol_dict, symbol in zip(symbol_dicts, symbols, strict=False):
+                try:
+                    symbol_relative_path = symbol.location.relative_path
+                    symbol_line = symbol.location.line
+                    symbol_column = symbol.location.column
+                    _log.debug(f"Hover for '{symbol.name}': path={symbol_relative_path}, line={symbol_line}, col={symbol_column}")
+                    if symbol_relative_path and symbol_line is not None and symbol_column is not None:
+                        ls = symbol_retriever.get_language_server(symbol_relative_path)
+                        hover = ls.request_hover(symbol_relative_path, symbol_line, symbol_column)
+                        _log.debug(
+                            f"Hover result for '{symbol.name}': {hover is not None}, contents={hover.get('contents') if hover else None}"
+                        )
+                        # hover is a TypedDict (dict), so use dict access
+                        if hover and hover.get("contents"):
+                            contents = hover["contents"]
+                            # contents can be MarkupContent (dict with 'value'), str, or list[MarkedString]
+                            if isinstance(contents, dict) and "value" in contents:
+                                symbol_dict["documentation"] = contents["value"]
+                            elif isinstance(contents, str):
+                                symbol_dict["documentation"] = contents
+                            elif isinstance(contents, list):
+                                # list[MarkedString] - join all string parts
+                                parts: list[str] = []
+                                for item in contents:
+                                    if isinstance(item, str):
+                                        parts.append(item)
+                                    elif isinstance(item, dict) and "value" in item:
+                                        parts.append(item["value"])
+                                symbol_dict["documentation"] = "\n".join(parts)
+                        else:
+                            _log.debug(f"Hover returned empty for '{symbol.name}'")
+                            symbol_dict["documentation"] = ""
+                    else:
+                        _log.warning(
+                            f"Cannot get hover for '{symbol.name}': path={symbol_relative_path}, line={symbol_line}, col={symbol_column}"
+                        )
+                        symbol_dict["documentation"] = ""
+                except Exception as e:
+                    # If hover fails for any reason, log the error and skip documentation for this symbol
+                    import logging
+
+                    logging.getLogger(__name__).warning(f"Hover failed for symbol '{symbol.name}': {type(e).__name__}: {e}")
+                    symbol_dict["documentation"] = ""
+
         result = self._to_json(symbol_dicts)
         return self._limit_length(result, max_answer_chars)
 
