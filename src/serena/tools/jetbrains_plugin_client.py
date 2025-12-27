@@ -181,6 +181,54 @@ class JetBrainsPluginClient(ToStringMixin):
         request_data = {"relativePath": relative_path}
         return self._make_request("POST", "/getSymbolsOverview", request_data)
 
+    def get_supertypes(
+        self,
+        name_path: str,
+        relative_path: str,
+        depth: int | None = None,
+        limit_children: int | None = None,
+    ) -> dict[str, Any]:
+        """
+        Gets the supertypes (parent classes/interfaces) of a symbol.
+
+        :param name_path: the name path of the symbol
+        :param relative_path: the relative path to the file containing the symbol
+        :param depth: depth limit for hierarchy traversal (None or 0 for unlimited)
+        :param limit_children: optional limit on children per level
+        :return: dictionary containing symbol info and type hierarchy
+        """
+        request_data = {
+            "namePath": name_path,
+            "relativePath": relative_path,
+            "depth": depth,
+            "limitChildren": limit_children,
+        }
+        return self._make_request("POST", "/getSupertypes", request_data)
+
+    def get_subtypes(
+        self,
+        name_path: str,
+        relative_path: str,
+        depth: int | None = None,
+        limit_children: int | None = None,
+    ) -> dict[str, Any]:
+        """
+        Gets the subtypes (subclasses/implementations) of a symbol.
+
+        :param name_path: the name path of the symbol
+        :param relative_path: the relative path to the file containing the symbol
+        :param depth: depth limit for hierarchy traversal (None or 0 for unlimited)
+        :param limit_children: optional limit on children per level
+        :return: dictionary containing symbol info and type hierarchy
+        """
+        request_data = {
+            "namePath": name_path,
+            "relativePath": relative_path,
+            "depth": depth,
+            "limitChildren": limit_children,
+        }
+        return self._make_request("POST", "/getSubtypes", request_data)
+
     def rename_symbol(
         self, name_path: str, relative_path: str, new_name: str, rename_in_comments: bool, rename_in_text_occurrences: bool
     ) -> None:

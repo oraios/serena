@@ -1,3 +1,5 @@
+from typing import Literal
+
 from serena.tools import Tool, ToolMarkerOptional, ToolMarkerSymbolicRead
 from serena.tools.jetbrains_plugin_client import JetBrainsPluginClient
 
@@ -120,4 +122,99 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
                 relative_path=relative_path,
             )
             result = self._to_json(response_dict)
+        return self._limit_length(result, max_answer_chars)
+
+
+class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+    """
+    Retrieves the type hierarchy (supertypes and/or subtypes) of a symbol using the JetBrains backend
+    """
+
+    @staticmethod
+    def _transform_hierarchy_nodes(nodes: list[dict] | None) -> dict[str, list]:
+        """
+        Transform a list of TypeHierarchyNode into a file-grouped compact format.
+
+        Returns a dict where keys are relative_paths and values are lists of either:
+        - "SymbolNamePath" (leaf node)
+        - {"SymbolNamePath": {nested_file_grouped_children}} (node with children)
+        """
+        if not nodes:
+            return {}
+
+        result: dict[str, list] = {}
+
+        for node in nodes:
+            symbol = node["symbol"]
+            name_path = symbol["name_path"]
+            rel_path = symbol["relative_path"]
+            children = node.get("children", [])
+
+            if rel_path not in result:
+                result[rel_path] = []
+
+            if children:
+                # Node with children - recurse
+                nested = JetBrainsTypeHierarchyTool._transform_hierarchy_nodes(children)
+                result[rel_path].append({name_path: nested})
+            else:
+                # Leaf node
+                result[rel_path].append(name_path)
+
+        return result
+
+    def apply(
+        self,
+        name_path: str,
+        relative_path: str,
+        hierarchy_type: Literal["super", "sub", "both"] = "sub",
+        depth: int | None = 1,
+        max_answer_chars: int = -1,
+    ) -> str:
+        """
+        Gets the type hierarchy of a symbol (supertypes, subtypes, or both).
+
+        :param name_path: name path of the symbol for which to get the type hierarchy.
+        :param relative_path: the relative path to the file containing the symbol.
+        :param hierarchy_type: which hierarchy to retrieve: "super" for parent classes/interfaces,
+            "sub" for subclasses/implementations, or "both" for both directions.
+        :param depth: depth limit for hierarchy traversal (None or 0 for unlimited).
+        :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
+            -1 means the default value from the config will be used.
+        :return: Compact JSON with file-grouped hierarchy. Error string if not applicable.
+        """
+        with JetBrainsPluginClient.from_project(self.project) as client:
+            subtypes = {}
+            supertypes = {}
+            if hierarchy_type in ("super", "both"):
+                supertypes_response = client.get_supertypes(
+                    name_path=name_path,
+                    relative_path=relative_path,
+                    depth=depth,
+                )
+                if error_msg := supertypes_response.get("error"):
+                    return error_msg
+
+                symbol = supertypes_response["symbol"]
+                supertypes = self._transform_hierarchy_nodes(supertypes_response.get("hierarchy"))
+            if hierarchy_type in ("sub", "both"):
+                subtypes_response = client.get_subtypes(
+                    name_path=name_path,
+                    relative_path=relative_path,
+                    depth=depth,
+                )
+                if error_msg := subtypes_response.get("error"):
+                    return error_msg
+                symbol = subtypes_response["symbol"]
+
+                subtypes = self._transform_hierarchy_nodes(subtypes_response.get("hierarchy"))
+
+            symbol_compact = {symbol["relative_path"]: [symbol["name_path"]]}
+            result_dict: dict[str, dict | list] = {"symbol": symbol_compact}
+            if supertypes:
+                result_dict["supertypes"] = supertypes
+            if subtypes:
+                result_dict["subtypes"] = subtypes
+
+            result = self._to_json(result_dict)
         return self._limit_length(result, max_answer_chars)
