@@ -255,3 +255,5 @@ cabal.project.local*
 
 zz-misc/
 vue-implementation/
+# Temporary implementation docs
+PASCAL_DELPHI_IMPLEMENTATION.md

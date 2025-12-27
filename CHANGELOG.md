@@ -56,6 +56,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   * **Add support for Erlang** experimental, may hang or be slow, uses the recently archived [erlang_ls](https://github.com/erlang-ls/erlang_ls)
   * **Ruby dual language server support**: Added ruby-lsp as the modern primary Ruby language server. Solargraph remains available as an experimental legacy option. ruby-lsp supports both .rb and .erb files, while Solargraph supports .rb files only.
   * **Add support for PowerShell** via PowerShell Editor Services (PSES). Requires `pwsh` (PowerShell Core) to be installed and available in PATH. Supports symbol navigation, go-to-definition, and within-file references for .ps1 files.
+  * **Add support for Pascal** via pasls language server with support for Free Pascal and Lazarus projects. Automatically detects or compiles pasls from source if needed. Supports .pas, .pp, .lpr, .lfm, and .inc files with full symbol navigation and cross-file references.
+  * **Add support for Delphi** via DelphiLSP for RAD Studio/Delphi projects. Automatically discovers DelphiLSP in standard RAD Studio installations. Supports .pas, .dpr, .dfm, .dpk, and .inc files with symbol navigation and go-to-definition.
 
 
 # 0.1.4

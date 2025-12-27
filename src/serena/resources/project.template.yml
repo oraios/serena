@@ -1,15 +1,20 @@
 # list of languages for which language servers are started; choose from:
 #   al               bash             clojure          cpp              csharp           csharp_omnisharp
-#   dart             elixir           elm              erlang           fortran          go
-#   haskell          java             julia            kotlin           lua              markdown
-#   nix              perl             php              python           python_jedi      r
-#   rego             ruby             ruby_solargraph  rust             scala            swift
-#   terraform        typescript       typescript_vts   yaml             zig
+#   dart             delphi           elixir           elm              erlang           fortran
+#   go               haskell          java             julia            kotlin           lua
+#   markdown         nix              pascal           perl             php              python
+#   python_jedi      r                rego             ruby             ruby_solargraph  rust
+#   scala            swift            terraform        typescript       typescript_vts   yaml
+#   zig
 # Note:
 #   - For C, use cpp
 #   - For JavaScript, use typescript
+#   - For Free Pascal / Lazarus, use pascal
+#   - For Embarcadero Delphi, use delphi
 # Special requirements:
 #   - csharp: Requires the presence of a .sln file in the project folder.
+#   - pascal: Requires Free Pascal Compiler (fpc) and optionally Lazarus.
+#   - delphi: Requires Embarcadero Delphi or RAD Studio with DelphiLSP.
 # When using multiple languages, the first language server that supports a given file will be used for that file.
 # The first language is the default language and the respective language server will be used as a fallback.
 # Note that when using the JetBrains backend, language servers are not used and this list is correspondingly ignored.
@@ -36,7 +41,7 @@ read_only: false
 
 # list of tool names to exclude. We recommend not excluding any tools, see the readme for more details.
 # Below is the complete list of tools for convenience.
-# To make sure you have the latest list of tools, and to view their descriptions, 
+# To make sure you have the latest list of tools, and to view their descriptions,
 # execute `uv run scripts/print_tool_overview.py`.
 #
 #  * `activate_project`: Activates a project by name.

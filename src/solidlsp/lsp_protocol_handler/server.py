@@ -124,11 +124,15 @@ class MessageType:
 
 
 def content_length(line: bytes) -> int | None:
-    if line.startswith(b"Content-Length: "):
-        _, value = line.split(b"Content-Length: ")
-        value = value.strip()
-        try:
-            return int(value)
-        except ValueError:
-            raise ValueError(f"Invalid Content-Length header: {value!r}")
+    # Handle both "Content-Length: " (with space) and "Content-Length:" (without space)
+    # for robustness against different LSP server implementations
+    if line.startswith(b"Content-Length:"):
+        # Split on colon and take everything after it
+        parts = line.split(b":", 1)
+        if len(parts) == 2:
+            value = parts[1].strip()
+            try:
+                return int(value)
+            except ValueError:
+                raise ValueError(f"Invalid Content-Length header: {value!r}")
     return None
