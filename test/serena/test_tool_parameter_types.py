@@ -3,7 +3,7 @@ import logging
 import pytest
 
 from serena.config.serena_config import SerenaConfig
-from serena.mcp import SerenaMCPFactorySingleProcess
+from serena.mcp import SerenaMCPFactory
 from serena.tools.tools_base import ToolRegistry
 
 
@@ -16,9 +16,9 @@ def test_all_tool_parameters_have_type(context):
     cfg = SerenaConfig(gui_log_window_enabled=False, web_dashboard=False, log_level=logging.ERROR)
     registry = ToolRegistry()
     cfg.included_optional_tools = tuple(registry.get_tool_names_optional())
-    factory = SerenaMCPFactorySingleProcess(context=context)
+    factory = SerenaMCPFactory(context=context)
     # Initialize the agent so that the tools are available
-    factory._instantiate_agent(cfg, [])
+    factory.agent = factory._create_serena_agent(cfg, [])
     tools = list(factory._iter_tools())
 
     for tool in tools:
