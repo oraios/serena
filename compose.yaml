@@ -1,7 +1,7 @@
 services:
   serena:
     image: serena:latest
-    # To work with projects, you must mount them as volumes:
+    # To work with projects, you must mount them into /workspace/ in the container:
     # volumes:
       # - ./my-project:/workspace/my-project
       # - /path/to/another/project:/workspace/another-project
@@ -16,23 +16,6 @@ services:
       - SERENA_DOCKER=1
     command:
       - "uv run --directory . serena-mcp-server --transport sse --port 9121 --host 0.0.0.0"
-      # Add the context for the IDE assistant
-      # - "uv run --directory . serena-mcp-server --transport sse --port 9121 --host 0.0.0.0 --context ide-assistant"
+      # Alternatively add further arguments, e.g. a context
+      # - "uv run --directory . serena-mcp-server --transport sse --port 9121 --host 0.0.0.0 --context ide"
 
-  serena-dev:
-    image: serena:dev
-    build:
-      context: ./
-      dockerfile: Dockerfile
-      target: development
-    tty: true
-    stdin_open: true
-    environment:
-      - SERENA_DOCKER=1
-    volumes:
-      - .:/workspaces/serena
-    ports:
-      - "${SERENA_PORT:-9121}:9121"  # MCP server port
-      - "${SERENA_DASHBOARD_PORT:-24282}:24282"  # Dashboard port
-    command:
-      - "uv run --directory . serena-mcp-server"

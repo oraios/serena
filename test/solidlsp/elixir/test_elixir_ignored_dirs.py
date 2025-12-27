@@ -1,3 +1,4 @@
+import os
 from collections.abc import Generator
 from pathlib import Path
 
@@ -5,29 +6,40 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from test.conftest import create_ls
+from test.conftest import start_ls_context
 
-from . import NEXTLS_UNAVAILABLE, NEXTLS_UNAVAILABLE_REASON
+from . import EXPERT_UNAVAILABLE, EXPERT_UNAVAILABLE_REASON
 
 # These marks will be applied to all tests in this module
-pytestmark = [pytest.mark.elixir, pytest.mark.skipif(NEXTLS_UNAVAILABLE, reason=f"Next LS not available: {NEXTLS_UNAVAILABLE_REASON}")]
+pytestmark = [pytest.mark.elixir, pytest.mark.skipif(EXPERT_UNAVAILABLE, reason=f"Expert not available: {EXPERT_UNAVAILABLE_REASON}")]
+
+# Skip slow tests in CI - they require multiple Expert instances which is too slow
+IN_CI = bool(os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"))
+SKIP_SLOW_IN_CI = pytest.mark.skipif(
+    IN_CI,
+    reason="Slow tests skipped in CI - require multiple Expert instances (~60-90s each)",
+)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def ls_with_ignored_dirs() -> Generator[SolidLanguageServer, None, None]:
-    """Fixture to set up an LS for the elixir test repo with the 'scripts' directory ignored."""
+    """Fixture to set up an LS for the elixir test repo with the 'scripts' directory ignored.
+
+    Uses session scope to avoid restarting Expert for each test.
+    """
     ignored_paths = ["scripts", "ignored_dir"]
-    ls = create_ls(ignored_paths=ignored_paths, language=Language.ELIXIR)
-    ls.start()
-    try:
+    with start_ls_context(language=Language.ELIXIR, ignored_paths=ignored_paths) as ls:
         yield ls
-    finally:
-        ls.stop()
 
 
-@pytest.mark.parametrize("ls_with_ignored_dirs", [Language.ELIXIR], indirect=True)
+@pytest.mark.slow
+@SKIP_SLOW_IN_CI
 def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
-    """Tests that request_full_symbol_tree ignores the configured directory."""
+    """Tests that request_full_symbol_tree ignores the configured directory.
+
+    Note: This test uses a separate Expert instance with custom ignored paths,
+    which adds ~60-90s startup time.
+    """
     root = ls_with_ignored_dirs.request_full_symbol_tree()[0]
     root_children = root["children"]
     children_names = {child["name"] for child in root_children}
@@ -39,9 +51,14 @@ def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     assert "ignored_dir" not in children_names, f"ignored_dir should not be in {children_names}"
 
 
-@pytest.mark.parametrize("ls_with_ignored_dirs", [Language.ELIXIR], indirect=True)
+@pytest.mark.slow
+@SKIP_SLOW_IN_CI
 def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
-    """Tests that find_references ignores the configured directory."""
+    """Tests that find_references ignores the configured directory.
+
+    Note: This test uses a separate Expert instance with custom ignored paths,
+    which adds ~60-90s startup time.
+    """
     # Location of User struct, which is referenced in scripts and ignored_dir
     definition_file = "lib/models.ex"
 
@@ -64,14 +81,18 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     assert not any("ignored_dir" in ref["relativePath"] for ref in references), "ignored_dir should be ignored"
 
 
+@pytest.mark.slow
+@SKIP_SLOW_IN_CI
 @pytest.mark.parametrize("repo_path", [Language.ELIXIR], indirect=True)
 def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
-    """Tests that refs and symbols with glob patterns are ignored."""
-    ignored_paths = ["*cripts", "ignored_*"]  # codespell:ignore cripts
-    ls = create_ls(ignored_paths=ignored_paths, repo_path=str(repo_path), language=Language.ELIXIR)
-    ls.start()
+    """Tests that refs and symbols with glob patterns are ignored.
 
-    try:
+    Note: This test uses a separate Expert instance with custom ignored paths,
+    which adds ~60-90s startup time.
+    """
+    ignored_paths = ["*cripts", "ignored_*"]  # codespell:ignore cripts
+    with start_ls_context(language=Language.ELIXIR, repo_path=str(repo_path), ignored_paths=ignored_paths) as ls:
+
         # Same as in the above tests
         root = ls.request_full_symbol_tree()[0]
         root_children = root["children"]
@@ -101,8 +122,6 @@ def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
             # Assert that scripts and ignored_dir do not appear in references
             assert not any("scripts" in ref["relativePath"] for ref in references), "scripts should be ignored (glob)"
             assert not any("ignored_dir" in ref["relativePath"] for ref in references), "ignored_dir should be ignored (glob)"
-    finally:
-        ls.stop()
 
 
 @pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)
@@ -122,6 +141,10 @@ def test_default_ignored_directories(language_server: SolidLanguageServer):
     assert not language_server.is_ignored_dirname("priv"), "priv should not be ignored"
 
 
+@pytest.mark.xfail(
+    reason="Expert 0.1.0 bug: document_symbols may return nil for some files (flaky)",
+    raises=Exception,
+)
 @pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)
 def test_symbol_tree_excludes_build_dirs(language_server: SolidLanguageServer):
     """Test that symbol tree excludes build and dependency directories."""

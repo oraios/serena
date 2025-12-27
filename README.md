@@ -22,6 +22,9 @@ Instead, it can use code-centric tools like `find_symbol`, `find_referencing_sym
   <a href="lessons_learned.md"><img src="https://img.shields.io/badge/Lessons-Learned-7c4700?style=flat&logo=readthedocs&logoColor=white&labelColor=7c4700" alt="Lessons Learned" /></a>
 </p>
 
+> [!TIP]
+> The [**Serena JetBrains plugin**](#the-serena-jetbrains-plugin) has been released!
+
 ## LLM Integration
 
 Serena provides the necessary [tools](https://oraios.github.io/serena/01-about/035_tools.html) for coding workflows, but an LLM is required to do the actual work,
@@ -55,23 +58,47 @@ Note how Serena's tools enable Claude to find and edit the right symbols.
 
 https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
 
-### Programming Language Support & Semantic Analysis Capabilities
+## Programming Language Support & Semantic Analysis Capabilities
 
-Serena's semantic code analysis capabilities build on **language servers** using the widely implemented
-language server protocol (LSP). The LSP provides a set of versatile code querying
-and editing functionalities based on symbolic understanding of the code.
+Serena provides a set of versatile code querying and editing functionalities
+based on symbolic understanding of the code.
 Equipped with these capabilities, Serena discovers and edits code just like a seasoned developer
 making use of an IDE's capabilities would.
 Serena can efficiently find the right context and do the right thing even in very large and
-complex projects! So not only is it free and open-source, it frequently achieves better results
-than existing solutions that charge a premium.
+complex projects!
 
-Language servers provide support for a wide range of programming languages.
+There are two alternative technologies powering these capabilities:
+
+* **Language servers** implementing the language server Protocol (LSP) — the free/open-source alternative.
+* **The Serena JetBrains Plugin**, which leverages the powerful code analysis and editing
+  capabilities of your JetBrains IDE.
+
+You can choose either of these backends depending on your preferences and requirements.
+
+### Language Servers
+
+Serena incorporates a powerful abstraction layer for the integration of language servers
+that implement the language server protocol (LSP).
+The underlying language servers are typically open-source projects (like Serena) or at least freely available for use.
+
 With Serena's LSP library, we provide **support for over 30 programming languages**, including
-AL, Bash, C#, C/C++, Clojure, Dart, Elixir, Elm, Erlang, Fortran, Go, Haskell, Java, Javascript, Julia, Kotlin, Lua, Markdown, Nix, Perl, PHP, Python, R, Ruby, Rust, Scala, Swift, TypeScript, YAML and Zig.
+AL, Bash, C#, C/C++, Clojure, Dart, Elixir, Elm, Erlang, Fortran, Go, Groovy (partial support), Haskell, Java, Javascript, Julia, Kotlin, Lua, Markdown, Nix, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Scala, Swift, TOML, TypeScript, YAML, and Zig.
 
 > [!IMPORTANT]
-> Some languages require additional dependencies to be installed; see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
+> Some language servers require additional dependencies to be installed; see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
+
+### The Serena JetBrains Plugin
+
+As an alternative to language servers, the [Serena JetBrains Plugin](https://plugins.jetbrains.com/plugin/28946-serena/)
+leverages the powerful code analysis capabilities of your JetBrains IDE. 
+The plugin naturally supports all programming languages and frameworks that are supported by JetBrains IDEs, 
+including IntelliJ IDEA, PyCharm, Android Studio, WebStorm, PhpStorm, RubyMine, GoLand, CLion, and others.
+Only Rider is not supported.
+
+<a href="https://plugins.jetbrains.com/plugin/28946-serena/"><img src="docs/_static/images/jetbrains-marketplace-button.png"></a>
+
+The plugin offers the most robust and most powerful Serena experience.  
+See our [documentation page](https://oraios.github.io/serena/02-usage/025_jetbrains_plugin.html) for further details and instructions.
 
 ## Quick Start
 

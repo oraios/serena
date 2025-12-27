@@ -1,11 +1,9 @@
-import logging
 import os
 
 import pytest
 
 from solidlsp.language_servers.scala_language_server import ScalaLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.settings import SolidLSPSettings
 
 pytest.skip("Scala must be compiled for these tests to run through, which is a huge hassle", allow_module_level=True)
@@ -18,10 +16,9 @@ pytestmark = pytest.mark.scala
 @pytest.fixture(scope="module")
 def scala_ls():
     repo_root = os.path.abspath("test/resources/repos/scala")
-    logger = LanguageServerLogger(json_format=False, log_level=logging.INFO)
     config = LanguageServerConfig(code_language=Language.SCALA)
     solidlsp_settings = SolidLSPSettings()
-    ls = ScalaLanguageServer(config, logger, repo_root, solidlsp_settings)
+    ls = ScalaLanguageServer(config, repo_root, solidlsp_settings)
 
     with ls.start_server():
         yield ls
@@ -37,6 +34,10 @@ def test_scala_document_symbols(scala_ls):
     assert symbol_names[3] == "result"
     assert symbol_names[4] == "sum"
     assert symbol_names[5] == "add"
+    assert symbol_names[6] == "someMethod"
+    assert symbol_names[7] == "str"
+    assert symbol_names[8] == "Config"
+    assert symbol_names[9] == "field1"  # confirm https://github.com/oraios/serena/issues/688
 
 
 def test_scala_references_within_same_file(scala_ls):

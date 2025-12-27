@@ -1,5 +1,5 @@
 """
-Defines wrapper objects around the types returned by LSP to ensure decoupling between LSP versions and multilspy
+Defines wrapper objects around the types returned by LSP to ensure decoupling between LSP versions and SolidLSP
 """
 
 from __future__ import annotations
@@ -371,28 +371,3 @@ class Diagnostic(TypedDict):
     """ The code of the diagnostic. """
     source: NotRequired[str]
     """ The source of the diagnostic, e.g. the name of the tool that produced it. """
-
-
-def extract_text_edits(workspace_edit: WorkspaceEdit) -> dict[str, list[TextEdit]]:
-    """
-    Extracts the text changes from a WorkspaceEdit object.
-
-    Args:
-        workspace_edit (WorkspaceEdit): The WorkspaceEdit object to extract text changes from.
-
-    Returns:
-        dict[str, list[TextEdit]]: A dictionary mapping document URIs to lists of TextEdit objects.
-
-    """
-    if "changes" in workspace_edit:
-        return workspace_edit["changes"]
-    elif "documentChanges" in workspace_edit:
-        changes = {}
-        for change in workspace_edit["documentChanges"]:
-            if "textDocument" in change and "edits" in change:
-                uri = change["textDocument"]["uri"]
-                edits = change["edits"]
-                changes[uri] = edits
-        return changes
-    else:
-        raise Exception(f"Invalid WorkspaceEdit (expected 'changes' or 'documentChanges' key):\n{workspace_edit}")

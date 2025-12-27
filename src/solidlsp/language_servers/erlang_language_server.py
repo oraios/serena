@@ -11,21 +11,16 @@ from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 class ErlangLanguageServer(SolidLanguageServer):
     """Language server for Erlang using Erlang LS."""
 
-    def __init__(
-        self,
-        config: LanguageServerConfig,
-        logger: LanguageServerLogger,
-        repository_root_path: str,
-        solidlsp_settings: SolidLSPSettings,
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates an ErlangLanguageServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
@@ -39,7 +34,6 @@ class ErlangLanguageServer(SolidLanguageServer):
 
         super().__init__(
             config,
-            logger,
             repository_root_path,
             ProcessLaunchInfo(cmd=[self.erlang_ls_path, "--transport", "stdio"], cwd=repository_root_path),
             "erlang",
@@ -89,7 +83,7 @@ class ErlangLanguageServer(SolidLanguageServer):
         def window_log_message(msg: dict) -> None:
             """Handle window/logMessage notifications from Erlang LS"""
             message_text = msg.get("message", "")
-            self.logger.log(f"LSP: window/logMessage: {message_text}", logging.INFO)
+            log.info(f"LSP: window/logMessage: {message_text}")
 
             # Look for Erlang LS readiness signals
             # Common patterns: "Started Erlang LS", "initialized", "ready"
@@ -105,7 +99,7 @@ class ErlangLanguageServer(SolidLanguageServer):
             message_lower = message_text.lower()
             for signal in readiness_signals:
                 if signal.lower() in message_lower:
-                    self.logger.log(f"Erlang LS readiness signal detected: {message_text}", logging.INFO)
+                    log.info(f"Erlang LS readiness signal detected: {message_text}")
                     self.server_ready.set()
                     break
 
@@ -120,7 +114,7 @@ class ErlangLanguageServer(SolidLanguageServer):
             if value.get("kind") == "end":
                 message = value.get("message", "")
                 if any(word in message.lower() for word in ["initialized", "ready", "complete"]):
-                    self.logger.log("Erlang LS initialization progress completed", logging.INFO)
+                    log.info("Erlang LS initialization progress completed")
                     # Set as fallback if no window/logMessage was received
                     if not self.server_ready.is_set():
                         self.server_ready.set()
@@ -133,7 +127,7 @@ class ErlangLanguageServer(SolidLanguageServer):
         self.server.on_notification("$/workDoneProgress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        self.logger.log("Starting Erlang LS server process", logging.INFO)
+        log.info("Starting Erlang LS server process")
         self.server.start()
 
         # Send initialize request
@@ -153,12 +147,12 @@ class ErlangLanguageServer(SolidLanguageServer):
             },
         }
 
-        self.logger.log("Sending initialize request to Erlang LS", logging.INFO)
+        log.info("Sending initialize request to Erlang LS")
         init_response = self.server.send.initialize(initialize_params)  # type: ignore[arg-type]
 
         # Verify server capabilities
         if "capabilities" in init_response:
-            self.logger.log(f"Erlang LS capabilities: {list(init_response['capabilities'].keys())}", logging.INFO)
+            log.info(f"Erlang LS capabilities: {list(init_response['capabilities'].keys())}")
 
         self.server.notify.initialized({})
         self.completions_available.set()
@@ -178,28 +172,26 @@ class ErlangLanguageServer(SolidLanguageServer):
             ready_timeout = 60.0  # 1 minute for local
             env_desc = "local"
 
-        self.logger.log(f"Waiting up to {ready_timeout} seconds for Erlang LS readiness ({env_desc} environment)...", logging.INFO)
+        log.info(f"Waiting up to {ready_timeout} seconds for Erlang LS readiness ({env_desc} environment)...")
 
         if self.server_ready.wait(timeout=ready_timeout):
-            self.logger.log("Erlang LS is ready and available for requests", logging.INFO)
+            log.info("Erlang LS is ready and available for requests")
 
             # Add settling period for indexing - adjust based on environment
             settling_time = 15.0 if is_ci else 5.0
-            self.logger.log(f"Allowing {settling_time} seconds for Erlang LS indexing to complete...", logging.INFO)
+            log.info(f"Allowing {settling_time} seconds for Erlang LS indexing to complete...")
             time.sleep(settling_time)
-            self.logger.log("Erlang LS settling period complete", logging.INFO)
+            log.info("Erlang LS settling period complete")
         else:
             # Set ready anyway and continue - Erlang LS might not send explicit ready messages
-            self.logger.log(
-                f"Erlang LS readiness timeout reached after {ready_timeout}s, proceeding anyway (common in CI)", logging.WARNING
-            )
+            log.warning(f"Erlang LS readiness timeout reached after {ready_timeout}s, proceeding anyway (common in CI)")
             self.server_ready.set()
 
             # Still give some time for basic initialization even without explicit readiness signal
             basic_settling_time = 20.0 if is_ci else 10.0
-            self.logger.log(f"Allowing {basic_settling_time} seconds for basic Erlang LS initialization...", logging.INFO)
+            log.info(f"Allowing {basic_settling_time} seconds for basic Erlang LS initialization...")
             time.sleep(basic_settling_time)
-            self.logger.log("Basic Erlang LS initialization period complete", logging.INFO)
+            log.info("Basic Erlang LS initialization period complete")
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:

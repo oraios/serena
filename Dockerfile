@@ -53,28 +53,21 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
 # Set the working directory
 WORKDIR /workspaces/serena
 
-# Development target
-FROM base AS development
 # Copy all files for development
 COPY . /workspaces/serena/
 
-# Create virtual environment and install dependencies with dev extras
-RUN uv venv
-RUN . .venv/bin/activate
-RUN uv pip install --all-extras -r pyproject.toml -e .
-ENV PATH="/workspaces/serena/.venv/bin:${PATH}"
+# Install sed
+RUN apt-get update && apt-get install -y sed
 
-# Entrypoint to ensure environment is activated
-ENTRYPOINT ["/bin/bash", "-c", "source .venv/bin/activate && $0 $@"]
+# Create Serena configuration
+ENV SERENA_HOME=/workspaces/serena/config
+RUN mkdir -p $SERENA_HOME
+RUN cp src/serena/resources/serena_config.template.yml $SERENA_HOME/serena_config.yml
+RUN sed -i 's/^gui_log_window: .*/gui_log_window: False/' $SERENA_HOME/serena_config.yml
+RUN sed -i 's/^web_dashboard_listen_address: .*/web_dashboard_listen_address: 0.0.0.0/' $SERENA_HOME/serena_config.yml
+RUN sed -i 's/^web_dashboard_open_on_launch: .*/web_dashboard_open_on_launch: False/' $SERENA_HOME/serena_config.yml
 
-# Production target
-FROM base AS production
-# Copy only necessary files for production
-COPY pyproject.toml /workspaces/serena/
-COPY README.md /workspaces/serena/
-COPY src/ /workspaces/serena/src/
-
-# Create virtual environment and install dependencies (production only)
+# Create virtual environment and install dependencies
 RUN uv venv
 RUN . .venv/bin/activate
 RUN uv pip install -r pyproject.toml -e .
@@ -82,4 +75,3 @@ ENV PATH="/workspaces/serena/.venv/bin:${PATH}"
 
 # Entrypoint to ensure environment is activated
 ENTRYPOINT ["/bin/bash", "-c", "source .venv/bin/activate && $0 $@"]
-

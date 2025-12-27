@@ -1,4 +1,3 @@
-import json
 from typing import Literal
 
 from serena.tools import ReplaceContentTool, Tool
@@ -50,7 +49,7 @@ class ListMemoriesTool(Tool):
         """
         List available memories. Any memory can be read using the `read_memory` tool.
         """
-        return json.dumps(self.memories_manager.list_memories())
+        return self._to_json(self.memories_manager.list_memories())
 
 
 class DeleteMemoryTool(Tool):

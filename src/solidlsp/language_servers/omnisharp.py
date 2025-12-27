@@ -14,11 +14,12 @@ from overrides import override
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import DotnetVersion, FileUtils, PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 def breadth_first_file_scan(root: str) -> Iterable[str]:
@@ -59,17 +60,15 @@ class OmniSharp(SolidLanguageServer):
     Provides C# specific instantiation of the LanguageServer class. Contains various configurations and settings specific to C#.
     """
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates an OmniSharp instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        omnisharp_executable_path, dll_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
+        omnisharp_executable_path, dll_path = self._setup_runtime_dependencies(config, solidlsp_settings)
 
         slnfilename = find_least_depth_sln_file(repository_root_path)
         if slnfilename is None:
-            logger.log("No *.sln file found in repository", logging.ERROR)
+            log.error("No *.sln file found in repository")
             raise SolidLSPException("No SLN file found in repository")
 
         cmd = " ".join(
@@ -104,9 +103,7 @@ class OmniSharp(SolidLanguageServer):
                 "formattingOptions:indentationSize=4",
             ]
         )
-        super().__init__(
-            config, logger, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "csharp", solidlsp_settings
-        )
+        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "csharp", solidlsp_settings)
 
         self.server_ready = threading.Event()
         self.definition_available = threading.Event()
@@ -142,9 +139,7 @@ class OmniSharp(SolidLanguageServer):
         return d
 
     @classmethod
-    def _setup_runtime_dependencies(
-        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> tuple[str, str]:
+    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> tuple[str, str]:
         """
         Setup runtime dependencies for OmniSharp.
         """
@@ -190,7 +185,7 @@ class OmniSharp(SolidLanguageServer):
         omnisharp_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "OmniSharp")
         if not os.path.exists(omnisharp_ls_dir):
             os.makedirs(omnisharp_ls_dir)
-            FileUtils.download_and_extract_archive(logger, runtime_dependencies["OmniSharp"]["url"], omnisharp_ls_dir, "zip")
+            FileUtils.download_and_extract_archive(runtime_dependencies["OmniSharp"]["url"], omnisharp_ls_dir, "zip")
         omnisharp_executable_path = os.path.join(omnisharp_ls_dir, runtime_dependencies["OmniSharp"]["binaryName"])
         assert os.path.exists(omnisharp_executable_path)
         os.chmod(omnisharp_executable_path, 0o755)
@@ -198,7 +193,7 @@ class OmniSharp(SolidLanguageServer):
         razor_omnisharp_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "RazorOmnisharp")
         if not os.path.exists(razor_omnisharp_ls_dir):
             os.makedirs(razor_omnisharp_ls_dir)
-            FileUtils.download_and_extract_archive(logger, runtime_dependencies["RazorOmnisharp"]["url"], razor_omnisharp_ls_dir, "zip")
+            FileUtils.download_and_extract_archive(runtime_dependencies["RazorOmnisharp"]["url"], razor_omnisharp_ls_dir, "zip")
         razor_omnisharp_dll_path = os.path.join(razor_omnisharp_ls_dir, runtime_dependencies["RazorOmnisharp"]["dll_path"])
         assert os.path.exists(razor_omnisharp_dll_path)
 
@@ -358,14 +353,11 @@ class OmniSharp(SolidLanguageServer):
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
         self.server.on_request("workspace/configuration", workspace_configuration_handler)
 
-        self.logger.log("Starting OmniSharp server process", logging.INFO)
+        log.info("Starting OmniSharp server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
         self.server.notify.initialized({})
         with open(os.path.join(os.path.dirname(__file__), "omnisharp", "workspace_did_change_configuration.json"), encoding="utf-8") as f:

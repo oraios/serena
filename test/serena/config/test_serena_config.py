@@ -43,6 +43,16 @@ class TestProjectConfigAutogenerate:
         assert config.project_name == self.project_path.name
         assert config.languages == [Language.PYTHON]
 
+    def test_autogenerate_with_js_files(self):
+        """Test successful autogeneration with JavaScript source files."""
+        # Create files for multiple languages
+        (self.project_path / "small.js").write_text("console.log('JS');")
+
+        # Run autogenerate - should pick Python as dominant
+        config = ProjectConfig.autogenerate(self.project_path, save_to_disk=False)
+
+        assert config.languages == [Language.TYPESCRIPT]
+
     def test_autogenerate_with_multiple_languages(self):
         """Test autogeneration picks dominant language when multiple are present."""
         # Create files for multiple languages

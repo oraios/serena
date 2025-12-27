@@ -4,10 +4,10 @@ from collections.abc import Iterator
 
 from sensai.util.logging import LogTime
 
-from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
+from serena.config.serena_config import SerenaPaths
+from serena.constants import SERENA_MANAGED_DIR_NAME
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -21,7 +21,6 @@ class LanguageServerFactory:
         ignored_patterns: list[str],
         ls_timeout: float | None = None,
         ls_specific_settings: dict | None = None,
-        log_level: int = logging.INFO,
         trace_lsp_communication: bool = False,
     ):
         self.project_root = project_root
@@ -29,7 +28,6 @@ class LanguageServerFactory:
         self.ignored_patterns = ignored_patterns
         self.ls_timeout = ls_timeout
         self.ls_specific_settings = ls_specific_settings
-        self.log_level = log_level
         self.trace_lsp_communication = trace_lsp_communication
 
     def create_language_server(self, language: Language) -> SolidLanguageServer:
@@ -39,16 +37,14 @@ class LanguageServerFactory:
             trace_lsp_communication=self.trace_lsp_communication,
             encoding=self.encoding,
         )
-        ls_logger = LanguageServerLogger(log_level=self.log_level)
 
         log.info(f"Creating language server instance for {self.project_root}, language={language}.")
         return SolidLanguageServer.create(
             ls_config,
-            ls_logger,
             self.project_root,
             timeout=self.ls_timeout,
             solidlsp_settings=SolidLSPSettings(
-                solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME,
+                solidlsp_dir=SerenaPaths().serena_user_home_dir,
                 project_data_relative_path=SERENA_MANAGED_DIR_NAME,
                 ls_specific_settings=self.ls_specific_settings or {},
             ),
@@ -187,25 +183,26 @@ class LanguageServerManager:
         self._stop_language_server(ls, save_cache=save_cache)
 
     @staticmethod
-    def _stop_language_server(ls: SolidLanguageServer, save_cache: bool = False) -> None:
+    def _stop_language_server(ls: SolidLanguageServer, save_cache: bool = False, timeout: float = 2.0) -> None:
         if ls.is_running():
             if save_cache:
                 ls.save_cache()
             log.info(f"Stopping language server for language {ls.language} ...")
-            ls.stop()
+            ls.stop(shutdown_timeout=timeout)
 
     def iter_language_servers(self) -> Iterator[SolidLanguageServer]:
         for ls in self._language_servers.values():
             yield self._ensure_functional_ls(ls)
 
-    def stop_all(self, save_cache: bool = False) -> None:
+    def stop_all(self, save_cache: bool = False, timeout: float = 2.0) -> None:
         """
         Stops all managed language servers.
 
         :param save_cache: whether to save the cache before stopping
+        :param timeout: timeout for shutdown of each language server
         """
         for ls in self.iter_language_servers():
-            self._stop_language_server(ls, save_cache=save_cache)
+            self._stop_language_server(ls, save_cache=save_cache, timeout=timeout)
 
     def save_all_caches(self) -> None:
         """

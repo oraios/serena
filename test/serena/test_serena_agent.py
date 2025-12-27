@@ -1,17 +1,21 @@
 import json
 import logging
 import os
+import re
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import Literal
 
 import pytest
 
-import test.solidlsp.clojure as clj
 from serena.agent import SerenaAgent
 from serena.config.serena_config import ProjectConfig, RegisteredProject, SerenaConfig
 from serena.project import Project
-from serena.tools import FindReferencingSymbolsTool, FindSymbolTool
+from serena.tools import SUCCESS_RESULT, FindReferencingSymbolsTool, FindSymbolTool, ReplaceContentTool, ReplaceSymbolBodyTool
 from solidlsp.ls_config import Language
-from test.conftest import get_repo_path
+from test.conftest import get_repo_path, language_tests_enabled
+from test.solidlsp import clojure as clj
 
 
 @pytest.fixture
@@ -29,6 +33,8 @@ def serena_config():
         Language.PHP,
         Language.CSHARP,
         Language.CLOJURE,
+        Language.FSHARP,
+        Language.POWERSHELL,
     ]:
         repo_path = get_repo_path(language)
         if repo_path.exists():
@@ -53,12 +59,47 @@ def serena_config():
     return config
 
 
+def read_project_file(project: Project, relative_path: str) -> str:
+    """Utility function to read a file from the project."""
+    file_path = os.path.join(project.project_root, relative_path)
+    with open(file_path, encoding=project.project_config.encoding) as f:
+        return f.read()
+
+
+@contextmanager
+def project_file_modification_context(serena_agent: SerenaAgent, relative_path: str) -> Iterator[None]:
+    """Context manager to modify a project file and revert the changes after use."""
+    project = serena_agent.get_active_project()
+    file_path = os.path.join(project.project_root, relative_path)
+
+    # Read the original content
+    original_content = read_project_file(project, relative_path)
+
+    try:
+        yield
+    finally:
+        # Revert to the original content
+        with open(file_path, "w", encoding=project.project_config.encoding) as f:
+            f.write(original_content)
+
+
 @pytest.fixture
-def serena_agent(request: pytest.FixtureRequest, serena_config):
+def serena_agent(request: pytest.FixtureRequest, serena_config) -> Iterator[SerenaAgent]:
     language = Language(request.param)
+    if not language_tests_enabled(language):
+        pytest.skip(f"Tests for language {language} are not enabled.")
+
     project_name = f"test_repo_{language}"
 
-    return SerenaAgent(project=project_name, serena_config=serena_config)
+    agent = SerenaAgent(project=project_name, serena_config=serena_config)
+
+    # wait for agent to be ready
+    agent.execute_task(lambda: None)
+
+    yield agent
+
+    # explicitly shut down to free resources
+    agent.shutdown(timeout=5)
 
 
 class TestSerenaAgent:
@@ -72,14 +113,10 @@ class TestSerenaAgent:
             pytest.param(Language.RUST, "add", "Function", "lib.rs", marks=pytest.mark.rust),
             pytest.param(Language.TYPESCRIPT, "DemoClass", "Class", "index.ts", marks=pytest.mark.typescript),
             pytest.param(Language.PHP, "helperFunction", "Function", "helper.php", marks=pytest.mark.php),
-            pytest.param(
-                Language.CLOJURE,
-                "greet",
-                "Function",
-                clj.CORE_PATH,
-                marks=[pytest.mark.clojure, pytest.mark.skipif(clj.CLI_FAIL, reason=f"Clojure CLI not available: {clj.CLI_FAIL}")],
-            ),
+            pytest.param(Language.CLOJURE, "greet", "Function", clj.CORE_PATH, marks=pytest.mark.clojure),
             pytest.param(Language.CSHARP, "Calculator", "Class", "Program.cs", marks=pytest.mark.csharp),
+            pytest.param(Language.FSHARP, "Calculator", "Module", "Calculator.fs", marks=pytest.mark.fsharp),
+            pytest.param(Language.POWERSHELL, "function Greet-User ()", "Function", "main.ps1", marks=pytest.mark.powershell),
         ],
         indirect=["serena_agent"],
     )
@@ -127,9 +164,11 @@ class TestSerenaAgent:
                 "multiply",
                 clj.CORE_PATH,
                 clj.UTILS_PATH,
-                marks=[pytest.mark.clojure, pytest.mark.skipif(clj.CLI_FAIL, reason=f"Clojure CLI not available: {clj.CLI_FAIL}")],
+                marks=pytest.mark.clojure,
             ),
             pytest.param(Language.CSHARP, "Calculator", "Program.cs", "Program.cs", marks=pytest.mark.csharp),
+            pytest.param(Language.FSHARP, "add", "Calculator.fs", "Program.fs", marks=pytest.mark.fsharp),
+            pytest.param(Language.POWERSHELL, "function Greet-User ()", "main.ps1", "main.ps1", marks=pytest.mark.powershell),
         ],
         indirect=["serena_agent"],
     )
@@ -284,3 +323,144 @@ class TestSerenaAgent:
 
         symbols = json.loads(result)
         assert not symbols, f"Expected to find no symbols for {name_path}. Symbols found: {symbols}"
+
+    @pytest.mark.parametrize(
+        "serena_agent,name_path,num_expected",
+        [
+            pytest.param(
+                Language.JAVA,
+                "Model/getName",
+                2,
+                id="overloaded_java_method",
+                marks=pytest.mark.java,
+            ),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_find_symbol_overloaded_function(self, serena_agent: SerenaAgent, name_path: str, num_expected: int):
+        """
+        Tests whether the FindSymbolTool can find all overloads of a function/method
+        (provided that the overload id remains unspecified in the name path)
+        """
+        agent = serena_agent
+
+        find_symbol_tool = agent.get_tool(FindSymbolTool)
+        result = find_symbol_tool.apply_ex(
+            name_path_pattern=name_path,
+            depth=0,
+            substring_matching=False,
+        )
+
+        symbols = json.loads(result)
+        assert (
+            len(symbols) == num_expected
+        ), f"Expected to find {num_expected} symbols for overloaded function {name_path}. Symbols found: {symbols}"
+
+    @pytest.mark.parametrize(
+        "serena_agent,name_path,relative_path",
+        [
+            pytest.param(
+                Language.JAVA,
+                "Model/getName",
+                os.path.join("src", "main", "java", "test_repo", "Model.java"),
+                id="overloaded_java_method",
+                marks=pytest.mark.java,
+            ),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_non_unique_symbol_reference_error(self, serena_agent: SerenaAgent, name_path: str, relative_path: str):
+        """
+        Tests whether the tools operating on a well-defined symbol raises an error when the symbol reference is non-unique.
+        We exemplarily test a retrieval tool (FindReferencingSymbolsTool) and an editing tool (ReplaceSymbolBodyTool).
+        """
+        match_text = "multiple"
+
+        find_refs_tool = serena_agent.get_tool(FindReferencingSymbolsTool)
+        with pytest.raises(ValueError, match=match_text):
+            find_refs_tool.apply(name_path=name_path, relative_path=relative_path)
+
+        replace_symbol_body_tool = serena_agent.get_tool(ReplaceSymbolBodyTool)
+        with pytest.raises(ValueError, match=match_text):
+            replace_symbol_body_tool.apply(name_path=name_path, relative_path=relative_path, body="")
+
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [
+            pytest.param(
+                Language.TYPESCRIPT,
+                marks=pytest.mark.typescript,
+            ),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_replace_content_regex_with_wildcard_ok(self, serena_agent: SerenaAgent):
+        """
+        Tests a regex-based content replacement that has a unique match
+        """
+        relative_path = "ws_manager.js"
+        with project_file_modification_context(serena_agent, relative_path):
+            replace_content_tool = serena_agent.get_tool(ReplaceContentTool)
+            result = replace_content_tool.apply(
+                needle=r'catch \(error\) \{\s*console.error\("Failed to connect.*?\}',
+                repl='catch(error) { console.log("Never mind"); }',
+                relative_path=relative_path,
+                mode="regex",
+            )
+            assert result == SUCCESS_RESULT
+
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [
+            pytest.param(
+                Language.TYPESCRIPT,
+                marks=pytest.mark.typescript,
+            ),
+        ],
+        indirect=["serena_agent"],
+    )
+    @pytest.mark.parametrize("mode", ["literal", "regex"])
+    def test_replace_content_with_backslashes(self, serena_agent: SerenaAgent, mode: Literal["literal", "regex"]):
+        """
+        Tests a content replacement where the needle and replacement strings contain backslashes.
+        This is a regression test for escaping issues.
+        """
+        relative_path = "ws_manager.js"
+        needle = r'console.log("WebSocketManager initializing\nStatus OK");'
+        repl = r'console.log("WebSocketManager initialized\nAll systems go!");'
+        replace_content_tool = serena_agent.get_tool(ReplaceContentTool)
+        mode: Literal["literal", "regex"]
+        with project_file_modification_context(serena_agent, relative_path):
+            result = replace_content_tool.apply(
+                needle=re.escape(needle) if mode == "regex" else needle,
+                repl=repl,
+                relative_path=relative_path,
+                mode=mode,
+            )
+            assert result == SUCCESS_RESULT
+            new_content = read_project_file(serena_agent.get_active_project(), relative_path)
+            assert repl in new_content
+
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [
+            pytest.param(
+                Language.TYPESCRIPT,
+                marks=pytest.mark.typescript,
+            ),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_replace_content_regex_with_wildcard_ambiguous(self, serena_agent: SerenaAgent):
+        """
+        Tests that an ambiguous replacement where there is a larger match that internally contains
+        a smaller match triggers an exception
+        """
+        replace_content_tool = serena_agent.get_tool(ReplaceContentTool)
+        with pytest.raises(ValueError, match="ambiguous"):
+            replace_content_tool.apply(
+                needle=r'catch \(error\) \{.*?this\.updateConnectionStatus\("Connection failed", false\);.*?\}',
+                repl='catch(error) { console.log("Never mind"); }',
+                relative_path="ws_manager.js",
+                mode="regex",
+            )

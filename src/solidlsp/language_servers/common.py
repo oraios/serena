@@ -8,7 +8,6 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, cast
 
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
 from solidlsp.util.subprocess_util import subprocess_kwargs
 
@@ -79,7 +78,7 @@ class RuntimeDependencyCollection:
             return target_dir
         return os.path.join(target_dir, dep.binary_name)
 
-    def install(self, logger: LanguageServerLogger, target_dir: str) -> dict[str, str]:
+    def install(self, target_dir: str) -> dict[str, str]:
         """Install all dependencies for the current platform into *target_dir*.
 
         Returns a mapping from dependency id to the resolved binary path.
@@ -88,7 +87,7 @@ class RuntimeDependencyCollection:
         results: dict[str, str] = {}
         for dep in self.get_dependencies_for_current_platform():
             if dep.url:
-                self._install_from_url(dep, logger, target_dir)
+                self._install_from_url(dep, target_dir)
             if dep.command:
                 self._run_command(dep.command, target_dir)
             if dep.binary_name:
@@ -131,15 +130,15 @@ class RuntimeDependencyCollection:
             )
 
     @staticmethod
-    def _install_from_url(dep: RuntimeDependency, logger: LanguageServerLogger, target_dir: str) -> None:
+    def _install_from_url(dep: RuntimeDependency, target_dir: str) -> None:
         if not dep.url:
             raise ValueError(f"Dependency {dep.id} has no URL")
 
         if dep.archive_type in ("gz", "binary") and dep.binary_name:
             dest = os.path.join(target_dir, dep.binary_name)
-            FileUtils.download_and_extract_archive(logger, dep.url, dest, dep.archive_type)
+            FileUtils.download_and_extract_archive(dep.url, dest, dep.archive_type)
         else:
-            FileUtils.download_and_extract_archive(logger, dep.url, target_dir, dep.archive_type or "zip")
+            FileUtils.download_and_extract_archive(dep.url, target_dir, dep.archive_type or "zip")
 
 
 def quote_windows_path(path: str) -> str:

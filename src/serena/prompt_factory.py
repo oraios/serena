@@ -1,6 +1,7 @@
 import os
 
-from serena.constants import PROMPT_TEMPLATES_DIR_IN_USER_HOME, PROMPT_TEMPLATES_DIR_INTERNAL
+from serena.config.serena_config import SerenaPaths
+from serena.constants import PROMPT_TEMPLATES_DIR_INTERNAL
 from serena.generated.generated_prompt_factory import PromptFactory
 
 
@@ -10,5 +11,6 @@ class SerenaPromptFactory(PromptFactory):
     """
 
     def __init__(self) -> None:
-        os.makedirs(PROMPT_TEMPLATES_DIR_IN_USER_HOME, exist_ok=True)
-        super().__init__(prompts_dir=[PROMPT_TEMPLATES_DIR_IN_USER_HOME, PROMPT_TEMPLATES_DIR_INTERNAL])
+        user_templates_dir = SerenaPaths().user_prompt_templates_dir
+        os.makedirs(user_templates_dir, exist_ok=True)
+        super().__init__(prompts_dir=[user_templates_dir, PROMPT_TEMPLATES_DIR_INTERNAL])

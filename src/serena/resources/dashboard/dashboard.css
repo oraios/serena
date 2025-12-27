@@ -97,21 +97,23 @@ body {
 }
 
 .logo-container {
+    height: var(--header-height);
     order: 1;
     flex-shrink: 0;
 }
 
-.header-sponsor {
+.logo-container img {
+    height: calc(var(--header-height) - 20px);
+    margin-top: 10px;
+    display: block;
+}
+
+.header-banner {
     position: relative;
     top: 0;
     left: 0;
     order: 2;
     max-height: var(--header-height);
-}
-
-.logo-container img {
-    height: var(--header-height);
-    display: block;
 }
 
 .header-nav {
@@ -178,7 +180,7 @@ body {
     margin: 5px 0;
 }
 
-.platinum-sponsor-slide {
+.platinum-banner-slide {
     position: absolute;
     top: 0;
     left: 0;
@@ -188,26 +190,26 @@ body {
     transition: opacity 0.5s ease-in-out;
 }
 
-.platinum-sponsor-slide.active {
+.platinum-banner-slide.active {
     opacity: 1;
     pointer-events: auto;
 }
 
-.sponsor-image {
+.banner-image {
     object-fit: contain;
     border-radius: var(--border-radius);
 }
 
-.sponsor-border {
+.banner-border {
     border: 1px solid var(--border-color);
 }
 
-.platinum-sponsor-slide .sponsor-image {
+.platinum-banner-slide .banner-image {
     max-height: 100%;
     object-fit: contain;
 }
 
-.gold-sponsors-section {
+.gold-banners-section {
     margin: 0 auto;
     width: 100%;
     position: relative;
@@ -223,18 +225,19 @@ body {
     overflow: hidden;
 }
 
-.gold-sponsor-slide {
+.gold-banner-slide {
     position: absolute;
+    pointer-events: none;
     opacity: 0;
     transition: opacity 0.5s ease-in-out;
 }
 
-.gold-sponsor-slide.active {
+.gold-banner-slide.active {
     opacity: 1;
     pointer-events: auto;
 }
 
-.gold-sponsor-slide .sponsor-image {
+.gold-banner-slide .banner-image {
     max-width: 100%;
     object-fit: contain;
 }

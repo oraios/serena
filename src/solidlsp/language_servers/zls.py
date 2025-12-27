@@ -14,10 +14,11 @@ from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 class ZigLanguageServer(SolidLanguageServer):
@@ -95,19 +96,10 @@ class ZigLanguageServer(SolidLanguageServer):
 
         return True
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         self._setup_runtime_dependency()
 
-        super().__init__(
-            config,
-            logger,
-            repository_root_path,
-            ProcessLaunchInfo(cmd="zls", cwd=repository_root_path),
-            "zig",
-            solidlsp_settings,
-        )
+        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd="zls", cwd=repository_root_path), "zig", solidlsp_settings)
         self.server_ready = threading.Event()
         self.request_id = 0
 
@@ -196,8 +188,8 @@ class ZigLanguageServer(SolidLanguageServer):
         def register_capability_handler(params: dict) -> None:
             return
 
-        def window_log_message(msg: str) -> None:
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"LSP: window/logMessage: {msg}")
 
         def do_nothing(params: dict) -> None:
             return
@@ -207,14 +199,11 @@ class ZigLanguageServer(SolidLanguageServer):
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        self.logger.log("Starting ZLS server process", logging.INFO)
+        log.info("Starting ZLS server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
 
         # Verify server capabilities
@@ -247,6 +236,6 @@ class ZigLanguageServer(SolidLanguageServer):
                             }
                         }
                     )
-                    self.logger.log("Opened build.zig to provide project context to ZLS", logging.INFO)
+                    log.info("Opened build.zig to provide project context to ZLS")
             except Exception as e:
-                self.logger.log(f"Failed to open build.zig: {e}", logging.WARNING)
+                log.warning(f"Failed to open build.zig: {e}")

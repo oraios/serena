@@ -41,9 +41,13 @@ class JetBrainsPluginClient(ToStringMixin):
     """
 
     BASE_PORT = 0x5EA2
+    PLUGIN_REQUEST_TIMEOUT = 300
+    """
+    the timeout used for request handling within the plugin (a constant in the plugin)
+    """
     last_port: int | None = None
 
-    def __init__(self, port: int, timeout: int = 30):
+    def __init__(self, port: int, timeout: int = PLUGIN_REQUEST_TIMEOUT):
         self.base_url = f"http://127.0.0.1:{port}"
         self.timeout = timeout
         self.session = requests.Session()
@@ -133,7 +137,13 @@ class JetBrainsPluginClient(ToStringMixin):
         return response["project_root"]
 
     def find_symbol(
-        self, name_path: str, relative_path: str | None = None, include_body: bool = False, depth: int = 0, include_location: bool = False
+        self,
+        name_path: str,
+        relative_path: str | None = None,
+        include_body: bool = False,
+        depth: int = 0,
+        include_location: bool = False,
+        search_deps: bool = False,
     ) -> dict[str, Any]:
         """
         Finds symbols by name.
@@ -142,6 +152,8 @@ class JetBrainsPluginClient(ToStringMixin):
         :param relative_path: the relative path to which to restrict the search
         :param include_body: whether to include symbol body content
         :param depth: depth of children to include (0 = no children)
+        :param include_location: whether to include symbol location information
+        :param search_deps: whether to also search in dependencies
 
         :return: Dictionary containing 'symbols' list with matching symbols
         """
@@ -151,6 +163,7 @@ class JetBrainsPluginClient(ToStringMixin):
             "includeBody": include_body,
             "depth": depth,
             "includeLocation": include_location,
+            "searchDeps": search_deps,
         }
         return self._make_request("POST", "/findSymbol", request_data)
 
@@ -192,6 +205,17 @@ class JetBrainsPluginClient(ToStringMixin):
             "renameInTextOccurrences": rename_in_text_occurrences,
         }
         self._make_request("POST", "/renameSymbol", request_data)
+
+    def refresh_file(self, relative_path: str) -> None:
+        """
+        Triggers a refresh of the given file in the IDE.
+
+        :param relative_path: the relative path
+        """
+        request_data = {
+            "relativePath": relative_path,
+        }
+        self._make_request("POST", "/refreshFile", request_data)
 
     def is_service_available(self) -> bool:
         try:

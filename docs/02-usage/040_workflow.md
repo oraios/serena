@@ -55,18 +55,18 @@ Indexing has to be called only once. During regular usage, Serena will automatic
    
 Project activation makes Serena aware of the project you want to work with.
 You can either choose to do this
- * while in a conversation, by telling the model to activate a project, e.g.,
+ * while in a conversation, by telling the LLM to activate a project, e.g.,
        
       * "Activate the project /path/to/my_project" (for first-time activation with auto-creation)
       * "Activate the project my_project"
    
    Note that this option requires the `activate_project` tool to be active, 
-   which it isn't in the (default version) of context `ide-assistant` if a project is provided at startup.
-   (The tool is deactivated because we assume that in the ide-assistant context the user will only work on the open project and have
+   which it isn't in single-project [contexts](contexts) like `ide` or `claude-code` *if* a project is provided at startup.
+   (The tool is deactivated, because we assume that in these contexts, user will only work on the single, open project and have
    no need to switch it.)
 
  * when the MCP server starts, by passing the project path or name as a command-line argument
-   (e.g. when working on a fixed project in `ide-assistant` mode): `--project <path|name>`
+   (e.g. when using a single-project mode like `ide` or `claude-code`): `--project <path|name>`
 
 
 ## Onboarding & Memories

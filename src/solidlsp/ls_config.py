@@ -28,7 +28,7 @@ class FilenameMatcher:
 
 class Language(str, Enum):
     """
-    Possible languages with Multilspy.
+    Enumeration of language servers supported by SolidLSP.
     """
 
     CSHARP = "csharp"
@@ -55,11 +55,15 @@ class Language(str, Enum):
     NIX = "nix"
     ERLANG = "erlang"
     AL = "al"
+    FSHARP = "fsharp"
     REGO = "rego"
     SCALA = "scala"
     JULIA = "julia"
     FORTRAN = "fortran"
     HASKELL = "haskell"
+    GROOVY = "groovy"
+    VUE = "vue"
+    POWERSHELL = "powershell"
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -82,6 +86,10 @@ class Language(str, Enum):
     """YAML language server (experimental).
     Must be explicitly specified as the main language, not auto-detected.
     """
+    TOML = "toml"
+    """TOML language server using Taplo.
+    Supports TOML validation, formatting, and schema support.
+    """
 
     @classmethod
     def iter_all(cls, include_experimental: bool = False) -> Iterable[Self]:
@@ -92,11 +100,41 @@ class Language(str, Enum):
     def is_experimental(self) -> bool:
         """
         Check if the language server is experimental or deprecated.
+
+        Note for serena users/developers:
+        Experimental languages are not autodetected and must be explicitly specified
+        in the project.yml configuration.
         """
-        return self in {self.TYPESCRIPT_VTS, self.PYTHON_JEDI, self.CSHARP_OMNISHARP, self.RUBY_SOLARGRAPH, self.MARKDOWN, self.YAML}
+        return self in {
+            self.TYPESCRIPT_VTS,
+            self.PYTHON_JEDI,
+            self.CSHARP_OMNISHARP,
+            self.RUBY_SOLARGRAPH,
+            self.MARKDOWN,
+            self.YAML,
+            self.TOML,
+            self.GROOVY,
+        }
 
     def __str__(self) -> str:
         return self.value
+
+    def get_priority(self) -> int:
+        """
+        :return: priority of the language for breaking ties between languages; higher is more important.
+        """
+        # experimental languages have the lowest priority
+        if self.is_experimental():
+            return 0
+        # We assign lower priority to languages that are supersets of others, such that
+        # the "larger" language is only chosen when it matches more strongly
+        match self:
+            # languages that are supersets of others (Vue is superset of TypeScript/JavaScript)
+            case self.VUE:
+                return 1
+            # regular languages
+            case _:
+                return 2
 
     def get_source_fn_matcher(self) -> FilenameMatcher:
         match self:
@@ -148,6 +186,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.sh", "*.bash")
             case self.YAML:
                 return FilenameMatcher("*.yaml", "*.yml")
+            case self.TOML:
+                return FilenameMatcher("*.toml")
             case self.ZIG:
                 return FilenameMatcher("*.zig", "*.zon")
             case self.LUA:
@@ -158,6 +198,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.erl", "*.hrl", "*.escript", "*.config", "*.app", "*.app.src")
             case self.AL:
                 return FilenameMatcher("*.al", "*.dal")
+            case self.FSHARP:
+                return FilenameMatcher("*.fs", "*.fsx", "*.fsi")
             case self.REGO:
                 return FilenameMatcher("*.rego")
             case self.MARKDOWN:
@@ -172,6 +214,17 @@ class Language(str, Enum):
                 )
             case self.HASKELL:
                 return FilenameMatcher("*.hs", "*.lhs")
+            case self.VUE:
+                path_patterns = ["*.vue"]
+                for prefix in ["c", "m", ""]:
+                    for postfix in ["x", ""]:
+                        for base_pattern in ["ts", "js"]:
+                            path_patterns.append(f"*.{prefix}{base_pattern}{postfix}")
+                return FilenameMatcher(*path_patterns)
+            case self.POWERSHELL:
+                return FilenameMatcher("*.ps1", "*.psm1", "*.psd1")
+            case self.GROOVY:
+                return FilenameMatcher("*.groovy", "*.gvy")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -213,6 +266,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.vts_language_server import VtsLanguageServer
 
                 return VtsLanguageServer
+            case self.VUE:
+                from solidlsp.language_servers.vue_language_server import VueLanguageServer
+
+                return VueLanguageServer
             case self.GO:
                 from solidlsp.language_servers.gopls import Gopls
 
@@ -269,6 +326,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.yaml_language_server import YamlLanguageServer
 
                 return YamlLanguageServer
+            case self.TOML:
+                from solidlsp.language_servers.taplo_server import TaploServer
+
+                return TaploServer
             case self.ZIG:
                 from solidlsp.language_servers.zls import ZigLanguageServer
 
@@ -317,6 +378,18 @@ class Language(str, Enum):
                 from solidlsp.language_servers.haskell_language_server import HaskellLanguageServer
 
                 return HaskellLanguageServer
+            case self.FSHARP:
+                from solidlsp.language_servers.fsharp_language_server import FSharpLanguageServer
+
+                return FSharpLanguageServer
+            case self.POWERSHELL:
+                from solidlsp.language_servers.powershell_language_server import PowerShellLanguageServer
+
+                return PowerShellLanguageServer
+            case self.GROOVY:
+                from solidlsp.language_servers.groovy_language_server import GroovyLanguageServer
+
+                return GroovyLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -351,9 +424,6 @@ class LanguageServerConfig:
 
     @classmethod
     def from_dict(cls, env: dict) -> Self:
-        """
-        Create a MultilspyConfig instance from a dictionary
-        """
         import inspect
 
         return cls(**{k: v for k, v in env.items() if k in inspect.signature(cls).parameters})

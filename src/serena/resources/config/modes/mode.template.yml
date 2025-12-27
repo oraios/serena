@@ -1,7 +1,8 @@
 # See Serena's documentation for more details on concept of modes.
-description: Description of the mode, not used in the code.
-prompt: Prompt that will form part of the message sent to the model when activating this mode.
+description: Description of the mode (meta-information only)
+prompt: |
+  Provide a prompt that will form part of the instructions sent to the model when this mode is activated.
+# tools that are to be excluded by this mode
 excluded_tools: []
-
 # several tools are excluded by default and have to be explicitly included by the user
 included_optional_tools: []

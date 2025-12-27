@@ -40,56 +40,74 @@ class LogMessage {
     };
 }
 
-class SponsorRotation {
+function updateThemeAwareImage($img, theme=null) {
+    if (!theme) {
+        const isDarkMode = $('html').data("theme") == 'dark';
+        theme = isDarkMode ? 'dark' : 'light';
+    }
+    console.log("updating theme-aware image to theme:", theme);
+    const newSrc = $img.data('src-' + theme);
+    if (newSrc) {
+        $img.attr('src', newSrc);
+    }
+}
+
+class BannerRotation {
     constructor() {
         this.platinumIndex = 0;
         this.goldIndex = 0;
         this.platinumTimer = null;
         this.goldTimer = null;
-        this.platinumInterval = 5000;
-        this.goldInterval = 5000;
+        this.platinumInterval = 15000;
+        this.goldInterval = 15000;
 
         this.init();
     }
 
     init() {
         let self = this;
-        this.loadSponsors(function() {
+        this.loadBanners(function() {
             self.startPlatinumRotation();
             self.startGoldRotation();
         });
     }
 
-    loadSponsors(onSuccess) {
+    loadBanners(onSuccess) {
         $.ajax({
-            url: 'https://oraios-software.de/serena-sponsors/manifest.php',
+            url: 'https://oraios-software.de/serena-banners/manifest.php',
             type: 'GET',
             success: function (response) {
-                console.log('Sponsors loaded:', response);
+                console.log('Banners loaded:', response);
 
-                function fillSponsors($container, sponsors, className) {
-                    $.each(sponsors, function (index, sponsor) {
-                        let $img = $('<img src="' + sponsor.image + '" alt="' + sponsor.alt + '" class="sponsor-image">');
-                        let $anchor = $('<a href="' + sponsor.link + '" target="_blank"></a>');
+                function fillBanners($container, banners, className) {
+                    $.each(banners, function (index, banner) {
+                        let $img = $('<img src="' + banner.image + '" alt="' + banner.alt + '" class="banner-image">');
+                        if (banner.image_dark) {
+                            $img.addClass('theme-aware-img');
+                            $img.attr('data-src-dark', banner.image_dark);
+                            $img.attr('data-src-light', banner.image);
+                            updateThemeAwareImage($img);
+                        }
+                        let $anchor = $('<a href="' + banner.link + '" target="_blank"></a>');
                         $anchor.append($img);
-                        let $sponsor = $('<div class="' + className + '-slide" data-sponsor="' + (index + 1) + '"></div>');
-                        $sponsor.append($anchor);
+                        let $banner = $('<div class="' + className + '-slide" data-banner="' + (index + 1) + '"></div>');
+                        $banner.append($anchor);
                         if (index === 0) {
-                            $sponsor.addClass('active');
+                            $banner.addClass('active');
                         }
-                        if (sponsor.border) {
-                            $img.addClass('sponsor-border');
+                        if (banner.border) {
+                            $img.addClass('banner-border');
                         }
-                        $container.append($sponsor);
+                        $container.append($banner);
                     });
                 }
 
-                fillSponsors($('#gold-sponsors'), response.gold, 'gold-sponsor');
-                fillSponsors($('#platinum-sponsors'), response.platinum, 'platinum-sponsor');
+                fillBanners($('#gold-banners'), response.gold, 'gold-banner');
+                fillBanners($('#platinum-banners'), response.platinum, 'platinum-banner');
                 onSuccess();
             },
             error: function (xhr, status, error) {
-                console.error('Error loading sponsors:', error);
+                console.error('Error loading banners:', error);
             }
         });
     }
@@ -109,7 +127,7 @@ class SponsorRotation {
     }
 
     rotatePlatinum(direction) {
-        const $slides = $('.platinum-sponsor-slide');
+        const $slides = $('.platinum-banner-slide');
         const total = $slides.length;
 
         if (total === 0) return;
@@ -133,7 +151,7 @@ class SponsorRotation {
     }
 
     rotateGold(direction) {
-        const $groups = $('.gold-sponsor-slide');
+        const $groups = $('.gold-banner-slide');
         const total = $groups.length;
 
         if (total === 0) return;
@@ -360,8 +378,8 @@ class Dashboard {
         // Initialize theme
         this.initializeTheme();
 
-        // Initialize sponsor rotation
-        //this.sponsorRotation = new SponsorRotation();
+        // Initialize banner rotation
+        this.bannerRotation = new BannerRotation();
 
         // Add ESC key handler for closing modals
         $(document).keydown(function (e) {
@@ -1463,6 +1481,9 @@ class Dashboard {
         this.setTheme(newTheme);
     }
 
+    /**
+     * @param theme {'light' | 'dark'}
+     */
     setTheme(theme) {
         // Set the theme on the document element
         document.documentElement.setAttribute('data-theme', theme);
@@ -1476,25 +1497,17 @@ class Dashboard {
             this.$themeText.text('Dark');
         }
 
-        // Update the logo based on theme
-        this.updateLogo(theme);
+        // Update theme-aware images
+        $(".theme-aware-img").each(function() {
+            const $img = $(this);
+            updateThemeAwareImage($img, theme);
+        });
 
         // Save to localStorage
         localStorage.setItem('serena-theme', theme);
 
         // Update charts if they exist
         this.updateChartsTheme();
-    }
-
-    updateLogo(theme) {
-        const logoElement = document.getElementById('serena-logo');
-        if (logoElement) {
-            if (theme === 'dark') {
-                logoElement.src = 'serena-logo-dark-mode.svg';
-            } else {
-                logoElement.src = 'serena-logo.svg';
-            }
-        }
     }
 
     updateChartsTheme() {

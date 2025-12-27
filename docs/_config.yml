@@ -53,7 +53,7 @@ parse:
 #######################################################################################
 # HTML-specific settings
 html:
-  #favicon                   :  # A path to a favicon image
+  favicon                   : "../src/serena/resources/dashboard/serena-icon-32.png"
   use_edit_page_button      : false  # Whether to add an "edit this page" button to pages. If `true`, repository information in repository: must be filled in
   use_repository_button     : false  # Whether to add a link to your repository button
   use_issues_button         : false  # Whether to add an "open an issue" button

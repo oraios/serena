@@ -2,14 +2,20 @@
 
 Serena is a command-line tool with a variety of sub-commands.
 This section describes
- * varies ways of running Serena
+ * various ways of running Serena
  * how to run and configure the most important command, i.e. starting the MCP server
  * other useful commands.
 
 ## Ways of Running Serena
 
 In the following, we will refer to the command used to run Serena as `<serena>`,
-which you should replace with the appropriate command based on your chosen method.
+which you should replace with the appropriate command based on your chosen method,
+as detailed below.
+
+In general, to get help, append `--help` to the command, i.e.
+
+    <serena> --help
+    <serena> <command> --help
 
 ### Using uvx
 
@@ -47,28 +53,30 @@ As a consequence, you will need to specify paths when using CLI commands that wo
 :::
 
 (docker)=
-### Using Docker (Experimental)
+### Using Docker 
 
-:::{warning}
-Docker support is currently experimental with several limitations. 
-:::
+The Docker approach offers several advantages:
 
-You can run the Serena MCP server directly via docker as follows,
+* better security isolation for shell command execution
+* no need to install language servers and dependencies locally
+* consistent environment across different systems
+
+You can run the Serena MCP server directly via Docker as follows,
 assuming that the projects you want to work on are all located in `/path/to/your/projects`:
 
 ```shell
 docker run --rm -i --network host -v /path/to/your/projects:/workspaces/projects ghcr.io/oraios/serena:latest serena 
 ```
 
-Replace `/path/to/your/projects` with the absolute path to your projects directory. The Docker approach provides:
+This command mounts your projects into the container under `/workspaces/projects`, so when working with projects, 
+you need to refer to them using the respective path (e.g. `/workspaces/projects/my-project`).
 
-* Better security isolation for shell command execution
-* No need to install language servers and dependencies locally
-* Consistent environment across different systems
+Alternatively, you may use Docker compose with the `compose.yml` file provided in the repository.
+See our [advanced Docker usage](https://github.com/oraios/serena/blob/main/DOCKER.md) documentation for more detailed instructions, configuration options, and limitations.
 
-Alternatively, use docker compose with the `compose.yml` file provided in the repository.
-
-See our [Docker Setup](https://github.com/oraios/serena/blob/main/DOCKER.md) documentation for more detailed setup instructions, configuration options, and known limitations.
+:::{note}
+Docker usage is subject to limitations; see the [advanced Docker usage](https://github.com/oraios/serena/blob/main/DOCKER.md) documentation for details.
+:::
 
 ### Using Nix
 
@@ -89,6 +97,12 @@ Given your preferred method of running Serena, you can start the MCP server usin
 
 Note that no matter how you run the MCP server, Serena will, by default, start a web-based dashboard on localhost that will allow you to inspect
 the server's operations, logs, and configuration.
+
+:::{tip}
+By default, Serena will use language servers for code understanding and analysis.    
+With the [Serena JetBrains Plugin](025_jetbrains_plugin), we recently introduced a powerful alternative,
+which has several advantages over the language server-based approach.
+:::
 
 ### Standard I/O Mode
 
@@ -148,6 +162,11 @@ to get a list of all available options.
 Some useful options include:
 
   * `--project <path|name>`: specify the project to work on by name or path.
+  * `--project-from-cwd`: auto-detect the project from current working directory   
+    (looking for a directory containing `.serena/project.yml` or `.git` in parent directories, activating the current directory if none is found);  
+    This option is intended for CLI-based agents like Claude Code, Gemini and Codex, which are typically started from within the project directory
+    and which do not change directories during their operation.
+  * `--language-backend JetBrains`: use the Serena JetBrains Plugin as the language backend (overriding the default backend configured in the central configuration)
   * `--context <context>`: specify the operation [context](contexts) in which Serena shall operate
   * `--mode <mode>`: specify one or more [modes](modes) to enable (can be passed several times)
   * `--enable-web-dashboard <true|false>`: enable or disable the web dashboard (enabled by default)

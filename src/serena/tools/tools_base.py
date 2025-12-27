@@ -1,5 +1,5 @@
 import inspect
-import os
+import json
 from abc import ABC
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -295,6 +295,10 @@ class Tool(Component):
             log.error(msg)
             return msg
 
+    @staticmethod
+    def _to_json(x: Any) -> str:
+        return json.dumps(x, ensure_ascii=False)
+
 
 class EditedFileContext:
     """
@@ -305,24 +309,23 @@ class EditedFileContext:
     When exiting the context without an exception, the updated content will be written back to the file.
     """
 
-    def __init__(self, relative_path: str, agent: "SerenaAgent"):
-        self._project = agent.get_active_project()
-        assert self._project is not None
-        self._abs_path = os.path.join(self._project.project_root, relative_path)
-        if not os.path.isfile(self._abs_path):
-            raise FileNotFoundError(f"File {self._abs_path} does not exist.")
-        with open(self._abs_path, encoding=self._project.project_config.encoding) as f:
-            self._original_content = f.read()
-        self._updated_content: str | None = None
+    def __init__(self, relative_path: str, code_editor: "CodeEditor"):
+        self._relative_path = relative_path
+        self._code_editor = code_editor
+        self._edited_file: CodeEditor.EditedFile | None = None
+        self._edited_file_context: Any = None
 
     def __enter__(self) -> Self:
+        self._edited_file_context = self._code_editor.edited_file_context(self._relative_path)
+        self._edited_file = self._edited_file_context.__enter__()
         return self
 
     def get_original_content(self) -> str:
         """
         :return: the original content of the file before any modifications.
         """
-        return self._original_content
+        assert self._edited_file is not None
+        return self._edited_file.get_contents()
 
     def set_updated_content(self, content: str) -> None:
         """
@@ -331,16 +334,12 @@ class EditedFileContext:
 
         :param content: the updated content of the file
         """
-        self._updated_content = content
+        assert self._edited_file is not None
+        self._edited_file.set_contents(content)
 
     def __exit__(self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None) -> None:
-        if self._updated_content is not None and exc_type is None:
-            assert self._project is not None
-            with open(self._abs_path, "w", encoding=self._project.project_config.encoding) as f:
-                f.write(self._updated_content)
-            log.info(f"Updated content written to {self._abs_path}")
-            # Language servers should automatically detect the change and update its state accordingly.
-            # If they do not, we may have to add a call to notify it.
+        assert self._edited_file_context is not None
+        self._edited_file_context.__exit__(exc_type, exc_value, traceback)
 
 
 @dataclass(kw_only=True)

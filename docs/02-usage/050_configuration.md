@@ -8,14 +8,15 @@ Serena is configured in four places:
 
 1. The `serena_config.yml` for general settings that apply to all clients and projects.
    It is located in your user directory under `.serena/serena_config.yml`.
-   If you do not explicitly create the file, it will be auto-generated when you first run Serena.
+   The file will be auto-generated when you first run Serena.
    You can edit it directly or use
 
    ```shell
-   uvx --from git+https://github.com/oraios/serena serena config edit
+   <serena> config edit
    ```
 
-   (or use the `--directory` command version).
+   where `<serena>` is [your way of running Serena](020_running).  
+   The configuration file can also be accessed through [Serena's dashboard](060_dashboard).
 2. In the arguments passed to the `start-mcp-server` in your client's config (see below),
    which will apply to all sessions started by the respective client. In particular, the [context](contexts) parameter
    should be set appropriately for Serena to be best adjusted to existing tools and capabilities of your client.
@@ -44,9 +45,22 @@ A context is set at startup when launching Serena (e.g., via CLI options for an 
 Serena comes with pre-defined contexts:
 
 * `desktop-app`: Tailored for use with desktop applications like Claude Desktop. This is the default.
+  The full set of Serena's tools is provided, as the application is assumed to have no prior coding-specific capabilities.
+* `claude-code`: Optimized for use with Claude Code, it disables tools that would duplicate Claude Code's built-in capabilities.
+* `codex`: Optimized for use with OpenAI Codex.
+* `ide`: Generic context for IDE assistants/coding agents, e.g. VSCode, Cursor, or Cline, focusing on augmenting existing capabilities.
+  Basic file operations and shell execution are assumed to be handled by the assistant's own capabilities.
 * `agent`: Designed for scenarios where Serena acts as a more autonomous agent, for example, when used with Agno.
-* `ide-assistant`: Optimized for integration into IDEs like VSCode, Cursor, or Cline, focusing on in-editor coding assistance.
-  Choose the context that best matches the type of integration you are using.
+
+Choose the context that best matches the type of integration you are using.
+
+Find the concrete definitions of the above contexts [here](https://github.com/oraios/serena/tree/main/src/serena/resources/config/contexts).
+
+Note that the contexts `ide` and `claude-code` are **single-project contexts** (defining `single_project: true`).
+For such contexts, if a project is provided at startup, the set of tools is limited to those required by the project's
+concrete configuration, and other tools are excluded completely, allowing the set of tools to be minimal.
+Tools explicitly disabled by the project will not be available at all. Since changing the active project
+ceases to be a relevant operation in this case, the project activation tool is disabled.
 
 When launching Serena, specify the context using `--context <context-name>`.
 Note that for cases where parameter lists are specified (e.g. Claude Desktop), you must add two parameters to the list.
@@ -74,18 +88,34 @@ Examples of built-in modes include:
 * `editing`: Optimizes Serena for direct code modification tasks.
 * `interactive`: Suitable for a conversational, back-and-forth interaction style.
 * `one-shot`: Configures Serena for tasks that should be completed in a single response, often used with `planning` for generating reports or initial plans.
-* `no-onboarding`: Skips the initial onboarding process if it's not needed for a particular session.
-* `onboarding`: (Usually triggered automatically) Focuses on the project onboarding process.
+* `no-onboarding`: Skips the initial onboarding process if it's not needed for a particular session but retains the memory tools (assuming initial memories were created externally).
+* `onboarding`: Focuses on the project onboarding process.
+* `no-memories`: Disables all memory tools (and tools building on memories such as onboarding tools)  
+
+Find the concrete definitions of these modes [here](https://github.com/oraios/serena/tree/main/src/serena/resources/config/modes).
+
+:::{important}
+By default, Serena activates the two modes `interactive` and `editing`.  
+
+As soon as you start to specify modes, only the modes you explicitly specify will be active, however.
+Therefore, if you want to keep the default modes, you must specify them as well.  
+For example, to add mode `no-memories` to the default behaviour, specify
+```shell
+--mode interactive --mode editing --mode no-memories
+```
+:::
 
 Modes can be set at startup (similar to contexts) but can also be _switched dynamically_ during a session. 
 You can instruct the LLM to use the `switch_modes` tool to activate a different set of modes (e.g., "Switch to planning and one-shot modes").
 
 When launching Serena, specify modes using `--mode <mode-name>`; multiple modes can be specified, e.g. `--mode planning --mode no-onboarding`.
 
-:warning: **Mode Compatibility**: While you can combine modes, some may be semantically incompatible (e.g., `interactive` and `one-shot`). 
+:::{note}
+**Mode Compatibility**: While you can combine modes, some may be semantically incompatible (e.g., `interactive` and `one-shot`). 
 Serena currently does not prevent incompatible combinations; it is up to the user to choose sensible mode configurations.
+:::
 
-You can manage contexts using the `mode` command,
+You can manage modes using the `mode` command,
 
     <serena> mode --help
     <serena> mode list
@@ -94,3 +124,30 @@ You can manage contexts using the `mode` command,
     <serena> mode delete <mode-name>
 
 where `<serena>` is [your way of running Serena](020_running).
+
+## Advanced Configuration
+
+For advanced users, Serena's configuration can be further customized.
+
+### Serena Data Directory
+
+The Serena user data directory (where configuration, language server files, logs, etc. are stored) defaults to `~/.serena`.
+You can change this location by setting the `SERENA_HOME` environment variable to your desired path.
+
+### Custom Prompts
+
+All of Serena's prompts can be fully customized.
+We define prompt as jinja templates in yaml files, and you can inspect our default prompts [here](https://github.com/oraios/serena/tree/main/src/serena/resources/config/prompt_templates).
+
+To override a prompt, simply add a .yml file to the `prompt_templates` folder in your Serena data directory
+which defines the prompt with the same name as the default prompt you want to override.
+For example, to override the `system_prompt`, you could create a file `~/.serena/prompt_templates/system_prompt.yml` (assuming default Serena data folder location) 
+with content like:
+
+```yaml
+prompts:
+  system_prompt: |
+    Whatever you want ...
+```
+
+It is advisable to use the default prompt as a starting point and modify it to suit your needs.

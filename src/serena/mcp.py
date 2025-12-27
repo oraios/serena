@@ -13,6 +13,7 @@ import docstring_parser
 from mcp.server.fastmcp import server
 from mcp.server.fastmcp.server import FastMCP, Settings
 from mcp.server.fastmcp.tools.base import Tool as MCPTool
+from mcp.types import ToolAnnotations
 from pydantic_settings import SettingsConfigDict
 from sensai.util import logging
 
@@ -21,6 +22,7 @@ from serena.agent import (
     SerenaConfig,
 )
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
+from serena.config.serena_config import LanguageBackend
 from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES, SERENA_LOG_FORMAT
 from serena.tools import Tool
 from serena.util.exception import show_fatal_exception_safe
@@ -219,6 +221,8 @@ class SerenaMCPFactory:
         def execute_fn(**kwargs) -> str:  # type: ignore
             return tool.apply_ex(log_call=True, catch_exceptions=True, **kwargs)
 
+        annotations = ToolAnnotations(readOnlyHint=not tool.can_edit())
+
         return MCPTool(
             fn=execute_fn,
             name=func_name,
@@ -227,7 +231,7 @@ class SerenaMCPFactory:
             fn_metadata=func_arg_metadata,
             is_async=is_async,
             context_kwarg=None,
-            annotations=None,
+            annotations=annotations,
             title=None,
         )
 
@@ -258,6 +262,7 @@ class SerenaMCPFactory:
         host: str = "0.0.0.0",
         port: int = 8000,
         modes: Sequence[str] = DEFAULT_MODES,
+        language_backend: LanguageBackend | None = None,
         enable_web_dashboard: bool | None = None,
         enable_gui_log_window: bool | None = None,
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
@@ -270,6 +275,7 @@ class SerenaMCPFactory:
         :param host: The host to bind to
         :param port: The port to bind to
         :param modes: List of mode names or paths to mode files
+        :param language_backend: the language backend to use, overriding the configuration setting.
         :param enable_web_dashboard: Whether to enable the web dashboard. If not specified, will take the value from the serena configuration.
         :param enable_gui_log_window: Whether to enable the GUI log window. It currently does not work on macOS, and setting this to True will be ignored then.
             If not specified, will take the value from the serena configuration.
@@ -293,6 +299,8 @@ class SerenaMCPFactory:
                 config.trace_lsp_communication = trace_lsp_communication
             if tool_timeout is not None:
                 config.tool_timeout = tool_timeout
+            if language_backend is not None:
+                config.language_backend = language_backend
 
             modes_instances = [SerenaAgentMode.load(mode) for mode in modes]
             self.agent = self._create_serena_agent(config, modes_instances)
