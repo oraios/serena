@@ -114,14 +114,15 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
 
         :param name_path_pattern: the name path matching pattern (see above)
         :param depth: depth up to which descendants shall be retrieved (e.g. use 1 to also retrieve immediate children;
-            for the case where the symbol is a class, this will return its methods).
+            for the case where the symbol is a class, this will return its methods). Default 0.
         :param relative_path: Optional. Restrict search to this file or directory. If None, searches entire codebase.
             If a directory is passed, the search will be restricted to the files in that directory.
             If a file is passed, the search will be restricted to that file.
             If you have some knowledge about the codebase, you should use this parameter, as it will significantly
             speed up the search as well as reduce the number of results.
         :param include_body: whether to include the symbol's source code. Use judiciously.
-        :param include_info: whether to include additional info about the symbol (ignored if include_body is True).
+        :param include_info: whether to include additional info (hover-like, typically including docstring and signature),
+            about the symbol (ignored if include_body is True). Default True, info is never included for child symbols.
         :param include_kinds: List of LSP symbol kind integers to include.
             If not provided, all kinds are included.
         :param exclude_kinds: Optional. List of LSP symbol kind integers to exclude. Takes precedence over `include_kinds`.

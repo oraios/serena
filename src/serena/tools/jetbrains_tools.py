@@ -177,8 +177,8 @@ class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptiona
         :param name_path: name path of the symbol for which to get the type hierarchy.
         :param relative_path: the relative path to the file containing the symbol.
         :param hierarchy_type: which hierarchy to retrieve: "super" for parent classes/interfaces,
-            "sub" for subclasses/implementations, or "both" for both directions.
-        :param depth: depth limit for hierarchy traversal (None or 0 for unlimited).
+            "sub" for subclasses/implementations, or "both" for both directions. Default is "sub".
+        :param depth: depth limit for hierarchy traversal (None or 0 for unlimited). Default is 1.
         :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
             -1 means the default value from the config will be used.
         :return: Compact JSON with file-grouped hierarchy. Error string if not applicable.
