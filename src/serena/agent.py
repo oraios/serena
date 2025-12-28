@@ -2,11 +2,10 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
-import multiprocessing
 import os
 import platform
+import subprocess
 import sys
-import webbrowser
 from collections.abc import Callable
 from logging import Logger
 from typing import TYPE_CHECKING, Optional, TypeVar
@@ -401,18 +400,6 @@ class SerenaAgent:
         log.debug(f"Recording tool usage for tool '{tool_name}'")
         self._tool_usage_stats.record_tool_usage(tool_name, input_str, output_str)
 
-    @staticmethod
-    def _open_dashboard(url: str) -> None:
-        # Redirect stdout and stderr file descriptors to /dev/null,
-        # making sure that nothing can be written to stdout/stderr, even by subprocesses
-        null_fd = os.open(os.devnull, os.O_WRONLY)
-        os.dup2(null_fd, sys.stdout.fileno())
-        os.dup2(null_fd, sys.stderr.fileno())
-        os.close(null_fd)
-
-        # open the dashboard URL in the default web browser
-        webbrowser.open(url)
-
     def get_dashboard_url(self) -> str | None:
         """
         :return: the URL of the web dashboard, or None if the dashboard is not running
@@ -432,11 +419,14 @@ class SerenaAgent:
             log.warning("Not opening the Serena web dashboard because no usable display was detected.")
             return False
 
-        # open the dashboard URL in the default web browser (using a separate process to control
-        # output redirection)
-        process = multiprocessing.Process(target=self._open_dashboard, args=(self._dashboard_url,))
-        process.start()
-        process.join(timeout=1)
+        # Use a subprocess to avoid any output from webbrowser.open being written to stdout
+        subprocess.Popen(
+            [sys.executable, "-c", f"import webbrowser; webbrowser.open({self._dashboard_url!r})"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,  # Detach from parent process
+        )
         return True
 
     def get_project_root(self) -> str:
