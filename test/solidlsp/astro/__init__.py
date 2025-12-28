@@ -1,0 +1,1 @@
+# Astro language server tests

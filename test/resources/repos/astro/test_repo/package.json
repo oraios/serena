@@ -1,0 +1,12 @@
+{
+  "name": "astro-test-fixture",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "astro": "^5.1.0"
+  },
+  "devDependencies": {
+    "@astrojs/language-server": "^2.15.7",
+    "typescript": "~5.9.3"
+  }
+}
