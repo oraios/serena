@@ -250,18 +250,20 @@ class SerenaAgent:
 
         # determine the base toolset defining the set of exposed tools (which e.g. the MCP shall see),
         # determined by the
+        #   * dashboard availability/opening on launch
         #   * Serena config,
         #   * the context (which is fixed for the session)
-        #   * dashboard availability/opening on launch
         #   * single-project mode reductions (if applicable)
         #   * JetBrains mode
-        tool_inclusion_definitions: list[ToolInclusionDefinition] = [self.serena_config, self._context]
+        tool_inclusion_definitions: list[ToolInclusionDefinition] = []
         if (
             self.serena_config.web_dashboard
             and not self.serena_config.web_dashboard_open_on_launch
             and not self.serena_config.gui_log_window_enabled
         ):
             tool_inclusion_definitions.append(ToolInclusionDefinition(included_optional_tools=[OpenDashboardTool.get_name_from_cls()]))
+        tool_inclusion_definitions.append(self.serena_config)
+        tool_inclusion_definitions.append(self._context)
         if self._context.single_project:
             tool_inclusion_definitions.extend(self._single_project_context_tool_inclusion_definitions(project))
         if self.serena_config.language_backend == LanguageBackend.JETBRAINS:
