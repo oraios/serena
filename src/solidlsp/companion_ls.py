@@ -209,7 +209,7 @@ class CompanionLanguageServer(SolidLanguageServer):
         log.debug(f"Cleaning up {len(self._indexed_file_uris)} indexed files")
 
         failed_cleanups: list[tuple[str, str]] = []
-        for uri in set(self._indexed_file_uris):
+        for uri in list(self._indexed_file_uris):
             for companion in self._companions.values():
                 try:
                     if uri in companion.open_file_buffers:
