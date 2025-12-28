@@ -184,8 +184,8 @@ class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptiona
         :return: Compact JSON with file-grouped hierarchy. Error string if not applicable.
         """
         with JetBrainsPluginClient.from_project(self.project) as client:
-            subtypes = {}
-            supertypes = {}
+            subtypes = None
+            supertypes = None
             if hierarchy_type in ("super", "both"):
                 supertypes_response = client.get_supertypes(
                     name_path=name_path,
@@ -211,9 +211,9 @@ class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptiona
 
             symbol_compact = {symbol["relative_path"]: [symbol["name_path"]]}
             result_dict: dict[str, dict | list] = {"symbol": symbol_compact}
-            if supertypes:
+            if supertypes is not None:
                 result_dict["supertypes"] = supertypes
-            if subtypes:
+            if subtypes is not None:
                 result_dict["subtypes"] = subtypes
 
             result = self._to_json(result_dict)
