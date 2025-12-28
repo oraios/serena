@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "type": "module",
   "dependencies": {
-    "astro": "^5.1.0"
+    "astro": "^5.16.6"
   },
   "devDependencies": {
-    "@astrojs/language-server": "^2.15.7",
-    "typescript": "~5.9.3"
+    "@astrojs/language-server": "^2.16.2",
+    "typescript": "~5.7.3"
   }
 }
