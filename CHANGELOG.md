@@ -35,6 +35,17 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Language support:
 
+  * **Add support for Astro** via @astrojs/language-server with companion TypeScript LS for code intelligence.
+    Uses dual-server architecture where Astro LS handles `.astro` file parsing and document symbols,
+    while a companion TypeScript server (configured with `@astrojs/ts-plugin`) handles go-to-definition,
+    find references, and rename operations. Supports frontmatter TypeScript/JavaScript extraction,
+    cross-file symbol resolution, and Props interface detection. Runtime dependencies auto-install on first use.
+  * **Add `CompanionLanguageServer` abstraction** for language servers requiring companion servers (Vue, Astro, future Svelte).
+    Manages companion lifecycle, LSP operation delegation with priority-based routing, cross-file domain file indexing
+    with ref-count tracking, and reference merging/deduplication. Extracted shared TypeScript companion configuration
+    to `typescript_companion.py` for reuse across framework implementations.
+  * **Refactored Vue language server** to use `CompanionLanguageServer` base class, reducing code by ~160 lines
+    while maintaining full functionality and improving maintainability.
   * **Add support for Fortran** via fortls language server (requires `pip install fortls`)
   * **Add partial support for Groovy** requires user-provided Groovy language server JAR (see [setup guide](docs/03-special-guides/groovy_setup_guide_for_serena.md))
   * **Add support for Julia** via LanguageServer.jl
