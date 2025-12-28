@@ -75,7 +75,8 @@ object, e.g.
 
 Serena is a great way to make Claude Code both cheaper and more powerful!
 
-From your project directory, add serena with a command like this,
+**Per-Project Configuration.** To add the Serena MCP server to the current project in the current directory, 
+use this command:
 
 ```shell
 claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context claude-code --project "$(pwd)"
@@ -88,18 +89,31 @@ Note:
     that Serena is configured to work on the current project from the get-go, following 
     Claude Code's mode of operation.
 
-Alternatively, use `--project-from-cwd` for user-level configuration that works across all projects:
+**Global Configuration**. Alternatively, use `--project-from-cwd` for user-level configuration that works across all projects:
 
 ```shell
 claude mcp add --scope user serena -- <serena> start-mcp-server --context=claude-code --project-from-cwd
 ```
 
-This searches up from the current directory for `.serena/project.yml` or `.git` markers,
-falling back to the current directory if neither is found. This makes it suitable for a
-single global MCP configuration. The `--project-from-cwd` option is intended for CLI-based agents
-(like Claude Code, Gemina or Codex) that invoke Serena from within project directories.
+Whenever you start Claude Code, Serena will search up from the current directory for `.serena/project.yml` or `.git` markers,
+activating the current directory as the project if neither is found. 
+This mechanism makes it suitable for a single global MCP configuration.
 
-Be sure to use at least `v1.0.52` of Claude Code (as earlier versions do not read MCP server system prompts upon startup). 
+**Maximum Token Efficiency.** To maximize token efficiency, you may want to use Claude Code's 
+*on-demand tool loading* feature, which is supported since at least v2.0.74 of Claude Code.
+This feature avoids sending all tool descriptions to Claude upon startup, thus saving tokens.
+Instead, Claude will search for tools as needed (but there are no guarantees that it will 
+search optimally, of course).
+To enable this feature, set the environment variable `ENABLE_TOOL_SEARCH=true`.  
+Depending on your shell, you can also set this on a per-session basis, e.g. using
+```shell
+ENABLE_TOOL_SEARCH=true claude
+```
+in bash/zsh, or using
+```shell
+set ENABLE_TOOL_SEARCH=true && claude
+```
+in Windows CMD to launch Claude Code.
 
 ## VSCode
 
