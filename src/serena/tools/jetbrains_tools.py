@@ -186,6 +186,8 @@ class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptiona
         with JetBrainsPluginClient.from_project(self.project) as client:
             subtypes = None
             supertypes = None
+            levels_not_included = {}
+
             if hierarchy_type in ("super", "both"):
                 supertypes_response = client.get_supertypes(
                     name_path=name_path,
@@ -194,9 +196,11 @@ class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptiona
                 )
                 if error_msg := supertypes_response.get("error"):
                     return error_msg
-
+                if "num_levels_not_included" in supertypes_response:
+                    levels_not_included["supertypes"] = supertypes_response["num_levels_not_included"]
                 symbol = supertypes_response["symbol"]
                 supertypes = self._transform_hierarchy_nodes(supertypes_response.get("hierarchy"))
+
             if hierarchy_type in ("sub", "both"):
                 subtypes_response = client.get_subtypes(
                     name_path=name_path,
@@ -206,7 +210,8 @@ class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptiona
                 if error_msg := subtypes_response.get("error"):
                     return error_msg
                 symbol = subtypes_response["symbol"]
-
+                if "num_levels_not_included" in subtypes_response:
+                    levels_not_included["subtypes"] = subtypes_response["num_levels_not_included"]
                 subtypes = self._transform_hierarchy_nodes(subtypes_response.get("hierarchy"))
 
             symbol_compact = {symbol["relative_path"]: [symbol["name_path"]]}
@@ -215,6 +220,8 @@ class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptiona
                 result_dict["supertypes"] = supertypes
             if subtypes is not None:
                 result_dict["subtypes"] = subtypes
+            if levels_not_included:
+                result_dict["levels_not_included"] = levels_not_included
 
             result = self._to_json(result_dict)
         return self._limit_length(result, max_answer_chars)
