@@ -201,6 +201,7 @@ class GroovyLanguageServer(SolidLanguageServer):
                     "synchronization": {"dynamicRegistration": True, "didSave": True},
                     "completion": {"dynamicRegistration": True},
                     "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                    "inlayHint": {"dynamicRegistration": True},
                     "definition": {"dynamicRegistration": True},
                     "references": {"dynamicRegistration": True},
                     "documentSymbol": {"dynamicRegistration": True},

@@ -6,6 +6,7 @@ Note that in most configurations, only a subset of these tools will be enabled s
 
 * `activate_project`: Activates a project based on the project name or path.
 * `check_onboarding_performed`: Checks whether project onboarding was already performed.
+* `completion`: Get code completion suggestions at a cursor position.
 * `create_text_file`: Creates/overwrites a file in the project directory.
 * `delete_lines`: Deletes a range of lines within a file.
 * `delete_memory`: Deletes a memory from Serena's project-specific memory store.
@@ -17,7 +18,9 @@ Note that in most configurations, only a subset of these tools will be enabled s
 * `get_current_config`: Prints the current configuration of the agent, including the active and available projects, tools,
   contexts, and modes.
 * `get_symbols_overview`: Gets an overview of the top-level symbols defined in a given file.
+* `hover`: Get type information and documentation at a cursor position.
 * `initial_instructions`: Provides instructions on how to use the Serena toolbox.
+* `inlay_hints`: Get type hints and parameter names for a code range.
 * `insert_after_symbol`: Inserts content after the end of the definition of a given symbol.
 * `insert_at_line`: Inserts content at a given line in a file.
 * `insert_before_symbol`: Inserts content before the beginning of the definition of a given symbol.

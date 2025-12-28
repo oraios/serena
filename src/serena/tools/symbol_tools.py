@@ -15,6 +15,8 @@ from serena.tools import (
 )
 from serena.tools.tools_base import ToolMarkerOptional
 from solidlsp.ls_types import SymbolKind
+from solidlsp.ls_utils import PathUtils
+from solidlsp.lsp_protocol_handler import lsp_types
 
 
 def _sanitize_symbol_dict(symbol_dict: dict[str, Any]) -> dict[str, Any]:
@@ -309,3 +311,166 @@ class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
         code_editor = self.create_code_editor()
         status_message = code_editor.rename_symbol(name_path, relative_file_path=relative_path, new_name=new_name)
         return status_message
+
+
+class CompletionTool(Tool, ToolMarkerSymbolicRead):
+    """Get code completion suggestions at a cursor position."""
+
+    def apply(
+        self,
+        relative_path: str,
+        line: int,
+        character: int,
+        trigger_character: str = "",
+        max_answer_chars: int = -1,
+    ) -> str:
+        """
+        Request code completion suggestions at a specific position in a file.
+        Use this before writing code to discover available methods, variables, or types.
+
+        :param relative_path: the relative path to the file
+        :param line: 0-indexed line number where completion is requested
+        :param character: 0-indexed character position on the line
+        :param trigger_character: optional trigger character (e.g., ".", "(") that initiated completion
+        :param max_answer_chars: if result is longer than this, no content returned.
+            -1 means default from config. Don't adjust unless necessary.
+        :return: JSON array of completion items with label, kind, detail, documentation
+        """
+        symbol_retriever = self.create_language_server_symbol_retriever()
+        file_path = os.path.join(self.project.project_root, relative_path)
+
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File {relative_path} does not exist in the project.")
+        if os.path.isdir(file_path):
+            raise ValueError(f"Expected a file path, but got a directory: {relative_path}")
+
+        ls = symbol_retriever.get_language_server(relative_path)
+        file_uri = PathUtils.path_to_uri(file_path)
+
+        params = lsp_types.CompletionParams(textDocument={"uri": file_uri}, position={"line": line, "character": character})
+
+        if trigger_character:
+            params["context"] = {"triggerKind": lsp_types.CompletionTriggerKind.TriggerCharacter, "triggerCharacter": trigger_character}
+
+        with ls.open_file(relative_path):
+            ls.completions_available.wait()
+            result = ls.server.send.completion(params)
+
+        if result is None:
+            return self._to_json({"message": "No completions available"})
+
+        # Handle both CompletionList and list[CompletionItem]
+        if isinstance(result, dict) and "items" in result:
+            items = result["items"]
+        else:
+            items = result
+
+        # Extract relevant fields
+        simplified_items = []
+        for item in items:
+            simplified = {
+                "label": item.get("label", ""),
+                "kind": item.get("kind"),
+                "detail": item.get("detail"),
+                "documentation": item.get("documentation"),
+                "insertText": item.get("insertText"),
+            }
+            simplified_items.append(simplified)
+
+        result_json = self._to_json(simplified_items)
+        return self._limit_length(result_json, max_answer_chars)
+
+
+class HoverTool(Tool, ToolMarkerSymbolicRead):
+    """Get type information and documentation at a cursor position."""
+
+    def apply(self, relative_path: str, line: int, character: int, max_answer_chars: int = -1) -> str:
+        """
+        Request hover information (type, documentation) at a specific position in a file.
+        Use this before editing to understand what a symbol is and what it does.
+
+        :param relative_path: the relative path to the file
+        :param line: 0-indexed line number
+        :param character: 0-indexed character position on the line
+        :param max_answer_chars: if result is longer than this, no content returned.
+            -1 means default from config. Don't adjust unless necessary.
+        :return: JSON object with hover contents and optional range
+        """
+        symbol_retriever = self.create_language_server_symbol_retriever()
+        file_path = os.path.join(self.project.project_root, relative_path)
+
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File {relative_path} does not exist in the project.")
+        if os.path.isdir(file_path):
+            raise ValueError(f"Expected a file path, but got a directory: {relative_path}")
+
+        ls = symbol_retriever.get_language_server(relative_path)
+        file_uri = PathUtils.path_to_uri(file_path)
+
+        params = lsp_types.HoverParams(textDocument={"uri": file_uri}, position={"line": line, "character": character})
+
+        with ls.open_file(relative_path):
+            ls.completions_available.wait()
+            result = ls.server.send.hover(params)
+
+        if result is None:
+            return self._to_json({"message": "No hover information available"})
+
+        result_json = self._to_json(result)
+        return self._limit_length(result_json, max_answer_chars)
+
+
+class InlayHintsTool(Tool, ToolMarkerSymbolicRead):
+    """Get type hints and parameter names for a code range."""
+
+    def apply(
+        self,
+        relative_path: str,
+        start_line: int = 0,
+        end_line: int = -1,
+        max_answer_chars: int = -1,
+    ) -> str:
+        """
+        Request inlay hints (type annotations, parameter names) for a range of lines.
+        Use this to understand implicit types and parameter names in existing code.
+
+        :param relative_path: the relative path to the file
+        :param start_line: 0-indexed start line (default: 0)
+        :param end_line: 0-indexed end line (default: -1 for end of file)
+        :param max_answer_chars: if result is longer than this, no content returned.
+            -1 means default from config. Don't adjust unless necessary.
+        :return: JSON array of inlay hints with position, label, kind, tooltip
+        """
+        symbol_retriever = self.create_language_server_symbol_retriever()
+        file_path = os.path.join(self.project.project_root, relative_path)
+
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File {relative_path} does not exist in the project.")
+        if os.path.isdir(file_path):
+            raise ValueError(f"Expected a file path, but got a directory: {relative_path}")
+
+        # Determine end_line if not specified
+        if end_line == -1:
+            with open(file_path) as f:
+                end_line = len(f.readlines())
+
+        ls = symbol_retriever.get_language_server(relative_path)
+        file_uri = PathUtils.path_to_uri(file_path)
+
+        params = lsp_types.InlayHintParams(
+            textDocument={"uri": file_uri},
+            range={
+                "start": {"line": start_line, "character": 0},
+                "end": {"line": end_line, "character": 0},
+            },
+        )
+
+        with ls.open_file(relative_path):
+            ls.completions_available.wait()
+            result = ls.server.send.inlay_hint(params)
+
+        if result is None:
+            return self._to_json({"message": "No inlay hints available"})
+
+        result_json = self._to_json(result)
+        return self._limit_length(result_json, max_answer_chars)

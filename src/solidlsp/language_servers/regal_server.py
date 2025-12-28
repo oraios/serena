@@ -81,6 +81,7 @@ class RegalLanguageServer(SolidLanguageServer):
                         "symbolKind": {"valueSet": list(range(1, 27))},  # type: ignore[arg-type]
                     },
                     "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},  # type: ignore[list-item]
+                    "inlayHint": {"dynamicRegistration": True},
                     "codeAction": {"dynamicRegistration": True},
                     "formatting": {"dynamicRegistration": True},
                 },

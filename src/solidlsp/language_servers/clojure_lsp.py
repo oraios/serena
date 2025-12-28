@@ -144,6 +144,7 @@ class ClojureLSP(SolidLanguageServer):
                     "definition": {"linkSupport": True},
                     "references": {},
                     "hover": {"contentFormat": ["markdown", "plaintext"]},
+                    "inlayHint": {"dynamicRegistration": True},
                     "documentSymbol": {
                         "hierarchicalDocumentSymbolSupport": True,
                         "symbolKind": {"valueSet": list(range(1, 27))},  #

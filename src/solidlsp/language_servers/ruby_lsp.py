@@ -319,6 +319,7 @@ class RubyLsp(SolidLanguageServer):
                             "commitCharactersSupport": True,
                         }
                     },
+                    "inlayHint": {"dynamicRegistration": True},
                 },
             },
             "initializationOptions": {

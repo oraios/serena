@@ -465,6 +465,7 @@ class EclipseJDTLS(SolidLanguageServer):
                         "completionList": {"itemDefaults": ["commitCharacters", "editRange", "insertTextFormat", "insertTextMode"]},
                     },
                     "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                    "inlayHint": {"dynamicRegistration": True},
                     "signatureHelp": {
                         "dynamicRegistration": True,
                         "signatureInformation": {

@@ -93,7 +93,11 @@ class DartLanguageServer(SolidLanguageServer):
         """
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
-            "capabilities": {},
+            "capabilities": {
+                "textDocument": {
+                    "inlayHint": {"dynamicRegistration": True},
+                },
+            },
             "initializationOptions": {
                 "onlyAnalyzeProjectsWithOpenFiles": False,
                 "closingLabels": False,

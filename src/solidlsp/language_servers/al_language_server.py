@@ -450,6 +450,7 @@ class ALLanguageServer(SolidLanguageServer):
                         },
                     },
                     "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                    "inlayHint": {"dynamicRegistration": True},
                     "definition": {"dynamicRegistration": True, "linkSupport": True},
                     "references": {"dynamicRegistration": True},
                     "documentHighlight": {"dynamicRegistration": True},

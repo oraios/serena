@@ -143,6 +143,7 @@ class ErlangLanguageServer(SolidLanguageServer):
                     "references": {"dynamicRegistration": True},
                     "documentSymbol": {"dynamicRegistration": True},
                     "hover": {"dynamicRegistration": True},
+                    "inlayHint": {"dynamicRegistration": True},
                 }
             },
         }

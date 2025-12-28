@@ -228,6 +228,7 @@ class ElixirTools(SolidLanguageServer):
                         "symbolKind": {"valueSet": list(range(1, 27))},
                     },
                     "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                    "inlayHint": {"dynamicRegistration": True},
                     "formatting": {"dynamicRegistration": True},
                     "codeAction": {
                         "dynamicRegistration": True,

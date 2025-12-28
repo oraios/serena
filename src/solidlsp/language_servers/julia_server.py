@@ -130,6 +130,7 @@ class JuliaLanguageServer(SolidLanguageServer):
                     "definition": {"dynamicRegistration": True},
                     "references": {"dynamicRegistration": True},
                     "documentSymbol": {"dynamicRegistration": True},
+                    "inlayHint": {"dynamicRegistration": True},
                 },
             },
             "workspaceFolders": [

@@ -501,6 +501,7 @@ class CSharpLanguageServer(SolidLanguageServer):
                     "textDocument": {
                         "synchronization": {"dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True, "didSave": True},
                         "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                        "inlayHint": {"dynamicRegistration": True},
                         "signatureHelp": {
                             "dynamicRegistration": True,
                             "signatureInformation": {

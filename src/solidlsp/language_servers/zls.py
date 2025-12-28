@@ -135,6 +135,7 @@ class ZigLanguageServer(SolidLanguageServer):
                         "dynamicRegistration": True,
                         "contentFormat": ["markdown", "plaintext"],
                     },
+                    "inlayHint": {"dynamicRegistration": True},
                 },
                 "workspace": {
                     "workspaceFolders": True,

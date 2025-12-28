@@ -112,6 +112,7 @@ class Intelephense(SolidLanguageServer):
                 "textDocument": {
                     "synchronization": {"didSave": True, "dynamicRegistration": True},
                     "definition": {"dynamicRegistration": True},
+                    "inlayHint": {"dynamicRegistration": True},
                 },
                 "workspace": {"workspaceFolders": True, "didChangeConfiguration": {"dynamicRegistration": True}},
             },

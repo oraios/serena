@@ -284,6 +284,7 @@ class NixLanguageServer(SolidLanguageServer):
                         "dynamicRegistration": True,
                         "contentFormat": ["markdown", "plaintext"],
                     },
+                    "inlayHint": {"dynamicRegistration": True},
                     "signatureHelp": {
                         "dynamicRegistration": True,
                         "signatureInformation": {

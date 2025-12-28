@@ -126,6 +126,7 @@ class PerlLanguageServer(SolidLanguageServer):
                     "references": {"dynamicRegistration": True},
                     "documentSymbol": {"dynamicRegistration": True},
                     "hover": {"dynamicRegistration": True},
+                    "inlayHint": {"dynamicRegistration": True},
                 },
                 "workspace": {
                     "workspaceFolders": True,
