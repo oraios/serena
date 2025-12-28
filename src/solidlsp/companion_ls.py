@@ -170,6 +170,8 @@ class CompanionLanguageServer(SolidLanguageServer):
 
                     if uri in companion.open_file_buffers:
                         companion.open_file_buffers[uri].ref_count += 1
+                        # Track URI so cleanup can decrement the ref-count we just added
+                        self._indexed_file_uris.append(uri)
                     else:
                         with open(absolute_file_path, encoding=companion._encoding) as f:
                             contents = f.read()

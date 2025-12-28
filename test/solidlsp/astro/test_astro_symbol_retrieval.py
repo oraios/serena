@@ -30,8 +30,8 @@ class TestAstroSymbolRetrieval:
         # Request document symbols to verify we can get symbols from TS files
         symbols = language_server.request_document_symbols(counter_path)
         assert symbols is not None, "Expected document symbols but got None"
-        all_symbols = symbols.get_all_symbols_and_roots()
-        symbol_names = [s.name for s in all_symbols]
+        all_symbols, _roots = symbols.get_all_symbols_and_roots()
+        symbol_names = [s["name"] for s in all_symbols]
         # Verify expected symbols from counter.ts
         assert "CounterStore" in symbol_names, f"Expected 'CounterStore' in symbols, got: {symbol_names}"
         assert "createCounter" in symbol_names, f"Expected 'createCounter' in symbols, got: {symbol_names}"
@@ -72,7 +72,7 @@ class TestAstroSymbolRetrieval:
         format_path = str(repo_path / "src" / "utils" / "format.ts")
         symbols = language_server.request_document_symbols(format_path)
         assert symbols is not None, "Expected document symbols but got None"
-        all_symbols = symbols.get_all_symbols_and_roots()
-        symbol_names = [s.name for s in all_symbols]
+        all_symbols, _roots = symbols.get_all_symbols_and_roots()
+        symbol_names = [s["name"] for s in all_symbols]
         assert "formatNumber" in symbol_names, f"Expected 'formatNumber' in symbols, got: {symbol_names}"
         assert "formatDate" in symbol_names, f"Expected 'formatDate' in symbols, got: {symbol_names}"

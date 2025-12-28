@@ -38,8 +38,8 @@ class TestAstroLanguageServer:
         symbols = language_server.request_document_symbols(layout_path)
         assert symbols is not None, "Expected document symbols but got None"
         # Layout.astro defines: interface Props { title: string; }
-        all_symbols = symbols.get_all_symbols_and_roots()
-        symbol_names = [s.name for s in all_symbols]
+        all_symbols, _roots = symbols.get_all_symbols_and_roots()
+        symbol_names = [s["name"] for s in all_symbols]
         # Verify we found the Props interface from frontmatter
         assert "Props" in symbol_names, f"Expected 'Props' interface in symbols, got: {symbol_names}"
 
@@ -50,8 +50,8 @@ class TestAstroLanguageServer:
         counter_path = str(repo_path / "src" / "stores" / "counter.ts")
         symbols = language_server.request_document_symbols(counter_path)
         assert symbols is not None, "Expected document symbols but got None"
-        all_symbols = symbols.get_all_symbols_and_roots()
-        symbol_names = [s.name for s in all_symbols]
+        all_symbols, _roots = symbols.get_all_symbols_and_roots()
+        symbol_names = [s["name"] for s in all_symbols]
         assert "CounterStore" in symbol_names, f"Expected 'CounterStore' in symbols, got: {symbol_names}"
         assert "createCounter" in symbol_names, f"Expected 'createCounter' in symbols, got: {symbol_names}"
 
@@ -135,7 +135,7 @@ class TestAstroEdgeCases:
         # Layout.astro defines: interface Props { title: string; }
         symbols = language_server.request_document_symbols(layout_path)
         assert symbols is not None, "Expected document symbols but got None"
-        all_symbols = symbols.get_all_symbols_and_roots()
-        symbol_names = [s.name for s in all_symbols]
+        all_symbols, _roots = symbols.get_all_symbols_and_roots()
+        symbol_names = [s["name"] for s in all_symbols]
         # Verify Props interface is found
         assert "Props" in symbol_names, f"Expected 'Props' interface in Layout.astro, got: {symbol_names}"
