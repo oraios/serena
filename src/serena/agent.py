@@ -24,7 +24,7 @@ from serena.ls_manager import LanguageServerManager
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.task_executor import TaskExecutor
-from serena.tools import ActivateProjectTool, GetCurrentConfigTool, ReplaceContentTool, Tool, ToolMarker, ToolRegistry
+from serena.tools import ActivateProjectTool, GetCurrentConfigTool, OpenDashboardTool, ReplaceContentTool, Tool, ToolMarker, ToolRegistry
 from serena.util.gui import system_has_usable_display
 from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
@@ -250,8 +250,19 @@ class SerenaAgent:
         self._check_shell_settings()
 
         # determine the base toolset defining the set of exposed tools (which e.g. the MCP shall see),
-        # limited by the Serena config, the context (which is fixed for the session) and JetBrains mode
+        # determined by the
+        #   * Serena config,
+        #   * the context (which is fixed for the session)
+        #   * dashboard availability/opening on launch
+        #   * single-project mode reductions (if applicable)
+        #   * JetBrains mode
         tool_inclusion_definitions: list[ToolInclusionDefinition] = [self.serena_config, self._context]
+        if (
+            self.serena_config.web_dashboard
+            and not self.serena_config.web_dashboard_open_on_launch
+            and not self.serena_config.gui_log_window_enabled
+        ):
+            tool_inclusion_definitions.append(ToolInclusionDefinition(included_optional_tools=[OpenDashboardTool.get_name_from_cls()]))
         if self._context.single_project:
             tool_inclusion_definitions.extend(self._single_project_context_tool_inclusion_definitions(project))
         if self.serena_config.language_backend == LanguageBackend.JETBRAINS:
@@ -298,14 +309,7 @@ class SerenaAgent:
             self._dashboard_url = dashboard_url
             log.info("Serena web dashboard started at %s", dashboard_url)
             if self.serena_config.web_dashboard_open_on_launch:
-                if not system_has_usable_display():
-                    log.warning("Not opening the Serena web dashboard automatically because no usable display was detected.")
-                else:
-                    # open the dashboard URL in the default web browser (using a separate process to control
-                    # output redirection)
-                    process = multiprocessing.Process(target=self._open_dashboard, args=(dashboard_url,))
-                    process.start()
-                    process.join(timeout=1)
+                self.open_dashboard()
             # inform the GUI window (if any)
             if self._gui_log_viewer is not None:
                 self._gui_log_viewer.set_dashboard_url(dashboard_url)
@@ -415,24 +419,25 @@ class SerenaAgent:
         """
         return self._dashboard_url
 
-    def open_dashboard(self) -> str:
+    def open_dashboard(self) -> bool:
         """
         Opens the Serena web dashboard in the default web browser.
 
         :return: a message indicating success or failure
         """
         if self._dashboard_url is None:
-            return "Error: The web dashboard is not running. Enable it in the Serena configuration."
+            raise Exception("Dashboard is not running.")
 
         if not system_has_usable_display():
-            return f"Error: No usable display detected. You can open the dashboard manually at: {self._dashboard_url}"
+            log.warning("Not opening the Serena web dashboard because no usable display was detected.")
+            return False
 
         # open the dashboard URL in the default web browser (using a separate process to control
         # output redirection)
         process = multiprocessing.Process(target=self._open_dashboard, args=(self._dashboard_url,))
         process.start()
         process.join(timeout=1)
-        return f"Dashboard opened in the default web browser: {self._dashboard_url}"
+        return True
 
     def get_project_root(self) -> str:
         """
