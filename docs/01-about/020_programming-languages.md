@@ -1,31 +1,16 @@
 # Language Support
 
-Serena provides a set of versatile code querying and editing functionalities
-based on symbolic understanding of the code.
+Serena's semantic code analysis capabilities build on **language servers** using the widely implemented
+language server protocol (LSP). The LSP provides a set of versatile code querying
+and editing functionalities based on symbolic understanding of the code.
 Equipped with these capabilities, Serena discovers and edits code just like a seasoned developer
 making use of an IDE's capabilities would.
 Serena can efficiently find the right context and do the right thing even in very large and
-complex projects!
+complex projects! So not only is it free and open-source, it frequently achieves better results
+than existing solutions that charge a premium.
 
-There are two alternative technologies powering these capabilities:
-
-* **Language servers** implementing the language server Protocol (LSP) — the free/open-source alternative.
-* **The Serena JetBrains Plugin**, which leverages the powerful code analysis and editing
-  capabilities of your JetBrains IDE.
-
-You can choose either of these backends depending on your preferences and requirements.
-
-## Language Servers
-
-Serena incorporates a powerful abstraction layer for the integration of language servers 
-that implement the language server protocol (LSP).
-It even supports multiple language servers in parallel to support polyglot projects.
-
-The language servers themselves are typically open-source projects (like Serena)
-or at least freely available for use.
-
-We currently provide direct, out-of-the-box support for the programming languages listed below.
-Some languages require additional installations or setup steps, as noted.
+Language servers provide support for a wide range of programming languages.
+With Serena, we provide direct, out-of-the-box support for:
 
 * **AL**
 * **Bash**
@@ -83,34 +68,3 @@ Some languages require additional installations or setup steps, as noted.
 
 Support for further languages can easily be added by providing a shallow adapter for a new language server implementation,
 see Serena's [memory on that](https://github.com/oraios/serena/blob/main/.serena/memories/adding_new_language_support_guide.md).
-
-## The Serena JetBrains Plugin
-
-As an alternative to language servers, the [Serena JetBrains Plugin](https://plugins.jetbrains.com/plugin/28946-serena/)
-leverages the powerful code analysis capabilities of JetBrains IDEs. 
-The plugin naturally supports all programming languages and frameworks that are supported by JetBrains IDEs, 
-including IntelliJ IDEA, PyCharm, Android Studio, AppCode, WebStorm, PhpStorm, RubyMine, GoLand, AppCode, CLion, Rider, and others.
-
-When using the plugin, Serena connects to an instance of your JetBrains IDE via the plugin. For users who already
-work in a JetBrains IDE, this means Serena seamlessly integrates with the IDE instance you typically have open anyway,
-requiring no additional setup or configuration beyond the plugin itself. This approach offers several key advantages:
-
-* **External library indexing**: Dependencies and libraries are fully indexed and accessible to Serena
-* **No additional setup**: No need to download or configure separate language servers
-* **Enhanced performance**: Faster tool execution thanks to optimized IDE integration
-* **Multi-language excellence**: First-class support for polyglot projects with multiple languages and frameworks
-
-Even if you prefer to work in a different code editor, you can still benefit from the JetBrains plugin by running 
-a JetBrains IDE instance (most have free community editions) alongside your preferred editor with your project 
-opened and indexed. Serena will connect to the IDE for code analysis while you continue working in your editor 
-of choice.
-
-```{raw} html
-<p>
-<a href="https://plugins.jetbrains.com/plugin/28946-serena/">
-<img style="background-color:transparent;" src="../_static/images/jetbrains-marketplace-button.png">
-</a>
-</p>
-```
-
-See the [JetBrains Plugin documentation](../02-usage/025_jetbrains_plugin) for usage details.
