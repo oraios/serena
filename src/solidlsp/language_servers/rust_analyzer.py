@@ -5,6 +5,7 @@ Provides Rust specific instantiation of the LanguageServer class. Contains vario
 import logging
 import os
 import pathlib
+import platform
 import shutil
 import subprocess
 import threading
@@ -76,14 +77,38 @@ class RustAnalyzer(SolidLanguageServer):
 
         :return: path to rust-analyzer executable
         """
+        # Determine platform-specific binary name and paths
+        is_windows = platform.system() == "Windows"
+        binary_name = "rust-analyzer.exe" if is_windows else "rust-analyzer"
+
         # Try common locations (following Haskell pattern)
-        common_paths = [
-            shutil.which("rust-analyzer"),  # System PATH first
-            "/opt/homebrew/bin/rust-analyzer",  # macOS Homebrew (Apple Silicon)
-            "/usr/local/bin/rust-analyzer",  # macOS Homebrew (Intel) / Linux system
-            os.path.expanduser("~/.cargo/bin/rust-analyzer"),  # cargo install
-            os.path.expanduser("~/.local/bin/rust-analyzer"),  # User local bin
+        common_paths: list[str | None] = [
+            shutil.which("rust-analyzer"),  # System PATH first (handles .exe on Windows)
         ]
+
+        if is_windows:
+            # Windows-specific paths
+            home = pathlib.Path.home()
+            common_paths.extend(
+                [
+                    str(home / ".cargo" / "bin" / binary_name),  # cargo install / rustup
+                    str(home / "scoop" / "shims" / binary_name),  # Scoop package manager
+                    str(home / "scoop" / "apps" / "rust-analyzer" / "current" / binary_name),  # Scoop direct
+                    str(
+                        pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "rust-analyzer" / binary_name
+                    ),  # Standalone install
+                ]
+            )
+        else:
+            # Unix-like paths (macOS, Linux)
+            common_paths.extend(
+                [
+                    "/opt/homebrew/bin/rust-analyzer",  # macOS Homebrew (Apple Silicon)
+                    "/usr/local/bin/rust-analyzer",  # macOS Homebrew (Intel) / Linux system
+                    os.path.expanduser("~/.cargo/bin/rust-analyzer"),  # cargo install
+                    os.path.expanduser("~/.local/bin/rust-analyzer"),  # User local bin
+                ]
+            )
 
         for path in common_paths:
             if path and os.path.isfile(path) and os.access(path, os.X_OK):
@@ -104,14 +129,30 @@ class RustAnalyzer(SolidLanguageServer):
 
         # Provide helpful error message with all searched locations
         searched = [p for p in common_paths if p]
+        install_instructions = [
+            "  - Rustup: rustup component add rust-analyzer",
+            "  - Cargo: cargo install rust-analyzer",
+        ]
+        if is_windows:
+            install_instructions.extend(
+                [
+                    "  - Scoop: scoop install rust-analyzer",
+                    "  - Chocolatey: choco install rust-analyzer",
+                    "  - Standalone: Download from https://github.com/rust-lang/rust-analyzer/releases",
+                ]
+            )
+        else:
+            install_instructions.extend(
+                [
+                    "  - Homebrew (macOS): brew install rust-analyzer",
+                    "  - System package manager (Linux): apt/dnf/pacman install rust-analyzer",
+                ]
+            )
+
         raise RuntimeError(
             "rust-analyzer is not installed or not in PATH.\n"
             "Searched locations:\n" + "\n".join(f"  - {p}" for p in searched) + "\n"
-            "Please install rust-analyzer via:\n"
-            "  - Rustup: rustup component add rust-analyzer\n"
-            "  - Cargo: cargo install rust-analyzer\n"
-            "  - Homebrew (macOS): brew install rust-analyzer\n"
-            "  - System package manager (Linux): apt/dnf/pacman install rust-analyzer"
+            "Please install rust-analyzer via:\n" + "\n".join(install_instructions)
         )
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
