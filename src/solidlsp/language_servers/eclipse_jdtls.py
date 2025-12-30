@@ -48,6 +48,8 @@ class EclipseJDTLS(SolidLanguageServer):
     You can configure the following options in ls_specific_settings (in serena_config.yml):
         - maven_user_settings: Path to Maven settings.xml file (default: ~/.m2/settings.xml)
         - gradle_user_home: Path to Gradle user home directory (default: ~/.gradle)
+        - enable_maven: Enable Maven project detection (default: true)
+        - enable_gradle: Enable Gradle project detection (default: true)
 
     Note: Gradle wrapper is disabled by default. Projects will use the bundled Gradle distribution.
 
@@ -59,6 +61,8 @@ class EclipseJDTLS(SolidLanguageServer):
         # maven_user_settings: 'C:\\Users\\YourName\\.m2\\settings.xml'  # Windows (use single quotes!)
         gradle_user_home: "/home/user/.gradle"  # Unix/Linux/Mac
         # gradle_user_home: 'C:\\Users\\YourName\\.gradle'  # Windows (use single quotes!)
+        enable_maven: true   # Set to false to disable Maven project detection
+        enable_gradle: true  # Set to false to disable Gradle project detection
     ```
     """
 
@@ -384,6 +388,10 @@ class EclipseJDTLS(SolidLanguageServer):
             gradle_user_home = None
             log.info(f"Gradle user home not found at default location ({default_gradle_home}), will use JDTLS defaults")
 
+        # Build system enable flags: default to True for backward compatibility
+        enable_maven = self._custom_settings.get("enable_maven", True)
+        enable_gradle = self._custom_settings.get("enable_gradle", True)
+
         initialize_params = {
             "locale": "en",
             "rootPath": repository_absolute_path,
@@ -583,12 +591,12 @@ class EclipseJDTLS(SolidLanguageServer):
                         "trace": {"server": "verbose"},
                         "import": {
                             "maven": {
-                                "enabled": True,
+                                "enabled": enable_maven,
                                 "offline": {"enabled": False},
                                 "disableTestClasspathFlag": False,
                             },
                             "gradle": {
-                                "enabled": True,
+                                "enabled": enable_gradle,
                                 "wrapper": {"enabled": False},
                                 "version": None,
                                 "home": "abs(static/gradle-7.3.3)",
