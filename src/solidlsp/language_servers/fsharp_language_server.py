@@ -347,6 +347,7 @@ class FSharpLanguageServer(SolidLanguageServer):
         # Register custom handlers
         self.server.on_notification("window/logMessage", handle_window_log_message)
         self.server.on_notification("window/showMessage", handle_window_show_message)
+        self.server.on_notification("textDocument/publishDiagnostics", self._handle_publish_diagnostics)
         self.server.on_request("workspace/configuration", handle_workspace_configuration)
         self.server.on_request("client/registerCapability", handle_client_register_capability)
         self.server.on_request("client/unregisterCapability", handle_client_unregister_capability)

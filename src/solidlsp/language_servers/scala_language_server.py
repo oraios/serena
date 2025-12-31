@@ -165,6 +165,9 @@ class ScalaLanguageServer(SolidLanguageServer):
         """
         Starts the Scala Language Server
         """
+        # Register notification handlers
+        self.server.on_notification("textDocument/publishDiagnostics", self._handle_publish_diagnostics)
+
         log.info("Starting Scala server process")
         self.server.start()
 

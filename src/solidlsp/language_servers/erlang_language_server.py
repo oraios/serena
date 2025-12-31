@@ -125,7 +125,7 @@ class ErlangLanguageServer(SolidLanguageServer):
         self.server.on_notification("$/progress", check_server_ready)
         self.server.on_notification("window/workDoneProgress/create", do_nothing)
         self.server.on_notification("$/workDoneProgress", do_nothing)
-        self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
+        self.server.on_notification("textDocument/publishDiagnostics", self._handle_publish_diagnostics)
 
         log.info("Starting Erlang LS server process")
         self.server.start()

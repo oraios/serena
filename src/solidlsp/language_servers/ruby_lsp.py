@@ -398,7 +398,7 @@ class RubyLsp(SolidLanguageServer):
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
         self.server.on_notification("$/progress", progress_handler)
         self.server.on_request("window/workDoneProgress/create", window_work_done_progress_create)
-        self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
+        self.server.on_notification("textDocument/publishDiagnostics", self._handle_publish_diagnostics)
 
         log.info("Starting ruby-lsp server process")
         self.server.start()

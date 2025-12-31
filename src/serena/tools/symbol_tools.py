@@ -474,3 +474,81 @@ class InlayHintsTool(Tool, ToolMarkerSymbolicRead):
 
         result_json = self._to_json(result)
         return self._limit_length(result_json, max_answer_chars)
+
+
+class GetDiagnosticsTool(Tool, ToolMarkerSymbolicRead):
+    """Get compiler/linter diagnostics (errors, warnings) for files."""
+
+    _SEVERITY_NAMES = ["Error", "Warning", "Info", "Hint"]
+
+    def apply(
+        self,
+        relative_path: str = "",
+        min_severity: int = 2,
+        max_results: int = 50,
+        max_answer_chars: int = -1,
+    ) -> str:
+        """
+        Get diagnostics (errors, warnings, hints) from the language server.
+        Diagnostics are automatically collected when files are opened.
+
+        :param relative_path: File to get diagnostics for. Empty string = all files with diagnostics.
+        :param min_severity: Minimum severity to include (1=Error, 2=Warning, 3=Info, 4=Hint).
+                            Default 2 includes errors and warnings.
+        :param max_results: Maximum number of diagnostics to return.
+        :param max_answer_chars: Max output length. -1 = default from config.
+        :return: JSON with diagnostics grouped by file.
+        """
+        symbol_retriever = self.create_language_server_symbol_retriever()
+
+        if relative_path:
+            file_path = os.path.join(self.project.project_root, relative_path)
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"File {relative_path} does not exist.")
+            if os.path.isdir(file_path):
+                raise ValueError(f"Path {relative_path} is a directory, not a file.")
+            ls = symbol_retriever.get_language_server(relative_path)
+            with ls.open_file(relative_path):
+                ls.completions_available.wait()
+                # Wait a bit for diagnostics to be published
+                import time
+
+                time.sleep(0.5)
+                raw_diagnostics = ls.get_diagnostics(relative_path)
+        else:
+            raw_diagnostics = {}
+            for ls in symbol_retriever.get_all_language_servers():
+                raw_diagnostics.update(ls.get_diagnostics())
+
+        result = []
+        for uri, diagnostics in raw_diagnostics.items():
+            diag_file_path = PathUtils.uri_to_path(uri)
+            rel_path = os.path.relpath(diag_file_path, self.project.project_root)
+
+            for diag in diagnostics:
+                severity = diag.get("severity", 1)
+                if severity > min_severity:
+                    continue
+
+                diag_range = diag.get("range", {})
+                start_pos = diag_range.get("start", {})
+                result.append(
+                    {
+                        "file": rel_path,
+                        "line": start_pos.get("line", 0) + 1,
+                        "character": start_pos.get("character", 0),
+                        "severity": self._SEVERITY_NAMES[severity - 1] if 1 <= severity <= 4 else str(severity),
+                        "message": diag.get("message", ""),
+                        "source": diag.get("source", ""),
+                        "code": diag.get("code", ""),
+                    }
+                )
+
+                if len(result) >= max_results:
+                    break
+            if len(result) >= max_results:
+                break
+
+        output = {"total": len(result), "diagnostics": result}
+        result_json = self._to_json(output)
+        return self._limit_length(result_json, max_answer_chars)

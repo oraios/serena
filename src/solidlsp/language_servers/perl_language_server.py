@@ -173,7 +173,7 @@ class PerlLanguageServer(SolidLanguageServer):
         self.server.on_request("workspace/configuration", workspace_configuration_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", do_nothing)
-        self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
+        self.server.on_notification("textDocument/publishDiagnostics", self._handle_publish_diagnostics)
 
         log.info("Starting Perl::LanguageServer process")
         self.server.start()

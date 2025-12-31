@@ -194,7 +194,7 @@ class VtsLanguageServer(SolidLanguageServer):
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
         self.server.on_request("workspace/configuration", workspace_configuration_handler)
         self.server.on_notification("$/progress", do_nothing)
-        self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
+        self.server.on_notification("textDocument/publishDiagnostics", self._handle_publish_diagnostics)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
         log.info("Starting VTS server process")

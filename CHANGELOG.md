@@ -34,7 +34,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     (and which requires no escaping in the replacement text, making it more robust)
   * Added `CompletionTool` for getting code completion suggestions at a cursor position
   * Added `HoverTool` for getting type information and documentation at a cursor position
-  * Added `InlayHintsTool` for getting type hints and parameter names for a code range 
+  * Added `InlayHintsTool` for getting type hints and parameter names for a code range
+  * Added `GetDiagnosticsTool` for retrieving compiler errors, warnings, and hints from language servers 
 
 * Language support:
 

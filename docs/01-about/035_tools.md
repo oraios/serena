@@ -17,6 +17,7 @@ Note that in most configurations, only a subset of these tools will be enabled s
   ed by type).
 * `get_current_config`: Prints the current configuration of the agent, including the active and available projects, tools,
   contexts, and modes.
+* `get_diagnostics`: Get compiler/linter diagnostics (errors, warnings) for files in the project.
 * `get_symbols_overview`: Gets an overview of the top-level symbols defined in a given file.
 * `hover`: Get type information and documentation at a cursor position.
 * `initial_instructions`: Provides instructions on how to use the Serena toolbox.
