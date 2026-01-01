@@ -700,9 +700,8 @@ class ALLanguageServer(SolidLanguageServer):
                 raise FileNotFoundError(f"File or directory not found: {within_abs_path}")
 
             if os.path.isfile(within_abs_path):
-                # Single file case - use parent class implementation
-                root_nodes = self.request_document_symbols(within_relative_path).root_symbols
-                return root_nodes
+                # Single file case - delegate to parent which wraps in File symbol
+                return super().request_full_symbol_tree(within_relative_path)
 
             # Directory case - scan within this directory
             scan_root = Path(within_abs_path)
