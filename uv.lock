@@ -2014,7 +2014,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.0,<2" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "requests", specifier = ">=2.32.3,<3" },
-    { name = "ruamel-yaml", specifier = ">=0.18.0" },
+    { name = "ruamel-yaml", specifier = "==0.18.14" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.0.285" },
     { name = "sensai-utils", specifier = ">=1.5.0" },
     { name = "sphinx", marker = "extra == 'dev'", specifier = ">=7,<8" },
