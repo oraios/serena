@@ -4,7 +4,7 @@ Contains various configurations and settings specific to MATLAB.
 
 Requirements:
     - MATLAB R2021b or later must be installed
-    - Node.js and npm must be installed
+    - Node.js must be installed (for running the language server)
     - MATLAB path can be specified via MATLAB_PATH environment variable or auto-detected
 
 The MATLAB language server provides:
@@ -25,9 +25,11 @@ import pathlib
 import platform
 import shutil
 import threading
+import zipfile
 from typing import cast
 
-from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
+import requests
+
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
@@ -38,6 +40,11 @@ log = logging.getLogger(__name__)
 
 # Environment variable for MATLAB installation path
 MATLAB_PATH_ENV_VAR = "MATLAB_PATH"
+
+# VS Code Marketplace URL for MATLAB extension
+MATLAB_EXTENSION_URL = (
+    "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/MathWorks/vsextensions/language-matlab/latest/vspackage"
+)
 
 
 def find_matlab_installation() -> str | None:
@@ -115,11 +122,13 @@ class MatlabLanguageServer(SolidLanguageServer):
 
     The MATLAB language server requires:
         - MATLAB R2021b or later installed on the system
-        - Node.js and npm for running the language server
+        - Node.js for running the language server
+
+    The language server is automatically downloaded from the VS Code marketplace
+    (MathWorks.language-matlab extension) and extracted.
 
     You can pass the following entries in ls_specific_settings["matlab"]:
         - matlab_path: Path to MATLAB installation (overrides MATLAB_PATH env var)
-        - matlab_language_server_version: Version of the MATLAB language server to install
     """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
@@ -130,15 +139,170 @@ class MatlabLanguageServer(SolidLanguageServer):
         matlab_lsp_command, matlab_path = self._setup_runtime_dependencies(config, solidlsp_settings)
         self._matlab_path = matlab_path
 
+        # Set environment for MATLAB
+        proc_env = {
+            "MATLAB_INSTALL_PATH": matlab_path,
+        }
+
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd=matlab_lsp_command, cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=matlab_lsp_command, cwd=repository_root_path, env=proc_env),
             "matlab",
             solidlsp_settings,
         )
         self.server_ready = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
+
+    @classmethod
+    def _download_matlab_extension(cls, url: str, target_dir: str) -> bool:
+        """
+        Download and extract the MATLAB extension from VS Code marketplace.
+
+        The VS Code marketplace packages extensions as .vsix files (which are ZIP archives).
+        This method downloads the VSIX file and extracts it to get the language server.
+
+        Args:
+            url: VS Code marketplace URL for the MATLAB extension
+            target_dir: Directory where the extension will be extracted
+
+        Returns:
+            True if successful, False otherwise
+
+        """
+        try:
+            log.info(f"Downloading MATLAB extension from {url}")
+
+            # Create target directory for the extension
+            os.makedirs(target_dir, exist_ok=True)
+
+            # Download with proper headers to mimic VS Code marketplace client
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept": "application/octet-stream, application/vsix, */*",
+            }
+
+            response = requests.get(url, headers=headers, stream=True, timeout=300)
+            response.raise_for_status()
+
+            # Save to temporary VSIX file
+            temp_file = os.path.join(target_dir, "matlab_extension_temp.vsix")
+            total_size = int(response.headers.get("content-length", 0))
+
+            log.info(f"Downloading {total_size / 1024 / 1024:.1f} MB...")
+
+            with open(temp_file, "wb") as f:
+                downloaded = 0
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total_size > 0 and downloaded % (10 * 1024 * 1024) == 0:
+                            progress = (downloaded / total_size) * 100
+                            log.info(f"Download progress: {progress:.1f}%")
+
+            log.info("Download complete, extracting...")
+
+            # Extract VSIX file (VSIX files are ZIP archives)
+            with zipfile.ZipFile(temp_file, "r") as zip_ref:
+                zip_ref.extractall(target_dir)
+
+            # Clean up temp file
+            os.remove(temp_file)
+
+            log.info("MATLAB extension extracted successfully")
+            return True
+
+        except Exception as e:
+            log.error(f"Error downloading/extracting MATLAB extension: {e}")
+            return False
+
+    @classmethod
+    def _find_matlab_extension(cls, solidlsp_settings: SolidLSPSettings) -> str | None:
+        """
+        Find MATLAB extension in various locations.
+
+        Search order:
+        1. Environment variable (MATLAB_EXTENSION_PATH)
+        2. Default download location (~/.serena/ls_resources/matlab-extension)
+        3. VS Code installed extensions
+
+        Returns:
+            Path to MATLAB extension directory or None if not found
+
+        """
+        # Check environment variable
+        env_path = os.environ.get("MATLAB_EXTENSION_PATH")
+        if env_path and os.path.exists(env_path):
+            log.debug(f"Found MATLAB extension via MATLAB_EXTENSION_PATH: {env_path}")
+            return env_path
+        elif env_path:
+            log.warning(f"MATLAB_EXTENSION_PATH set but directory not found: {env_path}")
+
+        # Check default download location
+        default_path = os.path.join(cls.ls_resources_dir(solidlsp_settings), "matlab-extension", "extension")
+        if os.path.exists(default_path):
+            log.debug(f"Found MATLAB extension in default location: {default_path}")
+            return default_path
+
+        # Search VS Code extensions
+        vscode_extensions_dir = os.path.expanduser("~/.vscode/extensions")
+        if os.path.exists(vscode_extensions_dir):
+            for entry in os.listdir(vscode_extensions_dir):
+                if entry.startswith("mathworks.language-matlab"):
+                    ext_path = os.path.join(vscode_extensions_dir, entry)
+                    if os.path.isdir(ext_path):
+                        log.debug(f"Found MATLAB extension in VS Code: {ext_path}")
+                        return ext_path
+
+        log.debug("MATLAB extension not found in any known location")
+        return None
+
+    @classmethod
+    def _download_and_install_matlab_extension(cls, solidlsp_settings: SolidLSPSettings) -> str | None:
+        """
+        Download and install MATLAB extension from VS Code marketplace.
+
+        Returns:
+            Path to installed extension or None if download failed
+
+        """
+        matlab_extension_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "matlab-extension")
+
+        log.info(f"Downloading MATLAB extension from: {MATLAB_EXTENSION_URL}")
+
+        if cls._download_matlab_extension(MATLAB_EXTENSION_URL, matlab_extension_dir):
+            extension_path = os.path.join(matlab_extension_dir, "extension")
+            if os.path.exists(extension_path):
+                log.info("MATLAB extension downloaded and installed successfully")
+                return extension_path
+            else:
+                log.error(f"Download completed but extension not found at: {extension_path}")
+        else:
+            log.error("Failed to download MATLAB extension from marketplace")
+
+        return None
+
+    @classmethod
+    def _get_executable_path(cls, extension_path: str, system: str) -> str:
+        """
+        Get the path to the MATLAB language server executable based on platform.
+
+        The language server is a Node.js script located in the extension's server directory.
+        """
+        # The MATLAB extension bundles the language server in the 'server' directory
+        server_dir = os.path.join(extension_path, "server", "out")
+        main_script = os.path.join(server_dir, "index.js")
+
+        if os.path.exists(main_script):
+            return main_script
+
+        # Alternative location
+        alt_script = os.path.join(extension_path, "out", "index.js")
+        if os.path.exists(alt_script):
+            return alt_script
+
+        raise RuntimeError(f"MATLAB language server script not found in extension at {extension_path}")
 
     @classmethod
     def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> tuple[list[str], str]:
@@ -149,11 +313,12 @@ class MatlabLanguageServer(SolidLanguageServer):
             Tuple of (command to start the server, MATLAB installation path)
 
         """
-        # Verify node and npm are installed
-        is_node_installed = shutil.which("node") is not None
-        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which("npm") is not None
-        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
+        system = platform.system()
+
+        # Verify node is installed
+        node_path = shutil.which("node")
+        if node_path is None:
+            raise RuntimeError("Node.js is not installed or isn't in PATH. Please install Node.js and try again.")
 
         # Get MATLAB path from settings or auto-detect
         language_specific_config = solidlsp_settings.get_ls_specific_settings(cls.get_language_enum_instance())
@@ -174,71 +339,35 @@ class MatlabLanguageServer(SolidLanguageServer):
 
         log.info(f"Using MATLAB installation: {matlab_path}")
 
-        # Get MATLAB language server version from settings or use default
-        matlab_ls_version = language_specific_config.get("matlab_language_server_version", "1.3.0")
+        # Find existing extension or download if needed
+        extension_path = cls._find_matlab_extension(solidlsp_settings)
+        if extension_path is None:
+            log.info("MATLAB extension not found on disk, attempting to download...")
+            extension_path = cls._download_and_install_matlab_extension(solidlsp_settings)
 
-        deps = RuntimeDependencyCollection(
-            [
-                RuntimeDependency(
-                    id="matlab-language-server",
-                    description="MathWorks MATLAB Language Server",
-                    command=["npm", "install", "--prefix", "./", f"@mathworks/matlab-language-server@{matlab_ls_version}"],
-                    platform_id="any",
-                ),
-            ]
-        )
-
-        # Install MATLAB language server if not already installed
-        matlab_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "matlab-lsp")
-        matlab_executable_path = os.path.join(matlab_ls_dir, "node_modules", ".bin", "matlab-language-server")
-
-        # Handle Windows executable extension
-        if os.name == "nt":
-            matlab_executable_path += ".cmd"
-
-        # Check if installation is needed
-        version_file = os.path.join(matlab_ls_dir, ".installed_version")
-        needs_install = False
-
-        if not os.path.exists(matlab_executable_path):
-            log.info(f"MATLAB Language Server executable not found at {matlab_executable_path}. Installing...")
-            needs_install = True
-        elif os.path.exists(version_file):
-            with open(version_file) as f:
-                installed_version = f.read().strip()
-            if installed_version != matlab_ls_version:
-                log.info(
-                    f"MATLAB Language Server version mismatch: installed={installed_version}, expected={matlab_ls_version}. Reinstalling..."
-                )
-                needs_install = True
-        else:
-            log.info("MATLAB Language Server version file not found. Reinstalling to ensure correct version...")
-            needs_install = True
-
-        if needs_install:
-            log.info("Installing MATLAB Language Server dependencies...")
-            deps.install(matlab_ls_dir)
-            # Write version marker file
-            with open(version_file, "w") as f:
-                f.write(matlab_ls_version)
-            log.info("MATLAB Language Server dependencies installed successfully")
-
-        if not os.path.exists(matlab_executable_path):
-            raise FileNotFoundError(
-                f"matlab-language-server executable not found at {matlab_executable_path}, something went wrong with the installation."
+        if extension_path is None:
+            raise RuntimeError(
+                "Failed to locate or download MATLAB Language Server. Please either:\n"
+                "1. Set MATLAB_EXTENSION_PATH environment variable to the MATLAB extension directory\n"
+                "2. Install the MATLAB extension in VS Code (MathWorks.language-matlab)\n"
+                "3. Ensure internet connection for automatic download"
             )
 
-        # Build the command with MATLAB path
-        # The MATLAB language server needs to know where MATLAB is installed
-        cmd = [matlab_executable_path, "--stdio", f"--matlabInstallationPath={matlab_path}"]
+        # Get the language server script path
+        server_script = cls._get_executable_path(extension_path, system)
+
+        if not os.path.exists(server_script):
+            raise RuntimeError(f"MATLAB Language Server script not found at: {server_script}")
+
+        # Build the command to run the language server
+        # The MATLAB language server is run via Node.js with the --stdio flag
+        cmd = [node_path, server_script, "--stdio"]
 
         return cmd, matlab_path
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
-        """
-        Returns the initialize params for the MATLAB Language Server.
-        """
+        """Return the initialize params for the MATLAB Language Server."""
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
             "locale": "en",
@@ -282,9 +411,7 @@ class MatlabLanguageServer(SolidLanguageServer):
         return cast(InitializeParams, initialize_params)
 
     def _start_server(self) -> None:
-        """
-        Starts the MATLAB Language Server, waits for the server to be ready.
-        """
+        """Start the MATLAB Language Server and wait for it to be ready."""
 
         def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
@@ -353,9 +480,7 @@ class MatlabLanguageServer(SolidLanguageServer):
             log.info("MATLAB server initialization complete")
 
     def is_ignored_dirname(self, dirname: str) -> bool:
-        """
-        Define MATLAB-specific directories to ignore.
-        """
+        """Define MATLAB-specific directories to ignore."""
         return super().is_ignored_dirname(dirname) or dirname in [
             "slprj",  # Simulink project files
             "codegen",  # Code generation output
