@@ -70,21 +70,24 @@ class RustAnalyzer(SolidLanguageServer):
         """
         Ensure rust-analyzer is available.
 
-        Searches multiple locations following the pattern established by HaskellLanguageServer:
-        1. System PATH (via shutil.which)
-        2. Common installation locations (Homebrew, system bin, cargo)
-        3. Rustup as final fallback (with auto-install if rustup available)
+        1. Rustup (preferred - avoids incorrect PATH aliases)
+        2. Common installation locations (Homebrew, Scoop, cargo) as fallback
+        3. System PATH last (can pick up incompatible versions)
+        4. Auto-install via rustup if available
 
         :return: path to rust-analyzer executable
         """
+        # Try rustup FIRST (original behavior - avoids picking up incorrect aliases from PATH)
+        rustup_path = RustAnalyzer._get_rust_analyzer_via_rustup()
+        if rustup_path:
+            return rustup_path
+
         # Determine platform-specific binary name and paths
         is_windows = platform.system() == "Windows"
         binary_name = "rust-analyzer.exe" if is_windows else "rust-analyzer"
 
-        # Try common locations (following Haskell pattern)
-        common_paths: list[str | None] = [
-            shutil.which("rust-analyzer"),  # System PATH first (handles .exe on Windows)
-        ]
+        # Fallback to common installation locations
+        common_paths: list[str | None] = []
 
         if is_windows:
             # Windows-specific paths
@@ -114,10 +117,10 @@ class RustAnalyzer(SolidLanguageServer):
             if path and os.path.isfile(path) and os.access(path, os.X_OK):
                 return path
 
-        # Fall back to rustup (existing behavior)
-        rustup_path = RustAnalyzer._get_rust_analyzer_via_rustup()
-        if rustup_path:
-            return rustup_path
+        # Last resort: check system PATH (can pick up incorrect aliases, hence checked last)
+        path_result = shutil.which("rust-analyzer")
+        if path_result and os.path.isfile(path_result) and os.access(path_result, os.X_OK):
+            return path_result
 
         # If rustup is available, try to install rust-analyzer component
         if RustAnalyzer._get_rustup_version():

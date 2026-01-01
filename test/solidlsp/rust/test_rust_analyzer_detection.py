@@ -3,12 +3,11 @@ Tests for rust-analyzer detection logic.
 
 These tests describe the expected behavior of RustAnalyzer._ensure_rust_analyzer_installed():
 
-1. Detection should check multiple locations in priority order
-2. shutil.which (PATH) should be checked first
-3. Common installation locations (Homebrew, cargo, Scoop) should be checked before rustup
-4. Rustup should be the fallback, not the only option
-5. Error messages should list all searched locations
-6. Windows-specific paths should be checked on Windows
+1. Rustup should be checked FIRST (avoids picking up incorrect PATH aliases)
+2. Common installation locations (Homebrew, cargo, Scoop) should be checked as fallback
+3. System PATH should be checked last (can pick up incompatible versions)
+4. Error messages should list all searched locations
+5. Windows-specific paths should be checked on Windows
 
 WHY these tests matter:
 - Users install rust-analyzer via Homebrew, cargo, Scoop, or system packages - not just rustup
@@ -34,37 +33,50 @@ class TestRustAnalyzerDetection:
     """Unit tests for rust-analyzer binary detection logic."""
 
     @pytest.mark.rust
-    def test_detect_from_shutil_which_when_in_path(self):
+    def test_detect_from_path_as_last_resort(self):
         """
-        GIVEN rust-analyzer is in system PATH
+        GIVEN rustup is not available
+        AND rust-analyzer is NOT in common locations (Homebrew, cargo)
+        AND rust-analyzer IS in system PATH
         WHEN _ensure_rust_analyzer_installed is called
-        THEN it should return the path from shutil.which
+        THEN it should return the path from shutil.which as last resort
 
-        WHY: Users who install via `brew install rust-analyzer` or system package managers
-        will have rust-analyzer in PATH. This should be detected first.
+        WHY: PATH is checked last to avoid picking up incorrect aliases.
+        Users with rust-analyzer in PATH but not via rustup/common locations
+        should still work.
         """
         from solidlsp.language_servers.rust_analyzer import RustAnalyzer
 
-        with patch("shutil.which") as mock_which:
-            mock_which.return_value = "/usr/local/bin/rust-analyzer"
-            with patch("os.path.isfile", return_value=True):
-                with patch("os.access", return_value=True):
-                    result = RustAnalyzer._ensure_rust_analyzer_installed()
+        # Mock rustup to be unavailable
+        with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=None):
+            # Mock common locations to NOT exist
+            with patch("os.path.isfile", return_value=False):
+                # Mock PATH to have rust-analyzer
+                with patch("shutil.which") as mock_which:
+                    mock_which.return_value = "/custom/bin/rust-analyzer"
+                    with patch("os.access", return_value=True):
+                        # Need isfile to return True for PATH result only
+                        def selective_isfile(path):
+                            return path == "/custom/bin/rust-analyzer"
 
-        assert result == "/usr/local/bin/rust-analyzer"
+                        with patch("os.path.isfile", side_effect=selective_isfile):
+                            result = RustAnalyzer._ensure_rust_analyzer_installed()
+
+        assert result == "/custom/bin/rust-analyzer"
         mock_which.assert_called_with("rust-analyzer")
 
     @pytest.mark.rust
     @pytest.mark.skipif(IS_WINDOWS, reason="Homebrew paths only apply to macOS/Linux")
     def test_detect_from_homebrew_apple_silicon_path(self):
         """
-        GIVEN rust-analyzer is installed via Homebrew on Apple Silicon Mac
+        GIVEN rustup is NOT available
+        AND rust-analyzer is installed via Homebrew on Apple Silicon Mac
         AND it is NOT in PATH (shutil.which returns None)
         WHEN _ensure_rust_analyzer_installed is called
         THEN it should find /opt/homebrew/bin/rust-analyzer
 
         WHY: Apple Silicon Macs use /opt/homebrew/bin for Homebrew.
-        This path should be checked even if it's not in PATH.
+        This path should be checked as fallback when rustup is unavailable.
         """
         from solidlsp.language_servers.rust_analyzer import RustAnalyzer
 
@@ -74,10 +86,11 @@ class TestRustAnalyzerDetection:
         def mock_access(path, mode):
             return path == "/opt/homebrew/bin/rust-analyzer"
 
-        with patch("shutil.which", return_value=None):
-            with patch("os.path.isfile", side_effect=mock_isfile):
-                with patch("os.access", side_effect=mock_access):
-                    result = RustAnalyzer._ensure_rust_analyzer_installed()
+        with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=None):
+            with patch("shutil.which", return_value=None):
+                with patch("os.path.isfile", side_effect=mock_isfile):
+                    with patch("os.access", side_effect=mock_access):
+                        result = RustAnalyzer._ensure_rust_analyzer_installed()
 
         assert result == "/opt/homebrew/bin/rust-analyzer"
 
@@ -85,7 +98,8 @@ class TestRustAnalyzerDetection:
     @pytest.mark.skipif(IS_WINDOWS, reason="Homebrew paths only apply to macOS/Linux")
     def test_detect_from_homebrew_intel_path(self):
         """
-        GIVEN rust-analyzer is installed via Homebrew on Intel Mac
+        GIVEN rustup is NOT available
+        AND rust-analyzer is installed via Homebrew on Intel Mac
         AND it is NOT in PATH
         WHEN _ensure_rust_analyzer_installed is called
         THEN it should find /usr/local/bin/rust-analyzer
@@ -101,10 +115,11 @@ class TestRustAnalyzerDetection:
         def mock_access(path, mode):
             return path == "/usr/local/bin/rust-analyzer"
 
-        with patch("shutil.which", return_value=None):
-            with patch("os.path.isfile", side_effect=mock_isfile):
-                with patch("os.access", side_effect=mock_access):
-                    result = RustAnalyzer._ensure_rust_analyzer_installed()
+        with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=None):
+            with patch("shutil.which", return_value=None):
+                with patch("os.path.isfile", side_effect=mock_isfile):
+                    with patch("os.access", side_effect=mock_access):
+                        result = RustAnalyzer._ensure_rust_analyzer_installed()
 
         assert result == "/usr/local/bin/rust-analyzer"
 
@@ -112,7 +127,8 @@ class TestRustAnalyzerDetection:
     @pytest.mark.skipif(IS_WINDOWS, reason="Unix cargo path - Windows has separate test")
     def test_detect_from_cargo_install_path(self):
         """
-        GIVEN rust-analyzer is installed via `cargo install rust-analyzer`
+        GIVEN rustup is NOT available
+        AND rust-analyzer is installed via `cargo install rust-analyzer`
         AND it is NOT in PATH or Homebrew locations
         WHEN _ensure_rust_analyzer_installed is called
         THEN it should find ~/.cargo/bin/rust-analyzer
@@ -130,22 +146,23 @@ class TestRustAnalyzerDetection:
         def mock_access(path, mode):
             return path == cargo_path
 
-        with patch("shutil.which", return_value=None):
-            with patch("os.path.isfile", side_effect=mock_isfile):
-                with patch("os.access", side_effect=mock_access):
-                    result = RustAnalyzer._ensure_rust_analyzer_installed()
+        with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=None):
+            with patch("shutil.which", return_value=None):
+                with patch("os.path.isfile", side_effect=mock_isfile):
+                    with patch("os.access", side_effect=mock_access):
+                        result = RustAnalyzer._ensure_rust_analyzer_installed()
 
         assert result == cargo_path
 
     @pytest.mark.rust
-    def test_falls_back_to_rustup_when_not_in_common_locations(self):
+    def test_detect_from_rustup_when_available(self):
         """
-        GIVEN rust-analyzer is NOT in PATH or common locations
-        AND rustup has rust-analyzer installed
+        GIVEN rustup has rust-analyzer installed
         WHEN _ensure_rust_analyzer_installed is called
-        THEN it should fall back to rustup which rust-analyzer
+        THEN it should return the rustup path
 
-        WHY: Rustup users should still work. Rustup is the fallback, not the only option.
+        WHY: Rustup is checked FIRST to avoid picking up incorrect aliases from PATH.
+        This ensures compatibility with the toolchain.
         """
         from solidlsp.language_servers.rust_analyzer import RustAnalyzer
 
@@ -189,25 +206,30 @@ class TestRustAnalyzerDetection:
         assert "rustup" in error_message.lower() or "Rustup" in error_message
 
     @pytest.mark.rust
-    def test_detection_priority_prefers_path_over_hardcoded_locations(self):
+    def test_detection_priority_prefers_rustup_over_path_and_common_locations(self):
         """
-        GIVEN rust-analyzer exists in BOTH PATH and a hardcoded location
+        GIVEN rust-analyzer is available via rustup
+        AND rust-analyzer also exists in PATH and common locations
         WHEN _ensure_rust_analyzer_installed is called
-        THEN it should return the PATH version (shutil.which result)
+        THEN it should return the rustup version
 
-        WHY: If user has rust-analyzer in PATH, that's their preferred version.
-        We shouldn't override their PATH with hardcoded locations.
+        WHY: Rustup provides version management and ensures compatibility.
+        Using PATH directly can pick up incorrect aliases or incompatible versions
+        that cause LSP crashes (as discovered in CI failures).
         """
         from solidlsp.language_servers.rust_analyzer import RustAnalyzer
 
-        # Both PATH and Homebrew have rust-analyzer
-        with patch("shutil.which", return_value="/custom/path/rust-analyzer"):
-            with patch("os.path.isfile", return_value=True):
-                with patch("os.access", return_value=True):
-                    result = RustAnalyzer._ensure_rust_analyzer_installed()
+        rustup_path = "/home/user/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rust-analyzer"
 
-        # Should use the PATH version, not hardcoded
-        assert result == "/custom/path/rust-analyzer"
+        # Rustup has rust-analyzer, PATH also has it, common locations also exist
+        with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=rustup_path):
+            with patch("shutil.which", return_value="/custom/path/rust-analyzer"):
+                with patch("os.path.isfile", return_value=True):
+                    with patch("os.access", return_value=True):
+                        result = RustAnalyzer._ensure_rust_analyzer_installed()
+
+        # Should use rustup version, NOT PATH or common locations
+        assert result == rustup_path
 
     @pytest.mark.rust
     @pytest.mark.skipif(IS_WINDOWS, reason="Uses Unix paths - Windows has different behavior")
@@ -238,10 +260,11 @@ class TestRustAnalyzerDetection:
         def mock_isfile_for_cargo(path):
             return path in ["/opt/homebrew/bin/rust-analyzer", os.path.expanduser("~/.cargo/bin/rust-analyzer")]
 
-        with patch("shutil.which", return_value=None):
-            with patch("os.path.isfile", side_effect=mock_isfile_for_cargo):
-                with patch("os.access", side_effect=mock_access):
-                    result = RustAnalyzer._ensure_rust_analyzer_installed()
+        with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=None):
+            with patch("shutil.which", return_value=None):
+                with patch("os.path.isfile", side_effect=mock_isfile_for_cargo):
+                    with patch("os.access", side_effect=mock_access):
+                        result = RustAnalyzer._ensure_rust_analyzer_installed()
 
         # Should skip non-executable Homebrew and use cargo
         assert result == os.path.expanduser("~/.cargo/bin/rust-analyzer")
@@ -249,7 +272,8 @@ class TestRustAnalyzerDetection:
     @pytest.mark.rust
     def test_detect_from_scoop_shims_path_on_windows(self):
         """
-        GIVEN rust-analyzer is installed via Scoop on Windows
+        GIVEN rustup is NOT available
+        AND rust-analyzer is installed via Scoop on Windows
         AND it is NOT in PATH
         WHEN _ensure_rust_analyzer_installed is called
         THEN it should find ~/scoop/shims/rust-analyzer.exe
@@ -268,18 +292,20 @@ class TestRustAnalyzerDetection:
         def mock_access(path, mode):
             return path == scoop_path
 
-        with patch("platform.system", return_value="Windows"):
-            with patch("shutil.which", return_value=None):
-                with patch("os.path.isfile", side_effect=mock_isfile):
-                    with patch("os.access", side_effect=mock_access):
-                        result = RustAnalyzer._ensure_rust_analyzer_installed()
+        with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=None):
+            with patch("platform.system", return_value="Windows"):
+                with patch("shutil.which", return_value=None):
+                    with patch("os.path.isfile", side_effect=mock_isfile):
+                        with patch("os.access", side_effect=mock_access):
+                            result = RustAnalyzer._ensure_rust_analyzer_installed()
 
         assert result == scoop_path
 
     @pytest.mark.rust
     def test_detect_from_cargo_path_on_windows(self):
         """
-        GIVEN rust-analyzer is installed via cargo on Windows
+        GIVEN rustup is NOT available
+        AND rust-analyzer is installed via cargo on Windows
         AND it is NOT in PATH or Scoop locations
         WHEN _ensure_rust_analyzer_installed is called
         THEN it should find ~/.cargo/bin/rust-analyzer.exe
@@ -298,11 +324,12 @@ class TestRustAnalyzerDetection:
         def mock_access(path, mode):
             return path == cargo_path
 
-        with patch("platform.system", return_value="Windows"):
-            with patch("shutil.which", return_value=None):
-                with patch("os.path.isfile", side_effect=mock_isfile):
-                    with patch("os.access", side_effect=mock_access):
-                        result = RustAnalyzer._ensure_rust_analyzer_installed()
+        with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=None):
+            with patch("platform.system", return_value="Windows"):
+                with patch("shutil.which", return_value=None):
+                    with patch("os.path.isfile", side_effect=mock_isfile):
+                        with patch("os.access", side_effect=mock_access):
+                            result = RustAnalyzer._ensure_rust_analyzer_installed()
 
         assert result == cargo_path
 
