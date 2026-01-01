@@ -114,7 +114,7 @@ class AstroLanguageServer(CompanionLanguageServer):
     Language server for Astro components using @astrojs/language-server with companion TypeScript LS.
 
     You can pass the following entries in ls_specific_settings["astro"]:
-        - astro_language_server_version: Version of @astrojs/language-server to install (default: "2.16.8")
+        - astro_language_server_version: Version of @astrojs/language-server to install (default: "2.16.2")
 
     Note: TypeScript versions are configured via ls_specific_settings["typescript"]:
         - typescript_version: Version of TypeScript to install (default: "5.9.3")
@@ -230,7 +230,7 @@ class AstroLanguageServer(CompanionLanguageServer):
         typescript_version = typescript_config.get("typescript_version", "5.9.3")
         typescript_language_server_version = typescript_config.get("typescript_language_server_version", "5.1.3")
         astro_config = solidlsp_settings.get_ls_specific_settings(Language.ASTRO)
-        astro_language_server_version = astro_config.get("astro_language_server_version", "2.16.8")
+        astro_language_server_version = astro_config.get("astro_language_server_version", "2.16.2")
 
         deps = RuntimeDependencyCollection(
             [
