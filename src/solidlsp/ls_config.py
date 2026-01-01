@@ -64,6 +64,11 @@ class Language(str, Enum):
     GROOVY = "groovy"
     VUE = "vue"
     POWERSHELL = "powershell"
+    MATLAB = "matlab"
+    """MATLAB language server using the official MathWorks MATLAB Language Server.
+    Requires MATLAB R2021b or later and Node.js.
+    Set MATLAB_PATH environment variable or configure matlab_path in ls_specific_settings.
+    """
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -225,6 +230,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.ps1", "*.psm1", "*.psd1")
             case self.GROOVY:
                 return FilenameMatcher("*.groovy", "*.gvy")
+            case self.MATLAB:
+                return FilenameMatcher("*.m", "*.mlx", "*.mlapp")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -390,6 +397,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.groovy_language_server import GroovyLanguageServer
 
                 return GroovyLanguageServer
+            case self.MATLAB:
+                from solidlsp.language_servers.matlab_language_server import MatlabLanguageServer
+
+                return MatlabLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
