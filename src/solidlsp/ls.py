@@ -1125,8 +1125,28 @@ class SolidLanguageServer(ABC):
                     log.error("You passed a file explicitly, but it is ignored. This is probably an error. File: %s", within_relative_path)
                     return []
                 else:
-                    root_nodes = self.request_document_symbols(within_relative_path).root_symbols
-                    return root_nodes
+                    with self._open_file_context(within_relative_path) as file_data:
+                        document_symbols = self.request_document_symbols(within_relative_path, file_data)
+                        root_nodes = document_symbols.root_symbols
+                        # Create file symbol wrapper, link with children
+                        file_range = self._get_range_from_file_content(file_data.contents)
+                        file_name = os.path.splitext(os.path.basename(within_relative_path))[0]
+                        file_symbol = ls_types.UnifiedSymbolInformation(  # type: ignore
+                            name=file_name,
+                            kind=ls_types.SymbolKind.File,
+                            range=file_range,
+                            selectionRange=file_range,
+                            location=ls_types.Location(
+                                uri=str(pathlib.Path(within_abs_path).as_uri()),
+                                range=file_range,
+                                absolutePath=str(within_abs_path),
+                                relativePath=within_relative_path,
+                            ),
+                            children=root_nodes,
+                        )
+                        for child in root_nodes:
+                            child["parent"] = file_symbol
+                        return [file_symbol]
 
         # Helper function to recursively process directories
         def process_directory(rel_dir_path: str) -> list[ls_types.UnifiedSymbolInformation]:
