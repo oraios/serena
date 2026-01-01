@@ -30,9 +30,9 @@ from typing import cast
 
 import requests
 
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, InitializeParams, SymbolInformation
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -412,6 +412,7 @@ class MatlabLanguageServer(SolidLanguageServer):
 
     def _start_server(self) -> None:
         """Start the MATLAB Language Server and wait for it to be ready."""
+        root_uri = pathlib.Path(self.repository_root_path).as_uri()
 
         def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
@@ -423,6 +424,23 @@ class MatlabLanguageServer(SolidLanguageServer):
         def execute_client_command_handler(params: dict) -> list:
             return []
 
+        def workspace_folders_handler(params: dict) -> list:
+            """Handle workspace/workspaceFolders request from the server."""
+            return [{"uri": root_uri, "name": os.path.basename(self.repository_root_path)}]
+
+        def workspace_configuration_handler(params: dict) -> list:
+            """Handle workspace/configuration request from the server."""
+            items = params.get("items", [])
+            result = []
+            for item in items:
+                section = item.get("section", "")
+                if section == "MATLAB":
+                    # Return MATLAB configuration
+                    result.append({"installPath": self._matlab_path, "matlabConnectionTiming": "onStart"})
+                else:
+                    result.append({})
+            return result
+
         def do_nothing(params: dict) -> None:
             return
 
@@ -430,14 +448,18 @@ class MatlabLanguageServer(SolidLanguageServer):
             log.info(f"LSP: window/logMessage: {msg}")
             message_text = msg.get("message", "")
             # Check for MATLAB language server ready signals
-            if "initialized" in message_text.lower() or "ready" in message_text.lower():
-                log.info("MATLAB language server ready signal detected")
+            # Wait for "MVM attach success" or "Adding workspace folder" which indicates MATLAB is fully ready
+            # Note: "connected to" comes earlier but the server isn't fully ready at that point
+            if "mvm attach success" in message_text.lower() or "adding workspace folder" in message_text.lower():
+                log.info("MATLAB language server ready signal detected (MVM attached)")
                 self.server_ready.set()
                 self.completions_available.set()
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
+        self.server.on_request("workspace/workspaceFolders", workspace_folders_handler)
+        self.server.on_request("workspace/configuration", workspace_configuration_handler)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
@@ -470,8 +492,9 @@ class MatlabLanguageServer(SolidLanguageServer):
         self.server.notify.initialized({})
 
         # Wait for server readiness with timeout
-        log.info("Waiting for MATLAB language server to be ready...")
-        if not self.server_ready.wait(timeout=10.0):
+        # MATLAB takes longer to start than most language servers (typically 10-30 seconds)
+        log.info("Waiting for MATLAB language server to be ready (this may take up to 60 seconds)...")
+        if not self.server_ready.wait(timeout=60.0):
             # Fallback: assume server is ready after timeout
             log.info("Timeout waiting for MATLAB server ready signal, proceeding anyway")
             self.server_ready.set()
@@ -487,3 +510,42 @@ class MatlabLanguageServer(SolidLanguageServer):
             "sldemo_cache",  # Simulink demo cache
             "helperFiles",  # Common helper file directories
         ]
+
+    def _request_document_symbols(
+        self, relative_file_path: str, file_data: LSPFileBuffer | None
+    ) -> list[SymbolInformation] | list[DocumentSymbol] | None:
+        """
+        Override to normalize MATLAB symbol names.
+
+        The MATLAB LSP sometimes returns symbol names as lists instead of strings,
+        particularly for script sections (cell mode markers like %%). This method
+        normalizes the names to strings for compatibility with the unified symbol format.
+        """
+        symbols = super()._request_document_symbols(relative_file_path, file_data)
+
+        if symbols is None or len(symbols) == 0:
+            return symbols
+
+        self._normalize_matlab_symbols(symbols)
+        return symbols
+
+    def _normalize_matlab_symbols(
+        self, symbols: list[SymbolInformation] | list[DocumentSymbol]
+    ) -> None:
+        """
+        Normalize MATLAB symbol names in-place.
+
+        MATLAB LSP returns section names as lists like ["Section Name"] instead of
+        strings. This converts them to plain strings.
+        """
+        for symbol in symbols:
+            name = symbol.get("name")
+            if isinstance(name, list):
+                # Convert list to string (take first element if it's a list)
+                symbol["name"] = name[0] if name else ""
+                log.debug(f"Normalized MATLAB symbol name from list: {name} -> {symbol['name']}")
+
+            # Recursively normalize children if present
+            children = symbol.get("children")
+            if children:
+                self._normalize_matlab_symbols(children)
