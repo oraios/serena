@@ -63,6 +63,7 @@ class Language(str, Enum):
     HASKELL = "haskell"
     GROOVY = "groovy"
     VUE = "vue"
+    ASTRO = "astro"
     POWERSHELL = "powershell"
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
@@ -129,8 +130,8 @@ class Language(str, Enum):
         # We assign lower priority to languages that are supersets of others, such that
         # the "larger" language is only chosen when it matches more strongly
         match self:
-            # languages that are supersets of others (Vue is superset of TypeScript/JavaScript)
-            case self.VUE:
+            # languages that are supersets of others (Vue/Astro are supersets of TypeScript/JavaScript)
+            case self.VUE | self.ASTRO:
                 return 1
             # regular languages
             case _:
@@ -221,6 +222,13 @@ class Language(str, Enum):
                         for base_pattern in ["ts", "js"]:
                             path_patterns.append(f"*.{prefix}{base_pattern}{postfix}")
                 return FilenameMatcher(*path_patterns)
+            case self.ASTRO:
+                path_patterns = ["*.astro"]
+                for prefix in ["c", "m", ""]:
+                    for postfix in ["x", ""]:
+                        for base_pattern in ["ts", "js"]:
+                            path_patterns.append(f"*.{prefix}{base_pattern}{postfix}")
+                return FilenameMatcher(*path_patterns)
             case self.POWERSHELL:
                 return FilenameMatcher("*.ps1", "*.psm1", "*.psd1")
             case self.GROOVY:
@@ -270,6 +278,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.vue_language_server import VueLanguageServer
 
                 return VueLanguageServer
+            case self.ASTRO:
+                from solidlsp.language_servers.astro_language_server import AstroLanguageServer
+
+                return AstroLanguageServer
             case self.GO:
                 from solidlsp.language_servers.gopls import Gopls
 
