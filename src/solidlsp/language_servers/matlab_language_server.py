@@ -529,9 +529,7 @@ class MatlabLanguageServer(SolidLanguageServer):
         self._normalize_matlab_symbols(symbols)
         return symbols
 
-    def _normalize_matlab_symbols(
-        self, symbols: list[SymbolInformation] | list[DocumentSymbol]
-    ) -> None:
+    def _normalize_matlab_symbols(self, symbols: list[SymbolInformation] | list[DocumentSymbol]) -> None:
         """
         Normalize MATLAB symbol names in-place.
 
