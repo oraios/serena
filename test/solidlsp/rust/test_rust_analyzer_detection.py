@@ -20,9 +20,14 @@ WHY these tests matter:
 
 import os
 import pathlib
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+# Platform detection for skipping platform-specific tests
+IS_WINDOWS = sys.platform == "win32"
+IS_UNIX = sys.platform != "win32"
 
 
 class TestRustAnalyzerDetection:
@@ -50,6 +55,7 @@ class TestRustAnalyzerDetection:
         mock_which.assert_called_with("rust-analyzer")
 
     @pytest.mark.rust
+    @pytest.mark.skipif(IS_WINDOWS, reason="Homebrew paths only apply to macOS/Linux")
     def test_detect_from_homebrew_apple_silicon_path(self):
         """
         GIVEN rust-analyzer is installed via Homebrew on Apple Silicon Mac
@@ -76,6 +82,7 @@ class TestRustAnalyzerDetection:
         assert result == "/opt/homebrew/bin/rust-analyzer"
 
     @pytest.mark.rust
+    @pytest.mark.skipif(IS_WINDOWS, reason="Homebrew paths only apply to macOS/Linux")
     def test_detect_from_homebrew_intel_path(self):
         """
         GIVEN rust-analyzer is installed via Homebrew on Intel Mac
@@ -102,6 +109,7 @@ class TestRustAnalyzerDetection:
         assert result == "/usr/local/bin/rust-analyzer"
 
     @pytest.mark.rust
+    @pytest.mark.skipif(IS_WINDOWS, reason="Unix cargo path - Windows has separate test")
     def test_detect_from_cargo_install_path(self):
         """
         GIVEN rust-analyzer is installed via `cargo install rust-analyzer`
@@ -153,6 +161,7 @@ class TestRustAnalyzerDetection:
         assert "rustup" in result or ".rustup" in result
 
     @pytest.mark.rust
+    @pytest.mark.skipif(IS_WINDOWS, reason="Unix error messages - Windows has separate test")
     def test_error_message_lists_searched_locations_when_not_found(self):
         """
         GIVEN rust-analyzer is NOT installed anywhere
@@ -173,7 +182,7 @@ class TestRustAnalyzerDetection:
                             RustAnalyzer._ensure_rust_analyzer_installed()
 
         error_message = str(exc_info.value)
-        # Error should list the locations that were searched
+        # Error should list the locations that were searched (Unix paths)
         assert "/opt/homebrew/bin/rust-analyzer" in error_message or "Homebrew" in error_message
         assert "cargo" in error_message.lower() or ".cargo/bin" in error_message
         # Error should suggest installation methods
@@ -201,6 +210,7 @@ class TestRustAnalyzerDetection:
         assert result == "/custom/path/rust-analyzer"
 
     @pytest.mark.rust
+    @pytest.mark.skipif(IS_WINDOWS, reason="Uses Unix paths - Windows has different behavior")
     def test_skips_nonexecutable_files(self):
         """
         GIVEN a file exists at a detection path but is NOT executable
