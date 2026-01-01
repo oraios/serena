@@ -20,7 +20,7 @@ WHY these tests matter:
 
 import os
 import pathlib
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -323,6 +323,92 @@ class TestRustAnalyzerDetection:
         assert "Chocolatey" in error_message or "choco" in error_message
         # Should NOT suggest Homebrew on Windows
         assert "Homebrew" not in error_message and "brew" not in error_message
+
+    @pytest.mark.rust
+    def test_auto_install_via_rustup_when_not_found(self):
+        """
+        GIVEN rust-analyzer is NOT installed anywhere
+        AND rustup IS installed
+        WHEN _ensure_rust_analyzer_installed is called
+        AND rustup component add succeeds
+        THEN it should return the rustup-installed path
+
+        WHY: Serena should auto-install rust-analyzer via rustup when possible.
+        This matches the original behavior and enables CI to work without pre-installing.
+        """
+        from solidlsp.language_servers.rust_analyzer import RustAnalyzer
+
+        with patch("shutil.which", return_value=None):
+            with patch("os.path.isfile", return_value=False):
+                with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup") as mock_rustup_path:
+                    # First call returns None (not installed), second returns path (after install)
+                    mock_rustup_path.side_effect = [None, "/home/user/.rustup/toolchains/stable/bin/rust-analyzer"]
+                    with patch.object(RustAnalyzer, "_get_rustup_version", return_value="1.70.0"):
+                        with patch("subprocess.run") as mock_run:
+                            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+                            result = RustAnalyzer._ensure_rust_analyzer_installed()
+
+        assert result == "/home/user/.rustup/toolchains/stable/bin/rust-analyzer"
+        mock_run.assert_called_once()
+        assert mock_run.call_args[0][0] == ["rustup", "component", "add", "rust-analyzer"]
+
+    @pytest.mark.rust
+    def test_auto_install_failure_raises_error_with_stderr(self):
+        """
+        GIVEN rust-analyzer is NOT installed anywhere
+        AND rustup IS installed
+        WHEN _ensure_rust_analyzer_installed is called
+        AND rustup component add FAILS
+        THEN it should raise RuntimeError containing the stderr output
+
+        WHY: When auto-install fails, users need to see the actual error from rustup
+        to diagnose the problem (e.g., network issues, permission errors).
+        Silently falling through to a generic error loses critical diagnostic info.
+        """
+        from solidlsp.language_servers.rust_analyzer import RustAnalyzer
+
+        with patch("shutil.which", return_value=None):
+            with patch("os.path.isfile", return_value=False):
+                with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=None):
+                    with patch.object(RustAnalyzer, "_get_rustup_version", return_value="1.70.0"):
+                        with patch("subprocess.run") as mock_run:
+                            mock_run.return_value = MagicMock(
+                                returncode=1, stdout="", stderr="error: component 'rust-analyzer' is not available"
+                            )
+                            with pytest.raises(RuntimeError) as exc_info:
+                                RustAnalyzer._ensure_rust_analyzer_installed()
+
+        error_message = str(exc_info.value)
+        # Error MUST contain the stderr from rustup so users can diagnose
+        assert "component 'rust-analyzer' is not available" in error_message
+
+    @pytest.mark.rust
+    def test_auto_install_success_but_binary_not_found_raises_error(self):
+        """
+        GIVEN rust-analyzer is NOT installed anywhere
+        AND rustup IS installed
+        WHEN _ensure_rust_analyzer_installed is called
+        AND rustup component add SUCCEEDS
+        BUT the binary is still not found after installation
+        THEN it should raise RuntimeError indicating installation succeeded but binary missing
+
+        WHY: This edge case (install reports success but binary not in expected location)
+        needs a specific error message to help diagnose rustup configuration issues.
+        """
+        from solidlsp.language_servers.rust_analyzer import RustAnalyzer
+
+        with patch("shutil.which", return_value=None):
+            with patch("os.path.isfile", return_value=False):
+                with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=None):
+                    with patch.object(RustAnalyzer, "_get_rustup_version", return_value="1.70.0"):
+                        with patch("subprocess.run") as mock_run:
+                            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+                            with pytest.raises(RuntimeError) as exc_info:
+                                RustAnalyzer._ensure_rust_analyzer_installed()
+
+        error_message = str(exc_info.value)
+        # Error should indicate installation appeared to succeed but binary not found
+        assert "installation succeeded" in error_message.lower() or "not found" in error_message.lower()
 
 
 class TestRustAnalyzerDetectionIntegration:

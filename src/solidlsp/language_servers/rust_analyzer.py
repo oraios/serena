@@ -122,10 +122,15 @@ class RustAnalyzer(SolidLanguageServer):
         # If rustup is available, try to install rust-analyzer component
         if RustAnalyzer._get_rustup_version():
             result = subprocess.run(["rustup", "component", "add", "rust-analyzer"], check=False, capture_output=True, text=True)
-            if result.returncode == 0:
-                rustup_path = RustAnalyzer._get_rust_analyzer_via_rustup()
-                if rustup_path:
-                    return rustup_path
+            if result.returncode != 0:
+                raise RuntimeError(f"Failed to install rust-analyzer via rustup: {result.stderr}")
+
+            # Verify installation worked
+            rustup_path = RustAnalyzer._get_rust_analyzer_via_rustup()
+            if rustup_path:
+                return rustup_path
+
+            raise RuntimeError("rust-analyzer installation succeeded but binary not found in PATH")
 
         # Provide helpful error message with all searched locations
         searched = [p for p in common_paths if p]
