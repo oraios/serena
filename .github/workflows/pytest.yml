@@ -44,6 +44,29 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
+      - name: Set up MATLAB (experimental - public project licensing)
+        uses: matlab-actions/setup-matlab@v2
+        continue-on-error: true
+        with:
+          release: R2024b
+          cache: true
+      - name: Set MATLAB_PATH environment variable
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          # Find MATLAB installation path
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            MATLAB_ROOT="/opt/hostedtoolcache/MATLAB"
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            MATLAB_ROOT="/Applications/MATLAB_R2024b.app"
+          fi
+          if [ -d "$MATLAB_ROOT" ]; then
+            echo "MATLAB_PATH=$MATLAB_ROOT" >> $GITHUB_ENV
+            echo "Found MATLAB at: $MATLAB_ROOT"
+          else
+            echo "MATLAB not found, tests will be skipped"
+          fi
+        continue-on-error: true
       - name: Ensure cached directory exist before calling cache-related actions
         shell: bash
         run: |
