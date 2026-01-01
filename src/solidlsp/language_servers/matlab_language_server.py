@@ -38,7 +38,7 @@ import platform
 import shutil
 import threading
 import zipfile
-from typing import cast
+from typing import Any, cast
 
 import requests
 
@@ -546,13 +546,14 @@ class MatlabLanguageServer(SolidLanguageServer):
         strings. This converts them to plain strings.
         """
         for symbol in symbols:
-            name = symbol.get("name")
+            # MATLAB LSP returns names as lists for script sections, violating LSP spec
+            # Cast to Any to handle runtime type that differs from spec
+            name: Any = symbol.get("name")
             if isinstance(name, list):
-                # Convert list to string (take first element if it's a list)
                 symbol["name"] = name[0] if name else ""
-                log.debug(f"Normalized MATLAB symbol name from list: {name} -> {symbol['name']}")
+                log.debug("Normalized MATLAB symbol name from list to string")
 
             # Recursively normalize children if present
-            children = symbol.get("children")
-            if children:
+            children: Any = symbol.get("children")
+            if children and isinstance(children, list):
                 self._normalize_matlab_symbols(children)
