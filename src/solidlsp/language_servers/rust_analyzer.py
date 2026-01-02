@@ -70,23 +70,35 @@ class RustAnalyzer(SolidLanguageServer):
         """
         Ensure rust-analyzer is available.
 
-        1. Rustup (preferred - avoids incorrect PATH aliases)
-        2. Common installation locations (Homebrew, Scoop, cargo) as fallback
-        3. System PATH last (can pick up incompatible versions)
-        4. Auto-install via rustup if available
+        Priority order:
+        1. Rustup existing installation (preferred - matches toolchain version)
+        2. Rustup auto-install if rustup is available (ensures correct version)
+        3. Common installation locations as fallback (only if rustup not available)
+        4. System PATH last (can pick up incompatible versions)
 
         :return: path to rust-analyzer executable
         """
-        # Try rustup FIRST (original behavior - avoids picking up incorrect aliases from PATH)
+        # Try rustup FIRST (preferred - avoids picking up incompatible versions from PATH)
         rustup_path = RustAnalyzer._get_rust_analyzer_via_rustup()
         if rustup_path:
             return rustup_path
+
+        # If rustup is available but rust-analyzer not installed, auto-install it BEFORE
+        # checking common paths. This ensures we get the correct version matching the toolchain.
+        if RustAnalyzer._get_rustup_version():
+            result = subprocess.run(["rustup", "component", "add", "rust-analyzer"], check=False, capture_output=True, text=True)
+            if result.returncode == 0:
+                # Verify installation worked
+                rustup_path = RustAnalyzer._get_rust_analyzer_via_rustup()
+                if rustup_path:
+                    return rustup_path
+            # If auto-install failed, fall through to common paths as last resort
 
         # Determine platform-specific binary name and paths
         is_windows = platform.system() == "Windows"
         binary_name = "rust-analyzer.exe" if is_windows else "rust-analyzer"
 
-        # Fallback to common installation locations
+        # Fallback to common installation locations (only used if rustup not available)
         common_paths: list[str | None] = []
 
         if is_windows:
@@ -121,19 +133,6 @@ class RustAnalyzer(SolidLanguageServer):
         path_result = shutil.which("rust-analyzer")
         if path_result and os.path.isfile(path_result) and os.access(path_result, os.X_OK):
             return path_result
-
-        # If rustup is available, try to install rust-analyzer component
-        if RustAnalyzer._get_rustup_version():
-            result = subprocess.run(["rustup", "component", "add", "rust-analyzer"], check=False, capture_output=True, text=True)
-            if result.returncode != 0:
-                raise RuntimeError(f"Failed to install rust-analyzer via rustup: {result.stderr}")
-
-            # Verify installation worked
-            rustup_path = RustAnalyzer._get_rust_analyzer_via_rustup()
-            if rustup_path:
-                return rustup_path
-
-            raise RuntimeError("rust-analyzer installation succeeded but binary not found in PATH")
 
         # Provide helpful error message with all searched locations
         searched = [p for p in common_paths if p]

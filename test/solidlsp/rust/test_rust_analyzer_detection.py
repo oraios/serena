@@ -390,17 +390,18 @@ class TestRustAnalyzerDetection:
         assert mock_run.call_args[0][0] == ["rustup", "component", "add", "rust-analyzer"]
 
     @pytest.mark.rust
-    def test_auto_install_failure_raises_error_with_stderr(self):
+    def test_auto_install_failure_falls_through_to_common_paths(self):
         """
         GIVEN rust-analyzer is NOT installed anywhere
         AND rustup IS installed
         WHEN _ensure_rust_analyzer_installed is called
         AND rustup component add FAILS
-        THEN it should raise RuntimeError containing the stderr output
+        THEN it should fall through to common paths and eventually raise helpful error
 
-        WHY: When auto-install fails, users need to see the actual error from rustup
-        to diagnose the problem (e.g., network issues, permission errors).
-        Silently falling through to a generic error loses critical diagnostic info.
+        WHY: The new resilient behavior tries all fallback options before failing.
+        When rustup auto-install fails, we try common paths (Homebrew, cargo, etc.)
+        as a last resort. This is more robust than failing immediately.
+        The error message should still help users install rust-analyzer.
         """
         from solidlsp.language_servers.rust_analyzer import RustAnalyzer
 
@@ -416,21 +417,23 @@ class TestRustAnalyzerDetection:
                                 RustAnalyzer._ensure_rust_analyzer_installed()
 
         error_message = str(exc_info.value)
-        # Error MUST contain the stderr from rustup so users can diagnose
-        assert "component 'rust-analyzer' is not available" in error_message
+        # Error should provide helpful installation instructions
+        assert "rust-analyzer is not installed" in error_message.lower()
+        assert "rustup" in error_message.lower()  # Should suggest rustup installation
 
     @pytest.mark.rust
-    def test_auto_install_success_but_binary_not_found_raises_error(self):
+    def test_auto_install_success_but_binary_not_found_falls_through(self):
         """
         GIVEN rust-analyzer is NOT installed anywhere
         AND rustup IS installed
         WHEN _ensure_rust_analyzer_installed is called
         AND rustup component add SUCCEEDS
         BUT the binary is still not found after installation
-        THEN it should raise RuntimeError indicating installation succeeded but binary missing
+        THEN it should fall through to common paths and eventually raise helpful error
 
-        WHY: This edge case (install reports success but binary not in expected location)
-        needs a specific error message to help diagnose rustup configuration issues.
+        WHY: Even if rustup install reports success but binary isn't found,
+        we try common paths as fallback. The final error provides installation
+        guidance to help users resolve the issue.
         """
         from solidlsp.language_servers.rust_analyzer import RustAnalyzer
 
@@ -444,8 +447,9 @@ class TestRustAnalyzerDetection:
                                 RustAnalyzer._ensure_rust_analyzer_installed()
 
         error_message = str(exc_info.value)
-        # Error should indicate installation appeared to succeed but binary not found
-        assert "installation succeeded" in error_message.lower() or "not found" in error_message.lower()
+        # Error should indicate rust-analyzer is not available and provide install instructions
+        assert "rust-analyzer is not installed" in error_message.lower()
+        assert "searched locations" in error_message.lower()  # Should show what was checked
 
 
 class TestRustAnalyzerDetectionIntegration:
