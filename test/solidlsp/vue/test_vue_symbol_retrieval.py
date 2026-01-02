@@ -1,3 +1,10 @@
+"""
+Vue language server symbol retrieval tests.
+
+Tests symbol lookup functionality including containing symbols,
+referencing symbols, cross-component references, and import resolution.
+"""
+
 import os
 
 import pytest
@@ -10,6 +17,8 @@ pytestmark = pytest.mark.vue
 
 
 class TestVueSymbolRetrieval:
+    """Tests for Vue symbol retrieval operations."""
+
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_request_containing_symbol_script_setup_function(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "components", "CalculatorInput.vue")
