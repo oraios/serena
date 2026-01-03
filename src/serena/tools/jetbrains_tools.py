@@ -194,7 +194,7 @@ class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptiona
     """
 
     @staticmethod
-    def _transform_hierarchy_nodes(nodes: list[jb.TypeHierarchyNode] | None) -> dict[str, list]:
+    def _transform_hierarchy_nodes(nodes: list[jb.TypeHierarchyNodeDTO] | None) -> dict[str, list]:
         """
         Transform a list of TypeHierarchyNode into a file-grouped compact format.
 

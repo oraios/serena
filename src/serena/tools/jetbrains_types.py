@@ -17,12 +17,12 @@ class SymbolDTO(TypedDict):
     name_path: str
     relative_path: str
     type: str
-    body: str
+    body: NotRequired[str]
     quick_info: NotRequired[str]
     """Quick info text (e.g., type signature) for the symbol, as HTML string."""
     documentation: NotRequired[str]
     """Documentation text for the symbol (if available), as HTML string."""
-    text_range: TextRangeDTO
+    text_range: NotRequired[TextRangeDTO]
     children: NotRequired[list["SymbolDTO"]]
 
 
@@ -33,18 +33,13 @@ class SymbolCollectionResponse(TypedDict):
     as HTML string."""
 
 
-class TypeHierarchyNode(TypedDict):
+class TypeHierarchyNodeDTO(TypedDict):
     symbol: SymbolDTO
-    children: NotRequired[list["TypeHierarchyNode"]]
-
-
-class TypeHierarchy(TypedDict):
-    nodes: list[TypeHierarchyNode]
-    depth: int
+    children: NotRequired[list["TypeHierarchyNodeDTO"]]
 
 
 class TypeHierarchyResponse(TypedDict):
     symbol: NotRequired[SymbolDTO]
-    hierarchy: NotRequired[list[TypeHierarchyNode]]
+    hierarchy: NotRequired[list[TypeHierarchyNodeDTO]]
     error: NotRequired[str]
     num_levels_not_included: NotRequired[int]
