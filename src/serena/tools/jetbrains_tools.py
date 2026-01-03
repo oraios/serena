@@ -2,7 +2,7 @@ import logging
 from collections import defaultdict
 from typing import Any, Literal
 
-import serena.tools.jetbrain_types as jb
+import serena.tools.jetbrains_types as jb
 from serena.text_utils import render_html
 from serena.tools import Tool, ToolMarkerOptional, ToolMarkerSymbolicRead
 from serena.tools.jetbrains_plugin_client import JetBrainsPluginClient

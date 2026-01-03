@@ -11,7 +11,7 @@ import requests
 from requests import Response
 from sensai.util.string import ToStringMixin
 
-import serena.tools.jetbrain_types as jb
+import serena.tools.jetbrains_types as jb
 from serena.project import Project
 
 T = TypeVar("T")

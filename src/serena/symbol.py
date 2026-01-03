@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Self, Union
 
 from sensai.util.string import ToStringMixin
 
-import serena.tools.jetbrain_types as jb
+import serena.tools.jetbrains_types as jb
 from solidlsp import SolidLanguageServer
 from solidlsp.ls import ReferenceInSymbol as LSPReferenceInSymbol
 from solidlsp.ls_types import Position, SymbolKind, UnifiedSymbolInformation
