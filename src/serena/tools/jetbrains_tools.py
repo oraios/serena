@@ -92,6 +92,7 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
     Finds symbols that reference the given symbol using the JetBrains backend
     """
 
+    # TODO: (maybe) - add content snippets showing the references like in LS based version?
     def apply(
         self,
         name_path: str,
