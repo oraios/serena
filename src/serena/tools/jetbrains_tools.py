@@ -214,8 +214,7 @@ class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptiona
                     levels_not_included["subtypes"] = subtypes_response["num_levels_not_included"]
                 subtypes = self._transform_hierarchy_nodes(subtypes_response.get("hierarchy"))
 
-            symbol_compact = {symbol["relative_path"]: [symbol["name_path"]]}
-            result_dict: dict[str, dict | list] = {"symbol": symbol_compact}
+            result_dict: dict[str, dict | list] = {}
             if supertypes is not None:
                 result_dict["supertypes"] = supertypes
             if subtypes is not None:
