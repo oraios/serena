@@ -56,6 +56,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   * **Add support for Erlang** experimental, may hang or be slow, uses the recently archived [erlang_ls](https://github.com/erlang-ls/erlang_ls)
   * **Ruby dual language server support**: Added ruby-lsp as the modern primary Ruby language server. Solargraph remains available as an experimental legacy option. ruby-lsp supports both .rb and .erb files, while Solargraph supports .rb files only.
   * **Add support for PowerShell** via PowerShell Editor Services (PSES). Requires `pwsh` (PowerShell Core) to be installed and available in PATH. Supports symbol navigation, go-to-definition, and within-file references for .ps1 files.
+  * **Add support for MATLAB** via the official MathWorks MATLAB Language Server. Requires MATLAB R2021b or later and Node.js. Set `MATLAB_PATH` environment variable or configure `matlab_path` in `ls_specific_settings`. Supports .m, .mlx, and .mlapp files with code completion, diagnostics, go-to-definition, find references, document symbols, formatting, and rename.
 
 
 # 0.1.4

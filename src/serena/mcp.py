@@ -221,7 +221,16 @@ class SerenaMCPFactory:
         def execute_fn(**kwargs) -> str:  # type: ignore
             return tool.apply_ex(log_call=True, catch_exceptions=True, **kwargs)
 
-        annotations = ToolAnnotations(readOnlyHint=not tool.can_edit())
+        # Generate human-readable title from snake_case tool name
+        tool_title = " ".join(word.capitalize() for word in func_name.split("_"))
+
+        # Create annotations with appropriate hints based on tool capabilities
+        can_edit = tool.can_edit()
+        annotations = ToolAnnotations(
+            title=tool_title,
+            readOnlyHint=not can_edit,
+            destructiveHint=can_edit,
+        )
 
         return MCPTool(
             fn=execute_fn,
@@ -232,7 +241,7 @@ class SerenaMCPFactory:
             is_async=is_async,
             context_kwarg=None,
             annotations=annotations,
-            title=None,
+            title=tool_title,
         )
 
     def _iter_tools(self) -> Iterator[Tool]:
