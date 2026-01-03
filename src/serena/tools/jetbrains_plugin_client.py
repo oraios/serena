@@ -5,12 +5,13 @@ Client for the Serena JetBrains Plugin
 import json
 import logging
 from pathlib import Path
-from typing import Any, Optional, Self, TypeVar
+from typing import Any, Optional, Self, TypeVar, cast
 
 import requests
 from requests import Response
 from sensai.util.string import ToStringMixin
 
+import serena.tools.jetbrain_types as jb
 from serena.project import Project
 
 T = TypeVar("T")
@@ -141,21 +142,21 @@ class JetBrainsPluginClient(ToStringMixin):
         name_path: str,
         relative_path: str | None = None,
         include_body: bool = False,
+        include_info: bool = True,
         depth: int = 0,
         include_location: bool = False,
         search_deps: bool = False,
-    ) -> dict[str, Any]:
+    ) -> jb.SymbolCollectionResponse:
         """
         Finds symbols by name.
 
         :param name_path: the name path to match
         :param relative_path: the relative path to which to restrict the search
         :param include_body: whether to include symbol body content
+        :param include_info: whether to include symbol info
         :param depth: depth of children to include (0 = no children)
         :param include_location: whether to include symbol location information
         :param search_deps: whether to also search in dependencies
-
-        :return: Dictionary containing 'symbols' list with matching symbols
         """
         request_data = {
             "namePath": name_path,
@@ -164,27 +165,28 @@ class JetBrainsPluginClient(ToStringMixin):
             "depth": depth,
             "includeLocation": include_location,
             "searchDeps": search_deps,
+            "includeInfo": include_info,
         }
-        return self._make_request("POST", "/findSymbol", request_data)
+        return cast(jb.SymbolCollectionResponse, self._make_request("POST", "/findSymbol", request_data))
 
-    def find_references(self, name_path: str, relative_path: str) -> dict[str, Any]:
+    def find_references(self, name_path: str, relative_path: str, include_info: bool) -> jb.SymbolCollectionResponse:
         """
         Finds references to a symbol.
 
         :param name_path: the name path of the symbol
         :param relative_path: the relative path
-        :return: dictionary containing 'symbols' list with symbol references
+        :param include_info: whether to include symbol info
         """
-        request_data = {"namePath": name_path, "relativePath": relative_path}
-        return self._make_request("POST", "/findReferences", request_data)
+        request_data = {"namePath": name_path, "relativePath": relative_path, "includeInfo": include_info}
+        return cast(jb.SymbolCollectionResponse, self._make_request("POST", "/findReferences", request_data))
 
-    def get_symbols_overview(self, relative_path: str, depth: int) -> dict[str, Any]:
+    def get_symbols_overview(self, relative_path: str, depth: int) -> jb.SymbolCollectionResponse:
         """
         :param relative_path: the relative path to a source file
         :param depth: the depth of children to include (0 = no children)
         """
         request_data = {"relativePath": relative_path, "depth": depth}
-        return self._make_request("POST", "/getSymbolsOverview", request_data)
+        return cast(jb.SymbolCollectionResponse, self._make_request("POST", "/getSymbolsOverview", request_data))
 
     def get_supertypes(
         self,
@@ -192,7 +194,7 @@ class JetBrainsPluginClient(ToStringMixin):
         relative_path: str,
         depth: int | None = None,
         limit_children: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> jb.TypeHierarchyResponse:
         """
         Gets the supertypes (parent classes/interfaces) of a symbol.
 
@@ -200,7 +202,6 @@ class JetBrainsPluginClient(ToStringMixin):
         :param relative_path: the relative path to the file containing the symbol
         :param depth: depth limit for hierarchy traversal (None or 0 for unlimited)
         :param limit_children: optional limit on children per level
-        :return: dictionary containing symbol info and type hierarchy
         """
         request_data = {
             "namePath": name_path,
@@ -208,7 +209,7 @@ class JetBrainsPluginClient(ToStringMixin):
             "depth": depth,
             "limitChildren": limit_children,
         }
-        return self._make_request("POST", "/getSupertypes", request_data)
+        return cast(jb.TypeHierarchyResponse, self._make_request("POST", "/getSupertypes", request_data))
 
     def get_subtypes(
         self,
@@ -216,7 +217,7 @@ class JetBrainsPluginClient(ToStringMixin):
         relative_path: str,
         depth: int | None = None,
         limit_children: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> jb.TypeHierarchyResponse:
         """
         Gets the subtypes (subclasses/implementations) of a symbol.
 
@@ -224,7 +225,6 @@ class JetBrainsPluginClient(ToStringMixin):
         :param relative_path: the relative path to the file containing the symbol
         :param depth: depth limit for hierarchy traversal (None or 0 for unlimited)
         :param limit_children: optional limit on children per level
-        :return: dictionary containing symbol info and type hierarchy
         """
         request_data = {
             "namePath": name_path,
@@ -232,7 +232,7 @@ class JetBrainsPluginClient(ToStringMixin):
             "depth": depth,
             "limitChildren": limit_children,
         }
-        return self._make_request("POST", "/getSubtypes", request_data)
+        return cast(jb.TypeHierarchyResponse, self._make_request("POST", "/getSubtypes", request_data))
 
     def rename_symbol(
         self, name_path: str, relative_path: str, new_name: str, rename_in_comments: bool, rename_in_text_occurrences: bool

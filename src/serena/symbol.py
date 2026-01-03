@@ -4,10 +4,11 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import asdict, dataclass
-from typing import TYPE_CHECKING, Any, NotRequired, Self, TypedDict, Union
+from typing import TYPE_CHECKING, Any, Self, Union
 
 from sensai.util.string import ToStringMixin
 
+import serena.tools.jetbrain_types as jb
 from solidlsp import SolidLanguageServer
 from solidlsp.ls import ReferenceInSymbol as LSPReferenceInSymbol
 from solidlsp.ls_types import Position, SymbolKind, UnifiedSymbolInformation
@@ -705,15 +706,7 @@ class LanguageServerSymbolRetriever:
 
 
 class JetBrainsSymbol(Symbol):
-    class SymbolDict(TypedDict):
-        name_path: str
-        relative_path: str
-        type: str
-        text_range: NotRequired[dict]
-        body: NotRequired[str]
-        children: NotRequired[list["JetBrainsSymbol.SymbolDict"]]
-
-    def __init__(self, symbol_dict: SymbolDict, project: Project) -> None:
+    def __init__(self, symbol_dict: jb.SymbolDTO, project: Project) -> None:
         """
         :param symbol_dict: dictionary as returned by the JetBrains plugin client.
         """
