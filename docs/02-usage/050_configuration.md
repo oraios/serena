@@ -8,14 +8,15 @@ Serena is configured in four places:
 
 1. The `serena_config.yml` for general settings that apply to all clients and projects.
    It is located in your user directory under `.serena/serena_config.yml`.
-   If you do not explicitly create the file, it will be auto-generated when you first run Serena.
+   The file will be auto-generated when you first run Serena.
    You can edit it directly or use
 
    ```shell
-   uvx --from git+https://github.com/oraios/serena serena config edit
+   <serena> config edit
    ```
 
-   (or use the `--directory` command version).
+   where `<serena>` is [your way of running Serena](020_running).  
+   The configuration file can also be accessed through [Serena's dashboard](060_dashboard).
 2. In the arguments passed to the `start-mcp-server` in your client's config (see below),
    which will apply to all sessions started by the respective client. In particular, the [context](contexts) parameter
    should be set appropriately for Serena to be best adjusted to existing tools and capabilities of your client.
@@ -54,6 +55,12 @@ Serena comes with pre-defined contexts:
 Choose the context that best matches the type of integration you are using.
 
 Find the concrete definitions of the above contexts [here](https://github.com/oraios/serena/tree/main/src/serena/resources/config/contexts).
+
+Note that the contexts `ide` and `claude-code` are **single-project contexts** (defining `single_project: true`).
+For such contexts, if a project is provided at startup, the set of tools is limited to those required by the project's
+concrete configuration, and other tools are excluded completely, allowing the set of tools to be minimal.
+Tools explicitly disabled by the project will not be available at all. Since changing the active project
+ceases to be a relevant operation in this case, the project activation tool is disabled.
 
 When launching Serena, specify the context using `--context <context-name>`.
 Note that for cases where parameter lists are specified (e.g. Claude Desktop), you must add two parameters to the list.

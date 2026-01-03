@@ -41,9 +41,13 @@ class JetBrainsPluginClient(ToStringMixin):
     """
 
     BASE_PORT = 0x5EA2
+    PLUGIN_REQUEST_TIMEOUT = 300
+    """
+    the timeout used for request handling within the plugin (a constant in the plugin)
+    """
     last_port: int | None = None
 
-    def __init__(self, port: int, timeout: int = 30):
+    def __init__(self, port: int, timeout: int = PLUGIN_REQUEST_TIMEOUT):
         self.base_url = f"http://127.0.0.1:{port}"
         self.timeout = timeout
         self.session = requests.Session()

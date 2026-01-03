@@ -27,7 +27,7 @@ from serena.constants import (
     SERENAS_OWN_CONTEXT_YAMLS_DIR,
     SERENAS_OWN_MODE_YAMLS_DIR,
 )
-from serena.mcp import SerenaMCPFactory, SerenaMCPFactorySingleProcess
+from serena.mcp import SerenaMCPFactory
 from serena.project import Project
 from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsOverviewTool, SearchForPatternTool, ToolRegistry
 from serena.util.logging import MemoryLogHandler
@@ -237,7 +237,7 @@ class TopLevelCommands(AutoRegisteringGroup):
             log.info("Auto-detected project root: %s", project)
 
         project_file = project_file_arg or project
-        factory = SerenaMCPFactorySingleProcess(context=context, project=project_file, memory_log_handler=memory_log_handler)
+        factory = SerenaMCPFactory(context=context, project=project_file, memory_log_handler=memory_log_handler)
         server = factory.create_mcp_server(
             host=host,
             port=port,

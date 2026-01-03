@@ -27,6 +27,8 @@ special settings for Docker usage:
 ```
 # Disable the GUI log window since it's not supported in Docker
 gui_log_window: False
+# Listen on all interfaces for the web dashboard to be accessible from outside the container
+web_dashboard_listen_address: 0.0.0.0
 # Disable opening the web dashboard on launch (not possible within the container)
 web_dashboard_open_on_launch: False
 ```
