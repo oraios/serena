@@ -40,7 +40,6 @@ class TypeHierarchyNodeDTO(TypedDict):
 
 
 class TypeHierarchyResponse(TypedDict):
-    symbol: NotRequired[SymbolDTO]
     hierarchy: NotRequired[list[TypeHierarchyNodeDTO]]
     error: NotRequired[str]
     num_levels_not_included: NotRequired[int]

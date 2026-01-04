@@ -1,6 +1,6 @@
 import logging
 from collections import defaultdict
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import serena.tools.jetbrains_types as jb
 from serena.text_utils import render_html
@@ -21,7 +21,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         depth: int = 0,
         relative_path: str | None = None,
         include_body: bool = False,
-        include_info: bool = True,
+        include_info: bool = False,
         search_deps: bool = False,
         max_answer_chars: int = -1,
     ) -> str:
@@ -62,27 +62,25 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         """
         if relative_path == ".":
             relative_path = None
-        if include_body:
-            include_info = False  # we save tokens and don't include info if body is requested
         with JetBrainsPluginClient.from_project(self.project) as client:
+            include_documentation = include_info and not include_body
+            include_quick_info = not include_documentation and not include_info
             response_dict = client.find_symbol(
                 name_path=name_path_pattern,
                 relative_path=relative_path,
                 depth=depth,
                 include_body=include_body,
-                include_info=include_info,
+                include_documentation=include_documentation,
+                include_quick_info=include_quick_info,
                 search_deps=search_deps,
             )
 
-            # massage the response to include only 'info' field if requested (instead of both doc and quick info)
-            if not include_body and include_info:
-                symbols = response_dict["symbols"]
-                for symbol in symbols:
-                    documentation = symbol.pop("documentation", None)
-                    quick_info = symbol.pop("quick_info", None)
-                    info = documentation if documentation else quick_info
-                    if info:
-                        symbol["info"] = render_html(info)  # type: ignore
+            symbols = response_dict["symbols"]
+            for symbol in symbols:
+                for doc_field in ("documentation", "quick_info"):
+                    if doc_html := symbol.get(doc_field):
+                        doc_html = cast(str, doc_html)
+                        symbol[doc_field] = render_html(doc_html)
             result = self._to_json(response_dict)
         return self._limit_length(result, max_answer_chars)
 
@@ -97,7 +95,6 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
         self,
         name_path: str,
         relative_path: str,
-        include_info: bool = True,
         max_answer_chars: int = -1,
     ) -> str:
         """
@@ -107,7 +104,6 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
         :param name_path: name path of the symbol for which to find references; matching logic as described in find symbol tool.
         :param relative_path: the relative path to the file containing the symbol for which to find references.
             Note that here you can't pass a directory but must pass a file.
-        :param include_info: whether to include additional info (hover-like, typically including docstring and signature).
         :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned. -1 means the
             default value from the config will be used.
         :return: a list of JSON objects with the symbols referencing the requested symbol
@@ -116,7 +112,7 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
             response_dict = client.find_references(
                 name_path=name_path,
                 relative_path=relative_path,
-                include_info=include_info,
+                include_quick_info=True,
             )
             result = self._to_json(response_dict)
         return self._limit_length(result, max_answer_chars)

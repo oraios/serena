@@ -142,7 +142,9 @@ class JetBrainsPluginClient(ToStringMixin):
         name_path: str,
         relative_path: str | None = None,
         include_body: bool = False,
-        include_info: bool = True,
+        include_quick_info: bool = True,
+        include_documentation: bool = False,
+        include_num_usages: bool = True,
         depth: int = 0,
         include_location: bool = False,
         search_deps: bool = False,
@@ -153,7 +155,9 @@ class JetBrainsPluginClient(ToStringMixin):
         :param name_path: the name path to match
         :param relative_path: the relative path to which to restrict the search
         :param include_body: whether to include symbol body content
-        :param include_info: whether to include symbol info
+        :param include_quick_info: whether to include quick info
+        :param include_documentation: whether to include documentation
+        :param include_num_usages: whether to include number of usages
         :param depth: depth of children to include (0 = no children)
         :param include_location: whether to include symbol location information
         :param search_deps: whether to also search in dependencies
@@ -165,19 +169,21 @@ class JetBrainsPluginClient(ToStringMixin):
             "depth": depth,
             "includeLocation": include_location,
             "searchDeps": search_deps,
-            "includeInfo": include_info,
+            "includeQuickInfo": include_quick_info,
+            "includeDocumentation": include_documentation,
+            "includeNumUsages": include_num_usages,
         }
         return cast(jb.SymbolCollectionResponse, self._make_request("POST", "/findSymbol", request_data))
 
-    def find_references(self, name_path: str, relative_path: str, include_info: bool) -> jb.SymbolCollectionResponse:
+    def find_references(self, name_path: str, relative_path: str, include_quick_info: bool) -> jb.SymbolCollectionResponse:
         """
         Finds references to a symbol.
 
         :param name_path: the name path of the symbol
         :param relative_path: the relative path
-        :param include_info: whether to include symbol info
+        :param include_quick_info: whether to include quick info about references
         """
-        request_data = {"namePath": name_path, "relativePath": relative_path, "includeInfo": include_info}
+        request_data = {"namePath": name_path, "relativePath": relative_path, "includeQuickInfo": include_quick_info}
         return cast(jb.SymbolCollectionResponse, self._make_request("POST", "/findReferences", request_data))
 
     def get_symbols_overview(self, relative_path: str, depth: int) -> jb.SymbolCollectionResponse:
