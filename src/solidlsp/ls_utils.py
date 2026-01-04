@@ -324,7 +324,8 @@ class PlatformUtils:
             if system == "Linux" and bitness == "64bit":
                 libc = platform.libc_ver()[0]
                 if libc != "glibc":
-                    platform_id += "-" + libc
+                    # Format: linux-musl-arch (e.g., linux-musl-arm64)
+                    platform_id = f"{system_map[system]}-{libc}-{machine_map[machine]}"
             return PlatformId(platform_id)
         else:
             raise SolidLSPException(f"Unknown platform: {system=}, {machine=}, {bitness=}")
