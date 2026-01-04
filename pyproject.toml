@@ -25,7 +25,7 @@ dependencies = [
   "pydantic>=2.10.6",
   "types-pyyaml>=6.0.12.20241230",
   "pyyaml>=6.0.2",
-  "ruamel.yaml>=0.18.0",
+  "ruamel.yaml==0.18.14",
   "jinja2>=3.1.6",
   "dotenv>=0.9.9",
   "pathspec>=0.12.1",
@@ -306,6 +306,7 @@ markers = [
   "powershell: language server running for PowerShell",
   "slow: tests that require additional Expert instances and have long startup times (~60-90s each)",
   "toml: language server running for TOML",
+  "matlab: language server running for MATLAB (requires MATLAB R2021b+)",
 ]
 
 [tool.codespell]
