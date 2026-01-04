@@ -24,6 +24,7 @@ class SymbolDTO(TypedDict):
     """Documentation text for the symbol (if available), as HTML string."""
     text_range: NotRequired[TextRangeDTO]
     children: NotRequired[list["SymbolDTO"]]
+    num_usages: NotRequired[int]
 
 
 class SymbolCollectionResponse(TypedDict):
