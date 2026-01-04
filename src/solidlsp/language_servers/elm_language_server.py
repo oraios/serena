@@ -32,8 +32,23 @@ class ElmLanguageServer(SolidLanguageServer):
         Creates an ElmLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
         elm_lsp_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
+
+        # Resolve ELM_HOME to absolute path if it's set to a relative path
+        env = {}
+        elm_home = os.environ.get("ELM_HOME")
+        if elm_home:
+            if not os.path.isabs(elm_home):
+                # Convert relative ELM_HOME to absolute based on repository root
+                elm_home = os.path.abspath(os.path.join(repository_root_path, elm_home))
+            env["ELM_HOME"] = elm_home
+            log.info(f"Using ELM_HOME: {elm_home}")
+
         super().__init__(
-            config, repository_root_path, ProcessLaunchInfo(cmd=elm_lsp_executable_path, cwd=repository_root_path), "elm", solidlsp_settings
+            config,
+            repository_root_path,
+            ProcessLaunchInfo(cmd=elm_lsp_executable_path, cwd=repository_root_path, env=env),
+            "elm",
+            solidlsp_settings,
         )
         self.server_ready = threading.Event()
 
@@ -119,9 +134,9 @@ class ElmLanguageServer(SolidLanguageServer):
                 },
             },
             "initializationOptions": {
-                "elmPath": "elm",
-                "elmFormatPath": "elm-format",
-                "elmTestPath": "elm-test",
+                "elmPath": shutil.which("elm") or "elm",
+                "elmFormatPath": shutil.which("elm-format") or "elm-format",
+                "elmTestPath": shutil.which("elm-test") or "elm-test",
                 "skipInstallPackageConfirmation": True,
                 "onlyUpdateDiagnosticsOnSave": False,
             },
@@ -141,6 +156,7 @@ class ElmLanguageServer(SolidLanguageServer):
         """
         Starts the Elm Language Server, waits for the server to be ready and yields the LanguageServer instance.
         """
+        workspace_ready = threading.Event()
 
         def do_nothing(params: dict) -> None:
             return
@@ -148,9 +164,14 @@ class ElmLanguageServer(SolidLanguageServer):
         def window_log_message(msg: dict) -> None:
             log.info(f"LSP: window/logMessage: {msg}")
 
+        def on_diagnostics(params: dict) -> None:
+            # Receiving diagnostics indicates the workspace has been scanned
+            log.info("LSP: Received diagnostics notification, workspace is ready")
+            workspace_ready.set()
+
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", do_nothing)
-        self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
+        self.server.on_notification("textDocument/publishDiagnostics", on_diagnostics)
 
         log.info("Starting Elm server process")
         self.server.start()
@@ -167,7 +188,13 @@ class ElmLanguageServer(SolidLanguageServer):
         assert "documentSymbolProvider" in init_response["capabilities"]
 
         self.server.notify.initialized({})
-        log.info("Elm server initialized successfully, waiting for workspace scan...")
+        log.info("Elm server initialized, waiting for workspace scan...")
+
+        # Wait for workspace to be scanned (indicated by receiving diagnostics)
+        if workspace_ready.wait(timeout=30.0):
+            log.info("Elm server workspace scan completed")
+        else:
+            log.warning("Timeout waiting for Elm workspace scan, proceeding anyway")
 
         self.server_ready.set()
         self.completions_available.set()
