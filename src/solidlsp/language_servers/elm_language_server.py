@@ -34,6 +34,7 @@ class ElmLanguageServer(SolidLanguageServer):
         elm_lsp_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
 
         # Resolve ELM_HOME to absolute path if it's set to a relative path
+        # ELM_HOME needs to be absolute for package discovery to work when devbox uses relative paths like '.elm'
         env = {}
         elm_home = os.environ.get("ELM_HOME")
         if elm_home:
@@ -164,14 +165,14 @@ class ElmLanguageServer(SolidLanguageServer):
         def window_log_message(msg: dict) -> None:
             log.info(f"LSP: window/logMessage: {msg}")
 
-        def on_diagnostics(params: dict) -> None:
+        def set_workspace_ready(params: dict) -> None:
             # Receiving diagnostics indicates the workspace has been scanned
             log.info("LSP: Received diagnostics notification, workspace is ready")
             workspace_ready.set()
 
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", do_nothing)
-        self.server.on_notification("textDocument/publishDiagnostics", on_diagnostics)
+        self.server.on_notification("textDocument/publishDiagnostics", set_workspace_ready)
 
         log.info("Starting Elm server process")
         self.server.start()
