@@ -228,6 +228,7 @@ class ElixirTools(SolidLanguageServer):
                         "symbolKind": {"valueSet": list(range(1, 27))},
                     },
                     "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                    "inlayHint": {"dynamicRegistration": True},
                     "formatting": {"dynamicRegistration": True},
                     "codeAction": {
                         "dynamicRegistration": True,
@@ -309,7 +310,7 @@ class ElixirTools(SolidLanguageServer):
 
         def publish_diagnostics(params: Any) -> None:
             """Handle textDocument/publishDiagnostics notifications."""
-            return
+            self._handle_publish_diagnostics(params)
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)

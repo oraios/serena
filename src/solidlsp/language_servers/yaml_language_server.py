@@ -118,6 +118,7 @@ class YamlLanguageServer(SolidLanguageServer):
                         "symbolKind": {"valueSet": list(range(1, 27))},
                     },
                     "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                    "inlayHint": {"dynamicRegistration": True},
                     "codeAction": {"dynamicRegistration": True},
                 },
                 "workspace": {
@@ -164,7 +165,7 @@ class YamlLanguageServer(SolidLanguageServer):
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", do_nothing)
-        self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
+        self.server.on_notification("textDocument/publishDiagnostics", self._handle_publish_diagnostics)
 
         log.info("Starting YAML server process")
         self.server.start()

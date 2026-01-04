@@ -121,6 +121,7 @@ class VtsLanguageServer(SolidLanguageServer):
                         "symbolKind": {"valueSet": list(range(1, 27))},
                     },
                     "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                    "inlayHint": {"dynamicRegistration": True},
                     "signatureHelp": {"dynamicRegistration": True},
                     "codeAction": {"dynamicRegistration": True},
                 },
@@ -193,7 +194,7 @@ class VtsLanguageServer(SolidLanguageServer):
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
         self.server.on_request("workspace/configuration", workspace_configuration_handler)
         self.server.on_notification("$/progress", do_nothing)
-        self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
+        self.server.on_notification("textDocument/publishDiagnostics", self._handle_publish_diagnostics)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
         log.info("Starting VTS server process")

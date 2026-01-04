@@ -201,6 +201,7 @@ class GroovyLanguageServer(SolidLanguageServer):
                     "synchronization": {"dynamicRegistration": True, "didSave": True},
                     "completion": {"dynamicRegistration": True},
                     "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                    "inlayHint": {"dynamicRegistration": True},
                     "definition": {"dynamicRegistration": True},
                     "references": {"dynamicRegistration": True},
                     "documentSymbol": {"dynamicRegistration": True},
@@ -250,7 +251,7 @@ class GroovyLanguageServer(SolidLanguageServer):
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
         self.server.on_notification("$/progress", do_nothing)
-        self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
+        self.server.on_notification("textDocument/publishDiagnostics", self._handle_publish_diagnostics)
         self.server.on_notification("language/actionableNotification", do_nothing)
 
         log.info("Starting Groovy server process")

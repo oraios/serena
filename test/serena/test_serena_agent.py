@@ -12,7 +12,14 @@ import pytest
 from serena.agent import SerenaAgent
 from serena.config.serena_config import ProjectConfig, RegisteredProject, SerenaConfig
 from serena.project import Project
-from serena.tools import SUCCESS_RESULT, FindReferencingSymbolsTool, FindSymbolTool, ReplaceContentTool, ReplaceSymbolBodyTool
+from serena.tools import (
+    SUCCESS_RESULT,
+    FindReferencingSymbolsTool,
+    FindSymbolTool,
+    GetDiagnosticsTool,
+    ReplaceContentTool,
+    ReplaceSymbolBodyTool,
+)
 from solidlsp.ls_config import Language
 from test.conftest import get_repo_path, language_tests_enabled
 from test.solidlsp import clojure as clj
@@ -464,3 +471,98 @@ class TestSerenaAgent:
                 relative_path="ws_manager.js",
                 mode="regex",
             )
+
+    @pytest.mark.parametrize(
+        "serena_agent,error_content,file_ext",
+        [
+            pytest.param(Language.PYTHON, "def foo(\n", ".py", marks=pytest.mark.python),
+            pytest.param(Language.TYPESCRIPT, "function foo( {\n", ".ts", marks=pytest.mark.typescript),
+            pytest.param(Language.RUST, "fn foo( {\n", ".rs", marks=pytest.mark.rust),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_get_diagnostics(self, serena_agent: SerenaAgent, error_content: str, file_ext: str):
+        """Test GetDiagnosticsTool returns diagnostics for files with errors."""
+        project = serena_agent.get_active_project()
+
+        # Create a temporary file with a syntax error
+        error_file = os.path.join(project.project_root, f"temp_error_file{file_ext}")
+        try:
+            with open(error_file, "w") as f:
+                f.write(error_content)
+
+            get_diagnostics_tool = serena_agent.get_tool(GetDiagnosticsTool)
+            result = get_diagnostics_tool.apply_ex(relative_path=f"temp_error_file{file_ext}")
+
+            diagnostics = json.loads(result)
+            assert "diagnostics" in diagnostics
+            assert "total" in diagnostics
+            assert diagnostics["total"] >= 1
+            # Verify diagnostic structure and content
+            first_diagnostic = diagnostics["diagnostics"][0]
+            assert "file" in first_diagnostic
+            assert "line" in first_diagnostic
+            assert "severity" in first_diagnostic
+            assert "message" in first_diagnostic
+            assert first_diagnostic["file"] == f"temp_error_file{file_ext}"
+            assert first_diagnostic["severity"] == "Error"
+        finally:
+            if os.path.exists(error_file):
+                os.remove(error_file)
+
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [pytest.param(Language.PYTHON, marks=pytest.mark.python)],
+        indirect=["serena_agent"],
+    )
+    def test_get_diagnostics_all_files(self, serena_agent: SerenaAgent):
+        """Test GetDiagnosticsTool returns diagnostics for all files when path is empty."""
+        project = serena_agent.get_active_project()
+
+        error_file = os.path.join(project.project_root, "temp_all_files_test.py")
+        try:
+            with open(error_file, "w") as f:
+                f.write("def foo(\n")
+
+            get_diagnostics_tool = serena_agent.get_tool(GetDiagnosticsTool)
+            # First open the file to trigger diagnostics collection
+            get_diagnostics_tool.apply_ex(relative_path="temp_all_files_test.py")
+            # Now get all diagnostics
+            result = get_diagnostics_tool.apply_ex(relative_path="")
+
+            diagnostics = json.loads(result)
+            assert "diagnostics" in diagnostics
+            assert "total" in diagnostics
+            # Should include diagnostics from the error file
+            files_with_diagnostics = {d["file"] for d in diagnostics["diagnostics"]}
+            assert "temp_all_files_test.py" in files_with_diagnostics
+        finally:
+            if os.path.exists(error_file):
+                os.remove(error_file)
+
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [pytest.param(Language.PYTHON, marks=pytest.mark.python)],
+        indirect=["serena_agent"],
+    )
+    def test_get_diagnostics_min_severity(self, serena_agent: SerenaAgent):
+        """Test GetDiagnosticsTool filters by min_severity."""
+        project = serena_agent.get_active_project()
+
+        error_file = os.path.join(project.project_root, "temp_severity_test.py")
+        try:
+            with open(error_file, "w") as f:
+                f.write("def foo(\n")
+
+            get_diagnostics_tool = serena_agent.get_tool(GetDiagnosticsTool)
+            # min_severity=1 means only errors (severity 1 in LSP)
+            result = get_diagnostics_tool.apply_ex(relative_path="temp_severity_test.py", min_severity=1)
+
+            diagnostics = json.loads(result)
+            assert "diagnostics" in diagnostics
+            # All returned diagnostics should be errors
+            for diagnostic in diagnostics["diagnostics"]:
+                assert diagnostic["severity"] == "Error"
+        finally:
+            if os.path.exists(error_file):
+                os.remove(error_file)

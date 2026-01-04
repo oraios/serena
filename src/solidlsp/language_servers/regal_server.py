@@ -81,6 +81,7 @@ class RegalLanguageServer(SolidLanguageServer):
                         "symbolKind": {"valueSet": list(range(1, 27))},  # type: ignore[arg-type]
                     },
                     "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},  # type: ignore[list-item]
+                    "inlayHint": {"dynamicRegistration": True},
                     "codeAction": {"dynamicRegistration": True},
                     "formatting": {"dynamicRegistration": True},
                 },
@@ -113,7 +114,7 @@ class RegalLanguageServer(SolidLanguageServer):
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", do_nothing)
-        self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
+        self.server.on_notification("textDocument/publishDiagnostics", self._handle_publish_diagnostics)
 
         log.info("Starting Regal language server process")
         self.server.start()

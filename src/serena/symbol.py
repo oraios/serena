@@ -502,6 +502,9 @@ class LanguageServerSymbolRetriever:
     def get_language_server(self, relative_path: str) -> SolidLanguageServer:
         return self._ls_manager.get_language_server(relative_path)
 
+    def get_all_language_servers(self) -> Iterator[SolidLanguageServer]:
+        return self._ls_manager.iter_language_servers()
+
     def find(
         self,
         name_path_pattern: str,

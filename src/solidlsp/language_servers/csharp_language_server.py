@@ -501,6 +501,7 @@ class CSharpLanguageServer(SolidLanguageServer):
                     "textDocument": {
                         "synchronization": {"dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True, "didSave": True},
                         "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                        "inlayHint": {"dynamicRegistration": True},
                         "signatureHelp": {
                             "dynamicRegistration": True,
                             "signatureInformation": {
@@ -633,7 +634,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         # Set up notification handlers
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", handle_progress)
-        self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
+        self.server.on_notification("textDocument/publishDiagnostics", self._handle_publish_diagnostics)
         self.server.on_notification("workspace/projectInitializationComplete", handle_workspace_indexing_complete)
         self.server.on_request("workspace/configuration", handle_workspace_configuration)
         self.server.on_request("window/workDoneProgress/create", handle_work_done_progress_create)

@@ -130,6 +130,7 @@ class JuliaLanguageServer(SolidLanguageServer):
                     "definition": {"dynamicRegistration": True},
                     "references": {"dynamicRegistration": True},
                     "documentSymbol": {"dynamicRegistration": True},
+                    "inlayHint": {"dynamicRegistration": True},
                 },
             },
             "workspaceFolders": [
@@ -152,7 +153,7 @@ class JuliaLanguageServer(SolidLanguageServer):
 
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", do_nothing)
-        self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
+        self.server.on_notification("textDocument/publishDiagnostics", self._handle_publish_diagnostics)
 
         log.info("Starting LanguageServer.jl server process")
         self.server.start()

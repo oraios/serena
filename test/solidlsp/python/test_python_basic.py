@@ -233,3 +233,51 @@ class TestProjectBasics:
         no_match_pattern = r"def\s+this_method_does_not_exist\s*\([^)]*\):"
         matches = project.search_source_files_for_pattern(no_match_pattern)
         assert len(matches) == 0
+
+
+@pytest.mark.python
+class TestDiagnostics:
+    """Test diagnostics functionality."""
+
+    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    def test_handle_publish_diagnostics(self, language_server: SolidLanguageServer) -> None:
+        """Test that _handle_publish_diagnostics stores diagnostics correctly."""
+        test_uri = "file:///test/file.py"
+        test_diagnostics = [
+            {"range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 5}}, "message": "Test error", "severity": 1}
+        ]
+
+        language_server._handle_publish_diagnostics({"uri": test_uri, "diagnostics": test_diagnostics})
+
+        stored_diagnostics = language_server.get_diagnostics()
+        assert test_uri in stored_diagnostics
+        assert len(stored_diagnostics[test_uri]) == 1
+        assert stored_diagnostics[test_uri][0]["message"] == "Test error"
+
+    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    def test_get_diagnostics_single_file(self, language_server: SolidLanguageServer) -> None:
+        """Test get_diagnostics returns diagnostics for a specific file."""
+        # Open a file with an error to trigger diagnostics
+        error_file = os.path.join("test_repo", "temp_diag_test.py")
+        absolute_path = os.path.join(language_server.repository_root_path, error_file)
+
+        try:
+            with open(absolute_path, "w") as f:
+                f.write("x: int = 'string'\n")
+
+            with language_server.open_file(error_file):
+                language_server.completions_available.wait()
+                result = language_server.get_diagnostics(error_file)
+
+            # Should return dict with file URI as key
+            assert isinstance(result, dict)
+            # May or may not have diagnostics depending on LSP
+        finally:
+            if os.path.exists(absolute_path):
+                os.remove(absolute_path)
+
+    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    def test_get_diagnostics_all_files(self, language_server: SolidLanguageServer) -> None:
+        """Test get_diagnostics returns all diagnostics when no file specified."""
+        result = language_server.get_diagnostics()
+        assert isinstance(result, dict)

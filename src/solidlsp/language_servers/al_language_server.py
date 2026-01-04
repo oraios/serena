@@ -450,6 +450,7 @@ class ALLanguageServer(SolidLanguageServer):
                         },
                     },
                     "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                    "inlayHint": {"dynamicRegistration": True},
                     "definition": {"dynamicRegistration": True, "linkSupport": True},
                     "references": {"dynamicRegistration": True},
                     "documentHighlight": {"dynamicRegistration": True},
@@ -494,6 +495,7 @@ class ALLanguageServer(SolidLanguageServer):
 
         def publish_diagnostics(params: dict) -> None:
             # AL server publishes diagnostics during initialization
+            self._handle_publish_diagnostics(params)
             uri = params.get("uri", "")
             diagnostics = params.get("diagnostics", [])
             log.debug(f"AL LSP: Diagnostics for {uri}: {len(diagnostics)} issues")

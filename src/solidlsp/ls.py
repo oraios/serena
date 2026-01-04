@@ -330,6 +330,10 @@ class SolidLanguageServer(ABC):
 
         self._has_waited_for_cross_file_references = False
 
+        # Diagnostics storage (populated by publishDiagnostics notifications)
+        self._diagnostics: dict[str, list[lsp_types.Diagnostic]] = {}
+        self._diagnostics_lock = threading.Lock()
+
     def _get_wait_time_for_cross_file_referencing(self) -> float:
         """Meant to be overridden by subclasses for LS that don't have a reliable "finished initializing" signal.
 
@@ -337,6 +341,32 @@ class SolidLanguageServer(ABC):
         if the LS is not fully initialized yet.
         """
         return 2
+
+    def _handle_publish_diagnostics(self, params: dict) -> None:
+        """Handle textDocument/publishDiagnostics notification."""
+        try:
+            uri = params.get("uri", "")
+            diagnostics = params.get("diagnostics", [])
+            with self._diagnostics_lock:
+                self._diagnostics[uri] = list(diagnostics)
+        except Exception as e:
+            log.warning("Error handling publishDiagnostics notification: %s", e)
+
+    def get_diagnostics(self, relative_path: str | None = None) -> dict[str, list[lsp_types.Diagnostic]]:
+        """Get diagnostics for a file or all files.
+
+        :param relative_path: If provided, get diagnostics for this file only.
+                             If None, get all diagnostics.
+        :return: Dict mapping file URIs to list of diagnostics.
+        """
+        with self._diagnostics_lock:
+            if relative_path is None:
+                return dict(self._diagnostics)
+            file_path = os.path.join(self.repository_root_path, relative_path)
+            file_uri = PathUtils.path_to_uri(file_path)
+            if file_uri in self._diagnostics:
+                return {file_uri: self._diagnostics[file_uri]}
+            return {}
 
     def set_request_timeout(self, timeout: float | None) -> None:
         """
