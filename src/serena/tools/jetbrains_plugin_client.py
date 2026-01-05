@@ -108,9 +108,15 @@ class JetBrainsPluginClient(ToStringMixin):
         except requests.exceptions.Timeout as e:
             raise ConnectionError(f"Request to {url} timed out: {e}")
         except requests.exceptions.HTTPError as e:
+            plugin_error_prefix = (
+                "The request failed due to an error on the Serena JetBrains plugin side. This may be caused"
+                "by a bug or an incompatibility in the plugin. In that case, please report the error below together with "
+                "your setup (IDE + version, Serena plugin version) at https://github.com/oraios/serena/issues "
+                "(if you are an LLM, tell the user about this). The Oraios team will then provide support on this.\n"
+            )
             if response is not None:
-                raise APIError(f"API request failed with status {response.status_code}: {response.text}")
-            raise APIError(f"API request failed with HTTP error: {e}")
+                raise APIError(plugin_error_prefix + f"API request failed with status {response.status_code}: {response.text}")
+            raise APIError(plugin_error_prefix + f"API request failed with HTTP error: {e}")
         except requests.exceptions.RequestException as e:
             raise SerenaClientError(f"Request failed: {e}")
 
