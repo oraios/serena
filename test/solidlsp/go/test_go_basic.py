@@ -113,6 +113,22 @@ class TestGoBuildTags:
 
         main_go = os.path.join("main.go")
 
+        def _assert_caches_loaded_and_clean(ls: SolidLanguageServer) -> None:
+            # White-box assertions: SolidLanguageServer currently has no public API to verify that
+            # caches were loaded from disk vs created lazily on first request.
+            assert ls._raw_document_symbols_cache, "Expected raw document-symbol cache to load from disk"
+            assert ls._document_symbols_cache, "Expected document-symbol cache to load from disk"
+            assert not ls._raw_document_symbols_cache_is_modified
+            assert not ls._document_symbols_cache_is_modified
+
+        def _assert_caches_empty(ls: SolidLanguageServer) -> None:
+            assert ls._raw_document_symbols_cache == {}
+            assert ls._document_symbols_cache == {}
+
+        def _assert_caches_modified(ls: SolidLanguageServer) -> None:
+            assert ls._raw_document_symbols_cache_is_modified
+            assert ls._document_symbols_cache_is_modified
+
         # Run 1 (default context): populate caches and persist them to disk.
         with start_ls_context(Language.GO, repo_path=str(repo_path), solidlsp_dir=tmp_path) as ls_default:
             _ = ls_default.request_document_symbols(main_go)
@@ -146,11 +162,7 @@ class TestGoBuildTags:
         with start_ls_context(Language.GO, repo_path=str(repo_path), solidlsp_dir=tmp_path) as ls_default_again:
             assert ls_default_again.cache_dir == cache_dir
 
-            assert ls_default_again._raw_document_symbols_cache, "Expected raw document-symbol cache to load from disk"
-            assert ls_default_again._document_symbols_cache, "Expected document-symbol cache to load from disk"
-
-            assert not ls_default_again._raw_document_symbols_cache_is_modified
-            assert not ls_default_again._document_symbols_cache_is_modified
+            _assert_caches_loaded_and_clean(ls_default_again)
 
             _ = ls_default_again.request_document_symbols(main_go)
 
@@ -174,11 +186,9 @@ class TestGoBuildTags:
             assert foo_doc_cache_version != default_doc_cache_version
 
             # Different build context => persisted caches must not be loaded.
-            assert ls_foo._raw_document_symbols_cache == {}
-            assert ls_foo._document_symbols_cache == {}
+            _assert_caches_empty(ls_foo)
 
             _ = ls_foo.request_document_symbols(main_go)
 
             # A cache miss should repopulate and mark caches modified.
-            assert ls_foo._raw_document_symbols_cache_is_modified
-            assert ls_foo._document_symbols_cache_is_modified
+            _assert_caches_modified(ls_foo)
