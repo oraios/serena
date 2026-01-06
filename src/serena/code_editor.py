@@ -421,8 +421,8 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
                 raise ValueError(f"No symbol with name {name_path} found in file {relative_file_path}")
             if len(symbols) > 1:
                 raise ValueError(
-                    f"Found multiple {len(symbols)} symbols with name {name_path} in file {relative_file_path}. "
-                    "Their locations are: \n " + json.dumps([s["location"] for s in symbols], indent=2)
+                    f"Found multiple {len(symbols)} symbols with name {name_path} in file {relative_file_path}: "
+                    + json.dumps(symbols, indent=2)
                 )
             return JetBrainsSymbol(symbols[0], self._project)
 
