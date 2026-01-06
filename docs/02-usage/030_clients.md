@@ -92,7 +92,7 @@ Note:
 **Global Configuration**. Alternatively, use `--project-from-cwd` for user-level configuration that works across all projects:
 
 ```shell
-claude mcp add --scope user serena -- <serena> start-mcp-server --context=claude-code --project-from-cwd
+claude mcp add --scope user serena -- uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context=claude-code --project-from-cwd
 ```
 
 Whenever you start Claude Code, Serena will search up from the current directory for `.serena/project.yml` or `.git` markers,
