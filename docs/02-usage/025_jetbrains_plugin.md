@@ -22,18 +22,28 @@ The proceeds from plugin sales allow us to dedicate more resources to further de
 After installing the plugin, you need to configure Serena to use it.
 
 **Central Configuration**.
+
 Edit the global Serena configuration file located at `~/.serena/serena_config.yml` 
-(`%USERPROFILE%\.serena\config.yaml` on Windows).
+(`%USERPROFILE%\.serena\serena_config.yml` on Windows).
 Change the `language_backend` setting as follows:
 
 ```yaml
 language_backend: JetBrains
 ```
 
+*Note*: you can also use the button `Edit Global Serena Config` in the Serena MCP dashboard to open the config file in your default editor.
+
 **Per-Instance Configuration**.
 The configuration setting in the global config file can be overridden on a 
 per-instance basis by providing the arguments `--language-backend JetBrains` when 
 launching the Serena MCP server.
+
+**Verifying the Setup**.
+You can verify that Serena is using the JetBrains plugin by either checking the dashboard, where
+you will see `Languages:
+Using JetBrains backend` in the configuration overview.
+You will also notice that your client will use the JetBrains-specific tools like `jet_brains_find_symbol` and others like it.
+
 
 ## Advantages of the JetBrains Plugin
 
