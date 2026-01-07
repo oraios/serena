@@ -54,6 +54,7 @@ class Language(str, Enum):
     LUA = "lua"
     NIX = "nix"
     ERLANG = "erlang"
+    OCAML = "ocaml"
     AL = "al"
     FSHARP = "fsharp"
     REGO = "rego"
@@ -201,6 +202,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.nix")
             case self.ERLANG:
                 return FilenameMatcher("*.erl", "*.hrl", "*.escript", "*.config", "*.app", "*.app.src")
+            case self.OCAML:
+                return FilenameMatcher("*.ml", "*.mli", "*.re", "*.rei")
             case self.AL:
                 return FilenameMatcher("*.al", "*.dal")
             case self.FSHARP:
@@ -353,6 +356,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.erlang_language_server import ErlangLanguageServer
 
                 return ErlangLanguageServer
+            case self.OCAML:
+                from solidlsp.language_servers.ocaml_lsp_server import OcamlLanguageServer
+
+                return OcamlLanguageServer
             case self.AL:
                 from solidlsp.language_servers.al_language_server import ALLanguageServer
 
