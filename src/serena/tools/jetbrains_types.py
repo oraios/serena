@@ -1,6 +1,11 @@
 from typing import NotRequired, TypedDict
 
 
+class PluginStatusDTO(TypedDict):
+    project_root: str
+    plugin_version: str
+
+
 class PositionDTO(TypedDict):
     line: int
     col: int

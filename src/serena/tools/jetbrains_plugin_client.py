@@ -13,6 +13,8 @@ from sensai.util.string import ToStringMixin
 
 import serena.tools.jetbrains_types as jb
 from serena.project import Project
+from serena.tools.jetbrains_types import PluginStatusDTO
+from serena.util.version import Version
 
 T = TypeVar("T")
 log = logging.getLogger(__name__)
@@ -54,6 +56,17 @@ class JetBrainsPluginClient(ToStringMixin):
         self.session = requests.Session()
         self.session.headers.update({"Content-Type": "application/json", "Accept": "application/json"})
 
+        # connect and obtain status
+        self._project_root: str | None
+        self._plugin_version: Version | None
+        try:
+            status_response: PluginStatusDTO = cast(jb.PluginStatusDTO, self._make_request("GET", "/status"))
+            self._project_root = status_response["project_root"]
+            self._plugin_version = Version(status_response["plugin_version"])
+        except ConnectionError:
+            self._project_root = None
+            self._plugin_version = None
+
     def _tostring_includes(self) -> list[str]:
         return ["base_url", "timeout"]
 
@@ -76,10 +89,14 @@ class JetBrainsPluginClient(ToStringMixin):
         raise ServerNotFoundError("Found no Serena service in a JetBrains IDE instance for the project at " + str(resolved_path))
 
     def matches(self, resolved_path: Path) -> bool:
-        try:
-            return Path(self.project_root()).resolve() == resolved_path
-        except ConnectionError:
+        if self._project_root is None:
             return False
+        return Path(self._project_root).resolve() == resolved_path
+
+    def is_version_at_least(self, *version_parts: int) -> bool:
+        if self._plugin_version is None:
+            return False
+        return self._plugin_version.is_at_least(*version_parts)
 
     def _make_request(self, method: str, endpoint: str, data: Optional[dict] = None) -> dict[str, Any]:
         url = f"{self.base_url}{endpoint}"
@@ -148,10 +165,6 @@ class JetBrainsPluginClient(ToStringMixin):
                 return x
 
         return convert(response)
-
-    def project_root(self) -> str:
-        response = self._make_request("GET", "/status")
-        return response["project_root"]
 
     def find_symbol(
         self,
@@ -287,13 +300,6 @@ class JetBrainsPluginClient(ToStringMixin):
             "relativePath": relative_path,
         }
         self._make_request("POST", "/refreshFile", request_data)
-
-    def is_service_available(self) -> bool:
-        try:
-            self.project_root()
-            return True
-        except (ConnectionError, APIError):
-            return False
 
     def close(self) -> None:
         self.session.close()
