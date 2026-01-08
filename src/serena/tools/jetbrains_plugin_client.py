@@ -126,7 +126,7 @@ class JetBrainsPluginClient(ToStringMixin):
             raise ConnectionError(f"Request to {url} timed out: {e}")
         except requests.exceptions.HTTPError as e:
             unrecoverable_error_prefix = (
-                "The request failed due to an error on the Serena JetBrains plugin side. This may be caused"
+                "The request failed due to an error on the Serena JetBrains plugin side. This may be caused "
                 "by a bug or an incompatibility in the plugin. In that case, please report the error below together with "
                 "your setup (IDE + version, Serena plugin version) at https://github.com/oraios/serena/issues "
                 "(if you are an LLM, tell the user about this). The Oraios team will then provide support on this.\n"
@@ -135,7 +135,11 @@ class JetBrainsPluginClient(ToStringMixin):
             if response is not None:
                 # check for recoverable error (i.e. errors where the problem can usually be fixed by the caller).
                 # The plugin returns 400 for such errors (typically illegal arguments, e.g. non-unique name path)
-                is_recoverable_error = response.status_code == 400
+                # but only since version 2023.2.6
+                if self.is_version_at_least(2023, 2, 6):
+                    is_recoverable_error = response.status_code == 400
+                else:
+                    is_recoverable_error = True  # assume recoverable for older versions (mix of errors)
 
                 error_text = f"API request failed with status {response.status_code}: {response.text}"
                 if not is_recoverable_error:
