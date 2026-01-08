@@ -52,10 +52,10 @@ class JetBrainsPluginClient(ToStringMixin):
 
     def __init__(self, port: int, timeout: int = PLUGIN_REQUEST_TIMEOUT):
         self._port = port
-        self.base_url = f"http://127.0.0.1:{port}"
-        self.timeout = timeout
-        self.session = requests.Session()
-        self.session.headers.update({"Content-Type": "application/json", "Accept": "application/json"})
+        self._base_url = f"http://127.0.0.1:{port}"
+        self._timeout = timeout
+        self._session = requests.Session()
+        self._session.headers.update({"Content-Type": "application/json", "Accept": "application/json"})
 
         # connect and obtain status
         self._project_root: str | None
@@ -100,15 +100,15 @@ class JetBrainsPluginClient(ToStringMixin):
         return self._plugin_version.is_at_least(*version_parts)
 
     def _make_request(self, method: str, endpoint: str, data: Optional[dict] = None) -> dict[str, Any]:
-        url = f"{self.base_url}{endpoint}"
+        url = f"{self._base_url}{endpoint}"
 
         response: Response | None = None
         try:
             if method.upper() == "GET":
-                response = self.session.get(url, timeout=self.timeout)
+                response = self._session.get(url, timeout=self._timeout)
             elif method.upper() == "POST":
                 json_data = json.dumps(data) if data else None
-                response = self.session.post(url, data=json_data, timeout=self.timeout)
+                response = self._session.post(url, data=json_data, timeout=self._timeout)
             else:
                 raise ValueError(f"Unsupported HTTP method: {method}")
 
@@ -307,7 +307,7 @@ class JetBrainsPluginClient(ToStringMixin):
         self._make_request("POST", "/refreshFile", request_data)
 
     def close(self) -> None:
-        self.session.close()
+        self._session.close()
 
     def __enter__(self) -> Self:
         return self
