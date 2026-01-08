@@ -124,7 +124,9 @@ class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
 
     @classmethod
     def load(cls, name_or_path: str | Path) -> Self:
-        if str(name_or_path).endswith(".yml"):
+        # Check if it's a file path that exists
+        path = Path(name_or_path)
+        if path.exists() and path.is_file():
             return cls.from_yaml(name_or_path)
         return cls.from_name(str(name_or_path))
 
@@ -225,7 +227,9 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
 
     @classmethod
     def load(cls, name_or_path: str | Path) -> Self:
-        if str(name_or_path).endswith(".yml"):
+        # Check if it's a file path that exists
+        path = Path(name_or_path)
+        if path.exists() and path.is_file():
             return cls.from_yaml(name_or_path)
         return cls.from_name(str(name_or_path))
 
