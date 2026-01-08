@@ -51,6 +51,7 @@ class JetBrainsPluginClient(ToStringMixin):
     last_port: int | None = None
 
     def __init__(self, port: int, timeout: int = PLUGIN_REQUEST_TIMEOUT):
+        self._port = port
         self.base_url = f"http://127.0.0.1:{port}"
         self.timeout = timeout
         self.session = requests.Session()
@@ -68,7 +69,7 @@ class JetBrainsPluginClient(ToStringMixin):
             self._plugin_version = None
 
     def _tostring_includes(self) -> list[str]:
-        return ["base_url", "timeout"]
+        return ["_port", "_project_root", "_plugin_version"]
 
     @classmethod
     def from_project(cls, project: Project) -> Self:
@@ -82,7 +83,7 @@ class JetBrainsPluginClient(ToStringMixin):
         for port in range(cls.BASE_PORT, cls.BASE_PORT + 20):
             client = JetBrainsPluginClient(port)
             if client.matches(resolved_path):
-                log.info("Found JetBrains IDE service at port %d for project %s", port, resolved_path)
+                log.info("Found matching %s", client)
                 cls.last_port = port
                 return client
 
