@@ -258,6 +258,11 @@ class JetBrainsPluginClient(ToStringMixin):
         request_data = {"relativePath": relative_path, "depth": depth, "includeFileDocumentation": include_file_documentation}
         response = cast(jb.GetSymbolsOverviewResponse, self._make_request("POST", "/getSymbolsOverview", request_data))
         self._postprocess_symbol_collection_response(response)
+
+        # process file documentation
+        if "documentation" in response:
+            response["documentation"] = render_html(response["documentation"])
+
         return response
 
     def get_supertypes(

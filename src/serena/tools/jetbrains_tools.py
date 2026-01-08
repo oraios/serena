@@ -3,7 +3,6 @@ from collections import defaultdict
 from typing import Any, Literal
 
 import serena.tools.jetbrains_types as jb
-from serena.text_utils import render_html
 from serena.tools import Tool, ToolMarkerOptional, ToolMarkerSymbolicRead
 from serena.tools.jetbrains_plugin_client import JetBrainsPluginClient
 
@@ -117,7 +116,7 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
     """
 
     @staticmethod
-    def _transform_symbols_to_compact_format(symbols: list[dict[str, Any]]) -> dict[str, list]:
+    def _transform_symbols_to_compact_format(symbols: list[jb.SymbolDTO]) -> dict[str, list]:
         """
         Transform symbol overview from verbose format to compact grouped format.
 
@@ -143,7 +142,7 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
                 result[kind].append({name: children_dict})
             else:
                 # Symbol has no children: just add the name
-                result[kind].append(name)
+                result[kind].append(name)  # type: ignore
 
         return result
 
@@ -167,14 +166,14 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
         :return: a JSON object containing the symbols grouped by kind in a compact format.
         """
         with JetBrainsPluginClient.from_project(self.project) as client:
-            response_dict = client.get_symbols_overview(relative_path=relative_path, depth=depth)
-        documentation = response_dict.pop("documentation", None)
+            symbol_overview = client.get_symbols_overview(relative_path=relative_path, depth=depth, include_file_documentation=False)
+        symbols = symbol_overview["symbols"]
+        result: dict[str, Any] = {"symbols": self._transform_symbols_to_compact_format(symbols)}
+        documentation = symbol_overview.pop("documentation", None)
         if documentation:
-            response_dict["docstring"] = render_html(documentation)  # type: ignore
-        symbols = response_dict["symbols"]
-        response_dict["symbols"] = self._transform_symbols_to_compact_format(symbols)  # type: ignore
-        result = self._to_json(response_dict)
-        return self._limit_length(result, max_answer_chars)
+            result["docstring"] = documentation
+        json_result = self._to_json(result)
+        return self._limit_length(json_result, max_answer_chars)
 
 
 class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
