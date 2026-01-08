@@ -54,7 +54,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         :param include_body: If True, include the symbol's source code. Use judiciously.
         :param include_info: whether to include additional info (hover-like, typically including docstring and signature),
             about the symbol (ignored if include_body is True).
-            Default True, info is never included for child symbols and is not included when body is requested.
+            Default False; info is never included for child symbols and is not included when body is requested.
         :param search_deps: If True, also search in project dependencies (e.g., libraries).
         :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
             -1 means the default value from the config will be used.
