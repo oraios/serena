@@ -32,6 +32,9 @@ class SymbolDTO(TypedDict):
 
 class SymbolCollectionResponse(TypedDict):
     symbols: list[SymbolDTO]
+
+
+class GetSymbolsOverviewResponse(SymbolCollectionResponse):
     documentation: NotRequired[str]
     """Docstring of the collection (if applicable - usually present only if the collection is from a single file), 
     as HTML string."""
