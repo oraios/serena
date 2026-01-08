@@ -1,7 +1,5 @@
 from typing import NotRequired, TypedDict
 
-# TODO or not TODO: in principle, we could autogenerate these from the java code. For now not worth the effort.
-
 
 class PositionDTO(TypedDict):
     line: int
