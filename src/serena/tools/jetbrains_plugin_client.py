@@ -220,12 +220,13 @@ class JetBrainsPluginClient(ToStringMixin):
         request_data = {"namePath": name_path, "relativePath": relative_path, "includeQuickInfo": include_quick_info}
         return cast(jb.SymbolCollectionResponse, self._make_request("POST", "/findReferences", request_data))
 
-    def get_symbols_overview(self, relative_path: str, depth: int) -> jb.SymbolCollectionResponse:
+    def get_symbols_overview(self, relative_path: str, depth: int, include_file_documentation: bool = False) -> jb.SymbolCollectionResponse:
         """
         :param relative_path: the relative path to a source file
         :param depth: the depth of children to include (0 = no children)
+        :param include_file_documentation: whether to include the file's documentation string (if any)
         """
-        request_data = {"relativePath": relative_path, "depth": depth}
+        request_data = {"relativePath": relative_path, "depth": depth, "includeFileDocumentation": include_file_documentation}
         return cast(jb.SymbolCollectionResponse, self._make_request("POST", "/getSymbolsOverview", request_data))
 
     def get_supertypes(
