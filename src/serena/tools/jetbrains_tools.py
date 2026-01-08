@@ -1,6 +1,6 @@
 import logging
 from collections import defaultdict
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 import serena.tools.jetbrains_types as jb
 from serena.text_utils import render_html
@@ -74,13 +74,6 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
                 include_quick_info=include_quick_info,
                 search_deps=search_deps,
             )
-
-            symbols = response_dict["symbols"]
-            for symbol in symbols:
-                for doc_field in ("documentation", "quick_info"):
-                    if doc_html := symbol.get(doc_field):
-                        doc_html = cast(str, doc_html)
-                        symbol[doc_field] = render_html(doc_html)
             result = self._to_json(response_dict)
         return self._limit_length(result, max_answer_chars)
 

@@ -5,7 +5,7 @@ Client for the Serena JetBrains Plugin
 import json
 import logging
 from pathlib import Path
-from typing import Any, Optional, Self, TypeVar, cast
+from typing import Any, Literal, Optional, Self, TypeVar, cast
 
 import requests
 from requests import Response
@@ -13,6 +13,7 @@ from sensai.util.string import ToStringMixin
 
 import serena.tools.jetbrains_types as jb
 from serena.project import Project
+from serena.text_utils import render_html
 from serena.tools.jetbrains_types import PluginStatusDTO
 from serena.util.version import Version
 
@@ -171,6 +172,28 @@ class JetBrainsPluginClient(ToStringMixin):
 
         return convert(response)
 
+    def _postprocess_symbol_collection_response(self, response_dict: jb.SymbolCollectionResponse) -> None:
+        """
+        Postprocesses a symbol collection response in-place, converting HTML documentation to plain text.
+
+        :param response_dict: the response dictionary
+        """
+
+        def convert_html(key: Literal["documentation", "quick_info"], symbol: jb.SymbolDTO) -> None:
+            if key in symbol:
+                doc_html: str = symbol[key]
+                doc_text = render_html(doc_html)
+                if doc_text:
+                    symbol[key] = doc_text
+                else:
+                    del symbol[key]
+
+        # convert documentation and quick info from HTML to plain text (if present)
+        symbols = response_dict["symbols"]
+        for s in symbols:
+            convert_html("documentation", s)
+            convert_html("quick_info", s)
+
     def find_symbol(
         self,
         name_path: str,
@@ -207,7 +230,9 @@ class JetBrainsPluginClient(ToStringMixin):
             "includeDocumentation": include_documentation,
             "includeNumUsages": include_num_usages,
         }
-        return cast(jb.SymbolCollectionResponse, self._make_request("POST", "/findSymbol", request_data))
+        symbol_collection = cast(jb.SymbolCollectionResponse, self._make_request("POST", "/findSymbol", request_data))
+        self._postprocess_symbol_collection_response(symbol_collection)
+        return symbol_collection
 
     def find_references(self, name_path: str, relative_path: str, include_quick_info: bool) -> jb.SymbolCollectionResponse:
         """
@@ -218,7 +243,9 @@ class JetBrainsPluginClient(ToStringMixin):
         :param include_quick_info: whether to include quick info about references
         """
         request_data = {"namePath": name_path, "relativePath": relative_path, "includeQuickInfo": include_quick_info}
-        return cast(jb.SymbolCollectionResponse, self._make_request("POST", "/findReferences", request_data))
+        symbol_collection = cast(jb.SymbolCollectionResponse, self._make_request("POST", "/findReferences", request_data))
+        self._postprocess_symbol_collection_response(symbol_collection)
+        return symbol_collection
 
     def get_symbols_overview(
         self, relative_path: str, depth: int, include_file_documentation: bool = False
@@ -229,7 +256,9 @@ class JetBrainsPluginClient(ToStringMixin):
         :param include_file_documentation: whether to include the file's documentation string (if any)
         """
         request_data = {"relativePath": relative_path, "depth": depth, "includeFileDocumentation": include_file_documentation}
-        return cast(jb.GetSymbolsOverviewResponse, self._make_request("POST", "/getSymbolsOverview", request_data))
+        response = cast(jb.GetSymbolsOverviewResponse, self._make_request("POST", "/getSymbolsOverview", request_data))
+        self._postprocess_symbol_collection_response(response)
+        return response
 
     def get_supertypes(
         self,
