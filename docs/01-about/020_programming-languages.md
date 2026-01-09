@@ -60,7 +60,9 @@ Some languages require additional installations or setup steps, as noted.
   (must be explicitly specified via `--language markdown` when generating project config, primarily useful for documentation-heavy projects)
 * **Nix**  
   (requires nixd installation)
-* **Perl**  
+* **Pascal**
+  (Free Pascal/Lazarus; automatically downloads pasls binary; set PP and FPCDIR environment variables for source navigation)
+* **Perl**
   (requires installation of Perl::LanguageServer)
 * **PHP**  
   (uses Intelephense LSP; set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features)
