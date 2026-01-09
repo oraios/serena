@@ -30,7 +30,28 @@ class ConnectionError(SerenaClientError):
 
 
 class APIError(SerenaClientError):
-    """Raised when the API returns an error response."""
+    """Raised when the API returns an error response that shall be reported on the caller/LLM."""
+
+    def __init__(self, response: Response):
+        try:
+            error_data = response.json()
+            message = error_data.get("error", response.text)
+        except:
+            message = response.text
+        super().__init__(message)
+
+
+class PluginServerError(SerenaClientError):
+    """Raised when the plugin's service encounters an internal error (which may need to be reported)."""
+
+    def __init__(self, message: str):
+        unrecoverable_error_prefix = (
+            "The request failed due to an error on the Serena JetBrains plugin side. This may be caused "
+            "by a bug or an incompatibility in the plugin. In that case, please report the error below together with "
+            "your setup (IDE + version, Serena plugin version) at https://github.com/oraios/serena/issues "
+            "(if you are an LLM, tell the user about this). The Oraios team will then provide support on this.\n"
+        )
+        super().__init__(unrecoverable_error_prefix + message)
 
 
 class ServerNotFoundError(Exception):
@@ -109,7 +130,7 @@ class JetBrainsPluginClient(ToStringMixin):
         if not self.is_version_at_least(*version_parts):
             raise SerenaClientError(
                 f"This operation requires Serena JetBrains plugin version "
-                f"{'.'.join(map(str, version_parts))} or higher, but the current version is "
+                f"{'.'.join(map(str, version_parts))} or higher, but the installed version is "
                 f"{self._plugin_version}. Ask the user to update the plugin!"
             )
 
@@ -140,29 +161,19 @@ class JetBrainsPluginClient(ToStringMixin):
         except requests.exceptions.Timeout as e:
             raise ConnectionError(f"Request to {url} timed out: {e}")
         except requests.exceptions.HTTPError as e:
-            unrecoverable_error_prefix = (
-                "The request failed due to an error on the Serena JetBrains plugin side. This may be caused "
-                "by a bug or an incompatibility in the plugin. In that case, please report the error below together with "
-                "your setup (IDE + version, Serena plugin version) at https://github.com/oraios/serena/issues "
-                "(if you are an LLM, tell the user about this). The Oraios team will then provide support on this.\n"
-            )
-
             if response is not None:
-                # check for recoverable error (i.e. errors where the problem can usually be fixed by the caller).
+                # check for recoverable error (i.e. errors where the problem can be resolved by the caller or
+                # other errors where the error text shall simply be passed on to the LLM).
                 # The plugin returns 400 for such errors (typically illegal arguments, e.g. non-unique name path)
                 # but only since version 2023.2.6
                 if self.is_version_at_least(2023, 2, 6):
                     is_recoverable_error = response.status_code == 400
                 else:
                     is_recoverable_error = True  # assume recoverable for older versions (mix of errors)
-
-                error_text = f"API request failed with status {response.status_code}: {response.text}"
-                if not is_recoverable_error:
-                    error_text = unrecoverable_error_prefix + error_text
-
-                raise APIError(error_text)
-
-            raise APIError(unrecoverable_error_prefix + f"API request failed with HTTP error: {e}")
+                if is_recoverable_error:
+                    raise APIError(response)
+                raise PluginServerError(f"API request failed with status {response.status_code}: {response.text}")
+            raise PluginServerError(f"API request failed with HTTP error: {e}")
         except requests.exceptions.RequestException as e:
             raise SerenaClientError(f"Request failed: {e}")
 
