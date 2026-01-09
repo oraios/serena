@@ -131,11 +131,7 @@ class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
 
         # If it looks like a file path but doesn't exist, raise FileNotFoundError
         name_or_path_str = str(name_or_path)
-        if (
-            os.sep in name_or_path_str
-            or (os.altsep and os.altsep in name_or_path_str)
-            or name_or_path_str.endswith((".yml", ".yaml"))
-        ):
+        if os.sep in name_or_path_str or (os.altsep and os.altsep in name_or_path_str) or name_or_path_str.endswith((".yml", ".yaml")):
             raise FileNotFoundError(f"Mode file not found: {path.resolve()}")
 
         return cls.from_name(str(name_or_path))
@@ -244,11 +240,7 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
 
         # If it looks like a file path but doesn't exist, raise FileNotFoundError
         name_or_path_str = str(name_or_path)
-        if (
-            os.sep in name_or_path_str
-            or (os.altsep and os.altsep in name_or_path_str)
-            or name_or_path_str.endswith((".yml", ".yaml"))
-        ):
+        if os.sep in name_or_path_str or (os.altsep and os.altsep in name_or_path_str) or name_or_path_str.endswith((".yml", ".yaml")):
             raise FileNotFoundError(f"Context file not found: {path.resolve()}")
 
         return cls.from_name(str(name_or_path))
