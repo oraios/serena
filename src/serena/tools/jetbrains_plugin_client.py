@@ -100,6 +100,19 @@ class JetBrainsPluginClient(ToStringMixin):
             return False
         return self._plugin_version.is_at_least(*version_parts)
 
+    def _require_version_at_least(self, *version_parts: int) -> None:
+        """
+        Ensures that the plugin version is at least the given version and raises an error otherwise.
+
+        :param version_parts: the minimum required version parts (major, minor, patch)
+        """
+        if not self.is_version_at_least(*version_parts):
+            raise SerenaClientError(
+                f"This operation requires Serena JetBrains plugin version "
+                f"{'.'.join(map(str, version_parts))} or higher, but the current version is "
+                f"{self._plugin_version}. Ask the user to update the plugin!"
+            )
+
     def _make_request(self, method: str, endpoint: str, data: Optional[dict] = None) -> dict[str, Any]:
         url = f"{self._base_url}{endpoint}"
 
@@ -280,6 +293,7 @@ class JetBrainsPluginClient(ToStringMixin):
         :param depth: depth limit for hierarchy traversal (None or 0 for unlimited)
         :param limit_children: optional limit on children per level
         """
+        self._require_version_at_least(2023, 2, 6)
         request_data = {
             "namePath": name_path,
             "relativePath": relative_path,
@@ -303,6 +317,7 @@ class JetBrainsPluginClient(ToStringMixin):
         :param depth: depth limit for hierarchy traversal (None or 0 for unlimited)
         :param limit_children: optional limit on children per level
         """
+        self._require_version_at_least(2023, 2, 6)
         request_data = {
             "namePath": name_path,
             "relativePath": relative_path,
