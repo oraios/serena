@@ -90,7 +90,7 @@ class JetBrainsPluginClient(ToStringMixin):
         """
         path_str = str(path_str)
         # Match //wsl.localhost/<distro>/... or //wsl$/<distro>/...
-        match = re.match(r'^//wsl(?:\.localhost|\$)/[^/]+(.*)$', path_str, re.IGNORECASE)
+        match = re.match(r"^//wsl(?:\.localhost|\$)/[^/]+(.*)$", path_str, re.IGNORECASE)
         if match:
             return Path(match.group(1))
         return Path(path_str)
