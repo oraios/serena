@@ -245,8 +245,6 @@ class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptiona
                     relative_path=relative_path,
                     depth=depth,
                 )
-                if error_msg := supertypes_response.get("error"):
-                    return error_msg
                 if "num_levels_not_included" in supertypes_response:
                     levels_not_included["supertypes"] = supertypes_response["num_levels_not_included"]
                 supertypes = self._transform_hierarchy_nodes(supertypes_response.get("hierarchy"))
@@ -257,8 +255,6 @@ class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptiona
                     relative_path=relative_path,
                     depth=depth,
                 )
-                if error_msg := subtypes_response.get("error"):
-                    return error_msg
                 if "num_levels_not_included" in subtypes_response:
                     levels_not_included["subtypes"] = subtypes_response["num_levels_not_included"]
                 subtypes = self._transform_hierarchy_nodes(subtypes_response.get("hierarchy"))
