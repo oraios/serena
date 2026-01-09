@@ -218,7 +218,7 @@ class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptiona
         self,
         name_path: str,
         relative_path: str,
-        hierarchy_type: Literal["super", "sub", "both"] = "sub",
+        hierarchy_type: Literal["super", "sub", "both"] = "both",
         depth: int | None = 1,
         max_answer_chars: int = -1,
     ) -> str:
