@@ -2,6 +2,7 @@ import os
 import socket
 import threading
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
 from flask import Flask, Response, request, send_from_directory
@@ -9,8 +10,8 @@ from pydantic import BaseModel
 from sensai.util import logging
 
 from serena.analytics import ToolUsageStats
-from serena.config.serena_config import LanguageBackend
-from serena.constants import SERENA_DASHBOARD_DIR
+from serena.config.serena_config import LanguageBackend, SerenaPaths
+from serena.constants import REPO_ROOT, SERENA_DASHBOARD_DIR
 from serena.task_executor import TaskExecutor
 from serena.util.logging import MemoryLogHandler
 
@@ -314,6 +315,36 @@ class SerenaDashboardAPI:
                 last_execution_info = self._agent.get_last_executed_task()
                 response = QueuedExecution.from_task_info(last_execution_info).model_dump() if last_execution_info is not None else None
                 return {"last_execution": response, "status": "success"}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+
+        @self._app.route("/news_snippet_ids", methods=["GET"])
+        def get_news_snippet_ids() -> dict[str, str | list[int]]:
+            def _get_unread_news_ids() -> list[int]:
+                all_news_files = (Path(REPO_ROOT) / "src" / "serena" / "resources" / "dashboard" / "news").glob("*.html")
+                all_news_ids = sorted([int(f.stem) for f in all_news_files])
+                news_snippet_id_file = SerenaPaths().news_snippet_id_file
+                if not os.path.exists(news_snippet_id_file):
+                    return all_news_ids
+                with open(news_snippet_id_file, encoding="utf-8") as f:
+                    last_read_news_id = int(f.read().strip())
+                return [news_id for news_id in all_news_ids if news_id > last_read_news_id]
+
+            try:
+                unread_news_ids = _get_unread_news_ids()
+                return {"news_snippet_ids": unread_news_ids, "status": "success"}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+
+        @self._app.route("/mark_news_snippet_as_read", methods=["POST"])
+        def mark_news_snippet_as_read() -> dict[str, str]:
+            try:
+                request_data = request.get_json()
+                news_snippet_id = int(request_data.get("news_snippet_id"))
+                news_snippet_id_file = SerenaPaths().news_snippet_id_file
+                with open(news_snippet_id_file, "w", encoding="utf-8") as f:
+                    f.write(str(news_snippet_id))
+                return {"status": "success", "message": f"Marked news snippet {news_snippet_id} as read"}
             except Exception as e:
                 return {"status": "error", "message": str(e)}
 

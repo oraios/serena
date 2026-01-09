@@ -268,6 +268,8 @@ class Dashboard {
         this.$editSerenaConfigSaveBtn = $('#edit-serena-config-save-btn');
         this.$editSerenaConfigCancelBtn = $('#edit-serena-config-cancel-btn');
         this.$modalCloseEditSerenaConfig = $('.modal-close-edit-serena-config');
+        this.$newsSection = $('#news-section');
+        this.$newsDisplay = $('#news-display');
 
         // Chart references
         this.countChart = null;
@@ -401,6 +403,7 @@ class Dashboard {
         // Initialize the application
         this.loadToolNames().then(function () {
             // Start on overview page
+            self.loadNews();
             self.loadConfigOverview();
             self.startConfigPolling();
             self.startExecutionsPolling();
@@ -454,6 +457,7 @@ class Dashboard {
 
         // Start appropriate polling for the page
         if (page === 'overview') {
+            this.loadNews();
             this.loadConfigOverview();
             this.startConfigPolling();
             this.startExecutionsPolling();
@@ -1873,6 +1877,105 @@ class Dashboard {
                 console.error('Error creating memory:', error);
                 alert('Error creating memory: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
                 self.$createMemoryCreateBtn.prop('disabled', false).text('Create');
+            }
+        });
+    }
+
+    // ===== News Methods =====
+
+    loadNews() {
+        let self = this;
+        console.log('Loading news...');
+        $.ajax({
+            url: '/news_snippet_ids',
+            type: 'GET',
+            success: function(response) {
+                console.log('News snippet IDs response:', response);
+                if (response.status === 'success' && response.news_snippet_ids && response.news_snippet_ids.length > 0) {
+                    console.log('Displaying news with IDs:', response.news_snippet_ids);
+                    self.displayNews(response.news_snippet_ids);
+                } else {
+                    console.log('No unread news, hiding section');
+                    self.$newsSection.hide();
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error loading news snippet IDs:', error);
+                self.$newsSection.hide();
+            }
+        });
+    }
+
+    displayNews(newsIds) {
+        let self = this;
+        console.log('displayNews called with:', newsIds);
+        // Sort newest first (descending order)
+        newsIds.sort((a, b) => b - a);
+        
+        if (newsIds.length === 0) {
+            console.log('No news items to display.');
+            self.$newsSection.hide();
+            return;
+        }
+        self.$newsSection.show();
+        self.$newsDisplay.empty();
+        console.log('Displaying ' + newsIds.length + ' news items.');
+        // Load each news snippet HTML
+        let loadedCount = 0;
+        newsIds.forEach(function(newsId) {
+            $.ajax({
+                url: '/dashboard/news/' + newsId + '.html',
+                type: 'GET',
+                success: function(html) {
+                    // Wrap the HTML in a container with a checkbox
+                    let $newsContainer = $('<div class="news-container">').attr('data-news-id', newsId);
+                    let $newsContent = $(html);
+                    
+                    // Add checkbox for marking as read
+                    let $markRead = $('<div class="news-mark-read">');
+                    let $checkbox = $('<input type="checkbox">').attr('id', 'news-read-' + newsId);
+                    let $label = $('<label>').attr('for', 'news-read-' + newsId).text('Mark as read');
+                    
+                    $markRead.append($checkbox).append($label);
+                    $newsContent.append($markRead);
+                    
+                    $newsContainer.append($newsContent);
+                    self.$newsDisplay.append($newsContainer);
+                    
+                    // Bind checkbox event
+                    $checkbox.on('change', function() {
+                        if ($(this).is(':checked')) {
+                            self.markNewsAsRead(newsId);
+                        }
+                    });
+                    
+                    loadedCount++;
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error loading news snippet ' + newsId + ':', error);
+                    loadedCount++;
+                }
+            });
+        });
+    }
+
+    markNewsAsRead(newsId) {
+        let self = this;
+        $.ajax({
+            url: '/mark_news_snippet_as_read',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ news_snippet_id: newsId }),
+            success: function(response) {
+                if (response.status === 'success') {
+                    // Reload news to show updated list
+                    self.loadNews();
+                } else {
+                    console.error('Error marking news as read:', response.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error marking news as read:', error);
             }
         });
     }
