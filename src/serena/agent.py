@@ -8,7 +8,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from logging import Logger
-from typing import TYPE_CHECKING, Optional, TypeVar
+from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
 from sensai.util import logging
 from sensai.util.logging import LogTime
@@ -352,6 +352,21 @@ class SerenaAgent:
 
     def get_tool_description_override(self, tool_name: str) -> str | None:
         return self._context.tool_description_overrides.get(tool_name, None)
+
+    def apply_tool(self, tool: type[Tool] | str, **input_kwargs: Any) -> str | dict:
+        """
+        Run a tool with the given input arguments.
+
+        :param tool: the tool class or tool name to run
+        :param input_kwargs: the input arguments for the tool
+        :return: the result of the tool execution
+        """
+        if isinstance(tool, str):
+            tool_class = ToolRegistry().get_tool_class_by_name(tool)
+        else:
+            tool_class = tool
+        tool_instance = self.get_tool(tool_class)
+        return tool_instance.apply_ex(**input_kwargs)
 
     def _check_shell_settings(self) -> None:
         # On Windows, Claude Code sets COMSPEC to Git-Bash (often even with a path containing spaces),
