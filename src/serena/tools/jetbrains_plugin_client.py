@@ -98,8 +98,7 @@ class JetBrainsPluginClient(ToStringMixin):
     def matches(self, resolved_path: Path) -> bool:
         try:
             plugin_root = self._normalize_wsl_path(self.project_root())
-            local_root = self._normalize_wsl_path(str(resolved_path))
-            return plugin_root.resolve() == local_root.resolve()
+            return plugin_root.resolve() == resolved_path
         except ConnectionError:
             return False
 
