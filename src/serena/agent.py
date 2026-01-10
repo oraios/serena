@@ -2,11 +2,10 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
-import multiprocessing
 import os
 import platform
+import subprocess
 import sys
-import webbrowser
 from collections.abc import Callable
 from logging import Logger
 from typing import TYPE_CHECKING, Optional, TypeVar
@@ -24,7 +23,7 @@ from serena.ls_manager import LanguageServerManager
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.task_executor import TaskExecutor
-from serena.tools import ActivateProjectTool, GetCurrentConfigTool, ReplaceContentTool, Tool, ToolMarker, ToolRegistry
+from serena.tools import ActivateProjectTool, GetCurrentConfigTool, OpenDashboardTool, ReplaceContentTool, Tool, ToolMarker, ToolRegistry
 from serena.util.gui import system_has_usable_display
 from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
@@ -189,6 +188,9 @@ class SerenaAgent:
         # project-specific instances, which will be initialized upon project activation
         self._active_project: Project | None = None
 
+        # dashboard URL (set when dashboard is started)
+        self._dashboard_url: str | None = None
+
         # adjust log level
         serena_log_level = self.serena_config.log_level
         if Logger.root.level != serena_log_level:
@@ -247,8 +249,21 @@ class SerenaAgent:
         self._check_shell_settings()
 
         # determine the base toolset defining the set of exposed tools (which e.g. the MCP shall see),
-        # limited by the Serena config, the context (which is fixed for the session) and JetBrains mode
-        tool_inclusion_definitions: list[ToolInclusionDefinition] = [self.serena_config, self._context]
+        # determined by the
+        #   * dashboard availability/opening on launch
+        #   * Serena config,
+        #   * the context (which is fixed for the session)
+        #   * single-project mode reductions (if applicable)
+        #   * JetBrains mode
+        tool_inclusion_definitions: list[ToolInclusionDefinition] = []
+        if (
+            self.serena_config.web_dashboard
+            and not self.serena_config.web_dashboard_open_on_launch
+            and not self.serena_config.gui_log_window_enabled
+        ):
+            tool_inclusion_definitions.append(ToolInclusionDefinition(included_optional_tools=[OpenDashboardTool.get_name_from_cls()]))
+        tool_inclusion_definitions.append(self.serena_config)
+        tool_inclusion_definitions.append(self._context)
         if self._context.single_project:
             tool_inclusion_definitions.extend(self._single_project_context_tool_inclusion_definitions(project))
         if self.serena_config.language_backend == LanguageBackend.JETBRAINS:
@@ -292,16 +307,10 @@ class SerenaAgent:
             if dashboard_host == "0.0.0.0":
                 dashboard_host = "localhost"
             dashboard_url = f"http://{dashboard_host}:{port}/dashboard/index.html"
+            self._dashboard_url = dashboard_url
             log.info("Serena web dashboard started at %s", dashboard_url)
             if self.serena_config.web_dashboard_open_on_launch:
-                if not system_has_usable_display():
-                    log.warning("Not opening the Serena web dashboard automatically because no usable display was detected.")
-                else:
-                    # open the dashboard URL in the default web browser (using a separate process to control
-                    # output redirection)
-                    process = multiprocessing.Process(target=self._open_dashboard, args=(dashboard_url,))
-                    process.start()
-                    process.join(timeout=1)
+                self.open_dashboard()
             # inform the GUI window (if any)
             if self._gui_log_viewer is not None:
                 self._gui_log_viewer.set_dashboard_url(dashboard_url)
@@ -393,17 +402,34 @@ class SerenaAgent:
         log.debug(f"Recording tool usage for tool '{tool_name}'")
         self._tool_usage_stats.record_tool_usage(tool_name, input_str, output_str)
 
-    @staticmethod
-    def _open_dashboard(url: str) -> None:
-        # Redirect stdout and stderr file descriptors to /dev/null,
-        # making sure that nothing can be written to stdout/stderr, even by subprocesses
-        null_fd = os.open(os.devnull, os.O_WRONLY)
-        os.dup2(null_fd, sys.stdout.fileno())
-        os.dup2(null_fd, sys.stderr.fileno())
-        os.close(null_fd)
+    def get_dashboard_url(self) -> str | None:
+        """
+        :return: the URL of the web dashboard, or None if the dashboard is not running
+        """
+        return self._dashboard_url
 
-        # open the dashboard URL in the default web browser
-        webbrowser.open(url)
+    def open_dashboard(self) -> bool:
+        """
+        Opens the Serena web dashboard in the default web browser.
+
+        :return: a message indicating success or failure
+        """
+        if self._dashboard_url is None:
+            raise Exception("Dashboard is not running.")
+
+        if not system_has_usable_display():
+            log.warning("Not opening the Serena web dashboard because no usable display was detected.")
+            return False
+
+        # Use a subprocess to avoid any output from webbrowser.open being written to stdout
+        subprocess.Popen(
+            [sys.executable, "-c", f"import webbrowser; webbrowser.open({self._dashboard_url!r})"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,  # Detach from parent process
+        )
+        return True
 
     def get_project_root(self) -> str:
         """
