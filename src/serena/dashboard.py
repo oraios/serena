@@ -354,12 +354,15 @@ class SerenaDashboardAPI:
         context_info = {
             "name": context.name,
             "description": context.description,
-            "path": SerenaAgentContext.get_path(context.name),
+            "path": SerenaAgentContext.get_path(context.name, instance=context),
         }
 
         # Get active modes
         modes = self._agent.get_active_modes()
-        modes_info = [{"name": mode.name, "description": mode.description, "path": SerenaAgentMode.get_path(mode.name)} for mode in modes]
+        modes_info = [
+            {"name": mode.name, "description": mode.description, "path": SerenaAgentMode.get_path(mode.name, instance=mode)}
+            for mode in modes
+        ]
         active_mode_names = [mode.name for mode in modes]
 
         # Get active tools
@@ -392,11 +395,16 @@ class SerenaDashboardAPI:
         all_mode_names = SerenaAgentMode.list_registered_mode_names()
         available_modes: list[dict[str, str | bool]] = []
         for mode_name in all_mode_names:
+            try:
+                mode_path = SerenaAgentMode.get_path(mode_name)
+            except FileNotFoundError:
+                # Skip modes that can't be found (shouldn't happen for registered modes)
+                continue
             available_modes.append(
                 {
                     "name": mode_name,
                     "is_active": mode_name in active_mode_names,
-                    "path": SerenaAgentMode.get_path(mode_name),
+                    "path": mode_path,
                 }
             )
 
@@ -404,11 +412,16 @@ class SerenaDashboardAPI:
         all_context_names = SerenaAgentContext.list_registered_context_names()
         available_contexts: list[dict[str, str | bool]] = []
         for context_name in all_context_names:
+            try:
+                context_path = SerenaAgentContext.get_path(context_name)
+            except FileNotFoundError:
+                # Skip contexts that can't be found (shouldn't happen for registered contexts)
+                continue
             available_contexts.append(
                 {
                     "name": context_name,
                     "is_active": context_name == context.name,
-                    "path": SerenaAgentContext.get_path(context_name),
+                    "path": context_path,
                 }
             )
 
