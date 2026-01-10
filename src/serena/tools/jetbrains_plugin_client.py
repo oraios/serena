@@ -4,6 +4,7 @@ Client for the Serena JetBrains Plugin
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any, Optional, Self, TypeVar
 
@@ -74,9 +75,30 @@ class JetBrainsPluginClient(ToStringMixin):
 
         raise ServerNotFoundError("Found no Serena service in a JetBrains IDE instance for the project at " + str(resolved_path))
 
+    @staticmethod
+    def _normalize_wsl_path(path_str: str) -> Path:
+        """
+        Normalize WSL UNC paths to Linux paths for comparison.
+
+        When JetBrains IDE runs on Windows with a project opened from WSL,
+        it returns paths like `//wsl.localhost/Ubuntu-24.04/home/user/project`
+        or `//wsl$/Ubuntu/home/user/project`. This method converts such paths
+        to standard Linux format `/home/user/project` for proper matching.
+
+        :param path_str: Path string that may be a WSL UNC path
+        :return: Normalized Path object
+        """
+        path_str = str(path_str)
+        # Match //wsl.localhost/<distro>/... or //wsl$/<distro>/...
+        match = re.match(r"^//wsl(?:\.localhost|\$)/[^/]+(.*)$", path_str, re.IGNORECASE)
+        if match:
+            return Path(match.group(1))
+        return Path(path_str)
+
     def matches(self, resolved_path: Path) -> bool:
         try:
-            return Path(self.project_root()).resolve() == resolved_path
+            plugin_root = self._normalize_wsl_path(self.project_root())
+            return plugin_root.resolve() == resolved_path
         except ConnectionError:
             return False
 
