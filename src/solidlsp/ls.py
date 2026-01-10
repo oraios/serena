@@ -1699,6 +1699,29 @@ class SolidLanguageServer(ABC):
 
         return defining_symbol
 
+    def _cache_context_fingerprint(self) -> Hashable | None:
+        """
+        Return a fingerprint of any language-server-specific context that affects cached results.
+
+        Subclasses may override to provide a deterministic value that changes when cached results
+        would be invalidated (e.g., build flags, environment variables).
+
+        The value must be hashable and safe for inclusion in cache version tuples.
+        Returns None if no context-specific fingerprint is needed.
+        """
+        return None
+
+    def _document_symbols_cache_version(self) -> Hashable:
+        """
+        Return the version for the document symbols cache.
+
+        Incorporates cache context fingerprint if provided by the language server.
+        """
+        fingerprint = self._cache_context_fingerprint()
+        if fingerprint is not None:
+            return (self.DOCUMENT_SYMBOL_CACHE_VERSION, fingerprint)
+        return self.DOCUMENT_SYMBOL_CACHE_VERSION
+
     def _save_raw_document_symbols_cache(self) -> None:
         cache_file = self.cache_dir / self.RAW_DOCUMENT_SYMBOL_CACHE_FILENAME
 
@@ -1717,8 +1740,12 @@ class SolidLanguageServer(ABC):
                 e,
             )
 
-    def _raw_document_symbols_cache_version(self) -> tuple[int, Hashable]:
-        return (self.RAW_DOCUMENT_SYMBOLS_CACHE_VERSION, self._ls_specific_raw_document_symbols_cache_version)
+    def _raw_document_symbols_cache_version(self) -> tuple[Hashable, ...]:
+        base_version: tuple[Hashable, ...] = (self.RAW_DOCUMENT_SYMBOLS_CACHE_VERSION, self._ls_specific_raw_document_symbols_cache_version)
+        fingerprint = self._cache_context_fingerprint()
+        if fingerprint is not None:
+            return (*base_version, fingerprint)
+        return base_version
 
     def _load_raw_document_symbols_cache(self) -> None:
         cache_file = self.cache_dir / self.RAW_DOCUMENT_SYMBOL_CACHE_FILENAME
@@ -1774,7 +1801,7 @@ class SolidLanguageServer(ABC):
 
         log.info("Saving updated document symbols cache to %s", cache_file)
         try:
-            save_cache(str(cache_file), self.DOCUMENT_SYMBOL_CACHE_VERSION, self._document_symbols_cache)
+            save_cache(str(cache_file), self._document_symbols_cache_version(), self._document_symbols_cache)
             self._document_symbols_cache_is_modified = False
         except Exception as e:
             log.error(
@@ -1788,7 +1815,7 @@ class SolidLanguageServer(ABC):
         if cache_file.exists():
             log.info("Loading document symbols cache from %s", cache_file)
             try:
-                saved_cache = load_cache(str(cache_file), self.DOCUMENT_SYMBOL_CACHE_VERSION)
+                saved_cache = load_cache(str(cache_file), self._document_symbols_cache_version())
                 if saved_cache is not None:
                     self._document_symbols_cache = saved_cache
                     log.info(f"Loaded {len(self._document_symbols_cache)} entries from document symbols cache.")
