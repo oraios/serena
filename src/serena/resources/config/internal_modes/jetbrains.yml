@@ -13,3 +13,4 @@ included_optional_tools:
   - jet_brains_find_symbol
   - jet_brains_find_referencing_symbols
   - jet_brains_get_symbols_overview
+  - jet_brains_type_hierarchy

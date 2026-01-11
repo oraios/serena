@@ -10,10 +10,12 @@ import shutil
 import threading
 import uuid
 from pathlib import PurePath
+from time import sleep
 from typing import cast
 
 from overrides import override
 
+from solidlsp import ls_types
 from solidlsp.ls import LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_types import UnifiedSymbolInformation
@@ -144,9 +146,9 @@ class EclipseJDTLS(SolidLanguageServer):
             f"{data_dir}",
         ]
 
-        self.service_ready_event = threading.Event()
-        self.intellicode_enable_command_available = threading.Event()
-        self.initialize_searcher_command_available = threading.Event()
+        self._service_ready_event = threading.Event()
+        self._project_ready_event = threading.Event()
+        self._intellicode_enable_command_available = threading.Event()
 
         super().__init__(
             config, repository_root_path, ProcessLaunchInfo(cmd, proc_env, proc_cwd), "java", solidlsp_settings=solidlsp_settings
@@ -612,6 +614,7 @@ class EclipseJDTLS(SolidLanguageServer):
                         "maven": {"downloadSources": True, "updateSnapshots": False},
                         "eclipse": {"downloadSources": True},
                         "signatureHelp": {"enabled": True, "description": {"enabled": True}},
+                        "hover": {"javadoc": {"enabled": True}},
                         "implementationsCodeLens": {"enabled": True},
                         "format": {
                             "enabled": True,
@@ -721,15 +724,15 @@ class EclipseJDTLS(SolidLanguageServer):
                     self.completions_available.set()
                 if registration["method"] == "workspace/executeCommand":
                     if "java.intellicode.enable" in registration["registerOptions"]["commands"]:
-                        self.intellicode_enable_command_available.set()
+                        self._intellicode_enable_command_available.set()
             return
 
         def lang_status_handler(params: dict) -> None:
-            # TODO: Should we wait for
-            # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
-            # Before proceeding?
             if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
-                self.service_ready_event.set()
+                self._service_ready_event.set()
+            if params["type"] == "ProjectStatus":
+                if params["message"] == "OK":
+                    self._project_ready_event.set()
 
         def execute_client_command_handler(params: dict) -> list:
             assert params["command"] == "_java.reloadBundles.command"
@@ -764,7 +767,7 @@ class EclipseJDTLS(SolidLanguageServer):
 
         self.server.notify.workspace_did_change_configuration({"settings": initialize_params["initializationOptions"]["settings"]})  # type: ignore
 
-        self.intellicode_enable_command_available.wait()
+        self._intellicode_enable_command_available.wait()
 
         java_intellisense_members_path = self.runtime_dependency_paths.intellisense_members_path
         assert os.path.exists(java_intellisense_members_path)
@@ -776,8 +779,52 @@ class EclipseJDTLS(SolidLanguageServer):
         )
         assert intellicode_enable_result
 
-        # TODO: Add comments about why we wait here, and how this can be optimized
-        self.service_ready_event.wait()
+        self._service_ready_event.wait()
+        self._project_ready_event.wait()
+
+    @override
+    def _request_hover(self, uri: str, line: int, column: int) -> ls_types.Hover | None:
+        # Eclipse JDTLS lazily loads javadocs on first hover request, then caches them.
+        # This means the first request often returns incomplete info (just the signature),
+        # while subsequent requests return the full javadoc.
+        #
+        # The response format also differs based on javadoc presence:
+        #   - contents: list[...] when javadoc IS present (preferred, richer format)
+        #   - contents: {value: info} when javadoc is NOT present
+        #
+        # There's no LSP signal for "javadoc fully loaded" and no way to request
+        # hover with "wait for complete info". The retry approach is the only viable
+        # workaround - we keep requesting until we get the richer list format or
+        # the content stops growing.
+        #
+        # The file is kept open by the caller (request_hover), so retries are cheap
+        # and don't cause repeated didOpen/didClose cycles.
+
+        def content_score(result: ls_types.Hover | None) -> tuple[int, int]:
+            """Return (format_priority, length) for comparison. Higher is better."""
+            if result is None:
+                return (0, 0)
+            contents = result["contents"]
+            if isinstance(contents, list):
+                return (2, len(contents))  # List format (has javadoc) is best
+            elif isinstance(contents, dict):
+                return (1, len(contents.get("value", "")))
+            else:
+                return (1, len(contents))
+
+        max_retries = 5
+        best_result = super()._request_hover(uri, line, column)
+        best_score = content_score(best_result)
+
+        for _ in range(max_retries):
+            sleep(0.05)
+            new_result = super()._request_hover(uri, line, column)
+            new_score = content_score(new_result)
+            if new_score > best_score:
+                best_result = new_result
+                best_score = new_score
+
+        return best_result
 
     def _request_document_symbols(
         self, relative_file_path: str, file_data: LSPFileBuffer | None

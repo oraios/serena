@@ -717,3 +717,9 @@ class SerenaAgent:
     def get_tool_by_name(self, tool_name: str) -> Tool:
         tool_class = ToolRegistry().get_tool_class_by_name(tool_name)
         return self.get_tool(tool_class)
+
+    def get_active_lsp_languages(self) -> list[Language]:
+        ls_manager = self.get_language_server_manager()
+        if ls_manager is None:
+            return []
+        return ls_manager.get_active_languages()

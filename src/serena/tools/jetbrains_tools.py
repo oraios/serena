@@ -1,8 +1,12 @@
+import logging
 from collections import defaultdict
-from typing import Any
+from typing import Any, Literal
 
+import serena.tools.jetbrains_types as jb
 from serena.tools import Tool, ToolMarkerOptional, ToolMarkerSymbolicRead
 from serena.tools.jetbrains_plugin_client import JetBrainsPluginClient
+
+log = logging.getLogger(__name__)
 
 
 class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
@@ -16,6 +20,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         depth: int = 0,
         relative_path: str | None = None,
         include_body: bool = False,
+        include_info: bool = False,
         search_deps: bool = False,
         max_answer_chars: int = -1,
     ) -> str:
@@ -46,6 +51,9 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
             If you have some knowledge about the codebase, you should use this parameter, as it will significantly
             speed up the search as well as reduce the number of results.
         :param include_body: If True, include the symbol's source code. Use judiciously.
+        :param include_info: whether to include additional info (hover-like, typically including docstring and signature),
+            about the symbol (ignored if include_body is True).
+            Default False; info is never included for child symbols and is not included when body is requested.
         :param search_deps: If True, also search in project dependencies (e.g., libraries).
         :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
             -1 means the default value from the config will be used.
@@ -54,11 +62,15 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         if relative_path == ".":
             relative_path = None
         with JetBrainsPluginClient.from_project(self.project) as client:
+            include_documentation = include_info and not include_body
+            include_quick_info = not include_documentation and not include_info
             response_dict = client.find_symbol(
                 name_path=name_path_pattern,
                 relative_path=relative_path,
                 depth=depth,
                 include_body=include_body,
+                include_documentation=include_documentation,
+                include_quick_info=include_quick_info,
                 search_deps=search_deps,
             )
             result = self._to_json(response_dict)
@@ -70,6 +82,7 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
     Finds symbols that reference the given symbol using the JetBrains backend
     """
 
+    # TODO: (maybe) - add content snippets showing the references like in LS based version?
     def apply(
         self,
         name_path: str,
@@ -91,6 +104,7 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
             response_dict = client.find_references(
                 name_path=name_path,
                 relative_path=relative_path,
+                include_quick_info=False,
             )
             result = self._to_json(response_dict)
         return self._limit_length(result, max_answer_chars)
@@ -102,7 +116,7 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
     """
 
     @staticmethod
-    def _transform_symbols_to_compact_format(symbols: list[dict[str, Any]]) -> dict[str, list]:
+    def _transform_symbols_to_compact_format(symbols: list[jb.SymbolDTO]) -> dict[str, list]:
         """
         Transform symbol overview from verbose format to compact grouped format.
 
@@ -128,7 +142,7 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
                 result[kind].append({name: children_dict})
             else:
                 # Symbol has no children: just add the name
-                result[kind].append(name)
+                result[kind].append(name)  # type: ignore
 
         return result
 
@@ -152,8 +166,106 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
         :return: a JSON object containing the symbols grouped by kind in a compact format.
         """
         with JetBrainsPluginClient.from_project(self.project) as client:
-            response_dict = client.get_symbols_overview(relative_path=relative_path, depth=depth)
-        symbols = response_dict["symbols"]
-        compact_symbols = self._transform_symbols_to_compact_format(symbols)
-        result = self._to_json(compact_symbols)
+            symbol_overview = client.get_symbols_overview(relative_path=relative_path, depth=depth, include_file_documentation=False)
+        symbols = symbol_overview["symbols"]
+        result: dict[str, Any] = {"symbols": self._transform_symbols_to_compact_format(symbols)}
+        documentation = symbol_overview.pop("documentation", None)
+        if documentation:
+            result["docstring"] = documentation
+        json_result = self._to_json(result)
+        return self._limit_length(json_result, max_answer_chars)
+
+
+class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+    """
+    Retrieves the type hierarchy (supertypes and/or subtypes) of a symbol using the JetBrains backend
+    """
+
+    @staticmethod
+    def _transform_hierarchy_nodes(nodes: list[jb.TypeHierarchyNodeDTO] | None) -> dict[str, list]:
+        """
+        Transform a list of TypeHierarchyNode into a file-grouped compact format.
+
+        Returns a dict where keys are relative_paths and values are lists of either:
+        - "SymbolNamePath" (leaf node)
+        - {"SymbolNamePath": {nested_file_grouped_children}} (node with children)
+        """
+        if not nodes:
+            return {}
+
+        result: dict[str, list] = {}
+
+        for node in nodes:
+            symbol = node["symbol"]
+            name_path = symbol["name_path"]
+            rel_path = symbol["relative_path"]
+            children = node.get("children", [])
+
+            if rel_path not in result:
+                result[rel_path] = []
+
+            if children:
+                # Node with children - recurse
+                nested = JetBrainsTypeHierarchyTool._transform_hierarchy_nodes(children)
+                result[rel_path].append({name_path: nested})
+            else:
+                # Leaf node
+                result[rel_path].append(name_path)
+
+        return result
+
+    def apply(
+        self,
+        name_path: str,
+        relative_path: str,
+        hierarchy_type: Literal["super", "sub", "both"] = "both",
+        depth: int | None = 1,
+        max_answer_chars: int = -1,
+    ) -> str:
+        """
+        Gets the type hierarchy of a symbol (supertypes, subtypes, or both).
+
+        :param name_path: name path of the symbol for which to get the type hierarchy.
+        :param relative_path: the relative path to the file containing the symbol.
+        :param hierarchy_type: which hierarchy to retrieve: "super" for parent classes/interfaces,
+            "sub" for subclasses/implementations, or "both" for both directions. Default is "sub".
+        :param depth: depth limit for hierarchy traversal (None or 0 for unlimited). Default is 1.
+        :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
+            -1 means the default value from the config will be used.
+        :return: Compact JSON with file-grouped hierarchy. Error string if not applicable.
+        """
+        with JetBrainsPluginClient.from_project(self.project) as client:
+            subtypes = None
+            supertypes = None
+            levels_not_included = {}
+
+            if hierarchy_type in ("super", "both"):
+                supertypes_response = client.get_supertypes(
+                    name_path=name_path,
+                    relative_path=relative_path,
+                    depth=depth,
+                )
+                if "num_levels_not_included" in supertypes_response:
+                    levels_not_included["supertypes"] = supertypes_response["num_levels_not_included"]
+                supertypes = self._transform_hierarchy_nodes(supertypes_response.get("hierarchy"))
+
+            if hierarchy_type in ("sub", "both"):
+                subtypes_response = client.get_subtypes(
+                    name_path=name_path,
+                    relative_path=relative_path,
+                    depth=depth,
+                )
+                if "num_levels_not_included" in subtypes_response:
+                    levels_not_included["subtypes"] = subtypes_response["num_levels_not_included"]
+                subtypes = self._transform_hierarchy_nodes(subtypes_response.get("hierarchy"))
+
+            result_dict: dict[str, dict | list] = {}
+            if supertypes is not None:
+                result_dict["supertypes"] = supertypes
+            if subtypes is not None:
+                result_dict["subtypes"] = subtypes
+            if levels_not_included:
+                result_dict["levels_not_included"] = levels_not_included
+
+            result = self._to_json(result_dict)
         return self._limit_length(result, max_answer_chars)

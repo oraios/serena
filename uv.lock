@@ -1933,6 +1933,7 @@ version = "0.1.4"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
+    { name = "beautifulsoup4" },
     { name = "docstring-parser" },
     { name = "dotenv" },
     { name = "flask" },
@@ -1988,6 +1989,7 @@ google = [
 requires-dist = [
     { name = "agno", marker = "extra == 'agno'", specifier = ">=2.2.1" },
     { name = "anthropic", specifier = ">=0.54.0" },
+    { name = "beautifulsoup4", specifier = ">=4.14.2" },
     { name = "black", extras = ["jupyter"], marker = "extra == 'dev'", specifier = ">=23.7.0" },
     { name = "docstring-parser", specifier = ">=0.16" },
     { name = "dotenv", specifier = ">=0.9.9" },
