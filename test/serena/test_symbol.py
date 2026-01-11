@@ -1,6 +1,8 @@
 import pytest
 
-from serena.symbol import NamePathMatcher
+from serena.symbol import LanguageServerSymbolRetriever, NamePathMatcher
+from solidlsp import SolidLanguageServer
+from solidlsp.ls_config import Language
 
 
 class TestSymbolNameMatching:
@@ -176,3 +178,13 @@ class TestSymbolNameMatching:
         result = matcher.matches_components(symbol_name_path_parts, symbol_overload_idx)
         error_msg = self._create_assertion_error_message(name_path_pattern, symbol_name_path_parts, False, expected, result)
         assert result == expected, error_msg
+
+
+@pytest.mark.python
+class TestLanguageServerSymbolRetriever:
+    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    def test_request_info(self, language_server: SolidLanguageServer):
+        symbol_retriever = LanguageServerSymbolRetriever(language_server)
+        create_user_method_symbol = symbol_retriever.find("UserService/create_user", within_relative_path="test_repo/services.py")[0]
+        create_user_method_symbol_info = symbol_retriever.request_info_for_symbol(create_user_method_symbol)
+        assert "Create a new user and store it" in create_user_method_symbol_info

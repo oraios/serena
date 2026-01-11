@@ -182,6 +182,14 @@ class LanguageServerManager:
         ls = self._language_servers.pop(language)
         self._stop_language_server(ls, save_cache=save_cache)
 
+    def get_active_languages(self) -> list[Language]:
+        """
+        Returns the list of languages for which language servers are currently managed.
+
+        :return: list of languages
+        """
+        return list(self._language_servers.keys())
+
     @staticmethod
     def _stop_language_server(ls: SolidLanguageServer, save_cache: bool = False, timeout: float = 2.0) -> None:
         if ls.is_running():

@@ -1322,11 +1322,57 @@ class SolidLanguageServer(ABC):
         :param relative_file_path: The relative path of the file that has the hover information
         :param line: The line number of the symbol
         :param column: The column number of the symbol
+        """
+        with self.open_file(relative_file_path):
+            uri = pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()
+            return self._request_hover(uri, line, column)
+
+    def _request_hover(self, uri: str, line: int, column: int) -> ls_types.Hover | None:
+        """
+        Internal method that performs the actual hover request.
+        The file must already be open when calling this method.
+        Subclasses can override this to customize hover behavior (e.g., retries).
+
+        :param uri: The URI of the file
+        :param line: The line number of the symbol
+        :param column: The column number of the symbol
+        """
+        response = self.server.send.hover(
+            {
+                "textDocument": {"uri": uri},
+                "position": {
+                    "line": line,
+                    "character": column,
+                },
+            }
+        )
+
+        if response is None:
+            return None
+
+        assert isinstance(response, dict)
+        contents = response.get("contents")
+        if not contents:
+            return None
+        if isinstance(contents, dict) and not contents.get("value"):
+            return None
+        return ls_types.Hover(**response)  # type: ignore
+
+    def request_signature_help(self, relative_file_path: str, line: int, column: int) -> ls_types.SignatureHelp | None:
+        """
+        Raise a [textDocument/signatureHelp](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_signatureHelp)
+        request to the Language Server to find the signature help at the given line and column in the given file.
+        Note: contrary to `hover`, this only returns something on the position of a *call* and not on a symbol definition.
+        This means for Serena's purposes, this method is not particularly useful. The result is also fairly verbose (but well structured).
+
+        :param relative_file_path: The relative path of the file that has the signature help
+        :param line: The line number of the symbol
+        :param column: The column number of the symbol
 
         :return None
         """
         with self.open_file(relative_file_path):
-            response = self.server.send.hover(
+            response = self.server.send.signature_help(
                 {
                     "textDocument": {"uri": pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()},
                     "position": {
@@ -1341,7 +1387,7 @@ class SolidLanguageServer(ABC):
 
         assert isinstance(response, dict)
 
-        return ls_types.Hover(**response)  # type: ignore
+        return ls_types.SignatureHelp(**response)  # type: ignore
 
     def retrieve_symbol_body(
         self,

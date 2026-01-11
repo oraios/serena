@@ -49,6 +49,100 @@ html {
     --stats-header: #3a3a3a;
 }
 
+.news-section {
+    background: var(--bg-secondary);
+    padding: 20px;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    margin-bottom: 25px;
+}
+
+.news-section h2 {
+    margin: 0 0 20px 0;
+    font-size: 18px;
+    color: var(--text-primary);
+}
+
+.news-item {
+    padding: 20px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    margin-bottom: 15px;
+    background: var(--bg-primary);
+    position: relative;
+}
+
+.news-item:last-child {
+    margin-bottom: 0;
+}
+
+.news-item h3 {
+    margin: 0 0 10px 0;
+    font-size: 16px;
+    color: var(--text-primary);
+}
+
+.news-item .date {
+    color: var(--text-muted);
+    font-size: 13px;
+    margin: 0 0 15px 0;
+}
+
+.news-item p {
+    margin: 10px 0;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
+.news-item ul {
+    margin: 10px 0;
+    padding-left: 25px;
+    color: var(--text-secondary);
+}
+
+.news-item ul li {
+    margin: 8px 0;
+    line-height: 1.5;
+}
+
+.news-item strong {
+    color: var(--text-primary);
+}
+
+.news-mark-read {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+}
+
+.news-mark-read-btn {
+    background-color: var(--btn-primary);
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background-color 0.3s ease;
+    white-space: nowrap;
+}
+
+.news-mark-read-btn:hover {
+    background-color: var(--btn-hover);
+}
+
+.news-mark-read-btn:disabled {
+    background-color: var(--btn-disabled);
+    cursor: not-allowed;
+}
+
+.news-no-items {
+    color: var(--text-muted);
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+}
+
 body {
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
     margin: 0;
