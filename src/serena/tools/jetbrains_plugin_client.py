@@ -136,7 +136,7 @@ class JetBrainsPluginClient(ToStringMixin):
         if self._project_root is None:
             return False
         try:
-            plugin_root = self._normalize_wsl_path(self.project_root())
+            plugin_root = self._normalize_wsl_path(self._project_root)
             return plugin_root.resolve() == resolved_path
         except ConnectionError:
             return False
