@@ -367,6 +367,59 @@ jobs:
             mv regal.exe "$HOME/bin/"
             echo "$HOME/bin" >> $GITHUB_PATH
           fi
+      - name: Install Free Pascal Compiler
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y fpc fpc-source
+            # Set environment variables for pasls
+            echo "PP=/usr/bin/fpc" >> $GITHUB_ENV
+            # Find FPC source directory (version may vary)
+            FPCDIR=$(ls -d /usr/share/fpcsrc/*/ 2>/dev/null | head -1 || echo "/usr/share/fpcsrc")
+            echo "FPCDIR=$FPCDIR" >> $GITHUB_ENV
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            brew install fpc
+            # Download FPC source from SourceForge (fpc-src-laz cask is incompatible with ARM64)
+            FPC_VERSION="3.2.2"
+            curl -L -o fpc-source.tar.gz "https://sourceforge.net/projects/freepascal/files/Source/${FPC_VERSION}/fpc-${FPC_VERSION}.source.tar.gz/download"
+            mkdir -p "$HOME/fpcsrc"
+            tar -xzf fpc-source.tar.gz -C "$HOME/fpcsrc"
+            rm fpc-source.tar.gz
+            # Set environment variables for pasls
+            echo "PP=$(which fpc)" >> $GITHUB_ENV
+            echo "FPCDIR=$HOME/fpcsrc/fpc-${FPC_VERSION}" >> $GITHUB_ENV
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            FPC_VERSION="3.2.2"
+            # Download freepascal-ootb (includes FPC compiler)
+            curl -L -o fpc-ootb.zip https://github.com/fredvs/freepascal-ootb/releases/download/${FPC_VERSION}/fpc-ootb-322-x86_64-win64.zip
+            mkdir -p "$HOME/fpc"
+            unzip -q fpc-ootb.zip -d "$HOME/fpc"
+            rm fpc-ootb.zip
+            # Download FPC source from SourceForge (fpc-ootb only has compiled units, not source)
+            curl -L -o fpc-source.zip "https://sourceforge.net/projects/freepascal/files/Source/${FPC_VERSION}/fpc-${FPC_VERSION}.source.zip/download"
+            mkdir -p "$HOME/fpcsrc"
+            unzip -q fpc-source.zip -d "$HOME/fpcsrc"
+            rm fpc-source.zip
+            # Find fpc executable (fpc-ootb uses fpc-ootb.exe as the compiler)
+            echo "=== FPC directory structure ==="
+            find "$HOME/fpc" -name "*.exe" -type f 2>/dev/null | head -10
+            FPC_EXE=$(find "$HOME/fpc" -name "fpc-ootb-64.exe" -type f 2>/dev/null | head -1)
+            echo "Found FPC executable: $FPC_EXE"
+            echo "Found FPC source dir: $HOME/fpcsrc/fpc-${FPC_VERSION}"
+            # Set environment variables for pasls
+            echo "PP=$FPC_EXE" >> $GITHUB_ENV
+            echo "FPCDIR=$HOME/fpcsrc/fpc-${FPC_VERSION}" >> $GITHUB_ENV
+            # Add FPC bin directory to PATH
+            FPC_BIN_DIR=$(dirname "$FPC_EXE")
+            echo "$FPC_BIN_DIR" >> $GITHUB_PATH
+          fi
+      - name: Verify FPC installation
+        shell: bash
+        run: |
+          echo "PP=$PP"
+          echo "FPCDIR=$FPCDIR"
+          fpc -v || echo "FPC not in PATH, using PP directly"
       - name: Cache language servers
         id: cache-language-servers
         uses: actions/cache@v3

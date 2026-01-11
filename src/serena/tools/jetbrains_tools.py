@@ -171,7 +171,9 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
         :return: a JSON object containing the symbols grouped by kind in a compact format.
         """
         with JetBrainsPluginClient.from_project(self.project) as client:
-            symbol_overview = client.get_symbols_overview(relative_path=relative_path, depth=depth, include_file_documentation=include_file_documentation)
+            symbol_overview = client.get_symbols_overview(
+                relative_path=relative_path, depth=depth, include_file_documentation=include_file_documentation
+            )
         symbols = symbol_overview["symbols"]
         result: dict[str, Any] = {"symbols": self._transform_symbols_to_compact_format(symbols)}
         documentation = symbol_overview.pop("documentation", None)

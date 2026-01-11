@@ -217,6 +217,11 @@ class EclipseJDTLS(SolidLanguageServer):
                     "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-arm64-1.42.0-561.vsix",
                     "archiveType": "zip",
                     "relative_extraction_path": "vscode-java",
+                    "jre_home_path": "extension/jre/21.0.7-linux-aarch64",
+                    "jre_path": "extension/jre/21.0.7-linux-aarch64/bin/java",
+                    "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
+                    "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                    "jdtls_readonly_config_path": "extension/server/config_linux_arm",
                 },
                 "linux-x64": {
                     "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-x64-1.42.0-561.vsix",

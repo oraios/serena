@@ -64,6 +64,11 @@ class Language(str, Enum):
     GROOVY = "groovy"
     VUE = "vue"
     POWERSHELL = "powershell"
+    PASCAL = "pascal"
+    """Pascal Language Server (pasls) for Free Pascal and Lazarus projects.
+    Automatically downloads pasls binary. Requires FPC for full functionality.
+    Set PP and FPCDIR environment variables for source navigation.
+    """
     MATLAB = "matlab"
     """MATLAB language server using the official MathWorks MATLAB Language Server.
     Requires MATLAB R2021b or later and Node.js.
@@ -228,6 +233,8 @@ class Language(str, Enum):
                 return FilenameMatcher(*path_patterns)
             case self.POWERSHELL:
                 return FilenameMatcher("*.ps1", "*.psm1", "*.psd1")
+            case self.PASCAL:
+                return FilenameMatcher("*.pas", "*.pp", "*.lpr", "*.dpr", "*.dpk", "*.inc")
             case self.GROOVY:
                 return FilenameMatcher("*.groovy", "*.gvy")
             case self.MATLAB:
@@ -393,6 +400,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.powershell_language_server import PowerShellLanguageServer
 
                 return PowerShellLanguageServer
+            case self.PASCAL:
+                from solidlsp.language_servers.pascal_server import PascalLanguageServer
+
+                return PascalLanguageServer
             case self.GROOVY:
                 from solidlsp.language_servers.groovy_language_server import GroovyLanguageServer
 
