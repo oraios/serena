@@ -14,6 +14,7 @@ Status of the `main` branch. Changes prior to the next official version change w
           solving several issues related to retrieval problems in Java projects
     * Major extensions to the dashboard, which now serves as a central web interface for Serena
         * View current configuration
+        * View news which can be marked as read
         * View the executions, with the possibility to cancel running/scheduled executions 
         * View tool usage statistics
         * View and create memories and edit the serena configuration file
@@ -29,6 +30,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     * New mode `oaicompat-agent` and extensions enhancing OpenAI tool compatibility, permitting Serena to work with llama.cpp
 
 * Tools:
+  * *New tool*: `jet_brains_type_hierarchy`
+  * Symbol information (hover, docstring, quick-info) is now provided as part of `find_symbol` and related tool responses.
   * Added `RenameSymbolTool` for renaming symbols across the codebase (if LS supports this operation).
   * Replaced `ReplaceRegexTool` with `ReplaceContentTool`, which supports both plain text and regex-based replacements
     (and which requires no escaping in the replacement text, making it more robust) 
@@ -57,6 +60,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   * **Ruby dual language server support**: Added ruby-lsp as the modern primary Ruby language server. Solargraph remains available as an experimental legacy option. ruby-lsp supports both .rb and .erb files, while Solargraph supports .rb files only.
   * **Add support for PowerShell** via PowerShell Editor Services (PSES). Requires `pwsh` (PowerShell Core) to be installed and available in PATH. Supports symbol navigation, go-to-definition, and within-file references for .ps1 files.
   * **Add support for MATLAB** via the official MathWorks MATLAB Language Server. Requires MATLAB R2021b or later and Node.js. Set `MATLAB_PATH` environment variable or configure `matlab_path` in `ls_specific_settings`. Supports .m, .mlx, and .mlapp files with code completion, diagnostics, go-to-definition, find references, document symbols, formatting, and rename.
+  * **Add support for Pascal** via the official Pascal Language Server.
 
 
 # 0.1.4
