@@ -321,8 +321,8 @@ class SerenaDashboardAPI:
         @self._app.route("/news_snippet_ids", methods=["GET"])
         def get_news_snippet_ids() -> dict[str, str | list[int]]:
             def _get_unread_news_ids() -> list[int]:
-                all_news_files = (Path(REPO_ROOT) / "src" / "serena" / "resources" / "dashboard" / "news").glob("*.html")
-                all_news_ids = sorted([int(f.stem) for f in all_news_files])
+                all_news_files = (Path(SERENA_DASHBOARD_DIR) / "news").glob("*.html")
+                all_news_ids = [int(f.stem) for f in all_news_files]
                 news_snippet_id_file = SerenaPaths().news_snippet_id_file
                 if not os.path.exists(news_snippet_id_file):
                     return all_news_ids
