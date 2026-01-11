@@ -87,6 +87,7 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
         self,
         name_path: str,
         relative_path: str,
+        include_info: bool = False,
         max_answer_chars: int = -1,
     ) -> str:
         """
@@ -96,6 +97,8 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
         :param name_path: name path of the symbol for which to find references; matching logic as described in find symbol tool.
         :param relative_path: the relative path to the file containing the symbol for which to find references.
             Note that here you can't pass a directory but must pass a file.
+        :param include_info: whether to include info (hover-like, typically including docstring and signature)
+            about the referencing symbols. Default False.
         :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned. -1 means the
             default value from the config will be used.
         :return: a list of JSON objects with the symbols referencing the requested symbol
@@ -104,7 +107,7 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
             response_dict = client.find_references(
                 name_path=name_path,
                 relative_path=relative_path,
-                include_quick_info=False,
+                include_quick_info=include_info,
             )
             result = self._to_json(response_dict)
         return self._limit_length(result, max_answer_chars)
@@ -151,6 +154,7 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
         relative_path: str,
         depth: int = 0,
         max_answer_chars: int = -1,
+        include_file_documentation: bool = False,
     ) -> str:
         """
         Gets an overview of the top-level symbols in the given file.
@@ -163,10 +167,11 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
         :param depth: depth up to which descendants shall be retrieved (e.g., use 1 to also retrieve immediate children).
         :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
             -1 means the default value from the config will be used.
+        :param include_file_documentation: whether to include the file's docstring. Default False.
         :return: a JSON object containing the symbols grouped by kind in a compact format.
         """
         with JetBrainsPluginClient.from_project(self.project) as client:
-            symbol_overview = client.get_symbols_overview(relative_path=relative_path, depth=depth, include_file_documentation=False)
+            symbol_overview = client.get_symbols_overview(relative_path=relative_path, depth=depth, include_file_documentation=include_file_documentation)
         symbols = symbol_overview["symbols"]
         result: dict[str, Any] = {"symbols": self._transform_symbols_to_compact_format(symbols)}
         documentation = symbol_overview.pop("documentation", None)
