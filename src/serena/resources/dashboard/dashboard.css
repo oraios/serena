@@ -113,23 +113,27 @@ html {
     position: absolute;
     top: 20px;
     right: 20px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+}
+
+.news-mark-read-btn {
+    background-color: var(--btn-primary);
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
     cursor: pointer;
     font-size: 13px;
-    color: var(--text-muted);
-    user-select: none;
+    transition: background-color 0.3s ease;
+    white-space: nowrap;
 }
 
-.news-mark-read:hover {
-    color: var(--text-primary);
+.news-mark-read-btn:hover {
+    background-color: var(--btn-hover);
 }
 
-.news-mark-read input[type="checkbox"] {
-    cursor: pointer;
-    width: 18px;
-    height: 18px;
+.news-mark-read-btn:disabled {
+    background-color: var(--btn-disabled);
+    cursor: not-allowed;
 }
 
 .news-no-items {

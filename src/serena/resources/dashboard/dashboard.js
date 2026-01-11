@@ -1927,26 +1927,25 @@ class Dashboard {
                 url: '/dashboard/news/' + newsId + '.html',
                 type: 'GET',
                 success: function(html) {
-                    // Wrap the HTML in a container with a checkbox
+                    // Wrap the HTML in a container with a button
                     let $newsContainer = $('<div class="news-container">').attr('data-news-id', newsId);
                     let $newsContent = $(html);
                     
-                    // Add checkbox for marking as read
+                    // Add button for marking as read
                     let $markRead = $('<div class="news-mark-read">');
-                    let $checkbox = $('<input type="checkbox">').attr('id', 'news-read-' + newsId);
-                    let $label = $('<label>').attr('for', 'news-read-' + newsId).text('Mark as read');
-                    
-                    $markRead.append($checkbox).append($label);
+                    let $button = $('<button class="news-mark-read-btn">').attr('data-news-id', newsId).text('Mark as read');
+
+                    $markRead.append($button);
                     $newsContent.append($markRead);
                     
                     $newsContainer.append($newsContent);
                     self.$newsDisplay.append($newsContainer);
                     
-                    // Bind checkbox event
-                    $checkbox.on('change', function() {
-                        if ($(this).is(':checked')) {
-                            self.markNewsAsRead(newsId);
-                        }
+                    // Bind button click event
+                    $button.on('click', function() {
+                        const btn = $(this);
+                        btn.prop('disabled', true).text('Marking...');
+                        self.markNewsAsRead(newsId);
                     });
                     
                     loadedCount++;
