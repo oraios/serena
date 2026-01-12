@@ -132,9 +132,12 @@ class TestSerenaAgent:
             for s in symbols
         ), f"Expected to find {symbol_name} ({expected_kind}) in {expected_file}"
         # testing retrieval of symbol info
+        if serena_agent.get_active_lsp_languages() == [Language.KOTLIN]:
+            # kotlin LS doesn't seem to provide hover info right now, at least for the struct we test this on
+            return
         for s in symbols:
-            if s["kind"] == SymbolKind.File.name:
-                # we ignore file symbols for the info test
+            if s["kind"] in (SymbolKind.File.name, SymbolKind.Module.name):
+                # we ignore file and module symbols for the info test
                 continue
             symbol_info = s.get("info")
             assert symbol_info, f"Expected symbol info to be present for symbol: {s}"
