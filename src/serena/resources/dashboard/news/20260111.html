@@ -1,17 +1,17 @@
 <div class="news-item">
-    <h3>Symbol Documentation, Type Hierarchy and Better Overviews</h3>
+    <h3>Extended Symbol Information, Type Hierarchy and Compact Overviews</h3>
     <p class="date">January 11, 2026</p>
     <p>
-        Recent commits and a new plugin release contain major new features!
+        Recent commits and a new plugin release provide major new features!
     </p>
     <ul>
-        <li><strong>Symbol Documentation:</strong> The `find_symbol` and `find_referencing_symbols` tools (and their JetBrains variants)
-            now can return information about the symbol (docstring and signature).
+        <li><strong>Extended symbol information:</strong> The `find_symbol` and `find_referencing_symbols` tools (and their JetBrains variants)
+            now can return more information about the symbol (specifically, docstrings and signatures).
         </li>
-        <li><strong>Type Hierarchy Tool:</strong> A new tool that can fetch a Symbol's hierarchy. This tool is very useful
-            in many situations, currently only available through the JetBrains plugin.
+        <li><strong>Type hierarchy tool:</strong> A new tool &ndash; exclusive to JetBrains mode &ndash; that can fetch a symbol's hierarchy, i.e. superclasses and
+            subclasses, which is very useful in many situations.
         </li>
-        <li><strong>Better Overviews:</strong> The `get_symbols_overview` tools now return a much more compact
+        <li><strong>Compact overviews:</strong> The `get_symbols_overview` tools now return a much more compact
             representation, saving many tokens. The JetBrains variant of the tool can now return a file's docstring (LSP
             varian't can't do that yet).
         </li>
