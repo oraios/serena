@@ -101,6 +101,8 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
     Retrieves an overview of the top-level symbols within a specified file using the JetBrains backend
     """
 
+    USE_COMPACT_FORMAT = True
+
     @staticmethod
     def _transform_symbols_to_compact_format(symbols: list[dict[str, Any]]) -> dict[str, list]:
         """
@@ -154,6 +156,9 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
         with JetBrainsPluginClient.from_project(self.project) as client:
             response_dict = client.get_symbols_overview(relative_path=relative_path, depth=depth)
         symbols = response_dict["symbols"]
-        compact_symbols = self._transform_symbols_to_compact_format(symbols)
-        result = self._to_json(compact_symbols)
+        if self.USE_COMPACT_FORMAT:
+            compact_symbols = self._transform_symbols_to_compact_format(symbols)
+            result = self._to_json(compact_symbols)
+        else:
+            result = self._to_json(symbols)
         return self._limit_length(result, max_answer_chars)
