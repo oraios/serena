@@ -6,10 +6,12 @@ import logging
 import os
 import pathlib
 import re
+import sys
 import threading
 from typing import cast
 
 from overrides import override
+
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
@@ -46,7 +48,7 @@ class PyrightServer(SolidLanguageServer):
 
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
         def _get_or_install_core_dependency(self) -> str:
-            return "python"
+            return sys.executable
 
         def _create_launch_command(self, core_path: str) -> list[str]:
             return [core_path, "-m", "pyright.langserver", "--stdio"]
