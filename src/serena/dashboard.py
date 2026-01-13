@@ -562,12 +562,12 @@ class SerenaDashboardAPI:
         self._agent.remove_language(language)
 
     @staticmethod
-    def _find_first_free_port(start_port: int) -> int:
+    def _find_first_free_port(start_port: int, host: str) -> int:
         port = start_port
         while port <= 65535:
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                    sock.bind(("0.0.0.0", port))
+                    sock.bind((host, port))
                     return port
             except OSError:
                 port += 1
@@ -587,7 +587,7 @@ class SerenaDashboardAPI:
         return port
 
     def run_in_thread(self, host: str) -> tuple[threading.Thread, int]:
-        port = self._find_first_free_port(0x5EDA)
+        port = self._find_first_free_port(0x5EDA, host)
         log.info("Starting dashboard (listen_address=%s, port=%d)", host, port)
         thread = threading.Thread(target=lambda: self.run(host=host, port=port), daemon=True)
         thread.start()
