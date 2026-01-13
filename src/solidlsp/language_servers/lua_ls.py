@@ -156,10 +156,14 @@ class LuaLanguageServer(SolidLanguageServer):
         return lua_ls_path
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        lua_ls_path = self._setup_runtime_dependency()
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            cmd = self._setup_runtime_dependency()
 
         super().__init__(
-            config, repository_root_path, ProcessLaunchInfo(cmd=lua_ls_path, cwd=repository_root_path), "lua", solidlsp_settings
+            config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "lua", solidlsp_settings
         )
         self.server_ready = threading.Event()
         self.request_id = 0

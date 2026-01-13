@@ -90,12 +90,17 @@ class Marksman(SolidLanguageServer):
         Creates a Marksman instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        marksman_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            marksman_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
+            cmd = f"{marksman_executable_path} server"
 
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd=f"{marksman_executable_path} server", cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path),
             "markdown",
             solidlsp_settings,
         )

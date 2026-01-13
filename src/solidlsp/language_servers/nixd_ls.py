@@ -246,9 +246,13 @@ class NixLanguageServer(SolidLanguageServer):
         return nixd_path
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        nixd_path = self._setup_runtime_dependency()
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            cmd = self._setup_runtime_dependency()
 
-        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=nixd_path, cwd=repository_root_path), "nix", solidlsp_settings)
+        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "nix", solidlsp_settings)
         self.server_ready = threading.Event()
         self.request_id = 0
 

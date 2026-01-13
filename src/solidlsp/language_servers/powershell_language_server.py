@@ -161,6 +161,18 @@ class PowerShellLanguageServer(SolidLanguageServer):
         return pwsh_path, pses_path, bundled_modules_path
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            super().__init__(
+                config,
+                repository_root_path,
+                ProcessLaunchInfo(cmd=custom_command, cwd=repository_root_path),
+                "powershell",
+                solidlsp_settings,
+            )
+            self.server_ready = threading.Event()
+            return
+
         pwsh_path, pses_path, bundled_modules_path = self._setup_runtime_dependency(solidlsp_settings)
 
         # Create a temp directory for PSES logs and session details

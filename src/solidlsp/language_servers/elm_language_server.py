@@ -31,22 +31,26 @@ class ElmLanguageServer(SolidLanguageServer):
         """
         Creates an ElmLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        elm_lsp_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
-
-        # Resolve ELM_HOME to absolute path if it's set to a relative path
         env = {}
-        elm_home = os.environ.get("ELM_HOME")
-        if elm_home:
-            if not os.path.isabs(elm_home):
-                # Convert relative ELM_HOME to absolute based on repository root
-                elm_home = os.path.abspath(os.path.join(repository_root_path, elm_home))
-            env["ELM_HOME"] = elm_home
-            log.info(f"Using ELM_HOME: {elm_home}")
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            cmd = self._setup_runtime_dependencies(config, solidlsp_settings)
+
+            # Resolve ELM_HOME to absolute path if it's set to a relative path
+            elm_home = os.environ.get("ELM_HOME")
+            if elm_home:
+                if not os.path.isabs(elm_home):
+                    # Convert relative ELM_HOME to absolute based on repository root
+                    elm_home = os.path.abspath(os.path.join(repository_root_path, elm_home))
+                env["ELM_HOME"] = elm_home
+                log.info(f"Using ELM_HOME: {elm_home}")
 
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd=elm_lsp_executable_path, cwd=repository_root_path, env=env),
+            ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path, env=env),
             "elm",
             solidlsp_settings,
         )

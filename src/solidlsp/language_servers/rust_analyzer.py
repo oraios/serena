@@ -166,13 +166,17 @@ class RustAnalyzer(SolidLanguageServer):
         """
         Creates a RustAnalyzer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        rustanalyzer_executable_path = self._ensure_rust_analyzer_installed()
-        log.info(f"Using rust-analyzer at: {rustanalyzer_executable_path}")
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            cmd = self._ensure_rust_analyzer_installed()
+            log.info(f"Using rust-analyzer at: {cmd}")
 
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd=rustanalyzer_executable_path, cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path),
             "rust",
             solidlsp_settings,
         )

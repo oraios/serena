@@ -84,11 +84,15 @@ class Intelephense(SolidLanguageServer):
         return [intelephense_executable_path, "--stdio"]
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        # Setup runtime dependencies before initializing
-        intelephense_cmd = self._setup_runtime_dependencies(solidlsp_settings)
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            # Setup runtime dependencies before initializing
+            cmd = self._setup_runtime_dependencies(solidlsp_settings)
 
         super().__init__(
-            config, repository_root_path, ProcessLaunchInfo(cmd=intelephense_cmd, cwd=repository_root_path), "php", solidlsp_settings
+            config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "php", solidlsp_settings
         )
         self.request_id = 0
 

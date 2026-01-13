@@ -151,6 +151,19 @@ class MatlabLanguageServer(SolidLanguageServer):
         Creates a MatlabLanguageServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            super().__init__(
+                config,
+                repository_root_path,
+                ProcessLaunchInfo(cmd=custom_command, cwd=repository_root_path),
+                "matlab",
+                solidlsp_settings,
+            )
+            self.server_ready = threading.Event()
+            self.initialize_searcher_command_available = threading.Event()
+            return
+
         matlab_lsp_command, matlab_path = self._setup_runtime_dependencies(config, solidlsp_settings)
         self._matlab_path = matlab_path
 

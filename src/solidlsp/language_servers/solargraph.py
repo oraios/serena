@@ -34,11 +34,16 @@ class Solargraph(SolidLanguageServer):
         Creates a Solargraph instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        solargraph_executable_path = self._setup_runtime_dependencies(config, repository_root_path)
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            solargraph_executable_path = self._setup_runtime_dependencies(config, repository_root_path)
+            cmd = f"{solargraph_executable_path} stdio"
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd=f"{solargraph_executable_path} stdio", cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path),
             "ruby",
             solidlsp_settings,
         )
@@ -53,7 +58,7 @@ class Solargraph(SolidLanguageServer):
         self.resolve_main_method_available = threading.Event()
 
         # Set timeout for Solargraph requests - Bundler environments may need more time
-        self.set_request_timeout(120.0)  # 120 seconds for initialization and requests
+        self.set_request_timeout(120.0)  # 120 seconds for initialization and requests  # 120 seconds for initialization and requests  # 120 seconds for initialization and requests
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:

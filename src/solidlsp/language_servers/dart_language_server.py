@@ -23,9 +23,13 @@ class DartLanguageServer(SolidLanguageServer):
         """
         Creates a DartServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        executable_path = self._setup_runtime_dependencies(solidlsp_settings)
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            cmd = self._setup_runtime_dependencies(solidlsp_settings)
         super().__init__(
-            config, repository_root_path, ProcessLaunchInfo(cmd=executable_path, cwd=repository_root_path), "dart", solidlsp_settings
+            config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "dart", solidlsp_settings
         )
 
     @classmethod

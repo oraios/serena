@@ -76,6 +76,17 @@ class HaskellLanguageServer(SolidLanguageServer):
         """
         Creates a HaskellLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            super().__init__(
+                config,
+                repository_root_path,
+                ProcessLaunchInfo(cmd=custom_command, cwd=repository_root_path),
+                "haskell",
+                solidlsp_settings,
+            )
+            return
+
         hls_executable_path = self._ensure_hls_installed()
         log.info(f"Using haskell-language-server at: {hls_executable_path}")
 

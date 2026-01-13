@@ -69,6 +69,17 @@ class EclipseJDTLS(SolidLanguageServer):
         Creates a new EclipseJDTLS instance initializing the language server settings appropriately.
         This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
+        self._service_ready_event = threading.Event()
+        self._project_ready_event = threading.Event()
+        self._intellicode_enable_command_available = threading.Event()
+
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            super().__init__(
+                config, repository_root_path, ProcessLaunchInfo(cmd=custom_command, cwd=repository_root_path), "java", solidlsp_settings=solidlsp_settings
+            )
+            return
+
         runtime_dependency_paths = self._setupRuntimeDependencies(config, solidlsp_settings)
         self.runtime_dependency_paths = runtime_dependency_paths
 
@@ -145,10 +156,6 @@ class EclipseJDTLS(SolidLanguageServer):
             "-data",
             f"{data_dir}",
         ]
-
-        self._service_ready_event = threading.Event()
-        self._project_ready_event = threading.Event()
-        self._intellicode_enable_command_available = threading.Event()
 
         super().__init__(
             config, repository_root_path, ProcessLaunchInfo(cmd, proc_env, proc_cwd), "java", solidlsp_settings=solidlsp_settings

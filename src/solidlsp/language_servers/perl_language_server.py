@@ -100,11 +100,15 @@ class PerlLanguageServer(SolidLanguageServer):
         return "perl -MPerl::LanguageServer -e 'Perl::LanguageServer::run'"
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        # Setup runtime dependencies before initializing
-        perl_ls_cmd = self._setup_runtime_dependencies()
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            # Setup runtime dependencies before initializing
+            cmd = self._setup_runtime_dependencies()
 
         super().__init__(
-            config, repository_root_path, ProcessLaunchInfo(cmd=perl_ls_cmd, cwd=repository_root_path), "perl", solidlsp_settings
+            config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "perl", solidlsp_settings
         )
         self.request_id = 0
 

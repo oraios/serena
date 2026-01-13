@@ -39,17 +39,22 @@ class RegalLanguageServer(SolidLanguageServer):
         :param repository_root_path: Path to the repository root
         :param solidlsp_settings: Settings for solidlsp
         """
-        # Regal should be installed system-wide (via CI or user installation)
-        regal_executable_path = shutil.which("regal")
-        if not regal_executable_path:
-            raise RuntimeError(
-                "Regal language server not found. Please install it from https://github.com/StyraInc/regal or via your package manager."
-            )
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            # Regal should be installed system-wide (via CI or user installation)
+            regal_executable_path = shutil.which("regal")
+            if not regal_executable_path:
+                raise RuntimeError(
+                    "Regal language server not found. Please install it from https://github.com/StyraInc/regal or via your package manager."
+                )
+            cmd = f"{regal_executable_path} language-server"
 
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd=f"{regal_executable_path} language-server", cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path),
             "rego",
             solidlsp_settings,
         )

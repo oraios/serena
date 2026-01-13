@@ -59,15 +59,19 @@ class RLanguageServer(SolidLanguageServer):
             raise RuntimeError("R is not installed. Please install R from https://www.r-project.org/")
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        # Check R installation
-        self._check_r_installation()
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            # Check R installation
+            self._check_r_installation()
 
-        # R command to start language server
-        # Use --vanilla for minimal startup and --quiet to suppress all output except LSP
-        # Set specific options to improve parsing stability
-        r_cmd = 'R --vanilla --quiet --slave -e "options(languageserver.debug_mode = FALSE); languageserver::run()"'
+            # R command to start language server
+            # Use --vanilla for minimal startup and --quiet to suppress all output except LSP
+            # Set specific options to improve parsing stability
+            cmd = 'R --vanilla --quiet --slave -e "options(languageserver.debug_mode = FALSE); languageserver::run()"'
 
-        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=r_cmd, cwd=repository_root_path), "r", solidlsp_settings)
+        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "r", solidlsp_settings)
         self.server_ready = threading.Event()
 
     @staticmethod

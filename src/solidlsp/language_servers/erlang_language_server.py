@@ -25,17 +25,23 @@ class ErlangLanguageServer(SolidLanguageServer):
         Creates an ErlangLanguageServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        self.erlang_ls_path = shutil.which("erlang_ls")
-        if not self.erlang_ls_path:
-            raise RuntimeError("Erlang LS not found. Install from: https://github.com/erlang-ls/erlang_ls")
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            self.erlang_ls_path = shutil.which("erlang_ls")
+            if not self.erlang_ls_path:
+                raise RuntimeError("Erlang LS not found. Install from: https://github.com/erlang-ls/erlang_ls")
 
-        if not self._check_erlang_installation():
-            raise RuntimeError("Erlang/OTP not found. Install from: https://www.erlang.org/downloads")
+            if not self._check_erlang_installation():
+                raise RuntimeError("Erlang/OTP not found. Install from: https://www.erlang.org/downloads")
+
+            cmd = [self.erlang_ls_path, "--transport", "stdio"]
 
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd=[self.erlang_ls_path, "--transport", "stdio"], cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path),
             "erlang",
             solidlsp_settings,
         )

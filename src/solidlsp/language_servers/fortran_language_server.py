@@ -180,15 +180,19 @@ class FortranLanguageServer(SolidLanguageServer):
         return fortls_path
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        # Check fortls installation
-        fortls_path = self._check_fortls_installation()
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            # Check fortls installation
+            fortls_path = self._check_fortls_installation()
 
-        # Command to start fortls language server
-        # fortls uses stdio for LSP communication by default
-        fortls_cmd = f"{fortls_path}"
+            # Command to start fortls language server
+            # fortls uses stdio for LSP communication by default
+            cmd = f"{fortls_path}"
 
         super().__init__(
-            config, repository_root_path, ProcessLaunchInfo(cmd=fortls_cmd, cwd=repository_root_path), "fortran", solidlsp_settings
+            config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "fortran", solidlsp_settings
         )
         self.server_ready = threading.Event()
 

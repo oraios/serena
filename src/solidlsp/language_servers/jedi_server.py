@@ -27,10 +27,15 @@ class JediServer(SolidLanguageServer):
         """
         Creates a JediServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            cmd = "jedi-language-server"
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd="jedi-language-server", cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path),
             "python",
             solidlsp_settings,
         )

@@ -157,12 +157,17 @@ class TerraformLS(SolidLanguageServer):
         """
         Creates a TerraformLS instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        terraform_ls_executable_path = self._setup_runtime_dependencies(solidlsp_settings)
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            terraform_ls_executable_path = self._setup_runtime_dependencies(solidlsp_settings)
+            cmd = f"{terraform_ls_executable_path} serve"
 
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd=f"{terraform_ls_executable_path} serve", cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path),
             "terraform",
             solidlsp_settings,
         )

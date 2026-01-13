@@ -64,45 +64,49 @@ class OmniSharp(SolidLanguageServer):
         """
         Creates an OmniSharp instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        omnisharp_executable_path, dll_path = self._setup_runtime_dependencies(config, solidlsp_settings)
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            omnisharp_executable_path, dll_path = self._setup_runtime_dependencies(config, solidlsp_settings)
 
-        slnfilename = find_least_depth_sln_file(repository_root_path)
-        if slnfilename is None:
-            log.error("No *.sln file found in repository")
-            raise SolidLSPException("No SLN file found in repository")
+            slnfilename = find_least_depth_sln_file(repository_root_path)
+            if slnfilename is None:
+                log.error("No *.sln file found in repository")
+                raise SolidLSPException("No SLN file found in repository")
 
-        cmd = " ".join(
-            [
-                omnisharp_executable_path,
-                "-lsp",
-                "--encoding",
-                "ascii",
-                "-z",
-                "-s",
-                f'"{slnfilename}"',
-                "--hostPID",
-                str(os.getpid()),
-                "DotNet:enablePackageRestore=false",
-                "--loglevel",
-                "trace",
-                "--plugin",
-                dll_path,
-                "FileOptions:SystemExcludeSearchPatterns:0=**/.git",
-                "FileOptions:SystemExcludeSearchPatterns:1=**/.svn",
-                "FileOptions:SystemExcludeSearchPatterns:2=**/.hg",
-                "FileOptions:SystemExcludeSearchPatterns:3=**/CVS",
-                "FileOptions:SystemExcludeSearchPatterns:4=**/.DS_Store",
-                "FileOptions:SystemExcludeSearchPatterns:5=**/Thumbs.db",
-                "RoslynExtensionsOptions:EnableAnalyzersSupport=true",
-                "FormattingOptions:EnableEditorConfigSupport=true",
-                "RoslynExtensionsOptions:EnableImportCompletion=true",
-                "Sdk:IncludePrereleases=true",
-                "RoslynExtensionsOptions:AnalyzeOpenDocumentsOnly=true",
-                "formattingOptions:useTabs=false",
-                "formattingOptions:tabSize=4",
-                "formattingOptions:indentationSize=4",
-            ]
-        )
+            cmd = " ".join(
+                [
+                    omnisharp_executable_path,
+                    "-lsp",
+                    "--encoding",
+                    "ascii",
+                    "-z",
+                    "-s",
+                    f'"{slnfilename}"',
+                    "--hostPID",
+                    str(os.getpid()),
+                    "DotNet:enablePackageRestore=false",
+                    "--loglevel",
+                    "trace",
+                    "--plugin",
+                    dll_path,
+                    "FileOptions:SystemExcludeSearchPatterns:0=**/.git",
+                    "FileOptions:SystemExcludeSearchPatterns:1=**/.svn",
+                    "FileOptions:SystemExcludeSearchPatterns:2=**/.hg",
+                    "FileOptions:SystemExcludeSearchPatterns:3=**/CVS",
+                    "FileOptions:SystemExcludeSearchPatterns:4=**/.DS_Store",
+                    "FileOptions:SystemExcludeSearchPatterns:5=**/Thumbs.db",
+                    "RoslynExtensionsOptions:EnableAnalyzersSupport=true",
+                    "FormattingOptions:EnableEditorConfigSupport=true",
+                    "RoslynExtensionsOptions:EnableImportCompletion=true",
+                    "Sdk:IncludePrereleases=true",
+                    "RoslynExtensionsOptions:AnalyzeOpenDocumentsOnly=true",
+                    "formattingOptions:useTabs=false",
+                    "formattingOptions:tabSize=4",
+                    "formattingOptions:indentationSize=4",
+                ]
+            )
         super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "csharp", solidlsp_settings)
 
         self.server_ready = threading.Event()

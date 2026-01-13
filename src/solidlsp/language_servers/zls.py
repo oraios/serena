@@ -97,9 +97,14 @@ class ZigLanguageServer(SolidLanguageServer):
         return True
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        self._setup_runtime_dependency()
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            self._setup_runtime_dependency()
+            cmd = "zls"
 
-        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd="zls", cwd=repository_root_path), "zig", solidlsp_settings)
+        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "zig", solidlsp_settings)
         self.server_ready = threading.Event()
         self.request_id = 0
 

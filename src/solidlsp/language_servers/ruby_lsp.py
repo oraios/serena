@@ -33,15 +33,19 @@ class RubyLsp(SolidLanguageServer):
         Creates a RubyLsp instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        ruby_lsp_executable = self._setup_runtime_dependencies(config, repository_root_path)
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            cmd = self._setup_runtime_dependencies(config, repository_root_path)
         super().__init__(
-            config, repository_root_path, ProcessLaunchInfo(cmd=ruby_lsp_executable, cwd=repository_root_path), "ruby", solidlsp_settings
+            config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "ruby", solidlsp_settings
         )
         self.analysis_complete = threading.Event()
         self.service_ready_event = threading.Event()
 
         # Set timeout for ruby-lsp requests - ruby-lsp is fast
-        self.set_request_timeout(30.0)  # 30 seconds for initialization and requests
+        self.set_request_timeout(30.0)  # 30 seconds for initialization and requests  # 30 seconds for initialization and requests  # 30 seconds for initialization and requests
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:

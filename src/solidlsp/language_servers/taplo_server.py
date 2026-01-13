@@ -120,11 +120,16 @@ class TaploServer(SolidLanguageServer):
         Creates a TaploServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        taplo_executable_path = self._setup_runtime_dependencies(solidlsp_settings)
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            taplo_executable_path = self._setup_runtime_dependencies(solidlsp_settings)
+            cmd = f"{taplo_executable_path} lsp stdio"
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd=f"{taplo_executable_path} lsp stdio", cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path),
             "toml",
             solidlsp_settings,
         )

@@ -47,11 +47,16 @@ class SourceKitLSP(SolidLanguageServer):
             ) from e
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        sourcekit_version = self._get_sourcekit_lsp_version()
-        log.info(f"Starting sourcekit lsp with version: {sourcekit_version}")
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            sourcekit_version = self._get_sourcekit_lsp_version()
+            log.info(f"Starting sourcekit lsp with version: {sourcekit_version}")
+            cmd = "sourcekit-lsp"
 
         super().__init__(
-            config, repository_root_path, ProcessLaunchInfo(cmd="sourcekit-lsp", cwd=repository_root_path), "swift", solidlsp_settings
+            config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "swift", solidlsp_settings
         )
         self.server_ready = threading.Event()
         self.request_id = 0

@@ -204,25 +204,29 @@ class CSharpLanguageServer(SolidLanguageServer):
         Creates a CSharpLanguageServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        dotnet_path, language_server_path = self._ensure_server_installed(config, solidlsp_settings)
-
-        # Find solution or project file
-        solution_or_project = find_solution_or_project_file(repository_root_path)
-
-        # Create log directory
-        log_dir = Path(self.ls_resources_dir(solidlsp_settings)) / "logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
-
-        # Build command using dotnet directly
-        cmd = [dotnet_path, language_server_path, "--logLevel=Information", f"--extensionLogDirectory={log_dir}", "--stdio"]
-
-        # The language server will discover the solution/project from the workspace root
-        if solution_or_project:
-            log.info(f"Found solution/project file: {solution_or_project}")
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
         else:
-            log.warning("No .sln or .csproj file found, language server will attempt auto-discovery")
+            dotnet_path, language_server_path = self._ensure_server_installed(config, solidlsp_settings)
 
-        log.debug(f"Language server command: {' '.join(cmd)}")
+            # Find solution or project file
+            solution_or_project = find_solution_or_project_file(repository_root_path)
+
+            # Create log directory
+            log_dir = Path(self.ls_resources_dir(solidlsp_settings)) / "logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+
+            # Build command using dotnet directly
+            cmd = [dotnet_path, language_server_path, "--logLevel=Information", f"--extensionLogDirectory={log_dir}", "--stdio"]
+
+            # The language server will discover the solution/project from the workspace root
+            if solution_or_project:
+                log.info(f"Found solution/project file: {solution_or_project}")
+            else:
+                log.warning("No .sln or .csproj file found, language server will attempt auto-discovery")
+
+            log.debug(f"Language server command: {' '.join(cmd)}")
 
         super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "csharp", solidlsp_settings)
 

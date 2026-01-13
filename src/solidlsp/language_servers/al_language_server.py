@@ -55,9 +55,13 @@ class ALLanguageServer(SolidLanguageServer):
             3. Extract and configure the platform-specific executable
 
         """
-        # Setup runtime dependencies and get the language server command
-        # This will download the AL extension if needed
-        cmd = self._setup_runtime_dependencies(config, solidlsp_settings)
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        if custom_command:
+            cmd = custom_command
+        else:
+            # Setup runtime dependencies and get the language server command
+            # This will download the AL extension if needed
+            cmd = self._setup_runtime_dependencies(config, solidlsp_settings)
 
         self._project_load_check_supported: bool = True
         """Whether the AL server supports the project load status check request.

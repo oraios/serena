@@ -203,6 +203,7 @@ class SolidLanguageServer(ABC):
         return result
 
     @classmethod
+    @classmethod
     def create(
         cls,
         config: LanguageServerConfig,
