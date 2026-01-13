@@ -132,6 +132,14 @@ _RUNTIME_DEPENDENCIES = [
         archive_type="tar.gz",
         binary_name="dotnet",
     ),
+    RuntimeDependency(
+        id="DotNetRuntime",
+        description=".NET 9 Runtime for Windows (ARM64)",
+        url="https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.6/dotnet-runtime-9.0.6-win-arm64.zip",
+        platform_id="win-arm64",
+        archive_type="zip",
+        binary_name="dotnet.exe",
+    ),
 ]
 
 
