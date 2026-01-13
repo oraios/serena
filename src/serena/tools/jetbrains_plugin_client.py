@@ -260,11 +260,13 @@ class JetBrainsPluginClient(ToStringMixin):
 
         :param name_path: the name path to match
         :param relative_path: the relative path to which to restrict the search
-        :param include_body: whether to include symbol body content
-        :param include_quick_info: whether to include quick info
-        :param include_documentation: whether to include documentation
-        :param include_num_usages: whether to include number of usages
-        :param depth: depth of children to include (0 = no children)
+        :param include_body: whether to include symbol body content (should typically not be combined with `include_quick_info`
+            or `include_documentation` because the body includes everything)
+        :param include_quick_info: whether to include quick info (typically the signature)
+        :param include_documentation: whether to include documentation; note that this includes the quick info, so one should
+            not pass both `include_quick_info` and this
+        :param include_num_usages: whether to include the number of usages
+        :param depth: depth up to which to include children (0 = no children)
         :param include_location: whether to include symbol location information
         :param search_deps: whether to also search in dependencies
         """

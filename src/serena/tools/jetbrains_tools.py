@@ -62,8 +62,17 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         if relative_path == ".":
             relative_path = None
         with JetBrainsPluginClient.from_project(self.project) as client:
-            include_documentation = include_info and not include_body
-            include_quick_info = not include_documentation and not include_info
+            if include_body:
+                include_quick_info = False
+                include_documentation = False
+            else:
+                if include_info:
+                    include_documentation = True
+                    include_quick_info = False
+                else:
+                    # If no additional information is requested, we still include the quick info (type signature)
+                    include_documentation = False
+                    include_quick_info = True
             response_dict = client.find_symbol(
                 name_path=name_path_pattern,
                 relative_path=relative_path,
