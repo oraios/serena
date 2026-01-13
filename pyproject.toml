@@ -119,6 +119,13 @@ exclude = "^build/|^docs/"
 [tool.poe.env]
 PYDEVD_DISABLE_FILE_VALIDATION = "1"
 
+[tool.poe.executor]
+# This is important when using poe with uv, because otherwise poe will try to run commands through
+# uv, which in turn will try to recreate the environment, which in turn will fail if any process
+# using the environment is already running! Naturally, processes using the env are running all the
+# time (e.g. a Serena MCP server), so using the default executor (uv) is not an option!
+type = "simple"
+
 [tool.poe.tasks]
 # Uses PYTEST_MARKERS env var for default markers
 # For custom markers, one can either adjust the env var or just use -m option in the command line,
