@@ -563,8 +563,43 @@ class SerenaDashboardAPI:
 
     @staticmethod
     def _find_first_free_port(start_port: int, host: str) -> int:
+        """Find the first available port starting from start_port.
+
+        This checks both whether a port has an active listener (via connect)
+        and whether we can bind to it. Both checks are necessary because:
+        - On Windows, bind() can succeed even if another process is listening
+          (due to SO_REUSEADDR behavior)
+        - A port might not have a listener but still be bound by another process
+
+        Args:
+            start_port: The port number to start searching from.
+            host: The host address to bind to.
+
+        Returns:
+            The first available port number.
+
+        Raises:
+            RuntimeError: If no free port is found up to port 65535.
+
+        """
         port = start_port
         while port <= 65535:
+            # First check if something is already listening on this port
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as check_sock:
+                # Use a short timeout - connect_ex returns immediately if connection
+                # is refused, timeout only applies if something is blocking
+                check_sock.settimeout(0.05)
+                try:
+                    result = check_sock.connect_ex(("127.0.0.1", port))
+                    if result == 0:
+                        # Connection succeeded, something is listening - skip this port
+                        port += 1
+                        continue
+                except OSError:
+                    # Connection attempt failed, port might be available
+                    pass
+
+            # Now try to bind to verify we can use it
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
                     sock.bind((host, port))
