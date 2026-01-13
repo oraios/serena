@@ -72,9 +72,10 @@ def scan_directory(
                                 )
                                 files.extend(sub_result.files)
                                 directories.extend(sub_result.directories)
-                except PermissionError as ex:
+                except (PermissionError, ValueError) as ex:
                     # Skip files/directories that cannot be accessed due to permission issues
-                    log.debug(f"Skipping entry due to permission error: {entry.path}", exc_info=ex)
+                    # or path errors (e.g. special device paths on Windows like \\.\nul)
+                    log.debug(f"Skipping entry due to error: {entry.path}", exc_info=ex)
                     continue
     except PermissionError as ex:
         # Skip the entire directory if it cannot be accessed
