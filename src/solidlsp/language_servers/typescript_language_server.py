@@ -13,11 +13,10 @@ from overrides import override
 from sensai.util.logging import LogTime
 
 from solidlsp import ls_types
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
@@ -72,16 +71,18 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         """
         Creates a TypeScriptLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        ts_lsp_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd=ts_lsp_executable_path, cwd=repository_root_path),
+            None,
             "typescript",
             solidlsp_settings,
         )
         self.server_ready = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
+
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -97,91 +98,96 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         """Classify typescript-language-server stderr output to avoid false-positive errors."""
         return SolidLanguageServer._determine_log_level(line)
 
-    @classmethod
-    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> list[str]:
-        """
-        Setup runtime dependencies for TypeScript Language Server and return the command to start the server.
-        """
-        platform_id = PlatformUtils.get_platform_id()
+    class DependencyProvider(LanguageServerDependencyProviderSinglePath):
+        def _get_or_install_core_dependency(self) -> str:
+            """
+            Setup runtime dependencies for TypeScript Language Server and return the path to the executable.
+            """
+            platform_id = PlatformUtils.get_platform_id()
 
-        valid_platforms = [
-            PlatformId.LINUX_x64,
-            PlatformId.LINUX_arm64,
-            PlatformId.OSX,
-            PlatformId.OSX_x64,
-            PlatformId.OSX_arm64,
-            PlatformId.WIN_x64,
-            PlatformId.WIN_arm64,
-        ]
-        assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy javascript/typescript at the moment"
-
-        # Get version settings from ls_specific_settings or use defaults
-        language_specific_config = solidlsp_settings.get_ls_specific_settings(cls.get_language_enum_instance())
-        typescript_version = language_specific_config.get("typescript_version", "5.9.3")
-        typescript_language_server_version = language_specific_config.get("typescript_language_server_version", "5.1.3")
-
-        deps = RuntimeDependencyCollection(
-            [
-                RuntimeDependency(
-                    id="typescript",
-                    description="typescript package",
-                    command=["npm", "install", "--prefix", "./", f"typescript@{typescript_version}"],
-                    platform_id="any",
-                ),
-                RuntimeDependency(
-                    id="typescript-language-server",
-                    description="typescript-language-server package",
-                    command=["npm", "install", "--prefix", "./", f"typescript-language-server@{typescript_language_server_version}"],
-                    platform_id="any",
-                ),
+            valid_platforms = [
+                PlatformId.LINUX_x64,
+                PlatformId.LINUX_arm64,
+                PlatformId.OSX,
+                PlatformId.OSX_x64,
+                PlatformId.OSX_arm64,
+                PlatformId.WIN_x64,
+                PlatformId.WIN_arm64,
             ]
-        )
+            assert (
+                platform_id in valid_platforms
+            ), f"Platform {platform_id} is not supported for multilspy javascript/typescript at the moment"
 
-        # Verify both node and npm are installed
-        is_node_installed = shutil.which("node") is not None
-        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which("npm") is not None
-        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
+            # Get version settings from ls_specific_settings or use defaults
+            language_specific_config = self._custom_settings
+            typescript_version = language_specific_config.get("typescript_version", "5.9.3")
+            typescript_language_server_version = language_specific_config.get("typescript_language_server_version", "5.1.3")
 
-        # Install typescript and typescript-language-server if not already installed or version mismatch
-        tsserver_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "ts-lsp")
-        tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
-
-        # Check if installation is needed based on executable AND version
-        version_file = os.path.join(tsserver_ls_dir, ".installed_version")
-        expected_version = f"{typescript_version}_{typescript_language_server_version}"
-
-        needs_install = False
-        if not os.path.exists(tsserver_executable_path):
-            log.info(f"Typescript Language Server executable not found at {tsserver_executable_path}.")
-            needs_install = True
-        elif os.path.exists(version_file):
-            with open(version_file) as f:
-                installed_version = f.read().strip()
-            if installed_version != expected_version:
-                log.info(
-                    f"TypeScript Language Server version mismatch: installed={installed_version}, expected={expected_version}. Reinstalling..."
-                )
-                needs_install = True
-        else:
-            # No version file exists, assume old installation needs refresh
-            log.info("TypeScript Language Server version file not found. Reinstalling to ensure correct version...")
-            needs_install = True
-
-        if needs_install:
-            log.info("Installing TypeScript Language Server dependencies...")
-            with LogTime("Installation of TypeScript language server dependencies", logger=log):
-                deps.install(tsserver_ls_dir)
-            # Write version marker file
-            with open(version_file, "w") as f:
-                f.write(expected_version)
-            log.info("TypeScript language server dependencies installed successfully")
-
-        if not os.path.exists(tsserver_executable_path):
-            raise FileNotFoundError(
-                f"typescript-language-server executable not found at {tsserver_executable_path}, something went wrong with the installation."
+            deps = RuntimeDependencyCollection(
+                [
+                    RuntimeDependency(
+                        id="typescript",
+                        description="typescript package",
+                        command=["npm", "install", "--prefix", "./", f"typescript@{typescript_version}"],
+                        platform_id="any",
+                    ),
+                    RuntimeDependency(
+                        id="typescript-language-server",
+                        description="typescript-language-server package",
+                        command=["npm", "install", "--prefix", "./", f"typescript-language-server@{typescript_language_server_version}"],
+                        platform_id="any",
+                    ),
+                ]
             )
-        return [tsserver_executable_path, "--stdio"]
+
+            # Verify both node and npm are installed
+            is_node_installed = shutil.which("node") is not None
+            assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
+            is_npm_installed = shutil.which("npm") is not None
+            assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
+
+            # Install typescript and typescript-language-server if not already installed or version mismatch
+            tsserver_ls_dir = os.path.join(self._ls_resources_dir, "ts-lsp")
+            tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
+
+            # Check if installation is needed based on executable AND version
+            version_file = os.path.join(tsserver_ls_dir, ".installed_version")
+            expected_version = f"{typescript_version}_{typescript_language_server_version}"
+
+            needs_install = False
+            if not os.path.exists(tsserver_executable_path):
+                log.info(f"Typescript Language Server executable not found at {tsserver_executable_path}.")
+                needs_install = True
+            elif os.path.exists(version_file):
+                with open(version_file) as f:
+                    installed_version = f.read().strip()
+                if installed_version != expected_version:
+                    log.info(
+                        f"TypeScript Language Server version mismatch: installed={installed_version}, expected={expected_version}. Reinstalling..."
+                    )
+                    needs_install = True
+            else:
+                # No version file exists, assume old installation needs refresh
+                log.info("TypeScript Language Server version file not found. Reinstalling to ensure correct version...")
+                needs_install = True
+
+            if needs_install:
+                log.info("Installing TypeScript Language Server dependencies...")
+                with LogTime("Installation of TypeScript language server dependencies", logger=log):
+                    deps.install(tsserver_ls_dir)
+                # Write version marker file
+                with open(version_file, "w") as f:
+                    f.write(expected_version)
+                log.info("TypeScript language server dependencies installed successfully")
+
+            if not os.path.exists(tsserver_executable_path):
+                raise FileNotFoundError(
+                    f"typescript-language-server executable not found at {tsserver_executable_path}, something went wrong with the installation."
+                )
+            return tsserver_executable_path
+
+        def _create_launch_command(self, core_path: str) -> list[str]:
+            return [core_path, "--stdio"]
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
