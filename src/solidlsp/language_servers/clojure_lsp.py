@@ -91,7 +91,7 @@ class ClojureLSP(SolidLanguageServer):
         """
         Creates a ClojureLSP instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get(SolidLSPSettings.CustomLSSettings.COMMAND_KEY, None)
         if custom_command:
             cmd = custom_command
         else:

@@ -23,7 +23,7 @@ class JuliaLanguageServer(SolidLanguageServer):
     """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get(SolidLSPSettings.CustomLSSettings.COMMAND_KEY, None)
         if custom_command:
             julia_ls_cmd = custom_command
         else:

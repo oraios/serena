@@ -44,6 +44,8 @@ class SolidLSPSettings:
         return os.path.join(str(self.solidlsp_dir), "language_servers", "static")
 
     class CustomLSSettings(ToStringMixin):
+        COMMAND_KEY = "command"
+
         def __init__(self, settings: dict[str, Any] | None) -> None:
             self.settings = settings or {}
 

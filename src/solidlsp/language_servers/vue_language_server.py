@@ -139,7 +139,7 @@ class VueLanguageServer(SolidLanguageServer):
     VUE_INDEXING_WAIT_TIME = 4.0 if os.name == "nt" else 2.0
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get(SolidLSPSettings.CustomLSSettings.COMMAND_KEY, None)
         if custom_command:
             cmd = custom_command
             # When using custom command, we still need to set up the tsdk path and ts_ls_cmd for TypeScript support

@@ -84,7 +84,7 @@ class Intelephense(SolidLanguageServer):
         return [intelephense_executable_path, "--stdio"]
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get(SolidLSPSettings.CustomLSSettings.COMMAND_KEY, None)
         if custom_command:
             cmd = custom_command
         else:

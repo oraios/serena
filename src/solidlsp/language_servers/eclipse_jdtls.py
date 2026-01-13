@@ -73,7 +73,7 @@ class EclipseJDTLS(SolidLanguageServer):
         self._project_ready_event = threading.Event()
         self._intellicode_enable_command_available = threading.Event()
 
-        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get("command", None)
+        custom_command = solidlsp_settings.get_ls_specific_settings(self.get_language_enum_instance()).get(SolidLSPSettings.CustomLSSettings.COMMAND_KEY, None)
         if custom_command:
             super().__init__(
                 config, repository_root_path, ProcessLaunchInfo(cmd=custom_command, cwd=repository_root_path), "java", solidlsp_settings=solidlsp_settings
