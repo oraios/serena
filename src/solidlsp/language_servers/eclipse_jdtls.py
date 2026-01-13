@@ -16,12 +16,11 @@ from typing import cast
 from overrides import override
 
 from solidlsp import ls_types
-from solidlsp.ls import LSPFileBuffer, SolidLanguageServer
+from solidlsp.ls import LanguageServerDependencyProvider, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, InitializeParams, SymbolInformation
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -69,90 +68,19 @@ class EclipseJDTLS(SolidLanguageServer):
         Creates a new EclipseJDTLS instance initializing the language server settings appropriately.
         This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        runtime_dependency_paths = self._setupRuntimeDependencies(config, solidlsp_settings)
-        self.runtime_dependency_paths = runtime_dependency_paths
+        super().__init__(config, repository_root_path, None, "java", solidlsp_settings)
 
-        # ws_dir is the workspace directory for the EclipseJDTLS server
-        ws_dir = str(
-            PurePath(
-                solidlsp_settings.ls_resources_dir,
-                "EclipseJDTLS",
-                "workspaces",
-                uuid.uuid4().hex,
-            )
-        )
-
-        # shared_cache_location is the global cache used by Eclipse JDTLS across all workspaces
-        shared_cache_location = str(PurePath(solidlsp_settings.ls_resources_dir, "lsp", "EclipseJDTLS", "sharedIndex"))
-        os.makedirs(shared_cache_location, exist_ok=True)
-        os.makedirs(ws_dir, exist_ok=True)
-
-        jre_path = self.runtime_dependency_paths.jre_path
-        lombok_jar_path = self.runtime_dependency_paths.lombok_jar_path
-
-        jdtls_launcher_jar = self.runtime_dependency_paths.jdtls_launcher_jar_path
-
-        data_dir = str(PurePath(ws_dir, "data_dir"))
-        jdtls_config_path = str(PurePath(ws_dir, "config_path"))
-
-        jdtls_readonly_config_path = self.runtime_dependency_paths.jdtls_readonly_config_path
-
-        if not os.path.exists(jdtls_config_path):
-            shutil.copytree(jdtls_readonly_config_path, jdtls_config_path)
-
-        for static_path in [
-            jre_path,
-            lombok_jar_path,
-            jdtls_launcher_jar,
-            jdtls_config_path,
-            jdtls_readonly_config_path,
-        ]:
-            assert os.path.exists(static_path), static_path
-
-        # TODO: Add "self.runtime_dependency_paths.jre_home_path"/bin to $PATH as well
-        proc_env = {"syntaxserver": "false", "JAVA_HOME": self.runtime_dependency_paths.jre_home_path}
-        proc_cwd = repository_root_path
-        cmd = [
-            jre_path,
-            "--add-modules=ALL-SYSTEM",
-            "--add-opens",
-            "java.base/java.util=ALL-UNNAMED",
-            "--add-opens",
-            "java.base/java.lang=ALL-UNNAMED",
-            "--add-opens",
-            "java.base/sun.nio.fs=ALL-UNNAMED",
-            "-Declipse.application=org.eclipse.jdt.ls.core.id1",
-            "-Dosgi.bundles.defaultStartLevel=4",
-            "-Declipse.product=org.eclipse.jdt.ls.core.product",
-            "-Djava.import.generatesMetadataFilesAtProjectRoot=false",
-            "-Dfile.encoding=utf8",
-            "-noverify",
-            "-XX:+UseParallelGC",
-            "-XX:GCTimeRatio=4",
-            "-XX:AdaptiveSizePolicyWeight=90",
-            "-Dsun.zip.disableMemoryMapping=true",
-            "-Djava.lsp.joinOnCompletion=true",
-            "-Xmx3G",
-            "-Xms100m",
-            "-Xlog:disable",
-            "-Dlog.level=ALL",
-            f"-javaagent:{lombok_jar_path}",
-            f"-Djdt.core.sharedIndexLocation={shared_cache_location}",
-            "-jar",
-            f"{jdtls_launcher_jar}",
-            "-configuration",
-            f"{jdtls_config_path}",
-            "-data",
-            f"{data_dir}",
-        ]
+        # Extract runtime_dependency_paths from the dependency provider
+        assert isinstance(self._dependency_provider, self.DependencyProvider)
+        self.runtime_dependency_paths = self._dependency_provider.runtime_dependency_paths
 
         self._service_ready_event = threading.Event()
         self._project_ready_event = threading.Event()
         self._intellicode_enable_command_available = threading.Event()
 
-        super().__init__(
-            config, repository_root_path, ProcessLaunchInfo(cmd, proc_env, proc_cwd), "java", solidlsp_settings=solidlsp_settings
-        )
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        ls_resources_dir = self.ls_resources_dir(self._solidlsp_settings)
+        return self.DependencyProvider(self._custom_settings, ls_resources_dir, self._solidlsp_settings, self.repository_root_path)
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -172,168 +100,253 @@ class EclipseJDTLS(SolidLanguageServer):
             "lib",  # General
         ]
 
-    @classmethod
-    def _setupRuntimeDependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> RuntimeDependencyPaths:
-        """
-        Setup runtime dependencies for EclipseJDTLS and return the paths.
-        """
-        platformId = PlatformUtils.get_platform_id()
-
-        runtime_dependencies = {
-            "gradle": {
-                "platform-agnostic": {
-                    "url": "https://services.gradle.org/distributions/gradle-8.14.2-bin.zip",
-                    "archiveType": "zip",
-                    "relative_extraction_path": ".",
-                }
-            },
-            "vscode-java": {
-                "darwin-arm64": {
-                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-arm64-1.42.0-561.vsix",
-                    "archiveType": "zip",
-                    "relative_extraction_path": "vscode-java",
-                },
-                "osx-arm64": {
-                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-arm64-1.42.0-561.vsix",
-                    "archiveType": "zip",
-                    "relative_extraction_path": "vscode-java",
-                    "jre_home_path": "extension/jre/21.0.7-macosx-aarch64",
-                    "jre_path": "extension/jre/21.0.7-macosx-aarch64/bin/java",
-                    "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
-                    "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
-                    "jdtls_readonly_config_path": "extension/server/config_mac_arm",
-                },
-                "osx-x64": {
-                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-x64-1.42.0-561.vsix",
-                    "archiveType": "zip",
-                    "relative_extraction_path": "vscode-java",
-                    "jre_home_path": "extension/jre/21.0.7-macosx-x86_64",
-                    "jre_path": "extension/jre/21.0.7-macosx-x86_64/bin/java",
-                    "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
-                    "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
-                    "jdtls_readonly_config_path": "extension/server/config_mac",
-                },
-                "linux-arm64": {
-                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-arm64-1.42.0-561.vsix",
-                    "archiveType": "zip",
-                    "relative_extraction_path": "vscode-java",
-                    "jre_home_path": "extension/jre/21.0.7-linux-aarch64",
-                    "jre_path": "extension/jre/21.0.7-linux-aarch64/bin/java",
-                    "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
-                    "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
-                    "jdtls_readonly_config_path": "extension/server/config_linux_arm",
-                },
-                "linux-x64": {
-                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-x64-1.42.0-561.vsix",
-                    "archiveType": "zip",
-                    "relative_extraction_path": "vscode-java",
-                    "jre_home_path": "extension/jre/21.0.7-linux-x86_64",
-                    "jre_path": "extension/jre/21.0.7-linux-x86_64/bin/java",
-                    "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
-                    "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
-                    "jdtls_readonly_config_path": "extension/server/config_linux",
-                },
-                "win-x64": {
-                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-win32-x64-1.42.0-561.vsix",
-                    "archiveType": "zip",
-                    "relative_extraction_path": "vscode-java",
-                    "jre_home_path": "extension/jre/21.0.7-win32-x86_64",
-                    "jre_path": "extension/jre/21.0.7-win32-x86_64/bin/java.exe",
-                    "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
-                    "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
-                    "jdtls_readonly_config_path": "extension/server/config_win",
-                },
-            },
-            "intellicode": {
-                "platform-agnostic": {
-                    "url": "https://VisualStudioExptTeam.gallery.vsassets.io/_apis/public/gallery/publisher/VisualStudioExptTeam/extension/vscodeintellicode/1.2.30/assetbyname/Microsoft.VisualStudio.Services.VSIXPackage",
-                    "alternate_url": "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/VisualStudioExptTeam/vsextensions/vscodeintellicode/1.2.30/vspackage",
-                    "archiveType": "zip",
-                    "relative_extraction_path": "intellicode",
-                    "intellicode_jar_path": "extension/dist/com.microsoft.jdtls.intellicode.core-0.7.0.jar",
-                    "intellisense_members_path": "extension/dist/bundledModels/java_intellisense-members",
-                }
-            },
-        }
-
-        # assert platformId.value in [
-        #     "linux-x64",
-        #     "win-x64",
-        # ], "Only linux-x64 platform is supported for in multilspy at the moment"
-
-        gradle_path = str(
-            PurePath(
-                cls.ls_resources_dir(solidlsp_settings),
-                "gradle-8.14.2",
-            )
-        )
-
-        if not os.path.exists(gradle_path):
-            FileUtils.download_and_extract_archive(
-                runtime_dependencies["gradle"]["platform-agnostic"]["url"],
-                str(PurePath(gradle_path).parent),
-                runtime_dependencies["gradle"]["platform-agnostic"]["archiveType"],
-            )
-
-        assert os.path.exists(gradle_path)
-
-        dependency = runtime_dependencies["vscode-java"][platformId.value]
-        vscode_java_path = str(PurePath(cls.ls_resources_dir(solidlsp_settings), dependency["relative_extraction_path"]))
-        os.makedirs(vscode_java_path, exist_ok=True)
-        jre_home_path = str(PurePath(vscode_java_path, dependency["jre_home_path"]))
-        jre_path = str(PurePath(vscode_java_path, dependency["jre_path"]))
-        lombok_jar_path = str(PurePath(vscode_java_path, dependency["lombok_jar_path"]))
-        jdtls_launcher_jar_path = str(PurePath(vscode_java_path, dependency["jdtls_launcher_jar_path"]))
-        jdtls_readonly_config_path = str(PurePath(vscode_java_path, dependency["jdtls_readonly_config_path"]))
-        if not all(
-            [
-                os.path.exists(vscode_java_path),
-                os.path.exists(jre_home_path),
-                os.path.exists(jre_path),
-                os.path.exists(lombok_jar_path),
-                os.path.exists(jdtls_launcher_jar_path),
-                os.path.exists(jdtls_readonly_config_path),
-            ]
+    class DependencyProvider(LanguageServerDependencyProvider):
+        def __init__(
+            self,
+            custom_settings: SolidLSPSettings.CustomLSSettings,
+            ls_resources_dir: str,
+            solidlsp_settings: SolidLSPSettings,
+            repository_root_path: str,
         ):
-            FileUtils.download_and_extract_archive(dependency["url"], vscode_java_path, dependency["archiveType"])
+            super().__init__(custom_settings, ls_resources_dir)
+            self._solidlsp_settings = solidlsp_settings
+            self._repository_root_path = repository_root_path
+            self.runtime_dependency_paths = self._setup_runtime_dependencies(ls_resources_dir)
 
-        os.chmod(jre_path, 0o755)
+        @classmethod
+        def _setup_runtime_dependencies(cls, ls_resources_dir: str) -> RuntimeDependencyPaths:
+            """
+            Setup runtime dependencies for EclipseJDTLS and return the paths.
+            """
+            platformId = PlatformUtils.get_platform_id()
 
-        assert os.path.exists(vscode_java_path)
-        assert os.path.exists(jre_home_path)
-        assert os.path.exists(jre_path)
-        assert os.path.exists(lombok_jar_path)
-        assert os.path.exists(jdtls_launcher_jar_path)
-        assert os.path.exists(jdtls_readonly_config_path)
+            runtime_dependencies = {
+                "gradle": {
+                    "platform-agnostic": {
+                        "url": "https://services.gradle.org/distributions/gradle-8.14.2-bin.zip",
+                        "archiveType": "zip",
+                        "relative_extraction_path": ".",
+                    }
+                },
+                "vscode-java": {
+                    "darwin-arm64": {
+                        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-arm64-1.42.0-561.vsix",
+                        "archiveType": "zip",
+                        "relative_extraction_path": "vscode-java",
+                    },
+                    "osx-arm64": {
+                        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-arm64-1.42.0-561.vsix",
+                        "archiveType": "zip",
+                        "relative_extraction_path": "vscode-java",
+                        "jre_home_path": "extension/jre/21.0.7-macosx-aarch64",
+                        "jre_path": "extension/jre/21.0.7-macosx-aarch64/bin/java",
+                        "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
+                        "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                        "jdtls_readonly_config_path": "extension/server/config_mac_arm",
+                    },
+                    "osx-x64": {
+                        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-x64-1.42.0-561.vsix",
+                        "archiveType": "zip",
+                        "relative_extraction_path": "vscode-java",
+                        "jre_home_path": "extension/jre/21.0.7-macosx-x86_64",
+                        "jre_path": "extension/jre/21.0.7-macosx-x86_64/bin/java",
+                        "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
+                        "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                        "jdtls_readonly_config_path": "extension/server/config_mac",
+                    },
+                    "linux-arm64": {
+                        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-arm64-1.42.0-561.vsix",
+                        "archiveType": "zip",
+                        "relative_extraction_path": "vscode-java",
+                        "jre_home_path": "extension/jre/21.0.7-linux-aarch64",
+                        "jre_path": "extension/jre/21.0.7-linux-aarch64/bin/java",
+                        "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
+                        "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                        "jdtls_readonly_config_path": "extension/server/config_linux_arm",
+                    },
+                    "linux-x64": {
+                        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-x64-1.42.0-561.vsix",
+                        "archiveType": "zip",
+                        "relative_extraction_path": "vscode-java",
+                        "jre_home_path": "extension/jre/21.0.7-linux-x86_64",
+                        "jre_path": "extension/jre/21.0.7-linux-x86_64/bin/java",
+                        "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
+                        "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                        "jdtls_readonly_config_path": "extension/server/config_linux",
+                    },
+                    "win-x64": {
+                        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-win32-x64-1.42.0-561.vsix",
+                        "archiveType": "zip",
+                        "relative_extraction_path": "vscode-java",
+                        "jre_home_path": "extension/jre/21.0.7-win32-x86_64",
+                        "jre_path": "extension/jre/21.0.7-win32-x86_64/bin/java.exe",
+                        "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
+                        "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                        "jdtls_readonly_config_path": "extension/server/config_win",
+                    },
+                },
+                "intellicode": {
+                    "platform-agnostic": {
+                        "url": "https://VisualStudioExptTeam.gallery.vsassets.io/_apis/public/gallery/publisher/VisualStudioExptTeam/extension/vscodeintellicode/1.2.30/assetbyname/Microsoft.VisualStudio.Services.VSIXPackage",
+                        "alternate_url": "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/VisualStudioExptTeam/vsextensions/vscodeintellicode/1.2.30/vspackage",
+                        "archiveType": "zip",
+                        "relative_extraction_path": "intellicode",
+                        "intellicode_jar_path": "extension/dist/com.microsoft.jdtls.intellicode.core-0.7.0.jar",
+                        "intellisense_members_path": "extension/dist/bundledModels/java_intellisense-members",
+                    }
+                },
+            }
 
-        dependency = runtime_dependencies["intellicode"]["platform-agnostic"]
-        intellicode_directory_path = str(PurePath(cls.ls_resources_dir(solidlsp_settings), dependency["relative_extraction_path"]))
-        os.makedirs(intellicode_directory_path, exist_ok=True)
-        intellicode_jar_path = str(PurePath(intellicode_directory_path, dependency["intellicode_jar_path"]))
-        intellisense_members_path = str(PurePath(intellicode_directory_path, dependency["intellisense_members_path"]))
-        if not all(
-            [
-                os.path.exists(intellicode_directory_path),
-                os.path.exists(intellicode_jar_path),
-                os.path.exists(intellisense_members_path),
+            gradle_path = str(
+                PurePath(
+                    ls_resources_dir,
+                    "gradle-8.14.2",
+                )
+            )
+
+            if not os.path.exists(gradle_path):
+                FileUtils.download_and_extract_archive(
+                    runtime_dependencies["gradle"]["platform-agnostic"]["url"],
+                    str(PurePath(gradle_path).parent),
+                    runtime_dependencies["gradle"]["platform-agnostic"]["archiveType"],
+                )
+
+            assert os.path.exists(gradle_path)
+
+            dependency = runtime_dependencies["vscode-java"][platformId.value]
+            vscode_java_path = str(PurePath(ls_resources_dir, dependency["relative_extraction_path"]))
+            os.makedirs(vscode_java_path, exist_ok=True)
+            jre_home_path = str(PurePath(vscode_java_path, dependency["jre_home_path"]))
+            jre_path = str(PurePath(vscode_java_path, dependency["jre_path"]))
+            lombok_jar_path = str(PurePath(vscode_java_path, dependency["lombok_jar_path"]))
+            jdtls_launcher_jar_path = str(PurePath(vscode_java_path, dependency["jdtls_launcher_jar_path"]))
+            jdtls_readonly_config_path = str(PurePath(vscode_java_path, dependency["jdtls_readonly_config_path"]))
+            if not all(
+                [
+                    os.path.exists(vscode_java_path),
+                    os.path.exists(jre_home_path),
+                    os.path.exists(jre_path),
+                    os.path.exists(lombok_jar_path),
+                    os.path.exists(jdtls_launcher_jar_path),
+                    os.path.exists(jdtls_readonly_config_path),
+                ]
+            ):
+                FileUtils.download_and_extract_archive(dependency["url"], vscode_java_path, dependency["archiveType"])
+
+            os.chmod(jre_path, 0o755)
+
+            assert os.path.exists(vscode_java_path)
+            assert os.path.exists(jre_home_path)
+            assert os.path.exists(jre_path)
+            assert os.path.exists(lombok_jar_path)
+            assert os.path.exists(jdtls_launcher_jar_path)
+            assert os.path.exists(jdtls_readonly_config_path)
+
+            dependency = runtime_dependencies["intellicode"]["platform-agnostic"]
+            intellicode_directory_path = str(PurePath(ls_resources_dir, dependency["relative_extraction_path"]))
+            os.makedirs(intellicode_directory_path, exist_ok=True)
+            intellicode_jar_path = str(PurePath(intellicode_directory_path, dependency["intellicode_jar_path"]))
+            intellisense_members_path = str(PurePath(intellicode_directory_path, dependency["intellisense_members_path"]))
+            if not all(
+                [
+                    os.path.exists(intellicode_directory_path),
+                    os.path.exists(intellicode_jar_path),
+                    os.path.exists(intellisense_members_path),
+                ]
+            ):
+                FileUtils.download_and_extract_archive(dependency["url"], intellicode_directory_path, dependency["archiveType"])
+
+            assert os.path.exists(intellicode_directory_path)
+            assert os.path.exists(intellicode_jar_path)
+            assert os.path.exists(intellisense_members_path)
+
+            return RuntimeDependencyPaths(
+                gradle_path=gradle_path,
+                lombok_jar_path=lombok_jar_path,
+                jre_path=jre_path,
+                jre_home_path=jre_home_path,
+                jdtls_launcher_jar_path=jdtls_launcher_jar_path,
+                jdtls_readonly_config_path=jdtls_readonly_config_path,
+                intellicode_jar_path=intellicode_jar_path,
+                intellisense_members_path=intellisense_members_path,
+            )
+
+        def create_launch_command(self) -> list[str] | str:
+            # ws_dir is the workspace directory for the EclipseJDTLS server
+            ws_dir = str(
+                PurePath(
+                    self._solidlsp_settings.ls_resources_dir,
+                    "EclipseJDTLS",
+                    "workspaces",
+                    uuid.uuid4().hex,
+                )
+            )
+
+            # shared_cache_location is the global cache used by Eclipse JDTLS across all workspaces
+            shared_cache_location = str(PurePath(self._solidlsp_settings.ls_resources_dir, "lsp", "EclipseJDTLS", "sharedIndex"))
+            os.makedirs(shared_cache_location, exist_ok=True)
+            os.makedirs(ws_dir, exist_ok=True)
+
+            jre_path = self.runtime_dependency_paths.jre_path
+            lombok_jar_path = self.runtime_dependency_paths.lombok_jar_path
+
+            jdtls_launcher_jar = self.runtime_dependency_paths.jdtls_launcher_jar_path
+
+            data_dir = str(PurePath(ws_dir, "data_dir"))
+            jdtls_config_path = str(PurePath(ws_dir, "config_path"))
+
+            jdtls_readonly_config_path = self.runtime_dependency_paths.jdtls_readonly_config_path
+
+            if not os.path.exists(jdtls_config_path):
+                shutil.copytree(jdtls_readonly_config_path, jdtls_config_path)
+
+            for static_path in [
+                jre_path,
+                lombok_jar_path,
+                jdtls_launcher_jar,
+                jdtls_config_path,
+                jdtls_readonly_config_path,
+            ]:
+                assert os.path.exists(static_path), static_path
+
+            cmd = [
+                jre_path,
+                "--add-modules=ALL-SYSTEM",
+                "--add-opens",
+                "java.base/java.util=ALL-UNNAMED",
+                "--add-opens",
+                "java.base/java.lang=ALL-UNNAMED",
+                "--add-opens",
+                "java.base/sun.nio.fs=ALL-UNNAMED",
+                "-Declipse.application=org.eclipse.jdt.ls.core.id1",
+                "-Dosgi.bundles.defaultStartLevel=4",
+                "-Declipse.product=org.eclipse.jdt.ls.core.product",
+                "-Djava.import.generatesMetadataFilesAtProjectRoot=false",
+                "-Dfile.encoding=utf8",
+                "-noverify",
+                "-XX:+UseParallelGC",
+                "-XX:GCTimeRatio=4",
+                "-XX:AdaptiveSizePolicyWeight=90",
+                "-Dsun.zip.disableMemoryMapping=true",
+                "-Djava.lsp.joinOnCompletion=true",
+                "-Xmx3G",
+                "-Xms100m",
+                "-Xlog:disable",
+                "-Dlog.level=ALL",
+                f"-javaagent:{lombok_jar_path}",
+                f"-Djdt.core.sharedIndexLocation={shared_cache_location}",
+                "-jar",
+                f"{jdtls_launcher_jar}",
+                "-configuration",
+                f"{jdtls_config_path}",
+                "-data",
+                f"{data_dir}",
             ]
-        ):
-            FileUtils.download_and_extract_archive(dependency["url"], intellicode_directory_path, dependency["archiveType"])
 
-        assert os.path.exists(intellicode_directory_path)
-        assert os.path.exists(intellicode_jar_path)
-        assert os.path.exists(intellisense_members_path)
+            return cmd
 
-        return RuntimeDependencyPaths(
-            gradle_path=gradle_path,
-            lombok_jar_path=lombok_jar_path,
-            jre_path=jre_path,
-            jre_home_path=jre_home_path,
-            jdtls_launcher_jar_path=jdtls_launcher_jar_path,
-            jdtls_readonly_config_path=jdtls_readonly_config_path,
-            intellicode_jar_path=intellicode_jar_path,
-            intellisense_members_path=intellisense_members_path,
-        )
+        def create_process_env(self) -> dict[str, str]:
+            return {"syntaxserver": "false", "JAVA_HOME": self.runtime_dependency_paths.jre_home_path}
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
