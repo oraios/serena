@@ -52,7 +52,11 @@ def scan_directory(
                     entry_path = entry.path
 
                     if rel_base:
-                        result_path = os.path.relpath(entry_path, rel_base)
+                        try:
+                            result_path = os.path.relpath(entry_path, rel_base)
+                        except:
+                            log.debug(f"Skipping entry due to relative path conversion error: {entry.path}")
+                            continue
                     else:
                         result_path = entry_path
 
