@@ -228,7 +228,8 @@ class ReplaceContentTool(Tool, ToolMarkerCanEdit):
             if "\n" in matched_text and re.search(regex_pattern, matched_text[1:], flags=regex_flags):
                 raise ValueError(
                     "Match is ambiguous: the search pattern matches multiple overlapping occurrences. "
-                    "Please revise the search pattern to be more specific to avoid ambiguity."
+                    "Please revise the search pattern to be more specific to avoid ambiguity, "
+                    "e.g. by matching specific context after the match, or try using the literal mode."
                 )
 
             # Handle backreferences: replace $!1, $!2, etc. with actual matched groups
