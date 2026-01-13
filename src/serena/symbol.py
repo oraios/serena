@@ -4,10 +4,11 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import asdict, dataclass
-from typing import TYPE_CHECKING, Any, NotRequired, Self, TypedDict, Union
+from typing import TYPE_CHECKING, Any, Self, Union
 
 from sensai.util.string import ToStringMixin
 
+import serena.tools.jetbrains_types as jb
 from solidlsp import SolidLanguageServer
 from solidlsp.ls import ReferenceInSymbol as LSPReferenceInSymbol
 from solidlsp.ls_types import Position, SymbolKind, UnifiedSymbolInformation
@@ -496,6 +497,39 @@ class LanguageServerSymbolRetriever:
         self._ls_manager: LanguageServerManager = ls_manager
         self.agent = agent
 
+    def _request_info(self, relative_file_path: str, line: int, column: int) -> str | None:
+        """Retrieves information (in a sanitized format) about the symbol at the desired location,
+        typically containing the docstring and signature.
+
+        Returns None if no information is available.
+        """
+        lang_server = self.get_language_server(relative_file_path)
+        hover_info = lang_server.request_hover(relative_file_path=relative_file_path, line=line, column=column)
+        if hover_info is None:
+            return None
+        contents = hover_info["contents"]
+        # Handle various response formats
+        if isinstance(contents, list):
+            # Array format: extract all parts and join them
+            stripped_parts = []
+            for part in contents:
+                if isinstance(part, str) and (stripped_part := part.strip()):
+                    stripped_parts.append(stripped_part)
+                else:
+                    # should be a dict with "value" key
+                    stripped_parts.append(part["value"].strip())  # type: ignore
+            return "\n".join(stripped_parts) if stripped_parts else None
+        if isinstance(contents, dict) and (stripped_contents := contents.get("value", "").strip()):
+            return stripped_contents
+        if isinstance(contents, str) and (stripped_contents := contents.strip()):
+            return stripped_contents
+        return None
+
+    def request_info_for_symbol(self, symbol: LanguageServerSymbol) -> str | None:
+        if None in [symbol.relative_path, symbol.line, symbol.column]:
+            return None
+        return self._request_info(relative_file_path=symbol.relative_path, line=symbol.line, column=symbol.column)  # type: ignore[arg-type]
+
     def get_root_path(self) -> str:
         return self._ls_manager.get_root_path()
 
@@ -672,15 +706,7 @@ class LanguageServerSymbolRetriever:
 
 
 class JetBrainsSymbol(Symbol):
-    class SymbolDict(TypedDict):
-        name_path: str
-        relative_path: str
-        type: str
-        text_range: NotRequired[dict]
-        body: NotRequired[str]
-        children: NotRequired[list["JetBrainsSymbol.SymbolDict"]]
-
-    def __init__(self, symbol_dict: SymbolDict, project: Project) -> None:
+    def __init__(self, symbol_dict: jb.SymbolDTO, project: Project) -> None:
         """
         :param symbol_dict: dictionary as returned by the JetBrains plugin client.
         """

@@ -1,5 +1,8 @@
 package test_repo;
 
+/**
+ * A simple model class that holds a name and provides methods to retrieve it.
+ */
 public class Model {
     private String name;
 

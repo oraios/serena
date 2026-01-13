@@ -14,6 +14,7 @@ from serena.config.serena_config import ProjectConfig, RegisteredProject, Serena
 from serena.project import Project
 from serena.tools import SUCCESS_RESULT, FindReferencingSymbolsTool, FindSymbolTool, ReplaceContentTool, ReplaceSymbolBodyTool
 from solidlsp.ls_config import Language
+from solidlsp.ls_types import SymbolKind
 from test.conftest import get_repo_path, language_tests_enabled
 from test.solidlsp import clojure as clj
 
@@ -120,7 +121,7 @@ class TestSerenaAgent:
         ],
         indirect=["serena_agent"],
     )
-    def test_find_symbol(self, serena_agent, symbol_name: str, expected_kind: str, expected_file: str):
+    def test_find_symbol(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str):
         agent = serena_agent
         find_symbol_tool = agent.get_tool(FindSymbolTool)
         result = find_symbol_tool.apply_ex(name_path_pattern=symbol_name)
@@ -130,6 +131,22 @@ class TestSerenaAgent:
             symbol_name in s["name_path"] and expected_kind.lower() in s["kind"].lower() and expected_file in s["relative_path"]
             for s in symbols
         ), f"Expected to find {symbol_name} ({expected_kind}) in {expected_file}"
+        # testing retrieval of symbol info
+        if serena_agent.get_active_lsp_languages() == [Language.KOTLIN]:
+            # kotlin LS doesn't seem to provide hover info right now, at least for the struct we test this on
+            return
+        for s in symbols:
+            if s["kind"] in (SymbolKind.File.name, SymbolKind.Module.name):
+                # we ignore file and module symbols for the info test
+                continue
+            symbol_info = s.get("info")
+            assert symbol_info, f"Expected symbol info to be present for symbol: {s}"
+            assert (
+                symbol_name in s["info"]
+            ), f"[{serena_agent.get_active_lsp_languages()[0]}] Expected symbol info to contain symbol name {symbol_name}. Info: {s['info']}"
+            # special additional test for Java, since Eclipse returns hover in a complex format and we want to make sure to get it right
+            if s["kind"] == SymbolKind.Class.name and serena_agent.get_active_lsp_languages() == [Language.JAVA]:
+                assert "A simple model class" in symbol_info, f"Java class docstring not found in symbol info: {s}"
 
     @pytest.mark.parametrize(
         "serena_agent,symbol_name,def_file,ref_file",
@@ -172,7 +189,7 @@ class TestSerenaAgent:
         ],
         indirect=["serena_agent"],
     )
-    def test_find_symbol_references(self, serena_agent, symbol_name: str, def_file: str, ref_file: str) -> None:
+    def test_find_symbol_references(self, serena_agent: SerenaAgent, symbol_name: str, def_file: str, ref_file: str) -> None:
         agent = serena_agent
 
         # Find the symbol location first
