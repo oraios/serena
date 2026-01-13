@@ -185,9 +185,7 @@ class TestFindFirstFreePort:
             found_port = SerenaDashboardAPI._find_first_free_port(test_port, "0.0.0.0")
 
             # The found port must NOT be the one with the listener
-            assert found_port != test_port, (
-                f"Function returned port {test_port} which has a listener on 127.0.0.1 " f"(checked with 0.0.0.0)!"
-            )
+            assert found_port != test_port, f"Function returned port {test_port} which has a listener on 127.0.0.1 (checked with 0.0.0.0)!"
             assert found_port > test_port
 
             # Verify the found port is actually usable
