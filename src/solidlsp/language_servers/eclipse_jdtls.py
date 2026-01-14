@@ -733,6 +733,7 @@ class EclipseJDTLS(SolidLanguageServer):
             return
 
         def lang_status_handler(params: dict) -> None:
+            log.info("Language status update: %s", params)
             if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
                 self._service_ready_event.set()
             if params["type"] == "ProjectStatus":
