@@ -150,7 +150,7 @@ class LanguageServerDependencyProvider(ABC):
            or the entire command in a single string.
         """
 
-    def create_process_env(self) -> dict[str, str]:
+    def create_launch_command_env(self) -> dict[str, str]:
         """
         Provides environment variables to be set when executing the launch command.
 
@@ -413,7 +413,7 @@ class SolidLanguageServer(ABC):
     def _create_process_launch_info(self) -> ProcessLaunchInfo:
         assert self._dependency_provider is not None
         cmd = self._dependency_provider.create_launch_command()
-        env = self._dependency_provider.create_process_env()
+        env = self._dependency_provider.create_launch_command_env()
         return ProcessLaunchInfo(cmd=cmd, cwd=self.repository_root_path, env=env)
 
     def _get_wait_time_for_cross_file_referencing(self) -> float:

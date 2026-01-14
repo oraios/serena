@@ -345,7 +345,7 @@ class EclipseJDTLS(SolidLanguageServer):
 
             return cmd
 
-        def create_process_env(self) -> dict[str, str]:
+        def create_launch_command_env(self) -> dict[str, str]:
             return {"syntaxserver": "false", "JAVA_HOME": self.runtime_dependency_paths.jre_home_path}
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:

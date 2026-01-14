@@ -370,7 +370,7 @@ class MatlabLanguageServer(SolidLanguageServer):
             cmd = [node_path, server_script, "--stdio"]
             return cmd
 
-        def create_process_env(self) -> dict[str, str]:
+        def create_launch_command_env(self) -> dict[str, str]:
             return {
                 "MATLAB_INSTALL_PATH": self.get_matlab_path(),
             }
