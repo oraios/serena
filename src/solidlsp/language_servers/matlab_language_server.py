@@ -74,77 +74,6 @@ class MatlabLanguageServer(SolidLanguageServer):
         - matlab_path: Path to MATLAB installation (overrides MATLAB_PATH env var)
     """
 
-    @staticmethod
-    def _find_matlab_installation() -> str:
-        """
-        Find MATLAB installation path.
-
-        Search order:
-            1. MATLAB_PATH environment variable
-            2. Common installation locations based on platform
-
-        Returns:
-            Path to MATLAB installation directory.
-
-        Raises:
-            RuntimeError: If MATLAB installation is not found.
-
-        """
-        # Check environment variable first
-        matlab_path = os.environ.get(MATLAB_PATH_ENV_VAR)
-        if matlab_path and os.path.isdir(matlab_path):
-            log.info(f"Using MATLAB from environment variable {MATLAB_PATH_ENV_VAR}: {matlab_path}")
-            return matlab_path
-
-        system = platform.system()
-
-        if system == "Darwin":  # macOS
-            # Check common macOS locations
-            search_patterns = [
-                "/Applications/MATLAB_*.app",
-                "/Volumes/*/Applications/MATLAB_*.app",
-                os.path.expanduser("~/Applications/MATLAB_*.app"),
-            ]
-            for pattern in search_patterns:
-                matches = sorted(glob.glob(pattern), reverse=True)  # Newest version first
-                for match in matches:
-                    if os.path.isdir(match):
-                        log.info(f"Found MATLAB installation: {match}")
-                        return match
-
-        elif system == "Windows":
-            # Check common Windows locations
-            search_patterns = [
-                "C:\\Program Files\\MATLAB\\R*",
-                "C:\\Program Files (x86)\\MATLAB\\R*",
-            ]
-            for pattern in search_patterns:
-                matches = sorted(glob.glob(pattern), reverse=True)
-                for match in matches:
-                    if os.path.isdir(match):
-                        log.info(f"Found MATLAB installation: {match}")
-                        return match
-
-        elif system == "Linux":
-            # Check common Linux locations
-            search_patterns = [
-                "/usr/local/MATLAB/R*",
-                "/opt/MATLAB/R*",
-                os.path.expanduser("~/MATLAB/R*"),
-            ]
-            for pattern in search_patterns:
-                matches = sorted(glob.glob(pattern), reverse=True)
-                for match in matches:
-                    if os.path.isdir(match):
-                        log.info(f"Found MATLAB installation: {match}")
-                        return match
-
-        raise RuntimeError(
-            f"MATLAB installation not found. Set the {MATLAB_PATH_ENV_VAR} environment variable "
-            "to your MATLAB installation directory (e.g., /Applications/MATLAB_R2024b.app on macOS, "
-            "C:\\Program Files\\MATLAB\\R2024b on Windows, or /usr/local/MATLAB/R2024b on Linux)."
-        )
-
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a MatlabLanguageServer instance. This class is not meant to be instantiated directly.
@@ -320,6 +249,77 @@ class MatlabLanguageServer(SolidLanguageServer):
 
             raise RuntimeError(f"MATLAB language server script not found in extension at {extension_path}")
 
+        @staticmethod
+        def _find_matlab_installation() -> str:
+            """
+            Find MATLAB installation path.
+
+            Search order:
+                1. MATLAB_PATH environment variable
+                2. Common installation locations based on platform
+
+            Returns:
+                Path to MATLAB installation directory.
+
+            Raises:
+                RuntimeError: If MATLAB installation is not found.
+
+            """
+            # Check environment variable first
+            matlab_path = os.environ.get(MATLAB_PATH_ENV_VAR)
+            if matlab_path and os.path.isdir(matlab_path):
+                log.info(f"Using MATLAB from environment variable {MATLAB_PATH_ENV_VAR}: {matlab_path}")
+                return matlab_path
+
+            system = platform.system()
+
+            if system == "Darwin":  # macOS
+                # Check common macOS locations
+                search_patterns = [
+                    "/Applications/MATLAB_*.app",
+                    "/Volumes/*/Applications/MATLAB_*.app",
+                    os.path.expanduser("~/Applications/MATLAB_*.app"),
+                ]
+                for pattern in search_patterns:
+                    matches = sorted(glob.glob(pattern), reverse=True)  # Newest version first
+                    for match in matches:
+                        if os.path.isdir(match):
+                            log.info(f"Found MATLAB installation: {match}")
+                            return match
+
+            elif system == "Windows":
+                # Check common Windows locations
+                search_patterns = [
+                    "C:\\Program Files\\MATLAB\\R*",
+                    "C:\\Program Files (x86)\\MATLAB\\R*",
+                ]
+                for pattern in search_patterns:
+                    matches = sorted(glob.glob(pattern), reverse=True)
+                    for match in matches:
+                        if os.path.isdir(match):
+                            log.info(f"Found MATLAB installation: {match}")
+                            return match
+
+            elif system == "Linux":
+                # Check common Linux locations
+                search_patterns = [
+                    "/usr/local/MATLAB/R*",
+                    "/opt/MATLAB/R*",
+                    os.path.expanduser("~/MATLAB/R*"),
+                ]
+                for pattern in search_patterns:
+                    matches = sorted(glob.glob(pattern), reverse=True)
+                    for match in matches:
+                        if os.path.isdir(match):
+                            log.info(f"Found MATLAB installation: {match}")
+                            return match
+
+            raise RuntimeError(
+                f"MATLAB installation not found. Set the {MATLAB_PATH_ENV_VAR} environment variable "
+                "to your MATLAB installation directory (e.g., /Applications/MATLAB_R2024b.app on macOS, "
+                "C:\\Program Files\\MATLAB\\R2024b on Windows, or /usr/local/MATLAB/R2024b on Linux)."
+            )
+
         def get_matlab_path(self) -> str:
             """Get MATLAB path from settings or auto-detect."""
             if self._matlab_path is not None:
@@ -328,7 +328,7 @@ class MatlabLanguageServer(SolidLanguageServer):
             matlab_path = self._custom_settings.get("matlab_path")
 
             if not matlab_path:
-                matlab_path = MatlabLanguageServer._find_matlab_installation()  # Raises RuntimeError if not found
+                matlab_path = self._find_matlab_installation()  # Raises RuntimeError if not found
 
             # Verify MATLAB path exists
             if not os.path.isdir(matlab_path):
