@@ -784,9 +784,14 @@ class EclipseJDTLS(SolidLanguageServer):
             }
         )
         assert intellicode_enable_result
-
-        self._service_ready_event.wait()
-        self._project_ready_event.wait()
+        if self._service_ready_event.wait(timeout=15):
+            log.info("Language server started successfully")
+        else:
+            log.warning("Failed to initialize in 15s, continuing")
+        if self._project_ready_event.wait(timeout=15):
+            log.info("Project loaded successfully in LS")
+        else:
+            log.warning("Failed to load project in 15s, continuing")
 
     @override
     def _request_hover(self, uri: str, line: int, column: int) -> ls_types.Hover | None:
