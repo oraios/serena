@@ -12,6 +12,9 @@ Serena comes with built-in tools for monitoring and managing the current session
   By default, it will be accessible at `http://localhost:24282/dashboard/index.html`,
   but a higher port may be used if the default port is unavailable/multiple instances are running.
 
+  **We recommend always enabling the dashboard**. If you don't want the browser to open automatically,
+  you can disable it while still keeping the dashboard running in the background (see below).
+
 * the **GUI tool** (disabled by default)
   
   The GUI tool is a native application window which displays logs.
@@ -26,7 +29,8 @@ For the dashboard, this can be disabled if desired (see below).
 ## Disabling Automatic Browser Opening
 
 If you prefer not to have the dashboard open automatically (e.g., to avoid focus stealing), you can disable it
-by setting `web_dashboard_open_on_launch: False` in your `serena_config.yml`.
+by setting `web_dashboard_open_on_launch: False` in your `serena_config.yml` or by passing `--open-web-dashboard False`
+to `start-mcp-server` CLI command.
 
 When automatic opening is disabled, you can still access the dashboard by:
 * asking the LLM to "open the Serena dashboard", which will open the dashboard in your default browser

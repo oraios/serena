@@ -27,6 +27,12 @@ web_dashboard: True
 # whether to open the Serena web dashboard (which will be accessible through your web browser) that
 # provides access to Serena's configuration and state as well as the current session logs.
 # The web dashboard is supported on all platforms.
+# We strongly recommend to always enable this option, since the dashboard provides important information
+# about the current state of Serena, including the configuration, the logs and tool usage statistics.
+# If you don't want the browser window to pop up automatically, set the `web_dashboard_open_on_launch` to False
+# (either here or through the corresponding flag in the `start-mcp-server` CLI command).
+# You can then open the dashboard by asking your agent to do so (e.g., by saying "open the dashboard"), Serena provides
+# a tool for this.
 # Further information: https://oraios.github.io/serena/02-usage/060_dashboard.html
 
 web_dashboard_listen_address: 127.0.0.1
@@ -34,7 +40,7 @@ web_dashboard_listen_address: 127.0.0.1
 
 web_dashboard_open_on_launch: True
 # whether to open a browser window with the web dashboard when Serena starts (provided that web_dashboard
-# is enabled).
+# is enabled). See also the web_dashboard option.
 # If set to false, you can still open the dashboard manually by
 # a) telling the LLM to "open the dashboard" (provided that the open_dashboard tool is enabled) or by
 # b) manually navigating to http://localhost:24282/dashboard/ in your web browser (actual port

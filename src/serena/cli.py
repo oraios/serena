@@ -36,6 +36,8 @@ from solidlsp.util.subprocess_util import subprocess_kwargs
 
 log = logging.getLogger(__name__)
 
+_MAX_CONTENT_WIDTH = 100
+
 
 def find_project_root(root: str | Path | None = None) -> str:
     """Find project root by walking up from CWD.
@@ -138,7 +140,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         super().__init__(name="serena", help="Serena CLI commands. You can run `<command> --help` for more info on each command.")
 
     @staticmethod
-    @click.command("start-mcp-server", help="Starts the Serena MCP server.")
+    @click.command("start-mcp-server", help="Starts the Serena MCP server.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
     @click.option("--project", "project", type=PROJECT_TYPE, default=None, help="Path or name of project to activate at startup.")
     @click.option("--project-file", "project", type=PROJECT_TYPE, default=None, help="[DEPRECATED] Use --project instead.")
     @click.argument("project_file_arg", type=PROJECT_TYPE, required=False, default=None, metavar="")
@@ -177,8 +179,29 @@ class TopLevelCommands(AutoRegisteringGroup):
     @click.option(
         "--port", type=int, default=8000, show_default=True, help="Listen port for the MCP server (when using corresponding transport)."
     )
-    @click.option("--enable-web-dashboard", type=bool, is_flag=False, default=None, help="Override dashboard setting in config.")
-    @click.option("--enable-gui-log-window", type=bool, is_flag=False, default=None, help="Override GUI log window setting in config.")
+    @click.option(
+        "--enable-web-dashboard",
+        type=bool,
+        is_flag=False,
+        default=None,
+        help="Enable the web dashboard (overriding the setting in Serena's config). "
+        "It is recommended to always enable the dashboard. If you don't want the browser to open on startup, set open-web-dashboard to False. "
+        "For more information, see\nhttps://oraios.github.io/serena/02-usage/060_dashboard.html",
+    )
+    @click.option(
+        "--enable-gui-log-window",
+        type=bool,
+        is_flag=False,
+        default=None,
+        help="Enable the gui log window (currently only displays logs; overriding the setting in Serena's config).",
+    )
+    @click.option(
+        "--open-web-dashboard",
+        type=bool,
+        is_flag=False,
+        default=None,
+        help="Open Serena's dashboard in your browser after MCP server startup (overriding the setting in Serena's config).",
+    )
     @click.option(
         "--log-level",
         type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
@@ -204,6 +227,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         host: str,
         port: int,
         enable_web_dashboard: bool | None,
+        open_web_dashboard: bool | None,
         enable_gui_log_window: bool | None,
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None,
         trace_lsp_communication: bool | None,
@@ -244,6 +268,7 @@ class TopLevelCommands(AutoRegisteringGroup):
             modes=modes,
             language_backend=LanguageBackend.from_str(language_backend) if language_backend else None,
             enable_web_dashboard=enable_web_dashboard,
+            open_web_dashboard=open_web_dashboard,
             enable_gui_log_window=enable_gui_log_window,
             log_level=log_level,
             trace_lsp_communication=trace_lsp_communication,
@@ -258,7 +283,9 @@ class TopLevelCommands(AutoRegisteringGroup):
         server.run(transport=transport)
 
     @staticmethod
-    @click.command("print-system-prompt", help="Print the system prompt for a project.")
+    @click.command(
+        "print-system-prompt", help="Print the system prompt for a project.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH}
+    )
     @click.argument("project", type=click.Path(exists=True), default=os.getcwd(), required=False)
     @click.option(
         "--log-level",
@@ -309,7 +336,7 @@ class ModeCommands(AutoRegisteringGroup):
         super().__init__(name="mode", help="Manage Serena modes. You can run `mode <command> --help` for more info on each command.")
 
     @staticmethod
-    @click.command("list", help="List available modes.")
+    @click.command("list", help="List available modes.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
     def list() -> None:
         mode_names = SerenaAgentMode.list_registered_mode_names()
         max_len_name = max(len(name) for name in mode_names) if mode_names else 20
@@ -321,7 +348,7 @@ class ModeCommands(AutoRegisteringGroup):
             click.echo(name_descr_string)
 
     @staticmethod
-    @click.command("create", help="Create a new mode or copy an internal one.")
+    @click.command("create", help="Create a new mode or copy an internal one.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
     @click.option(
         "--name",
         "-n",
@@ -350,7 +377,7 @@ class ModeCommands(AutoRegisteringGroup):
         _open_in_editor(dest)
 
     @staticmethod
-    @click.command("edit", help="Edit a custom mode YAML file.")
+    @click.command("edit", help="Edit a custom mode YAML file.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
     @click.argument("mode_name")
     def edit(mode_name: str) -> None:
         path = os.path.join(SerenaPaths().user_modes_dir, f"{mode_name}.yml")
@@ -366,7 +393,7 @@ class ModeCommands(AutoRegisteringGroup):
         _open_in_editor(path)
 
     @staticmethod
-    @click.command("delete", help="Delete a custom mode file.")
+    @click.command("delete", help="Delete a custom mode file.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
     @click.argument("mode_name")
     def delete(mode_name: str) -> None:
         path = os.path.join(SerenaPaths().user_modes_dir, f"{mode_name}.yml")
@@ -386,7 +413,7 @@ class ContextCommands(AutoRegisteringGroup):
         )
 
     @staticmethod
-    @click.command("list", help="List available contexts.")
+    @click.command("list", help="List available contexts.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
     def list() -> None:
         context_names = SerenaAgentContext.list_registered_context_names()
         max_len_name = max(len(name) for name in context_names) if context_names else 20
@@ -398,7 +425,9 @@ class ContextCommands(AutoRegisteringGroup):
             click.echo(name_descr_string)
 
     @staticmethod
-    @click.command("create", help="Create a new context or copy an internal one.")
+    @click.command(
+        "create", help="Create a new context or copy an internal one.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH}
+    )
     @click.option(
         "--name",
         "-n",
@@ -427,7 +456,7 @@ class ContextCommands(AutoRegisteringGroup):
         _open_in_editor(dest)
 
     @staticmethod
-    @click.command("edit", help="Edit a custom context YAML file.")
+    @click.command("edit", help="Edit a custom context YAML file.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
     @click.argument("context_name")
     def edit(context_name: str) -> None:
         path = os.path.join(SerenaPaths().user_contexts_dir, f"{context_name}.yml")
@@ -443,7 +472,7 @@ class ContextCommands(AutoRegisteringGroup):
         _open_in_editor(path)
 
     @staticmethod
-    @click.command("delete", help="Delete a custom context file.")
+    @click.command("delete", help="Delete a custom context file.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
     @click.argument("context_name")
     def delete(context_name: str) -> None:
         path = os.path.join(SerenaPaths().user_contexts_dir, f"{context_name}.yml")
@@ -462,7 +491,9 @@ class SerenaConfigCommands(AutoRegisteringGroup):
 
     @staticmethod
     @click.command(
-        "edit", help="Edit serena_config.yml in your default editor. Will create a config file from the template if no config is found."
+        "edit",
+        help="Edit serena_config.yml in your default editor. Will create a config file from the template if no config is found.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
     )
     def edit() -> None:
         serena_config = SerenaConfig.from_config_file()
@@ -512,7 +543,7 @@ class ProjectCommands(AutoRegisteringGroup):
         return generated_conf
 
     @staticmethod
-    @click.command("create", help="Create a new Serena project configuration.")
+    @click.command("create", help="Create a new Serena project configuration.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
     @click.argument("project_path", type=click.Path(exists=True, file_okay=False), default=os.getcwd())
     @click.option("--name", type=str, default=None, help="Project name; defaults to directory name if not specified.")
     @click.option(
@@ -538,7 +569,11 @@ class ProjectCommands(AutoRegisteringGroup):
             raise click.ClickException(str(e))
 
     @staticmethod
-    @click.command("index", help="Index a project by saving symbols to the LSP cache. Auto-creates project.yml if it doesn't exist.")
+    @click.command(
+        "index",
+        help="Index a project by saving symbols to the LSP cache. Auto-creates project.yml if it doesn't exist.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
     @click.argument("project", type=click.Path(exists=True), default=os.getcwd(), required=False)
     @click.option("--name", type=str, default=None, help="Project name (only used if auto-creating project.yml).")
     @click.option(
@@ -570,7 +605,9 @@ class ProjectCommands(AutoRegisteringGroup):
         ProjectCommands._index_project(project, log_level, timeout=timeout)
 
     @staticmethod
-    @click.command("index-deprecated", help="Deprecated alias for 'serena project index'.")
+    @click.command(
+        "index-deprecated", help="Deprecated alias for 'serena project index'.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH}
+    )
     @click.argument("project", type=click.Path(exists=True), default=os.getcwd(), required=False)
     @click.option("--log-level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="WARNING")
     @click.option("--timeout", type=float, default=10, help="Timeout for indexing a single file.")
@@ -622,7 +659,11 @@ class ProjectCommands(AutoRegisteringGroup):
             ls_mgr.stop_all()
 
     @staticmethod
-    @click.command("is_ignored_path", help="Check if a path is ignored by the project configuration.")
+    @click.command(
+        "is_ignored_path",
+        help="Check if a path is ignored by the project configuration.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
     @click.argument("path", type=click.Path(exists=False, file_okay=True, dir_okay=True))
     @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
     def is_ignored_path(path: str, project: str) -> None:
@@ -639,7 +680,11 @@ class ProjectCommands(AutoRegisteringGroup):
         click.echo(f"Path '{path}' IS {'ignored' if is_ignored else 'IS NOT ignored'} by the project configuration.")
 
     @staticmethod
-    @click.command("index-file", help="Index a single file by saving its symbols to the LSP cache.")
+    @click.command(
+        "index-file",
+        help="Index a single file by saving its symbols to the LSP cache.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
     @click.argument("file", type=click.Path(exists=True, file_okay=True, dir_okay=False))
     @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
     @click.option("--verbose", "-v", is_flag=True, help="Print detailed information about the indexed symbols.")
@@ -672,7 +717,11 @@ class ProjectCommands(AutoRegisteringGroup):
             ls_mgr.stop_all()
 
     @staticmethod
-    @click.command("health-check", help="Perform a comprehensive health check of the project's tools and language server.")
+    @click.command(
+        "health-check",
+        help="Perform a comprehensive health check of the project's tools and language server.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
     @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
     def health_check(project: str) -> None:
         """
@@ -827,6 +876,7 @@ class ToolCommands(AutoRegisteringGroup):
     @click.command(
         "list",
         help="Prints an overview of the tools that are active by default (not just the active ones for your project). For viewing all tools, pass `--all / -a`",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
     )
     @click.option("--quiet", "-q", is_flag=True)
     @click.option("--all", "-a", "include_optional", is_flag=True, help="List all tools, including those not enabled by default.")
@@ -849,6 +899,7 @@ class ToolCommands(AutoRegisteringGroup):
     @click.command(
         "description",
         help="Print the description of a tool, optionally with a specific context (the latter may modify the default description).",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
     )
     @click.argument("tool_name", type=str)
     @click.option("--context", type=str, default=None, help="Context name or path to context file.")
@@ -879,7 +930,9 @@ class PromptCommands(AutoRegisteringGroup):
         return os.path.join(templates_dir, prompt_yaml_name)
 
     @staticmethod
-    @click.command("list", help="Lists yamls that are used for defining prompts.")
+    @click.command(
+        "list", help="Lists yamls that are used for defining prompts.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH}
+    )
     def list() -> None:
         serena_prompt_yaml_names = [os.path.basename(f) for f in glob.glob(PROMPT_TEMPLATES_DIR_INTERNAL + "/*.yml")]
         for prompt_yaml_name in serena_prompt_yaml_names:
@@ -890,7 +943,11 @@ class PromptCommands(AutoRegisteringGroup):
                 click.echo(prompt_yaml_name)
 
     @staticmethod
-    @click.command("create-override", help="Create an override of an internal prompts yaml for customizing Serena's prompts")
+    @click.command(
+        "create-override",
+        help="Create an override of an internal prompts yaml for customizing Serena's prompts",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
     @click.argument("prompt_yaml_name")
     def create_override(prompt_yaml_name: str) -> None:
         """
@@ -908,7 +965,9 @@ class PromptCommands(AutoRegisteringGroup):
         _open_in_editor(user_prompt_yaml_path)
 
     @staticmethod
-    @click.command("edit-override", help="Edit an existing prompt override file")
+    @click.command(
+        "edit-override", help="Edit an existing prompt override file", context_settings={"max_content_width": _MAX_CONTENT_WIDTH}
+    )
     @click.argument("prompt_yaml_name")
     def edit_override(prompt_yaml_name: str) -> None:
         """
@@ -925,7 +984,7 @@ class PromptCommands(AutoRegisteringGroup):
         _open_in_editor(user_prompt_yaml_path)
 
     @staticmethod
-    @click.command("list-overrides", help="List existing prompt override files")
+    @click.command("list-overrides", help="List existing prompt override files", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
     def list_overrides() -> None:
         user_templates_dir = SerenaPaths().user_prompt_templates_dir
         os.makedirs(user_templates_dir, exist_ok=True)
@@ -936,7 +995,7 @@ class PromptCommands(AutoRegisteringGroup):
                 click.echo(file_path)
 
     @staticmethod
-    @click.command("delete-override", help="Delete a prompt override file")
+    @click.command("delete-override", help="Delete a prompt override file", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
     @click.argument("prompt_yaml_name")
     def delete_override(prompt_yaml_name: str) -> None:
         """
