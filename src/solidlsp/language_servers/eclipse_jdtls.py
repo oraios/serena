@@ -784,14 +784,23 @@ class EclipseJDTLS(SolidLanguageServer):
             }
         )
         assert intellicode_enable_result
-        if self._service_ready_event.wait(timeout=15):
-            log.info("Language server started successfully")
+
+        if not self._service_ready_event.is_set():
+            log.info("Waiting for service to be ready ...")
+            self._service_ready_event.wait()
+        log.info("Service is ready")
+
+        if not self._project_ready_event.is_set():
+            log.info("Waiting for project to be ready ...")
+            project_ready_timeout = 20  # Hotfix: Using timeout until we figure out why sometimes we don't get the project ready event
+            if self._project_ready_event.wait(timeout=project_ready_timeout):
+                log.info("Project is ready")
+            else:
+                log.warning("Did not receive project ready status within %d seconds; proceeding anyway", project_ready_timeout)
         else:
-            log.warning("Failed to initialize in 15s, continuing")
-        if self._project_ready_event.wait(timeout=15):
-            log.info("Project loaded successfully in LS")
-        else:
-            log.warning("Failed to load project in 15s, continuing")
+            log.info("Project is ready")
+
+        log.info("Startup complete")
 
     @override
     def _request_hover(self, uri: str, line: int, column: int) -> ls_types.Hover | None:
