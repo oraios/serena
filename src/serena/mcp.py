@@ -239,7 +239,9 @@ class SerenaMCPFactory:
             parameters=parameters,
             fn_metadata=func_arg_metadata,
             is_async=is_async,
-            context_kwarg=None,
+            # keep the value in sync with the kwarg name in Tool.apply_ex. The mcp sdk uses reflection to infer this
+            # when the tool is constructed via from_function (which is a bit crazy IMO, but well...)
+            context_kwarg="mcp_ctx",
             annotations=annotations,
             title=tool_title,
         )
