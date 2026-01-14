@@ -237,7 +237,7 @@ class TestCSharpSolutionProjectOpening:
             # Should still prefer .sln file even though it's deeper
             assert result == str(solution_file)
 
-    @patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed")
+    @patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer.DependencyProvider._ensure_server_installed")
     @patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._start_server")
     def test_csharp_language_server_logs_solution_discovery(self, mock_start_server, mock_ensure_server_installed):
         """Test that CSharpLanguageServer logs solution/project discovery during initialization."""
@@ -266,7 +266,7 @@ class TestCSharpSolutionProjectOpening:
                     expected_log_msg = f"Found solution/project file: {solution_file}"
                     assert expected_log_msg in mem_log.get_log()
 
-    @patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._ensure_server_installed")
+    @patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer.DependencyProvider._ensure_server_installed")
     @patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._start_server")
     def test_csharp_language_server_logs_no_solution_warning(self, mock_start_server, mock_ensure_server_installed):
         """Test that CSharpLanguageServer logs warning when no solution/project files are found."""
