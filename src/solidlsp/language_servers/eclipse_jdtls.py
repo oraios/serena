@@ -51,7 +51,9 @@ class EclipseJDTLS(SolidLanguageServer):
         - maven_user_settings: Path to Maven settings.xml file (default: ~/.m2/settings.xml)
         - gradle_user_home: Path to Gradle user home directory (default: ~/.gradle)
 
-    Note: Gradle wrapper is disabled by default. Projects will use the bundled Gradle distribution.
+    Note: Gradle wrapper is ENABLED by default to support projects with custom plugins/repositories.
+          Gradle uses system JAVA_HOME by default (not bundled JRE) to support custom JDK requirements.
+          The JDTLS process itself also uses system JAVA_HOME when available.
 
     Example configuration in ~/.serena/serena_config.yml:
     ```yaml
@@ -60,6 +62,8 @@ class EclipseJDTLS(SolidLanguageServer):
         maven_user_settings: "/home/user/.m2/settings.xml"  # Unix/Linux/Mac
         # maven_user_settings: 'C:\\Users\\YourName\\.m2\\settings.xml'  # Windows (use single quotes!)
         gradle_user_home: "/home/user/.gradle"  # Unix/Linux/Mac
+        gradle_wrapper_enabled: true  # Enable gradle wrapper (default: true)
+        gradle_java_home: null  # Use system JAVA_HOME (default: null)
         # gradle_user_home: 'C:\\Users\\YourName\\.gradle'  # Windows (use single quotes!)
     ```
     """
@@ -110,7 +114,16 @@ class EclipseJDTLS(SolidLanguageServer):
             assert os.path.exists(static_path), static_path
 
         # TODO: Add "self.runtime_dependency_paths.jre_home_path"/bin to $PATH as well
-        proc_env = {"syntaxserver": "false", "JAVA_HOME": self.runtime_dependency_paths.jre_home_path}
+        # Use system JAVA_HOME if available (important for Gradle wrapper JDK checks)
+        # Otherwise fall back to bundled JRE for JDTLS itself
+        system_java_home = os.environ.get("JAVA_HOME")
+        java_home_for_jdtls = system_java_home if system_java_home else self.runtime_dependency_paths.jre_home_path
+        if system_java_home:
+            log.info(f"Using system JAVA_HOME for JDTLS and Gradle: {system_java_home}")
+        else:
+            log.info(f"Using bundled JRE for JDTLS (no system JAVA_HOME found): {java_home_for_jdtls}")
+        proc_env = {"syntaxserver": "false", "JAVA_HOME": java_home_for_jdtls}
+
         proc_cwd = repository_root_path
         cmd = [
             jre_path,
@@ -391,6 +404,32 @@ class EclipseJDTLS(SolidLanguageServer):
             gradle_user_home = None
             log.info(f"Gradle user home not found at default location ({default_gradle_home}), will use JDTLS defaults")
 
+        # Gradle wrapper: default to True (enabled) to support projects with custom plugins/repositories
+        # Note: When enabled, projects use their own gradlew which knows about custom repositories
+        gradle_wrapper_enabled = self._custom_settings.get("gradle_wrapper_enabled")
+        if gradle_wrapper_enabled is None:
+            # Default to True to support projects with custom plugins like 'com.indeed.common'
+            gradle_wrapper_enabled = True
+            log.info("Gradle wrapper enabled by default (use ls_specific_settings -> java -> gradle_wrapper_enabled: false to disable)")
+        else:
+            log.info(f"Gradle wrapper {'enabled' if gradle_wrapper_enabled else 'disabled'} via configuration")
+
+        # Gradle Java home: default to None to use system JAVA_HOME (important for custom JDK requirements)
+        # Note: When None, Gradle uses the system's JAVA_HOME environment variable
+        gradle_java_home = self._custom_settings.get("gradle_java_home")
+        if gradle_java_home is not None:
+            if not os.path.exists(gradle_java_home):
+                error_msg = (
+                    f"Gradle Java home not found: {gradle_java_home}. "
+                    f"Fix: update path in ~/.serena/serena_config.yml (ls_specific_settings -> java -> gradle_java_home), "
+                    f"or remove the setting to use system JAVA_HOME"
+                )
+                log.error(error_msg)
+                raise FileNotFoundError(error_msg)
+            log.info(f"Using Gradle Java home from custom location: {gradle_java_home}")
+        else:
+            log.info("Gradle will use system JAVA_HOME (not the bundled JRE)")
+
         initialize_params = {
             "locale": "en",
             "rootPath": repository_absolute_path,
@@ -596,10 +635,9 @@ class EclipseJDTLS(SolidLanguageServer):
                             },
                             "gradle": {
                                 "enabled": True,
-                                "wrapper": {"enabled": False},
+                                "wrapper": {"enabled": gradle_wrapper_enabled},
                                 "version": None,
                                 "home": "abs(static/gradle-7.3.3)",
-                                "java": {"home": "abs(static/launch_jres/21.0.7-linux-x86_64)"},
                                 "offline": {"enabled": False},
                                 "arguments": None,
                                 "jvmArguments": None,
@@ -706,7 +744,12 @@ class EclipseJDTLS(SolidLanguageServer):
 
         gradle_settings = initialize_params["initializationOptions"]["settings"]["java"]["import"]["gradle"]  # type: ignore
         gradle_settings["home"] = self.runtime_dependency_paths.gradle_path
-        gradle_settings["java"]["home"] = self.runtime_dependency_paths.jre_path
+        if gradle_java_home is not None:
+            # Create java dict if it doesn't exist, then set home
+            if "java" not in gradle_settings:
+                gradle_settings["java"] = {}
+            gradle_settings["java"]["home"] = gradle_java_home
+        # If gradle_java_home is None, don't set it - Gradle will use system JAVA_HOME
         return cast(InitializeParams, initialize_params)
 
     def _start_server(self) -> None:
