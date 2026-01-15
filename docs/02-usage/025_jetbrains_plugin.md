@@ -62,5 +62,31 @@ will be available exclusively through the JetBrains plugin.
 We realize that not everyone uses a JetBrains IDE as their main code editor.
 You can still take advantage of the JetBrains plugin by running a JetBrains IDE instance alongside your
 preferred editor. Most JetBrains IDEs have a free community edition that you can use for this purpose.
-You just need to make sure that the project you are working on is open and indexed in the JetBrains IDE, 
+You just need to make sure that the project you are working on is open and indexed in the JetBrains IDE,
 so that Serena can connect to it.
+
+## IDE on a Different Host
+
+If your JetBrains IDE runs on a different host than Serena (e.g., IDE on Windows with Serena in WSL2,
+or Serena in a Docker container), you can configure the host address using the `SERENA_JETBRAINS_HOST`
+environment variable:
+
+```bash
+export SERENA_JETBRAINS_HOST=192.168.16.1
+```
+
+Or in your MCP client configuration (e.g., `.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "serena": {
+      "env": {
+        "SERENA_JETBRAINS_HOST": "192.168.16.1"
+      }
+    }
+  }
+}
+```
+
+Replace `192.168.16.1` with the IP address of the host where your JetBrains IDE is running.

@@ -4,6 +4,7 @@ Client for the Serena JetBrains Plugin
 
 import json
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Any, Literal, Optional, Self, TypeVar, cast
@@ -75,7 +76,8 @@ class JetBrainsPluginClient(ToStringMixin):
 
     def __init__(self, port: int, timeout: int = PLUGIN_REQUEST_TIMEOUT):
         self._port = port
-        self._base_url = f"http://127.0.0.1:{port}"
+        host = os.environ.get("SERENA_JETBRAINS_HOST", "127.0.0.1")
+        self._base_url = f"http://{host}:{port}"
         self._timeout = timeout
         self._session = requests.Session()
         self._session.headers.update({"Content-Type": "application/json", "Accept": "application/json"})
