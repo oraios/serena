@@ -165,6 +165,10 @@ class LanguageServerDependencyProviderSinglePath(LanguageServerDependencyProvide
     """
     Special case of a dependency provider, where there is a single core dependency which provides
     the basis for the launch command.
+
+    The core dependency's path can be overridden by the user in LS-specific settings (SerenaConfig)
+    via the key "ls_path". If the user provides the key, the specified path is used directly.
+    Otherwise, the provider implementation is called to get or install the core dependency.
     """
 
     @abstractmethod
