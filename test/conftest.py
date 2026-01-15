@@ -1,10 +1,11 @@
 import logging
 import os
 from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 import pytest
-from blib2to3.pgen2.parse import contextmanager
 from sensai.util.logging import configure
 
 from serena.config.serena_config import SerenaPaths
@@ -38,7 +39,12 @@ def get_repo_path(language: Language) -> Path:
 
 
 def _create_ls(
-    language: Language, repo_path: str | None = None, ignored_paths: list[str] | None = None, trace_lsp_communication: bool = False
+    language: Language,
+    repo_path: str | None = None,
+    ignored_paths: list[str] | None = None,
+    trace_lsp_communication: bool = False,
+    ls_specific_settings: dict[Language, dict[str, Any]] | None = None,
+    solidlsp_dir: Path | None = None,
 ) -> SolidLanguageServer:
     ignored_paths = ignored_paths or []
     if repo_path is None:
@@ -47,20 +53,28 @@ def _create_ls(
     for spec in gitignore_parser.get_ignore_specs():
         ignored_paths.extend(spec.patterns)
     config = LanguageServerConfig(code_language=language, ignored_paths=ignored_paths, trace_lsp_communication=trace_lsp_communication)
+    effective_solidlsp_dir = solidlsp_dir if solidlsp_dir is not None else SerenaPaths().serena_user_home_dir
     return SolidLanguageServer.create(
         config,
         repo_path,
         solidlsp_settings=SolidLSPSettings(
-            solidlsp_dir=SerenaPaths().serena_user_home_dir, project_data_relative_path=SERENA_MANAGED_DIR_NAME
+            solidlsp_dir=effective_solidlsp_dir,
+            project_data_relative_path=SERENA_MANAGED_DIR_NAME,
+            ls_specific_settings=ls_specific_settings or {},
         ),
     )
 
 
 @contextmanager
 def start_ls_context(
-    language: Language, repo_path: str | None = None, ignored_paths: list[str] | None = None, trace_lsp_communication: bool = False
+    language: Language,
+    repo_path: str | None = None,
+    ignored_paths: list[str] | None = None,
+    trace_lsp_communication: bool = False,
+    ls_specific_settings: dict[Language, dict[str, Any]] | None = None,
+    solidlsp_dir: Path | None = None,
 ) -> Iterator[SolidLanguageServer]:
-    ls = _create_ls(language, repo_path, ignored_paths, trace_lsp_communication)
+    ls = _create_ls(language, repo_path, ignored_paths, trace_lsp_communication, ls_specific_settings, solidlsp_dir)
     log.info(f"Starting language server for {language} {repo_path}")
     ls.start()
     try:

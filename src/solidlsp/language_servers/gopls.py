@@ -3,7 +3,7 @@ import os
 import pathlib
 import subprocess
 import threading
-from typing import cast
+from typing import Any, cast
 
 from overrides import override
 
@@ -98,13 +98,12 @@ class Gopls(SolidLanguageServer):
         self.server_ready = threading.Event()
         self.request_id = 0
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the Go Language Server.
         """
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
-        initialize_params = {
+        initialize_params: dict = {
             "locale": "en",
             "capabilities": {
                 "textDocument": {
@@ -128,7 +127,82 @@ class Gopls(SolidLanguageServer):
                 }
             ],
         }
+
+        # Apply gopls-specific settings via initializationOptions
+        # Serena applies gopls settings at initialization time via initializationOptions
+        # (Access settings directly to avoid extra INFO logging from CustomLSSettings.get.)
+        gopls_settings = self._custom_settings.settings.get("gopls_settings")
+        if gopls_settings:
+            gopls_settings = self._validate_gopls_settings_dict(gopls_settings)
+
+            # Validate JSON-serializability early: initializationOptions is sent over JSON-RPC.
+            import json
+
+            self._canonical_json_or_raise(json, gopls_settings)
+
+            # Log keys only (and at DEBUG) to avoid leaking sensitive values and to reduce startup noise.
+            log.debug("Applying gopls settings via initializationOptions: keys=%s", list(gopls_settings.keys()))
+            initialize_params["initializationOptions"] = gopls_settings
+
         return cast(InitializeParams, initialize_params)
+
+    def _validate_gopls_settings_dict(self, gopls_settings: object) -> dict:
+        if not isinstance(gopls_settings, dict):
+            raise TypeError(
+                f"gopls_settings must be a dict, got {type(gopls_settings).__name__}. "
+                "Expected structure: {'buildFlags': ['-tags=foo'], 'env': {...}, ...}"
+            )
+
+        return gopls_settings
+
+    def _canonical_json_or_raise(self, json_module: Any, data: object) -> str:
+        try:
+            return json_module.dumps(data, sort_keys=True, separators=(",", ":"))
+        except (TypeError, ValueError) as exc:
+            raise TypeError(
+                "gopls_settings must be JSON-serializable (json.dumps). Use JSON-compatible values (dict/list/str/int/float/bool/null) and prefer string keys."
+            ) from exc
+
+    # Environment variables that influence Go build context and affect cached symbols.
+    _CACHE_CONTEXT_ENV_KEYS = ("GOFLAGS", "GOOS", "GOARCH", "CGO_ENABLED")
+
+    @override
+    def _cache_context_fingerprint(self) -> str | None:
+        """
+        Compute a deterministic fingerprint of the Go build context.
+
+        The fingerprint includes gopls_settings and selected env vars that affect symbol discovery.
+        """
+        import hashlib
+        import json
+
+        gopls_settings_raw = self._custom_settings.settings.get("gopls_settings")
+
+        gopls_settings: dict | None
+        if gopls_settings_raw is None:
+            gopls_settings = None
+        else:
+            # Treat an explicitly empty dict the same as not providing settings at all.
+            gopls_settings = self._validate_gopls_settings_dict(gopls_settings_raw) or None
+
+        # Only include env vars that are set to a non-empty value.
+        env_subset: dict[str, str] = {}
+        for key in self._CACHE_CONTEXT_ENV_KEYS:
+            value = os.environ.get(key)
+            if value:
+                env_subset[key] = value
+
+        # Return None only when BOTH settings and env subset are effectively empty.
+        if gopls_settings is None and not env_subset:
+            return None
+
+        fingerprint_data: dict[str, object] = {"env": env_subset}
+        if gopls_settings is not None:
+            fingerprint_data["gopls_settings"] = gopls_settings
+
+        canonical_json = self._canonical_json_or_raise(json, fingerprint_data)
+
+        return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()[:16]
 
     def _start_server(self) -> None:
         """Start gopls server process"""

@@ -134,6 +134,47 @@ For advanced users, Serena's configuration can be further customized.
 The Serena user data directory (where configuration, language server files, logs, etc. are stored) defaults to `~/.serena`.
 You can change this location by setting the `SERENA_HOME` environment variable to your desired path.
 
+### Language server specific settings (`ls_specific_settings`)
+
+`ls_specific_settings` lets you pass per-language, language-server-specific configuration.
+
+Structure:
+
+```yaml
+ls_specific_settings:
+  <language>:
+    # language-server-specific keys
+```
+
+Where to put it:
+- Global default: `~/.serena/serena_config.yml`
+- Per-project override: `<project>/.serena/project.yml` (takes precedence over the global config for the same keys)
+- There is currently no `serena-mcp-server` CLI option to set `ls_specific_settings`; use the config files above.
+
+#### Go (`gopls`)
+
+Serena forwards `ls_specific_settings.go.gopls_settings` to `gopls` as LSP `initializationOptions` when the Go language server is started.
+
+Example: enable build tags and set a build environment:
+
+```yaml
+ls_specific_settings:
+  go:
+    gopls_settings:
+      buildFlags:
+        - "-tags=foo"
+      env:
+        GOOS: "linux"
+        GOARCH: "amd64"
+        CGO_ENABLED: "0"
+```
+
+Notes:
+- To enable multiple tags, use `"-tags=foo,bar"`.
+- `gopls_settings.env` values are strings.
+- `GOFLAGS` (from the environment you start Serena in) may also affect the Go build context. Prefer `buildFlags` for tags.
+- Build context changes are only picked up when `gopls` starts. After changing `gopls_settings` (or relevant env vars like `GOFLAGS`), restart the Serena process (or server) that hosts the Go language server, or use your client's "Restart language server" action if it causes `gopls` to restart.
+
 ### Custom Prompts
 
 All of Serena's prompts can be fully customized.
