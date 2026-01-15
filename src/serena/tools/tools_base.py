@@ -4,8 +4,10 @@ from abc import ABC
 from collections.abc import Iterable
 from dataclasses import dataclass
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Protocol, Self, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, Self, TypeVar, cast
 
+from mcp import Implementation
+from mcp.server.fastmcp import Context
 from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metadata
 from sensai.util import logging
 from sensai.util.string import dict_string
@@ -115,6 +117,17 @@ class Tool(Component):
     # (which is use by the LLM, so a good description is important)
     # and to validate the tool call arguments.
 
+    _last_tool_call_client_str: str | None = None
+    """We can only get the client info from within a tool call. Each tool call will update this variable."""
+
+    @classmethod
+    def set_last_tool_call_client_str(cls, client_str: str | None) -> None:
+        cls._last_tool_call_client_str = client_str
+
+    @classmethod
+    def get_last_tool_call_client_str(cls) -> str | None:
+        return cls._last_tool_call_client_str
+
     @classmethod
     def get_name_from_cls(cls) -> str:
         name = cls.__name__
@@ -219,10 +232,21 @@ class Tool(Component):
     def is_active(self) -> bool:
         return self.agent.tool_is_active(self.__class__)
 
-    def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, **kwargs) -> str:  # type: ignore
+    def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, mcp_ctx: Context | None = None, **kwargs) -> str:  # type: ignore
         """
         Applies the tool with logging and exception handling, using the given keyword arguments
         """
+        if mcp_ctx is not None:
+            try:
+                client_params = mcp_ctx.session.client_params
+                if client_params is not None:
+                    client_info = cast(Implementation, client_params.clientInfo)
+                    client_str = client_info.title if client_info.title else client_info.name + " " + client_info.version
+                    if client_str != self.get_last_tool_call_client_str():
+                        log.debug(f"Updating client info: {client_info}")
+                        self.set_last_tool_call_client_str(client_str)
+            except BaseException as e:
+                log.info(f"Failed to get client info: {e}.")
 
         def task() -> str:
             apply_fn = self.get_apply_fn()

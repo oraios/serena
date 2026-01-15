@@ -56,6 +56,7 @@ class ResponseConfigOverview(BaseModel):
     jetbrains_mode: bool
     languages: list[str]
     encoding: str | None
+    current_client: str | None
 
 
 class ResponseAvailableLanguages(BaseModel):
@@ -370,6 +371,7 @@ class SerenaDashboardAPI:
 
     def _get_config_overview(self) -> ResponseConfigOverview:
         from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
+        from serena.tools.tools_base import Tool
 
         # Get active project info
         project = self._agent.get_active_project()
@@ -491,6 +493,7 @@ class SerenaDashboardAPI:
             jetbrains_mode=self._agent.serena_config.language_backend == LanguageBackend.JETBRAINS,
             languages=languages,
             encoding=encoding,
+            current_client=Tool.get_last_tool_call_client_str(),
         )
 
     def _shutdown(self) -> None:

@@ -619,6 +619,10 @@ class Dashboard {
             html += '<div class="config-label">File Encoding:</div>';
             html += '<div class="config-value">' + (config.encoding || 'N/A') + '</div>';
 
+            // Current Client info
+            html += '<div class="config-label">Current Client:</div>';
+            html += '<div class="config-value">' + (config.current_client || 'None') + '</div>';
+
             html += '</div>';
 
             // Active tools - collapsible

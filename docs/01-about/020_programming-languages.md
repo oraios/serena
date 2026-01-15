@@ -91,7 +91,7 @@ see Serena's [memory on that](https://github.com/oraios/serena/blob/main/.serena
 As an alternative to language servers, the [Serena JetBrains Plugin](https://plugins.jetbrains.com/plugin/28946-serena/)
 leverages the powerful code analysis capabilities of JetBrains IDEs. 
 The plugin naturally supports all programming languages and frameworks that are supported by JetBrains IDEs, 
-including IntelliJ IDEA, PyCharm, Android Studio, AppCode, WebStorm, PhpStorm, RubyMine, GoLand, AppCode, CLion, Rider, and others.
+including IntelliJ IDEA, PyCharm, Android Studio, AppCode, WebStorm, PhpStorm, RubyMine, GoLand, AppCode, CLion, and others.
 
 When using the plugin, Serena connects to an instance of your JetBrains IDE via the plugin. For users who already
 work in a JetBrains IDE, this means Serena seamlessly integrates with the IDE instance you typically have open anyway,

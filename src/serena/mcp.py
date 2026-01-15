@@ -239,7 +239,9 @@ class SerenaMCPFactory:
             parameters=parameters,
             fn_metadata=func_arg_metadata,
             is_async=is_async,
-            context_kwarg=None,
+            # keep the value in sync with the kwarg name in Tool.apply_ex. The mcp sdk uses reflection to infer this
+            # when the tool is constructed via from_function (which is a bit crazy IMO, but well...)
+            context_kwarg="mcp_ctx",
             annotations=annotations,
             title=tool_title,
         )
@@ -274,6 +276,7 @@ class SerenaMCPFactory:
         language_backend: LanguageBackend | None = None,
         enable_web_dashboard: bool | None = None,
         enable_gui_log_window: bool | None = None,
+        open_web_dashboard: bool | None = None,
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
         trace_lsp_communication: bool | None = None,
         tool_timeout: float | None = None,
@@ -288,6 +291,8 @@ class SerenaMCPFactory:
         :param enable_web_dashboard: Whether to enable the web dashboard. If not specified, will take the value from the serena configuration.
         :param enable_gui_log_window: Whether to enable the GUI log window. It currently does not work on macOS, and setting this to True will be ignored then.
             If not specified, will take the value from the serena configuration.
+        :param open_web_dashboard: Whether to open the web dashboard on launch.
+            If not specified, will take the value from the serena configuration.
         :param log_level: Log level. If not specified, will take the value from the serena configuration.
         :param trace_lsp_communication: Whether to trace the communication between Serena and the language servers.
             This is useful for debugging language server issues.
@@ -301,6 +306,8 @@ class SerenaMCPFactory:
                 config.web_dashboard = enable_web_dashboard
             if enable_gui_log_window is not None:
                 config.gui_log_window_enabled = enable_gui_log_window
+            if open_web_dashboard is not None:
+                config.web_dashboard_open_on_launch = open_web_dashboard
             if log_level is not None:
                 log_level = cast(Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], log_level.upper())
                 config.log_level = logging.getLevelNamesMapping()[log_level]
