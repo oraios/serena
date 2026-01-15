@@ -6,15 +6,15 @@ import logging
 import os
 import pathlib
 import re
+import sys
 import threading
 from typing import cast
 
 from overrides import override
 
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ class PyrightServer(SolidLanguageServer):
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd="python -m pyright.langserver --stdio", cwd=repository_root_path),
+            None,
             "python",
             solidlsp_settings,
         )
@@ -42,6 +42,16 @@ class PyrightServer(SolidLanguageServer):
         # Event to signal when initial workspace analysis is complete
         self.analysis_complete = threading.Event()
         self.found_source_files = False
+
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
+
+    class DependencyProvider(LanguageServerDependencyProviderSinglePath):
+        def _get_or_install_core_dependency(self) -> str:
+            return sys.executable
+
+        def _create_launch_command(self, core_path: str) -> list[str]:
+            return [core_path, "-m", "pyright.langserver", "--stdio"]
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:

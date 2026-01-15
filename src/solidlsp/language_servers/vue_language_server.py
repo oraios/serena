@@ -36,8 +36,6 @@ log = logging.getLogger(__name__)
 class VueTypeScriptServer(TypeScriptLanguageServer):
     """TypeScript LS configured with @vue/typescript-plugin for Vue file support."""
 
-    _pending_ts_ls_executable: list[str] | None = None
-
     @classmethod
     @override
     def get_language_enum_instance(cls) -> Language:
@@ -49,12 +47,13 @@ class VueTypeScriptServer(TypeScriptLanguageServer):
         """
         return Language.TYPESCRIPT
 
-    @classmethod
-    @override
-    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> list[str]:
-        if cls._pending_ts_ls_executable is not None:
-            return cls._pending_ts_ls_executable
-        return ["typescript-language-server", "--stdio"]
+    class DependencyProvider(TypeScriptLanguageServer.DependencyProvider):
+        override_ts_ls_executable: str | None = None
+
+        def _get_or_install_core_dependency(self) -> str:
+            if self.override_ts_ls_executable is not None:
+                return self.override_ts_ls_executable
+            return super()._get_or_install_core_dependency()
 
     @override
     def _get_language_id_for_file(self, relative_file_path: str) -> str:
@@ -81,13 +80,13 @@ class VueTypeScriptServer(TypeScriptLanguageServer):
         solidlsp_settings: SolidLSPSettings,
         vue_plugin_path: str,
         tsdk_path: str,
-        ts_ls_executable_path: list[str],
+        ts_ls_executable_path: str,
     ):
         self._vue_plugin_path = vue_plugin_path
         self._custom_tsdk_path = tsdk_path
-        VueTypeScriptServer._pending_ts_ls_executable = ts_ls_executable_path
+        VueTypeScriptServer.DependencyProvider.override_ts_ls_executable = ts_ls_executable_path
         super().__init__(config, repository_root_path, solidlsp_settings)
-        VueTypeScriptServer._pending_ts_ls_executable = None
+        VueTypeScriptServer.DependencyProvider.override_ts_ls_executable = None
 
     @override
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
@@ -383,9 +382,7 @@ class VueLanguageServer(SolidLanguageServer):
             return self._ts_server.request_rename_symbol_edit(relative_file_path, line, column, new_name)
 
     @classmethod
-    def _setup_runtime_dependencies(
-        cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> tuple[list[str], str, list[str]]:
+    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> tuple[list[str], str, str]:
         is_node_installed = shutil.which("node") is not None
         assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
         is_npm_installed = shutil.which("npm") is not None
@@ -476,7 +473,7 @@ class VueLanguageServer(SolidLanguageServer):
                 f"typescript-language-server executable not found at {ts_ls_executable_path}, something went wrong with the installation."
             )
 
-        return [vue_executable_path, "--stdio"], tsdk_path, [ts_ls_executable_path, "--stdio"]
+        return [vue_executable_path, "--stdio"], tsdk_path, ts_ls_executable_path
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         root_uri = pathlib.Path(repository_absolute_path).as_uri()

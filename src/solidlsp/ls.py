@@ -130,6 +130,72 @@ class DocumentSymbols:
         return self._all_symbols, self.root_symbols
 
 
+class LanguageServerDependencyProvider(ABC):
+    """
+    Prepares dependencies for a language server (if any), ultimately enabling the launch command to be constructed
+    and optionally providing environment variables that are necessary for the execution.
+    """
+
+    def __init__(self, custom_settings: SolidLSPSettings.CustomLSSettings, ls_resources_dir: str):
+        self._custom_settings = custom_settings
+        self._ls_resources_dir = ls_resources_dir
+
+    @abstractmethod
+    def create_launch_command(self) -> list[str] | str:
+        """
+        Creates the launch command for this language server, potentially downloading and installing dependencies
+        beforehand.
+
+        :return: the launch command as a list containing the executable and its arguments (preferred for robustness)
+           or the entire command in a single string.
+        """
+
+    def create_launch_command_env(self) -> dict[str, str]:
+        """
+        Provides environment variables to be set when executing the launch command.
+
+        This method is intended to be overridden by subclasses that need to set variables.
+
+        :return: a mapping for variable names to values
+        """
+        return {}
+
+
+class LanguageServerDependencyProviderSinglePath(LanguageServerDependencyProvider, ABC):
+    """
+    Special case of a dependency provider, where there is a single core dependency which provides
+    the basis for the launch command.
+
+    The core dependency's path can be overridden by the user in LS-specific settings (SerenaConfig)
+    via the key "ls_path". If the user provides the key, the specified path is used directly.
+    Otherwise, the provider implementation is called to get or install the core dependency.
+    """
+
+    @abstractmethod
+    def _get_or_install_core_dependency(self) -> str:
+        """
+        Gets the language server's core path, potentially installing dependencies beforehand.
+
+        :return: the core dependency's path (e.g. executable, jar, etc.)
+        """
+
+    def create_launch_command(self) -> Union[str, list[str]]:
+        path = self._custom_settings.get("ls_path", None)
+        if path is not None:
+            core_path = path
+        else:
+            core_path = self._get_or_install_core_dependency()
+        return self._create_launch_command(core_path)
+
+    @abstractmethod
+    def _create_launch_command(self, core_path: str) -> list[str] | str:
+        """
+        :param core_path: path to the core dependency
+        :return: the launch command as a list containing the executable and its arguments (preferred for robustness)
+           or the entire command in a single string.
+        """
+
+
 class SolidLanguageServer(ABC):
     """
     The LanguageServer class provides a language agnostic interface to the Language Server Protocol.
@@ -242,7 +308,7 @@ class SolidLanguageServer(ABC):
         self,
         config: LanguageServerConfig,
         repository_root_path: str,
-        process_launch_info: ProcessLaunchInfo,
+        process_launch_info: ProcessLaunchInfo | None,
         language_id: str,
         solidlsp_settings: SolidLSPSettings,
         cache_version_raw_document_symbols: Hashable = 1,
@@ -254,7 +320,8 @@ class SolidLanguageServer(ABC):
 
         :param config: the global SolidLSP configuration.
         :param repository_root_path: the root path of the repository.
-        :param process_launch_info: the command used to start the actual language server.
+        :param process_launch_info: (DEPRECATED - implement _create_dependency_provider instead)
+            the command used to start the actual language server.
             The command must pass appropriate flags to the binary, so that it runs in the stdio mode,
             as opposed to HTTP, TCP modes supported by some language servers.
         :param cache_version_raw_document_symbols: the version, for caching, of the raw document symbols coming
@@ -265,9 +332,11 @@ class SolidLanguageServer(ABC):
         self._solidlsp_settings = solidlsp_settings
         lang = self.get_language_enum_instance()
         self._custom_settings = solidlsp_settings.get_ls_specific_settings(lang)
+        self._ls_resources_dir = self.ls_resources_dir(solidlsp_settings)
         log.debug(f"Custom config (LS-specific settings) for {lang}: {self._custom_settings}")
         self._encoding = config.encoding
         self.repository_root_path: str = repository_root_path
+
         log.debug(
             f"Creating language server instance for {repository_root_path=} with {language_id=} and process launch info: {process_launch_info}"
         )
@@ -303,8 +372,12 @@ class SolidLanguageServer(ABC):
         else:
             logging_fn = None  # type: ignore
 
-        # cmd is obtained from the child classes, which provide the language specific command to start the language server
-        # LanguageServerHandler provides the functionality to start the language server and communicate with it
+        # create the LanguageServerHandler, which provides the functionality to start the language server and communicate with it,
+        # preparing the launch command beforehand
+        self._dependency_provider: LanguageServerDependencyProvider | None = None
+        if process_launch_info is None:
+            self._dependency_provider = self._create_dependency_provider()
+            process_launch_info = self._create_process_launch_info()
         log.debug(f"Creating language server instance with {language_id=} and process launch info: {process_launch_info}")
         self.server = SolidLanguageServerHandler(
             process_launch_info,
@@ -329,6 +402,23 @@ class SolidLanguageServer(ABC):
         self._request_timeout: float | None = None
 
         self._has_waited_for_cross_file_references = False
+
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        """
+        Creates the dependency provider for this language server.
+
+        Subclasses should override this method to provide their specific dependency provider.
+        This method is only called if process_launch_info is not passed to __init__.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement _create_dependency_provider() or pass process_launch_info to __init__()"
+        )
+
+    def _create_process_launch_info(self) -> ProcessLaunchInfo:
+        assert self._dependency_provider is not None
+        cmd = self._dependency_provider.create_launch_command()
+        env = self._dependency_provider.create_launch_command_env()
+        return ProcessLaunchInfo(cmd=cmd, cwd=self.repository_root_path, env=env)
 
     def _get_wait_time_for_cross_file_referencing(self) -> float:
         """Meant to be overridden by subclasses for LS that don't have a reliable "finished initializing" signal.

@@ -10,10 +10,9 @@ import subprocess
 import threading
 from typing import cast
 
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
@@ -91,11 +90,10 @@ class ClojureLSP(SolidLanguageServer):
         """
         Creates a ClojureLSP instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        clojure_lsp_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd=clojure_lsp_executable_path, cwd=repository_root_path),
+            None,
             "clojure",
             solidlsp_settings,
         )
@@ -104,24 +102,29 @@ class ClojureLSP(SolidLanguageServer):
         self.resolve_main_method_available = threading.Event()
         self.service_ready_event = threading.Event()
 
-    @classmethod
-    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> str:
-        """Setup runtime dependencies for clojure-lsp and return the command to start the server."""
-        verify_clojure_cli()
-        deps = ClojureLSP.runtime_dependencies
-        dependency = deps.get_single_dep_for_current_platform()
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
-        clojurelsp_ls_dir = cls.ls_resources_dir(solidlsp_settings)
-        clojurelsp_executable_path = deps.binary_path(clojurelsp_ls_dir)
-        if not os.path.exists(clojurelsp_executable_path):
-            log.info(
-                f"Downloading and extracting clojure-lsp from {dependency.url} to {clojurelsp_ls_dir}",
-            )
-            deps.install(clojurelsp_ls_dir)
-        if not os.path.exists(clojurelsp_executable_path):
-            raise FileNotFoundError(f"Download failed? Could not find clojure-lsp executable at {clojurelsp_executable_path}")
-        os.chmod(clojurelsp_executable_path, 0o755)
-        return clojurelsp_executable_path
+    class DependencyProvider(LanguageServerDependencyProviderSinglePath):
+        def _get_or_install_core_dependency(self) -> str:
+            """Setup runtime dependencies for clojure-lsp and return the path to the executable."""
+            verify_clojure_cli()
+            deps = ClojureLSP.runtime_dependencies
+            dependency = deps.get_single_dep_for_current_platform()
+
+            clojurelsp_executable_path = deps.binary_path(self._ls_resources_dir)
+            if not os.path.exists(clojurelsp_executable_path):
+                log.info(
+                    f"Downloading and extracting clojure-lsp from {dependency.url} to {self._ls_resources_dir}",
+                )
+                deps.install(self._ls_resources_dir)
+            if not os.path.exists(clojurelsp_executable_path):
+                raise FileNotFoundError(f"Download failed? Could not find clojure-lsp executable at {clojurelsp_executable_path}")
+            os.chmod(clojurelsp_executable_path, 0o755)
+            return clojurelsp_executable_path
+
+        def _create_launch_command(self, core_path: str) -> list[str] | str:
+            return [core_path]
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:

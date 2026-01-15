@@ -134,9 +134,10 @@ For advanced users, Serena's configuration can be further customized.
 The Serena user data directory (where configuration, language server files, logs, etc. are stored) defaults to `~/.serena`.
 You can change this location by setting the `SERENA_HOME` environment variable to your desired path.
 
-### Language server specific settings (`ls_specific_settings`)
+### Language Server-Specific settings (`ls_specific_settings`)
 
-`ls_specific_settings` lets you pass per-language, language-server-specific configuration.
+Under the key `ls_specific_settings` in `serena_config.yml`, you can you pass per-language, 
+language server-specific configuration.
 
 Structure:
 
@@ -146,10 +147,28 @@ ls_specific_settings:
     # language-server-specific keys
 ```
 
-Where to put it:
-- Global default: `~/.serena/serena_config.yml`
-- Per-project override: `<project>/.serena/project.yml` (takes precedence over the global config for the same keys)
-- There is currently no `serena-mcp-server` CLI option to set `ls_specific_settings`; use the config files above.
+:::{attention}
+Most settings are currently undocumented. Please refer to the 
+[source code of the respective language server](https://github.com/oraios/serena/tree/main/src/solidlsp/language_servers) 
+implementation to determine supported settings.
+:::
+
+#### Overriding the Language Server Path
+
+Some language servers, particularly those that use a single core path for the language server (e.g. the main executable),
+support overriding that path via the `ls_path` setting.
+Therefore, if you have installed the language server yourself and want to use your installation 
+instead of Serena's managed installation, you can set the `ls_path` setting as follows:
+
+```yaml
+ls_specific_settings:
+  <language>:
+    ls_path: "/path/to/language-server"
+```
+
+This is supported by all language servers deriving their dependency provider from  `LanguageServerDependencyProviderSinglePath`.
+Currently, this includes the following languages: `clojure`, `cpp`, `php`, `python`, `typescript`. 
+We will add support for more languages over time.
 
 #### Go (`gopls`)
 
