@@ -701,7 +701,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
 
         save_yaml(self.config_file_path, loaded_original_yaml, preserve_comments=True)
 
-    def propagate_settings(self):
+    def propagate_settings(self) -> None:
         """
         Propagate settings from this configuration to individual components that are statically configured
         """
