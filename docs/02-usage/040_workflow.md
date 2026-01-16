@@ -37,13 +37,34 @@ For instance, when using `uvx`, run
  * You can optionally specify a custom project name with `--name "My Project"`.
  * You can immediately index the project after creation with `--index`.
 
-After creation, you can adjust the project settings in the generated `.serena/project.yml` file.
+(project-config)=
+#### Project Configuration
+
+After creation, you can adjust the project settings in the generated `.serena/project.yml` file
+within the project directory.
+
+The file allows you to configure ...
+  * the set of programming languages for which language servers are spawned (not relevant when using the JetBrains plugin)  
+    Note that you can dynamically add/remove language servers while Serena is running via the [Dashboard](060_dashboard).
+  * the encoding used in source files
+  * ignore rules
+  * write access
+  * an initial prompt that shall be passed to the LLM whenever the project is activated 
+  * the name by which you want to refer to the project (relevant when telling the LLM to dynamically activate the project)
+
+For detailed information on the parameters and possible settings, see the 
+[template file](https://github.com/oraios/serena/blob/main/src/serena/resources/project.template.yml). 
 
 (indexing)=
 ### Indexing
 
-Especially for larger project, it is advisable to index the project after creation (in order to avoid
-delays during MCP server startup or the first tool application):
+:::{note}
+Indexing is not a relevant operation when using the JetBrains plugin, as indexing is handled by the IDE.
+:::
+
+Especially for larger project, it can be advisable to index the project after creation, pre-caching 
+symbol information provided by the language server(s). This will avoid delays during the first tool invocation
+that requires symbol information.
 
 While in the project directory, run this command:
    

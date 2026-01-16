@@ -1,15 +1,20 @@
 # list of languages for which language servers are started; choose from:
-#   al               bash             clojure          cpp              csharp           csharp_omnisharp
-#   dart             elixir           elm              erlang           fortran          fsharp
-#   go               groovy           haskell          java             julia            kotlin
-#   lua              markdown         nix              pascal           perl             php
-#   powershell       python           python_jedi      r                rego             ruby
-#   ruby_solargraph  rust             scala            swift            terraform        toml
-#   typescript       typescript_vts   yaml             zig
+#   al                  bash                clojure             cpp                 csharp
+#   csharp_omnisharp    dart                elixir              elm                 erlang
+#   fortran             fsharp              go                  groovy              haskell
+#   java                julia               kotlin              lua                 markdown
+#   matlab              nix                 pascal              perl                php
+#   powershell          python              python_jedi         r                   rego
+#   ruby                ruby_solargraph     rust                scala               swift
+#   terraform           toml                typescript          typescript_vts      vue
+#   yaml                zig
+#   (This list may be outdated. For the current list, see values of Language enum here:
+#   https://github.com/oraios/serena/blob/main/src/solidlsp/ls_config.py
+#   For some languages, there are alternative language servers, e.g. csharp_omnisharp, ruby_solargraph.)
 # Note:
 #   - For C, use cpp
 #   - For JavaScript, use typescript
-#   - For Free Pascal / Lazarus, use pascal
+#   - For Free Pascal/Lazarus, use pascal
 # Special requirements:
 #   - csharp: Requires the presence of a .sln file in the project folder.
 #   - pascal: Requires Free Pascal Compiler (fpc) and optionally Lazarus.
@@ -22,14 +27,11 @@ languages: ["python"]
 # For a list of possible encodings, see https://docs.python.org/3.11/library/codecs.html#standard-encodings
 encoding: "utf-8"
 
-# whether to use the project's gitignore file to ignore files
-# Added on 2025-04-07
+# whether to use project's .gitignore files to ignore files
 ignore_all_files_in_gitignore: true
 
-# list of additional paths to ignore
+# list of additional paths to ignore in all projects
 # same syntax as gitignore, so you can use * and **
-# Was previously called `ignored_dirs`, please update your config if you are using that.
-# Added (renamed) on 2025-04-07
 ignored_paths: []
 
 # whether the project is in read-only mode

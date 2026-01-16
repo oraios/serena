@@ -169,7 +169,7 @@ Some useful options include:
   * `--language-backend JetBrains`: use the Serena JetBrains Plugin as the language backend (overriding the default backend configured in the central configuration)
   * `--context <context>`: specify the operation [context](contexts) in which Serena shall operate
   * `--mode <mode>`: specify one or more [modes](modes) to enable (can be passed several times)
-  * `--enable-web-dashboard <true|false>`: enable or disable the web dashboard (enabled by default)
+  * `--open-web-dashboard <true|false>`: whether to open the web dashboard on startup (enabled by default)
 
 ## Other Commands
 
