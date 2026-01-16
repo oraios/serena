@@ -410,13 +410,8 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     web_dashboard: bool = True
     web_dashboard_open_on_launch: bool = True
     web_dashboard_listen_address: str = "127.0.0.1"
+    jetbrains_plugin_server_address: str = "127.0.0.1"
     tool_timeout: float = DEFAULT_TOOL_TIMEOUT
-    loaded_commented_yaml: CommentedMap | None = None
-    config_file_path: str | None = None
-    """
-    the path to the configuration file to which updates of the configuration shall be saved;
-    if None, the configuration is not saved to disk
-    """
 
     language_backend: LanguageBackend = LanguageBackend.LSP
     """
@@ -439,7 +434,30 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     ls_specific_settings: dict = field(default_factory=dict)
     """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""
 
+    # *** fields that are NOT mapped to/from the configuration file ***
+
+    _loaded_commented_yaml: CommentedMap | None = None
+    _config_file_path: str | None = None
+    """
+    the path to the configuration file to which updates of the configuration shall be saved;
+    if None, the configuration is not saved to disk
+    """
+
+    # *** static members ***
+
     CONFIG_FILE = "serena_config.yml"
+    CONFIG_FILE_RENAMED_KEYS = {
+        "gui_log_window_enabled": "gui_log_window",
+    }
+    """
+    maps attributes to the keys used in the configuration file, in case they differ
+    """
+
+    # *** methods ***
+
+    @property
+    def config_file_path(self) -> str | None:
+        return self._config_file_path
 
     def _tostring_includes(self) -> list[str]:
         return ["config_file_path"]
@@ -494,7 +512,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
             raise ValueError(f"Error loading Serena configuration from {config_file_path}: {e}") from e
 
         # create the configuration instance
-        instance = cls(loaded_commented_yaml=loaded_commented_yaml, config_file_path=config_file_path)
+        instance = cls(_loaded_commented_yaml=loaded_commented_yaml, _config_file_path=config_file_path)
 
         # read projects
         if "projects" not in loaded_commented_yaml:
@@ -520,9 +538,11 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
             )
             instance.projects.append(project)
 
-        def get_value_or_default(key: str, field_name: str | None = None) -> Any:
-            if field_name is None:
-                field_name = key
+        def get_value_or_default(field_name: str) -> Any:
+            key = cls.CONFIG_FILE_RENAMED_KEYS.get(field_name, field_name)
+            nonlocal num_migrations
+            if key not in loaded_commented_yaml:
+                num_migrations += 1
             return loaded_commented_yaml.get(key, get_dataclass_default(SerenaConfig, field_name))
 
         # determine language backend
@@ -540,11 +560,12 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         instance.language_backend = language_backend
 
         # set other configuration parameters (primitive types)
-        instance.gui_log_window_enabled = get_value_or_default("gui_log_window", "gui_log_window_enabled")
+        instance.gui_log_window_enabled = get_value_or_default("gui_log_window_enabled")
         instance.web_dashboard_listen_address = get_value_or_default("web_dashboard_listen_address")
         instance.log_level = loaded_commented_yaml.get("log_level", loaded_commented_yaml.get("gui_log_level", logging.INFO))
         instance.web_dashboard = get_value_or_default("web_dashboard")
         instance.web_dashboard_open_on_launch = get_value_or_default("web_dashboard_open_on_launch")
+        instance.jetbrains_plugin_server_address = get_value_or_default("jetbrains_plugin_server_address")
         instance.tool_timeout = get_value_or_default("tool_timeout")
         instance.trace_lsp_communication = get_value_or_default("trace_lsp_communication")
         instance.excluded_tools = get_value_or_default("excluded_tools")
@@ -659,9 +680,18 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         if self.config_file_path is None:
             return
 
-        assert self.loaded_commented_yaml is not None, "Cannot save configuration without loaded YAML"
+        assert self._loaded_commented_yaml is not None, "Cannot save configuration without loaded YAML"
 
-        loaded_original_yaml = deepcopy(self.loaded_commented_yaml)
+        loaded_original_yaml = deepcopy(self._loaded_commented_yaml)
+
+        # update fields with current values
+        # iterate over all dataclass fields
+        for field_info in dataclasses.fields(self):
+            field_name = field_info.name
+            if field_name in ["projects", "language_backend"] or field_name.startswith("_"):
+                continue
+            yaml_key = SerenaConfig.CONFIG_FILE_RENAMED_KEYS.get(field_name, field_name)
+            loaded_original_yaml[yaml_key] = getattr(self, field_name)
 
         # convert project objects into list of paths
         loaded_original_yaml["projects"] = sorted({str(project.project_root) for project in self.projects})
@@ -670,3 +700,11 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         loaded_original_yaml["language_backend"] = self.language_backend.value
 
         save_yaml(self.config_file_path, loaded_original_yaml, preserve_comments=True)
+
+    def propagate_settings(self):
+        """
+        Propagate settings from this configuration to individual components that are statically configured
+        """
+        from serena.tools import JetBrainsPluginClient
+
+        JetBrainsPluginClient.set_server_address(self.jetbrains_plugin_server_address)

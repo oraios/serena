@@ -47,6 +47,9 @@ web_dashboard_open_on_launch: True
 #    may be higher if you have multiple instances running; try ports 24283, 24284, etc.)
 # See also: https://oraios.github.io/serena/02-usage/060_dashboard.html
 
+jetbrains_plugin_server_address: 127.0.0.1
+# address where JetBrains plugin servers are running (only relevant when using the JetBrains language backend)
+
 log_level: 20
 # the minimum log level for the GUI log window and the dashboard (10 = debug, 20 = info, 30 = warning, 40 = error)
 
@@ -69,6 +72,10 @@ excluded_tools: []
 
 included_optional_tools: []
 # list of optional tools (which are disabled by default) to be included
+
+fixed_tools: []
+# fixed set of tools to use as the base tool set (if non-empty), replacing Serena's default set of tools.
+# This cannot be combined with non-empty excluded_tools or included_optional_tools.
 
 default_max_tool_answer_chars: 150000
 # Used as default for tools where the apply method has a default maximal answer length.

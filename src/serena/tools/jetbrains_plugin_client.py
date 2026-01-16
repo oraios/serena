@@ -71,11 +71,17 @@ class JetBrainsPluginClient(ToStringMixin):
     """
     the timeout used for request handling within the plugin (a constant in the plugin)
     """
-    last_port: int | None = None
+    _last_port: int | None = None
+    """
+    the last port that was successfully used to connect to a plugin instance in the current session
+    """
+    _server_address: str = "127.0.0.1"
+    """
+    the server address where to connect to the plugin service
+    """
 
     def __init__(self, port: int, timeout: int = PLUGIN_REQUEST_TIMEOUT):
         self._port = port
-        self._base_url = f"http://127.0.0.1:{port}"
         self._timeout = timeout
         self._session = requests.Session()
         self._session.headers.update({"Content-Type": "application/json", "Accept": "application/json"})
@@ -91,6 +97,14 @@ class JetBrainsPluginClient(ToStringMixin):
             self._project_root = None
             self._plugin_version = None
 
+    @property
+    def _base_url(self) -> str:
+        return f"http://{self._server_address}:{self._port}"
+
+    @classmethod
+    def set_server_address(cls, address: str) -> None:
+        cls._server_address = address
+
     def _tostring_includes(self) -> list[str]:
         return ["_port", "_project_root", "_plugin_version"]
 
@@ -98,8 +112,8 @@ class JetBrainsPluginClient(ToStringMixin):
     def from_project(cls, project: Project) -> Self:
         resolved_path = Path(project.project_root).resolve()
 
-        if cls.last_port is not None:
-            client = JetBrainsPluginClient(cls.last_port)
+        if cls._last_port is not None:
+            client = JetBrainsPluginClient(cls._last_port)
             if client.matches(resolved_path):
                 return client
 
@@ -107,7 +121,7 @@ class JetBrainsPluginClient(ToStringMixin):
             client = JetBrainsPluginClient(port)
             if client.matches(resolved_path):
                 log.info("Found matching %s", client)
-                cls.last_port = port
+                cls._last_port = port
                 return client
 
         raise ServerNotFoundError("Found no Serena service in a JetBrains IDE instance for the project at " + str(resolved_path))

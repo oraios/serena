@@ -185,6 +185,9 @@ class SerenaAgent:
         # obtain serena configuration using the decoupled factory function
         self.serena_config = serena_config or SerenaConfig.from_config_file()
 
+        # propagate configuration to other components
+        self.serena_config.propagate_settings()
+
         # project-specific instances, which will be initialized upon project activation
         self._active_project: Project | None = None
 
