@@ -17,7 +17,21 @@ especially for users of JetBrains IDEs.
 **Purchasing the JetBrains Plugin supports the Serena project.**
 The proceeds from plugin sales allow us to dedicate more resources to further developing and improving Serena.
 
-## Configuring Serena 
+
+## Advantages of the JetBrains Plugin
+
+There are multiple features that are only available when using the JetBrains plugin:
+
+* **External library indexing**: Dependencies and libraries are fully indexed and accessible to Serena
+* **No additional setup**: No need to download or configure separate language servers
+* **Enhanced performance**: Faster tool execution thanks to optimized IDE integration
+* **Multi-language excellence**: First-class support for polyglot projects with multiple languages and frameworks
+* **Enhanced retrieval capabilities**: The plugin supports additional retrieval tools for type hierarchy information as well as fast and reliable documentation/type signature retrieval
+
+We are also working on additional features like a `move_symbol` tool and debugging-related capabilities that
+will be available exclusively through the JetBrains plugin.
+
+## Configuring Serena to Use the JetBrains Plugin
 
 After installing the plugin, you need to configure Serena to use it.
 
@@ -44,18 +58,20 @@ you will see `Languages:
 Using JetBrains backend` in the configuration overview.
 You will also notice that your client will use the JetBrains-specific tools like `jet_brains_find_symbol` and others like it.
 
+## Workflow
 
-## Advantages of the JetBrains Plugin
+Having installed the plugin in your IDE and having configured Serena to use the JetBrains backend,
+the general workflow is simple:
+1. Open the project you want to work on in your JetBrains IDE
+2. Open the project's root folder as a project in Serena (see [Project Creation](project-creation-indexing) and [Project Activation](project-activation))
+3. Start using Serena tools as usual
 
-There are multiple features that are only available when using the JetBrains plugin:
+Note that the folder that is open in your IDE and the project's root folder must match.
 
-* **External library indexing**: Dependencies and libraries are fully indexed and accessible to Serena
-* **No additional setup**: No need to download or configure separate language servers
-* **Enhanced performance**: Faster tool execution thanks to optimized IDE integration
-* **Multi-language excellence**: First-class support for polyglot projects with multiple languages and frameworks
-
-We are also working on additional features like a `move_symbol` tool and debugging-related capabilities that
-will be available exclusively through the JetBrains plugin.
+:::{tip}
+If you need to work on multiple projects in the same agent session, create a monorepo folder
+containing all the projects and open that folder in both Serena and your IDE.
+:::
 
 ## Usage with Other Editors
 

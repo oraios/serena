@@ -15,6 +15,8 @@ setting up a project with Serena typically involves the following steps:
 (project-creation-indexing)=
 ## Project Creation & Indexing
 
+Project creation is the process of defining fundamental project settings that are relevant to Serena's operation.
+
 You can create a project either  
  * implicitly, by just activating a directory as a project while already in a conversation; this will use default settings for your project (skip to the next section).
  * explicitly, using the project creation command, or
@@ -72,6 +74,7 @@ While in the project directory, run this command:
 
 Indexing has to be called only once. During regular usage, Serena will automatically update the index whenever files change.
 
+(project-activation)=
 ## Project Activation
    
 Project activation makes Serena aware of the project you want to work with.
@@ -89,6 +92,8 @@ You can either choose to do this
  * when the MCP server starts, by passing the project path or name as a command-line argument
    (e.g. when using a single-project mode like `ide` or `claude-code`): `--project <path|name>`
 
+When working with the JetBrains plugin, be sure to have the same project folder open as a project in your IDE,
+i.e. the folder that is activated in Serena should correspond to the root folder of the project in your IDE.
 
 ## Onboarding & Memories
 
