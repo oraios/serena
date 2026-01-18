@@ -122,7 +122,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         depth: int = 0,
         relative_path: str = "",
         include_body: bool = False,
-        include_info: bool = True,
+        include_info: bool = False,
         include_kinds: list[int] = [],  # noqa: B006
         exclude_kinds: list[int] = [],  # noqa: B006
         substring_matching: bool = False,
@@ -155,7 +155,8 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             speed up the search as well as reduce the number of results.
         :param include_body: whether to include the symbol's source code. Use judiciously.
         :param include_info: whether to include additional info (hover-like, typically including docstring and signature),
-            about the symbol (ignored if include_body is True). Default True, info is never included for child symbols.
+            about the symbol (ignored if include_body is True). Info is never included for child symbols.
+            Note: Depending on the language, this can be slow (e.g., C/C++).
         :param include_kinds: List of LSP symbol kind integers to include.
             If not provided, all kinds are included.
         :param exclude_kinds: Optional. List of LSP symbol kind integers to exclude. Takes precedence over `include_kinds`.
