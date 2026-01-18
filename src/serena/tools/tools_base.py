@@ -230,7 +230,7 @@ class Tool(Component):
         return result
 
     def is_active(self) -> bool:
-        return self.agent.tool_is_active(self.__class__)
+        return self.agent.tool_is_active(self.get_name())
 
     def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, mcp_ctx: Context | None = None, **kwargs) -> str:  # type: ignore
         """

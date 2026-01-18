@@ -52,7 +52,11 @@ class AvailableTools:
         :param tools: the list of available tools
         """
         self.tools = tools
-        self.tool_names = [tool.get_name_from_cls() for tool in tools]
+        self.tool_names = sorted([tool.get_name_from_cls() for tool in tools])
+        """
+        the list of available tool names, sorted alphabetically
+        """
+        self._tool_name_set = set(self.tool_names)
         self.tool_marker_names = set()
         for marker_class in iter_subclasses(ToolMarker):
             for tool in tools:
@@ -61,6 +65,9 @@ class AvailableTools:
 
     def __len__(self) -> int:
         return len(self.tools)
+
+    def contains_tool_name(self, tool_name: str) -> bool:
+        return tool_name in self._tool_name_set
 
 
 class ToolSet:
@@ -289,7 +296,7 @@ class SerenaAgent:
         self._modes = modes
 
         # determine the subset of active tools (depending on active modes and the active project)
-        self._active_tools: dict[type[Tool], Tool] = {}
+        self._active_tools: AvailableTools = self._exposed_tools
         self._update_active_tools()
 
         # activate a project configuration (if provided or if there is only a single project available)
@@ -491,12 +498,13 @@ class SerenaAgent:
         return template.render(available_tools=self._exposed_tools.tool_names, available_markers=self._exposed_tools.tool_marker_names)
 
     def create_system_prompt(self) -> str:
-        available_markers = self._exposed_tools.tool_marker_names
-        log.info("Generating system prompt with available_tools=(see exposed tools), available_markers=%s", available_markers)
+        available_tools = self._active_tools
+        available_markers = available_tools.tool_marker_names
+        log.info("Generating system prompt with available_tools=(see active tools), available_markers=%s", available_markers)
         system_prompt = self.prompt_factory.create_system_prompt(
             context_system_prompt=self._format_prompt(self._context.prompt),
             mode_system_prompts=[self._format_prompt(mode.prompt) for mode in self._modes],
-            available_tools=self._exposed_tools.tool_names,
+            available_tools=available_tools.tool_names,
             available_markers=available_markers,
         )
 
@@ -522,13 +530,10 @@ class SerenaAgent:
             if self._active_project.project_config.read_only:
                 tool_set = tool_set.without_editing_tools()
 
-        self._active_tools = {
-            tool_class: tool_instance
-            for tool_class, tool_instance in self._all_tools.items()
-            if tool_set.includes_name(tool_instance.get_name())
-        }
+        tools = [t for t in self._all_tools.values() if tool_set.includes_name(t.get_name())]
+        self._active_tools = AvailableTools(tools)
 
-        log.info(f"Active tools ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
+        log.info(f"Active tools ({len(self._active_tools)}): {', '.join(self._active_tools.tool_names)}")
 
     def issue_task(
         self, task: Callable[[], T], name: str | None = None, logged: bool = True, timeout: float | None = None
@@ -617,27 +622,18 @@ class SerenaAgent:
         self._activate_project(project_instance)
         return project_instance
 
-    def get_active_tool_classes(self) -> list[type["Tool"]]:
-        """
-        :return: the list of active tool classes for the current project
-        """
-        return list(self._active_tools.keys())
-
     def get_active_tool_names(self) -> list[str]:
         """
-        :return: the list of names of the active tools for the current project
+        :return: the list of names of the active tools for the current project, sorted alphabetically
         """
-        return sorted([tool.get_name_from_cls() for tool in self.get_active_tool_classes()])
+        return self._active_tools.tool_names
 
-    def tool_is_active(self, tool_class: type["Tool"] | str) -> bool:
+    def tool_is_active(self, tool_name: str) -> bool:
         """
-        :param tool_class: the class or name of the tool to check
+        :param tool_class: the name of the tool to check
         :return: True if the tool is active, False otherwise
         """
-        if isinstance(tool_class, str):
-            return tool_class in self.get_active_tool_names()
-        else:
-            return tool_class in self.get_active_tool_classes()
+        return self._active_tools.contains_tool_name(tool_name)
 
     def get_current_config_overview(self) -> str:
         """
@@ -726,7 +722,7 @@ class SerenaAgent:
         return self._all_tools[tool_class]  # type: ignore
 
     def print_tool_overview(self) -> None:
-        ToolRegistry().print_tool_overview(self._active_tools.values())
+        ToolRegistry().print_tool_overview(self._active_tools.tools)
 
     def __del__(self) -> None:
         self.shutdown()
