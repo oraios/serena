@@ -198,7 +198,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         self,
         name_path: str,
         relative_path: str,
-        include_info: bool = True,
+        include_info: bool = False,
         include_kinds: list[int] = [],  # noqa: B006
         exclude_kinds: list[int] = [],  # noqa: B006
         max_answer_chars: int = -1,
@@ -211,7 +211,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         :param relative_path: the relative path to the file containing the symbol for which to find references.
             Note that here you can't pass a directory but must pass a file.
         :param include_info: whether to include additional info (hover-like, typically including docstring and signature),
-            about the referencing symbols. Default True.
+            about the referencing symbols; can be slow depending on the language (e.g. C/C++).
         :param include_kinds: same as in the `find_symbol` tool.
         :param exclude_kinds: same as in the `find_symbol` tool.
         :param max_answer_chars: same as in the `find_symbol` tool.
