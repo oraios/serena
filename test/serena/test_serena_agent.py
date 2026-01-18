@@ -124,7 +124,7 @@ class TestSerenaAgent:
     def test_find_symbol(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str):
         agent = serena_agent
         find_symbol_tool = agent.get_tool(FindSymbolTool)
-        result = find_symbol_tool.apply_ex(name_path_pattern=symbol_name)
+        result = find_symbol_tool.apply_ex(name_path_pattern=symbol_name, include_info=True)
 
         symbols = json.loads(result)
         assert any(
