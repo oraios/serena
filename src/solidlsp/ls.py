@@ -59,31 +59,25 @@ class ReferenceInSymbol:
     character: int
 
 
-@dataclasses.dataclass
 class LSPFileBuffer:
     """
     This class is used to store the contents of an open LSP file in memory.
     """
 
-    # uri of the file
-    uri: str
+    def __init__(self, uri: str, contents: str, encoding: str, version: int, language_id: str, ref_count: int) -> None:
+        self.uri = uri
+        self.contents = contents
+        self.version = version
+        self.language_id = language_id
+        self.ref_count = ref_count
+        self.encoding = encoding
+        self._content_hash: str | None = None
 
-    # The contents of the file
-    contents: str
-
-    # The version of the file
-    version: int
-
-    # The language id of the file
-    language_id: str
-
-    # reference count of the file
-    ref_count: int
-
-    content_hash: str = ""
-
-    def __post_init__(self) -> None:
-        self.content_hash = hashlib.md5(self.contents.encode("utf-8")).hexdigest()
+    @property
+    def content_hash(self) -> str:
+        if self._content_hash is None:
+            self._content_hash = hashlib.md5(self.contents.encode(self.encoding)).hexdigest()
+        return self._content_hash
 
     def split_lines(self) -> list[str]:
         """Splits the contents of the file into lines."""
@@ -590,7 +584,9 @@ class SolidLanguageServer(ABC):
 
             version = 0
             language_id = self._get_language_id_for_file(relative_file_path)
-            self.open_file_buffers[uri] = LSPFileBuffer(uri, contents, version, language_id, 1)
+            self.open_file_buffers[uri] = LSPFileBuffer(
+                uri=uri, contents=contents, encoding=self._encoding, version=version, language_id=language_id, ref_count=1
+            )
 
             self.server.notify.did_open_text_document(
                 {
