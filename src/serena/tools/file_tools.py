@@ -190,7 +190,7 @@ class ReplaceContentTool(Tool, ToolMarkerCanEdit):
             If `mode` is "literal", this string will be matched exactly.
             If `mode` is "regex", this string will be treated as a regular expression (syntax of Python's `re` module,
             with flags DOTALL and MULTILINE enabled).
-        :param repl: the replacement string (verbatim).
+        :param repl: the replacement string (used as-is; backslash escapes are not expanded).
             If mode is "regex", the string can contain backreferences to matched groups in the needle regex,
             specified using the syntax $!1, $!2, etc. for groups 1, 2, etc.
         :param mode: either "literal" or "regex", specifying how the `needle` parameter is to be interpreted.
