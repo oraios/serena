@@ -1050,21 +1050,18 @@ class SolidLanguageServer(ABC):
         def get_cached_raw_document_symbols(cache_key: str, fd: LSPFileBuffer) -> list[SymbolInformation] | list[DocumentSymbol] | None:
             file_hash_and_result = self._raw_document_symbols_cache.get(cache_key)
             if file_hash_and_result is None:
-                log.debug("No cache hit for raw document symbols symbols in %s", relative_file_path)
-                if log.isEnabledFor(logging.DEBUG):
-                    log.debug("perf: raw_document_symbols_cache MISS path=%s", relative_file_path)
+                log.debug("No cache hit for raw document symbols in %s", relative_file_path)
+                log.debug("perf: raw_document_symbols_cache MISS path=%s", relative_file_path)
                 return None
 
             file_hash, result = file_hash_and_result
             if file_hash == fd.content_hash:
                 log.debug("Returning cached raw document symbols for %s", relative_file_path)
-                if log.isEnabledFor(logging.DEBUG):
-                    log.debug("perf: raw_document_symbols_cache HIT path=%s", relative_file_path)
+                log.debug("perf: raw_document_symbols_cache HIT path=%s", relative_file_path)
                 return result
 
             log.debug("Document content for %s has changed (raw symbol cache is not up-to-date)", relative_file_path)
-            if log.isEnabledFor(logging.DEBUG):
-                log.debug("perf: raw_document_symbols_cache STALE path=%s", relative_file_path)
+            log.debug("perf: raw_document_symbols_cache STALE path=%s", relative_file_path)
             return None
 
         def get_raw_document_symbols(fd: LSPFileBuffer) -> list[SymbolInformation] | list[DocumentSymbol] | None:
@@ -1111,19 +1108,16 @@ class SolidLanguageServer(ABC):
             file_hash_and_result = self._document_symbols_cache.get(cache_key)
             if file_hash_and_result is None:
                 log.debug("No cache hit for document symbols in %s", relative_file_path)
-                if log.isEnabledFor(logging.DEBUG):
-                    log.debug("perf: document_symbols_cache MISS path=%s", relative_file_path)
+                log.debug("perf: document_symbols_cache MISS path=%s", relative_file_path)
             else:
                 file_hash, document_symbols = file_hash_and_result
                 if file_hash == file_data.content_hash:
                     log.debug("Returning cached document symbols for %s", relative_file_path)
-                    if log.isEnabledFor(logging.DEBUG):
-                        log.debug("perf: document_symbols_cache HIT path=%s", relative_file_path)
+                    log.debug("perf: document_symbols_cache HIT path=%s", relative_file_path)
                     return document_symbols
 
                 log.debug("Cached document symbol content for %s has changed", relative_file_path)
-                if log.isEnabledFor(logging.DEBUG):
-                    log.debug("perf: document_symbols_cache STALE path=%s", relative_file_path)
+                log.debug("perf: document_symbols_cache STALE path=%s", relative_file_path)
 
             # no cached result: request the root symbols from the language server
             root_symbols = self._request_document_symbols(relative_file_path, file_data)

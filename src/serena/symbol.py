@@ -549,7 +549,7 @@ class LanguageServerSymbolRetriever:
         requests. If exceeded, remaining symbols get info=None (partial results).
 
         :param symbols: list of symbols to get info for
-        :return: a dict mapping each symbol to its info (or None if unavailable)
+        :return: a dict mapping each processable symbol to its info (or None if unavailable). Symbols with missing location attributes (relative_path/line/column is None) are skipped and omitted from the result.
         """
         if not symbols:
             return {}
