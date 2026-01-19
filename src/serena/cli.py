@@ -746,7 +746,7 @@ class ProjectCommands(AutoRegisteringGroup):
             try:
                 # Create SerenaAgent with dashboard disabled
                 log.info("Creating SerenaAgent with disabled dashboard...")
-                config = SerenaConfig(gui_log_window_enabled=False, web_dashboard=False)
+                config = SerenaConfig(gui_log_window=False, web_dashboard=False)
                 agent = SerenaAgent(project=project_path, serena_config=config)
                 log.info("SerenaAgent created successfully")
 

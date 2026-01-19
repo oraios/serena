@@ -305,7 +305,7 @@ class SerenaMCPFactory:
             if enable_web_dashboard is not None:
                 config.web_dashboard = enable_web_dashboard
             if enable_gui_log_window is not None:
-                config.gui_log_window_enabled = enable_gui_log_window
+                config.gui_log_window = enable_gui_log_window
             if open_web_dashboard is not None:
                 config.web_dashboard_open_on_launch = open_web_dashboard
             if log_level is not None:

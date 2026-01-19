@@ -5,7 +5,7 @@ The Serena Model Context Protocol (MCP) Server
 import dataclasses
 import os
 import shutil
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -403,8 +403,10 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     For testing purposes, it can also be instantiated directly with the desired parameters.
     """
 
+    # *** fields that are mapped directly to/from the configuration file (DO NOT RENAME) ***
+
     projects: list[RegisteredProject] = field(default_factory=list)
-    gui_log_window_enabled: bool = False
+    gui_log_window: bool = False
     log_level: int = logging.INFO
     trace_lsp_communication: bool = False
     web_dashboard: bool = True
@@ -446,18 +448,22 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     # *** static members ***
 
     CONFIG_FILE = "serena_config.yml"
-    CONFIG_FILE_RENAMED_KEYS = {
-        "gui_log_window_enabled": "gui_log_window",
-    }
-    """
-    maps attributes to the keys used in the configuration file, in case they differ
-    """
+    CONFIG_FIELDS_WITH_TYPE_CONVERSION = {"projects", "language_backend"}
 
     # *** methods ***
 
     @property
     def config_file_path(self) -> str | None:
         return self._config_file_path
+
+    def _iter_config_file_mapped_fields_without_type_conversion(self) -> Iterator[str]:
+        for field_info in dataclasses.fields(self):
+            field_name = field_info.name
+            if field_name.startswith("_"):
+                continue
+            if field_name in self.CONFIG_FIELDS_WITH_TYPE_CONVERSION:
+                continue
+            yield field_name
 
     def _tostring_includes(self) -> list[str]:
         return ["config_file_path"]
@@ -513,14 +519,23 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
 
         # create the configuration instance
         instance = cls(_loaded_commented_yaml=loaded_commented_yaml, _config_file_path=config_file_path)
+        num_migrations = 0
+
+        def get_value_or_default(field_name: str) -> Any:
+            nonlocal num_migrations
+            if field_name not in loaded_commented_yaml:
+                num_migrations += 1
+            return loaded_commented_yaml.get(field_name, get_dataclass_default(SerenaConfig, field_name))
+
+        # transfer regular fields that do not require type conversion
+        for field_name in instance._iter_config_file_mapped_fields_without_type_conversion():
+            assert hasattr(instance, field_name)
+            setattr(instance, field_name, get_value_or_default(field_name))
 
         # read projects
         if "projects" not in loaded_commented_yaml:
             raise SerenaConfigError("`projects` key not found in Serena configuration. Please update your `serena_config.yml` file.")
-
-        # load list of known projects
         instance.projects = []
-        num_migrations = 0
         for path in loaded_commented_yaml["projects"]:
             path = Path(path).resolve()
             if not path.exists() or (path.is_dir() and not (path / ProjectConfig.rel_path_to_project_yml()).exists()):
@@ -538,13 +553,6 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
             )
             instance.projects.append(project)
 
-        def get_value_or_default(field_name: str) -> Any:
-            key = cls.CONFIG_FILE_RENAMED_KEYS.get(field_name, field_name)
-            nonlocal num_migrations
-            if key not in loaded_commented_yaml:
-                num_migrations += 1
-            return loaded_commented_yaml.get(key, get_dataclass_default(SerenaConfig, field_name))
-
         # determine language backend
         language_backend = get_dataclass_default(SerenaConfig, "language_backend")
         if "language_backend" in loaded_commented_yaml:
@@ -559,20 +567,12 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
                 del loaded_commented_yaml["jetbrains"]
         instance.language_backend = language_backend
 
-        # set other configuration parameters (primitive types)
-        instance.gui_log_window_enabled = get_value_or_default("gui_log_window_enabled")
-        instance.web_dashboard_listen_address = get_value_or_default("web_dashboard_listen_address")
-        instance.log_level = loaded_commented_yaml.get("log_level", loaded_commented_yaml.get("gui_log_level", logging.INFO))
-        instance.web_dashboard = get_value_or_default("web_dashboard")
-        instance.web_dashboard_open_on_launch = get_value_or_default("web_dashboard_open_on_launch")
-        instance.jetbrains_plugin_server_address = get_value_or_default("jetbrains_plugin_server_address")
-        instance.tool_timeout = get_value_or_default("tool_timeout")
-        instance.trace_lsp_communication = get_value_or_default("trace_lsp_communication")
-        instance.excluded_tools = get_value_or_default("excluded_tools")
-        instance.included_optional_tools = get_value_or_default("included_optional_tools")
-        instance.token_count_estimator = get_value_or_default("token_count_estimator")
-        instance.default_max_tool_answer_chars = get_value_or_default("default_max_tool_answer_chars")
-        instance.ls_specific_settings = get_value_or_default("ls_specific_settings")
+        # migrate deprecated "gui_log_level" field if necessary
+        if "gui_log_level" in loaded_commented_yaml:
+            num_migrations += 1
+            if "log_level" not in loaded_commented_yaml:
+                instance.log_level = loaded_commented_yaml["gui_log_level"]
+            del loaded_commented_yaml["gui_log_level"]
 
         # re-save the configuration file if any migrations were performed
         if num_migrations > 0:
@@ -682,24 +682,19 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
 
         assert self._loaded_commented_yaml is not None, "Cannot save configuration without loaded YAML"
 
-        loaded_original_yaml = deepcopy(self._loaded_commented_yaml)
+        commented_yaml = deepcopy(self._loaded_commented_yaml)
 
         # update fields with current values
-        # iterate over all dataclass fields
-        for field_info in dataclasses.fields(self):
-            field_name = field_info.name
-            if field_name in ["projects", "language_backend"] or field_name.startswith("_"):
-                continue
-            yaml_key = SerenaConfig.CONFIG_FILE_RENAMED_KEYS.get(field_name, field_name)
-            loaded_original_yaml[yaml_key] = getattr(self, field_name)
+        for field_name in self._iter_config_file_mapped_fields_without_type_conversion():
+            commented_yaml[field_name] = getattr(self, field_name)
 
         # convert project objects into list of paths
-        loaded_original_yaml["projects"] = sorted({str(project.project_root) for project in self.projects})
+        commented_yaml["projects"] = sorted({str(project.project_root) for project in self.projects})
 
         # convert language backend to string
-        loaded_original_yaml["language_backend"] = self.language_backend.value
+        commented_yaml["language_backend"] = self.language_backend.value
 
-        save_yaml(self.config_file_path, loaded_original_yaml, preserve_comments=True)
+        save_yaml(self.config_file_path, commented_yaml, preserve_comments=True)
 
     def propagate_settings(self) -> None:
         """
