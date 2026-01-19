@@ -13,6 +13,7 @@ from pathlib import Path
 import requests
 from overrides import override
 
+from solidlsp import ls_types
 from solidlsp.language_servers.common import quote_windows_path
 from solidlsp.ls import DocumentSymbols, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
@@ -108,6 +109,14 @@ class ALLanguageServer(SolidLanguageServer):
         """
 
         super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "al", solidlsp_settings)
+
+        # Cache mapping (file_path, line, char) -> original_full_name for hover injection
+        self._al_original_names: dict[tuple[str, int, int], str] = {}
+
+    @staticmethod
+    def _normalize_path(path: str) -> str:
+        """Normalize file path for consistent cache key usage across platforms."""
+        return path.replace("\\", "/")
 
     @classmethod
     def _download_al_extension(cls, url: str, target_dir: str) -> bool:
@@ -1013,9 +1022,21 @@ class ALLanguageServer(SolidLanguageServer):
         # Get symbols from parent implementation
         document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
 
-        # Normalize names by stripping AL object metadata
+        # Normalize names by stripping AL object metadata, storing originals for hover
         def normalize_name(symbol: UnifiedSymbolInformation) -> None:
-            symbol["name"] = extract_al_display_name(symbol["name"])
+            original_name = symbol["name"]
+            normalized_name = extract_al_display_name(original_name)
+
+            # Store original name if it was normalized (for hover injection)
+            if original_name != normalized_name:
+                sel_range = symbol.get("selectionRange", {})
+                start = sel_range.get("start", {})
+                line = start.get("line", 0)
+                char = start.get("character", 0)
+                normalized_path = self._normalize_path(relative_file_path)
+                self._al_original_names[(normalized_path, line, char)] = original_name
+
+            symbol["name"] = normalized_name
 
             # Process children recursively
             if symbol.get("children"):
@@ -1027,3 +1048,29 @@ class ALLanguageServer(SolidLanguageServer):
             normalize_name(sym)
 
         return document_symbols
+
+    @override
+    def request_hover(self, relative_file_path: str, line: int, column: int) -> ls_types.Hover | None:
+        """
+        Override to inject original AL object name (with type and ID) into hover responses.
+
+        When hovering over a symbol whose name was normalized, we prepend the original
+        full name (e.g., 'Table 50000 "TEST Customer"') to the hover content.
+        """
+        hover = super().request_hover(relative_file_path, line, column)
+
+        if hover is None:
+            return None
+
+        # Check if we have an original name for this position (using normalized path for consistency)
+        normalized_path = self._normalize_path(relative_file_path)
+        original_name = self._al_original_names.get((normalized_path, line, column))
+
+        if original_name and "contents" in hover:
+            contents = hover["contents"]
+            if isinstance(contents, dict) and "value" in contents:
+                # Prepend the original full name to the hover content
+                prefix = f"**{original_name}**\n\n---\n\n"
+                contents["value"] = prefix + contents["value"]
+
+        return hover

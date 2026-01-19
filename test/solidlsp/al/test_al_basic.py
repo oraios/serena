@@ -242,3 +242,317 @@ class TestALLanguageServer:
         assert "TEST Customer" in al_object_names, f"TEST Customer not found in: {al_object_names}"
         assert "CustomerMgt" in al_object_names, f"CustomerMgt not found in: {al_object_names}"
         assert "CustomerType" in al_object_names, f"CustomerType not found in: {al_object_names}"
+
+
+@pytest.mark.al
+class TestALHoverInjection:
+    """Tests for hover injection of original AL object names with type and ID."""
+
+    def _get_symbol_hover(self, language_server: SolidLanguageServer, file_path: str, symbol_name: str) -> tuple[dict | None, str | None]:
+        """Helper to get hover info for a symbol by name.
+
+        Returns (hover_info, hover_value) tuple.
+        """
+        symbols = language_server.request_document_symbols(file_path)
+        for sym in symbols.root_symbols:
+            if sym.get("name") == symbol_name:
+                sel_range = sym.get("selectionRange", {})
+                start = sel_range.get("start", {})
+                line = start.get("line", 0)
+                char = start.get("character", 0)
+                hover = language_server.request_hover(file_path, line, char)
+                if hover and "contents" in hover:
+                    return hover, hover["contents"].get("value", "")
+                return hover, None
+        return None, None
+
+    def _get_child_symbol_hover(
+        self, language_server: SolidLanguageServer, file_path: str, parent_name: str, child_name_contains: str
+    ) -> tuple[dict | None, str | None]:
+        """Helper to get hover info for a child symbol.
+
+        Returns (hover_info, hover_value) tuple.
+        """
+        symbols = language_server.request_document_symbols(file_path)
+        for sym in symbols.root_symbols:
+            if sym.get("name") == parent_name:
+                for child in sym.get("children", []):
+                    if child_name_contains in child.get("name", ""):
+                        sel_range = child.get("selectionRange", {})
+                        start = sel_range.get("start", {})
+                        line = start.get("line", 0)
+                        char = start.get("character", 0)
+                        hover = language_server.request_hover(file_path, line, char)
+                        if hover and "contents" in hover:
+                            return hover, hover["contents"].get("value", "")
+                        return hover, None
+        return None, None
+
+    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    def test_hover_table_injects_full_name(self, language_server: SolidLanguageServer) -> None:
+        """Test that hovering over a Table symbol shows the full object name with ID."""
+        file_path = os.path.join("src", "Tables", "Customer.Table.al")
+        hover, value = self._get_symbol_hover(language_server, file_path, "TEST Customer")
+
+        assert hover is not None, "Hover should return a result for Table symbol"
+        assert value is not None, "Hover should have content"
+        assert '**Table 50000 "TEST Customer"**' in value, f"Hover should contain full Table name with ID. Got: {value[:200]}"
+
+    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    def test_hover_page_injects_full_name(self, language_server: SolidLanguageServer) -> None:
+        """Test that hovering over a Page symbol shows the full object name with ID."""
+        file_path = os.path.join("src", "Pages", "CustomerCard.Page.al")
+        hover, value = self._get_symbol_hover(language_server, file_path, "TEST Customer Card")
+
+        assert hover is not None, "Hover should return a result for Page symbol"
+        assert value is not None, "Hover should have content"
+        assert '**Page 50001 "TEST Customer Card"**' in value, f"Hover should contain full Page name with ID. Got: {value[:200]}"
+
+    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    def test_hover_codeunit_injects_full_name(self, language_server: SolidLanguageServer) -> None:
+        """Test that hovering over a Codeunit symbol shows the full object name with ID."""
+        file_path = os.path.join("src", "Codeunits", "CustomerMgt.Codeunit.al")
+        hover, value = self._get_symbol_hover(language_server, file_path, "CustomerMgt")
+
+        assert hover is not None, "Hover should return a result for Codeunit symbol"
+        assert value is not None, "Hover should have content"
+        assert "**Codeunit 50000 CustomerMgt**" in value, f"Hover should contain full Codeunit name with ID. Got: {value[:200]}"
+
+    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    def test_hover_enum_injects_full_name(self, language_server: SolidLanguageServer) -> None:
+        """Test that hovering over an Enum symbol shows the full object name with ID."""
+        file_path = os.path.join("src", "Enums", "CustomerType.Enum.al")
+        hover, value = self._get_symbol_hover(language_server, file_path, "CustomerType")
+
+        assert hover is not None, "Hover should return a result for Enum symbol"
+        assert value is not None, "Hover should have content"
+        assert "**Enum 50000 CustomerType**" in value, f"Hover should contain full Enum name with ID. Got: {value[:200]}"
+
+    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    def test_hover_interface_injects_full_name(self, language_server: SolidLanguageServer) -> None:
+        """Test that hovering over an Interface symbol shows the full object name (no ID for interfaces)."""
+        file_path = os.path.join("src", "Interfaces", "IPaymentProcessor.Interface.al")
+        hover, value = self._get_symbol_hover(language_server, file_path, "IPaymentProcessor")
+
+        assert hover is not None, "Hover should return a result for Interface symbol"
+        assert value is not None, "Hover should have content"
+        assert "**Interface IPaymentProcessor**" in value, f"Hover should contain full Interface name. Got: {value[:200]}"
+
+    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    def test_hover_procedure_no_injection(self, language_server: SolidLanguageServer) -> None:
+        """Test that hovering over a procedure does NOT inject object name (procedures are not normalized)."""
+        file_path = os.path.join("src", "Codeunits", "CustomerMgt.Codeunit.al")
+        hover, value = self._get_child_symbol_hover(language_server, file_path, "CustomerMgt", "CreateCustomer")
+
+        assert hover is not None, "Hover should return a result for procedure"
+        assert value is not None, "Hover should have content"
+        # Procedure hover should NOT start with ** (no injection)
+        assert not value.startswith("**"), f"Procedure hover should not have injected name. Got: {value[:200]}"
+        # But should contain procedure info
+        assert "CreateCustomer" in value, f"Hover should contain procedure name. Got: {value[:200]}"
+
+    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    def test_hover_field_no_injection(self, language_server: SolidLanguageServer) -> None:
+        """Test that hovering over a field does NOT inject object name (fields are not normalized)."""
+        file_path = os.path.join("src", "Tables", "Customer.Table.al")
+        symbols = language_server.request_document_symbols(file_path)
+
+        # Navigate to a field: Table -> fields -> specific field
+        for sym in symbols.root_symbols:
+            if sym.get("name") == "TEST Customer":
+                for child in sym.get("children", []):
+                    if child.get("name") == "fields":
+                        for field in child.get("children", []):
+                            if "Name" in field.get("name", ""):
+                                sel_range = field.get("selectionRange", {})
+                                start = sel_range.get("start", {})
+                                line = start.get("line", 0)
+                                char = start.get("character", 0)
+                                hover = language_server.request_hover(file_path, line, char)
+
+                                assert hover is not None, "Hover should return a result for field"
+                                value = hover.get("contents", {}).get("value", "")
+                                # Field hover should NOT start with ** (no injection)
+                                assert not value.startswith("**"), f"Field hover should not have injected name. Got: {value[:200]}"
+                                return
+
+        pytest.fail("Could not find a field to test hover on")
+
+    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    def test_hover_multiple_objects_correct_injection(self, language_server: SolidLanguageServer) -> None:
+        """Test that multiple AL objects each get their correct full name injected."""
+        test_cases = [
+            (os.path.join("src", "Tables", "Customer.Table.al"), "TEST Customer", 'Table 50000 "TEST Customer"'),
+            (os.path.join("src", "Codeunits", "CustomerMgt.Codeunit.al"), "CustomerMgt", "Codeunit 50000 CustomerMgt"),
+            (os.path.join("src", "Enums", "CustomerType.Enum.al"), "CustomerType", "Enum 50000 CustomerType"),
+        ]
+
+        for file_path, symbol_name, expected_full_name in test_cases:
+            hover, value = self._get_symbol_hover(language_server, file_path, symbol_name)
+
+            assert hover is not None, f"Hover should return a result for {symbol_name}"
+            assert value is not None, f"Hover should have content for {symbol_name}"
+            assert (
+                f"**{expected_full_name}**" in value
+            ), f"Hover for {symbol_name} should contain '{expected_full_name}'. Got: {value[:200]}"
+
+    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    def test_hover_contains_separator_after_injection(self, language_server: SolidLanguageServer) -> None:
+        """Test that injected hover has a separator between injected name and original content."""
+        file_path = os.path.join("src", "Tables", "Customer.Table.al")
+        hover, value = self._get_symbol_hover(language_server, file_path, "TEST Customer")
+
+        assert hover is not None, "Hover should return a result"
+        assert value is not None, "Hover should have content"
+        # Should have the separator after the bold name
+        assert "---" in value, f"Hover should contain separator. Got: {value[:300]}"
+        # The separator should come after the injected name
+        bold_end = value.find("**", 2)  # Find closing **
+        separator_pos = value.find("---")
+        assert separator_pos > bold_end, "Separator should come after the injected name"
+
+    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    def test_hover_preserves_original_content(self, language_server: SolidLanguageServer) -> None:
+        """Test that the original hover content is preserved after the injected name."""
+        file_path = os.path.join("src", "Tables", "Customer.Table.al")
+        hover, value = self._get_symbol_hover(language_server, file_path, "TEST Customer")
+
+        assert hover is not None, "Hover should return a result"
+        assert value is not None, "Hover should have content"
+        # Original AL hover content should still be present (the table structure)
+        assert "```al" in value, f"Hover should contain original AL code block. Got: {value[:500]}"
+        assert 'Table "TEST Customer"' in value, f"Hover should contain original table definition. Got: {value[:500]}"
+
+
+@pytest.mark.al
+class TestALPathNormalization:
+    """Tests for path normalization in hover injection cache."""
+
+    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    def test_hover_with_forward_slash_path(self, language_server: SolidLanguageServer) -> None:
+        """Test that hover injection works with forward slash paths."""
+        file_path = "src/Tables/Customer.Table.al"
+        symbols = language_server.request_document_symbols(file_path)
+
+        for sym in symbols.root_symbols:
+            if sym.get("name") == "TEST Customer":
+                sel_range = sym.get("selectionRange", {})
+                start = sel_range.get("start", {})
+                line = start.get("line", 0)
+                char = start.get("character", 0)
+
+                hover = language_server.request_hover(file_path, line, char)
+                assert hover is not None, "Hover should return a result"
+                value = hover.get("contents", {}).get("value", "")
+                assert '**Table 50000 "TEST Customer"**' in value, f"Hover should have injection. Got: {value[:200]}"
+                return
+
+        pytest.fail("Could not find TEST Customer symbol")
+
+    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    def test_hover_with_backslash_path(self, language_server: SolidLanguageServer) -> None:
+        """Test that hover injection works with backslash paths (Windows style)."""
+        file_path = "src\\Tables\\Customer.Table.al"
+        symbols = language_server.request_document_symbols(file_path)
+
+        for sym in symbols.root_symbols:
+            if sym.get("name") == "TEST Customer":
+                sel_range = sym.get("selectionRange", {})
+                start = sel_range.get("start", {})
+                line = start.get("line", 0)
+                char = start.get("character", 0)
+
+                hover = language_server.request_hover(file_path, line, char)
+                assert hover is not None, "Hover should return a result"
+                value = hover.get("contents", {}).get("value", "")
+                assert '**Table 50000 "TEST Customer"**' in value, f"Hover should have injection. Got: {value[:200]}"
+                return
+
+        pytest.fail("Could not find TEST Customer symbol")
+
+    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    def test_hover_with_mixed_path_formats_symbols_backslash_hover_forward(self, language_server: SolidLanguageServer) -> None:
+        """Test hover works when symbols requested with backslash but hover with forward slash."""
+        file_path_backslash = "src\\Tables\\Customer.Table.al"
+        file_path_forward = "src/Tables/Customer.Table.al"
+
+        # Request symbols with backslash path
+        symbols = language_server.request_document_symbols(file_path_backslash)
+
+        for sym in symbols.root_symbols:
+            if sym.get("name") == "TEST Customer":
+                sel_range = sym.get("selectionRange", {})
+                start = sel_range.get("start", {})
+                line = start.get("line", 0)
+                char = start.get("character", 0)
+
+                # Request hover with forward slash path (different format)
+                hover = language_server.request_hover(file_path_forward, line, char)
+                assert hover is not None, "Hover should return a result"
+                value = hover.get("contents", {}).get("value", "")
+                assert (
+                    '**Table 50000 "TEST Customer"**' in value
+                ), f"Hover injection should work with mixed path formats. Got: {value[:200]}"
+                return
+
+        pytest.fail("Could not find TEST Customer symbol")
+
+    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    def test_hover_with_mixed_path_formats_symbols_forward_hover_backslash(self, language_server: SolidLanguageServer) -> None:
+        """Test hover works when symbols requested with forward slash but hover with backslash."""
+        file_path_forward = "src/Tables/Customer.Table.al"
+        file_path_backslash = "src\\Tables\\Customer.Table.al"
+
+        # Request symbols with forward slash path
+        symbols = language_server.request_document_symbols(file_path_forward)
+
+        for sym in symbols.root_symbols:
+            if sym.get("name") == "TEST Customer":
+                sel_range = sym.get("selectionRange", {})
+                start = sel_range.get("start", {})
+                line = start.get("line", 0)
+                char = start.get("character", 0)
+
+                # Request hover with backslash path (different format)
+                hover = language_server.request_hover(file_path_backslash, line, char)
+                assert hover is not None, "Hover should return a result"
+                value = hover.get("contents", {}).get("value", "")
+                assert (
+                    '**Table 50000 "TEST Customer"**' in value
+                ), f"Hover injection should work with mixed path formats. Got: {value[:200]}"
+                return
+
+        pytest.fail("Could not find TEST Customer symbol")
+
+    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    def test_hover_caching_multiple_files_different_path_formats(self, language_server: SolidLanguageServer) -> None:
+        """Test that hover injection cache works correctly across multiple files with different path formats."""
+        test_cases = [
+            ("src/Tables/Customer.Table.al", "src\\Tables\\Customer.Table.al", "TEST Customer", 'Table 50000 "TEST Customer"'),
+            (
+                "src\\Codeunits\\CustomerMgt.Codeunit.al",
+                "src/Codeunits/CustomerMgt.Codeunit.al",
+                "CustomerMgt",
+                "Codeunit 50000 CustomerMgt",
+            ),
+        ]
+
+        for symbols_path, hover_path, symbol_name, expected_injection in test_cases:
+            # Request symbols with one path format
+            symbols = language_server.request_document_symbols(symbols_path)
+
+            for sym in symbols.root_symbols:
+                if sym.get("name") == symbol_name:
+                    sel_range = sym.get("selectionRange", {})
+                    start = sel_range.get("start", {})
+                    line = start.get("line", 0)
+                    char = start.get("character", 0)
+
+                    # Request hover with different path format
+                    hover = language_server.request_hover(hover_path, line, char)
+                    assert hover is not None, f"Hover should return a result for {symbol_name}"
+                    value = hover.get("contents", {}).get("value", "")
+                    assert (
+                        f"**{expected_injection}**" in value
+                    ), f"Hover for {symbol_name} should have injection with mixed paths. Got: {value[:200]}"
+                    break
