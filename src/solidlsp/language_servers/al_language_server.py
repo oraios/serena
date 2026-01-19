@@ -4,6 +4,7 @@ import logging
 import os
 import pathlib
 import platform
+import re
 import stat
 import time
 import zipfile
@@ -13,7 +14,7 @@ import requests
 from overrides import override
 
 from solidlsp.language_servers.common import quote_windows_path
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import DocumentSymbols, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
 from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink
@@ -21,6 +22,45 @@ from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
+
+# Regex pattern to match AL object names like:
+# - 'Table 50000 "TEST Customer"' -> captures 'TEST Customer'
+# - 'Codeunit 50000 CustomerMgt' -> captures 'CustomerMgt'
+# - 'Interface IPaymentProcessor' -> captures 'IPaymentProcessor'
+# - 'Enum 50000 CustomerType' -> captures 'CustomerType'
+# Pattern: <ObjectType> [<ID>] (<QuotedName>|<UnquotedName>)
+_AL_OBJECT_NAME_PATTERN = re.compile(
+    r"^(?:Table|Page|Codeunit|Enum|Interface|Report|Query|XMLPort|PermissionSet|"
+    r"PermissionSetExtension|Profile|PageExtension|TableExtension|EnumExtension|"
+    r"PageCustomization|ReportExtension|ControlAddin|DotNetPackage)"  # Object type
+    r"(?:\s+\d+)?"  # Optional object ID
+    r"\s+"  # Required space before name
+    r'(?:"([^"]+)"|(\S+))$'  # Quoted name (group 1) or unquoted identifier (group 2)
+)
+
+
+def extract_al_display_name(full_name: str) -> str:
+    """
+    Extract the display name from an AL symbol's full name.
+
+    AL Language Server returns symbol names in format:
+    - 'Table 50000 "TEST Customer"' -> 'TEST Customer'
+    - 'Codeunit 50000 CustomerMgt' -> 'CustomerMgt'
+    - 'Interface IPaymentProcessor' -> 'IPaymentProcessor'
+    - 'fields' -> 'fields' (non-AL-object symbols pass through unchanged)
+
+    Args:
+        full_name: The full symbol name as returned by AL Language Server
+
+    Returns:
+        The extracted display name for matching, or the original name if not an AL object
+
+    """
+    match = _AL_OBJECT_NAME_PATTERN.match(full_name)
+    if match:
+        # Return quoted name (group 1) or unquoted name (group 2)
+        return match.group(1) or match.group(2) or full_name
+    return full_name
 
 
 class ALLanguageServer(SolidLanguageServer):
@@ -957,3 +997,33 @@ class ALLanguageServer(SolidLanguageServer):
         except Exception as e:
             log.warning(f"Failed to set active workspace: {e}")
             # Non-critical error, continue operation
+
+    @override
+    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
+        """
+        Override to normalize AL symbol names by stripping object type and ID metadata.
+
+        AL Language Server returns symbol names with full object format like
+        'Table 50000 "TEST Customer"', but symbol names should be pure without metadata.
+        This follows the same pattern as Java LS which strips type information from names.
+
+        Metadata (object type, ID) is available via the hover LSP method when using
+        include_info=True in find_symbol.
+        """
+        # Get symbols from parent implementation
+        document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
+
+        # Normalize names by stripping AL object metadata
+        def normalize_name(symbol: UnifiedSymbolInformation) -> None:
+            symbol["name"] = extract_al_display_name(symbol["name"])
+
+            # Process children recursively
+            if symbol.get("children"):
+                for child in symbol["children"]:
+                    normalize_name(child)
+
+        # Apply to all root symbols
+        for sym in document_symbols.root_symbols:
+            normalize_name(sym)
+
+        return document_symbols
