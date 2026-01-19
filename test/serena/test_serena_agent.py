@@ -55,7 +55,7 @@ def serena_config():
             )
             test_projects.append(RegisteredProject.from_project_instance(project))
 
-    config = SerenaConfig(gui_log_window_enabled=False, web_dashboard=False, log_level=logging.ERROR)
+    config = SerenaConfig(gui_log_window=False, web_dashboard=False, log_level=logging.ERROR)
     config.projects = test_projects
     return config
 

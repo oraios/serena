@@ -403,8 +403,10 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     For testing purposes, it can also be instantiated directly with the desired parameters.
     """
 
+    # *** fields that are mapped directly to/from the configuration file (DO NOT RENAME) ***
+
     projects: list[RegisteredProject] = field(default_factory=list)
-    gui_log_window_enabled: bool = False
+    gui_log_window: bool = False
     log_level: int = logging.INFO
     trace_lsp_communication: bool = False
     web_dashboard: bool = True
@@ -446,12 +448,6 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     # *** static members ***
 
     CONFIG_FILE = "serena_config.yml"
-    CONFIG_FILE_RENAMED_KEYS = {
-        "gui_log_window_enabled": "gui_log_window",
-    }
-    """
-    maps attributes to the keys used in the configuration file, in case they differ
-    """
 
     # *** methods ***
 
@@ -539,11 +535,10 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
             instance.projects.append(project)
 
         def get_value_or_default(field_name: str) -> Any:
-            key = cls.CONFIG_FILE_RENAMED_KEYS.get(field_name, field_name)
             nonlocal num_migrations
-            if key not in loaded_commented_yaml:
+            if field_name not in loaded_commented_yaml:
                 num_migrations += 1
-            return loaded_commented_yaml.get(key, get_dataclass_default(SerenaConfig, field_name))
+            return loaded_commented_yaml.get(field_name, get_dataclass_default(SerenaConfig, field_name))
 
         # determine language backend
         language_backend = get_dataclass_default(SerenaConfig, "language_backend")
@@ -560,7 +555,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         instance.language_backend = language_backend
 
         # set other configuration parameters (primitive types)
-        instance.gui_log_window_enabled = get_value_or_default("gui_log_window_enabled")
+        instance.gui_log_window = get_value_or_default("gui_log_window")
         instance.web_dashboard_listen_address = get_value_or_default("web_dashboard_listen_address")
         instance.log_level = loaded_commented_yaml.get("log_level", loaded_commented_yaml.get("gui_log_level", logging.INFO))
         instance.web_dashboard = get_value_or_default("web_dashboard")
@@ -690,8 +685,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
             field_name = field_info.name
             if field_name in ["projects", "language_backend"] or field_name.startswith("_"):
                 continue
-            yaml_key = SerenaConfig.CONFIG_FILE_RENAMED_KEYS.get(field_name, field_name)
-            loaded_original_yaml[yaml_key] = getattr(self, field_name)
+            loaded_original_yaml[field_name] = getattr(self, field_name)
 
         # convert project objects into list of paths
         loaded_original_yaml["projects"] = sorted({str(project.project_root) for project in self.projects})

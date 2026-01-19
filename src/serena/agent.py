@@ -216,7 +216,7 @@ class SerenaAgent:
 
         # open GUI log window if enabled
         self._gui_log_viewer: Optional["GuiLogViewer"] = None
-        if self.serena_config.gui_log_window_enabled:
+        if self.serena_config.gui_log_window:
             log.info("Opening GUI window")
             if platform.system() == "Darwin":
                 log.warning("GUI log window is not supported on macOS")
@@ -269,7 +269,7 @@ class SerenaAgent:
         if (
             self.serena_config.web_dashboard
             and not self.serena_config.web_dashboard_open_on_launch
-            and not self.serena_config.gui_log_window_enabled
+            and not self.serena_config.gui_log_window
         ):
             tool_inclusion_definitions.append(ToolInclusionDefinition(included_optional_tools=[OpenDashboardTool.get_name_from_cls()]))
         tool_inclusion_definitions.append(self.serena_config)
