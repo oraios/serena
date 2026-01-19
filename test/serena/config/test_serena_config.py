@@ -117,3 +117,64 @@ class TestProjectConfigAutogenerate:
 
         assert config.project_name == custom_name
         assert config.languages == [Language.TYPESCRIPT]
+
+
+class TestProjectConfigHoverBudget:
+    """Test class for include_info_hover_budget_seconds validation in ProjectConfig."""
+
+    def _base_project_dict(self, **overrides):
+        data = {
+            "project_name": "test_project",
+            "languages": ["python"],
+            "ignored_paths": [],
+            "excluded_tools": [],
+            "included_optional_tools": [],
+            "read_only": False,
+            "ignore_all_files_in_gitignore": True,
+            "initial_prompt": "",
+            "encoding": "utf-8",
+            "include_info_hover_budget_seconds": None,
+        }
+        data.update(overrides)
+        return data
+
+    def test_from_dict_accepts_null_budget(self):
+        """Test that _from_dict accepts null hover budget (for inheritance)."""
+        data = self._base_project_dict()
+        config = ProjectConfig._from_dict(data)
+        assert config.include_info_hover_budget_seconds is None
+
+    def test_from_dict_accepts_positive_budget(self):
+        """Test that _from_dict accepts positive hover budget."""
+        data = self._base_project_dict(include_info_hover_budget_seconds=10.5)
+        config = ProjectConfig._from_dict(data)
+        assert config.include_info_hover_budget_seconds == 10.5
+
+    def test_from_dict_accepts_zero_budget(self):
+        """Test that _from_dict accepts zero hover budget (disabled)."""
+        data = self._base_project_dict(include_info_hover_budget_seconds=0)
+        config = ProjectConfig._from_dict(data)
+        assert config.include_info_hover_budget_seconds == 0.0
+
+    def test_from_dict_rejects_negative_budget(self):
+        """Test that _from_dict raises ValueError for negative hover budget."""
+        data = self._base_project_dict(include_info_hover_budget_seconds=-1.0)
+        with pytest.raises(ValueError) as exc_info:
+            ProjectConfig._from_dict(data)
+        assert "cannot be negative" in str(exc_info.value)
+
+    def test_apply_defaults_preserves_null(self):
+        """Test that _apply_defaults_to_dict preserves None for hover budget."""
+        data = {"project_name": "test", "languages": ["python"]}
+        result = ProjectConfig._apply_defaults_to_dict(data)
+        assert result["include_info_hover_budget_seconds"] is None
+
+    def test_apply_defaults_preserves_explicit_value(self):
+        """Test that _apply_defaults_to_dict preserves explicit hover budget value."""
+        data = {
+            "project_name": "test",
+            "languages": ["python"],
+            "include_info_hover_budget_seconds": 15.0,
+        }
+        result = ProjectConfig._apply_defaults_to_dict(data)
+        assert result["include_info_hover_budget_seconds"] == 15.0

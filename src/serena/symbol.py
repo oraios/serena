@@ -4,6 +4,7 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import asdict, dataclass
+from time import perf_counter
 from typing import TYPE_CHECKING, Any, Self, Union
 
 from sensai.util.string import ToStringMixin
@@ -507,7 +508,9 @@ class LanguageServerSymbolRetriever:
         hover_info = lang_server.request_hover(relative_file_path=relative_file_path, line=line, column=column)
         if hover_info is None:
             return None
+
         contents = hover_info["contents"]
+
         # Handle various response formats
         if isinstance(contents, list):
             # Array format: extract all parts and join them
@@ -519,16 +522,145 @@ class LanguageServerSymbolRetriever:
                     # should be a dict with "value" key
                     stripped_parts.append(part["value"].strip())  # type: ignore
             return "\n".join(stripped_parts) if stripped_parts else None
+
         if isinstance(contents, dict) and (stripped_contents := contents.get("value", "").strip()):
             return stripped_contents
+
         if isinstance(contents, str) and (stripped_contents := contents.strip()):
             return stripped_contents
+
         return None
 
     def request_info_for_symbol(self, symbol: LanguageServerSymbol) -> str | None:
         if None in [symbol.relative_path, symbol.line, symbol.column]:
             return None
         return self._request_info(relative_file_path=symbol.relative_path, line=symbol.line, column=symbol.column)  # type: ignore[arg-type]
+
+    def request_info_for_symbols(
+        self,
+        symbols: list[LanguageServerSymbol],
+    ) -> dict[LanguageServerSymbol, str | None]:
+        """Retrieves information for multiple symbols, optimizing by grouping by file.
+
+        Groups symbols by file path to minimize file switching overhead and uses a per-file
+        cache keyed by (line, col) to avoid duplicate hover lookups.
+
+        The hover budget (include_info_hover_budget_seconds) limits total time spent on hover
+        requests. If exceeded, remaining symbols get info=None (partial results).
+
+        :param symbols: list of symbols to get info for
+        :return: a dict mapping each symbol to its info (or None if unavailable)
+        """
+        if not symbols:
+            return {}
+
+        debug_enabled = log.isEnabledFor(logging.DEBUG)
+        t0_total = perf_counter() if debug_enabled else 0.0
+
+        # Resolve effective hover budget: project -> global -> default 5.0
+        budget_seconds = 5.0
+        if self.agent is not None:
+            budget_seconds = self.agent.serena_config.include_info_hover_budget_seconds
+            active_project = self.agent.get_active_project()
+            if active_project is not None:
+                project_budget = active_project.project_config.include_info_hover_budget_seconds
+                if project_budget is not None:
+                    budget_seconds = project_budget
+
+        info_by_symbol: dict[LanguageServerSymbol, str | None] = {}
+        skipped_symbols = 0
+        detail_present_count = 0
+
+        # Group symbols by file path, filtering invalid symbols.
+        symbols_by_file: dict[str, list[LanguageServerSymbol]] = {}
+        for sym in symbols:
+            detail = sym.symbol_root.get("detail")
+            if isinstance(detail, str) and detail.strip():
+                detail_present_count += 1
+
+            file_path = sym.relative_path
+            line = sym.line
+            column = sym.column
+            if file_path is None or line is None or column is None:
+                skipped_symbols += 1
+                continue
+
+            symbols_by_file.setdefault(file_path, []).append(sym)
+
+        per_file_stats: list[tuple[str, int, float]] = []
+        total_hover_lookups = 0
+        hover_cache_hits = 0
+        hover_spent_seconds = 0.0
+        skipped_due_to_budget = 0
+
+        for file_path, file_symbols in symbols_by_file.items():
+            t0_file = perf_counter() if debug_enabled else 0.0
+            hover_cache: dict[tuple[int, int], str | None] = {}
+            file_hover_lookups = 0
+
+            for sym in file_symbols:
+                line = sym.line
+                column = sym.column
+                assert line is not None and column is not None
+
+                cache_key = (line, column)
+                if cache_key in hover_cache:
+                    hover_cache_hits += 1
+                    info = hover_cache[cache_key]
+                else:
+                    # Check budget before starting new hover request
+                    if budget_seconds > 0 and hover_spent_seconds >= budget_seconds:
+                        skipped_due_to_budget += 1
+                        info = None
+                    else:
+                        t0_hover = perf_counter()
+                        info = self._request_info(file_path, line, column)
+                        hover_spent_seconds += perf_counter() - t0_hover
+                        file_hover_lookups += 1
+                        total_hover_lookups += 1
+
+                    hover_cache[cache_key] = info
+
+                info_by_symbol[sym] = info
+
+            if debug_enabled:
+                file_elapsed_ms = (perf_counter() - t0_file) * 1000
+                per_file_stats.append((file_path, file_hover_lookups, file_elapsed_ms))
+
+        if debug_enabled:
+            total_elapsed_ms = (perf_counter() - t0_total) * 1000
+            total_symbols = len(symbols)
+            unique_files = len(symbols_by_file)
+            detail_rate = (detail_present_count / total_symbols * 100) if total_symbols > 0 else 0.0
+            budget_exceeded = skipped_due_to_budget > 0
+
+            log.debug(
+                "perf: request_info_for_symbols total_elapsed_ms=%.2f symbols=%d skipped=%d "
+                "detail_present=%d detail_rate=%.1f%% hover_lookups=%d hover_cache_hits=%d unique_files=%d "
+                "hover_budget_seconds=%.1f hover_spent_seconds=%.2f budget_exceeded=%s skipped_due_to_budget=%d",
+                total_elapsed_ms,
+                total_symbols,
+                skipped_symbols,
+                detail_present_count,
+                detail_rate,
+                total_hover_lookups,
+                hover_cache_hits,
+                unique_files,
+                budget_seconds,
+                hover_spent_seconds,
+                budget_exceeded,
+                skipped_due_to_budget,
+            )
+
+            for file_path, lookup_count, elapsed_ms in per_file_stats:
+                log.debug(
+                    "perf: request_info_for_symbols file=%s hover_count=%d elapsed_ms=%.2f",
+                    file_path,
+                    lookup_count,
+                    elapsed_ms,
+                )
+
+        return info_by_symbol
 
     def get_root_path(self) -> str:
         return self._ls_manager.get_root_path()

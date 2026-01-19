@@ -164,6 +164,12 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
     ignore_all_files_in_gitignore: bool = True
     initial_prompt: str = ""
     encoding: str = DEFAULT_SOURCE_FILE_ENCODING
+    include_info_hover_budget_seconds: float | None = None
+    """
+    Per-project override for include_info hover budget (seconds).
+
+    If None, global config is used. 0 disables the budget. Negative values are invalid.
+    """
 
     SERENA_DEFAULT_PROJECT_FILE = "project.yml"
 
@@ -267,6 +273,8 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         data["ignore_all_files_in_gitignore"] = data.get("ignore_all_files_in_gitignore", True)
         data["initial_prompt"] = data.get("initial_prompt", "")
         data["encoding"] = data.get("encoding", DEFAULT_SOURCE_FILE_ENCODING)
+        # Keep None if missing to inherit from global config.
+        data.setdefault("include_info_hover_budget_seconds", None)
 
         # backward compatibility: handle single "language" field
         if len(data["languages"]) == 0 and "language" in data:
@@ -309,6 +317,17 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                     f"Invalid language: {orig_language_str}.\nValid language_strings are: {[l.value for l in Language]}"
                 ) from e
 
+        # Validate include_info_hover_budget_seconds
+        hover_budget_raw = data["include_info_hover_budget_seconds"]
+        hover_budget = hover_budget_raw
+        if hover_budget is not None:
+            try:
+                hover_budget = float(hover_budget_raw)
+            except (TypeError, ValueError) as e:
+                raise ValueError(f"include_info_hover_budget_seconds must be a number or null, got: {hover_budget_raw}") from e
+            if hover_budget < 0:
+                raise ValueError(f"include_info_hover_budget_seconds cannot be negative, got: {hover_budget}")
+
         return cls(
             project_name=data["project_name"],
             languages=languages,
@@ -319,6 +338,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
             ignore_all_files_in_gitignore=data["ignore_all_files_in_gitignore"],
             initial_prompt=data["initial_prompt"],
             encoding=data["encoding"],
+            include_info_hover_budget_seconds=hover_budget,
         )
 
     def to_yaml_dict(self) -> dict:
@@ -433,6 +453,14 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     """
     ls_specific_settings: dict = field(default_factory=dict)
     """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""
+
+    include_info_hover_budget_seconds: float = 5.0
+    """
+    Time budget (seconds) for LSP hover requests when tools request include_info.
+
+    If budget is exceeded, Serena stops issuing further hover requests and returns partial info results.
+    0 disables the budget (no early stopping). Negative values are invalid.
+    """
 
     # *** fields that are NOT mapped to/from the configuration file ***
 
@@ -573,6 +601,16 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         instance.token_count_estimator = get_value_or_default("token_count_estimator")
         instance.default_max_tool_answer_chars = get_value_or_default("default_max_tool_answer_chars")
         instance.ls_specific_settings = get_value_or_default("ls_specific_settings")
+
+        # Load and validate include_info_hover_budget_seconds
+        hover_budget_raw = get_value_or_default("include_info_hover_budget_seconds")
+        try:
+            hover_budget = float(hover_budget_raw)
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"include_info_hover_budget_seconds must be a number, got: {hover_budget_raw}") from e
+        if hover_budget < 0:
+            raise ValueError(f"include_info_hover_budget_seconds cannot be negative, got: {hover_budget}")
+        instance.include_info_hover_budget_seconds = hover_budget
 
         # re-save the configuration file if any migrations were performed
         if num_migrations > 0:
