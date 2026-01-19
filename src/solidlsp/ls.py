@@ -2015,7 +2015,8 @@ class SolidLanguageServer(ABC):
             newName=new_name,
         )
 
-        return self.server.send.rename(params)
+        with self.open_file(relative_file_path):
+            return self.server.send.rename(params)
 
     def apply_text_edits_to_file(self, relative_path: str, edits: list[ls_types.TextEdit]) -> None:
         """
