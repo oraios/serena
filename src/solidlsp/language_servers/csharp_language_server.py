@@ -191,7 +191,7 @@ class CSharpLanguageServer(SolidLanguageServer):
     Provides C# specific instantiation of the LanguageServer class using `Microsoft.CodeAnalysis.LanguageServer`,
     the official Roslyn-based language server from Microsoft.
 
-    You can pass a list of runtime dependency overrides in ls_specific_settings["csharp"]. This is a list of
+    You can pass a list of runtime dependency overrides in ls_specific_settings["csharp"]["runtime_dependencies"]. This is a list of
     dicts, each containing at least the "id" key, and optionally "platform_id" to uniquely identify the dependency to override.
     For example, to override the URL of the .NET runtime on windows-x64, add the entry:
 
