@@ -64,20 +64,28 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
             Don't adjust unless there is really no other way to get the content required for the task.
         :return: a JSON object containing symbols grouped by kind in a compact format.
         """
+        result = self.get_symbol_overview(relative_path, depth=depth)
+        compact_result = self._transform_symbols_to_compact_format(result)
+        result_json_str = self._to_json(compact_result)
+        return self._limit_length(result_json_str, max_answer_chars)
+
+    def get_symbol_overview(self, relative_path: str, depth: int = 0) -> list[dict]:
+        """
+        :param relative_path: relative path to a source file
+        :param depth: the depth up to which descendants shall be retrieved
+        :return: a list of symbol dictionaries representing the symbol overview of the file
+        """
         symbol_retriever = self.create_language_server_symbol_retriever()
-        file_path = os.path.join(self.project.project_root, relative_path)
 
         # The symbol overview is capable of working with both files and directories,
         # but we want to ensure that the user provides a file path.
+        file_path = os.path.join(self.project.project_root, relative_path)
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File or directory {relative_path} does not exist in the project.")
         if os.path.isdir(file_path):
             raise ValueError(f"Expected a file path, but got a directory path: {relative_path}. ")
-        result = symbol_retriever.get_symbol_overview(relative_path, depth=depth)[relative_path]
-        # Transform to compact format
-        compact_result = self._transform_symbols_to_compact_format(result)
-        result_json_str = self._to_json(compact_result)
-        return self._limit_length(result_json_str, max_answer_chars)
+
+        return symbol_retriever.get_symbol_overview(relative_path, depth=depth)[relative_path]
 
     @staticmethod
     def _transform_symbols_to_compact_format(symbols: list[dict[str, Any]]) -> dict[str, list]:

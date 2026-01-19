@@ -779,8 +779,7 @@ class ProjectCommands(AutoRegisteringGroup):
 
                 # Test 1: Get symbols overview
                 log.info("Testing GetSymbolsOverviewTool on file: %s", target_file)
-                overview_result = agent.execute_task(lambda: overview_tool.apply(target_file))
-                overview_data = json.loads(overview_result)
+                overview_data = agent.execute_task(lambda: overview_tool.get_symbol_overview(target_file))
                 log.info("GetSymbolsOverviewTool returned %d symbols", len(overview_data))
 
                 if not overview_data:
