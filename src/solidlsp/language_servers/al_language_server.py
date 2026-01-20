@@ -4,6 +4,7 @@ import logging
 import os
 import pathlib
 import platform
+import re
 import stat
 import time
 import zipfile
@@ -12,8 +13,9 @@ from pathlib import Path
 import requests
 from overrides import override
 
+from solidlsp import ls_types
 from solidlsp.language_servers.common import quote_windows_path
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import DocumentSymbols, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
 from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink
@@ -37,6 +39,45 @@ class ALLanguageServer(SolidLanguageServer):
     - Custom AL-specific LSP commands (al/gotodefinition, al/setActiveWorkspace)
     - File opening requirement before symbol retrieval
     """
+
+    # Regex pattern to match AL object names like:
+    # - 'Table 50000 "TEST Customer"' -> captures 'TEST Customer'
+    # - 'Codeunit 50000 CustomerMgt' -> captures 'CustomerMgt'
+    # - 'Interface IPaymentProcessor' -> captures 'IPaymentProcessor'
+    # - 'Enum 50000 CustomerType' -> captures 'CustomerType'
+    # Pattern: <ObjectType> [<ID>] (<QuotedName>|<UnquotedName>)
+    _AL_OBJECT_NAME_PATTERN = re.compile(
+        r"^(?:Table|Page|Codeunit|Enum|Interface|Report|Query|XMLPort|PermissionSet|"
+        r"PermissionSetExtension|Profile|PageExtension|TableExtension|EnumExtension|"
+        r"PageCustomization|ReportExtension|ControlAddin|DotNetPackage)"  # Object type
+        r"(?:\s+\d+)?"  # Optional object ID
+        r"\s+"  # Required space before name
+        r'(?:"([^"]+)"|(\S+))$'  # Quoted name (group 1) or unquoted identifier (group 2)
+    )
+
+    @staticmethod
+    def _extract_al_display_name(full_name: str) -> str:
+        """
+        Extract the display name from an AL symbol's full name.
+
+        AL Language Server returns symbol names in format:
+        - 'Table 50000 "TEST Customer"' -> 'TEST Customer'
+        - 'Codeunit 50000 CustomerMgt' -> 'CustomerMgt'
+        - 'Interface IPaymentProcessor' -> 'IPaymentProcessor'
+        - 'fields' -> 'fields' (non-AL-object symbols pass through unchanged)
+
+        Args:
+            full_name: The full symbol name as returned by AL Language Server
+
+        Returns:
+            The extracted display name for matching, or the original name if not an AL object
+
+        """
+        match = ALLanguageServer._AL_OBJECT_NAME_PATTERN.match(full_name)
+        if match:
+            # Return quoted name (group 1) or unquoted name (group 2)
+            return match.group(1) or match.group(2) or full_name
+        return full_name
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
@@ -68,6 +109,14 @@ class ALLanguageServer(SolidLanguageServer):
         """
 
         super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "al", solidlsp_settings)
+
+        # Cache mapping (file_path, line, char) -> original_full_name for hover injection
+        self._al_original_names: dict[tuple[str, int, int], str] = {}
+
+    @staticmethod
+    def _normalize_path(path: str) -> str:
+        """Normalize file path for consistent cache key usage across platforms."""
+        return path.replace("\\", "/")
 
     @classmethod
     def _download_al_extension(cls, url: str, target_dir: str) -> bool:
@@ -957,3 +1006,78 @@ class ALLanguageServer(SolidLanguageServer):
         except Exception as e:
             log.warning(f"Failed to set active workspace: {e}")
             # Non-critical error, continue operation
+
+    @override
+    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
+        """
+        Override to normalize AL symbol names by stripping object type and ID metadata.
+
+        AL Language Server returns symbol names with full object format like
+        'Table 50000 "TEST Customer"', but symbol names should be pure without metadata.
+        This follows the same pattern as Java LS which strips type information from names.
+
+        Metadata (object type, ID) is available via the hover LSP method when using
+        include_info=True in find_symbol.
+        """
+        # Normalize path separators for cross-platform compatibility (backslash → forward slash)
+        relative_file_path = self._normalize_path(relative_file_path)
+
+        # Get symbols from parent implementation
+        document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
+
+        # Normalize names by stripping AL object metadata, storing originals for hover
+        def normalize_name(symbol: UnifiedSymbolInformation) -> None:
+            original_name = symbol["name"]
+            normalized_name = self._extract_al_display_name(original_name)
+
+            # Store original name if it was normalized (for hover injection)
+            # Only store if we have valid position data to avoid false matches at (0, 0)
+            if original_name != normalized_name:
+                sel_range = symbol.get("selectionRange")
+                if sel_range:
+                    start = sel_range.get("start")
+                    if start and "line" in start and "character" in start:
+                        line = start["line"]
+                        char = start["character"]
+                        self._al_original_names[(relative_file_path, line, char)] = original_name
+
+            symbol["name"] = normalized_name
+
+            # Process children recursively
+            if symbol.get("children"):
+                for child in symbol["children"]:
+                    normalize_name(child)
+
+        # Apply to all root symbols
+        for sym in document_symbols.root_symbols:
+            normalize_name(sym)
+
+        return document_symbols
+
+    @override
+    def request_hover(self, relative_file_path: str, line: int, column: int) -> ls_types.Hover | None:
+        """
+        Override to inject original AL object name (with type and ID) into hover responses.
+
+        When hovering over a symbol whose name was normalized, we prepend the original
+        full name (e.g., 'Table 50000 "TEST Customer"') to the hover content.
+        """
+        # Normalize path separators for cross-platform compatibility (backslash → forward slash)
+        relative_file_path = self._normalize_path(relative_file_path)
+
+        hover = super().request_hover(relative_file_path, line, column)
+
+        if hover is None:
+            return None
+
+        # Check if we have an original name for this position
+        original_name = self._al_original_names.get((relative_file_path, line, column))
+
+        if original_name and "contents" in hover:
+            contents = hover["contents"]
+            if isinstance(contents, dict) and "value" in contents:
+                # Prepend the original full name to the hover content
+                prefix = f"**{original_name}**\n\n---\n\n"
+                contents["value"] = prefix + contents["value"]
+
+        return hover
