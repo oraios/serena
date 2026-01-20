@@ -1019,6 +1019,9 @@ class ALLanguageServer(SolidLanguageServer):
         Metadata (object type, ID) is available via the hover LSP method when using
         include_info=True in find_symbol.
         """
+        # Normalize path separators for cross-platform compatibility (backslash → forward slash)
+        relative_file_path = self._normalize_path(relative_file_path)
+
         # Get symbols from parent implementation
         document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
 
@@ -1036,8 +1039,7 @@ class ALLanguageServer(SolidLanguageServer):
                     if start and "line" in start and "character" in start:
                         line = start["line"]
                         char = start["character"]
-                        normalized_path = self._normalize_path(relative_file_path)
-                        self._al_original_names[(normalized_path, line, char)] = original_name
+                        self._al_original_names[(relative_file_path, line, char)] = original_name
 
             symbol["name"] = normalized_name
 
@@ -1060,14 +1062,16 @@ class ALLanguageServer(SolidLanguageServer):
         When hovering over a symbol whose name was normalized, we prepend the original
         full name (e.g., 'Table 50000 "TEST Customer"') to the hover content.
         """
+        # Normalize path separators for cross-platform compatibility (backslash → forward slash)
+        relative_file_path = self._normalize_path(relative_file_path)
+
         hover = super().request_hover(relative_file_path, line, column)
 
         if hover is None:
             return None
 
-        # Check if we have an original name for this position (using normalized path for consistency)
-        normalized_path = self._normalize_path(relative_file_path)
-        original_name = self._al_original_names.get((normalized_path, line, column))
+        # Check if we have an original name for this position
+        original_name = self._al_original_names.get((relative_file_path, line, column))
 
         if original_name and "contents" in hover:
             contents = hover["contents"]
