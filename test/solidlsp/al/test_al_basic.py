@@ -4,7 +4,7 @@ import pytest
 
 from serena.symbol import LanguageServerSymbol
 from solidlsp import SolidLanguageServer
-from solidlsp.language_servers.al_language_server import extract_al_display_name
+from solidlsp.language_servers.al_language_server import ALLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
 from test.conftest import language_tests_enabled
@@ -13,49 +13,49 @@ pytestmark = [pytest.mark.al, pytest.mark.skipif(not language_tests_enabled(Lang
 
 
 class TestExtractALDisplayName:
-    """Tests for the extract_al_display_name function."""
+    """Tests for the ALLanguageServer._extract_al_display_name method."""
 
     def test_table_with_quoted_name(self) -> None:
         """Test extraction from Table with quoted name."""
-        assert extract_al_display_name('Table 50000 "TEST Customer"') == "TEST Customer"
+        assert ALLanguageServer._extract_al_display_name('Table 50000 "TEST Customer"') == "TEST Customer"
 
     def test_page_with_quoted_name(self) -> None:
         """Test extraction from Page with quoted name."""
-        assert extract_al_display_name('Page 50001 "TEST Customer Card"') == "TEST Customer Card"
+        assert ALLanguageServer._extract_al_display_name('Page 50001 "TEST Customer Card"') == "TEST Customer Card"
 
     def test_codeunit_unquoted(self) -> None:
         """Test extraction from Codeunit with unquoted name."""
-        assert extract_al_display_name("Codeunit 50000 CustomerMgt") == "CustomerMgt"
+        assert ALLanguageServer._extract_al_display_name("Codeunit 50000 CustomerMgt") == "CustomerMgt"
 
     def test_enum_unquoted(self) -> None:
         """Test extraction from Enum with unquoted name."""
-        assert extract_al_display_name("Enum 50000 CustomerType") == "CustomerType"
+        assert ALLanguageServer._extract_al_display_name("Enum 50000 CustomerType") == "CustomerType"
 
     def test_interface_no_id(self) -> None:
         """Test extraction from Interface (no ID)."""
-        assert extract_al_display_name("Interface IPaymentProcessor") == "IPaymentProcessor"
+        assert ALLanguageServer._extract_al_display_name("Interface IPaymentProcessor") == "IPaymentProcessor"
 
     def test_table_extension(self) -> None:
         """Test extraction from TableExtension."""
-        assert extract_al_display_name('TableExtension 50000 "Ext Customer"') == "Ext Customer"
+        assert ALLanguageServer._extract_al_display_name('TableExtension 50000 "Ext Customer"') == "Ext Customer"
 
     def test_page_extension(self) -> None:
         """Test extraction from PageExtension."""
-        assert extract_al_display_name('PageExtension 50000 "My Page Ext"') == "My Page Ext"
+        assert ALLanguageServer._extract_al_display_name('PageExtension 50000 "My Page Ext"') == "My Page Ext"
 
     def test_non_al_object_unchanged(self) -> None:
         """Test that non-AL-object names pass through unchanged."""
-        assert extract_al_display_name("fields") == "fields"
-        assert extract_al_display_name("CreateCustomer") == "CreateCustomer"
-        assert extract_al_display_name("Name") == "Name"
+        assert ALLanguageServer._extract_al_display_name("fields") == "fields"
+        assert ALLanguageServer._extract_al_display_name("CreateCustomer") == "CreateCustomer"
+        assert ALLanguageServer._extract_al_display_name("Name") == "Name"
 
     def test_report_with_quoted_name(self) -> None:
         """Test extraction from Report."""
-        assert extract_al_display_name('Report 50000 "Sales Invoice"') == "Sales Invoice"
+        assert ALLanguageServer._extract_al_display_name('Report 50000 "Sales Invoice"') == "Sales Invoice"
 
     def test_query_unquoted(self) -> None:
         """Test extraction from Query."""
-        assert extract_al_display_name("Query 50000 CustomerQuery") == "CustomerQuery"
+        assert ALLanguageServer._extract_al_display_name("Query 50000 CustomerQuery") == "CustomerQuery"
 
 
 @pytest.mark.al

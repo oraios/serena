@@ -24,45 +24,6 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
-# Regex pattern to match AL object names like:
-# - 'Table 50000 "TEST Customer"' -> captures 'TEST Customer'
-# - 'Codeunit 50000 CustomerMgt' -> captures 'CustomerMgt'
-# - 'Interface IPaymentProcessor' -> captures 'IPaymentProcessor'
-# - 'Enum 50000 CustomerType' -> captures 'CustomerType'
-# Pattern: <ObjectType> [<ID>] (<QuotedName>|<UnquotedName>)
-_AL_OBJECT_NAME_PATTERN = re.compile(
-    r"^(?:Table|Page|Codeunit|Enum|Interface|Report|Query|XMLPort|PermissionSet|"
-    r"PermissionSetExtension|Profile|PageExtension|TableExtension|EnumExtension|"
-    r"PageCustomization|ReportExtension|ControlAddin|DotNetPackage)"  # Object type
-    r"(?:\s+\d+)?"  # Optional object ID
-    r"\s+"  # Required space before name
-    r'(?:"([^"]+)"|(\S+))$'  # Quoted name (group 1) or unquoted identifier (group 2)
-)
-
-
-def extract_al_display_name(full_name: str) -> str:
-    """
-    Extract the display name from an AL symbol's full name.
-
-    AL Language Server returns symbol names in format:
-    - 'Table 50000 "TEST Customer"' -> 'TEST Customer'
-    - 'Codeunit 50000 CustomerMgt' -> 'CustomerMgt'
-    - 'Interface IPaymentProcessor' -> 'IPaymentProcessor'
-    - 'fields' -> 'fields' (non-AL-object symbols pass through unchanged)
-
-    Args:
-        full_name: The full symbol name as returned by AL Language Server
-
-    Returns:
-        The extracted display name for matching, or the original name if not an AL object
-
-    """
-    match = _AL_OBJECT_NAME_PATTERN.match(full_name)
-    if match:
-        # Return quoted name (group 1) or unquoted name (group 2)
-        return match.group(1) or match.group(2) or full_name
-    return full_name
-
 
 class ALLanguageServer(SolidLanguageServer):
     """
@@ -78,6 +39,45 @@ class ALLanguageServer(SolidLanguageServer):
     - Custom AL-specific LSP commands (al/gotodefinition, al/setActiveWorkspace)
     - File opening requirement before symbol retrieval
     """
+
+    # Regex pattern to match AL object names like:
+    # - 'Table 50000 "TEST Customer"' -> captures 'TEST Customer'
+    # - 'Codeunit 50000 CustomerMgt' -> captures 'CustomerMgt'
+    # - 'Interface IPaymentProcessor' -> captures 'IPaymentProcessor'
+    # - 'Enum 50000 CustomerType' -> captures 'CustomerType'
+    # Pattern: <ObjectType> [<ID>] (<QuotedName>|<UnquotedName>)
+    _AL_OBJECT_NAME_PATTERN = re.compile(
+        r"^(?:Table|Page|Codeunit|Enum|Interface|Report|Query|XMLPort|PermissionSet|"
+        r"PermissionSetExtension|Profile|PageExtension|TableExtension|EnumExtension|"
+        r"PageCustomization|ReportExtension|ControlAddin|DotNetPackage)"  # Object type
+        r"(?:\s+\d+)?"  # Optional object ID
+        r"\s+"  # Required space before name
+        r'(?:"([^"]+)"|(\S+))$'  # Quoted name (group 1) or unquoted identifier (group 2)
+    )
+
+    @staticmethod
+    def _extract_al_display_name(full_name: str) -> str:
+        """
+        Extract the display name from an AL symbol's full name.
+
+        AL Language Server returns symbol names in format:
+        - 'Table 50000 "TEST Customer"' -> 'TEST Customer'
+        - 'Codeunit 50000 CustomerMgt' -> 'CustomerMgt'
+        - 'Interface IPaymentProcessor' -> 'IPaymentProcessor'
+        - 'fields' -> 'fields' (non-AL-object symbols pass through unchanged)
+
+        Args:
+            full_name: The full symbol name as returned by AL Language Server
+
+        Returns:
+            The extracted display name for matching, or the original name if not an AL object
+
+        """
+        match = ALLanguageServer._AL_OBJECT_NAME_PATTERN.match(full_name)
+        if match:
+            # Return quoted name (group 1) or unquoted name (group 2)
+            return match.group(1) or match.group(2) or full_name
+        return full_name
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
@@ -1025,7 +1025,7 @@ class ALLanguageServer(SolidLanguageServer):
         # Normalize names by stripping AL object metadata, storing originals for hover
         def normalize_name(symbol: UnifiedSymbolInformation) -> None:
             original_name = symbol["name"]
-            normalized_name = extract_al_display_name(original_name)
+            normalized_name = self._extract_al_display_name(original_name)
 
             # Store original name if it was normalized (for hover injection)
             # Only store if we have valid position data to avoid false matches at (0, 0)
