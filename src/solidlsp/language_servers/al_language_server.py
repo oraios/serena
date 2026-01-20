@@ -1028,13 +1028,16 @@ class ALLanguageServer(SolidLanguageServer):
             normalized_name = extract_al_display_name(original_name)
 
             # Store original name if it was normalized (for hover injection)
+            # Only store if we have valid position data to avoid false matches at (0, 0)
             if original_name != normalized_name:
-                sel_range = symbol.get("selectionRange", {})
-                start = sel_range.get("start", {})
-                line = start.get("line", 0)
-                char = start.get("character", 0)
-                normalized_path = self._normalize_path(relative_file_path)
-                self._al_original_names[(normalized_path, line, char)] = original_name
+                sel_range = symbol.get("selectionRange")
+                if sel_range:
+                    start = sel_range.get("start")
+                    if start and "line" in start and "character" in start:
+                        line = start["line"]
+                        char = start["character"]
+                        normalized_path = self._normalize_path(relative_file_path)
+                        self._al_original_names[(normalized_path, line, char)] = original_name
 
             symbol["name"] = normalized_name
 
