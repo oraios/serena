@@ -93,7 +93,7 @@ class JetBrainsPluginClient(ToStringMixin):
             status_response: PluginStatusDTO = cast(jb.PluginStatusDTO, self._make_request("GET", "/status"))
             self._project_root = status_response["project_root"]
             self._plugin_version = Version(status_response["plugin_version"])
-        except ConnectionError:
+        except (ConnectionError, requests.exceptions.HTTPError):
             self._project_root = None
             self._plugin_version = None
 
