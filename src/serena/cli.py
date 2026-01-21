@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 from serena.agent import SerenaAgent
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
-from serena.config.serena_config import LanguageBackend, ProjectConfig, SerenaConfig, SerenaPaths
+from serena.config.serena_config import LanguageBackend, ProjectConfig, SerenaConfig, SerenaPaths, RegisteredProject
 from serena.constants import (
     DEFAULT_CONTEXT,
     DEFAULT_MODES,
@@ -521,7 +521,8 @@ class ProjectCommands(AutoRegisteringGroup):
         :raises FileExistsError: If project.yml already exists
         :raises ValueError: If an unsupported language is specified
         """
-        yml_path = os.path.join(project_path, ProjectConfig.rel_path_to_project_yml())
+        project_root = Path(project_path).resolve()
+        yml_path = ProjectConfig.path_to_project_yml(project_root)
         if os.path.exists(yml_path):
             raise FileExistsError(f"Project file {yml_path} already exists.")
 
@@ -540,6 +541,15 @@ class ProjectCommands(AutoRegisteringGroup):
         yml_path = ProjectConfig.path_to_project_yml(project_path)
         languages_str = ", ".join([lang.value for lang in generated_conf.languages]) if generated_conf.languages else "N/A"
         click.echo(f"Generated project with languages {{{languages_str}}} at {yml_path}.")
+
+        # add to SerenaConfig's list of registered projects
+        serena_config = SerenaConfig.from_config_file()
+        if serena_config.get_registered_project(str(project_root)) is None:
+            registered_project = RegisteredProject(str(project_root), generated_conf)
+            serena_config.projects.append(registered_project)
+            click.echo(f"Saving project registration to {serena_config}")
+            serena_config.save()
+
         return generated_conf
 
     @staticmethod

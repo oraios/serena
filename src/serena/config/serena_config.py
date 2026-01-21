@@ -613,14 +613,14 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     def project_names(self) -> list[str]:
         return sorted(project.project_config.project_name for project in self.projects)
 
-    def get_project(self, project_root_or_name: str) -> Optional["Project"]:
+    def get_registered_project(self, project_root_or_name: str) -> Optional[RegisteredProject]:
         # look for project by name
         project_candidates = []
         for project in self.projects:
             if project.project_config.project_name == project_root_or_name:
                 project_candidates.append(project)
         if len(project_candidates) == 1:
-            return project_candidates[0].get_project_instance()
+            return project_candidates[0]
         elif len(project_candidates) > 1:
             raise ValueError(
                 f"Multiple projects found with name '{project_root_or_name}'. Please activate it by location instead. "
@@ -630,13 +630,21 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         if os.path.isdir(project_root_or_name):
             for project in self.projects:
                 if project.matches_root_path(project_root_or_name):
-                    return project.get_project_instance()
+                    return project
         return None
+
+    def get_project(self, project_root_or_name: str) -> Optional["Project"]:
+        registered_project = self.get_registered_project(project_root_or_name)
+        if registered_project is None:
+            return None
+        else:
+            return registered_project.get_project_instance()
 
     def add_project_from_path(self, project_root: Path | str) -> "Project":
         """
-        Add a project to the Serena configuration from a given path. Will raise a FileExistsError if a
-        project already exists at the path.
+        Add a new project to the Serena configuration from a given path, auto-generating the project
+        with defaults if it does not exist.
+        Will raise a FileExistsError if a project already exists at the path.
 
         :param project_root: the path to the project to add
         :return: the project that was added
