@@ -152,7 +152,7 @@ class TestTomlEdgeCases:
         assert endpoint_symbol is not None
 
         if "body" in endpoint_symbol:
-            body = endpoint_symbol["body"]
+            body = endpoint_symbol["body"].get_text()
             # Body should contain the inline table syntax
             assert "url" in body or "version" in body, f"Body should contain inline table contents, got: {body}"
 

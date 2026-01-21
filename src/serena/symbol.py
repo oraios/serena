@@ -300,7 +300,11 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
 
     @property
     def body(self) -> str | None:
-        return self.symbol_root.get("body")
+        body = self.symbol_root.get("body")
+        if body is None:
+            return None
+        else:
+            return body.get_text()
 
     def get_name_path(self) -> str:
         """
@@ -418,9 +422,10 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
             result["body_location"] = {"start_line": body_start_line, "end_line": body_end_line}
 
         if include_body:
-            if self.body is None:
+            body = self.body
+            if body is None:
                 log.warning("Requested body for symbol, but it is not present. The symbol might have been loaded with include_body=False.")
-            result["body"] = self.body
+            result["body"] = body
 
         if child_inclusion_predicate is None:
             child_inclusion_predicate = lambda s: True

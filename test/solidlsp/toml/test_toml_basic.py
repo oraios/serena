@@ -137,7 +137,7 @@ class TestTomlLanguageServerBasics:
         # Check that body exists and contains expected content
         # Note: Taplo includes the section header in the body
         assert "body" in package_symbol, "'package' symbol should have body"
-        package_body = package_symbol["body"]
+        package_body = package_symbol["body"].get_text()
         assert 'name = "test_project"' in package_body, "Body should contain 'name' field"
         assert 'version = "0.1.0"' in package_body, "Body should contain 'version' field"
         assert 'edition = "2021"' in package_body, "Body should contain 'edition' field"
@@ -146,7 +146,7 @@ class TestTomlLanguageServerBasics:
         deps_symbol = next((s for s in all_symbols if s.get("name") == "dependencies"), None)
         assert deps_symbol is not None, "Should find 'dependencies' symbol"
         assert "body" in deps_symbol, "'dependencies' symbol should have body"
-        deps_body = deps_symbol["body"]
+        deps_body = deps_symbol["body"].get_text()
         assert "serde" in deps_body, "Body should contain serde dependency"
         assert "tokio" in deps_body, "Body should contain tokio dependency"
 
@@ -160,7 +160,7 @@ class TestTomlLanguageServerBasics:
         )
         assert features_symbol is not None, "Should find top-level 'features' table symbol"
         assert "body" in features_symbol, "'features' symbol should have body"
-        features_body = features_symbol["body"]
+        features_body = features_symbol["body"].get_text()
         assert "default" in features_body, "Body should contain 'default' feature"
 
     @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
