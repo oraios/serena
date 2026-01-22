@@ -5,11 +5,15 @@ Defines wrapper objects around the types returned by LSP to ensure decoupling be
 from __future__ import annotations
 
 from enum import Enum, IntEnum
-from typing import NotRequired, Union
+from typing import TYPE_CHECKING, NotRequired, Union
 
 from typing_extensions import TypedDict
 
 from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticSeverity
+
+if TYPE_CHECKING:
+    from .ls import SymbolBody
+
 
 URI = str
 DocumentUri = str
@@ -187,8 +191,12 @@ class SymbolTag(IntEnum):
 
 
 class UnifiedSymbolInformation(TypedDict):
-    """Represents information about programming constructs like variables, classes,
+    """
+    Represents information about programming constructs like variables, classes,
     interfaces etc.
+
+    This is a unifying extension of `lsp_types.SymbolInformation` and `lsp_types.DocumentSymbol`,
+    with added fields for SolidLSP/Serena use.
     """
 
     deprecated: NotRequired[bool]
@@ -234,7 +242,7 @@ class UnifiedSymbolInformation(TypedDict):
     """ The range that should be selected and revealed when this symbol is being picked, e.g the name of a function.
     Must be contained by the `range`. """
 
-    body: NotRequired[str]
+    body: NotRequired["SymbolBody"]
     """ The body of the symbol. """
 
     children: list[UnifiedSymbolInformation]

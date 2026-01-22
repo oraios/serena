@@ -124,7 +124,7 @@ class TestYAMLLanguageServerBasics:
 
         # Check that body exists and contains expected content
         assert "body" in app_symbol, "'app' symbol should have body"
-        app_body = app_symbol["body"]
+        app_body = app_symbol["body"].get_text()
         assert "app:" in app_body, "Body should start with 'app:'"
         assert "name: test-application" in app_body, "Body should contain 'name' field"
         assert "version: 1.0.0" in app_body, "Body should contain 'version' field"
@@ -135,13 +135,13 @@ class TestYAMLLanguageServerBasics:
         name_symbols = [s for s in all_symbols if s.get("name") == "name" and "body" in s]
         assert len(name_symbols) > 0, "Should find 'name' symbols with bodies"
         # At least one should contain "test-application"
-        assert any("test-application" in s["body"] for s in name_symbols), "Should find name with test-application"
+        assert any("test-application" in s["body"].get_text() for s in name_symbols), "Should find name with test-application"
 
         # Find the database symbol and check its body
         database_symbol = next((s for s in all_symbols if s.get("name") == "database"), None)
         assert database_symbol is not None, "Should find 'database' symbol"
         assert "body" in database_symbol, "'database' symbol should have body"
-        db_body = database_symbol["body"]
+        db_body = database_symbol["body"].get_text()
         assert "database:" in db_body, "Body should start with 'database:'"
         assert "host: localhost" in db_body, "Body should contain host configuration"
         assert "port: 5432" in db_body, "Body should contain port configuration"

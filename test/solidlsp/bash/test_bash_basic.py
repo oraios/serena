@@ -50,7 +50,7 @@ class TestBashLanguageServerBasics:
         assert greet_user_symbol is not None, "Should find greet_user function"
 
         if "body" in greet_user_symbol:
-            body = greet_user_symbol["body"]
+            body = greet_user_symbol["body"].get_text()
             assert "function greet_user()" in body, "Function body should contain function definition"
             assert "case" in body.lower(), "Function body should contain case statement"
 
