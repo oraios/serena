@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 from serena.agent import SerenaAgent
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
-from serena.config.serena_config import LanguageBackend, ProjectConfig, SerenaConfig, SerenaPaths, RegisteredProject
+from serena.config.serena_config import LanguageBackend, ProjectConfig, RegisteredProject, SerenaConfig, SerenaPaths
 from serena.constants import (
     DEFAULT_CONTEXT,
     DEFAULT_MODES,
@@ -615,17 +615,6 @@ class ProjectCommands(AutoRegisteringGroup):
         ProjectCommands._index_project(project, log_level, timeout=timeout)
 
     @staticmethod
-    @click.command(
-        "index-deprecated", help="Deprecated alias for 'serena project index'.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH}
-    )
-    @click.argument("project", type=click.Path(exists=True), default=os.getcwd(), required=False)
-    @click.option("--log-level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="WARNING")
-    @click.option("--timeout", type=float, default=10, help="Timeout for indexing a single file.")
-    def index_deprecated(project: str, log_level: str, timeout: float) -> None:
-        click.echo("Deprecated! Use `serena project index` instead.")
-        ProjectCommands._index_project(project, log_level, timeout=timeout)
-
-    @staticmethod
     def _index_project(project: str, log_level: str, timeout: float) -> None:
         lvl = logging.getLevelNamesMapping()[log_level.upper()]
         logging.configure(level=lvl)
@@ -1034,7 +1023,6 @@ prompts = PromptCommands()
 # Expose toplevel commands for the same reason
 top_level = TopLevelCommands()
 start_mcp_server = top_level.start_mcp_server
-index_project = project.index_deprecated
 
 # needed for the help script to work - register all subcommands to the top-level group
 for subgroup in (mode, context, project, config, tools, prompts):
