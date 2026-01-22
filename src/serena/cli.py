@@ -510,16 +510,16 @@ class ProjectCommands(AutoRegisteringGroup):
         )
 
     @staticmethod
-    def _create_project(project_path: str, name: str | None, language: tuple[str, ...]) -> ProjectConfig:
+    def _create_project(project_path: str, name: str | None, language: tuple[str, ...]) -> RegisteredProject:
         """
         Helper method to create a project configuration file.
 
         :param project_path: Path to the project directory
         :param name: Optional project name (defaults to directory name if not specified)
         :param language: Tuple of language names
-        :return: The generated ProjectConfig instance
         :raises FileExistsError: If project.yml already exists
         :raises ValueError: If an unsupported language is specified
+        :return: the RegisteredProject instance
         """
         project_root = Path(project_path).resolve()
         yml_path = ProjectConfig.path_to_project_yml(project_root)
@@ -544,13 +544,12 @@ class ProjectCommands(AutoRegisteringGroup):
 
         # add to SerenaConfig's list of registered projects
         serena_config = SerenaConfig.from_config_file()
-        if serena_config.get_registered_project(str(project_root)) is None:
+        registered_project = serena_config.get_registered_project(str(project_root))
+        if registered_project is None:
             registered_project = RegisteredProject(str(project_root), generated_conf)
-            serena_config.projects.append(registered_project)
-            click.echo(f"Saving project registration to {serena_config}")
-            serena_config.save()
+            serena_config.add_registered_project(registered_project)
 
-        return generated_conf
+        return registered_project
 
     @staticmethod
     @click.command("create", help="Create a new Serena project configuration.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
@@ -569,10 +568,10 @@ class ProjectCommands(AutoRegisteringGroup):
     @click.option("--timeout", type=float, default=10, help="Timeout for indexing a single file (only used if --index is set).")
     def create(project_path: str, name: str | None, language: tuple[str, ...], index: bool, log_level: str, timeout: float) -> None:
         try:
-            ProjectCommands._create_project(project_path, name, language)
+            registered_project = ProjectCommands._create_project(project_path, name, language)
             if index:
                 click.echo("Indexing project...")
-                ProjectCommands._index_project(project_path, log_level, timeout=timeout)
+                ProjectCommands._index_project(registered_project, log_level, timeout=timeout)
         except FileExistsError as e:
             raise click.ClickException(f"Project already exists: {e}\nUse 'serena project index' to index an existing project.")
         except ValueError as e:
@@ -584,7 +583,7 @@ class ProjectCommands(AutoRegisteringGroup):
         help="Index a project by saving symbols to the LSP cache. Auto-creates project.yml if it doesn't exist.",
         context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
     )
-    @click.argument("project", type=click.Path(exists=True), default=os.getcwd(), required=False)
+    @click.argument("project", type=PROJECT_TYPE, default=os.getcwd(), required=False)
     @click.option("--name", type=str, default=None, help="Project name (only used if auto-creating project.yml).")
     @click.option(
         "--language",
@@ -600,32 +599,30 @@ class ProjectCommands(AutoRegisteringGroup):
     )
     @click.option("--timeout", type=float, default=10, help="Timeout for indexing a single file.")
     def index(project: str, name: str | None, language: tuple[str, ...], log_level: str, timeout: float) -> None:
-        # Check if project.yml exists, if not auto-create it
-        yml_path = os.path.join(project, ProjectConfig.rel_path_to_project_yml())
-        if not os.path.exists(yml_path):
-            click.echo(f"Project configuration not found at {yml_path}. Auto-creating...")
+        serena_config = SerenaConfig.from_config_file()
+        registered_project = serena_config.get_registered_project(project, autoregister=True)
+        if registered_project is None:
+            # Project not found; auto-create it
+            click.echo(f"No existing project found for '{project}'. Attempting auto-creation ...")
             try:
-                ProjectCommands._create_project(project, name, language)
-            except FileExistsError:
-                # Race condition - file was created between check and creation
-                pass
-            except ValueError as e:
+                registered_project = ProjectCommands._create_project(project, name, language)
+            except Exception as e:
                 raise click.ClickException(str(e))
 
-        ProjectCommands._index_project(project, log_level, timeout=timeout)
+        ProjectCommands._index_project(registered_project, log_level, timeout=timeout)
 
     @staticmethod
-    def _index_project(project: str, log_level: str, timeout: float) -> None:
+    def _index_project(registered_project: RegisteredProject, log_level: str, timeout: float) -> None:
         lvl = logging.getLevelNamesMapping()[log_level.upper()]
         logging.configure(level=lvl)
         serena_config = SerenaConfig.from_config_file()
-        proj = Project.load(os.path.abspath(project))
-        click.echo(f"Indexing symbols in project {project} …")
+        proj = registered_project.get_project_instance()
+        click.echo(f"Indexing symbols in {proj} …")
         ls_mgr = proj.create_language_server_manager(
             log_level=lvl, ls_timeout=timeout, ls_specific_settings=serena_config.ls_specific_settings
         )
         try:
-            log_file = os.path.join(project, ".serena", "logs", "indexing.txt")
+            log_file = os.path.join(proj.project_root, ".serena", "logs", "indexing.txt")
 
             files = proj.gather_source_files()
 

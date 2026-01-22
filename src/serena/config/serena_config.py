@@ -374,6 +374,14 @@ class RegisteredProject(ToStringMixin):
             project_instance=project_instance,
         )
 
+    @classmethod
+    def from_project_root(cls, project_root: str | Path) -> "RegisteredProject":
+        project_config = ProjectConfig.load(project_root)
+        return RegisteredProject(
+            project_root=str(project_root),
+            project_config=project_config,
+        )
+
     def matches_root_path(self, path: str | Path) -> bool:
         """
         Check if the given path matches the project root path.
@@ -613,7 +621,12 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     def project_names(self) -> list[str]:
         return sorted(project.project_config.project_name for project in self.projects)
 
-    def get_registered_project(self, project_root_or_name: str) -> Optional[RegisteredProject]:
+    def get_registered_project(self, project_root_or_name: str, autoregister: bool = False) -> Optional[RegisteredProject]:
+        """
+        :param project_root_or_name: path to the project root or the name of the project
+        :param autoregister: whether to register the project if it exists but is not registered yet
+        :return: the registered project, or None if not found
+        """
         # look for project by name
         project_candidates = []
         for project in self.projects:
@@ -631,6 +644,14 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
             for project in self.projects:
                 if project.matches_root_path(project_root_or_name):
                     return project
+        # no registered project found; auto-register if project configuration exists
+        if autoregister:
+            config_path = ProjectConfig.path_to_project_yml(project_root_or_name)
+            if os.path.isfile(config_path):
+                registered_project = RegisteredProject.from_project_root(project_root_or_name)
+                self.add_registered_project(registered_project)
+                return registered_project
+        # nothing found
         return None
 
     def get_project(self, project_root_or_name: str) -> Optional["Project"]:
@@ -639,6 +660,13 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
             return None
         else:
             return registered_project.get_project_instance()
+
+    def add_registered_project(self, registered_project: RegisteredProject) -> None:
+        """
+        Adds a registered project, saving the configuration file.
+        """
+        self.projects.append(registered_project)
+        self.save()
 
     def add_project_from_path(self, project_root: Path | str) -> "Project":
         """
@@ -666,8 +694,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         project_config = ProjectConfig.load(project_root, autogenerate=True)
 
         new_project = Project(project_root=str(project_root), project_config=project_config, is_newly_created=True)
-        self.projects.append(RegisteredProject.from_project_instance(new_project))
-        self.save()
+        self.add_registered_project(RegisteredProject.from_project_instance(new_project))
 
         return new_project
 
