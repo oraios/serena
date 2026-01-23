@@ -233,26 +233,32 @@ Serena automatically checks for pasls updates every 24 hours. Updates include:
 - Atomic update with rollback on failure
 - Windows file locking detection (defers update if pasls is in use)
 
-**Configuration via Environment Variables:**
+**Configuration:**
 
-pasls reads compiler paths from environment variables. Set these before starting Serena:
+Configure pasls via `ls_specific_settings.pascal` in `serena_config.yml`:
 
-| Variable       | Description                                              |
-| -------------- | -------------------------------------------------------- |
-| `PP`           | Path to FPC compiler executable                          |
-| `FPCDIR`       | Path to FPC source directory                             |
-| `LAZARUSDIR`   | Path to Lazarus directory (only needed for LCL projects) |
-| `FPCTARGET`    | Target OS (e.g., `linux`, `win64`, `darwin`)             |
-| `FPCTARGETCPU` | Target CPU (e.g., `x86_64`, `aarch64`, `i386`)           |
+| Setting          | Description                                                                 |
+| ---------------- | --------------------------------------------------------------------------- |
+| `pp`             | Path to FPC compiler driver (must be `fpc` or `fpc.exe`, not `ppc386.exe`)  |
+| `fpcdir`         | Path to FPC source directory                                                |
+| `lazarusdir`     | Path to Lazarus directory (required for LCL projects)                       |
+| `fpc_target`     | Target OS override (e.g., `Win32`, `Win64`, `Linux`)                        |
+| `fpc_target_cpu` | Target CPU override (e.g., `i386`, `x86_64`, `aarch64`)                     |
 
-Example (bash):
+Example configuration:
 
-```bash
-export PP=/usr/bin/fpc
-export FPCDIR=/usr/share/fpcsrc
-export LAZARUSDIR=/usr/share/lazarus
-serena start-mcp-server --project /path/to/pascal-project
+```yaml
+ls_specific_settings:
+  pascal:
+    pp: "D:/laz32/fpc/bin/i386-win32/fpc.exe"
+    fpcdir: "D:/laz32/fpcsrc"
+    lazarusdir: "D:/laz32/lazarus"
 ```
+
+Notes:
+- The `pp` setting is the most important for hover and navigation to work correctly.
+- Use the FPC compiler driver (`fpc`/`fpc.exe`), not backend compilers like `ppc386.exe`.
+- These settings are passed as environment variables to the pasls process.
 
 ### Custom Prompts
 
