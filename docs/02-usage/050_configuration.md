@@ -215,6 +215,45 @@ Notes:
 - `GOFLAGS` (from the environment you start Serena in) may also affect the Go build context. Prefer `buildFlags` for tags.
 - Build context changes are only picked up when `gopls` starts. After changing `gopls_settings` (or relevant env vars like `GOFLAGS`), restart the Serena process (or server) that hosts the Go language server, or use your client's "Restart language server" action if it causes `gopls` to restart.
 
+#### Pascal (`pasls`)
+
+Serena uses [pasls](https://github.com/genericptr/pascal-language-server) (Pascal Language Server) for Pascal/Free Pascal support.
+
+**Language Server Installation:**
+
+1. If `pasls` is found in your system PATH, Serena uses it directly
+2. Otherwise, Serena automatically downloads a prebuilt binary from GitHub releases
+
+Supported platforms for automatic download: Linux (x64, arm64), macOS (x64, arm64), Windows (x64).
+
+**Auto-Update:**
+
+Serena automatically checks for pasls updates every 24 hours. Updates include:
+- SHA256 checksum verification before installation
+- Atomic update with rollback on failure
+- Windows file locking detection (defers update if pasls is in use)
+
+**Configuration via Environment Variables:**
+
+pasls reads compiler paths from environment variables. Set these before starting Serena:
+
+| Variable       | Description                                              |
+| -------------- | -------------------------------------------------------- |
+| `PP`           | Path to FPC compiler executable                          |
+| `FPCDIR`       | Path to FPC source directory                             |
+| `LAZARUSDIR`   | Path to Lazarus directory (only needed for LCL projects) |
+| `FPCTARGET`    | Target OS (e.g., `linux`, `win64`, `darwin`)             |
+| `FPCTARGETCPU` | Target CPU (e.g., `x86_64`, `aarch64`, `i386`)           |
+
+Example (bash):
+
+```bash
+export PP=/usr/bin/fpc
+export FPCDIR=/usr/share/fpcsrc
+export LAZARUSDIR=/usr/share/lazarus
+serena start-mcp-server --project /path/to/pascal-project
+```
+
 ### Custom Prompts
 
 All of Serena's prompts can be fully customized.
