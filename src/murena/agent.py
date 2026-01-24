@@ -172,7 +172,7 @@ class MurenaAgent:
         self,
         project: str | None = None,
         project_activation_callback: Callable[[], None] | None = None,
-        serena_config: MurenaConfig | None = None,
+        murena_config: MurenaConfig | None = None,
         context: MurenaAgentContext | None = None,
         modes: list[MurenaAgentMode] | None = None,
         memory_log_handler: MemoryLogHandler | None = None,
@@ -181,7 +181,7 @@ class MurenaAgent:
         :param project: the project to load immediately or None to not load any project; may be a path to the project or a name of
             an already registered project;
         :param project_activation_callback: a callback function to be called when a project is activated.
-        :param serena_config: the Murena configuration or None to read the configuration from the default location.
+        :param murena_config: the Murena configuration or None to read the configuration from the default location.
         :param context: the context in which the agent is operating, None for default context.
             The context may adjust prompts, tool availability, and tool descriptions.
         :param modes: list of modes in which the agent is operating (they will be combined), None for default modes.
@@ -190,10 +190,10 @@ class MurenaAgent:
             if necessary.
         """
         # obtain murena configuration using the decoupled factory function
-        self.serena_config = serena_config or MurenaConfig.from_config_file()
+        self.murena_config = murena_config or MurenaConfig.from_config_file()
 
         # propagate configuration to other components
-        self.serena_config.propagate_settings()
+        self.murena_config.propagate_settings()
 
         # project-specific instances, which will be initialized upon project activation
         self._active_project: Project | None = None
@@ -202,7 +202,7 @@ class MurenaAgent:
         self._dashboard_url: str | None = None
 
         # adjust log level
-        serena_log_level = self.serena_config.log_level
+        serena_log_level = self.murena_config.log_level
         if Logger.root.level != serena_log_level:
             log.info(f"Changing the root logger level to {serena_log_level}")
             Logger.root.setLevel(serena_log_level)
@@ -216,7 +216,7 @@ class MurenaAgent:
 
         # open GUI log window if enabled
         self._gui_log_viewer: Optional["GuiLogViewer"] = None
-        if self.serena_config.gui_log_window:
+        if self.murena_config.gui_log_window:
             log.info("Opening GUI window")
             if platform.system() == "Darwin":
                 log.warning("GUI log window is not supported on macOS")
@@ -243,17 +243,17 @@ class MurenaAgent:
         if self._gui_log_viewer is not None:
             self._gui_log_viewer.set_tool_names(tool_names)
 
-        token_count_estimator = RegisteredTokenCountEstimator[self.serena_config.token_count_estimator]
+        token_count_estimator = RegisteredTokenCountEstimator[self.murena_config.token_count_estimator]
         log.info(f"Will record tool usage statistics with token count estimator: {token_count_estimator.name}.")
         self._tool_usage_stats = ToolUsageStats(token_count_estimator)
 
         # log fundamental information
         log.info(
             f"Starting Murena server (version={murena_version()}, process id={os.getpid()}, parent process id={os.getppid()}; "
-            f"language backend={self.serena_config.language_backend.name})"
+            f"language backend={self.murena_config.language_backend.name})"
         )
-        log.info("Configuration file: %s", self.serena_config.config_file_path)
-        log.info("Available projects: {}".format(", ".join(self.serena_config.project_names)))
+        log.info("Configuration file: %s", self.murena_config.config_file_path)
+        log.info("Available projects: {}".format(", ".join(self.murena_config.project_names)))
         log.info(f"Loaded tools ({len(self._all_tools)}): {', '.join([tool.get_name_from_cls() for tool in self._all_tools.values()])}")
 
         self._check_shell_settings()
@@ -267,16 +267,16 @@ class MurenaAgent:
         #   * JetBrains mode
         tool_inclusion_definitions: list[ToolInclusionDefinition] = []
         if (
-            self.serena_config.web_dashboard
-            and not self.serena_config.web_dashboard_open_on_launch
-            and not self.serena_config.gui_log_window
+            self.murena_config.web_dashboard
+            and not self.murena_config.web_dashboard_open_on_launch
+            and not self.murena_config.gui_log_window
         ):
             tool_inclusion_definitions.append(ToolInclusionDefinition(included_optional_tools=[OpenDashboardTool.get_name_from_cls()]))
-        tool_inclusion_definitions.append(self.serena_config)
+        tool_inclusion_definitions.append(self.murena_config)
         tool_inclusion_definitions.append(self._context)
         if self._context.single_project:
             tool_inclusion_definitions.extend(self._single_project_context_tool_inclusion_definitions(project))
-        if self.serena_config.language_backend == LanguageBackend.JETBRAINS:
+        if self.murena_config.language_backend == LanguageBackend.JETBRAINS:
             tool_inclusion_definitions.append(MurenaAgentMode.from_name_internal("jetbrains"))
         self._base_tool_set = ToolSet.default().apply(*tool_inclusion_definitions)
         self._exposed_tools = AvailableTools([t for t in self._all_tools.values() if self._base_tool_set.includes_name(t.get_name())])
@@ -309,17 +309,17 @@ class MurenaAgent:
         # start the dashboard (web frontend), registering its log handler
         # should be the last thing to happen in the initialization since the dashboard
         # may access various parts of the agent
-        if self.serena_config.web_dashboard:
+        if self.murena_config.web_dashboard:
             self._dashboard_thread, port = MurenaDashboardAPI(
                 get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats
-            ).run_in_thread(host=self.serena_config.web_dashboard_listen_address)
-            dashboard_host = self.serena_config.web_dashboard_listen_address
+            ).run_in_thread(host=self.murena_config.web_dashboard_listen_address)
+            dashboard_host = self.murena_config.web_dashboard_listen_address
             if dashboard_host == "0.0.0.0":
                 dashboard_host = "localhost"
             dashboard_url = f"http://{dashboard_host}:{port}/dashboard/index.html"
             self._dashboard_url = dashboard_url
             log.info("Serena web dashboard started at %s", dashboard_url)
-            if self.serena_config.web_dashboard_open_on_launch:
+            if self.murena_config.web_dashboard_open_on_launch:
                 self.open_dashboard()
             # inform the GUI window (if any)
             if self._gui_log_viewer is not None:
@@ -633,7 +633,7 @@ class MurenaAgent:
                     dependency_graph=dep_graph,
                     execute_func=execute_tool,
                     max_workers=10,
-                    timeout_per_tool=self.serena_config.tool_timeout,
+                    timeout_per_tool=self.murena_config.tool_timeout,
                 )
             )
             return results
@@ -644,7 +644,7 @@ class MurenaAgent:
         """
         :return: whether this agent uses language server-based code analysis
         """
-        return self.serena_config.language_backend == LanguageBackend.LSP
+        return self.murena_config.language_backend == LanguageBackend.LSP
 
     def _activate_project(self, project: Project) -> None:
         log.info(f"Activating {project.project_name} at {project.project_root}")
@@ -672,11 +672,11 @@ class MurenaAgent:
             which does not yet contain a Serena project configuration file
         :return: the project instance if it was found/could be created, None otherwise
         """
-        project_instance: Project | None = self.serena_config.get_project(project_root_or_name)
+        project_instance: Project | None = self.murena_config.get_project(project_root_or_name)
         if project_instance is not None:
             log.info(f"Found registered project '{project_instance.project_name}' at path {project_instance.project_root}")
         elif autogenerate and os.path.isdir(project_root_or_name):
-            project_instance = self.serena_config.add_project_from_path(project_root_or_name)
+            project_instance = self.murena_config.add_project_from_path(project_root_or_name)
             log.info(f"Added new project {project_instance.project_name} for path {project_instance.project_root}")
         return project_instance
 
@@ -694,7 +694,7 @@ class MurenaAgent:
         if project_instance is None:
             raise ProjectNotFoundError(
                 f"Project '{project_root_or_name}' not found: Not a valid project name or directory. "
-                f"Existing project names: {self.serena_config.project_names}"
+                f"Existing project names: {self.murena_config.project_names}"
             )
         self._activate_project(project_instance)
         return project_instance
@@ -718,12 +718,12 @@ class MurenaAgent:
         """
         result_str = "Current configuration:\n"
         result_str += f"Murena version: {murena_version()}\n"
-        result_str += f"Loglevel: {self.serena_config.log_level}, trace_lsp_communication={self.serena_config.trace_lsp_communication}\n"
+        result_str += f"Loglevel: {self.murena_config.log_level}, trace_lsp_communication={self.murena_config.trace_lsp_communication}\n"
         if self._active_project is not None:
             result_str += f"Active project: {self._active_project.project_name}\n"
         else:
             result_str += "No active project\n"
-        result_str += "Available projects:\n" + "\n".join(list(self.serena_config.project_names)) + "\n"
+        result_str += "Available projects:\n" + "\n".join(list(self.murena_config.project_names)) + "\n"
         result_str += f"Active context: {self._context.name}\n"
 
         # Active modes
@@ -760,7 +760,7 @@ class MurenaAgent:
         """
         Starts/resets the language server manager for the current project
         """
-        tool_timeout = self.serena_config.tool_timeout
+        tool_timeout = self.murena_config.tool_timeout
         if tool_timeout is None or tool_timeout < 0:
             ls_timeout = None
         else:
@@ -770,10 +770,10 @@ class MurenaAgent:
 
         # instantiate and start the necessary language servers
         self.get_active_project_or_raise().create_language_server_manager(
-            log_level=self.serena_config.log_level,
+            log_level=self.murena_config.log_level,
             ls_timeout=ls_timeout,
-            trace_lsp_communication=self.serena_config.trace_lsp_communication,
-            ls_specific_settings=self.serena_config.ls_specific_settings,
+            trace_lsp_communication=self.murena_config.trace_lsp_communication,
+            ls_specific_settings=self.murena_config.ls_specific_settings,
         )
 
     def add_language(self, language: Language) -> None:

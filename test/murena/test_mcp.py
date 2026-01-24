@@ -14,7 +14,7 @@ make_tool = MurenaMCPFactory.make_mcp_tool
 class MockAgent:
     def __init__(self):
         self.project_config = None
-        self.serena_config = None
+        self.murena_config = None
 
     @staticmethod
     def get_context() -> MurenaAgentContext:

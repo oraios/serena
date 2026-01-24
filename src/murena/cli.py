@@ -317,7 +317,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         mode_instances = [MurenaAgentMode.load(mode) for mode in modes]
         agent = MurenaAgent(
             project=os.path.abspath(project),
-            serena_config=MurenaConfig(web_dashboard=False, log_level=lvl),
+            murena_config=MurenaConfig(web_dashboard=False, log_level=lvl),
             context=context_instance,
             modes=mode_instances,
         )
@@ -496,9 +496,9 @@ class MurenaConfigCommands(AutoRegisteringGroup):
         context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
     )
     def edit() -> None:
-        serena_config = MurenaConfig.from_config_file()
-        assert serena_config.config_file_path is not None
-        _open_in_editor(serena_config.config_file_path)
+        murena_config = MurenaConfig.from_config_file()
+        assert murena_config.config_file_path is not None
+        _open_in_editor(murena_config.config_file_path)
 
 
 class ProjectCommands(AutoRegisteringGroup):
@@ -543,11 +543,11 @@ class ProjectCommands(AutoRegisteringGroup):
         click.echo(f"Generated project with languages {{{languages_str}}} at {yml_path}.")
 
         # add to MurenaConfig's list of registered projects
-        serena_config = MurenaConfig.from_config_file()
-        registered_project = serena_config.get_registered_project(str(project_root))
+        murena_config = MurenaConfig.from_config_file()
+        registered_project = murena_config.get_registered_project(str(project_root))
         if registered_project is None:
             registered_project = RegisteredProject(str(project_root), generated_conf)
-            serena_config.add_registered_project(registered_project)
+            murena_config.add_registered_project(registered_project)
 
         return registered_project
 
@@ -599,8 +599,8 @@ class ProjectCommands(AutoRegisteringGroup):
     )
     @click.option("--timeout", type=float, default=10, help="Timeout for indexing a single file.")
     def index(project: str, name: str | None, language: tuple[str, ...], log_level: str, timeout: float) -> None:
-        serena_config = MurenaConfig.from_config_file()
-        registered_project = serena_config.get_registered_project(project, autoregister=True)
+        murena_config = MurenaConfig.from_config_file()
+        registered_project = murena_config.get_registered_project(project, autoregister=True)
         if registered_project is None:
             # Project not found; auto-create it
             click.echo(f"No existing project found for '{project}'. Attempting auto-creation ...")
@@ -615,11 +615,11 @@ class ProjectCommands(AutoRegisteringGroup):
     def _index_project(registered_project: RegisteredProject, log_level: str, timeout: float) -> None:
         lvl = logging.getLevelNamesMapping()[log_level.upper()]
         logging.configure(level=lvl)
-        serena_config = MurenaConfig.from_config_file()
+        murena_config = MurenaConfig.from_config_file()
         proj = registered_project.get_project_instance()
         click.echo(f"Indexing symbols in {proj} …")
         ls_mgr = proj.create_language_server_manager(
-            log_level=lvl, ls_timeout=timeout, ls_specific_settings=serena_config.ls_specific_settings
+            log_level=lvl, ls_timeout=timeout, ls_specific_settings=murena_config.ls_specific_settings
         )
         try:
             log_file = os.path.join(proj.project_root, ".murena", "logs", "indexing.txt")
@@ -743,7 +743,7 @@ class ProjectCommands(AutoRegisteringGroup):
                 # Create MurenaAgent with dashboard disabled
                 log.info("Creating MurenaAgent with disabled dashboard...")
                 config = MurenaConfig(gui_log_window=False, web_dashboard=False)
-                agent = MurenaAgent(project=project_path, serena_config=config)
+                agent = MurenaAgent(project=project_path, murena_config=config)
                 log.info("MurenaAgent created successfully")
 
                 # Find first non-empty file that can be analyzed
@@ -906,7 +906,7 @@ class ToolCommands(AutoRegisteringGroup):
 
         agent = MurenaAgent(
             project=None,
-            serena_config=MurenaConfig(web_dashboard=False, log_level=logging.INFO),
+            murena_config=MurenaConfig(web_dashboard=False, log_level=logging.INFO),
             context=serena_context,
         )
         tool = agent.get_tool_by_name(tool_name)

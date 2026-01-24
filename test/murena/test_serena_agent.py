@@ -20,7 +20,7 @@ from test.solidlsp import clojure as clj
 
 
 @pytest.fixture
-def serena_config():
+def murena_config():
     """Create an in-memory configuration for tests with test repositories pre-registered."""
     # Create test projects for all supported languages
     test_projects = []
@@ -85,14 +85,14 @@ def project_file_modification_context(serena_agent: MurenaAgent, relative_path: 
 
 
 @pytest.fixture
-def serena_agent(request: pytest.FixtureRequest, serena_config) -> Iterator[MurenaAgent]:
+def serena_agent(request: pytest.FixtureRequest, murena_config) -> Iterator[MurenaAgent]:
     language = Language(request.param)
     if not language_tests_enabled(language):
         pytest.skip(f"Tests for language {language} are not enabled.")
 
     project_name = f"test_repo_{language}"
 
-    agent = MurenaAgent(project=project_name, serena_config=serena_config)
+    agent = MurenaAgent(project=project_name, murena_config=murena_config)
 
     # wait for agent to be ready
     agent.execute_task(lambda: None)

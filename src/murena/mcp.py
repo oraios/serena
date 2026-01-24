@@ -260,12 +260,12 @@ class MurenaMCPFactory:
                 mcp._tool_manager._tools[tool.get_name()] = mcp_tool
             log.info(f"Starting MCP server with {len(mcp._tool_manager._tools)} tools: {list(mcp._tool_manager._tools.keys())}")
 
-    def _create_serena_agent(self, serena_config: MurenaConfig, modes: list[MurenaAgentMode]) -> MurenaAgent:
+    def _create_serena_agent(self, murena_config: MurenaConfig, modes: list[MurenaAgentMode]) -> MurenaAgent:
         return MurenaAgent(
-            project=self.project, serena_config=serena_config, context=self.context, modes=modes, memory_log_handler=self.memory_log_handler
+            project=self.project, murena_config=murena_config, context=self.context, modes=modes, memory_log_handler=self.memory_log_handler
         )
 
-    def _create_default_serena_config(self) -> MurenaConfig:
+    def _create_default_murena_config(self) -> MurenaConfig:
         return MurenaConfig.from_config_file()
 
     def create_mcp_server(
@@ -299,7 +299,7 @@ class MurenaMCPFactory:
         :param tool_timeout: Timeout in seconds for tool execution. If not specified, will take the value from the murena configuration.
         """
         try:
-            config = self._create_default_serena_config()
+            config = self._create_default_murena_config()
 
             # update configuration with the provided parameters
             if enable_web_dashboard is not None:

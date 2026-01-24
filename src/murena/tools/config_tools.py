@@ -46,7 +46,7 @@ class RemoveProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerO
 
         :param project_name: Name of the project to remove
         """
-        self.agent.serena_config.remove_project(project_name)
+        self.agent.murena_config.remove_project(project_name)
         return f"Successfully removed project '{project_name}' from configuration."
 
 

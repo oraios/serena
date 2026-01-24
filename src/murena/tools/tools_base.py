@@ -221,7 +221,7 @@ class Tool(Component):
 
     def _limit_length(self, result: str, max_answer_chars: int) -> str:
         if max_answer_chars == -1:
-            max_answer_chars = self.agent.serena_config.default_max_tool_answer_chars
+            max_answer_chars = self.agent.murena_config.default_max_tool_answer_chars
         if max_answer_chars <= 0:
             raise ValueError(f"Must be positive or the default (-1), got: {max_answer_chars=}")
         if (n_chars := len(result)) > max_answer_chars:
@@ -267,7 +267,7 @@ class Tool(Component):
                     if self.agent.get_active_project() is None:
                         return (
                             "Error: No active project. Ask the user to provide the project path or to select a project from this list of known projects: "
-                            + f"{self.agent.serena_config.project_names}"
+                            + f"{self.agent.murena_config.project_names}"
                         )
 
                 # apply the actual tool
@@ -316,7 +316,7 @@ class Tool(Component):
         # execute the tool in the agent's task executor, with timeout
         try:
             task_exec = self.agent.issue_task(task, name=self.__class__.__name__)
-            return task_exec.result(timeout=self.agent.serena_config.tool_timeout)
+            return task_exec.result(timeout=self.agent.murena_config.tool_timeout)
         except Exception as e:  # typically TimeoutError (other exceptions caught in task)
             msg = f"Error: {e.__class__.__name__} - {e}"
             log.error(msg)

@@ -320,7 +320,7 @@ class GuiLogViewer:
             self.running = False
 
     def _shutdown_server(self) -> None:
-        log.info("Shutting down Serena")
+        log.info("Shutting down Murena")
         # noinspection PyUnresolvedReferences
         # noinspection PyProtectedMember
         os._exit(0)

@@ -403,7 +403,7 @@ class MurenaDashboardAPI:
 
         # Get registered projects
         registered_projects: list[dict[str, str | bool]] = []
-        for proj in self._agent.serena_config.projects:
+        for proj in self._agent.murena_config.projects:
             registered_projects.append(
                 {
                     "name": proj.project_name,
@@ -490,14 +490,14 @@ class MurenaDashboardAPI:
             available_modes=available_modes,
             available_contexts=available_contexts,
             available_memories=available_memories,
-            jetbrains_mode=self._agent.serena_config.language_backend == LanguageBackend.JETBRAINS,
+            jetbrains_mode=self._agent.murena_config.language_backend == LanguageBackend.JETBRAINS,
             languages=languages,
             encoding=encoding,
             current_client=Tool.get_last_tool_call_client_str(),
         )
 
     def _shutdown(self) -> None:
-        log.info("Shutting down Serena")
+        log.info("Shutting down Murena")
         if self._shutdown_callback:
             self._shutdown_callback()
         else:
@@ -555,7 +555,7 @@ class MurenaDashboardAPI:
         self._agent.execute_task(run, logged=True, name="DeleteMemory")
 
     def _get_murena_config(self) -> ResponseGetMurenaConfig:
-        config_path = self._agent.serena_config.config_file_path
+        config_path = self._agent.murena_config.config_file_path
         if config_path is None or not os.path.exists(config_path):
             raise ValueError("Murena config file not found")
 
@@ -566,7 +566,7 @@ class MurenaDashboardAPI:
 
     def _save_murena_config(self, request_save_config: RequestSaveMurenaConfig) -> None:
         def run() -> None:
-            config_path = self._agent.serena_config.config_file_path
+            config_path = self._agent.murena_config.config_file_path
             if config_path is None:
                 raise ValueError("Murena config file path not set")
 
