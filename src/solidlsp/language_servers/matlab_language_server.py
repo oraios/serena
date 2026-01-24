@@ -170,7 +170,7 @@ class MatlabLanguageServer(SolidLanguageServer):
 
             Search order:
             1. Environment variable (MATLAB_EXTENSION_PATH)
-            2. Default download location (~/.serena/ls_resources/matlab-extension)
+            2. Default download location (~/.murena/ls_resources/matlab-extension)
             3. VS Code installed extensions
 
             Returns:

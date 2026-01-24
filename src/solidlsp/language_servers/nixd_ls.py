@@ -136,7 +136,7 @@ class NixLanguageServer(SolidLanguageServer):
         home = Path.home()
         possible_paths = [
             home / ".local" / "bin" / "nixd",
-            home / ".serena" / "language_servers" / "nixd" / "nixd",
+            home / ".murena" / "language_servers" / "nixd" / "nixd",
             home / ".nix-profile" / "bin" / "nixd",
             Path("/usr/local/bin/nixd"),
             Path("/run/current-system/sw/bin/nixd"),  # NixOS system profile
@@ -149,7 +149,7 @@ class NixLanguageServer(SolidLanguageServer):
             possible_paths.extend(
                 [
                     home / "AppData" / "Local" / "nixd" / "nixd.exe",
-                    home / ".serena" / "language_servers" / "nixd" / "nixd.exe",
+                    home / ".murena" / "language_servers" / "nixd" / "nixd.exe",
                 ]
             )
 

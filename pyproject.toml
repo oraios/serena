@@ -3,7 +3,7 @@ build-backend = "hatchling.build"
 requires = ["hatchling"]
 
 [project]
-name = "serena-agent"
+name = "murena-agent"
 version = "0.1.4"
 description = ""
 authors = [{ name = "Oraios AI", email = "info@oraios-ai.de" }]
@@ -45,9 +45,9 @@ publish-url = "https://test.pypi.org/legacy/"
 explicit = true
 
 [project.scripts]
-serena = "serena.cli:top_level"
-serena-mcp-server = "serena.cli:start_mcp_server"
-index-project = "serena.cli:index_project"        # deprecated
+murena = "murena.cli:top_level"
+murena-mcp-server = "murena.cli:start_mcp_server"
+index-project = "murena.cli:index_project"        # deprecated
 
 [project.license]
 text = "MIT"
@@ -79,10 +79,10 @@ agno = ["agno>=2.2.1", "sqlalchemy>=2.0.40"]
 google = ["google-genai>=1.8.0"]
 
 [project.urls]
-Homepage = "https://github.com/oraios/serena"
+Homepage = "https://github.com/oraios/murena"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/serena", "src/interprompt", "src/solidlsp"]
+packages = ["src/murena", "src/interprompt", "src/solidlsp"]
 
 [tool.black]
 line-length = 140
@@ -137,7 +137,7 @@ _black_format = "black src scripts test"
 _ruff_format = "ruff check --fix src scripts test"
 lint = ["_black_check", "_ruff_check"]
 format = ["_ruff_format", "_black_format"]
-_mypy = "mypy src/serena src/solidlsp"
+_mypy = "mypy src/murena src/solidlsp"
 type-check = ["_mypy"]
 # docs
 _autogen_rst = "python docs/autogen_rst.py"

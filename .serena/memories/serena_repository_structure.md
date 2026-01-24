@@ -1,20 +1,20 @@
-# Serena Repository Structure
+# Murena Repository Structure
 
 ## Overview
-Serena is a multi-language code assistant that combines two main components:
-1. **Serena Core** - The main agent framework with tools and MCP server
+Murena is a multi-language code assistant that combines two main components:
+1. **Murena Core** - The main agent framework with tools and MCP server
 2. **SolidLSP** - A unified Language Server Protocol wrapper for multiple programming languages
 
 ## Top-Level Structure
 
 ```
-serena/
+murena/
 ├── src/                          # Main source code
-│   ├── serena/                   # Serena agent framework
+│   ├── murena/                   # Murena agent framework
 │   ├── solidlsp/                 # LSP wrapper library  
 │   └── interprompt/              # Multi-language prompt templates
 ├── test/                         # Test suites
-│   ├── serena/                   # Serena agent tests
+│   ├── murena/                   # Murena agent tests
 │   ├── solidlsp/                 # Language server tests
 │   └── resources/repos/          # Test repositories for each language
 ├── scripts/                      # Build and utility scripts
@@ -26,8 +26,8 @@ serena/
 
 ## Source Code Organization
 
-### Serena Core (`src/serena/`)
-- **`agent.py`** - Main SerenaAgent class that orchestrates everything
+### Murena Core (`src/murena/`)
+- **`agent.py`** - Main MurenaAgent class that orchestrates everything
 - **`tools/`** - MCP tools for file operations, symbols, memory, etc.
   - `file_tools.py` - File system operations (read, write, search)
   - `symbol_tools.py` - Symbol-based code operations (find, edit)
@@ -35,7 +35,7 @@ serena/
   - `config_tools.py` - Project and mode management
   - `workflow_tools.py` - Onboarding and meta-operations
 - **`config/`** - Configuration management
-  - `serena_config.py` - Main configuration classes
+  - `murena_config.py` - Main configuration classes
   - `context_mode.py` - Context and mode definitions
 - **`util/`** - Utility modules
 - **`mcp.py`** - MCP server implementation
@@ -78,7 +78,7 @@ Contains minimal test projects for each language:
 ```
 test/resources/repos/
 ├── csharp/test_repo/
-│   ├── serena.sln
+│   ├── murena.sln
 │   ├── TestProject.csproj
 │   ├── Program.cs
 │   └── Models/Person.cs
@@ -95,7 +95,7 @@ test/resources/repos/
 ## Key Configuration Files
 
 - **`pyproject.toml`** - Python dependencies, build config, and tool settings
-- **`.serena/`** directories - Project-specific Serena configuration and memories
+- **`.murena/`** directories - Project-specific Murena configuration and memories
 - **`CLAUDE.md`** - Instructions for AI assistants working on the project
 
 ## Dependencies Management

@@ -1,15 +1,15 @@
-# Serena Core Concepts and Architecture
+# Murena Core Concepts and Architecture
 
 ## High-Level Architecture
 
-Serena is built around a dual-layer architecture:
+Murena is built around a dual-layer architecture:
 
-1. **SerenaAgent** - The main orchestrator that manages projects, tools, and user interactions
+1. **MurenaAgent** - The main orchestrator that manages projects, tools, and user interactions
 2. **SolidLanguageServer** - A unified wrapper around Language Server Protocol (LSP) implementations
 
 ## Core Components
 
-### 1. SerenaAgent (`src/serena/agent.py`)
+### 1. MurenaAgent (`src/murena/agent.py`)
 
 The central coordinator that:
 - Manages active projects and their configurations
@@ -40,7 +40,7 @@ Core capabilities:
 - Document and workspace symbol search
 - File watching and change notifications
 
-### 3. Tool System (`src/serena/tools/`)
+### 3. Tool System (`src/murena/tools/`)
 
 Modular tool architecture with several categories:
 
@@ -64,7 +64,7 @@ Modular tool architecture with several categories:
 - Mode and context management
 - Tool inclusion/exclusion
 
-### 4. Configuration System (`src/serena/config/`)
+### 4. Configuration System (`src/murena/config/`)
 
 Multi-layered configuration supporting:
 - **Contexts** - Define available tools and their behavior
@@ -111,7 +111,7 @@ Current language support includes:
 ## Memory and Knowledge Management
 
 ### Memory System
-- **Markdown-based storage** in `.serena/memories/` directory
+- **Markdown-based storage** in `.murena/memories/` directory
 - **Contextual retrieval** - memories loaded based on relevance
 - **Project-specific** knowledge persistence
 - **Onboarding support** - guided setup for new projects
@@ -124,7 +124,7 @@ Current language support includes:
 
 ## MCP Server Interface
 
-Serena exposes its functionality through Model Context Protocol:
+Murena exposes its functionality through Model Context Protocol:
 - **Tool Discovery** - AI agents can enumerate available tools
 - **Context-Aware Operations** - Tools behave based on active project/mode
 - **Stateful Sessions** - Maintains project state across interactions

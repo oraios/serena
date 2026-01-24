@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 import pytest
 from sensai.util import logging
 
-from serena.util.logging import SuspendedLoggersContext
+from murena.util.logging import SuspendedLoggersContext
 from solidlsp import SolidLanguageServer
 from solidlsp.language_servers.csharp_language_server import (
     CSharpLanguageServer,

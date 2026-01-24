@@ -1119,6 +1119,112 @@ wheels = [
 ]
 
 [[package]]
+name = "murena-agent"
+version = "0.1.4"
+source = { editable = "." }
+dependencies = [
+    { name = "anthropic" },
+    { name = "beautifulsoup4" },
+    { name = "docstring-parser" },
+    { name = "dotenv" },
+    { name = "flask" },
+    { name = "fortls" },
+    { name = "jinja2" },
+    { name = "joblib" },
+    { name = "mcp" },
+    { name = "overrides" },
+    { name = "pathspec" },
+    { name = "psutil" },
+    { name = "pydantic" },
+    { name = "pyright" },
+    { name = "python-dotenv" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "ruamel-yaml" },
+    { name = "sensai-utils" },
+    { name = "tiktoken" },
+    { name = "tqdm" },
+    { name = "types-pyyaml" },
+]
+
+[package.optional-dependencies]
+agno = [
+    { name = "agno" },
+    { name = "sqlalchemy" },
+]
+dev = [
+    { name = "black", extra = ["jupyter"] },
+    { name = "jinja2" },
+    { name = "jupyter-book" },
+    { name = "mypy" },
+    { name = "nbsphinx" },
+    { name = "poethepoet" },
+    { name = "pyinstrument" },
+    { name = "pytest" },
+    { name = "pytest-timeout" },
+    { name = "pytest-xdist" },
+    { name = "ruff" },
+    { name = "sphinx" },
+    { name = "sphinx-rtd-theme" },
+    { name = "sphinx-toolbox" },
+    { name = "syrupy" },
+    { name = "toml-sort" },
+    { name = "types-pyyaml" },
+    { name = "types-requests" },
+]
+google = [
+    { name = "google-genai" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "agno", marker = "extra == 'agno'", specifier = ">=2.2.1" },
+    { name = "anthropic", specifier = ">=0.54.0" },
+    { name = "beautifulsoup4", specifier = ">=4.14.2" },
+    { name = "black", extras = ["jupyter"], marker = "extra == 'dev'", specifier = ">=23.7.0,<26" },
+    { name = "docstring-parser", specifier = ">=0.16" },
+    { name = "dotenv", specifier = ">=0.9.9" },
+    { name = "flask", specifier = ">=3.0.0" },
+    { name = "fortls", specifier = ">=3.2.2" },
+    { name = "google-genai", marker = "extra == 'google'", specifier = ">=1.8.0" },
+    { name = "jinja2", specifier = ">=3.1.6" },
+    { name = "jinja2", marker = "extra == 'dev'" },
+    { name = "joblib", specifier = ">=1.5.1" },
+    { name = "jupyter-book", marker = "extra == 'dev'", specifier = ">=1,<2" },
+    { name = "mcp", specifier = "==1.23.0" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.16.1" },
+    { name = "nbsphinx", marker = "extra == 'dev'" },
+    { name = "overrides", specifier = ">=7.7.0,<8" },
+    { name = "pathspec", specifier = ">=0.12.1" },
+    { name = "poethepoet", marker = "extra == 'dev'", specifier = ">=0.20.0" },
+    { name = "psutil", specifier = ">=7.0.0" },
+    { name = "pydantic", specifier = ">=2.10.6" },
+    { name = "pyinstrument", marker = "extra == 'dev'" },
+    { name = "pyright", specifier = ">=1.1.396,<2" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.2" },
+    { name = "pytest-timeout", marker = "extra == 'dev'", specifier = ">=2.4.0" },
+    { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.5.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0,<2" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
+    { name = "requests", specifier = ">=2.32.3,<3" },
+    { name = "ruamel-yaml", specifier = "==0.18.14" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.0.285" },
+    { name = "sensai-utils", specifier = ">=1.5.0" },
+    { name = "sphinx", marker = "extra == 'dev'", specifier = ">=7,<8" },
+    { name = "sphinx-rtd-theme", marker = "extra == 'dev'", specifier = ">=0.5.1" },
+    { name = "sphinx-toolbox", marker = "extra == 'dev'", specifier = "==3.7.0" },
+    { name = "sqlalchemy", marker = "extra == 'agno'", specifier = ">=2.0.40" },
+    { name = "syrupy", marker = "extra == 'dev'", specifier = ">=4.9.1" },
+    { name = "tiktoken", specifier = ">=0.9.0" },
+    { name = "toml-sort", marker = "extra == 'dev'", specifier = ">=0.24.2" },
+    { name = "tqdm", specifier = ">=4.67.1" },
+    { name = "types-pyyaml", specifier = ">=6.0.12.20241230" },
+    { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12.20241230" },
+    { name = "types-requests", marker = "extra == 'dev'", specifier = ">=2.32.4.20241230" },
+]
+provides-extras = ["dev", "agno", "google"]
+
+[[package]]
 name = "mypy"
 version = "1.17.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1925,112 +2031,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/8c/dd/faa2e2de71a03af3d
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ad/d5/62a0e693230bace8e9a767d6d187a4d9421a7c6ee4b48551f8ff7bd1629a/sensai_utils-1.5.0-py3-none-any.whl", hash = "sha256:c23c51d23d353e7a9b77c70aa8ba7f2d0a8fe4e67ee5bc1ef41c69dba5e4befb", size = 68836, upload-time = "2025-07-28T22:46:08.929Z" },
 ]
-
-[[package]]
-name = "serena-agent"
-version = "0.1.4"
-source = { editable = "." }
-dependencies = [
-    { name = "anthropic" },
-    { name = "beautifulsoup4" },
-    { name = "docstring-parser" },
-    { name = "dotenv" },
-    { name = "flask" },
-    { name = "fortls" },
-    { name = "jinja2" },
-    { name = "joblib" },
-    { name = "mcp" },
-    { name = "overrides" },
-    { name = "pathspec" },
-    { name = "psutil" },
-    { name = "pydantic" },
-    { name = "pyright" },
-    { name = "python-dotenv" },
-    { name = "pyyaml" },
-    { name = "requests" },
-    { name = "ruamel-yaml" },
-    { name = "sensai-utils" },
-    { name = "tiktoken" },
-    { name = "tqdm" },
-    { name = "types-pyyaml" },
-]
-
-[package.optional-dependencies]
-agno = [
-    { name = "agno" },
-    { name = "sqlalchemy" },
-]
-dev = [
-    { name = "black", extra = ["jupyter"] },
-    { name = "jinja2" },
-    { name = "jupyter-book" },
-    { name = "mypy" },
-    { name = "nbsphinx" },
-    { name = "poethepoet" },
-    { name = "pyinstrument" },
-    { name = "pytest" },
-    { name = "pytest-timeout" },
-    { name = "pytest-xdist" },
-    { name = "ruff" },
-    { name = "sphinx" },
-    { name = "sphinx-rtd-theme" },
-    { name = "sphinx-toolbox" },
-    { name = "syrupy" },
-    { name = "toml-sort" },
-    { name = "types-pyyaml" },
-    { name = "types-requests" },
-]
-google = [
-    { name = "google-genai" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "agno", marker = "extra == 'agno'", specifier = ">=2.2.1" },
-    { name = "anthropic", specifier = ">=0.54.0" },
-    { name = "beautifulsoup4", specifier = ">=4.14.2" },
-    { name = "black", extras = ["jupyter"], marker = "extra == 'dev'", specifier = ">=23.7.0,<26" },
-    { name = "docstring-parser", specifier = ">=0.16" },
-    { name = "dotenv", specifier = ">=0.9.9" },
-    { name = "flask", specifier = ">=3.0.0" },
-    { name = "fortls", specifier = ">=3.2.2" },
-    { name = "google-genai", marker = "extra == 'google'", specifier = ">=1.8.0" },
-    { name = "jinja2", specifier = ">=3.1.6" },
-    { name = "jinja2", marker = "extra == 'dev'" },
-    { name = "joblib", specifier = ">=1.5.1" },
-    { name = "jupyter-book", marker = "extra == 'dev'", specifier = ">=1,<2" },
-    { name = "mcp", specifier = "==1.23.0" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.16.1" },
-    { name = "nbsphinx", marker = "extra == 'dev'" },
-    { name = "overrides", specifier = ">=7.7.0,<8" },
-    { name = "pathspec", specifier = ">=0.12.1" },
-    { name = "poethepoet", marker = "extra == 'dev'", specifier = ">=0.20.0" },
-    { name = "psutil", specifier = ">=7.0.0" },
-    { name = "pydantic", specifier = ">=2.10.6" },
-    { name = "pyinstrument", marker = "extra == 'dev'" },
-    { name = "pyright", specifier = ">=1.1.396,<2" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.2" },
-    { name = "pytest-timeout", marker = "extra == 'dev'", specifier = ">=2.4.0" },
-    { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.5.0" },
-    { name = "python-dotenv", specifier = ">=1.0.0,<2" },
-    { name = "pyyaml", specifier = ">=6.0.2" },
-    { name = "requests", specifier = ">=2.32.3,<3" },
-    { name = "ruamel-yaml", specifier = "==0.18.14" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.0.285" },
-    { name = "sensai-utils", specifier = ">=1.5.0" },
-    { name = "sphinx", marker = "extra == 'dev'", specifier = ">=7,<8" },
-    { name = "sphinx-rtd-theme", marker = "extra == 'dev'", specifier = ">=0.5.1" },
-    { name = "sphinx-toolbox", marker = "extra == 'dev'", specifier = "==3.7.0" },
-    { name = "sqlalchemy", marker = "extra == 'agno'", specifier = ">=2.0.40" },
-    { name = "syrupy", marker = "extra == 'dev'", specifier = ">=4.9.1" },
-    { name = "tiktoken", specifier = ">=0.9.0" },
-    { name = "toml-sort", marker = "extra == 'dev'", specifier = ">=0.24.2" },
-    { name = "tqdm", specifier = ">=4.67.1" },
-    { name = "types-pyyaml", specifier = ">=6.0.12.20241230" },
-    { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12.20241230" },
-    { name = "types-requests", marker = "extra == 'dev'", specifier = ">=2.32.4.20241230" },
-]
-provides-extras = ["dev", "agno", "google"]
 
 [[package]]
 name = "setuptools"

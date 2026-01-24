@@ -8,9 +8,9 @@
 
 #######################################################################################
 # Book settings
-title                       : Serena Documentation  # The title of the book. Will be placed in the left navbar.
+title                       : Murena Documentation  # The title of the book. Will be placed in the left navbar.
 author                      : Oraios AI & Oraios Software  # The author of the book
-copyright                   : "2025 by Serena contributors"  # Copyright year to be placed in the footer
+copyright                   : "2025 by Murena contributors"  # Copyright year to be placed in the footer
 # Patterns to skip when building the book. Can be glob-style (e.g. "*skip.ipynb")
 exclude_patterns            : ['**.ipynb_checkpoints', '.DS_Store', 'Thumbs.db', '_build', 'jupyter_execute', '.jupyter_cache', '.pytest_cache', 'docs/autogen_rst.py', 'docs/create_toc.py']
 # Auto-exclude files not in the toc
@@ -53,7 +53,7 @@ parse:
 #######################################################################################
 # HTML-specific settings
 html:
-  favicon                   : "../src/serena/resources/dashboard/serena-icon-32.png"
+  favicon                   : "../src/murena/resources/dashboard/murena-icon-32.png"
   use_edit_page_button      : false  # Whether to add an "edit this page" button to pages. If `true`, repository information in repository: must be filled in
   use_repository_button     : false  # Whether to add a link to your repository button
   use_issues_button         : false  # Whether to add an "open an issue" button
@@ -61,7 +61,7 @@ html:
   use_darkmode_button       : false
   extra_footer              : ""
   home_page_in_navbar       : true  # Whether to include your home page in the left Navigation Bar
-  baseurl                   : "https://oraios.github.io/serena/"
+  baseurl                   : "https://oraios.github.io/murena/"
   comments:
     hypothesis              : false
     utterances              : false
@@ -87,7 +87,7 @@ launch_buttons:
   colab_url                 : "https://colab.research.google.com"
 
 repository:
-  url                       : https://github.com/oraios/serena  # The URL to your book's repository
+  url                       : https://github.com/oraios/murena  # The URL to your book's repository
   path_to_book              : docs  # A path to your book's folder, relative to the repository root.
   branch                    : main  # Which branch of the repository should be used when creating links
 
@@ -105,8 +105,8 @@ sphinx:
     master_doc: "01-about/000_intro.md"
     html_theme_options:
       logo:
-        image_light: ../resources/serena-logo.svg
-        image_dark: ../resources/serena-logo-dark-mode.svg
+        image_light: ../resources/murena-logo.svg
+        image_dark: ../resources/murena-logo-dark-mode.svg
     autodoc_typehints_format: "short"
     autodoc_member_order: "bysource"
     autoclass_content: "both"
@@ -115,7 +115,7 @@ sphinx:
     autodoc_show_sourcelink: True
     add_module_names: False
     github_username: oraios
-    github_repository: serena
+    github_repository: murena
     nb_execution_mode: "off"
     nb_merge_streams: True  # This is important for cell outputs to appear as single blocks rather than one block per line
     python_use_unqualified_type_names: True

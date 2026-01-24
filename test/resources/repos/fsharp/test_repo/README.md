@@ -1,6 +1,6 @@
 # F# Test Project
 
-This is a test F# project for testing Serena's F# language support.
+This is a test F# project for testing Murena's F# language support.
 
 ## Project Structure
 

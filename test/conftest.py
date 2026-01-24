@@ -8,10 +8,10 @@ from typing import Any
 import pytest
 from sensai.util.logging import configure
 
-from serena.config.serena_config import SerenaPaths
-from serena.constants import SERENA_MANAGED_DIR_NAME
-from serena.project import Project
-from serena.util.file_system import GitignoreParser
+from murena.config.murena_config import MurenaPaths
+from murena.constants import MURENA_MANAGED_DIR_NAME
+from murena.project import Project
+from murena.util.file_system import GitignoreParser
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
@@ -53,13 +53,13 @@ def _create_ls(
     for spec in gitignore_parser.get_ignore_specs():
         ignored_paths.extend(spec.patterns)
     config = LanguageServerConfig(code_language=language, ignored_paths=ignored_paths, trace_lsp_communication=trace_lsp_communication)
-    effective_solidlsp_dir = solidlsp_dir if solidlsp_dir is not None else SerenaPaths().serena_user_home_dir
+    effective_solidlsp_dir = solidlsp_dir if solidlsp_dir is not None else MurenaPaths().serena_user_home_dir
     return SolidLanguageServer.create(
         config,
         repo_path,
         solidlsp_settings=SolidLSPSettings(
             solidlsp_dir=effective_solidlsp_dir,
-            project_data_relative_path=SERENA_MANAGED_DIR_NAME,
+            project_data_relative_path=MURENA_MANAGED_DIR_NAME,
             ls_specific_settings=ls_specific_settings or {},
         ),
     )

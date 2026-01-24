@@ -47,7 +47,7 @@ jobs:
       - name: Ensure cached directory exist before calling cache-related actions
         shell: bash
         run: |
-          mkdir -p $HOME/.serena/language_servers/static
+          mkdir -p $HOME/.murena/language_servers/static
           mkdir -p $HOME/.cache/go-build
           mkdir -p $HOME/go/bin
       - name: Install uv
@@ -254,7 +254,7 @@ jobs:
         shell: bash
         run: |
           LUA_LS_VERSION="3.15.0"
-          LUA_LS_DIR="$HOME/.serena/language_servers/lua"
+          LUA_LS_DIR="$HOME/.murena/language_servers/lua"
           mkdir -p "$LUA_LS_DIR"
           
           if [[ "${{ runner.os }}" == "Linux" ]]; then
@@ -268,7 +268,7 @@ jobs:
             chmod +x "$LUA_LS_DIR/bin/lua-language-server"
             # Create wrapper script instead of symlink to ensure supporting files are found
             echo '#!/bin/bash' | sudo tee /usr/local/bin/lua-language-server > /dev/null
-            echo 'cd "${HOME}/.serena/language_servers/lua/bin"' | sudo tee -a /usr/local/bin/lua-language-server > /dev/null
+            echo 'cd "${HOME}/.murena/language_servers/lua/bin"' | sudo tee -a /usr/local/bin/lua-language-server > /dev/null
             echo 'exec ./lua-language-server "$@"' | sudo tee -a /usr/local/bin/lua-language-server > /dev/null
             sudo chmod +x /usr/local/bin/lua-language-server
             rm lua-language-server-*.tar.gz
@@ -283,7 +283,7 @@ jobs:
             chmod +x "$LUA_LS_DIR/bin/lua-language-server"
             # Create wrapper script instead of symlink to ensure supporting files are found
             echo '#!/bin/bash' | sudo tee /usr/local/bin/lua-language-server > /dev/null
-            echo 'cd "${HOME}/.serena/language_servers/lua/bin"' | sudo tee -a /usr/local/bin/lua-language-server > /dev/null
+            echo 'cd "${HOME}/.murena/language_servers/lua/bin"' | sudo tee -a /usr/local/bin/lua-language-server > /dev/null
             echo 'exec ./lua-language-server "$@"' | sudo tee -a /usr/local/bin/lua-language-server > /dev/null
             sudo chmod +x /usr/local/bin/lua-language-server
             rm lua-language-server-*.tar.gz
@@ -477,7 +477,7 @@ jobs:
         id: cache-language-servers
         uses: actions/cache@v3
         with:
-          path: ~/.serena/language_servers/static
+          path: ~/.murena/language_servers/static
           key: language-servers-${{ runner.os }}-v1
           restore-keys: |
             language-servers-${{ runner.os }}-

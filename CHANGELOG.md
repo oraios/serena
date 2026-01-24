@@ -12,22 +12,22 @@ Status of the `main` branch. Changes prior to the next official version change w
         * Name paths of overloaded symbols now include an index (e.g., `myOverloadedFunction[2]`)
         * Responses of the Java language server, which handled this in its own way, are now adapted accordingly,
           solving several issues related to retrieval problems in Java projects
-    * Major extensions to the dashboard, which now serves as a central web interface for Serena
+    * Major extensions to the dashboard, which now serves as a central web interface for Murena
         * View current configuration
         * View news which can be marked as read
         * View the executions, with the possibility to cancel running/scheduled executions 
         * View tool usage statistics
-        * View and create memories and edit the serena configuration file
+        * View and create memories and edit the murena configuration file
     * New two-tier caching of language server document symbols and considerable performance improvements surrounding symbol retrieval/indexing
     * Various fixes related to indexing, special paths and determination of ignored paths
     * Decreased `TOOL_DEFAULT_MAX_ANSWER_LENGTH` to be in accordance with (below) typical max-tokens configurations
-    * Allow passing language server specific settings through `ls_specific_settings` field (in `serena_config.yml`)
+    * Allow passing language server specific settings through `ls_specific_settings` field (in `murena_config.yml`)
     * Add notion of a "single-project context" (flag `single_project`), allowing user-defined contexts to behave 
       like the built-in `ide-assistant` context (where the available tools are restricted to ones required by the active 
       project and project changes are disabled)
 
 * Client support:
-    * New mode `oaicompat-agent` and extensions enhancing OpenAI tool compatibility, permitting Serena to work with llama.cpp
+    * New mode `oaicompat-agent` and extensions enhancing OpenAI tool compatibility, permitting Murena to work with llama.cpp
 
 * Tools:
   * *New tool*: `jet_brains_type_hierarchy`
@@ -39,10 +39,10 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Language support:
 
   * **Add support for Fortran** via fortls language server (requires `pip install fortls`)
-  * **Add partial support for Groovy** requires user-provided Groovy language server JAR (see [setup guide](docs/03-special-guides/groovy_setup_guide_for_serena.md))
+  * **Add partial support for Groovy** requires user-provided Groovy language server JAR (see [setup guide](docs/03-special-guides/groovy_setup_guide_for_murena.md))
   * **Add support for Julia** via LanguageServer.jl
   * **Add support for Haskell** via Haskell Language Server (HLS) with automatic discovery via ghcup, stack, or system PATH; supports both Stack and Cabal projects
-  * **Add support for Scala** via Metals language server (requires some [manual setup](docs/03-special-guides/scala_setup_guide_for_serena.md))
+  * **Add support for Scala** via Metals language server (requires some [manual setup](docs/03-special-guides/scala_setup_guide_for_murena.md))
   * **Add support for F#** via FsAutoComplete/Ionide LSP server. 
   * **Add support for Elm** via @elm-tooling/elm-language-server (automatically downloads if not installed; requires Elm compiler)
   * **Add support for Perl** via Perl::LanguageServer with LSP integration for .pl, .pm, and .t files
@@ -54,7 +54,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   * **Add experimental support for YAML** via yaml-language-server with LSP integration for .yaml and .yml files
   * **Add support for TOML** via Taplo language server with automatic binary download, validation, formatting, and schema support for .toml files
   * **Dart now officially supported**: Dart was always working, but now tests were added, and it is promoted to "officially supported"
-  * **Rust now uses already installed rustup**: The rust-analyzer is no longer bundled with Serena. Instead, it uses the rust-analyzer from your Rust toolchain managed by rustup. This ensures compatibility with your Rust version and eliminates outdated bundled binaries.
+  * **Rust now uses already installed rustup**: The rust-analyzer is no longer bundled with Murena. Instead, it uses the rust-analyzer from your Rust toolchain managed by rustup. This ensures compatibility with your Rust version and eliminates outdated bundled binaries.
   * **Kotlin now officially supported**: We now use the official Kotlin LS, tests run through and performance is good, even though the LS is in an early development stage.
   * **Add support for Erlang** experimental, may hang or be slow, uses the recently archived [erlang_ls](https://github.com/erlang-ls/erlang_ls)
   * **Ruby dual language server support**: Added ruby-lsp as the modern primary Ruby language server. Solargraph remains available as an experimental legacy option. ruby-lsp supports both .rb and .erb files, while Solargraph supports .rb files only.
@@ -68,9 +68,9 @@ Status of the `main` branch. Changes prior to the next official version change w
 ## Summary
 
 This likely is the last release before the stable version 1.0.0 which will come together with the jetbrains IDE extension.
-We release it for users who install Serena from a tag, since the last tag cannot be installed due to a breaking change in the mcp dependency (see #381).
+We release it for users who install Murena from a tag, since the last tag cannot be installed due to a breaking change in the mcp dependency (see #381).
 
-Since the last release, several new languages were supported, and the Serena CLI and configurability were significantly extended.
+Since the last release, several new languages were supported, and the Murena CLI and configurability were significantly extended.
 We thank all external contributors who made a lot of the improvements possible!
 
 * General:
@@ -111,13 +111,13 @@ Fixes:
 
 ## Summary
 
-This is the first release of Serena to pypi. Since the last release, we have greatly improved 
+This is the first release of Murena to pypi. Since the last release, we have greatly improved 
 stability and performance, as well as extended functionality, improved editing tools and included support for several new languages. 
 
 * **Reduce the use of asyncio to a minimum**, improving stability and reducing the need for workarounds
    * Switch to newly developed fully synchronous LSP library `solidlsp` (derived from `multilspy`),
      removing our fork of `multilspy` (src/multilspy)
-   * Switch from fastapi (which uses asyncio) to Flask in the Serena dashboard
+   * Switch from fastapi (which uses asyncio) to Flask in the Murena dashboard
    * The MCP server is the only asyncio-based component now, which resolves cross-component loop contamination,
      such that process isolation is no longer required.
      Neither are non-graceful shutdowns on Windows.
@@ -136,7 +136,7 @@ stability and performance, as well as extended functionality, improved editing t
 * Configuration:
    * Add option `web_dashboard_open_on_launch` (allowing the dashboard to be enabled without opening a browser window) 
    * Add options `record_tool_usage_stats` and `token_count_estimator`
-   * Serena config, modes and contexts can now be adjusted from the user's home directory.
+   * Murena config, modes and contexts can now be adjusted from the user's home directory.
    * Extended CLI to help with configuration
 * Dashboard:
   * Displaying tool usage statistics if enabled in the config
@@ -156,24 +156,24 @@ Fixes:
 # 2025-06-20
 
 * **Overhaul and major improvement of editing tools!**
-  This represents a very important change in Serena. Symbols can now be addressed by their `name_path` (including nested ones)
+  This represents a very important change in Murena. Symbols can now be addressed by their `name_path` (including nested ones)
   and we introduced a regex-based replaced tools. We tuned the prompts and tested the new editing mechanism.
   It is much more reliable, flexible, and at the same time uses fewer tokens.
   The line-replacement tools are disabled by default and deprecated, we will likely remove them soon.
 * **Better multi-project support and zero-config setup**: We significantly simplified the config setup, you no longer need to manually
   create `project.yaml` for each project. Project activation is now always available. 
   Any project can now be activated by just asking the LLM to do so and passing the path to a repo.
-* Dashboard as web app and possibility to shut down Serena from it (or the old log GUI).
-* Possibility to index your project beforehand, accelerating Serena's tools.
+* Dashboard as web app and possibility to shut down Murena from it (or the old log GUI).
+* Possibility to index your project beforehand, accelerating Murena's tools.
 * Initial prompt for project supported (has to be added manually for the moment)
 * Massive performance improvement of pattern search tool
 * Use **process isolation** to fix stability issues and deadlocks (see #170). 
-  This uses separate process for the MCP server, the Serena agent and the dashboard in order to fix asyncio-related issues.
+  This uses separate process for the MCP server, the Murena agent and the dashboard in order to fix asyncio-related issues.
 
 # 2025-05-24
 
 * Important new feature: **configurability of mode and context**, allowing better integration in a variety of clients.
-  See corresponding section in readme - Serena can now be integrated in IDE assistants in a more productive way. 
+  See corresponding section in readme - Murena can now be integrated in IDE assistants in a more productive way. 
   You can now also do things like switching to one-shot planning mode, ask to plan something (which will create a memory),
   then switch to interactive editing mode in the next conversation and work through the plan read from the memory.
 * Some improvements to prompts.
@@ -182,7 +182,7 @@ Fixes:
 
 **Significant improvement in symbol finding!**
 
-* Serena core:
+* Murena core:
     * `FindSymbolTool` now can look for symbols by specifying paths to them, not just the symbol name
 * Language Servers:
     * Fixed `gopls` initialization
@@ -191,14 +191,14 @@ Fixes:
 
 # 2025-05-19
 
-* Serena core:
+* Murena core:
     * Bugfix in `FindSymbolTool` (a bug fixed in LS)
     * Fix in `ListDirTool`: Do not ignore files with extensions not understood by the language server, only skip ignored directories
       (error introduced in previous version)
     * Merged the two overview tools (for directories and files) into a single one: `GetSymbolsOverviewTool`
     * One-click setup for Cline enabled
     * `SearchForPatternTool` can now (optionally) search in the entire project
-    * New tool `RestartLanguageServerTool` for restarting the language server (in case of other sources of editing apart from Serena)
+    * New tool `RestartLanguageServerTool` for restarting the language server (in case of other sources of editing apart from Murena)
     * Fix `CheckOnboardingPerformedTool`:
         * Tool description was incompatible with project change
         * Returned result was not as useful as it could be (now added list of memories)
@@ -214,14 +214,14 @@ Fixes:
 > **Breaking Config Changes**: make sure to set `ignore_all_files_in_gitignore`, remove `ignore_dirs`
 >  and (optionally) set `ignore_paths` in your project configs. See [updated config template](myproject.template.yml)
 
-* Serena core:
+* Murena core:
     * New tool: FindReferencingCodeSnippets
     * Adjusted prompt in CreateTextFileTool to prevent writing partial content (see [here](https://www.reddit.com/r/ClaudeAI/comments/1jpavtm/comment/mloek1x/?utm_source=share&utm_medium=web3x&utm_name=web3xcss&utm_term=1&utm_content=share_button)).
     * FindSymbolTool: allow passing a file for restricting search, not just a directory (Gemini was too dumb to pass directories)
-    * Native support for gitignore files for configuring files to be ignored by serena. See also
+    * Native support for gitignore files for configuring files to be ignored by murena. See also
       in *Language Servers* section below.
-    * **Major Feature**: Allow Serena to switch between projects (project activation)
-        * Add central Serena configuration in `serena_config.yml`, which 
+    * **Major Feature**: Allow Murena to switch between projects (project activation)
+        * Add central Murena configuration in `murena_config.yml`, which 
             * contains the list of available projects
             * allows to configure whether project activation is enabled
             * now contains the GUI logging configuration (project configurations no longer do)
@@ -237,7 +237,7 @@ Fixes:
       and were likely responsible for slowness of tools and even server crashes (presumably due to OOM errors).
 * Agno: 
     * Fix Agno reloading mechanism causing failures when initializing the sqlite memory database #8
-    * Fix Serena GUI log window not capturing logs after initialization
+    * Fix Murena GUI log window not capturing logs after initialization
 
 # 2025-04-01
 

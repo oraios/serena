@@ -19,8 +19,8 @@ from typing import Self, Union, cast
 import pathspec
 from sensai.util.pickle import getstate, load_pickle
 
-from serena.text_utils import MatchedConsecutiveLines
-from serena.util.file_system import match_path
+from murena.text_utils import MatchedConsecutiveLines
+from murena.util.file_system import match_path
 from solidlsp import ls_types
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
@@ -45,6 +45,7 @@ from solidlsp.lsp_protocol_handler.server import (
 )
 from solidlsp.settings import SolidLSPSettings
 from solidlsp.util.cache import load_cache, save_cache
+from solidlsp.util.lru_cache import LRUCache
 
 GenericDocumentSymbol = Union[LSPTypes.DocumentSymbol, LSPTypes.SymbolInformation, ls_types.UnifiedSymbolInformation]
 log = logging.getLogger(__name__)
@@ -212,7 +213,7 @@ class LanguageServerDependencyProviderSinglePath(LanguageServerDependencyProvide
     Special case of a dependency provider, where there is a single core dependency which provides
     the basis for the launch command.
 
-    The core dependency's path can be overridden by the user in LS-specific settings (SerenaConfig)
+    The core dependency's path can be overridden by the user in LS-specific settings (MurenaConfig)
     via the key "ls_path". If the user provides the key, the specified path is used directly.
     Otherwise, the provider implementation is called to get or install the core dependency.
     """
@@ -398,12 +399,18 @@ class SolidLanguageServer(ABC):
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         # * raw document symbols cache
         self._ls_specific_raw_document_symbols_cache_version = cache_version_raw_document_symbols
-        self._raw_document_symbols_cache: dict[str, tuple[str, list[DocumentSymbol] | list[SymbolInformation] | None]] = {}
+        # Use LRU cache with configurable limits (TODO: make configurable via serena_config)
+        # Default: 1000 entries, 200 MB max memory
+        self._raw_document_symbols_cache: LRUCache[str, tuple[str, list[DocumentSymbol] | list[SymbolInformation] | None]] = LRUCache(
+            max_entries=1000, max_memory_mb=200
+        )
         """maps relative file paths to a tuple of (file_content_hash, raw_root_symbols)"""
         self._raw_document_symbols_cache_is_modified: bool = False
         self._load_raw_document_symbols_cache()
         # * high-level document symbols cache
-        self._document_symbols_cache: dict[str, tuple[str, DocumentSymbols]] = {}
+        # Use LRU cache with configurable limits (TODO: make configurable via serena_config)
+        # Default: 1000 entries, 200 MB max memory
+        self._document_symbols_cache: LRUCache[str, tuple[str, DocumentSymbols]] = LRUCache(max_entries=1000, max_memory_mb=200)
         """maps relative file paths to a tuple of (file_content_hash, document_symbols)"""
         self._document_symbols_cache_is_modified: bool = False
         self._load_document_symbols_cache()
@@ -1106,7 +1113,7 @@ class SolidLanguageServer(ABC):
             )
 
             # update cache
-            self._raw_document_symbols_cache[cache_key] = (fd.content_hash, response)
+            self._raw_document_symbols_cache.put(cache_key, (fd.content_hash, response))
             self._raw_document_symbols_cache_is_modified = True
 
             return response
@@ -1231,10 +1238,34 @@ class SolidLanguageServer(ABC):
 
             # update cache
             log.debug("Updating cached document symbols for %s", relative_file_path)
-            self._document_symbols_cache[cache_key] = (file_data.content_hash, document_symbols)
+            self._document_symbols_cache.put(cache_key, (file_data.content_hash, document_symbols))
             self._document_symbols_cache_is_modified = True
 
             return document_symbols
+
+    async def request_document_symbols_async(
+        self,
+        relative_file_path: str,
+        include_body: bool = False,
+        force_recomputation: bool = False,
+    ) -> DocumentSymbols | None:
+        """
+        Async version of request_document_symbols.
+
+        Allows multiple symbol requests to execute concurrently.
+
+        Args:
+            relative_file_path: Path to the file to get symbols for
+            include_body: Whether to include symbol bodies
+            force_recomputation: Whether to bypass cache
+
+        Returns:
+            Document symbols or None if unavailable
+
+        """
+        from solidlsp.async_wrappers import run_in_executor
+
+        return await run_in_executor(self.request_document_symbols, relative_file_path, include_body, force_recomputation)
 
     def request_full_symbol_tree(self, within_relative_path: str | None = None) -> list[ls_types.UnifiedSymbolInformation]:
         """
@@ -1370,6 +1401,29 @@ class SolidLanguageServer(ABC):
         # Start from the root or the specified directory
         start_rel_path = within_relative_path or "."
         return process_directory(start_rel_path)
+
+    async def request_full_symbol_tree_async(
+        self,
+        within_relative_path: str | None = None,
+    ) -> list[UnifiedSymbolInformation]:
+        """
+        Async wrapper for request_full_symbol_tree.
+
+        Allows multiple symbol tree requests to execute concurrently.
+        Note: This is a simple wrapper around the synchronous method.
+        For true parallel file processing, the synchronous method would
+        need to be refactored to use asyncio.gather().
+
+        Args:
+            within_relative_path: Optional path to restrict the tree to
+
+        Returns:
+            List of root symbols representing the symbol tree
+
+        """
+        from solidlsp.async_wrappers import run_in_executor
+
+        return await run_in_executor(self.request_full_symbol_tree, within_relative_path)
 
     @staticmethod
     def _get_range_from_file_content(file_content: str) -> ls_types.Range:
@@ -1902,7 +1956,9 @@ class SolidLanguageServer(ABC):
 
         log.info("Saving updated raw document symbols cache to %s", cache_file)
         try:
-            save_cache(str(cache_file), self._raw_document_symbols_cache_version(), self._raw_document_symbols_cache)
+            # Export LRUCache to dict for persistence
+            cache_dict = self._raw_document_symbols_cache.to_dict()
+            save_cache(str(cache_file), self._raw_document_symbols_cache_version(), cache_dict)
             self._raw_document_symbols_cache_is_modified = False
         except Exception as e:
             log.error(
@@ -1938,7 +1994,7 @@ class SolidLanguageServer(ABC):
                             migrated_cache[new_cache_key] = (file_hash, root_symbols)
                             num_symbols_migrated += len(all_symbols)
                     log.info("Migrated %d document symbols from legacy cache", num_symbols_migrated)
-                    self._raw_document_symbols_cache = migrated_cache  # type: ignore
+                    self._raw_document_symbols_cache.load_from_dict(migrated_cache)  # type: ignore
                     self._raw_document_symbols_cache_is_modified = True
                     self._save_raw_document_symbols_cache()
                     legacy_cache_file.unlink()
@@ -1953,7 +2009,7 @@ class SolidLanguageServer(ABC):
             try:
                 saved_cache = load_cache(str(cache_file), self._raw_document_symbols_cache_version())
                 if saved_cache is not None:
-                    self._raw_document_symbols_cache = saved_cache
+                    self._raw_document_symbols_cache.load_from_dict(saved_cache)
                     log.info(f"Loaded {len(self._raw_document_symbols_cache)} entries from raw document symbols cache.")
             except Exception as e:
                 # cache can become corrupt, so just skip loading it
@@ -1972,7 +2028,9 @@ class SolidLanguageServer(ABC):
 
         log.info("Saving updated document symbols cache to %s", cache_file)
         try:
-            save_cache(str(cache_file), self._document_symbols_cache_version(), self._document_symbols_cache)
+            # Export LRUCache to dict for persistence
+            cache_dict = self._document_symbols_cache.to_dict()
+            save_cache(str(cache_file), self._document_symbols_cache_version(), cache_dict)
             self._document_symbols_cache_is_modified = False
         except Exception as e:
             log.error(
@@ -1988,7 +2046,7 @@ class SolidLanguageServer(ABC):
             try:
                 saved_cache = load_cache(str(cache_file), self._document_symbols_cache_version())
                 if saved_cache is not None:
-                    self._document_symbols_cache = saved_cache
+                    self._document_symbols_cache.load_from_dict(saved_cache)
                     log.info(f"Loaded {len(self._document_symbols_cache)} entries from document symbols cache.")
             except Exception as e:
                 # cache can become corrupt, so just skip loading it

@@ -1,10 +1,10 @@
-# Custom Agents with Serena
+# Custom Agents with Murena
 
 As a reference implementation, we provide an integration with the [Agno](https://docs.agno.com/introduction/playground) agent framework.
-Agno is a model-agnostic agent framework that allows you to turn Serena into an agent 
+Agno is a model-agnostic agent framework that allows you to turn Murena into an agent 
 (independent of the MCP technology) with a large number of underlying LLMs. While Agno has recently
 added support for MCP servers out of the box, our Agno integration predates this and is a good illustration of how
-easy it is to integrate Serena into an arbitrary agent framework.
+easy it is to integrate Murena into an arbitrary agent framework.
 
 Here's how it works:
 
@@ -20,7 +20,7 @@ Here's how it works:
    pnpm dev
    ```
 
-2. Install serena with the optional requirements:
+2. Install murena with the optional requirements:
    ```shell
    # You can also only select agno,google or agno,anthropic instead of all-extras
    uv pip install --all-extras -r pyproject.toml -e .
@@ -45,7 +45,7 @@ Here's how it works:
    the same tools as in the MCP server version.
 
 
-Here is a short demo of Serena performing a small analysis task with the newest Gemini model:
+Here is a short demo of Murena performing a small analysis task with the newest Gemini model:
 
 https://github.com/user-attachments/assets/ccfcb968-277d-4ca9-af7f-b84578858c62
 
@@ -54,14 +54,14 @@ https://github.com/user-attachments/assets/ccfcb968-277d-4ca9-af7f-b84578858c62
 not ask for the user's permission. The shell tool is particularly critical, as it can perform arbitrary code execution. 
 While we have never encountered any issues with
 this in our testing with Claude, allowing this may not be entirely safe. 
-You may choose to disable certain tools for your setup in your Serena project's
+You may choose to disable certain tools for your setup in your Murena project's
 configuration file (`.yml`).
 
 
 ## Other Agent Frameworks
 
-It should be straightforward to incorporate Serena into any
+It should be straightforward to incorporate Murena into any
 agent framework (like [pydantic-ai](https://ai.pydantic.dev/), [langgraph](https://langchain-ai.github.io/langgraph/tutorials/introduction/) or others).
-Typically, you need only to write an adapter for Serena's tools to the tool representation in the framework of your choice, 
-as was done by us for Agno with `SerenaAgnoToolkit` (see `/src/serena/agno.py`).
+Typically, you need only to write an adapter for Murena's tools to the tool representation in the framework of your choice, 
+as was done by us for Agno with `MurenaAgnoToolkit` (see `/src/murena/agno.py`).
 

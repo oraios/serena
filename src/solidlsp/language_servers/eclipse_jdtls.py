@@ -52,7 +52,7 @@ class EclipseJDTLS(SolidLanguageServer):
 
     Note: Gradle wrapper is disabled by default. Projects will use the bundled Gradle distribution.
 
-    Example configuration in ~/.serena/serena_config.yml:
+    Example configuration in ~/.murena/serena_config.yml:
     ```yaml
     ls_specific_settings:
       java:
@@ -368,7 +368,7 @@ class EclipseJDTLS(SolidLanguageServer):
             if not os.path.exists(custom_maven_settings_path):
                 error_msg = (
                     f"Provided maven settings file not found: {custom_maven_settings_path}. "
-                    f"Fix: create the file, update path in ~/.serena/serena_config.yml (ls_specific_settings -> java -> maven_user_settings), "
+                    f"Fix: create the file, update path in ~/.murena/serena_config.yml (ls_specific_settings -> java -> maven_user_settings), "
                     f"or remove the setting to use default ({default_maven_settings_path})"
                 )
                 log.error(error_msg)
@@ -390,7 +390,7 @@ class EclipseJDTLS(SolidLanguageServer):
             if not os.path.exists(custom_gradle_home):
                 error_msg = (
                     f"Gradle user home directory not found: {custom_gradle_home}. "
-                    f"Fix: create the directory, update path in ~/.serena/serena_config.yml (ls_specific_settings -> java -> gradle_user_home), "
+                    f"Fix: create the directory, update path in ~/.murena/serena_config.yml (ls_specific_settings -> java -> gradle_user_home), "
                     f"or remove the setting to use default (~/.gradle)"
                 )
                 log.error(error_msg)

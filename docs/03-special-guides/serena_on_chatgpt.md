@@ -1,7 +1,7 @@
 
-# Connecting Serena MCP Server to ChatGPT via MCPO & Cloudflare Tunnel
+# Connecting Murena MCP Server to ChatGPT via MCPO & Cloudflare Tunnel
 
-This guide explains how to expose a **locally running Serena MCP server** (powered by MCPO) to the internet using **Cloudflare Tunnel**, and how to connect it to **ChatGPT as a Custom GPT with tool access**.
+This guide explains how to expose a **locally running Murena MCP server** (powered by MCPO) to the internet using **Cloudflare Tunnel**, and how to connect it to **ChatGPT as a Custom GPT with tool access**.
 
 Once configured, ChatGPT becomes a powerful **coding agent** with direct access to your codebase, shell, and file system — so **read the security notes carefully**.
 
@@ -11,14 +11,14 @@ Once configured, ChatGPT becomes a powerful **coding agent** with direct access 
 Make sure you have [uv](https://docs.astral.sh/uv/getting-started/installation/) 
 and [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) installed.
 
-## 1. Start the Serena MCP Server via MCPO
+## 1. Start the Murena MCP Server via MCPO
 
-Run the following command to launch Serena as http server (assuming port 8000):
+Run the following command to launch Murena as http server (assuming port 8000):
 
 ```bash
 uvx mcpo --port 8000 --api-key <YOUR_SECRET_KEY> -- \
-  uvx --from git+https://github.com/oraios/serena \
-  serena start-mcp-server --context chatgpt --project $(pwd)
+  uvx --from git+https://github.com/oraios/murena \
+  murena start-mcp-server --context chatgpt --project $(pwd)
 ```
 
 - `--api-key` is required to secure the server.
@@ -28,7 +28,7 @@ You can also use other options, and you don't have to pass `--project` if you wa
 or want to activate it later. See 
 
 ```shell
-uvx --from git+https://github.com/oraios/serena serena start-mcp-server --help
+uvx --from git+https://github.com/oraios/murena murena start-mcp-server --help
 ```
 
 ---
@@ -44,7 +44,7 @@ cloudflared tunnel --url http://localhost:8000
 This will give you a **public HTTPS URL** like:
 
 ```
-https://serena-agent-tunnel.trycloudflare.com
+https://murena-agent-tunnel.trycloudflare.com
 ```
 
 Your server is now securely exposed to the internet.
@@ -71,7 +71,7 @@ ChatGPT will read the schema and create functions automatically.
 
 ## Security Warning — Read Carefully
 
-Depending on your configuration and enabled tools, Serena's MCP server may:
+Depending on your configuration and enabled tools, Murena's MCP server may:
 - Execute **arbitrary shell commands**
 - Read, write, and modify **files in your codebase**
 
@@ -81,7 +81,7 @@ This gives ChatGPT the same powers as a remote developer on your machine.
 - **NEVER expose your API key**
 - **Only expose this server when needed**, and monitor its use.
 
-In your project’s `.serena/project.yml` or global config, you can disable tools like:
+In your project’s `.murena/project.yml` or global config, you can disable tools like:
 
 ```yaml
 excluded_tools:

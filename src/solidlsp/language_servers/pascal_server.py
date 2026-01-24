@@ -32,7 +32,7 @@ Target platform overrides (use only if pp setting is not sufficient):
 - fpc_target: Override target OS (e.g., "Win32", "Win64", "Linux"). Sets FPCTARGET env var.
 - fpc_target_cpu: Override target CPU (e.g., "i386", "x86_64", "aarch64"). Sets FPCTARGETCPU.
 
-Example configuration in ~/.serena/serena_config.yml:
+Example configuration in ~/.murena/serena_config.yml:
     ls_specific_settings:
         pascal:
             pp: "D:/laz32/fpc/bin/i386-win32/fpc.exe"

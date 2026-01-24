@@ -1,10 +1,10 @@
-# Docker Setup for Serena (Experimental)
+# Docker Setup for Murena (Experimental)
 
-⚠️ **EXPERIMENTAL FEATURE**: The Docker setup for Serena is still experimental and has some limitations. Please read this entire document before using Docker with Serena.
+⚠️ **EXPERIMENTAL FEATURE**: The Docker setup for Murena is still experimental and has some limitations. Please read this entire document before using Docker with Murena.
 
 ## Overview
 
-Docker support allows you to run Serena in an isolated container environment, which provides better security isolation for the shell tool and consistent dependencies across different systems.
+Docker support allows you to run Murena in an isolated container environment, which provides better security isolation for the shell tool and consistent dependencies across different systems.
 
 ## Benefits
 
@@ -16,13 +16,13 @@ Docker support allows you to run Serena in an isolated container environment, wh
 
 ### Configuration
 
-Serena's configuration and log files are stored in the container in `/workspaces/serena/config/`.
-Any local configuration you may have for Serena will not apply; the container uses its own separate configuration.
+Murena's configuration and log files are stored in the container in `/workspaces/murena/config/`.
+Any local configuration you may have for Murena will not apply; the container uses its own separate configuration.
 
 You can mount a local configuration/data directory to persist settings across container restarts
 (which will also contain session log files).
-Simply mount your local directory to `/workspaces/serena/config` in the container.
-Initially, be sure to add a `serena_config.yml` file to the mounted directory which applies the following
+Simply mount your local directory to `/workspaces/murena/config` in the container.
+Initially, be sure to add a `murena_config.yml` file to the mounted directory which applies the following
 special settings for Docker usage:
 ```
 # Disable the GUI log window since it's not supported in Docker
@@ -53,10 +53,10 @@ The web dashboard runs on port 24282 (0x5EDA) by default. You can configure this
 
 ```bash
 # Use default ports
-docker-compose up serena
+docker-compose up murena
 
 # Use custom ports
-SERENA_DASHBOARD_PORT=8080 docker-compose up serena
+SERENA_DASHBOARD_PORT=8080 docker-compose up murena
 ```
 
 ⚠️ **Note**: If the local port is occupied, you'll need to specify a different port using the environment variable.
@@ -73,14 +73,14 @@ SERENA_DASHBOARD_PORT=8080 docker-compose up serena
 
 ### Using Docker Compose (Recommended)
 
-1. **Production mode** (for using Serena as MCP server):
+1. **Production mode** (for using Murena as MCP server):
    ```bash
-   docker-compose up serena
+   docker-compose up murena
    ```
 
 2. **Development mode** (with source code mounted):
    ```bash
-   docker-compose up serena-dev
+   docker-compose up murena-dev
    ```
 
 Note: Edit the `compose.yaml` file to customize volume mounts for your projects.
@@ -89,7 +89,7 @@ Note: Edit the `compose.yaml` file to customize volume mounts for your projects.
 
 ```bash
 # Build the image
-docker build -t serena .
+docker build -t murena .
 
 # Run with current directory mounted
 docker run -it --rm \
@@ -97,7 +97,7 @@ docker run -it --rm \
   -p 9121:9121 \
   -p 24282:24282 \
   -e SERENA_DOCKER=1 \
-  serena
+  murena
 ```
 
 ### Using Docker Compose with Merge Compose files
@@ -106,14 +106,14 @@ To use Docker Compose with merge files, you can create a `compose.override.yml` 
 
 ```yaml
 services:
-  serena:
+  murena:
     # To work with projects, you must mount them as volumes:
     volumes:
       - ./my-project:/workspace/my-project
       - /path/to/another/project:/workspace/another-project
     # Add the context for the IDE assistant option:
     command:
-      - "uv run --directory . serena-mcp-server --transport sse --port 9121 --host 0.0.0.0 --context claude-code"
+      - "uv run --directory . murena-mcp-server --transport sse --port 9121 --host 0.0.0.0 --context claude-code"
 ```
 
 See the [Docker Merge Compose files documentation](https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/) for more details on using merge files.
@@ -153,7 +153,7 @@ lsof -i :24282  # macOS/Linux
 netstat -ano | findstr :24282  # Windows
 
 # Use a different port
-SERENA_DASHBOARD_PORT=8080 docker-compose up serena
+SERENA_DASHBOARD_PORT=8080 docker-compose up murena
 ```
 
 ### Configuration Issues
@@ -161,9 +161,9 @@ SERENA_DASHBOARD_PORT=8080 docker-compose up serena
 If you need to reset Docker configuration:
 ```bash
 # Remove Docker-specific config
-rm serena_config.docker.yml
+rm murena_config.docker.yml
 
-# Serena will auto-generate a new one on next run
+# Murena will auto-generate a new one on next run
 ```
 
 ### Project Access Issues

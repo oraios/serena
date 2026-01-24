@@ -1,6 +1,6 @@
-# Contributing to Serena
+# Contributing to Murena
 
-Serena is under active development. We are just discovering what it can do and where the limitations lie.
+Murena is under active development. We are just discovering what it can do and where the limitations lie.
 
 Feel free to share your learnings by opening new issues, feature requests and extensions.
 
@@ -27,11 +27,11 @@ You can install a virtual environment with the required as follows
 
 ## Running Tools Locally
 
-The Serena tools (and in fact all Serena code) can be executed without an LLM, and also without
+The Murena tools (and in fact all Murena code) can be executed without an LLM, and also without
 any MCP specifics (though you can use the mcp inspector, if you want).
 
 An example script for running tools is provided in [scripts/demo_run_tools.py](scripts/demo_run_tools.py).
 
 ## Adding a New Supported Language
 
-See the corresponding [memory](.serena/memories/adding_new_language_support_guide.md).
+See the corresponding [memory](.murena/memories/adding_new_language_support_guide.md).

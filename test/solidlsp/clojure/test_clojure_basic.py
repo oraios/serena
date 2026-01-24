@@ -1,6 +1,6 @@
 import pytest
 
-from serena.project import Project
+from murena.project import Project
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import UnifiedSymbolInformation

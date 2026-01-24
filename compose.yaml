@@ -1,6 +1,6 @@
 services:
-  serena:
-    image: serena:latest
+  murena:
+    image: murena:latest
     # To work with projects, you must mount them into /workspace/ in the container:
     # volumes:
       # - ./my-project:/workspace/my-project
@@ -15,7 +15,7 @@ services:
     environment:
       - SERENA_DOCKER=1
     command:
-      - "uv run --directory . serena-mcp-server --transport sse --port 9121 --host 0.0.0.0"
+      - "uv run --directory . murena-mcp-server --transport sse --port 9121 --host 0.0.0.0"
       # Alternatively add further arguments, e.g. a context
-      # - "uv run --directory . serena-mcp-server --transport sse --port 9121 --host 0.0.0.0 --context ide"
+      # - "uv run --directory . murena-mcp-server --transport sse --port 9121 --host 0.0.0.0 --context ide"
 

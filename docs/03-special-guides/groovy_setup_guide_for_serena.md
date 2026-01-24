@@ -1,11 +1,11 @@
-# Groovy Setup Guide for Serena
+# Groovy Setup Guide for Murena
 
-The Groovy support in Serena is incomplete and requires the user to provide a functioning,
+The Groovy support in Murena is incomplete and requires the user to provide a functioning,
 JVM-based Groovy language server as a jar. This intermediate state allows the contributors
-of Groovy support to use Serena internally and hopefully to accelerate their open-source
+of Groovy support to use Murena internally and hopefully to accelerate their open-source
 release of a Groovy language server in the future.
 
-If you happen to have a Groovy language server JAR file, you can configure Serena to use it
+If you happen to have a Groovy language server JAR file, you can configure Murena to use it
 by following the instructions below.
 
 ---
@@ -18,7 +18,7 @@ by following the instructions below.
 ---
 ## Configuration
 
-Configure Groovy Language Server by adding settings to your `~/.serena/serena_config.yml`:
+Configure Groovy Language Server by adding settings to your `~/.murena/murena_config.yml`:
 
 ### Basic Configuration
 
@@ -45,7 +45,7 @@ ls_specific_settings:
 
 - `ls_jar_path`: Absolute path to your Groovy Language Server JAR file (required)
 - `ls_java_home_path`: Custom JAVA_HOME directory for Java installation (optional)
-    - When specified, Serena will use this Java installation instead of downloading bundled Java
+    - When specified, Murena will use this Java installation instead of downloading bundled Java
     - Java executable path is automatically determined based on platform:
         - Windows: `{ls_java_home_path}/bin/java.exe`
         - Linux/macOS: `{ls_java_home_path}/bin/java`
@@ -76,13 +76,13 @@ project-root/
 ```
 
 ---
-## Using Serena with Groovy
+## Using Murena with Groovy
 
-- Serena automatically detects Groovy files (`*.groovy`, `*.gvy`) and will start a Groovy Language Server JAR process per project when needed.
+- Murena automatically detects Groovy files (`*.groovy`, `*.gvy`) and will start a Groovy Language Server JAR process per project when needed.
 - Optimal results require that your project compiles successfully via Gradle or Maven. If compilation fails, fix build errors in your build tool first.
 
 ## Reference
 
 - **Groovy Documentation**: [https://groovy-lang.org/documentation.html](https://groovy-lang.org/documentation.html)
 - **Gradle Documentation**: [https://docs.gradle.org](https://docs.gradle.org)
-- **Serena Configuration**: [../02-usage/050_configuration.md](../02-usage/050_configuration.md)
+- **Murena Configuration**: [../02-usage/050_configuration.md](../02-usage/050_configuration.md)

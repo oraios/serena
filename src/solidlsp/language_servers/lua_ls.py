@@ -49,7 +49,7 @@ class LuaLanguageServer(SolidLanguageServer):
         home = Path.home()
         possible_paths = [
             home / ".local" / "bin" / "lua-language-server",
-            home / ".serena" / "language_servers" / "lua" / "bin" / "lua-language-server",
+            home / ".murena" / "language_servers" / "lua" / "bin" / "lua-language-server",
             Path("/usr/local/bin/lua-language-server"),
             Path("/opt/lua-language-server/bin/lua-language-server"),
         ]
@@ -59,7 +59,7 @@ class LuaLanguageServer(SolidLanguageServer):
             possible_paths.extend(
                 [
                     home / "AppData" / "Local" / "lua-language-server" / "bin" / "lua-language-server.exe",
-                    home / ".serena" / "language_servers" / "lua" / "bin" / "lua-language-server.exe",
+                    home / ".murena" / "language_servers" / "lua" / "bin" / "lua-language-server.exe",
                 ]
             )
 
@@ -102,7 +102,7 @@ class LuaLanguageServer(SolidLanguageServer):
         download_url = f"https://github.com/LuaLS/lua-language-server/releases/download/{lua_ls_version}/{download_name}"
 
         # Create installation directory
-        install_dir = Path.home() / ".serena" / "language_servers" / "lua"
+        install_dir = Path.home() / ".murena" / "language_servers" / "lua"
         install_dir.mkdir(parents=True, exist_ok=True)
 
         # Download the file

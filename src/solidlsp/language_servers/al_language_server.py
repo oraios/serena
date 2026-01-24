@@ -236,7 +236,7 @@ class ALLanguageServer(SolidLanguageServer):
 
         Search order:
         1. Environment variable (AL_EXTENSION_PATH)
-        2. Default download location (~/.serena/ls_resources/al-extension)
+        2. Default download location (~/.murena/ls_resources/al-extension)
         3. VS Code installed extensions
 
         Returns:

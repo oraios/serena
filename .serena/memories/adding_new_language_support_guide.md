@@ -1,6 +1,6 @@
-# Adding New Language Support to Serena
+# Adding New Language Support to Murena
 
-This guide explains how to add support for a new programming language to Serena.
+This guide explains how to add support for a new programming language to Murena.
 
 ## Overview
 
@@ -165,7 +165,7 @@ class Program {
 
 Testing the language server implementation is of crucial importance, and the tests will
 form the main part of the review process. Make sure that the tests are up to the standard
-of Serena to make the review go smoother.
+of Murena to make the review go smoother.
 
 General rules for tests:
 
@@ -189,7 +189,7 @@ Don't forget to add a new language marker to `pytest.ini`.
 
 ### 4.2 Integration Tests
 
-Consider adding new cases to the parametrized tests in `test_serena_agent.py` for the new language.
+Consider adding new cases to the parametrized tests in `test_murena_agent.py` for the new language.
 
 
 ### 5 Documentation

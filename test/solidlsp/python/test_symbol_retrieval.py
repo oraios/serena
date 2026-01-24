@@ -10,7 +10,7 @@ import os
 
 import pytest
 
-from serena.symbol import LanguageServerSymbol
+from murena.symbol import LanguageServerSymbol
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind

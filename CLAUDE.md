@@ -18,18 +18,18 @@ Available pytest markers for selective testing:
 - `snapshot` - for symbolic editing operation tests
 
 **Project Management:**
-- `uv run serena-mcp-server` - Start MCP server from project root
+- `uv run murena-mcp-server` - Start MCP server from project root
 - `uv run index-project` - Index project for faster tool performance
 
 **Always run format, type-check, and test before completing any task.**
 
 ## Architecture Overview
 
-Serena is a dual-layer coding agent toolkit:
+Murena is a dual-layer coding agent toolkit:
 
 ### Core Components
 
-**1. SerenaAgent (`src/serena/agent.py`)**
+**1. MurenaAgent (`src/murena/agent.py`)**
 - Central orchestrator managing projects, tools, and user interactions
 - Coordinates language servers, memory persistence, and MCP server interface
 - Manages tool registry and context/mode configurations
@@ -39,14 +39,14 @@ Serena is a dual-layer coding agent toolkit:
 - Provides language-agnostic interface for symbol operations
 - Handles caching, error recovery, and multiple language server lifecycle
 
-**3. Tool System (`src/serena/tools/`)**
+**3. Tool System (`src/murena/tools/`)**
 - **file_tools.py** - File system operations, search, regex replacements
 - **symbol_tools.py** - Language-aware symbol finding, navigation, editing
 - **memory_tools.py** - Project knowledge persistence and retrieval
 - **config_tools.py** - Project activation, mode switching
 - **workflow_tools.py** - Onboarding and meta-operations
 
-**4. Configuration System (`src/serena/config/`)**
+**4. Configuration System (`src/murena/config/`)**
 - **Contexts** - Define tool sets for different environments (desktop-app, agent, ide-assistant)
 - **Modes** - Operational patterns (planning, editing, interactive, one-shot)
 - **Projects** - Per-project settings and language server configs
@@ -61,7 +61,7 @@ Each supported language has:
 
 ### Memory & Knowledge System
 
-- **Markdown-based storage** in `.serena/memories/` directories
+- **Markdown-based storage** in `.murena/memories/` directories
 - **Project-specific knowledge** persistence across sessions
 - **Contextual retrieval** based on relevance
 - **Onboarding support** for new projects
@@ -77,7 +77,7 @@ Each supported language has:
 6. Add pytest marker to `pyproject.toml`
 
 ### Adding New Tools
-1. Inherit from `Tool` base class in `src/serena/tools/tools_base.py`
+1. Inherit from `Tool` base class in `src/murena/tools/tools_base.py`
 2. Implement required methods and parameter validation
 3. Register in appropriate tool registry
 4. Add to context/mode configurations
@@ -85,15 +85,15 @@ Each supported language has:
 ### Testing Strategy
 - Language-specific tests use pytest markers
 - Symbolic editing operations have snapshot tests
-- Integration tests in `test_serena_agent.py`
+- Integration tests in `test_murena_agent.py`
 - Test repositories provide realistic symbol structures
 
 ## Configuration Hierarchy
 
 Configuration is loaded from (in order of precedence):
-1. Command-line arguments to `serena-mcp-server`
-2. Project-specific `.serena/project.yml`
-3. User config `~/.serena/serena_config.yml`
+1. Command-line arguments to `murena-mcp-server`
+2. Project-specific `.murena/project.yml`
+3. User config `~/.murena/murena_config.yml`
 4. Active modes and contexts
 
 ## Key Implementation Notes

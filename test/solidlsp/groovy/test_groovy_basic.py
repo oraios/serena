@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from serena.constants import SERENA_MANAGED_DIR_NAME
+from murena.constants import MURENA_MANAGED_DIR_NAME
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import SymbolUtils
@@ -43,8 +43,8 @@ class TestGroovyLanguageServer:
         config = LanguageServerConfig(code_language=Language.GROOVY, ignored_paths=[], trace_lsp_communication=False)
 
         solidlsp_settings = SolidLSPSettings(
-            solidlsp_dir=str(Path.home() / ".serena"),
-            project_data_relative_path=SERENA_MANAGED_DIR_NAME,
+            solidlsp_dir=str(Path.home() / ".murena"),
+            project_data_relative_path=MURENA_MANAGED_DIR_NAME,
             ls_specific_settings={Language.GROOVY: groovy_settings},
         )
 
