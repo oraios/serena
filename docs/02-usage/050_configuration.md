@@ -215,6 +215,51 @@ Notes:
 - `GOFLAGS` (from the environment you start Serena in) may also affect the Go build context. Prefer `buildFlags` for tags.
 - Build context changes are only picked up when `gopls` starts. After changing `gopls_settings` (or relevant env vars like `GOFLAGS`), restart the Serena process (or server) that hosts the Go language server, or use your client's "Restart language server" action if it causes `gopls` to restart.
 
+#### Pascal (`pasls`)
+
+Serena uses [pasls](https://github.com/genericptr/pascal-language-server) (Pascal Language Server) for Pascal/Free Pascal support.
+
+**Language Server Installation:**
+
+1. If `pasls` is found in your system PATH, Serena uses it directly
+2. Otherwise, Serena automatically downloads a prebuilt binary from GitHub releases
+
+Supported platforms for automatic download: Linux (x64, arm64), macOS (x64, arm64), Windows (x64).
+
+**Auto-Update:**
+
+Serena automatically checks for pasls updates every 24 hours. Updates include:
+- SHA256 checksum verification before installation
+- Atomic update with rollback on failure
+- Windows file locking detection (defers update if pasls is in use)
+
+**Configuration:**
+
+Configure pasls via `ls_specific_settings.pascal` in `serena_config.yml`:
+
+| Setting          | Description                                                                 |
+| ---------------- | --------------------------------------------------------------------------- |
+| `pp`             | Path to FPC compiler driver (must be `fpc` or `fpc.exe`, not `ppc386.exe`)  |
+| `fpcdir`         | Path to FPC source directory                                                |
+| `lazarusdir`     | Path to Lazarus directory (required for LCL projects)                       |
+| `fpc_target`     | Target OS override (e.g., `Win32`, `Win64`, `Linux`)                        |
+| `fpc_target_cpu` | Target CPU override (e.g., `i386`, `x86_64`, `aarch64`)                     |
+
+Example configuration:
+
+```yaml
+ls_specific_settings:
+  pascal:
+    pp: "D:/laz32/fpc/bin/i386-win32/fpc.exe"
+    fpcdir: "D:/laz32/fpcsrc"
+    lazarusdir: "D:/laz32/lazarus"
+```
+
+Notes:
+- The `pp` setting is the most important for hover and navigation to work correctly.
+- Use the FPC compiler driver (`fpc`/`fpc.exe`), not backend compilers like `ppc386.exe`.
+- These settings are passed as environment variables to the pasls process.
+
 ### Custom Prompts
 
 All of Serena's prompts can be fully customized.

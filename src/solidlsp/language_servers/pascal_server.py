@@ -12,7 +12,26 @@ Supported platforms for binary download:
 - win-x64
 
 You can pass the following entries in ls_specific_settings["pascal"]:
-- (reserved for future use)
+
+Environment variables (recommended for CodeTools configuration):
+- pp: Path to FPC compiler driver, must be "fpc.exe" (e.g., "D:/laz32/fpc/bin/i386-win32/fpc.exe").
+  Do NOT use backend compilers like ppc386.exe or ppcx64.exe - CodeTools queries fpc.exe for
+  configuration (fpc -iV, fpc -iTO, etc.). This is the most important setting for hover/navigation.
+- fpcdir: Path to FPC source directory (e.g., "D:/laz32/fpcsrc"). Helps CodeTools locate
+  standard library sources for better navigation.
+- lazarusdir: Path to Lazarus directory (e.g., "D:/laz32/lazarus"). Required for Lazarus
+  projects using LCL and other Lazarus components.
+
+Target platform overrides (use only if pp setting is not sufficient):
+- fpc_target: Override target OS (e.g., "Win32", "Win64", "Linux"). Sets FPCTARGET env var.
+- fpc_target_cpu: Override target CPU (e.g., "i386", "x86_64", "aarch64"). Sets FPCTARGETCPU.
+
+Example configuration in ~/.serena/serena_config.yml:
+    ls_specific_settings:
+        pascal:
+            pp: "D:/laz32/fpc/bin/i386-win32/fpc.exe"
+            fpcdir: "D:/laz32/fpcsrc"
+            lazarusdir: "D:/laz32/lazarus"
 """
 
 import logging
@@ -46,10 +65,51 @@ class PascalLanguageServer(SolidLanguageServer):
         Use LanguageServer.create() instead.
         """
         pasls_executable_path = self._setup_runtime_dependencies(solidlsp_settings)
+
+        # Build environment variables for pasls
+        # These control CodeTools' configuration and target platform settings
+        proc_env: dict[str, str] = {}
+
+        # Read from ls_specific_settings["pascal"]
+        from solidlsp.ls_config import Language
+
+        pascal_settings = solidlsp_settings.get_ls_specific_settings(Language.PASCAL)
+
+        # pp: Path to FPC compiler driver (must be fpc.exe, NOT ppc386.exe/ppcx64.exe)
+        # CodeTools queries fpc.exe for configuration via "fpc -iV", "fpc -iTO", etc.
+        pp = pascal_settings.get("pp", "")
+        if pp:
+            proc_env["PP"] = pp
+            log.info(f"Setting PP={pp} from ls_specific_settings")
+
+        # fpcdir: Path to FPC source directory (e.g., "D:/laz32/fpcsrc")
+        fpcdir = pascal_settings.get("fpcdir", "")
+        if fpcdir:
+            proc_env["FPCDIR"] = fpcdir
+            log.info(f"Setting FPCDIR={fpcdir} from ls_specific_settings")
+
+        # lazarusdir: Path to Lazarus directory (e.g., "D:/laz32/lazarus")
+        lazarusdir = pascal_settings.get("lazarusdir", "")
+        if lazarusdir:
+            proc_env["LAZARUSDIR"] = lazarusdir
+            log.info(f"Setting LAZARUSDIR={lazarusdir} from ls_specific_settings")
+
+        # fpc_target: Override target OS (e.g., "Win32", "Win64", "Linux")
+        fpc_target = pascal_settings.get("fpc_target", "")
+        if fpc_target:
+            proc_env["FPCTARGET"] = fpc_target
+            log.info(f"Setting FPCTARGET={fpc_target} from ls_specific_settings")
+
+        # fpc_target_cpu: Override target CPU (e.g., "i386", "x86_64", "aarch64")
+        fpc_target_cpu = pascal_settings.get("fpc_target_cpu", "")
+        if fpc_target_cpu:
+            proc_env["FPCTARGETCPU"] = fpc_target_cpu
+            log.info(f"Setting FPCTARGETCPU={fpc_target_cpu} from ls_specific_settings")
+
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd=pasls_executable_path, cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=pasls_executable_path, cwd=repository_root_path, env=proc_env),
             "pascal",
             solidlsp_settings,
         )
