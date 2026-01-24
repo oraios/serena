@@ -288,15 +288,15 @@ class MurenaMCPFactory:
         :param port: The port to bind to
         :param modes: List of mode names or paths to mode files
         :param language_backend: the language backend to use, overriding the configuration setting.
-        :param enable_web_dashboard: Whether to enable the web dashboard. If not specified, will take the value from the serena configuration.
+        :param enable_web_dashboard: Whether to enable the web dashboard. If not specified, will take the value from the murena configuration.
         :param enable_gui_log_window: Whether to enable the GUI log window. It currently does not work on macOS, and setting this to True will be ignored then.
-            If not specified, will take the value from the serena configuration.
+            If not specified, will take the value from the murena configuration.
         :param open_web_dashboard: Whether to open the web dashboard on launch.
-            If not specified, will take the value from the serena configuration.
-        :param log_level: Log level. If not specified, will take the value from the serena configuration.
+            If not specified, will take the value from the murena configuration.
+        :param log_level: Log level. If not specified, will take the value from the murena configuration.
         :param trace_lsp_communication: Whether to trace the communication between Serena and the language servers.
             This is useful for debugging language server issues.
-        :param tool_timeout: Timeout in seconds for tool execution. If not specified, will take the value from the serena configuration.
+        :param tool_timeout: Timeout in seconds for tool execution. If not specified, will take the value from the murena configuration.
         """
         try:
             config = self._create_default_serena_config()

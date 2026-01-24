@@ -106,7 +106,7 @@ class MurenaAgentMode(ToolInclusionDefinition, ToStringMixin):
 
     @classmethod
     def list_registered_mode_names(cls, include_user_modes: bool = True) -> list[str]:
-        """Names of all registered modes (from the corresponding YAML files in the serena repo)."""
+        """Names of all registered modes (from the corresponding YAML files in the murena repo)."""
         modes = [f.stem for f in Path(MURENAS_OWN_MODE_YAMLS_DIR).glob("*.yml") if f.name != "mode.template.yml"]
         if include_user_modes:
             modes += cls.list_custom_mode_names()
@@ -247,7 +247,7 @@ class MurenaAgentContext(ToolInclusionDefinition, ToStringMixin):
 
     @classmethod
     def list_registered_context_names(cls, include_user_contexts: bool = True) -> list[str]:
-        """Names of all registered contexts (from the corresponding YAML files in the serena repo)."""
+        """Names of all registered contexts (from the corresponding YAML files in the murena repo)."""
         contexts = [f.stem for f in Path(MURENAS_OWN_CONTEXT_YAMLS_DIR).glob("*.yml")]
         if include_user_contexts:
             contexts += cls.list_custom_context_names()

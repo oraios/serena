@@ -573,7 +573,7 @@ class ProjectCommands(AutoRegisteringGroup):
                 click.echo("Indexing project...")
                 ProjectCommands._index_project(registered_project, log_level, timeout=timeout)
         except FileExistsError as e:
-            raise click.ClickException(f"Project already exists: {e}\nUse 'serena project index' to index an existing project.")
+            raise click.ClickException(f"Project already exists: {e}\nUse 'murena project index' to index an existing project.")
         except ValueError as e:
             raise click.ClickException(str(e))
 
@@ -864,7 +864,7 @@ class ToolCommands(AutoRegisteringGroup):
     def __init__(self) -> None:
         super().__init__(
             name="tools",
-            help="Commands related to Serena's tools. You can run `serena tools <command> --help` for more info on each command.",
+            help="Commands related to Murena's tools. You can run `murena tools <command> --help` for more info on each command.",
         )
 
     @staticmethod
