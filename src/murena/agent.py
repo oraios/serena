@@ -22,6 +22,7 @@ from murena.dashboard import MurenaDashboardAPI
 from murena.ls_manager import LanguageServerManager
 from murena.project import Project
 from murena.prompt_factory import MurenaPromptFactory
+from murena.symbol_cache import SessionSymbolCache
 from murena.task_executor import TaskExecutor
 from murena.tools import ActivateProjectTool, GetCurrentConfigTool, OpenDashboardTool, ReplaceContentTool, Tool, ToolMarker, ToolRegistry
 from murena.util.gui import system_has_usable_display
@@ -201,6 +202,9 @@ class MurenaAgent:
         # dashboard URL (set when dashboard is started)
         self._dashboard_url: str | None = None
 
+        # session-level symbol cache for token optimization (initialized when project is activated)
+        self._symbol_cache: "SessionSymbolCache | None" = None
+
         # adjust log level
         serena_log_level = self.murena_config.log_level
         if Logger.root.level != serena_log_level:
@@ -312,7 +316,10 @@ class MurenaAgent:
         if self.murena_config.web_dashboard:
             self._dashboard_thread, port = MurenaDashboardAPI(
                 get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats
-            ).run_in_thread(host=self.murena_config.web_dashboard_listen_address)
+            ).run_in_thread(
+                host=self.murena_config.web_dashboard_listen_address,
+                start_port=self.murena_config.web_dashboard_port,
+            )
             dashboard_host = self.murena_config.web_dashboard_listen_address
             if dashboard_host == "0.0.0.0":
                 dashboard_host = "localhost"
@@ -475,6 +482,12 @@ class MurenaAgent:
         if project is None:
             raise ValueError("No active project. Please activate a project first.")
         return project
+
+    def get_symbol_cache(self) -> "SessionSymbolCache | None":
+        """
+        :return: the session symbol cache or None if no project is active
+        """
+        return self._symbol_cache
 
     def set_modes(self, modes: list[MurenaAgentMode]) -> None:
         """
@@ -650,6 +663,11 @@ class MurenaAgent:
         log.info(f"Activating {project.project_name} at {project.project_root}")
         self._active_project = project
         self._update_active_tools()
+
+        # Initialize session symbol cache for token optimization
+        # Cache TTL: 1 hour (configurable via murena_config in future)
+        self._symbol_cache = SessionSymbolCache(project.project_root, ttl_seconds=3600)
+        log.info("Initialized symbol cache for token optimization")
 
         def init_language_server_manager() -> None:
             # start the language server

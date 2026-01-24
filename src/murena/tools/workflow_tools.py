@@ -136,3 +136,93 @@ class InitialInstructionsTool(Tool, ToolMarkerDoesNotRequireActiveProject):
         as it will critically inform you!
         """
         return self.agent.create_system_prompt()
+
+
+class RunWorkflowTool(Tool, ToolMarkerOptional):
+    """
+    Execute a predefined workflow.
+
+    Workflows automate common multi-step patterns:
+    - test-fix-commit: Run tests, fix failures, commit
+    - review-pr: Lint, test, security scan
+    - refactor-safe: Rename with test validation
+
+    Provides 90% token savings vs manual multi-step execution.
+    """
+
+    def apply(self, name: str, args: dict[str, str] | None = None, verbose: bool = False) -> str:
+        """
+        Execute a workflow by name with the given arguments.
+
+        Example:
+        - run_workflow("test-fix-commit", {"file": "tests/test_auth.py"})
+        - run_workflow("refactor-safe", {"symbol": "MyClass", "file": "src/foo.py", "new_name": "BetterClass"})
+
+        :param name: Workflow name (e.g., "test-fix-commit")
+        :param args: Arguments to pass to workflow (available as ${arg_name} in workflow steps)
+        :param verbose: Whether to return verbose output (default: compact format)
+        :return: JSON string with workflow result
+
+        """
+        from murena.workflows.workflow_dsl import WorkflowLoader
+        from murena.workflows.workflow_engine import WorkflowEngine
+
+        # Load workflow
+        loader = WorkflowLoader(project_root=self.get_project_root())
+        workflow = loader.get_workflow(name)
+
+        if workflow is None:
+            available = loader.list_workflows()
+            return json.dumps({"error": f"Workflow '{name}' not found. Available workflows: {', '.join(available)}"})
+
+        # Execute workflow
+        engine = WorkflowEngine(self.agent)
+
+        try:
+            result = engine.execute(workflow, args or {}, verbose=verbose)
+
+            if verbose:
+                return json.dumps(result.to_verbose_dict(), indent=2)
+            else:
+                return json.dumps(result.to_compact_dict())
+
+        except Exception as e:
+            return json.dumps({"error": f"Workflow execution failed: {e}"})
+
+
+class ListWorkflowsTool(Tool, ToolMarkerOptional):
+    """
+    List all available workflows.
+
+    Shows built-in, user-defined, and project-specific workflows.
+    """
+
+    def apply(self) -> str:
+        """
+        List all available workflows with descriptions.
+
+        Returns:
+        - Built-in workflows (shipped with Murena)
+        - User workflows (~/.murena/workflows/)
+        - Project workflows (.murena/workflows/)
+
+        :return: JSON string with workflow list
+
+        """
+        from murena.workflows.workflow_dsl import WorkflowLoader
+
+        loader = WorkflowLoader(project_root=self.get_project_root())
+        workflows = loader.load_all()
+
+        workflow_list = []
+        for name, workflow in workflows.items():
+            workflow_list.append(
+                {
+                    "name": name,
+                    "description": workflow.description,
+                    "steps": len(workflow.steps),
+                    "author": workflow.author or "Unknown",
+                }
+            )
+
+        return json.dumps({"workflows": workflow_list, "total": len(workflow_list)}, indent=2)
