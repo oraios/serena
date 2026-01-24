@@ -318,7 +318,7 @@ class MurenaAgent:
                 dashboard_host = "localhost"
             dashboard_url = f"http://{dashboard_host}:{port}/dashboard/index.html"
             self._dashboard_url = dashboard_url
-            log.info("Serena web dashboard started at %s", dashboard_url)
+            log.info("Murena web dashboard started at %s", dashboard_url)
             if self.murena_config.web_dashboard_open_on_launch:
                 self.open_dashboard()
             # inform the GUI window (if any)
@@ -420,7 +420,7 @@ class MurenaAgent:
 
     def open_dashboard(self) -> bool:
         """
-        Opens the Serena web dashboard in the default web browser.
+        Opens the Murena web dashboard in the default web browser.
 
         :return: a message indicating success or failure
         """
@@ -428,7 +428,7 @@ class MurenaAgent:
             raise Exception("Dashboard is not running.")
 
         if not system_has_usable_display():
-            log.warning("Not opening the Serena web dashboard because no usable display was detected.")
+            log.warning("Not opening the Murena web dashboard because no usable display was detected.")
             return False
 
         # Use a subprocess to avoid any output from webbrowser.open being written to stdout
