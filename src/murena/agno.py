@@ -129,7 +129,7 @@ class MurenaAgnoAgentProvider:
                 description="A fully-featured coding assistant",
                 tools=[MurenaAgnoToolkit(serena_agent)],
                 # Tool calls will be shown in the UI since that's configurable per tool
-                # To see detailed logs, you should use the serena logger (configure it in the project file path)
+                # To see detailed logs, you should use the murena logger (configure it in the project file path)
                 markdown=True,
                 system_message=serena_agent.create_system_prompt(),
                 telemetry=False,

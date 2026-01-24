@@ -189,7 +189,7 @@ class MurenaAgent:
         :param memory_log_handler: a MemoryLogHandler instance from which to read log messages; if None, a new one will be created
             if necessary.
         """
-        # obtain serena configuration using the decoupled factory function
+        # obtain murena configuration using the decoupled factory function
         self.serena_config = serena_config or MurenaConfig.from_config_file()
 
         # propagate configuration to other components
