@@ -60,6 +60,7 @@ out/
 
 # Project specific ignore
 .idea
+.murena
 temp
 
 # Byte-compiled / optimized / DLL files
