@@ -375,9 +375,15 @@ jobs:
             sudo apt-get install -y fpc fpc-source
             # Set environment variables for pasls
             echo "PP=/usr/bin/fpc" >> $GITHUB_ENV
-            # Find FPC source directory (version may vary)
-            FPCDIR=$(ls -d /usr/share/fpcsrc/*/ 2>/dev/null | head -1 || echo "/usr/share/fpcsrc")
+            # Find FPC source directory (version may vary) - remove trailing slash
+            FPCDIR=$(ls -d /usr/share/fpcsrc/*/ 2>/dev/null | head -1 | sed 's:/$::')
+            if [[ -z "$FPCDIR" ]]; then
+              FPCDIR="/usr/share/fpcsrc"
+            fi
             echo "FPCDIR=$FPCDIR" >> $GITHUB_ENV
+            echo "=== FPC source directory structure ==="
+            ls -la "$FPCDIR" || echo "FPCDIR not found"
+            ls -la "$FPCDIR/rtl" 2>/dev/null || echo "rtl subdirectory not found"
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
             brew install fpc
             # Download FPC source from SourceForge (fpc-src-laz cask is incompatible with ARM64)
@@ -386,9 +392,21 @@ jobs:
             mkdir -p "$HOME/fpcsrc"
             tar -xzf fpc-source.tar.gz -C "$HOME/fpcsrc"
             rm fpc-source.tar.gz
-            # Set environment variables for pasls
+            # Check extracted directory structure (might be nested)
+            echo "=== Extracted FPC source structure ==="
+            ls -la "$HOME/fpcsrc"
+            # Find the actual FPC source root (contains rtl, packages, etc.)
+            if [[ -d "$HOME/fpcsrc/fpc-${FPC_VERSION}/rtl" ]]; then
+              FPCDIR="$HOME/fpcsrc/fpc-${FPC_VERSION}"
+            elif [[ -d "$HOME/fpcsrc/fpc-${FPC_VERSION}/fpc-${FPC_VERSION}/rtl" ]]; then
+              FPCDIR="$HOME/fpcsrc/fpc-${FPC_VERSION}/fpc-${FPC_VERSION}"
+            else
+              FPCDIR="$HOME/fpcsrc/fpc-${FPC_VERSION}"
+            fi
             echo "PP=$(which fpc)" >> $GITHUB_ENV
-            echo "FPCDIR=$HOME/fpcsrc/fpc-${FPC_VERSION}" >> $GITHUB_ENV
+            echo "FPCDIR=$FPCDIR" >> $GITHUB_ENV
+            echo "=== FPC source directory ==="
+            ls -la "$FPCDIR" || echo "FPCDIR not found"
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
             FPC_VERSION="3.2.2"
             # Download freepascal-ootb (includes FPC compiler)
@@ -417,9 +435,44 @@ jobs:
       - name: Verify FPC installation
         shell: bash
         run: |
+          echo "=== Environment variables ==="
           echo "PP=$PP"
           echo "FPCDIR=$FPCDIR"
-          fpc -v || echo "FPC not in PATH, using PP directly"
+
+          # Create a simple test program
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            TEST_PAS="$TEMP/fpc_test.pas"
+            TEST_OUT="$TEMP/fpc_test"
+          else
+            TEST_PAS="/tmp/fpc_test.pas"
+            TEST_OUT="/tmp/fpc_test"
+          fi
+          echo "program fpc_test; begin writeln('FPC works'); end." > "$TEST_PAS"
+
+          # Compile using PP (the compiler we actually use in tests)
+          echo "=== Compiling test program with PP=$PP ==="
+          if [[ -n "$PP" ]]; then
+            "$PP" "$TEST_PAS" -o"$TEST_OUT" 2>&1
+          else
+            echo "ERROR: PP environment variable is not set"
+            exit 1
+          fi
+
+          # Verify output binary exists
+          if [[ -f "$TEST_OUT" ]] || [[ -f "${TEST_OUT}.exe" ]]; then
+            echo "FPC compilation test PASSED"
+          else
+            echo "ERROR: FPC compilation failed - no output binary at $TEST_OUT"
+            exit 1
+          fi
+
+          # Verify FPCDIR exists (required for pasls)
+          if [[ -d "$FPCDIR" ]]; then
+            echo "FPCDIR exists: $FPCDIR"
+          else
+            echo "ERROR: FPCDIR does not exist: $FPCDIR"
+            exit 1
+          fi
       - name: Cache language servers
         id: cache-language-servers
         uses: actions/cache@v3
