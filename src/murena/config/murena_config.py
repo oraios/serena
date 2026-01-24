@@ -489,7 +489,7 @@ class MurenaConfig(ToolInclusionDefinition, ToStringMixin):
     # *** static members ***
 
     CONFIG_FILE = "murena_config.yml"
-    CONFIG_FIELDS_WITH_TYPE_CONVERSION = {"projects", "language_backend"}
+    CONFIG_FIELDS_WITH_TYPE_CONVERSION = {"projects", "language_backend", "cache"}
 
     # *** methods ***
 
@@ -607,6 +607,11 @@ class MurenaConfig(ToolInclusionDefinition, ToStringMixin):
                     language_backend = LanguageBackend.JETBRAINS
                 del loaded_commented_yaml["jetbrains"]
         instance.language_backend = language_backend
+
+        # load cache config if present
+        if "cache" in loaded_commented_yaml:
+            cache_dict = loaded_commented_yaml["cache"]
+            instance.cache = CacheConfig(**cache_dict)
 
         # migrate deprecated "gui_log_level" field if necessary
         if "gui_log_level" in loaded_commented_yaml:
@@ -761,6 +766,9 @@ class MurenaConfig(ToolInclusionDefinition, ToStringMixin):
 
         # convert language backend to string
         commented_yaml["language_backend"] = self.language_backend.value
+
+        # convert cache config to dict
+        commented_yaml["cache"] = dataclasses.asdict(self.cache)
 
         save_yaml(self.config_file_path, commented_yaml, preserve_comments=True)
 
