@@ -21,44 +21,91 @@ log = logging.getLogger(__name__)
 
 
 class MemoriesManager:
-    def __init__(self, project_root: str):
+    def __init__(self, project_root: str, additional_folders: list[str] | None = None):
+        self._project_root = Path(project_root)
         self._memory_dir = Path(get_serena_managed_in_project_dir(project_root)) / "memories"
         self._memory_dir.mkdir(parents=True, exist_ok=True)
         self._encoding = SERENA_FILE_ENCODING
+        self._additional_folders = self._resolve_additional_folders(additional_folders or [])
 
-    def get_memory_file_path(self, name: str) -> Path:
-        # strip all .md from the name. Models tend to get confused, sometimes passing the .md extension and sometimes not.
+    def _resolve_additional_folders(self, folders: list[str]) -> list[Path]:
+        resolved = []
+        for folder in folders:
+            path = Path(folder) if Path(folder).is_absolute() else (self._project_root / folder).resolve()
+            if path.exists() and path.is_dir():
+                resolved.append(path)
+            else:
+                log.warning(f"Additional memory folder not found: {path}")
+        return resolved
+
+    def _find_memory(self, name: str) -> Path | None:
+        # strip all.md from the name. Models tend to get confused, sometimes passing the .md extension and sometimes not.
         name = name.replace(".md", "")
         filename = f"{name}.md"
-        return self._memory_dir / filename
+        primary_path = self._memory_dir / filename
+        if primary_path.exists():
+            return primary_path
+        for folder in self._additional_folders:
+            path = folder / filename
+            if path.exists():
+                return path
+        return None
+
+    def get_memory_file_path(self, name: str) -> Path:
+        # strip .md from the name. Models tend to get confused, sometimes passing the .md extension and sometimes not.
+        name = name.replace(".md", "")
+        return self._memory_dir / f"{name}.md"
 
     def load_memory(self, name: str) -> str:
-        memory_file_path = self.get_memory_file_path(name)
-        if not memory_file_path.exists():
+        memory_file_path = self._find_memory(name)
+        if memory_file_path is None:
             return f"Memory file {name} not found, consider creating it with the `write_memory` tool if you need it."
         with open(memory_file_path, encoding=self._encoding) as f:
             return f.read()
 
     def save_memory(self, name: str, content: str) -> str:
-        memory_file_path = self.get_memory_file_path(name)
+        memory_file_path = self._find_memory(name) or self.get_memory_file_path(name)
         with open(memory_file_path, "w", encoding=self._encoding) as f:
             f.write(content)
         return f"Memory {name} written."
 
     def list_memories(self) -> list[str]:
-        return [f.name.replace(".md", "") for f in self._memory_dir.iterdir() if f.is_file()]
+        seen: set[str] = set()
+        result: list[str] = []
+        if self._memory_dir.exists():
+            for f in self._memory_dir.iterdir():
+                if f.is_file() and f.suffix == ".md":
+                    seen.add(f.stem)
+                    result.append(f.stem)
+        for folder in self._additional_folders:
+            for f in folder.iterdir():
+                if f.is_file() and f.suffix == ".md" and f.stem not in seen:
+                    seen.add(f.stem)
+                    result.append(f.stem)
+        return result
 
     def delete_memory(self, name: str) -> str:
-        memory_file_path = self.get_memory_file_path(name)
+        memory_file_path = self._find_memory(name)
+        if memory_file_path is None:
+            return f"Memory {name} not found."
         memory_file_path.unlink()
         return f"Memory {name} deleted."
 
+    def set_additional_folders(self, folders: list[str] | None) -> None:
+        self._additional_folders = self._resolve_additional_folders(folders or [])
+
 
 class Project(ToStringMixin):
-    def __init__(self, project_root: str, project_config: ProjectConfig, is_newly_created: bool = False):
+    def __init__(
+        self,
+        project_root: str,
+        project_config: ProjectConfig,
+        is_newly_created: bool = False,
+        additional_memory_folders: list[str] | None = None,
+    ):
         self.project_root = project_root
         self.project_config = project_config
-        self.memories_manager = MemoriesManager(project_root)
+        self.memories_manager = MemoriesManager(project_root, additional_folders=additional_memory_folders)
         self.language_server_manager: LanguageServerManager | None = None
         self._is_newly_created = is_newly_created
 
@@ -101,6 +148,9 @@ class Project(ToStringMixin):
     @property
     def project_name(self) -> str:
         return self.project_config.project_name
+
+    def set_additional_memory_folders(self, folders: list[str] | None) -> None:
+        self.memories_manager.set_additional_folders(folders)
 
     @classmethod
     def load(cls, project_root: str | Path, autogenerate: bool = True) -> "Project":
