@@ -264,23 +264,23 @@ class MurenaDashboardAPI:
             except Exception as e:
                 return {"status": "error", "message": str(e)}
 
-        @self._app.route("/get_serena_config", methods=["GET"])
-        def get_serena_config() -> dict[str, Any]:
+        @self._app.route("/get_murena_config", methods=["GET"])
+        def get_murena_config() -> dict[str, Any]:
             try:
-                result = self._get_serena_config()
+                result = self._get_murena_config()
                 return result.model_dump()
             except Exception as e:
                 return {"status": "error", "message": str(e)}
 
-        @self._app.route("/save_serena_config", methods=["POST"])
-        def save_serena_config() -> dict[str, str]:
+        @self._app.route("/save_murena_config", methods=["POST"])
+        def save_murena_config() -> dict[str, str]:
             request_data = request.get_json()
             if not request_data:
                 return {"status": "error", "message": "No data provided"}
             request_save_config = RequestSaveMurenaConfig.model_validate(request_data)
             try:
-                self._save_serena_config(request_save_config)
-                return {"status": "success", "message": "Serena config saved successfully"}
+                self._save_murena_config(request_save_config)
+                return {"status": "success", "message": "Murena config saved successfully"}
             except Exception as e:
                 return {"status": "error", "message": str(e)}
 
@@ -554,21 +554,21 @@ class MurenaDashboardAPI:
 
         self._agent.execute_task(run, logged=True, name="DeleteMemory")
 
-    def _get_serena_config(self) -> ResponseGetMurenaConfig:
+    def _get_murena_config(self) -> ResponseGetMurenaConfig:
         config_path = self._agent.serena_config.config_file_path
         if config_path is None or not os.path.exists(config_path):
-            raise ValueError("Serena config file not found")
+            raise ValueError("Murena config file not found")
 
         with open(config_path, encoding="utf-8") as f:
             content = f.read()
 
         return ResponseGetMurenaConfig(content=content)
 
-    def _save_serena_config(self, request_save_config: RequestSaveMurenaConfig) -> None:
+    def _save_murena_config(self, request_save_config: RequestSaveMurenaConfig) -> None:
         def run() -> None:
             config_path = self._agent.serena_config.config_file_path
             if config_path is None:
-                raise ValueError("Serena config file path not set")
+                raise ValueError("Murena config file path not set")
 
             with open(config_path, "w", encoding="utf-8") as f:
                 f.write(request_save_config.content)

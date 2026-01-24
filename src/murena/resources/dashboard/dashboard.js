@@ -74,7 +74,7 @@ class BannerRotation {
 
     loadBanners(onSuccess) {
         $.ajax({
-            url: 'https://oraios-software.de/serena-banners/manifest.php',
+            url: 'https://oraios-software.de/murena-banners/manifest.php',
             type: 'GET',
             success: function (response) {
                 console.log('Banners loaded:', response);
@@ -193,8 +193,8 @@ class Dashboard {
         this.isAddingLanguage = false;
         this.waitingForConfigPollingResult = false;
         this.waitingForExecutionsPollingResult = false;
-        this.originalSerenaConfigContent = null;
-        this.serenaConfigContentDirty = false;
+        this.originalMurenaConfigContent = null;
+        this.murenaConfigContentDirty = false;
 
         // Execution tracking
         this.cancelledExecutions = [];
@@ -263,11 +263,11 @@ class Dashboard {
         this.$cancelExecutionOkBtn = $('#cancel-execution-ok-btn');
         this.$cancelExecutionCancelBtn = $('#cancel-execution-cancel-btn');
         this.$modalCloseCancelExecution = $('.modal-close-cancel-execution');
-        this.$editSerenaConfigModal = $('#edit-serena-config-modal');
-        this.$editSerenaConfigContent = $('#edit-serena-config-content');
-        this.$editSerenaConfigSaveBtn = $('#edit-serena-config-save-btn');
-        this.$editSerenaConfigCancelBtn = $('#edit-serena-config-cancel-btn');
-        this.$modalCloseEditSerenaConfig = $('.modal-close-edit-serena-config');
+        this.$editMurenaConfigModal = $('#edit-murena-config-modal');
+        this.$editMurenaConfigContent = $('#edit-murena-config-content');
+        this.$editMurenaConfigSaveBtn = $('#edit-murena-config-save-btn');
+        this.$editMurenaConfigCancelBtn = $('#edit-murena-config-cancel-btn');
+        this.$modalCloseEditMurenaConfig = $('.modal-close-edit-murena-config');
         this.$newsSection = $('#news-section');
         this.$newsDisplay = $('#news-display');
 
@@ -312,9 +312,9 @@ class Dashboard {
         this.$cancelExecutionOkBtn.click(this.confirmCancelExecutionOk.bind(this));
         this.$cancelExecutionCancelBtn.click(this.closeCancelExecutionModal.bind(this));
         this.$modalCloseCancelExecution.click(this.closeCancelExecutionModal.bind(this));
-        this.$editSerenaConfigSaveBtn.click(this.saveSerenaConfigFromModal.bind(this));
-        this.$editSerenaConfigCancelBtn.click(this.closeEditSerenaConfigModal.bind(this));
-        this.$modalCloseEditSerenaConfig.click(this.closeEditSerenaConfigModal.bind(this));
+        this.$editMurenaConfigSaveBtn.click(this.saveMurenaConfigFromModal.bind(this));
+        this.$editMurenaConfigCancelBtn.click(this.closeEditMurenaConfigModal.bind(this));
+        this.$modalCloseEditMurenaConfig.click(this.closeEditMurenaConfigModal.bind(this));
 
         // Page navigation
         $('[data-page]').click(function (e) {
@@ -361,9 +361,9 @@ class Dashboard {
             }
         });
 
-        this.$editSerenaConfigModal.click(function (e) {
+        this.$editMurenaConfigModal.click(function (e) {
             if ($(e.target).hasClass('modal')) {
-                self.closeEditSerenaConfigModal();
+                self.closeEditMurenaConfigModal();
             }
         });
 
@@ -557,7 +557,7 @@ class Dashboard {
             // Project info
             html += '<div class="config-label">Active Project:</div>';
             if (config.active_project.name && config.active_project.path) {
-                const configPath = config.active_project.path + '/.serena/project.yml';
+                const configPath = config.active_project.path + '/.murena/project.yml';
                 html += '<div class="config-value"><span title="Project configuration in ' + configPath + '">' + config.active_project.name + '</span></div>';
             } else {
                 html += '<div class="config-value">' + (config.active_project.name || 'None') + '</div>';
@@ -665,9 +665,9 @@ class Dashboard {
             html += '<div style="margin-top: 15px; display: flex; gap: 10px; align-items: center;">';
             html += '<div style="flex: 1; padding: 10px; background: var(--bg-secondary); border-radius: 4px; font-size: 13px; border: 1px solid var(--border-color);">';
             html += '<span style="color: var(--text-muted);">📖</span> ';
-            html += '<a href="https://oraios.github.io/serena/02-usage/050_configuration.html" target="_blank" rel="noopener noreferrer" style="color: var(--btn-primary); text-decoration: none; font-weight: 500;">View Configuration Guide</a>';
+            html += '<a href="https://oraios.github.io/murena/02-usage/050_configuration.html" target="_blank" rel="noopener noreferrer" style="color: var(--btn-primary); text-decoration: none; font-weight: 500;">View Configuration Guide</a>';
             html += '</div>';
-            html += '<button id="edit-serena-config-btn" class="btn language-add-btn" style="white-space: nowrap; padding: 10px; ">Edit Global Serena Config</button>';
+            html += '<button id="edit-murena-config-btn" class="btn language-add-btn" style="white-space: nowrap; padding: 10px; ">Edit Global Murena Config</button>';
             html += '</div>';
 
             this.$configDisplay.html(html);
@@ -675,8 +675,8 @@ class Dashboard {
             // Attach event handlers for the dynamically created add language button
             $('#add-language-btn').click(this.openLanguageModal.bind(this));
 
-            // Attach event handler for edit serena config button
-            $('#edit-serena-config-btn').click(this.openEditSerenaConfigModal.bind(this));
+            // Attach event handler for edit murena config button
+            $('#edit-murena-config-btn').click(this.openEditMurenaConfigModal.bind(this));
 
             // Attach event handlers for language remove buttons
             const self = this;
@@ -1109,7 +1109,7 @@ class Dashboard {
     }
 
     updateTitle(activeProject) {
-        document.title = activeProject ? `${activeProject} – Serena Dashboard` : 'Serena Dashboard';
+        document.title = activeProject ? `${activeProject} – Murena Dashboard` : 'Murena Dashboard';
     }
 
     copyLogs() {
@@ -1437,7 +1437,7 @@ class Dashboard {
 
     initializeTheme() {
         // Check if user has manually set a theme preference
-        const savedTheme = localStorage.getItem('serena-theme');
+        const savedTheme = localStorage.getItem('murena-theme');
 
         if (savedTheme) {
             // User has manually set a preference, use it
@@ -1464,7 +1464,7 @@ class Dashboard {
 
         const handleSystemThemeChange = (e) => {
             // Only auto-switch if user hasn't manually set a preference
-            const savedTheme = localStorage.getItem('serena-theme');
+            const savedTheme = localStorage.getItem('murena-theme');
             if (!savedTheme) {
                 const newTheme = e.matches ? 'dark' : 'light';
                 this.setTheme(newTheme);
@@ -1485,7 +1485,7 @@ class Dashboard {
         const newTheme = currentTheme === 'light' ? 'dark' : 'light';
 
         // When user manually toggles, save their preference
-        localStorage.setItem('serena-theme', newTheme);
+        localStorage.setItem('murena-theme', newTheme);
         this.setTheme(newTheme);
     }
 
@@ -1512,7 +1512,7 @@ class Dashboard {
         });
 
         // Save to localStorage
-        localStorage.setItem('serena-theme', theme);
+        localStorage.setItem('murena-theme', theme);
 
         // Update charts if they exist
         this.updateChartsTheme();
@@ -1983,76 +1983,76 @@ class Dashboard {
         });
     }
 
-    // ===== Serena Config Editing Methods =====
+    // ===== Murena Config Editing Methods =====
 
-    openEditSerenaConfigModal() {
+    openEditMurenaConfigModal() {
         const self = this;
-        this.serenaConfigContentDirty = false;
+        this.murenaConfigContentDirty = false;
 
-        // Load serena config content
+        // Load murena config content
         $.ajax({
-            url: '/get_serena_config', type: 'GET', success: function (response) {
+            url: '/get_murena_config', type: 'GET', success: function (response) {
                 if (response.status === 'error') {
                     alert('Error: ' + response.message);
                     return;
                 }
-                self.originalSerenaConfigContent = response.content;
-                self.$editSerenaConfigContent.val(response.content);
-                self.serenaConfigContentDirty = false;
-                self.$editSerenaConfigModal.fadeIn(200);
+                self.originalMurenaConfigContent = response.content;
+                self.$editMurenaConfigContent.val(response.content);
+                self.murenaConfigContentDirty = false;
+                self.$editMurenaConfigModal.fadeIn(200);
             }, error: function (xhr, status, error) {
-                console.error('Error loading serena config:', error);
-                alert('Error loading serena config: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
+                console.error('Error loading murena config:', error);
+                alert('Error loading murena config: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
             }
         });
 
         // Track changes to config content
-        this.$editSerenaConfigContent.off('input').on('input', function () {
-            const currentContent = self.$editSerenaConfigContent.val();
-            self.serenaConfigContentDirty = (currentContent !== self.originalSerenaConfigContent);
+        this.$editMurenaConfigContent.off('input').on('input', function () {
+            const currentContent = self.$editMurenaConfigContent.val();
+            self.murenaConfigContentDirty = (currentContent !== self.originalMurenaConfigContent);
         });
     }
 
-    closeEditSerenaConfigModal() {
+    closeEditMurenaConfigModal() {
         // Check if there are unsaved changes
-        if (this.serenaConfigContentDirty) {
+        if (this.murenaConfigContentDirty) {
             if (!confirm('You have unsaved changes. Are you sure you want to close?')) {
                 return;
             }
         }
 
-        this.$editSerenaConfigModal.fadeOut(200);
-        this.originalSerenaConfigContent = null;
-        this.serenaConfigContentDirty = false;
+        this.$editMurenaConfigModal.fadeOut(200);
+        this.originalMurenaConfigContent = null;
+        this.murenaConfigContentDirty = false;
     }
 
-    saveSerenaConfigFromModal() {
+    saveMurenaConfigFromModal() {
         const self = this;
-        const content = this.$editSerenaConfigContent.val();
+        const content = this.$editMurenaConfigContent.val();
 
         // Disable button during request
-        self.$editSerenaConfigSaveBtn.prop('disabled', true).text('Saving...');
+        self.$editMurenaConfigSaveBtn.prop('disabled', true).text('Saving...');
 
         $.ajax({
-            url: '/save_serena_config', type: 'POST', contentType: 'application/json', data: JSON.stringify({
+            url: '/save_murena_config', type: 'POST', contentType: 'application/json', data: JSON.stringify({
                 content: content
             }), success: function (response) {
                 if (response.status === 'success') {
                     // Update original content and reset dirty flag
-                    self.originalSerenaConfigContent = content;
-                    self.serenaConfigContentDirty = false;
+                    self.originalMurenaConfigContent = content;
+                    self.murenaConfigContentDirty = false;
                     // Close modal
-                    self.$editSerenaConfigModal.fadeOut(200);
-                    alert('Configuration saved successfully. Please restart Serena for changes to take effect.');
+                    self.$editMurenaConfigModal.fadeOut(200);
+                    alert('Configuration saved successfully. Please restart Murena for changes to take effect.');
                 } else {
                     alert('Error: ' + response.message);
                 }
             }, error: function (xhr, status, error) {
-                console.error('Error saving serena config:', error);
-                alert('Error saving serena config: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
+                console.error('Error saving murena config:', error);
+                alert('Error saving murena config: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
             }, complete: function () {
                 // Re-enable button
-                self.$editSerenaConfigSaveBtn.prop('disabled', false).text('Save');
+                self.$editMurenaConfigSaveBtn.prop('disabled', false).text('Save');
             }
         });
     }
@@ -2073,7 +2073,7 @@ class Dashboard {
         }
 
         // ask for confirmation using a dialog
-        if (confirm("This will fully terminate the Serena server.")) {
+        if (confirm("This will fully terminate the Murena server.")) {
             _shutdown();
         } else {
             console.log("Shutdown cancelled");

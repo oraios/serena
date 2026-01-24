@@ -4,10 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Serena Dashboard</title>
-    <link rel="icon" type="image/png" sizes="16x16" href="serena-icon-16.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="serena-icon-32.png">
-    <link rel="icon" type="image/png" sizes="48x48" href="serena-icon-48.png">
+    <title>Murena Dashboard</title>
+    <link rel="icon" type="image/png" sizes="16x16" href="murena-icon-16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="murena-icon-32.png">
+    <link rel="icon" type="image/png" sizes="48x48" href="murena-icon-48.png">
     <link rel="stylesheet" href="dashboard.css">
     <script src="jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -21,7 +21,7 @@
     <div class="header-left">
 
         <div class="logo-container">
-            <img id="serena-logo" class="theme-aware-img" src="serena-logo.svg" data-src-light="serena-logo.svg" data-src-dark="serena-logo-dark-mode.svg" alt="Serena">
+            <img id="murena-logo" class="theme-aware-img" src="murena-logo.svg" data-src-light="murena-logo.svg" data-src-dark="murena-logo-dark-mode.svg" alt="Murena">
         </div>
 
         <!-- Platinum Banners in Header -->
@@ -203,7 +203,7 @@
             <span class="modal-close">&times;</span>
             <h3>Add Language</h3>
             <p id="modal-project-info" style="margin: 15px 0; color: var(--text-primary); line-height: 1.5;">
-                Adding a language to serena config of project <strong id="modal-project-name"></strong>.
+                Adding a language to Murena config of project <strong id="modal-project-name"></strong>.
             </p>
             <p style="margin: 15px 0; color: var(--text-muted); font-size: 13px; line-height: 1.5;">
                 Note that this may download some dependencies needed for the language server and then start it,
@@ -306,7 +306,7 @@
             <span class="modal-close modal-close-cancel-execution">&times;</span>
             <p style="margin: 20px 0; color: var(--text-primary); line-height: 1.5; font-size: 15px;">
                 Are you sure? The execution will continue running until timeout, it will simply no longer be in the queue.
-                Abandoning a running execution is only advised as a measure for unblocking Serena.
+                Abandoning a running execution is only advised as a measure for unblocking Murena.
             </p>
             <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
                 <button id="cancel-execution-cancel-btn" class="btn"
@@ -317,21 +317,21 @@
         </div>
     </div>
 
-    <!-- Edit Serena Config Modal -->
-    <div id="edit-serena-config-modal" class="modal" style="display:none">
+    <!-- Edit Murena Config Modal -->
+    <div id="edit-murena-config-modal" class="modal" style="display:none">
         <div class="modal-content modal-content-large">
-            <span class="modal-close modal-close-edit-serena-config">&times;</span>
-            <h3 style="margin-bottom: 10px;">Global Serena Configuration</h3>
+            <span class="modal-close modal-close-edit-murena-config">&times;</span>
+            <h3 style="margin-bottom: 10px;">Global Murena Configuration</h3>
             <p style="margin: 10px 0 20px 0; color: var(--text-muted); font-size: 13px; line-height: 1.5;">
-                Note: Changes to the configuration will only take effect after Serena is restarted.
+                Note: Changes to the configuration will only take effect after Murena is restarted.
             </p>
-            <textarea id="edit-serena-config-content" class="memory-editor" rows="20"
+            <textarea id="edit-murena-config-content" class="memory-editor" rows="20"
                       style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-family: 'Courier New', monospace; font-size: 13px; resize: vertical;"></textarea>
             <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
-                <button id="edit-serena-config-cancel-btn" class="btn"
+                <button id="edit-murena-config-cancel-btn" class="btn"
                         style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
                 </button>
-                <button id="edit-serena-config-save-btn" class="btn" style="padding: 8px 16px;">Save</button>
+                <button id="edit-murena-config-save-btn" class="btn" style="padding: 8px 16px;">Save</button>
             </div>
         </div>
     </div>
