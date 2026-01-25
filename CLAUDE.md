@@ -113,6 +113,92 @@ Configuration is loaded from (in order of precedence):
 - Memory system enables persistent project knowledge
 - Context/mode system allows workflow customization
 
+## 📝 Markdown Documentation Optimization
+
+Murena MCP provides 70-90% token savings when working with documentation files through Marksman LSP integration.
+
+### Pattern: Two-Phase Documentation Reading
+
+**Problem:** Reading large documentation files (500+ lines) wastes 20,000+ tokens per file.
+
+**Solution:** Use symbolic operations to navigate documentation like code.
+
+```python
+# Phase 1: Get document structure (metadata only) - ~1,000 tokens
+overview = get_symbols_overview(relative_path="docs/API.md", depth=2)
+# Returns: Hierarchical list of headings
+
+# Phase 2: Load specific section - ~500-1,500 tokens
+section = find_symbol(
+    name_path_pattern="Authentication",
+    relative_path="docs/API.md",
+    include_body=True
+)
+# Returns: Only the Authentication section content
+
+# Total: ~1,500-2,500 tokens instead of 20,000+ for full file
+# Savings: 87.5-92.5%
+```
+
+### Common Use Cases
+
+**1. Find relevant documentation:**
+```python
+# Search across all markdown files
+search_for_pattern(
+    substring_pattern="authentication",
+    paths_include_glob="**/*.md",
+    context_lines_after=2
+)
+```
+
+**2. Navigate document structure:**
+```python
+# See the outline without reading content
+get_symbols_overview(relative_path="docs/user-guide.md", depth=2)
+# Returns all headings in hierarchical format
+```
+
+**3. Extract specific sections:**
+```python
+# Read only what you need
+find_symbol(
+    name_path_pattern="Installation Guide",
+    relative_path="README.md",
+    include_body=True
+)
+```
+
+### Supported Features
+
+- **Heading hierarchy** - All heading levels (# through ######) become navigable symbols
+- **Cross-file links** - Marksman tracks relationships between documents
+- **Section extraction** - Read individual sections without loading full files
+- **Auto-detection** - All .md files automatically use symbolic tools (no configuration needed)
+- **Caching** - Structure cached for fast repeated access
+
+### Token Savings Examples
+
+| Operation | Traditional Approach | Symbolic Approach | Savings |
+|-----------|---------------------|-------------------|---------|
+| Get document structure | Read (20,000 tokens) | get_symbols_overview (1,000) | 95% |
+| Find specific section | Read + grep (20,000) | find_symbol (500) | 97.5% |
+| Read one section | Read full file (20,000) | get_symbol_body (1,500) | 92.5% |
+| Repeated access | Read again (20,000) | Use cache (100) | 99.5% |
+
+**Real-world example:** For a 650-line README:
+- Traditional read: ~25,000 tokens
+- Symbolic navigation: ~2,500 tokens
+- **Savings: 90%**
+
+### Best Practices
+
+1. **Always check file size first** - Use symbolic tools for files >100 lines
+2. **Get overview before reading** - Understand structure before loading content
+3. **Use caching** - Enable session cache for repeated access to same files
+4. **Restrict search scope** - Use `relative_path` parameter to narrow searches
+5. **Progressive disclosure** - Load only the sections you need, when you need them
+
 ## 🚀 Token Optimization: Using Murena MCP Tools
 
 **CRITICAL: This project has Murena MCP server running.**
@@ -124,3 +210,153 @@ For comprehensive token optimization rules, see global CLAUDE.md. Project-specif
 3. Emergency override: Only use Read() if file < 100 lines or Murena MCP unavailable
 
 **Quick reference:** Global CLAUDE.md § TOKEN OPTIMIZATION RULES
+
+## 🔀 Multi-Project Support
+
+Murena MCP supports running multiple independent instances for working with multiple projects simultaneously.
+
+### CLI Commands
+
+**Setup and discovery:**
+```bash
+# Auto-discover and configure all projects
+murena multi-project setup-claude-code
+
+# Discover projects without configuring
+murena multi-project discover-projects
+
+# Generate MCP configurations
+murena multi-project generate-mcp-configs
+
+# Automatic discovery with MCP registration (NEW)
+murena multi-project auto-discover
+murena multi-project auto-discover --workspace-root /path/to/workspace
+murena multi-project auto-discover --max-depth 2 --auto-register
+murena multi-project auto-discover --no-auto-register  # Discover only
+```
+
+**Project management:**
+```bash
+# Add a specific project
+murena multi-project add-project /path/to/project
+
+# Remove a project
+murena multi-project remove-project project-name
+
+# List configured projects
+murena multi-project list-projects
+murena multi-project list-projects --verbose
+```
+
+### Tool Usage
+
+When multiple projects are configured, tools are namespaced by project:
+
+```python
+# serena project tools
+mcp__murena-serena__get_symbols_overview(relative_path="src/murena/agent.py")
+mcp__murena-serena__find_symbol(name_path_pattern="MurenaAgent")
+
+# spec-kit project tools
+mcp__murena-spec-kit__get_symbols_overview(relative_path="templates/commands/specify.md")
+mcp__murena-spec-kit__find_symbol(name_path_pattern="SpecKitManager")
+```
+
+### Server Naming
+
+- **Auto-naming:** Server names follow the pattern `murena-{project-directory-name}`
+- **Example:** `/Users/you/projects/serena` → `murena-serena`
+- **Backward compatible:** Old `murena` server continues to work
+
+### Architecture
+
+Each MCP server instance maintains:
+- **Isolated language servers** - No cross-project interference
+- **Independent memory** - Project-specific `.murena/memories/`
+- **Separate caches** - Symbol caches per project
+- **Memory usage:** ~150-200MB per active project
+
+### Configuration File
+
+MCP configurations are stored in `~/.claude/mcp_servers_murena.json`:
+
+```json
+{
+  "murena-serena": {
+    "command": "uvx",
+    "args": ["murena", "start-mcp-server", "--project", "/path/to/serena", "--auto-name"],
+    "env": {}
+  },
+  "murena-spec-kit": {
+    "command": "uvx",
+    "args": ["murena", "start-mcp-server", "--project", "/path/to/spec-kit", "--auto-name"],
+    "env": {}
+  }
+}
+```
+
+### Automatic Project Discovery
+
+Murena can automatically discover and register Murena projects in a workspace directory.
+
+**Features:**
+- Recursive project discovery up to specified depth (default: 3 levels)
+- Excludes common non-project directories (node_modules, venv, .git, etc.)
+- Automatic MCP server registration in Claude Code
+- Batch operations for efficient setup
+
+**Auto-Discovery Workflow:**
+
+```bash
+# Quick auto-discovery with automatic registration
+murena multi-project auto-discover
+
+# Control discovery scope
+murena multi-project auto-discover --workspace-root ~/projects --max-depth 2
+
+# Discover without registering (manual review first)
+murena multi-project auto-discover --no-auto-register
+
+# View results before committing to registration
+murena multi-project auto-discover --no-auto-register --workspace-root /path/to/workspace
+# Then review output and run:
+murena multi-project auto-discover --workspace-root /path/to/workspace
+```
+
+**What Auto-Discovery Does:**
+1. Scans workspace for `.murena/project.yml` marker files
+2. Identifies valid Murena projects by directory structure
+3. Generates MCP server configurations automatically
+4. Registers projects in `~/.claude/mcp_servers_murena.json`
+5. Provides detailed status report with success/failure counts
+
+**Output Example:**
+```
+🔍 Auto-discovering Murena projects in: /Users/you/projects
+
+✓ Found 5 project(s):
+
+  • serena
+    Path: /Users/you/projects/serena
+    Marker: /Users/you/projects/serena/.murena/project.yml
+
+  • spec-kit
+    Path: /Users/you/projects/spec-kit
+    Marker: /Users/you/projects/spec-kit/.murena/project.yml
+
+📝 Registering projects in MCP...
+
+Registration Results:
+  Total: 5
+  Registered: 5
+  Failed: 0
+
+✅ All projects registered successfully!
+
+📋 Next steps:
+  1. Restart Claude Code to load the new MCP servers
+  2. Verify servers are running in Claude Code
+  3. Start using multi-project tools!
+```
+
+**📖 Full documentation:** See [docs/multi_project_setup.md](docs/multi_project_setup.md)

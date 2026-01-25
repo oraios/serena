@@ -1296,6 +1296,83 @@ class MultiProjectCommands(AutoRegisteringGroup):
             click.echo("Use --verbose to see detailed configurations.")
 
 
+    @staticmethod
+    @click.command(
+        "auto-discover",
+        help="Automatically discover and register projects in Claude Code MCP.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.option(
+        "--workspace-root",
+        type=click.Path(exists=True, file_okay=False, dir_okay=True),
+        default=None,
+        help="Workspace root directory to search. Defaults to current directory.",
+    )
+    @click.option(
+        "--max-depth",
+        type=int,
+        default=3,
+        help="Maximum directory depth to search (default: 3)",
+    )
+    @click.option(
+        "--auto-register/--no-auto-register",
+        default=True,
+        help="Automatically register discovered projects in MCP (default: auto-register)",
+    )
+    def auto_discover(
+        workspace_root: str | None,
+        max_depth: int,
+        auto_register: bool,
+    ) -> None:
+        """Automatically discover Murena projects and optionally register them in Claude Code MCP."""
+        from murena.multi_project.auto_discovery import AutoDiscoveryManager
+
+        workspace = Path(workspace_root) if workspace_root else Path.cwd()
+
+        click.echo(f"🔍 Auto-discovering Murena projects in: {workspace}\n")
+
+        manager = AutoDiscoveryManager(workspace_root=workspace)
+        projects = manager.discover_projects(max_depth=max_depth)
+
+        if not projects:
+            click.echo(f"⚠️  No Murena projects found in {workspace}")
+            click.echo(f"   Searched up to depth {max_depth}")
+            click.echo("\nTip: Ensure projects have .murena/project.yml file marker")
+            return
+
+        click.echo(f"✓ Found {len(projects)} project(s):\n")
+        for project in projects:
+            click.echo(f"  • {project['name']}")
+            click.echo(f"    Path: {project['path']}")
+            click.echo(f"    Marker: {project['marker_file']}\n")
+
+        if not auto_register:
+            click.echo("Discovery complete. Use --auto-register to register projects in MCP.")
+            return
+
+        click.echo("📝 Registering projects in MCP...\n")
+
+        results = manager.auto_register_projects(projects)
+
+        click.echo("Registration Results:")
+        click.echo(f"  Total: {results['total']}")
+        click.echo(f"  Registered: {results['registered']}")
+        click.echo(f"  Failed: {results['failed']}\n")
+
+        for project_result in results["projects"]:
+            status_symbol = "✓" if project_result["status"] == "registered" else "✗"
+            click.echo(f"  {status_symbol} {project_result['name']}: {project_result['status']}")
+
+        if results["failed"] > 0:
+            click.echo("\n⚠️  Some projects failed to register. Check logs for details.")
+        else:
+            click.echo("\n✅ All projects registered successfully!")
+            click.echo("\n📋 Next steps:")
+            click.echo("  1. Restart Claude Code to load the new MCP servers")
+            click.echo("  2. Verify servers are running in Claude Code")
+            click.echo("  3. Start using multi-project tools!")
+
+
 class TenantCommands(AutoRegisteringGroup):
     """Commands for managing Murena MCP tenants (multi-project instances)."""
 
