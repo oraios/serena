@@ -236,6 +236,12 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                         if enable:
                             languages_to_use.append(lang.value)
                     print()
+                elif len(other_language_pairs) > 0 and not interactive:
+                    # Non-interactive mode: auto-enable top languages for lazy initialization
+                    # Enable up to 2 additional languages (3 total including top language)
+                    max_additional = 2
+                    for lang, _perc in other_language_pairs[:max_additional]:
+                        languages_to_use.append(lang.value)
                 log.info("Using languages: %s", languages_to_use)
             else:
                 languages_to_use = [lang.value for lang in languages]
@@ -506,6 +512,24 @@ class ResourceManagementConfig:
             return cls()
 
 
+@dataclass
+class LazyInitConfig:
+    """Configuration for lazy project initialization.
+    
+    Controls automatic project configuration generation when Claude Code
+    works in a directory without .murena/project.yml.
+    """
+
+    enabled: bool = True
+    """Enable lazy initialization for --project-from-cwd mode."""
+
+    max_languages_to_enable: int = 3
+    """Maximum number of languages to auto-enable (sorted by file count)."""
+
+    language_detection_timeout_seconds: int = 30
+    """Timeout for language detection (fallback to Python if exceeded)."""
+
+
 @dataclass(kw_only=True)
 class MurenaConfig(ToolInclusionDefinition, ToStringMixin):
     """
@@ -553,6 +577,9 @@ class MurenaConfig(ToolInclusionDefinition, ToStringMixin):
 
     resource_management: ResourceManagementConfig = field(default_factory=ResourceManagementConfig)
     """Resource management configuration (monitoring, rate limiting, cache limits)"""
+
+    lazy_init: LazyInitConfig = field(default_factory=LazyInitConfig)
+    """Lazy initialization settings for automatic project configuration"""
 
     memory_profile: str = "medium"
     """Memory profile preset: 'low', 'medium', or 'high'"""

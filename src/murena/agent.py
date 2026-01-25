@@ -335,11 +335,20 @@ class MurenaAgent:
         self._update_active_tools()
 
         # activate a project configuration (if provided or if there is only a single project available)
+        self._lazy_initializer: "LazyProjectInitializer | None" = None
         if project is not None:
             try:
                 self.activate_project_from_path_or_name(project)
             except Exception as e:
                 log.error(f"Error activating project '{project}' at startup: {e}", exc_info=e)
+                # Setup lazy initialization if project activation failed
+                # This handles --project-from-cwd with missing .murena/project.yml
+                if isinstance(project, str | Path) and Path(project).is_dir():
+                    from murena.lazy_init import LazyProjectInitializer
+
+                    self._lazy_initializer = LazyProjectInitializer(self)
+                    self._lazy_initializer.set_project_root(str(Path(project).resolve()))
+                    log.info(f"Lazy initialization enabled for: {project}")
 
         # register tenant in multi-project registry
         self._health_monitor_thread: threading.Thread | None = None

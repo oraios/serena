@@ -253,6 +253,11 @@ class Tool(Component):
         def task() -> str:
             apply_fn = self.get_apply_fn()
 
+            # NEW: Check lazy initialization before tool execution
+            init_msg = None
+            if hasattr(self.agent, '_lazy_initializer') and self.agent._lazy_initializer is not None:
+                init_msg = self.agent._lazy_initializer.ensure_initialized()
+
             try:
                 if not self.is_active():
                     return f"Error: Tool '{self.get_name_from_cls()}' is not active. Active tools: {self.agent.get_active_tool_names()}"
@@ -310,6 +315,10 @@ class Tool(Component):
                     ls_manager.schedule_async_cache_writes()
             except Exception as e:
                 log.error(f"Error scheduling language server cache write: {e}")
+
+            # NEW: Prepend lazy initialization message if initialization occurred
+            if init_msg and result:
+                result = f"{init_msg}\n\n{result}"
 
             return result
 
