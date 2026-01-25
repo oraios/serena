@@ -39,7 +39,7 @@ class MemoriesManager:
         return resolved
 
     def _find_memory(self, name: str) -> Path | None:
-        # strip all.md from the name. Models tend to get confused, sometimes passing the .md extension and sometimes not.
+        # strip all .md from the name. Models tend to get confused, sometimes passing the .md extension and sometimes not.
         name = name.replace(".md", "")
         filename = f"{name}.md"
         primary_path = self._memory_dir / filename
@@ -55,12 +55,10 @@ class MemoriesManager:
         """Find additional folder whose name matches longest ALL CAPS prefix."""
         name_without_ext = name.replace(".md", "")
         best_match: Path | None = None
-        best_length = 0
         for folder in self._additional_folders:
             prefix = folder.name.upper() + "_"
-            if name_without_ext.startswith(prefix) and len(prefix) > best_length:
+            if name_without_ext.startswith(prefix):
                 best_match = folder
-                best_length = len(prefix)
         return best_match
 
     def get_memory_file_path(self, name: str) -> Path:
@@ -96,7 +94,12 @@ class MemoriesManager:
         for folder in self._additional_folders:
             for f in folder.iterdir():
                 if f.is_file() and f.suffix == ".md" and f.stem not in seen:
-                    seen.add(f.stem)
+            try:
+                entries = folder.iterdir()
+            except OSError as e:
+                log.warning("Unable to list additional memory folder %s: %s", folder, e)
+                continue
+            for f in entries:
                     result.append(f.stem)
         return result
 
