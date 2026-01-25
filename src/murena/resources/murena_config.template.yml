@@ -39,7 +39,7 @@ web_dashboard_listen_address: 127.0.0.1
 # The address where the web dashboard will listen on
 
 web_dashboard_port: 24290
-# Port for the web dashboard. Default 24290 avoids conflict with Serena (24282).
+# Port for the web dashboard. Default 24290.
 # If port is occupied, will auto-increment to 24291, 24292, etc.
 
 web_dashboard_open_on_launch: True

@@ -42,7 +42,7 @@ _MAX_CONTENT_WIDTH = 100
 def find_project_root(root: str | Path | None = None) -> str:
     """Find project root by walking up from CWD.
 
-    Checks for .murena/project.yml first (explicit Serena project), then .git (git root).
+    Checks for .murena/project.yml first (explicit Murena project), then .git (git root).
     Falls back to CWD if no marker is found.
 
     :param root: If provided, constrains the search to this directory and below
@@ -200,7 +200,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         type=bool,
         is_flag=False,
         default=None,
-        help="Open Serena's dashboard in your browser after MCP server startup (overriding the setting in Murena's config).",
+        help="Open Murena's dashboard in your browser after MCP server startup (overriding the setting in Murena's config).",
     )
     @click.option(
         "--web-dashboard-port",
@@ -315,7 +315,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         help="Built-in mode names or paths to custom mode YAMLs.",
     )
     def print_system_prompt(project: str, log_level: str, only_instructions: bool, context: str, modes: tuple[str, ...]) -> None:
-        prefix = "You will receive access to Serena's symbolic tools. Below are instructions for using them, take them into account."
+        prefix = "You will receive access to Murena's symbolic tools. Below are instructions for using them, take them into account."
         postfix = "You begin by acknowledging that you understood the above instructions and are ready to receive tasks."
         from murena.tools.workflow_tools import InitialInstructionsTool
 
@@ -560,7 +560,7 @@ class ProjectCommands(AutoRegisteringGroup):
         return registered_project
 
     @staticmethod
-    @click.command("create", help="Create a new Serena project configuration.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
+    @click.command("create", help="Create a new Murena project configuration.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
     @click.argument("project_path", type=click.Path(exists=True, file_okay=False), default=os.getcwd())
     @click.option("--name", type=str, default=None, help="Project name; defaults to directory name if not specified.")
     @click.option(

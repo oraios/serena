@@ -123,7 +123,7 @@ class PrepareForNewConversationTool(Tool):
 
 class InitialInstructionsTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     """
-    Provides instructions on how to use the Serena toolbox.
+    Provides instructions on how to use the Murena toolbox.
     Should only be used in settings where the system prompt is not read automatically by the client.
 
     NOTE: Some MCP clients (including Claude Desktop) do not read the system prompt automatically!
@@ -131,7 +131,7 @@ class InitialInstructionsTool(Tool, ToolMarkerDoesNotRequireActiveProject):
 
     def apply(self) -> str:
         """
-        Provides the 'Serena Instructions Manual', which contains essential information on how to use the Serena toolbox.
+        Provides the 'Murena Instructions Manual', which contains essential information on how to use the Murena toolbox.
         IMPORTANT: If you have not yet read the manual, call this tool immediately after you are given your task by the user,
         as it will critically inform you!
         """

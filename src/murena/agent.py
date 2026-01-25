@@ -1,5 +1,5 @@
 """
-The Serena Model Context Protocol (MCP) Server
+The Murena Model Context Protocol (MCP) Server
 """
 
 import os
@@ -229,7 +229,7 @@ class MurenaAgent:
                 # which uv used as a base, unfortunately)
                 from murena.gui_log_viewer import GuiLogViewer
 
-                self._gui_log_viewer = GuiLogViewer("dashboard", title="Serena Logs", memory_log_handler=get_memory_log_handler())
+                self._gui_log_viewer = GuiLogViewer("dashboard", title="Murena Logs", memory_log_handler=get_memory_log_handler())
                 self._gui_log_viewer.start()
         else:
             log.debug("GUI window is disabled")
@@ -359,7 +359,7 @@ class MurenaAgent:
         if language_server_manager is None:
             raise Exception(
                 "The language server manager is not initialized, indicating a problem during project activation. "
-                "Inform the user, telling them to inspect Serena's logs in order to determine the issue. "
+                "Inform the user, telling them to inspect Murena's logs in order to determine the issue. "
                 "IMPORTANT: Wait for further instructions before you continue!"
             )
         return language_server_manager

@@ -5,7 +5,7 @@ from murena.tools import ReplaceContentTool, Tool, ToolMarkerCanEdit
 
 class WriteMemoryTool(Tool, ToolMarkerCanEdit):
     """
-    Writes a named memory (for future reference) to Serena's project-specific memory store.
+    Writes a named memory (for future reference) to Murena's project-specific memory store.
     """
 
     def apply(self, memory_file_name: str, content: str, max_answer_chars: int = -1) -> str:
@@ -27,7 +27,7 @@ class WriteMemoryTool(Tool, ToolMarkerCanEdit):
 
 class ReadMemoryTool(Tool):
     """
-    Reads the memory with the given name from Serena's project-specific memory store.
+    Reads the memory with the given name from Murena's project-specific memory store.
     """
 
     def apply(self, memory_file_name: str, max_answer_chars: int = -1) -> str:
@@ -43,7 +43,7 @@ class ReadMemoryTool(Tool):
 
 class ListMemoriesTool(Tool):
     """
-    Lists memories in Serena's project-specific memory store.
+    Lists memories in Murena's project-specific memory store.
     """
 
     def apply(self) -> str:
@@ -55,7 +55,7 @@ class ListMemoriesTool(Tool):
 
 class DeleteMemoryTool(Tool, ToolMarkerCanEdit):
     """
-    Deletes a memory from Serena's project-specific memory store.
+    Deletes a memory from Murena's project-specific memory store.
     """
 
     def apply(self, memory_file_name: str) -> str:

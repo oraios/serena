@@ -1,5 +1,5 @@
 """
-The Serena Model Context Protocol (MCP) Server
+The Murena Model Context Protocol (MCP) Server
 """
 
 import sys
@@ -49,7 +49,7 @@ class MurenaMCPRequestContext:
 
 class MurenaMCPFactory:
     """
-    Factory for the creation of the Serena MCP server with an associated MurenaAgent.
+    Factory for the creation of the Murena MCP server with an associated MurenaAgent.
     """
 
     def __init__(self, context: str = DEFAULT_CONTEXT, project: str | None = None, memory_log_handler: MemoryLogHandler | None = None):
@@ -175,11 +175,11 @@ class MurenaMCPFactory:
     @staticmethod
     def make_mcp_tool(tool: Tool, openai_tool_compatible: bool = True) -> MCPTool:
         """
-        Create an MCP tool from a Serena Tool instance.
+        Create an MCP tool from a Murena Tool instance.
 
-        :param tool: The Serena Tool instance to convert.
+        :param tool: The Murena Tool instance to convert.
         :param openai_tool_compatible: whether to process the tool schema to be compatible with OpenAI tools
-            (doesn't accept integer, needs number instead, etc.). This allows using Serena MCP within codex.
+            (doesn't accept integer, needs number instead, etc.). This allows using Murena MCP within codex.
         """
         func_name = tool.get_name()
         func_doc = tool.get_apply_docstring() or ""
@@ -295,7 +295,7 @@ class MurenaMCPFactory:
         :param open_web_dashboard: Whether to open the web dashboard on launch.
             If not specified, will take the value from the murena configuration.
         :param log_level: Log level. If not specified, will take the value from the murena configuration.
-        :param trace_lsp_communication: Whether to trace the communication between Serena and the language servers.
+        :param trace_lsp_communication: Whether to trace the communication between Murena and the language servers.
             This is useful for debugging language server issues.
         :param tool_timeout: Timeout in seconds for tool execution. If not specified, will take the value from the murena configuration.
         """

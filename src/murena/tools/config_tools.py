@@ -4,18 +4,18 @@ from murena.tools import Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarker
 
 class OpenDashboardTool(Tool, ToolMarkerOptional, ToolMarkerDoesNotRequireActiveProject):
     """
-    Opens the Serena web dashboard in the default web browser.
+    Opens the Murena web dashboard in the default web browser.
     The dashboard provides logs, session information, and tool usage statistics.
     """
 
     def apply(self) -> str:
         """
-        Opens the Serena web dashboard in the default web browser.
+        Opens the Murena web dashboard in the default web browser.
         """
         if self.agent.open_dashboard():
-            return f"Serena web dashboard has been opened in the user's default web browser: {self.agent.get_dashboard_url()}"
+            return f"Murena web dashboard has been opened in the user's default web browser: {self.agent.get_dashboard_url()}"
         else:
-            return f"Serena web dashboard could not be opened automatically; tell the user to open it via {self.agent.get_dashboard_url()}"
+            return f"Murena web dashboard could not be opened automatically; tell the user to open it via {self.agent.get_dashboard_url()}"
 
 
 class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
@@ -31,7 +31,7 @@ class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
         """
         active_project = self.agent.activate_project_from_path_or_name(project)
         result = active_project.get_activation_message()
-        result += "\nIMPORTANT: If you have not yet read the 'Serena Instructions Manual', do it now before continuing!"
+        result += "\nIMPORTANT: If you have not yet read the 'Murena Instructions Manual', do it now before continuing!"
         return result
 
 
