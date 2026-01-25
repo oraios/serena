@@ -16,7 +16,7 @@ from typing import Any
 
 from sensai.util import logging
 
-from murena.tools import Tool, ToolMarkerOptional
+from murena.tools import Tool
 from murena.tools.adapters.base_adapter import TestFrameworkAdapter
 from murena.tools.adapters.pytest_adapter import PytestAdapter
 from murena.tools.testing_types import TestSymbol
@@ -257,7 +257,7 @@ class FindTestsForSymbolTool(Tool):
         return False
 
 
-class AnalyzeTestFailureTool(Tool, ToolMarkerOptional):
+class AnalyzeTestFailureTool(Tool):
     """
     Analyze test failures and suggest fixes.
 

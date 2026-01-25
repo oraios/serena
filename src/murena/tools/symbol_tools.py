@@ -401,7 +401,7 @@ class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
         return status_message
 
 
-class GetSymbolBodyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class GetSymbolBodyTool(Tool, ToolMarkerSymbolicRead):
     """
     Get only the body of a specific symbol (lazy loading).
 

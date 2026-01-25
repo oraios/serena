@@ -138,7 +138,7 @@ class InitialInstructionsTool(Tool, ToolMarkerDoesNotRequireActiveProject):
         return self.agent.create_system_prompt()
 
 
-class RunWorkflowTool(Tool, ToolMarkerOptional):
+class RunWorkflowTool(Tool):
     """
     Execute a predefined workflow.
 
@@ -190,7 +190,7 @@ class RunWorkflowTool(Tool, ToolMarkerOptional):
             return json.dumps({"error": f"Workflow execution failed: {e}"})
 
 
-class ListWorkflowsTool(Tool, ToolMarkerOptional):
+class ListWorkflowsTool(Tool):
     """
     List all available workflows.
 
