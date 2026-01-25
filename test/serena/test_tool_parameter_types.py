@@ -13,7 +13,7 @@ def test_all_tool_parameters_have_type(context):
     For every tool exposed by Serena, ensure that the generated
     Open‑AI schema contains a ``type`` entry for each parameter.
     """
-    cfg = SerenaConfig(gui_log_window_enabled=False, web_dashboard=False, log_level=logging.ERROR)
+    cfg = SerenaConfig(gui_log_window=False, web_dashboard=False, log_level=logging.ERROR)
     registry = ToolRegistry()
     cfg.included_optional_tools = tuple(registry.get_tool_names_optional())
     factory = SerenaMCPFactory(context=context)

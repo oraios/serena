@@ -59,35 +59,81 @@ class ReferenceInSymbol:
     character: int
 
 
-@dataclasses.dataclass
 class LSPFileBuffer:
     """
     This class is used to store the contents of an open LSP file in memory.
     """
 
-    # uri of the file
-    uri: str
+    def __init__(self, uri: str, contents: str, encoding: str, version: int, language_id: str, ref_count: int) -> None:
+        self.uri = uri
+        self.contents = contents
+        self.version = version
+        self.language_id = language_id
+        self.ref_count = ref_count
+        self.encoding = encoding
+        self._content_hash: str | None = None
 
-    # The contents of the file
-    contents: str
-
-    # The version of the file
-    version: int
-
-    # The language id of the file
-    language_id: str
-
-    # reference count of the file
-    ref_count: int
-
-    content_hash: str = ""
-
-    def __post_init__(self) -> None:
-        self.content_hash = hashlib.md5(self.contents.encode("utf-8")).hexdigest()
+    @property
+    def content_hash(self) -> str:
+        if self._content_hash is None:
+            self._content_hash = hashlib.md5(self.contents.encode(self.encoding)).hexdigest()
+        return self._content_hash
 
     def split_lines(self) -> list[str]:
         """Splits the contents of the file into lines."""
         return self.contents.split("\n")
+
+
+class SymbolBody:
+    """
+    Representation of the body of a symbol, which allows the extraction of the symbol's text
+    from the lines of the file it is defined in.
+
+    Instances that share the same lines buffer are memory-efficient,
+    using only 4 integers and a reference to the lines buffer from which the text can be extracted,
+    i.e. a core representation of only about 40 bytes per body.
+    """
+
+    def __init__(self, lines: list[str], start_line: int, start_col: int, end_line: int, end_col: int) -> None:
+        self._lines = lines
+        self._start_line = start_line
+        self._start_col = start_col
+        self._end_line = end_line
+        self._end_col = end_col
+
+    def get_text(self) -> str:
+        # extract relevant lines
+        symbol_body = "\n".join(self._lines[self._start_line : self._end_line + 1])
+
+        # remove leading indentation
+        symbol_body = symbol_body[self._start_col :]
+
+        # TODO: handle end_col properly (this was never implemented)
+
+        return symbol_body
+
+
+class SymbolBodyFactory:
+    """
+    A factory for the creation of SymbolBody instances from symbols dictionaries.
+    Instances created from the same factory instance are memory-efficient, as they share
+    the same lines buffer.
+    """
+
+    def __init__(self, file_buffer: LSPFileBuffer):
+        self._lines = file_buffer.split_lines()
+
+    def create_symbol_body(self, symbol: GenericDocumentSymbol) -> SymbolBody:
+        existing_body = symbol.get("body", None)
+        if existing_body and isinstance(existing_body, SymbolBody):
+            return existing_body
+
+        assert "location" in symbol
+        start_line = symbol["location"]["range"]["start"]["line"]  # type: ignore
+        end_line = symbol["location"]["range"]["end"]["line"]  # type: ignore
+        start_col = symbol["location"]["range"]["start"]["character"]  # type: ignore
+        end_col = symbol["location"]["range"]["end"]["character"]  # type: ignore
+        return SymbolBody(self._lines, start_line, start_col, end_line, end_col)
 
 
 class DocumentSymbols:
@@ -212,7 +258,7 @@ class SolidLanguageServer(ABC):
     """
     RAW_DOCUMENT_SYMBOL_CACHE_FILENAME = "raw_document_symbols.pkl"
     RAW_DOCUMENT_SYMBOL_CACHE_FILENAME_LEGACY_FALLBACK = "document_symbols_cache_v23-06-25.pkl"
-    DOCUMENT_SYMBOL_CACHE_VERSION = 3
+    DOCUMENT_SYMBOL_CACHE_VERSION = 4
     DOCUMENT_SYMBOL_CACHE_FILENAME = "document_symbols.pkl"
 
     # To be overridden and extended by subclasses
@@ -590,7 +636,9 @@ class SolidLanguageServer(ABC):
 
             version = 0
             language_id = self._get_language_id_for_file(relative_file_path)
-            self.open_file_buffers[uri] = LSPFileBuffer(uri, contents, version, language_id, 1)
+            self.open_file_buffers[uri] = LSPFileBuffer(
+                uri=uri, contents=contents, encoding=self._encoding, version=version, language_id=language_id, ref_count=1
+            )
 
             self.server.notify.did_open_text_document(
                 {
@@ -1133,7 +1181,7 @@ class SolidLanguageServer(ABC):
             assert isinstance(root_symbols, list), f"Unexpected response from Language Server: {root_symbols}"
             log.debug("Received %d root symbols for %s from the language server", len(root_symbols), relative_file_path)
 
-            file_lines = file_data.split_lines()
+            body_factory = SymbolBodyFactory(file_data)
 
             def convert_to_unified_symbol(original_symbol_dict: GenericDocumentSymbol) -> ls_types.UnifiedSymbolInformation:
                 """
@@ -1164,8 +1212,7 @@ class SolidLanguageServer(ABC):
                 if "relativePath" not in location:
                     location["relativePath"] = relative_file_path  # type: ignore
 
-                if "body" not in item:
-                    item["body"] = self.retrieve_symbol_body(item, file_lines=file_lines)
+                item["body"] = self.create_symbol_body(item, factory=body_factory)
 
                 # handle missing selectionRange
                 if "selectionRange" not in item:
@@ -1502,32 +1549,17 @@ class SolidLanguageServer(ABC):
 
         return ls_types.SignatureHelp(**response)  # type: ignore
 
-    def retrieve_symbol_body(
+    def create_symbol_body(
         self,
         symbol: ls_types.UnifiedSymbolInformation | LSPTypes.SymbolInformation,
-        file_lines: list[str] | None = None,
-        file_buffer: LSPFileBuffer | None = None,
-    ) -> str:
-        """
-        Load the body of the given symbol. If the body is already contained in the symbol, just return it.
-        """
-        existing_body = symbol.get("body", None)
-        if existing_body:
-            return str(existing_body)
+        factory: SymbolBodyFactory | None = None,
+    ) -> SymbolBody:
+        if factory is None:
+            assert "relativePath" in symbol["location"]
+            with self._open_file_context(symbol["location"]["relativePath"]) as f:  # type: ignore
+                factory = SymbolBodyFactory(f)
 
-        assert "location" in symbol
-        symbol_start_line = symbol["location"]["range"]["start"]["line"]
-        symbol_end_line = symbol["location"]["range"]["end"]["line"]
-        assert "relativePath" in symbol["location"]
-        if file_lines is None:
-            with self._open_file_context(symbol["location"]["relativePath"], file_buffer) as f:  # type: ignore
-                file_lines = f.split_lines()
-        symbol_body = "\n".join(file_lines[symbol_start_line : symbol_end_line + 1])
-
-        # remove leading indentation
-        symbol_start_column = symbol["location"]["range"]["start"]["character"]  # type: ignore
-        symbol_body = symbol_body[symbol_start_column:]
-        return symbol_body
+        return factory.create_symbol_body(symbol)
 
     def request_referencing_symbols(
         self,
@@ -1578,8 +1610,12 @@ class SolidLanguageServer(ABC):
             ref_col = ref["range"]["start"]["character"]
 
             with self.open_file(ref_path) as file_data:
+                body_factory = SymbolBodyFactory(file_data)
+
                 # Get the containing symbol for this reference
-                containing_symbol = self.request_containing_symbol(ref_path, ref_line, ref_col, include_body=include_body)
+                containing_symbol = self.request_containing_symbol(
+                    ref_path, ref_line, ref_col, include_body=include_body, body_factory=body_factory
+                )
                 if containing_symbol is None:
                     # TODO: HORRIBLE HACK! I don't know how to do it better for now...
                     # THIS IS BOUND TO BREAK IN MANY CASES! IT IS ALSO SPECIFIC TO PYTHON!
@@ -1617,11 +1653,6 @@ class SolidLanguageServer(ABC):
                     )
                     name = os.path.splitext(os.path.basename(ref_path))[0]
 
-                    if include_body:
-                        body = self.retrieve_full_file_content(ref_path)
-                    else:
-                        body = ""
-
                     containing_symbol = ls_types.UnifiedSymbolInformation(
                         kind=ls_types.SymbolKind.File,
                         range=fileRange,
@@ -1629,8 +1660,11 @@ class SolidLanguageServer(ABC):
                         location=location,
                         name=name,
                         children=[],
-                        body=body,
                     )
+
+                    if include_body:
+                        containing_symbol["body"] = self.create_symbol_body(containing_symbol, factory=body_factory)
+
                 if containing_symbol is None or (not include_file_symbols and containing_symbol["kind"] == ls_types.SymbolKind.File):
                     continue
 
@@ -1689,6 +1723,7 @@ class SolidLanguageServer(ABC):
         column: int | None = None,
         strict: bool = False,
         include_body: bool = False,
+        body_factory: SymbolBodyFactory | None = None,
     ) -> ls_types.UnifiedSymbolInformation | None:
         """
         Finds the first symbol containing the position for the given file.
@@ -1788,7 +1823,7 @@ class SolidLanguageServer(ABC):
             # Return the one with the greatest starting position (i.e. the innermost container).
             containing_symbol = max(containing_symbols, key=lambda s: s["location"]["range"]["start"]["line"])
             if include_body:
-                containing_symbol["body"] = self.retrieve_symbol_body(containing_symbol)
+                containing_symbol["body"] = self.create_symbol_body(containing_symbol, factory=body_factory)
             return containing_symbol
         else:
             return None
@@ -2056,7 +2091,8 @@ class SolidLanguageServer(ABC):
             newName=new_name,
         )
 
-        return self.server.send.rename(params)
+        with self.open_file(relative_file_path):
+            return self.server.send.rename(params)
 
     def apply_text_edits_to_file(self, relative_path: str, edits: list[ls_types.TextEdit]) -> None:
         """

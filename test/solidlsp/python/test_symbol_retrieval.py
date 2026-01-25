@@ -34,7 +34,7 @@ class TestLanguageServerSymbols:
         assert containing_symbol["name"] == "create_user"
         assert containing_symbol["kind"] == SymbolKind.Method
         if "body" in containing_symbol:
-            assert containing_symbol["body"].strip().startswith("def create_user(self")
+            assert containing_symbol["body"].get_text().strip().startswith("def create_user(self")
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
     def test_references_to_variables(self, language_server: SolidLanguageServer) -> None:
@@ -463,7 +463,6 @@ class TestLanguageServerSymbols:
             for ref in language_server.request_referencing_symbols(file_path, 4, 6, include_imports=False, include_file_symbols=True)
         ]
         assert {ref["kind"] for ref in references_to_typing} == {SymbolKind.File}
-        assert {ref["body"] for ref in references_to_typing} == {""}
 
         # now include bodies
         references_to_typing = [

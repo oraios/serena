@@ -14,7 +14,6 @@ from sensai.util.string import dict_string
 
 from serena.project import MemoriesManager, Project
 from serena.prompt_factory import PromptFactory
-from serena.symbol import LanguageServerSymbolRetriever
 from serena.util.class_decorators import singleton
 from serena.util.inspection import iter_subclasses
 from solidlsp.ls_exceptions import SolidLSPException
@@ -22,6 +21,7 @@ from solidlsp.ls_exceptions import SolidLSPException
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
     from serena.code_editor import CodeEditor
+    from serena.symbol import LanguageServerSymbolRetriever
 
 log = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -46,7 +46,9 @@ class Component(ABC):
     def memories_manager(self) -> "MemoriesManager":
         return self.project.memories_manager
 
-    def create_language_server_symbol_retriever(self) -> LanguageServerSymbolRetriever:
+    def create_language_server_symbol_retriever(self) -> "LanguageServerSymbolRetriever":
+        from serena.symbol import LanguageServerSymbolRetriever
+
         if not self.agent.is_using_language_server():
             raise Exception("Cannot create LanguageServerSymbolRetriever; agent is not in language server mode.")
         language_server_manager = self.agent.get_language_server_manager_or_raise()
@@ -230,7 +232,7 @@ class Tool(Component):
         return result
 
     def is_active(self) -> bool:
-        return self.agent.tool_is_active(self.__class__)
+        return self.agent.tool_is_active(self.get_name())
 
     def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, mcp_ctx: Context | None = None, **kwargs) -> str:  # type: ignore
         """

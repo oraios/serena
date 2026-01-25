@@ -269,13 +269,6 @@ Then make sure to configure the working directory to be the project root.
 
 ## Antigravity
 
-:::{warning}
-At the time of writing (12/2025), Antigravity does not seem to work with Serena due to schema validation issues
-which are beyond our control.
-The client starts Serena but then crashes with `[internal] marshal message: string field contains invalid UTF-8`.  
-Nevertheless, we provide a configuration that should work once the issue is resolved.
-:::
-
 Add this configuration:
 
 ```json
@@ -295,6 +288,12 @@ Add this configuration:
   }
 }
 ```
+
+You will have to prompt Antigravity's agent to "Activate the current project using serena's activation tool" after starting Antigravity in the project directory (once in the first chat enough, all other chat sessions will continue using the same Serena session).
+
+
+Unlike VSCode, Antigravity does not currently support including the working directory in the MCP configuration.
+Also, the current client will be shown as `none` in Serena's dashboard (Antigravity currently does not fully support the MCP specifications). This is not a problem, all tools will work as expected.
 
 ## Other Clients
 

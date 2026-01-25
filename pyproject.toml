@@ -54,7 +54,7 @@ text = "MIT"
 
 [project.optional-dependencies]
 dev = [
-  "black[jupyter]>=23.7.0",
+  "black[jupyter]>=23.7.0, <26",  # black 26 is incompatible with our pathspec version
   "jinja2",
   # In version 1.0.4 we get a NoneType error related to some config conversion (yml_analytics is None and should be a list)
   "mypy>=1.16.1",

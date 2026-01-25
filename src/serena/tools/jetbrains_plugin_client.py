@@ -87,15 +87,16 @@ class JetBrainsPluginClient(ToStringMixin):
         self._session.headers.update({"Content-Type": "application/json", "Accept": "application/json"})
 
         # connect and obtain status
-        self._project_root: str | None
-        self._plugin_version: Version | None
+        self._project_root: str | None = None
+        self._plugin_version: Version | None = None
         try:
             status_response: PluginStatusDTO = cast(jb.PluginStatusDTO, self._make_request("GET", "/status"))
             self._project_root = status_response["project_root"]
             self._plugin_version = Version(status_response["plugin_version"])
-        except ConnectionError:
-            self._project_root = None
-            self._plugin_version = None
+        except ConnectionError:  # expected if no server is running at the port
+            pass
+        except Exception as e:
+            log.warning("Failed to obtain status from JetBrains plugin service at port %d: %s", e, port, exc_info=True)
 
     @property
     def _base_url(self) -> str:

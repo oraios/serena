@@ -116,6 +116,18 @@ class Symbol(ToStringMixin, ABC):
         """
 
 
+class NamePathComponent:
+    def __init__(self, name: str, overload_idx: int | None = None) -> None:
+        self.name = name
+        self.overload_idx = overload_idx
+
+    def __repr__(self) -> str:
+        if self.overload_idx is not None:
+            return f"{self.name}[{self.overload_idx}]"
+        else:
+            return self.name
+
+
 class NamePathMatcher(ToStringMixin):
     """
     Matches name paths of symbols against search patterns.
@@ -132,6 +144,29 @@ class NamePathMatcher(ToStringMixin):
     Append an index `[i]` to match a specific overload only, e.g. "MyClass/my_method[1]".
     """
 
+    class PatternComponent(NamePathComponent):
+        @classmethod
+        def from_string(cls, component_str: str) -> Self:
+            overload_idx = None
+            if component_str.endswith("]") and "[" in component_str:
+                bracket_idx = component_str.rfind("[")
+                index_part = component_str[bracket_idx + 1 : -1]
+                if index_part.isdigit():
+                    component_str = component_str[:bracket_idx]
+                    overload_idx = int(index_part)
+            return cls(name=component_str, overload_idx=overload_idx)
+
+        def matches(self, name_path_component: NamePathComponent, substring_matching: bool) -> bool:
+            if substring_matching:
+                if self.name not in name_path_component.name:
+                    return False
+            else:
+                if self.name != name_path_component.name:
+                    return False
+            if self.overload_idx is not None and self.overload_idx != name_path_component.overload_idx:
+                return False
+            return True
+
     def __init__(self, name_path_pattern: str, substring_matching: bool) -> None:
         """
         :param name_path_pattern: the name path expression to match against
@@ -141,51 +176,32 @@ class NamePathMatcher(ToStringMixin):
         self._expr = name_path_pattern
         self._substring_matching = substring_matching
         self._is_absolute_pattern = name_path_pattern.startswith(NAME_PATH_SEP)
-        self._pattern_parts = name_path_pattern.lstrip(NAME_PATH_SEP).rstrip(NAME_PATH_SEP).split(NAME_PATH_SEP)
-
-        # extract overload index "[idx]" if present at end of last part
-        self._overload_idx: int | None = None
-        last_part = self._pattern_parts[-1]
-        if last_part.endswith("]") and "[" in last_part:
-            bracket_idx = last_part.rfind("[")
-            index_part = last_part[bracket_idx + 1 : -1]
-            if index_part.isdigit():
-                self._pattern_parts[-1] = last_part[:bracket_idx]
-                self._overload_idx = int(index_part)
+        self._components = [
+            self.PatternComponent.from_string(x) for x in name_path_pattern.lstrip(NAME_PATH_SEP).rstrip(NAME_PATH_SEP).split(NAME_PATH_SEP)
+        ]
 
     def _tostring_includes(self) -> list[str]:
         return ["_expr"]
 
     def matches_ls_symbol(self, symbol: "LanguageServerSymbol") -> bool:
-        return self.matches_components(symbol.get_name_path_parts(), symbol.overload_idx)
+        return self.matches_reversed_components(symbol.iter_name_path_components_reversed())
 
-    def matches_components(self, symbol_name_path_parts: list[str], overload_idx: int | None) -> bool:
-        # filtering based on ancestors
-        if len(self._pattern_parts) > len(symbol_name_path_parts):
-            # can't possibly match if pattern has more parts than symbol
-            return False
-        if self._is_absolute_pattern and len(self._pattern_parts) != len(symbol_name_path_parts):
-            # for absolute patterns, the number of parts must match exactly
-            return False
-        if symbol_name_path_parts[-len(self._pattern_parts) : -1] != self._pattern_parts[:-1]:
-            # ancestors must match
-            return False
-
-        # matching the last part of the symbol name
-        name_to_match = self._pattern_parts[-1]
-        symbol_name = symbol_name_path_parts[-1]
-        if self._substring_matching:
-            if name_to_match not in symbol_name:
+    def matches_reversed_components(self, components_reversed: Iterator[NamePathComponent]) -> bool:
+        for i, pattern_component in enumerate(reversed(self._components)):
+            try:
+                symbol_component = next(components_reversed)
+            except StopIteration:
                 return False
-        else:
-            if name_to_match != symbol_name:
+            use_substring_matching = self._substring_matching and (i == 0)
+            if not pattern_component.matches(symbol_component, use_substring_matching):
                 return False
-
-        # check for matching overload index
-        if self._overload_idx is not None:
-            if overload_idx != self._overload_idx:
+        if self._is_absolute_pattern:
+            # ensure that there are no more components in the symbol
+            try:
+                next(components_reversed)
                 return False
-
+            except StopIteration:
+                pass
         return True
 
 
@@ -301,25 +317,24 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
 
     @property
     def body(self) -> str | None:
-        return self.symbol_root.get("body")
+        body = self.symbol_root.get("body")
+        if body is None:
+            return None
+        else:
+            return body.get_text()
 
     def get_name_path(self) -> str:
         """
         Get the name path of the symbol, e.g. "class/method/inner_function" or
         "class/method[1]" (overloaded method with identifying index).
         """
-        name_path = NAME_PATH_SEP.join(self.get_name_path_parts())
-        if "overload_idx" in self.symbol_root:
-            name_path += f"[{self.symbol_root['overload_idx']}]"
+        name_path = NAME_PATH_SEP.join(reversed([str(x) for x in self.iter_name_path_components_reversed()]))
         return name_path
 
-    def get_name_path_parts(self) -> list[str]:
-        """
-        Get the parts of the name path of the symbol (e.g. ["class", "method", "inner_function"]).
-        """
-        ancestors_within_file = list(self.iter_ancestors(up_to_symbol_kind=SymbolKind.File))
-        ancestors_within_file.reverse()
-        return [a.name for a in ancestors_within_file] + [self.name]
+    def iter_name_path_components_reversed(self) -> Iterator[NamePathComponent]:
+        yield NamePathComponent(self.name, self.overload_idx)
+        for ancestor in self.iter_ancestors(up_to_symbol_kind=SymbolKind.File):
+            yield NamePathComponent(ancestor.name, ancestor.overload_idx)
 
     def iter_children(self) -> Iterator[Self]:
         for c in self.symbol_root["children"]:
@@ -419,9 +434,10 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
             result["body_location"] = {"start_line": body_start_line, "end_line": body_end_line}
 
         if include_body:
-            if self.body is None:
+            body = self.body
+            if body is None:
                 log.warning("Requested body for symbol, but it is not present. The symbol might have been loaded with include_body=False.")
-            result["body"] = self.body
+            result["body"] = body
 
         if child_inclusion_predicate is None:
             child_inclusion_predicate = lambda s: True

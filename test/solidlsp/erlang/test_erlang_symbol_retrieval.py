@@ -52,7 +52,7 @@ class TestErlangLanguageServerSymbols:
             assert "create_user" in containing_symbol["name"]
             assert containing_symbol["kind"] == SymbolKind.Method or containing_symbol["kind"] == SymbolKind.Function
             if "body" in containing_symbol:
-                assert "create_user" in containing_symbol["body"]
+                assert "create_user" in containing_symbol["body"].get_text()
 
     @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
     def test_request_containing_symbol_module(self, language_server: SolidLanguageServer) -> None:
