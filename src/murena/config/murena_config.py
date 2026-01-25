@@ -598,7 +598,13 @@ class MurenaConfig(ToolInclusionDefinition, ToStringMixin):
     # *** static members ***
 
     CONFIG_FILE = "murena_config.yml"
-    CONFIG_FIELDS_WITH_TYPE_CONVERSION = {"projects", "language_backend", "cache", "resource_management"}
+    CONFIG_FIELDS_WITH_TYPE_CONVERSION = {
+        "projects",
+        "language_backend",
+        "cache",
+        "resource_management",
+        "lazy_init",
+    }
 
     # *** methods ***
 
@@ -735,6 +741,11 @@ class MurenaConfig(ToolInclusionDefinition, ToStringMixin):
         if "cache" in loaded_commented_yaml:
             cache_dict = loaded_commented_yaml["cache"]
             instance.cache = CacheConfig(**cache_dict)
+
+        # load lazy init config if present
+        if "lazy_init" in loaded_commented_yaml:
+            lazy_init_dict = loaded_commented_yaml["lazy_init"]
+            instance.lazy_init = LazyInitConfig(**lazy_init_dict)
 
         # load resource management config if present (with memory_profile override)
         if "memory_profile" in loaded_commented_yaml and loaded_commented_yaml["memory_profile"] != "medium":
@@ -909,6 +920,12 @@ class MurenaConfig(ToolInclusionDefinition, ToStringMixin):
 
         # convert cache config to dict
         commented_yaml["cache"] = dataclasses.asdict(self.cache)
+
+        # convert resource management config to dict
+        commented_yaml["resource_management"] = dataclasses.asdict(self.resource_management)
+
+        # convert lazy init config to dict
+        commented_yaml["lazy_init"] = dataclasses.asdict(self.lazy_init)
 
         save_yaml(self.config_file_path, commented_yaml, preserve_comments=True)
 
