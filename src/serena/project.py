@@ -51,9 +51,25 @@ class MemoriesManager:
                 return path
         return None
 
+    def _find_matching_additional_folder(self, name: str) -> Path | None:
+        """Find additional folder whose name matches longest ALL CAPS prefix."""
+        name_without_ext = name.replace(".md", "")
+        best_match: Path | None = None
+        best_length = 0
+        for folder in self._additional_folders:
+            prefix = folder.name.upper() + "_"
+            if name_without_ext.startswith(prefix) and len(prefix) > best_length:
+                best_match = folder
+                best_length = len(prefix)
+        return best_match
+
     def get_memory_file_path(self, name: str) -> Path:
         # strip .md from the name. Models tend to get confused, sometimes passing the .md extension and sometimes not.
         name = name.replace(".md", "")
+        # Route to matching additional folder if prefix matches
+        matching_folder = self._find_matching_additional_folder(name)
+        if matching_folder is not None:
+            return matching_folder / f"{name}.md"
         return self._memory_dir / f"{name}.md"
 
     def load_memory(self, name: str) -> str:
