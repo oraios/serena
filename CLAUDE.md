@@ -112,3 +112,148 @@ Configuration is loaded from (in order of precedence):
 - Language servers run as separate processes with LSP communication
 - Memory system enables persistent project knowledge
 - Context/mode system allows workflow customization
+
+## 🚀 Token Optimization: Using Murena MCP Tools
+
+**CRITICAL: This project has Murena MCP server running. You MUST use symbolic tools instead of reading entire files.**
+
+### Tool Selection Rules (MANDATORY)
+
+**❌ NEVER do this:**
+```
+Read('src/murena/agent.py')  # 800 lines = 3200 tokens WASTED
+```
+
+**✅ ALWAYS do this instead:**
+```
+mcp__murena__get_symbols_overview(relative_path='src/murena/agent.py')  # 200 tokens
+mcp__murena__find_symbol(name_path_pattern='MurenaAgent', relative_path='src/murena/agent.py', include_body=False)  # 150 tokens
+```
+
+### Decision Matrix (Use This Every Time)
+
+| Your Goal | Built-in Tool ❌ | Murena MCP Tool ✅ | Token Savings |
+|-----------|------------------|-------------------|---------------|
+| "Understand file structure" | Read() | `get_symbols_overview()` | 80-90% |
+| "Find a class/function" | Read() + search | `find_symbol()` | 70-85% |
+| "See method implementation" | Read() | `find_symbol(include_body=True)` | 60-80% |
+| "Find usage of X" | Grep() + Read() | `find_referencing_symbols()` | 70-85% |
+| "Search for pattern" | Grep() + Read() | `search_for_pattern()` | 50-70% |
+| "Edit a function" | Read() + Edit() | `replace_symbol_body()` | 70-80% |
+
+### Workflow Examples
+
+**Example 1: Understanding a new file**
+```python
+# ❌ BAD (3000 tokens):
+Read('src/murena/ls_manager.py')
+
+# ✅ GOOD (300 tokens):
+mcp__murena__get_symbols_overview(
+    relative_path='src/murena/ls_manager.py',
+    depth=1  # Get classes and their methods
+)
+# Then read only specific symbols you need:
+mcp__murena__find_symbol(
+    name_path_pattern='LanguageServerManager/from_languages',
+    relative_path='src/murena/ls_manager.py',
+    include_body=True
+)
+```
+
+**Example 2: Finding where something is used**
+```python
+# ❌ BAD (10000+ tokens):
+Grep('ResourceMonitor', output_mode='content')
+# Then Read() each file...
+
+# ✅ GOOD (500 tokens):
+mcp__murena__find_symbol(
+    name_path_pattern='ResourceMonitor',
+    relative_path='src/murena/util/resource_monitor.py'
+)
+mcp__murena__find_referencing_symbols(
+    name_path='ResourceMonitor',
+    relative_path='src/murena/util/resource_monitor.py',
+    context_mode='line_only'  # Minimal context
+)
+```
+
+**Example 3: Editing a method**
+```python
+# ❌ BAD (2000 tokens):
+Read('src/murena/agent.py')  # Read whole file
+Edit('src/murena/agent.py', old_string='...', new_string='...')
+
+# ✅ GOOD (400 tokens):
+mcp__murena__find_symbol(
+    name_path_pattern='MurenaAgent/shutdown',
+    relative_path='src/murena/agent.py',
+    include_body=True  # Only this method
+)
+mcp__murena__replace_symbol_body(
+    name_path='MurenaAgent/shutdown',
+    relative_path='src/murena/agent.py',
+    body='new implementation'
+)
+```
+
+### Pre-Check Before ANY File Operation
+
+**Before using Read(), Glob(), or Grep(), ask yourself:**
+
+1. ☐ Can I use `get_symbols_overview()` instead? (usually YES)
+2. ☐ Can I use `find_symbol()` to find specific code? (usually YES)
+3. ☐ Can I use `search_for_pattern()` for text search? (usually YES)
+4. ☐ Do I really need the ENTIRE file? (usually NO)
+
+**If you answer YES to questions 1-3, you MUST use Murena MCP tools.**
+
+### Common Patterns
+
+**Pattern: "I need to understand what's in this file"**
+```python
+# Step 1: Get overview
+mcp__murena__get_symbols_overview(relative_path='file.py', depth=1)
+# Step 2: Read only interesting symbols
+mcp__murena__find_symbol(name_path_pattern='InterestingClass', include_body=True)
+```
+
+**Pattern: "I need to find all files with X"**
+```python
+# Step 1: Find symbol
+mcp__murena__find_symbol(name_path_pattern='X', substring_matching=True)
+# Step 2: Find references
+mcp__murena__find_referencing_symbols(name_path='X', relative_path='...', context_mode='line_only')
+```
+
+**Pattern: "I need to modify a function"**
+```python
+# Step 1: Find it
+mcp__murena__find_symbol(name_path_pattern='function_name', include_body=True)
+# Step 2: Replace it
+mcp__murena__replace_symbol_body(name_path='Class/function_name', relative_path='...', body='...')
+```
+
+### Performance Impact
+
+Using Murena MCP tools vs built-in tools:
+
+| Operation | Built-in Tools | Murena MCP | Savings |
+|-----------|----------------|------------|---------|
+| Explore 1 file (500 lines) | 2000 tokens | 200 tokens | **90%** |
+| Find 1 method | 2000 tokens | 300 tokens | **85%** |
+| Edit 1 method | 2500 tokens | 400 tokens | **84%** |
+| Find all usages | 8000 tokens | 600 tokens | **92%** |
+
+**In a typical session with 20 file operations: 40,000 tokens → 5,000 tokens = 87.5% savings**
+
+### Emergency Override
+
+Only use built-in Read() if:
+- File is < 100 lines
+- File is not code (markdown, JSON, config)
+- Murena MCP server is not running
+- You've tried symbolic tools and they failed
+
+**Otherwise, ALWAYS use Murena MCP symbolic tools first.**
