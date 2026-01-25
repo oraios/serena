@@ -3,6 +3,8 @@
   <img src="resources/murena-logo-dark-mode.svg#gh-dark-mode-only" style="width:500px">
 </p>
 
+> 🔱 **Fork Notice:** Murena is an enhanced fork of [oraios/serena](https://github.com/oraios/serena) with performance improvements, extended tool support, and optimizations for large-scale projects.
+
 * :rocket: Murena is a powerful **coding agent toolkit** capable of turning an LLM into a fully-featured agent that works **directly on your codebase**.
   Unlike most other tools, it is not tied to an LLM, framework or an interface, making it easy to use it in a variety of ways.
 * :wrench: Murena provides essential **semantic code retrieval and editing tools** that are akin to an IDE's capabilities, extracting code entities at the symbol level and exploiting relational structure. When combined with an existing coding agent, these tools greatly enhance (token) efficiency.

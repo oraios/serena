@@ -131,6 +131,7 @@ type = "simple"
 # For custom markers, one can either adjust the env var or just use -m option in the command line,
 # as the second -m option will override the first one.
 test = "pytest test -vv"
+test-sequential = "pytest test -vv -n 0"
 _black_check = "black --check src scripts test"
 _ruff_check = "ruff check src scripts test"
 _black_format = "black src scripts test"
@@ -275,7 +276,7 @@ max-complexity = 20
 "scripts/**" = ["D103"]
 
 [tool.pytest.ini_options]
-addopts = "--snapshot-patch-pycharm-diff"
+addopts = "--snapshot-patch-pycharm-diff -n auto --dist=loadfile"
 markers = [
   "clojure: language server running for Clojure",
   "python: language server running for Python",

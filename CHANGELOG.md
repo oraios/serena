@@ -1,6 +1,20 @@
 # latest
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+## [Unreleased]
+
+### Added
+- MCP tool `update_changelog` for automatic CHANGELOG management from Claude Code (2026-01-25)
+- 4 new default-enabled tools: `delete_lines`, `insert_at_line`, `replace_lines`, `summarize_changes` (2026-01-25)
+- Fork notice badge in README linking to original Serena project (2026-01-25)
+
+### Changed
+- Parallelized test execution using pytest-xdist, reducing runtime from 30min to 3-4min (2026-01-25)
+- Sequential test option added as `test-sequential` for debugging purposes (2026-01-25)
+
+### Fixed
+- Dashboard header renamed from "Available Tools (Disabled)" to "Inactive Tools" for clarity (2026-01-25)
+- Completed Serena→Murena rebranding in all user-facing messages and documentation (2026-01-25)
 
 * General:
     * Add monorepo/multi-language support

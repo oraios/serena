@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Literal
 
 from murena.text_utils import search_files
-from murena.tools import SUCCESS_RESULT, EditedFileContext, Tool, ToolMarkerCanEdit, ToolMarkerOptional
+from murena.tools import SUCCESS_RESULT, EditedFileContext, Tool, ToolMarkerCanEdit
 from murena.util.file_system import scan_directory
 
 
@@ -287,7 +287,7 @@ class ReplaceContentTool(Tool, ToolMarkerCanEdit):
         return SUCCESS_RESULT
 
 
-class DeleteLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
+class DeleteLinesTool(Tool, ToolMarkerCanEdit):
     """
     Deletes a range of lines within a file.
     """
@@ -312,7 +312,7 @@ class DeleteLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
         return SUCCESS_RESULT
 
 
-class ReplaceLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
+class ReplaceLinesTool(Tool, ToolMarkerCanEdit):
     """
     Replaces a range of lines within a file with new content.
     """
@@ -343,7 +343,7 @@ class ReplaceLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
         return SUCCESS_RESULT
 
 
-class InsertAtLineTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
+class InsertAtLineTool(Tool, ToolMarkerCanEdit):
     """
     Inserts content at a given line in a file.
     """

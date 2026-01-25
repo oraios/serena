@@ -5,7 +5,7 @@ Tools supporting the general workflow of the agent
 import json
 import platform
 
-from murena.tools import Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional
+from murena.tools import Tool, ToolMarkerDoesNotRequireActiveProject
 
 
 class CheckOnboardingPerformedTool(Tool):
@@ -95,7 +95,7 @@ class ThinkAboutWhetherYouAreDoneTool(Tool):
         return self.prompt_factory.create_think_about_whether_you_are_done()
 
 
-class SummarizeChangesTool(Tool, ToolMarkerOptional):
+class SummarizeChangesTool(Tool):
     """
     Provides instructions for summarizing the changes made to the codebase.
     """
