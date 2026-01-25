@@ -63,6 +63,9 @@ class LanguageServerManager:
         language_server_factory: LanguageServerFactory | None = None,
         async_cache_enabled: bool = True,
         async_cache_debounce_interval: float = 5.0,
+        lsp_rate_limiting_enabled: bool = True,
+        lsp_rate_limiting_rate: float = 50.0,
+        lsp_rate_limiting_burst: int = 100,
     ) -> None:
         """
         :param language_servers: a mapping from language to language server; the servers are assumed to be already started.
@@ -72,6 +75,9 @@ class LanguageServerManager:
             is not supported
         :param async_cache_enabled: whether to use async cache persistence (non-blocking writes)
         :param async_cache_debounce_interval: minimum time between cache writes (debouncing)
+        :param lsp_rate_limiting_enabled: whether to enable rate limiting for LSP calls
+        :param lsp_rate_limiting_rate: maximum LSP operations per second
+        :param lsp_rate_limiting_burst: maximum burst capacity for rate limiting
         """
         self._language_servers = language_servers
         self._language_server_factory = language_server_factory
@@ -81,14 +87,35 @@ class LanguageServerManager:
         # Initialize async cache persister with configuration
         self._async_cache_persister = AsyncCachePersister(debounce_interval=async_cache_debounce_interval, enabled=async_cache_enabled)
 
+        # Initialize LSP rate limiter
+        self._lsp_rate_limiter: "RateLimiter | None" = None
+        if lsp_rate_limiting_enabled:
+            from murena.util.rate_limiter import RateLimiter
+
+            self._lsp_rate_limiter = RateLimiter(rate=lsp_rate_limiting_rate, burst=lsp_rate_limiting_burst)
+            log.debug(f"LSP rate limiting enabled: {lsp_rate_limiting_rate} ops/sec, burst={lsp_rate_limiting_burst}")
+
     @staticmethod
-    def from_languages(languages: list[Language], factory: LanguageServerFactory) -> "LanguageServerManager":
+    def from_languages(
+        languages: list[Language],
+        factory: LanguageServerFactory,
+        async_cache_enabled: bool = True,
+        async_cache_debounce_interval: float = 5.0,
+        lsp_rate_limiting_enabled: bool = True,
+        lsp_rate_limiting_rate: float = 50.0,
+        lsp_rate_limiting_burst: int = 100,
+    ) -> "LanguageServerManager":
         """
         Creates a manager with language servers for the given languages using the given factory.
         The language servers are started in parallel threads.
 
         :param languages: the languages for which to spawn language servers
         :param factory: the factory for language server creation
+        :param async_cache_enabled: whether to use async cache persistence
+        :param async_cache_debounce_interval: minimum time between cache writes
+        :param lsp_rate_limiting_enabled: whether to enable rate limiting
+        :param lsp_rate_limiting_rate: maximum LSP ops/sec
+        :param lsp_rate_limiting_burst: maximum burst capacity
         :return: the instance
         """
         language_servers: dict[Language, SolidLanguageServer] = {}
@@ -125,7 +152,15 @@ class LanguageServerManager:
             failure_messages = "\n".join([f"{lang.value}: {e}" for lang, e in exceptions.items()])
             raise Exception(f"Failed to start language servers:\n{failure_messages}")
 
-        return LanguageServerManager(language_servers, factory)
+        return LanguageServerManager(
+            language_servers,
+            factory,
+            async_cache_enabled=async_cache_enabled,
+            async_cache_debounce_interval=async_cache_debounce_interval,
+            lsp_rate_limiting_enabled=lsp_rate_limiting_enabled,
+            lsp_rate_limiting_rate=lsp_rate_limiting_rate,
+            lsp_rate_limiting_burst=lsp_rate_limiting_burst,
+        )
 
     def get_root_path(self) -> str:
         return self._root_path

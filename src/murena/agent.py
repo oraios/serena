@@ -32,6 +32,7 @@ from solidlsp.ls_config import Language
 
 if TYPE_CHECKING:
     from murena.gui_log_viewer import GuiLogViewer
+    from murena.util.resource_monitor import ResourceMonitor, ResourceSnapshot
 
 log = logging.getLogger(__name__)
 TTool = TypeVar("TTool", bound="Tool")
@@ -289,6 +290,34 @@ class MurenaAgent:
         # create executor for starting the language server and running tools in another thread
         # This executor is used to achieve linear task execution
         self._task_executor = TaskExecutor("MurenaAgentTaskExecutor")
+
+        # create async executor for parallel tool execution (reused across calls)
+        from murena.async_task_executor import AsyncTaskExecutor
+
+        rm_config = self.murena_config.resource_management
+        self._async_executor = AsyncTaskExecutor(max_workers=rm_config.async_execution_max_workers)
+
+        # Initialize resource monitoring with graceful degradation
+        self._degradation_level = 0
+        self._resource_monitor: "ResourceMonitor | None" = None
+        if rm_config.monitoring_enabled:
+            from murena.util.resource_monitor import ResourceMonitor as _ResourceMonitor
+            from murena.util.resource_monitor import ResourceThresholds
+
+            self._resource_monitor = _ResourceMonitor(
+                sample_interval=rm_config.monitoring_sample_interval,
+                thresholds=ResourceThresholds(
+                    memory_warning_mb=rm_config.monitoring_memory_warning_mb,
+                    memory_critical_mb=rm_config.monitoring_memory_critical_mb,
+                ),
+                on_warning=self._on_resource_warning,
+                on_critical=self._on_resource_critical,
+            )
+            self._resource_monitor.start()
+            log.info(
+                f"Resource monitoring started (warning={rm_config.monitoring_memory_warning_mb}MB, "
+                f"critical={rm_config.monitoring_memory_critical_mb}MB)"
+            )
 
         # Initialize the prompt factory
         self.prompt_factory = MurenaPromptFactory()
@@ -606,7 +635,6 @@ class MurenaAgent:
         """
         import asyncio
 
-        from murena.async_task_executor import execute_tools_parallel
         from murena.tool_dependency_analyzer import ToolCall, ToolDependencyAnalyzer
 
         if not enabled or len(tool_names) <= 1:
@@ -636,22 +664,23 @@ class MurenaAgent:
                 raise ValueError(f"Tool not found: {tc.tool_name}")
             return tool.apply_ex(**tc.params)
 
-        # Run async execution
+        # Run async execution with reusable executor
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
             results = loop.run_until_complete(
-                execute_tools_parallel(
+                self._async_executor.execute_tools(
                     tool_calls=tool_calls,
                     dependency_graph=dep_graph,
                     execute_func=execute_tool,
-                    max_workers=10,
                     timeout_per_tool=self.murena_config.tool_timeout,
                 )
             )
             return results
         finally:
             loop.close()
+            # Clear thread-local event loop reference to prevent leak
+            asyncio.set_event_loop(None)
 
     def is_using_language_server(self) -> bool:
         """
@@ -665,9 +694,17 @@ class MurenaAgent:
         self._update_active_tools()
 
         # Initialize session symbol cache for token optimization
-        # Cache TTL: 1 hour (configurable via murena_config in future)
-        self._symbol_cache = SessionSymbolCache(project.project_root, ttl_seconds=3600)
-        log.info("Initialized symbol cache for token optimization")
+        rm_config = self.murena_config.resource_management
+        self._symbol_cache = SessionSymbolCache(
+            project.project_root,
+            ttl_seconds=rm_config.symbol_cache_ttl_seconds,
+            max_entries=rm_config.symbol_cache_max_entries,
+            max_memory_mb=rm_config.symbol_cache_max_memory_mb,
+        )
+        log.info(
+            f"Initialized symbol cache (max_entries={rm_config.symbol_cache_max_entries}, "
+            f"max_memory_mb={rm_config.symbol_cache_max_memory_mb})"
+        )
 
         def init_language_server_manager() -> None:
             # start the language server
@@ -787,11 +824,17 @@ class MurenaAgent:
             ls_timeout = tool_timeout - 5  # the LS timeout is for a single call, it should be smaller than the tool timeout
 
         # instantiate and start the necessary language servers
+        rm_config = self.murena_config.resource_management
         self.get_active_project_or_raise().create_language_server_manager(
             log_level=self.murena_config.log_level,
             ls_timeout=ls_timeout,
             trace_lsp_communication=self.murena_config.trace_lsp_communication,
             ls_specific_settings=self.murena_config.ls_specific_settings,
+            async_cache_enabled=self.murena_config.cache.async_persistence_enabled,
+            async_cache_debounce_interval=self.murena_config.cache.async_persistence_debounce_interval,
+            lsp_rate_limiting_enabled=rm_config.lsp_rate_limiting_enabled,
+            lsp_rate_limiting_rate=rm_config.lsp_rate_limiting_rate_per_second,
+            lsp_rate_limiting_burst=rm_config.lsp_rate_limiting_burst,
         )
 
     def add_language(self, language: Language) -> None:
@@ -819,6 +862,46 @@ class MurenaAgent:
     def print_tool_overview(self) -> None:
         ToolRegistry().print_tool_overview(self._active_tools.tools)
 
+    def _on_resource_warning(self, snapshot: "ResourceSnapshot") -> None:
+        """Callback when resource warning threshold is exceeded."""
+        if self._degradation_level < 1:
+            self._degradation_level = 1
+            log.warning(
+                f"Resource warning: memory={snapshot.memory_rss_mb:.1f}MB, cpu={snapshot.cpu_percent:.1f}% - "
+                f"Entering degradation level 1 (reducing cache by 50%)"
+            )
+            # Level 1: Reduce cache by 50%
+            if self._symbol_cache:
+                old_max = self._symbol_cache._max_entries
+                self._symbol_cache._max_entries = old_max // 2
+                log.info(f"Reduced symbol cache max_entries: {old_max} -> {self._symbol_cache._max_entries}")
+
+    def _on_resource_critical(self, snapshot: "ResourceSnapshot") -> None:
+        """Callback when resource critical threshold is exceeded."""
+        if snapshot.memory_rss_mb > self.murena_config.resource_management.monitoring_memory_critical_mb * 0.9:
+            if self._degradation_level < 3:
+                self._degradation_level = 3
+                log.error(
+                    f"Resource CRITICAL: memory={snapshot.memory_rss_mb:.1f}MB, cpu={snapshot.cpu_percent:.1f}% - "
+                    f"Entering degradation level 3 (aggressive cleanup)"
+                )
+                # Level 3: Aggressive cleanup
+                if self._symbol_cache:
+                    self._symbol_cache.clear()
+                    self._symbol_cache._max_entries = 100  # Minimal cache
+                    log.warning("Cleared symbol cache and set to minimal capacity (100 entries)")
+
+        elif self._degradation_level < 2:
+            self._degradation_level = 2
+            log.warning(
+                f"Resource critical: memory={snapshot.memory_rss_mb:.1f}MB, cpu={snapshot.cpu_percent:.1f}% - "
+                f"Entering degradation level 2 (clearing cache)"
+            )
+            # Level 2: Clear cache
+            if self._symbol_cache:
+                self._symbol_cache.clear()
+                log.info("Cleared symbol cache")
+
     def __del__(self) -> None:
         self.shutdown()
 
@@ -829,13 +912,39 @@ class MurenaAgent:
         if not hasattr(self, "_is_initialized"):
             return
         log.info("MurenaAgent is shutting down ...")
+
+        # Shutdown task executor
+        if hasattr(self, "_task_executor"):
+            log.info("Shutting down task executor...")
+            self._task_executor.shutdown(timeout=timeout)
+
+        # Shutdown async executor
+        if hasattr(self, "_async_executor"):
+            log.info("Shutting down async executor...")
+            self._async_executor.shutdown()
+
+        # Shutdown resource monitoring
+        if hasattr(self, "_resource_monitor") and self._resource_monitor is not None:
+            log.info("Shutting down resource monitor...")
+            self._resource_monitor.stop(timeout=timeout)
+
+        # Shutdown active project
         if self._active_project is not None:
             self._active_project.shutdown(timeout=timeout)
             self._active_project = None
+
+        # Stop GUI log viewer
         if self._gui_log_viewer:
             log.info("Stopping the GUI log window ...")
             self._gui_log_viewer.stop()
             self._gui_log_viewer = None
+
+        # Join dashboard thread
+        if hasattr(self, "_dashboard_thread") and self._dashboard_thread is not None:
+            log.info("Waiting for dashboard thread...")
+            self._dashboard_thread.join(timeout=1.0)
+            if self._dashboard_thread.is_alive():
+                log.warning("Dashboard thread did not terminate in time")
 
     def get_tool_by_name(self, tool_name: str) -> Tool:
         tool_class = ToolRegistry().get_tool_class_by_name(tool_name)

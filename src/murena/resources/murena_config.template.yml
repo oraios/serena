@@ -71,6 +71,38 @@ ls_specific_settings: {}
 tool_timeout: 240
 # timeout, in seconds, after which tool executions are terminated
 
+# Resource Management Configuration
+resource_management:
+  # Symbol cache settings (session-level cache for token optimization)
+  symbol_cache:
+    ttl_seconds: 3600  # Cache entry lifetime (1 hour)
+    max_entries: 500   # Maximum number of cached symbols
+    max_memory_mb: 100 # Maximum memory usage for cache
+
+  # Resource monitoring settings
+  monitoring:
+    enabled: true           # Enable real-time resource monitoring
+    sample_interval: 10.0   # Seconds between resource samples
+    memory_warning_mb: 300  # Memory threshold for warning callback
+    memory_critical_mb: 500 # Memory threshold for critical callback
+
+  # Async execution settings
+  async_execution:
+    max_workers: 10  # Maximum concurrent tool executions
+
+  # LSP rate limiting settings
+  lsp_rate_limiting:
+    enabled: true         # Enable rate limiting for LSP calls
+    rate_per_second: 50   # Maximum LSP operations per second
+    burst: 100            # Maximum burst capacity
+
+# Memory profile: low | medium | high
+# Overrides individual resource_management settings with preset values
+# - low: max_entries=200, max_memory_mb=50, aggressive limits
+# - medium: max_entries=500, max_memory_mb=100 (default)
+# - high: max_entries=1000, max_memory_mb=200, relaxed limits
+memory_profile: medium
+
 excluded_tools: []
 # list of tools to be globally excluded
 

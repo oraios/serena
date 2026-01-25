@@ -433,6 +433,79 @@ class CacheConfig:
     """Maximum memory usage in MB for document symbols LRU cache"""
 
 
+@dataclass
+class ResourceManagementConfig:
+    """
+    Configuration for resource management (monitoring, rate limiting, cache limits).
+    """
+
+    # Symbol cache settings
+    symbol_cache_ttl_seconds: int = 3600
+    """TTL for session-level symbol cache entries (default: 1 hour)"""
+
+    symbol_cache_max_entries: int = 500
+    """Maximum number of entries in session symbol cache"""
+
+    symbol_cache_max_memory_mb: int = 100
+    """Maximum memory usage in MB for session symbol cache"""
+
+    # Resource monitoring settings
+    monitoring_enabled: bool = True
+    """Whether to enable real-time resource monitoring"""
+
+    monitoring_sample_interval: float = 10.0
+    """Seconds between resource monitoring samples"""
+
+    monitoring_memory_warning_mb: float = 300.0
+    """Memory threshold in MB for warning callbacks"""
+
+    monitoring_memory_critical_mb: float = 500.0
+    """Memory threshold in MB for critical callbacks"""
+
+    # Async execution settings
+    async_execution_max_workers: int = 10
+    """Maximum number of concurrent tool executions"""
+
+    # LSP rate limiting settings
+    lsp_rate_limiting_enabled: bool = True
+    """Whether to enable rate limiting for LSP calls"""
+
+    lsp_rate_limiting_rate_per_second: float = 50.0
+    """Maximum LSP operations per second"""
+
+    lsp_rate_limiting_burst: int = 100
+    """Maximum burst capacity for LSP rate limiting"""
+
+    @classmethod
+    def from_memory_profile(cls, profile: str) -> "ResourceManagementConfig":
+        """
+        Create config from a memory profile preset.
+
+        Args:
+            profile: One of 'low', 'medium', 'high'
+
+        Returns:
+            ResourceManagementConfig with preset values
+
+        """
+        if profile == "low":
+            return cls(
+                symbol_cache_max_entries=200,
+                symbol_cache_max_memory_mb=50,
+                monitoring_memory_warning_mb=150,
+                monitoring_memory_critical_mb=250,
+            )
+        elif profile == "high":
+            return cls(
+                symbol_cache_max_entries=1000,
+                symbol_cache_max_memory_mb=200,
+                monitoring_memory_warning_mb=500,
+                monitoring_memory_critical_mb=800,
+            )
+        else:  # medium (default)
+            return cls()
+
+
 @dataclass(kw_only=True)
 class MurenaConfig(ToolInclusionDefinition, ToStringMixin):
     """
@@ -478,6 +551,12 @@ class MurenaConfig(ToolInclusionDefinition, ToStringMixin):
     cache: CacheConfig = field(default_factory=CacheConfig)
     """Cache configuration for async persistence and LRU limits"""
 
+    resource_management: ResourceManagementConfig = field(default_factory=ResourceManagementConfig)
+    """Resource management configuration (monitoring, rate limiting, cache limits)"""
+
+    memory_profile: str = "medium"
+    """Memory profile preset: 'low', 'medium', or 'high'"""
+
     # *** fields that are NOT mapped to/from the configuration file ***
 
     _loaded_commented_yaml: CommentedMap | None = None
@@ -490,7 +569,7 @@ class MurenaConfig(ToolInclusionDefinition, ToStringMixin):
     # *** static members ***
 
     CONFIG_FILE = "murena_config.yml"
-    CONFIG_FIELDS_WITH_TYPE_CONVERSION = {"projects", "language_backend", "cache"}
+    CONFIG_FIELDS_WITH_TYPE_CONVERSION = {"projects", "language_backend", "cache", "resource_management"}
 
     # *** methods ***
 
@@ -613,6 +692,23 @@ class MurenaConfig(ToolInclusionDefinition, ToStringMixin):
         if "cache" in loaded_commented_yaml:
             cache_dict = loaded_commented_yaml["cache"]
             instance.cache = CacheConfig(**cache_dict)
+
+        # load resource management config if present (with memory_profile override)
+        if "memory_profile" in loaded_commented_yaml and loaded_commented_yaml["memory_profile"] != "medium":
+            # Apply memory profile preset
+            instance.memory_profile = loaded_commented_yaml["memory_profile"]
+            instance.resource_management = ResourceManagementConfig.from_memory_profile(instance.memory_profile)
+        elif "resource_management" in loaded_commented_yaml:
+            # Load from detailed config
+            rm_dict = loaded_commented_yaml["resource_management"]
+            # Flatten nested structure from YAML
+            flat_rm_dict = {}
+            for section, values in rm_dict.items():
+                if isinstance(values, dict):
+                    for key, value in values.items():
+                        flat_key = f"{section}_{key}"
+                        flat_rm_dict[flat_key] = value
+            instance.resource_management = ResourceManagementConfig(**flat_rm_dict)
 
         # migrate deprecated "gui_log_level" field if necessary
         if "gui_log_level" in loaded_commented_yaml:

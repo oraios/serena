@@ -54,6 +54,7 @@ class AsyncCachePersister:
         self._enabled = enabled
         self._pending_writes: dict[str, tuple[Any, Callable[[Any], None], float]] = {}
         self._lock = threading.RLock()
+        self._write_available = threading.Condition(self._lock)
         self._shutdown_flag = threading.Event()
         self._flush_requested = threading.Event()
         self._worker_thread: threading.Thread | None = None
@@ -74,24 +75,52 @@ class AsyncCachePersister:
         Background worker that periodically flushes pending writes.
 
         Runs until shutdown is requested or thread is interrupted.
+        Uses smart debouncing with dynamic timeout to avoid busy-waiting.
         """
         try:
             while not self._shutdown_flag.is_set():
-                # Sleep for a short interval, checking for shutdown
-                self._shutdown_flag.wait(timeout=0.5)
+                # Calculate dynamic timeout until next write
+                with self._write_available:
+                    # Check if flush was requested
+                    if self._flush_requested.is_set():
+                        self._execute_pending_writes(force=True)
+                        self._flush_requested.clear()
+                    else:
+                        # Calculate timeout to next pending write
+                        timeout = self._calculate_next_timeout()
+                        if timeout > 0:
+                            # Wait for notification or timeout
+                            self._write_available.wait(timeout=timeout)
 
-                # Check if flush was requested
-                if self._flush_requested.is_set():
-                    self._execute_pending_writes(force=True)
-                    self._flush_requested.clear()
-                else:
-                    # Execute writes whose debounce interval has elapsed
-                    self._execute_pending_writes(force=False)
+                        # Execute writes whose debounce interval has elapsed
+                        self._execute_pending_writes(force=False)
 
         except Exception as e:
             log.exception(f"AsyncCachePersister worker thread encountered an error: {e}")
         finally:
             log.debug("AsyncCachePersister worker thread terminating")
+
+    def _calculate_next_timeout(self) -> float:
+        """
+        Calculate timeout until the next write should be executed.
+
+        Returns:
+            Timeout in seconds, or debounce_interval if no pending writes
+
+        """
+        if not self._pending_writes:
+            return self._debounce_interval
+
+        current_time = time.time()
+        min_wait = self._debounce_interval
+
+        for _key, (_data, _save_fn, scheduled_time) in self._pending_writes.items():
+            elapsed = current_time - scheduled_time
+            remaining = self._debounce_interval - elapsed
+            if remaining < min_wait:
+                min_wait = max(0.0, remaining)
+
+        return min_wait
 
     def _execute_pending_writes(self, force: bool = False) -> None:
         """
@@ -144,9 +173,11 @@ class AsyncCachePersister:
                 log.exception(f"Error in synchronous cache write for {key}: {e}")
             return
 
-        with self._lock:
+        with self._write_available:
             # Update or add pending write with current timestamp
             self._pending_writes[key] = (data, save_function, time.time())
+            # Notify worker thread of new write
+            self._write_available.notify()
 
         log.debug(f"Cache write scheduled: {key}")
 
@@ -166,8 +197,10 @@ class AsyncCachePersister:
 
         log.debug(f"Flushing all pending cache writes (timeout={timeout}s)")
 
-        # Request flush
-        self._flush_requested.set()
+        # Request flush and notify worker
+        with self._write_available:
+            self._flush_requested.set()
+            self._write_available.notify()
 
         # Wait for worker to process
         start_time = time.time()

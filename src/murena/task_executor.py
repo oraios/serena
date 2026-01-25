@@ -1,6 +1,5 @@
 import concurrent.futures
 import threading
-import time
 from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass
@@ -19,6 +18,8 @@ class TaskExecutor:
     def __init__(self, name: str):
         self._task_executor_lock = threading.Lock()
         self._task_executor_queue: list[TaskExecutor.Task] = []
+        self._task_available = threading.Event()
+        self._shutdown_requested = threading.Event()
         self._task_executor_thread = Thread(target=self._process_task_queue, name=name, daemon=True)
         self._task_executor_thread.start()
         self._task_executor_task_index = 1
@@ -106,14 +107,17 @@ class TaskExecutor:
                 pass
 
     def _process_task_queue(self) -> None:
-        while True:
+        while not self._shutdown_requested.is_set():
             # obtain task from the queue
             task: TaskExecutor.Task | None = None
             with self._task_executor_lock:
                 if len(self._task_executor_queue) > 0:
                     task = self._task_executor_queue.pop(0)
+
             if task is None:
-                time.sleep(0.1)
+                # Wait for task availability with timeout (no busy-wait)
+                self._task_available.wait(timeout=5.0)
+                self._task_available.clear()
                 continue
 
             # start task execution asynchronously
@@ -192,6 +196,8 @@ class TaskExecutor:
                 log.info(f"Scheduling {task_name}")
             task_obj = self.Task(function=task, name=task_name, logged=logged, timeout=timeout)
             self._task_executor_queue.append(task_obj)
+            # Wake up the worker thread
+            self._task_available.set()
             return task_obj
 
     def execute_task(self, task: Callable[[], T], name: str | None = None, logged: bool = True, timeout: float | None = None) -> T:
@@ -216,3 +222,18 @@ class TaskExecutor:
         """
         with self._task_executor_lock:
             return self._task_executor_last_executed_task_info
+
+    def shutdown(self, timeout: float = 5.0) -> None:
+        """
+        Gracefully shutdown the task executor.
+
+        :param timeout: maximum time to wait for shutdown in seconds
+        """
+        log.info("Shutting down TaskExecutor")
+        self._shutdown_requested.set()
+        self._task_available.set()  # Wake up worker thread
+        self._task_executor_thread.join(timeout=timeout)
+        if self._task_executor_thread.is_alive():
+            log.warning("TaskExecutor thread did not terminate in time")
+        else:
+            log.debug("TaskExecutor shutdown complete")

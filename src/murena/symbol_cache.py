@@ -14,6 +14,8 @@ from typing import Any
 
 from sensai.util import logging
 
+from solidlsp.util.lru_cache import LRUCache
+
 log = logging.getLogger(__name__)
 
 
@@ -33,7 +35,7 @@ class CachedSymbol:
 
 class SessionSymbolCache:
     """
-    Session-level cache for symbol bodies.
+    Session-level cache for symbol bodies with LRU eviction.
 
     The cache is keyed by (relative_path, name_path) and stores the complete
     symbol dictionary including body. Entries are automatically invalidated
@@ -42,21 +44,37 @@ class SessionSymbolCache:
     Attributes:
         ttl_seconds: Time-to-live for cache entries (default: 3600 = 1 hour)
         project_root: Root directory of the project (for resolving relative paths)
+        max_entries: Maximum number of cache entries (default: 500)
+        max_memory_mb: Maximum memory usage in MB (default: 100)
 
     """
 
-    def __init__(self, project_root: str, ttl_seconds: int = 3600):
+    def __init__(
+        self,
+        project_root: str,
+        ttl_seconds: int = 3600,
+        max_entries: int = 500,
+        max_memory_mb: int = 100,
+    ):
         """
-        Initialize the symbol cache.
+        Initialize the symbol cache with LRU eviction.
 
         :param project_root: Root directory of the project
         :param ttl_seconds: Time-to-live for cache entries in seconds
+        :param max_entries: Maximum number of cache entries
+        :param max_memory_mb: Maximum memory usage in MB
         """
         self.project_root = project_root
         self.ttl_seconds = ttl_seconds
-        self._cache: dict[tuple[str, str], CachedSymbol] = {}
+        self._max_entries = max_entries
+        self._max_memory_mb = max_memory_mb
+        self._cache: LRUCache[tuple[str, str], CachedSymbol] = LRUCache(
+            max_entries=max_entries,
+            max_memory_mb=max_memory_mb,
+        )
         self._hits = 0
         self._misses = 0
+        self._evictions = 0
 
     def get(self, relative_path: str, name_path: str) -> dict[str, Any] | None:
         """
@@ -73,17 +91,17 @@ class SessionSymbolCache:
         """
         key = (relative_path, name_path)
 
-        if key not in self._cache:
+        cached = self._cache.get(key)
+        if cached is None:
             self._misses += 1
             return None
 
-        cached = self._cache[key]
         current_time = time.time()
 
         # Check TTL
         if current_time - cached.cache_time > self.ttl_seconds:
             log.debug(f"Cache expired for {relative_path}::{name_path}")
-            del self._cache[key]
+            self._cache.remove(key)
             self._misses += 1
             return None
 
@@ -93,12 +111,12 @@ class SessionSymbolCache:
             current_mtime = os.path.getmtime(file_path)
             if current_mtime > cached.file_mtime:
                 log.debug(f"File modified, invalidating cache for {relative_path}::{name_path}")
-                del self._cache[key]
+                self._cache.remove(key)
                 self._misses += 1
                 return None
         except OSError as e:
             log.warning(f"Failed to check mtime for {file_path}: {e}, invalidating cache")
-            del self._cache[key]
+            self._cache.remove(key)
             self._misses += 1
             return None
 
@@ -130,8 +148,17 @@ class SessionSymbolCache:
             cache_time=time.time(),
         )
 
-        self._cache[key] = cached
-        log.debug(f"Cached symbol {relative_path}::{name_path} (cache size: {len(self._cache)})")
+        # Track size before put to detect evictions
+        size_before = self._cache.size()
+        self._cache.put(key, cached)
+        size_after = self._cache.size()
+
+        # If size didn't increase and we added an item, something was evicted
+        if size_after <= size_before:
+            self._evictions += size_before - size_after + 1
+
+        stats = self._cache.stats()
+        log.debug(f"Cached symbol {relative_path}::{name_path} (size: {stats['entries']}, memory: {stats['memory_mb']:.1f} MB)")
 
     def invalidate_file(self, relative_path: str) -> int:
         """
@@ -140,9 +167,12 @@ class SessionSymbolCache:
         :param relative_path: Relative path to the source file
         :return: Number of entries invalidated
         """
-        keys_to_remove = [key for key in self._cache if key[0] == relative_path]
+        # Get all keys that match the file path
+        cache_dict = self._cache.to_dict()
+        keys_to_remove = [key for key in cache_dict.keys() if key[0] == relative_path]
+
         for key in keys_to_remove:
-            del self._cache[key]
+            self._cache.remove(key)
 
         if keys_to_remove:
             log.debug(f"Invalidated {len(keys_to_remove)} cache entries for {relative_path}")
@@ -163,10 +193,15 @@ class SessionSymbolCache:
 
         :return: Dictionary with cache statistics
         """
+        lru_stats = self._cache.stats()
         return {
-            "size": len(self._cache),
+            "size": lru_stats["entries"],
+            "memory_mb": lru_stats["memory_mb"],
+            "max_entries": self._max_entries,
+            "max_memory_mb": self._max_memory_mb,
             "hits": self._hits,
             "misses": self._misses,
+            "evictions": self._evictions,
             "hit_rate": self.get_hit_rate(),
             "ttl_seconds": self.ttl_seconds,
         }

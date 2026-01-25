@@ -370,6 +370,11 @@ class Project(ToStringMixin):
         ls_timeout: float | None = DEFAULT_TOOL_TIMEOUT - 5,
         trace_lsp_communication: bool = False,
         ls_specific_settings: dict[Language, Any] | None = None,
+        async_cache_enabled: bool = True,
+        async_cache_debounce_interval: float = 5.0,
+        lsp_rate_limiting_enabled: bool = True,
+        lsp_rate_limiting_rate: float = 50.0,
+        lsp_rate_limiting_burst: int = 100,
     ) -> LanguageServerManager:
         """
         Creates the language server manager for the project, starting one language server per configured programming language.
@@ -379,6 +384,11 @@ class Project(ToStringMixin):
         :param trace_lsp_communication: whether to trace LSP communication
         :param ls_specific_settings: optional LS specific configuration of the language server,
             see docstrings in the inits of subclasses of SolidLanguageServer to see what values may be passed.
+        :param async_cache_enabled: whether to use async cache persistence
+        :param async_cache_debounce_interval: minimum time between cache writes
+        :param lsp_rate_limiting_enabled: whether to enable LSP rate limiting
+        :param lsp_rate_limiting_rate: maximum LSP ops/sec
+        :param lsp_rate_limiting_burst: maximum burst capacity
         :return: the language server manager, which is also stored in the project instance
         """
         # if there is an existing instance, stop its language servers first
@@ -396,7 +406,15 @@ class Project(ToStringMixin):
             ls_specific_settings=ls_specific_settings,
             trace_lsp_communication=trace_lsp_communication,
         )
-        self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory)
+        self.language_server_manager = LanguageServerManager.from_languages(
+            self.project_config.languages,
+            factory,
+            async_cache_enabled=async_cache_enabled,
+            async_cache_debounce_interval=async_cache_debounce_interval,
+            lsp_rate_limiting_enabled=lsp_rate_limiting_enabled,
+            lsp_rate_limiting_rate=lsp_rate_limiting_rate,
+            lsp_rate_limiting_burst=lsp_rate_limiting_burst,
+        )
         return self.language_server_manager
 
     def add_language(self, language: Language) -> None:
