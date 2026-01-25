@@ -620,8 +620,8 @@ class MurenaDashboardAPI:
         self._app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
         return port
 
-    def run_in_thread(self, host: str) -> tuple[threading.Thread, int]:
-        port = self._find_first_free_port(0x5EDA, host)
+    def run_in_thread(self, host: str, start_port: int = 0x5EE2) -> tuple[threading.Thread, int]:
+        port = self._find_first_free_port(start_port, host)
         log.info("Starting dashboard (listen_address=%s, port=%d)", host, port)
         thread = threading.Thread(target=lambda: self.run(host=host, port=port), daemon=True)
         thread.start()

@@ -203,6 +203,12 @@ class TopLevelCommands(AutoRegisteringGroup):
         help="Open Serena's dashboard in your browser after MCP server startup (overriding the setting in Murena's config).",
     )
     @click.option(
+        "--web-dashboard-port",
+        type=int,
+        default=None,
+        help="Port for the web dashboard (overrides config). Auto-increments if unavailable.",
+    )
+    @click.option(
         "--log-level",
         type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
         default=None,
@@ -229,6 +235,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         enable_web_dashboard: bool | None,
         open_web_dashboard: bool | None,
         enable_gui_log_window: bool | None,
+        web_dashboard_port: int | None,
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None,
         trace_lsp_communication: bool | None,
         tool_timeout: float | None,
@@ -270,6 +277,7 @@ class TopLevelCommands(AutoRegisteringGroup):
             enable_web_dashboard=enable_web_dashboard,
             open_web_dashboard=open_web_dashboard,
             enable_gui_log_window=enable_gui_log_window,
+            web_dashboard_port=web_dashboard_port,
             log_level=log_level,
             trace_lsp_communication=trace_lsp_communication,
             tool_timeout=tool_timeout,

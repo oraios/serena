@@ -38,13 +38,17 @@ web_dashboard: True
 web_dashboard_listen_address: 127.0.0.1
 # The address where the web dashboard will listen on
 
+web_dashboard_port: 24290
+# Port for the web dashboard. Default 24290 avoids conflict with Serena (24282).
+# If port is occupied, will auto-increment to 24291, 24292, etc.
+
 web_dashboard_open_on_launch: True
 # whether to open a browser window with the web dashboard when Murena starts (provided that web_dashboard
 # is enabled). See also the web_dashboard option.
 # If set to false, you can still open the dashboard manually by
 # a) telling the LLM to "open the dashboard" (provided that the open_dashboard tool is enabled) or by
-# b) manually navigating to http://localhost:24282/dashboard/ in your web browser (actual port
-#    may be higher if you have multiple instances running; try ports 24283, 24284, etc.)
+# b) manually navigating to http://localhost:24290/dashboard/ in your web browser (actual port
+#    may be higher if you have multiple instances running; try ports 24291, 24292, etc.)
 # See also: https://oraios.github.io/murena/02-usage/060_dashboard.html
 
 jetbrains_plugin_server_address: 127.0.0.1

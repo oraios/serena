@@ -277,6 +277,7 @@ class MurenaMCPFactory:
         enable_web_dashboard: bool | None = None,
         enable_gui_log_window: bool | None = None,
         open_web_dashboard: bool | None = None,
+        web_dashboard_port: int | None = None,
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
         trace_lsp_communication: bool | None = None,
         tool_timeout: float | None = None,
@@ -308,6 +309,8 @@ class MurenaMCPFactory:
                 config.gui_log_window = enable_gui_log_window
             if open_web_dashboard is not None:
                 config.web_dashboard_open_on_launch = open_web_dashboard
+            if web_dashboard_port is not None:
+                config.web_dashboard_port = web_dashboard_port
             if log_level is not None:
                 log_level = cast(Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], log_level.upper())
                 config.log_level = logging.getLevelNamesMapping()[log_level]

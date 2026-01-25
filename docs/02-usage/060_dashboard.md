@@ -9,7 +9,7 @@ Murena comes with built-in tools for monitoring and managing the current session
 
   The dashboard is supported on all platforms.
   
-  By default, it will be accessible at `http://localhost:24282/dashboard/index.html`,
+  By default, it will be accessible at `http://localhost:24290/dashboard/index.html`,
   but a higher port may be used if the default port is unavailable/multiple instances are running.
 
   **We recommend always enabling the dashboard**. If you don't want the browser to open automatically,
