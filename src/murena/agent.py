@@ -6,8 +6,10 @@ import os
 import platform
 import subprocess
 import sys
+import threading
 from collections.abc import Callable
 from logging import Logger
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
 from sensai.util import logging
@@ -339,6 +341,50 @@ class MurenaAgent:
             except Exception as e:
                 log.error(f"Error activating project '{project}' at startup: {e}", exc_info=e)
 
+        # register tenant in multi-project registry
+        self._health_monitor_thread: threading.Thread | None = None
+        self._tenant_id: str | None = None
+        try:
+            from murena.multi_project import TenantMetadata, TenantRegistry, TenantStatus
+            from murena.multi_project.health_monitor import BackgroundHealthMonitor
+
+            # Determine tenant ID from project or use default
+            self._tenant_id = (
+                Path(self._active_project.project_root).name
+                if self._active_project
+                else "default"
+            )
+
+            registry = TenantRegistry()
+            tenant_metadata = TenantMetadata(
+                tenant_id=self._tenant_id,
+                server_name=f"murena-{self._tenant_id}",
+                project_root=self._active_project.project_root if self._active_project else os.getcwd(),
+                pid=os.getpid(),
+                status=TenantStatus.STARTING,
+            )
+            registry.register_tenant(tenant_metadata)
+
+            # Start background health monitoring if enabled
+            health_config = self.murena_config.resource_management
+            if health_config.monitoring_enabled:
+                self._health_monitor = BackgroundHealthMonitor(
+                    tenant_id=self._tenant_id,
+                    pid=os.getpid(),
+                    interval_seconds=health_config.monitoring_sample_interval,
+                    enabled=True,
+                )
+                self._health_monitor.start()
+
+            # Update status to RUNNING
+            registry.update_status(self._tenant_id, TenantStatus.RUNNING)
+            log.info(f"Registered tenant '{self._tenant_id}' in multi-project registry")
+
+        except ImportError:
+            log.debug("Multi-project registry not available")
+        except Exception as e:
+            log.warning(f"Failed to register tenant: {e}")
+
         # start the dashboard (web frontend), registering its log handler
         # should be the last thing to happen in the initialization since the dashboard
         # may access various parts of the agent
@@ -603,7 +649,19 @@ class MurenaAgent:
         :param timeout: the maximum time to wait for task completion in seconds, or None to wait indefinitely
         :return: the result of the task execution
         """
-        return self._task_executor.execute_task(task, name=name, logged=logged, timeout=timeout)
+        result = self._task_executor.execute_task(task, name=name, logged=logged, timeout=timeout)
+
+        # Record activity in multi-project registry
+        if hasattr(self, "_tenant_id") and self._tenant_id:
+            try:
+                from murena.multi_project import TenantRegistry
+
+                registry = TenantRegistry()
+                registry.mark_activity(self._tenant_id)
+            except Exception:
+                pass  # Silently ignore registry errors
+
+        return result
 
     def execute_tools_parallel(
         self,
@@ -945,6 +1003,21 @@ class MurenaAgent:
             self._dashboard_thread.join(timeout=1.0)
             if self._dashboard_thread.is_alive():
                 log.warning("Dashboard thread did not terminate in time")
+
+        # Stop health monitor and unregister from multi-project registry
+        if hasattr(self, "_health_monitor") and self._health_monitor is not None:
+            log.info("Stopping health monitor...")
+            self._health_monitor.stop()
+
+        if hasattr(self, "_tenant_id") and self._tenant_id:
+            try:
+                from murena.multi_project import TenantRegistry
+
+                registry = TenantRegistry()
+                registry.unregister_tenant(self._tenant_id)
+                log.debug(f"Unregistered tenant '{self._tenant_id}' from multi-project registry")
+            except Exception as e:
+                log.warning(f"Failed to unregister tenant: {e}")
 
     def get_tool_by_name(self, tool_name: str) -> Tool:
         tool_class = ToolRegistry().get_tool_class_by_name(tool_name)

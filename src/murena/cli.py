@@ -222,6 +222,19 @@ class TopLevelCommands(AutoRegisteringGroup):
         default=False,
         help="Auto-detect project from current working directory (searches for .murena/project.yml or .git, falls back to CWD). Intended for CLI-based agents like Claude Code, Gemini and Codex.",
     )
+    @click.option(
+        "--server-name",
+        type=str,
+        default=None,
+        help="Explicit name for this MCP server instance (e.g., 'murena-serena'). Used for logging and identification.",
+    )
+    @click.option(
+        "--auto-name",
+        is_flag=True,
+        default=False,
+        help="Automatically generate server name from project directory name (e.g., 'murena-{project_dir_name}'). "
+        "Used with multi-project support.",
+    )
     def start_mcp_server(
         project: str | None,
         project_file_arg: str | None,
@@ -239,6 +252,8 @@ class TopLevelCommands(AutoRegisteringGroup):
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None,
         trace_lsp_communication: bool | None,
         tool_timeout: float | None,
+        server_name: str | None,
+        auto_name: bool,
     ) -> None:
         # initialize logging, using INFO level initially (will later be adjusted by MurenaAgent according to the config)
         #   * memory log handler (for use by GUI/Dashboard)
@@ -268,6 +283,20 @@ class TopLevelCommands(AutoRegisteringGroup):
             log.info("Auto-detected project root: %s", project)
 
         project_file = project_file_arg or project
+
+        # Determine server name for logging and identification
+        effective_server_name = "murena"  # Default name
+        if server_name:
+            effective_server_name = server_name
+        elif auto_name and project_file:
+            # Generate name from project directory
+            project_dir_name = Path(project_file).name
+            effective_server_name = f"murena-{project_dir_name}"
+
+        log.info("MCP server name: %s", effective_server_name)
+        if project_file:
+            log.info("Active project: %s", project_file)
+
         factory = MurenaMCPFactory(context=context, project=project_file, memory_log_handler=memory_log_handler)
         server = factory.create_mcp_server(
             host=host,
@@ -287,7 +316,7 @@ class TopLevelCommands(AutoRegisteringGroup):
                 "Positional project arg is deprecated; use --project instead. Used: %s",
                 project_file,
             )
-        log.info("Starting MCP server …")
+        log.info("Starting MCP server '%s' …", effective_server_name)
         server.run(transport=transport)
 
     @staticmethod
@@ -1017,20 +1046,492 @@ class PromptCommands(AutoRegisteringGroup):
         click.echo(f"Deleted override file '{prompt_yaml_name}'.")
 
 
-# Expose groups so we can reference them in pyproject.toml
+class MultiProjectCommands(AutoRegisteringGroup):
+    """Group for multi-project support commands."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            name="multi-project",
+            help="Commands for managing multiple Murena projects with Claude Code. "
+            "You can run `multi-project <command> --help` for more info on each command.",
+        )
+
+    @staticmethod
+    @click.command(
+        "discover-projects",
+        help="Discover Murena projects in a directory.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.option(
+        "--search-root",
+        type=click.Path(exists=True, file_okay=False, dir_okay=True),
+        default=None,
+        help="Directory to search for projects. Defaults to ~/Documents/projects",
+    )
+    def discover_projects(search_root: str | None) -> None:
+        """Discover Murena projects in the specified directory."""
+        from murena.multi_project.project_discovery import ProjectDiscovery
+
+        discovery = ProjectDiscovery(search_root=Path(search_root) if search_root else None)
+        projects = discovery.find_murena_projects()
+
+        if not projects:
+            click.echo("No Murena projects found.")
+            return
+
+        click.echo(f"Found {len(projects)} Murena project(s):\n")
+        for project in projects:
+            click.echo(f"  • {project.project_name}")
+            click.echo(f"    Path: {project.project_root}")
+            languages = ", ".join([lang.value for lang in project.project_config.languages])
+            click.echo(f"    Languages: {languages}")
+            click.echo()
+
+    @staticmethod
+    @click.command(
+        "generate-mcp-configs",
+        help="Generate MCP server configurations for discovered projects.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.option(
+        "--search-root",
+        type=click.Path(exists=True, file_okay=False, dir_okay=True),
+        default=None,
+        help="Directory to search for projects. Defaults to ~/Documents/projects",
+    )
+    @click.option(
+        "--output",
+        type=click.Path(),
+        default=None,
+        help="Output file path. Defaults to ~/.claude/mcp_servers_murena.json",
+    )
+    @click.option(
+        "--merge/--no-merge",
+        default=True,
+        help="Merge with existing configs (default: merge)",
+    )
+    def generate_mcp_configs(search_root: str | None, output: str | None, merge: bool) -> None:
+        """Generate MCP server configurations for Claude Code."""
+        from murena.multi_project.project_discovery import ProjectDiscovery
+
+        discovery = ProjectDiscovery(search_root=Path(search_root) if search_root else None)
+        output_path = Path(output) if output else None
+
+        try:
+            saved_path = discovery.save_mcp_configs(output_path=output_path, merge=merge)
+            projects = discovery.find_murena_projects()
+
+            click.echo(f"✓ Generated MCP configs for {len(projects)} project(s)")
+            click.echo(f"✓ Saved to: {saved_path}\n")
+
+            if projects:
+                click.echo("MCP server names:")
+                for project in projects:
+                    server_name = f"murena-{Path(project.project_root).name}"
+                    click.echo(f"  • {server_name} → {project.project_name}")
+                click.echo()
+
+            click.echo("Next steps:")
+            click.echo("  1. Restart Claude Code to load the new MCP servers")
+            click.echo("  2. Verify servers are running: check Claude Code status")
+            click.echo("  3. Use tools like: mcp__murena-<project-name>__find_symbol(...)")
+
+        except Exception as e:
+            raise click.ClickException(f"Failed to generate MCP configs: {e}")
+
+    @staticmethod
+    @click.command(
+        "setup-claude-code",
+        help="Complete setup: discover projects and generate MCP configs.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.option(
+        "--search-root",
+        type=click.Path(exists=True, file_okay=False, dir_okay=True),
+        default=None,
+        help="Directory to search for projects. Defaults to ~/Documents/projects",
+    )
+    def setup_claude_code(search_root: str | None) -> None:
+        """Complete setup for multi-project support with Claude Code."""
+        from murena.multi_project.project_discovery import ProjectDiscovery
+
+        click.echo("🔍 Discovering Murena projects...\n")
+
+        discovery = ProjectDiscovery(search_root=Path(search_root) if search_root else None)
+        projects = discovery.find_murena_projects()
+
+        if not projects:
+            click.echo("⚠️  No Murena projects found.")
+            click.echo(f"   Searched in: {discovery.search_root}")
+            click.echo("\nTip: Use --search-root to specify a different directory")
+            return
+
+        click.echo(f"Found {len(projects)} project(s):")
+        for project in projects:
+            click.echo(f"  • {project.project_name} ({Path(project.project_root).name})")
+        click.echo()
+
+        click.echo("📝 Generating MCP configurations...\n")
+
+        try:
+            saved_path = discovery.save_mcp_configs(merge=True)
+            click.echo(f"✓ Saved MCP configs to: {saved_path}\n")
+
+            click.echo("🎯 Setup complete!\n")
+            click.echo("MCP servers configured:")
+            for project in projects:
+                server_name = f"murena-{Path(project.project_root).name}"
+                click.echo(f"  • {server_name}")
+            click.echo()
+
+            click.echo("📋 Next steps:")
+            click.echo("  1. Restart Claude Code to load the new MCP servers")
+            click.echo("  2. Verify in Claude Code that all servers are running")
+            click.echo("  3. Start using multi-project tools!")
+            click.echo()
+            click.echo("Example tool usage:")
+            click.echo("  mcp__murena-serena__get_symbols_overview(...)")
+            click.echo("  mcp__murena-spec-kit__find_symbol(...)")
+
+        except Exception as e:
+            raise click.ClickException(f"Setup failed: {e}")
+
+    # Expose groups so we can reference them in pyproject.toml
+    @staticmethod
+    @click.command(
+        "add-project",
+        help="Add a single project to MCP configuration.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("project_path", type=click.Path(exists=True, file_okay=False, dir_okay=True))
+    def add_project(project_path: str) -> None:
+        """Add a specific project to the MCP configuration."""
+        from murena.config.claude_code_integration import ClaudeCodeConfigManager
+
+        try:
+            # Create project from path
+            project_config = ProjectConfig.load(project_path, autogenerate=True)
+            registered_project = RegisteredProject(
+                project_root=project_path,
+                project_config=project_config,
+            )
+
+            # Add to MCP config
+            config_manager = ClaudeCodeConfigManager()
+            server_name = config_manager.add_project_server(registered_project)
+
+            click.echo(f"✓ Added project: {registered_project.project_name}")
+            click.echo(f"  Server name: {server_name}")
+            click.echo(f"  Project path: {project_path}")
+            click.echo()
+            click.echo("Next steps:")
+            click.echo("  1. Restart Claude Code to load the new MCP server")
+            click.echo("  2. Use tools like: mcp__{server_name}__find_symbol(...)")
+
+        except Exception as e:
+            raise click.ClickException(f"Failed to add project: {e}")
+
+    @staticmethod
+    @click.command(
+        "remove-project",
+        help="Remove a project from MCP configuration.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("project_name", type=str)
+    def remove_project(project_name: str) -> None:
+        """Remove a project from the MCP configuration by project directory name."""
+        from murena.config.claude_code_integration import ClaudeCodeConfigManager
+
+        config_manager = ClaudeCodeConfigManager()
+
+        if config_manager.remove_project_server(project_name):
+            click.echo(f"✓ Removed project: {project_name}")
+            click.echo(f"  Server name: murena-{project_name}")
+            click.echo()
+            click.echo("Restart Claude Code to apply changes.")
+        else:
+            click.echo(f"⚠️  Project not found: {project_name}")
+            click.echo()
+            click.echo("Available projects:")
+            for server_name in config_manager.list_configured_projects():
+                # Extract project name from server name (murena-{project_name})
+                proj_name = server_name.replace("murena-", "")
+                click.echo(f"  • {proj_name}")
+
+    @staticmethod
+    @click.command(
+        "list-projects",
+        help="List all configured MCP projects.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.option("--verbose", "-v", is_flag=True, help="Show detailed information including configurations.")
+    def list_projects(verbose: bool) -> None:
+        """List all projects configured in MCP."""
+        from murena.config.claude_code_integration import ClaudeCodeConfigManager
+
+        config_manager = ClaudeCodeConfigManager()
+        projects = config_manager.list_configured_projects()
+
+        if not projects:
+            click.echo("No MCP projects configured.")
+            click.echo()
+            click.echo("Run 'murena multi-project setup-claude-code' to discover and configure projects.")
+            return
+
+        click.echo(f"Configured MCP servers ({len(projects)}):\n")
+
+        for server_name in projects:
+            # Extract project name from server name
+            project_name = server_name.replace("murena-", "")
+            click.echo(f"  • {server_name}")
+
+            if verbose:
+                config = config_manager.get_project_config(project_name)
+                if config:
+                    click.echo(f"    Command: {config.get('command')} {' '.join(config.get('args', []))}")
+                click.echo()
+
+        if not verbose:
+            click.echo()
+            click.echo("Use --verbose to see detailed configurations.")
+
+
+class TenantCommands(AutoRegisteringGroup):
+    """Commands for managing Murena MCP tenants (multi-project instances)."""
+
+    def __init__(self) -> None:
+        super().__init__(name="tenant", help="Manage Murena MCP tenant instances.")
+
+    @staticmethod
+    @click.command("status", help="Show status of Murena tenants.")
+    @click.argument("tenant_id", required=False, default=None)
+    def status(tenant_id: str | None) -> None:
+        """Show status of one or all tenants."""
+        from murena.multi_project import TenantUI
+
+        ui = TenantUI()
+
+        if tenant_id:
+            ui.print_tenant_status_detailed(tenant_id)
+        else:
+            ui.print_tenant_status_simple()
+
+    @staticmethod
+    @click.command("list", help="List all configured tenants.")
+    @click.option("--verbose", "-v", is_flag=True, help="Show detailed information.")
+    def list_tenants(verbose: bool) -> None:
+        """List all configured tenants."""
+        from murena.multi_project import TenantRegistry
+
+        registry = TenantRegistry()
+        tenants = registry.list_all_tenants()
+
+        if not tenants:
+            click.echo("No tenants configured")
+            return
+
+        click.echo(f"\nConfigured Tenants ({len(tenants)}):")
+        click.echo("-" * 80)
+
+        for tenant in tenants:
+            status_emoji = "🟢" if tenant.is_running() else "⬜"
+            click.echo(f"{status_emoji} {tenant.tenant_id:<20} {tenant.status.value:<12} PID: {tenant.pid or 'N/A':<8}")
+
+            if verbose:
+                click.echo(f"   Project: {tenant.project_root}")
+                click.echo(f"   Server: {tenant.server_name}")
+                click.echo()
+
+    @staticmethod
+    @click.command("ps", help="List processes like `ps aux`.")
+    def ps() -> None:
+        """Show process list for all tenants."""
+        from murena.multi_project import TenantUI
+
+        ui = TenantUI()
+        ui.print_process_list()
+
+    @staticmethod
+    @click.command("health-check", help="Check health status of tenants.")
+    @click.argument("tenant_id", required=False, default=None)
+    def health_check(tenant_id: str | None) -> None:
+        """Check health of one or all tenants."""
+        from murena.multi_project import HealthUI
+
+        HealthUI.print_health_report(tenant_id)
+
+    @staticmethod
+    @click.command("start", help="Start a tenant MCP server.")
+    @click.argument("tenant_id")
+    def start(tenant_id: str) -> None:
+        """Start a tenant."""
+        from murena.multi_project import LifecycleManager
+
+        manager = LifecycleManager()
+
+        if manager.start_tenant(tenant_id):
+            click.echo(f"✅ Started tenant: {tenant_id}")
+        else:
+            click.echo(f"❌ Failed to start tenant: {tenant_id}", err=True)
+            sys.exit(1)
+
+    @staticmethod
+    @click.command("stop", help="Stop a tenant MCP server.")
+    @click.argument("tenant_id")
+    @click.option("--force", is_flag=True, help="Force kill the process.")
+    def stop(tenant_id: str, force: bool) -> None:
+        """Stop a tenant."""
+        from murena.multi_project import LifecycleManager
+
+        manager = LifecycleManager()
+
+        if manager.stop_tenant(tenant_id, graceful=not force):
+            click.echo(f"✅ Stopped tenant: {tenant_id}")
+        else:
+            click.echo(f"❌ Failed to stop tenant: {tenant_id}", err=True)
+            sys.exit(1)
+
+    @staticmethod
+    @click.command("restart", help="Restart a tenant MCP server.")
+    @click.argument("tenant_id")
+    def restart(tenant_id: str) -> None:
+        """Restart a tenant."""
+        from murena.multi_project import LifecycleManager
+
+        manager = LifecycleManager()
+
+        if manager.restart_tenant(tenant_id):
+            click.echo(f"✅ Restarted tenant: {tenant_id}")
+        else:
+            click.echo(f"❌ Failed to restart tenant: {tenant_id}", err=True)
+            sys.exit(1)
+
+    @staticmethod
+    @click.command("pin", help="Pin a tenant (never auto-stop).")
+    @click.argument("tenant_id")
+    def pin(tenant_id: str) -> None:
+        """Pin a tenant to prevent auto-stop."""
+        import yaml
+
+        from murena.multi_project import TenantRegistry
+
+        registry = TenantRegistry()
+        tenant = registry.get_tenant(tenant_id)
+
+        if not tenant:
+            click.echo(f"❌ Tenant not found: {tenant_id}", err=True)
+            sys.exit(1)
+
+        config_path = Path.home() / ".murena" / "lifecycle.yml"
+
+        try:
+            with open(config_path) as f:
+                config = yaml.safe_load(f) or {}
+
+            pinned = config.get("pinned_projects", [])
+            if tenant_id not in pinned:
+                pinned.append(tenant_id)
+                config["pinned_projects"] = pinned
+
+                with open(config_path, "w") as f:
+                    yaml.dump(config, f)
+
+                click.echo(f"✅ Pinned tenant: {tenant_id}")
+            else:
+                click.echo(f"ℹ️  Tenant already pinned: {tenant_id}")
+        except Exception as e:
+            click.echo(f"❌ Failed to pin tenant: {e}", err=True)
+            sys.exit(1)
+
+    @staticmethod
+    @click.command("unpin", help="Unpin a tenant (allow auto-stop).")
+    @click.argument("tenant_id")
+    def unpin(tenant_id: str) -> None:
+        """Unpin a tenant to allow auto-stop."""
+        import yaml
+
+        from murena.multi_project import TenantRegistry
+
+        registry = TenantRegistry()
+        tenant = registry.get_tenant(tenant_id)
+
+        if not tenant:
+            click.echo(f"❌ Tenant not found: {tenant_id}", err=True)
+            sys.exit(1)
+
+        config_path = Path.home() / ".murena" / "lifecycle.yml"
+
+        try:
+            with open(config_path) as f:
+                config = yaml.safe_load(f) or {}
+
+            pinned = config.get("pinned_projects", [])
+            if tenant_id in pinned:
+                pinned.remove(tenant_id)
+                config["pinned_projects"] = pinned
+
+                with open(config_path, "w") as f:
+                    yaml.dump(config, f)
+
+                click.echo(f"✅ Unpinned tenant: {tenant_id}")
+            else:
+                click.echo(f"ℹ️  Tenant not pinned: {tenant_id}")
+        except Exception as e:
+            click.echo(f"❌ Failed to unpin tenant: {e}", err=True)
+            sys.exit(1)
+
+    @staticmethod
+    @click.command("logs", help="Display tenant logs.")
+    @click.argument("tenant_id")
+    @click.option("--lines", "-n", type=int, default=50, help="Number of lines to show (default: 50).")
+    @click.option("--follow", "-f", is_flag=True, help="Follow logs in real-time.")
+    def logs(tenant_id: str, lines: int, follow: bool) -> None:
+        """Show tenant logs."""
+        from murena.multi_project import TenantUI
+
+        ui = TenantUI()
+        ui.print_tenant_logs(tenant_id, lines=lines, follow=follow)
+
+    @staticmethod
+    @click.command("stats", help="Show resource usage statistics.")
+    @click.option("--sort", type=click.Choice(["memory", "cpu", "name"]), default="memory", help="Sort by (default: memory).")
+    def stats(sort: str) -> None:
+        """Show resource usage statistics."""
+        from murena.multi_project import TenantUI
+
+        ui = TenantUI()
+        ui.print_resource_stats(sort_by=sort)
+
+    @staticmethod
+    @click.command("clean", help="Clean up stale registry entries.")
+    def clean() -> None:
+        """Clean stale registry entries."""
+        from murena.multi_project import TenantRegistry
+
+        registry = TenantRegistry()
+        removed = registry.cleanup_stale_entries()
+
+        if removed > 0:
+            click.echo(f"✅ Cleaned up {removed} stale entries")
+        else:
+            click.echo("ℹ️  No stale entries found")
+
+
 mode = ModeCommands()
 context = ContextCommands()
 project = ProjectCommands()
 config = MurenaConfigCommands()
 tools = ToolCommands()
 prompts = PromptCommands()
+multi_project = MultiProjectCommands()
+tenant = TenantCommands()
 
 # Expose toplevel commands for the same reason
 top_level = TopLevelCommands()
 start_mcp_server = top_level.start_mcp_server
 
 # needed for the help script to work - register all subcommands to the top-level group
-for subgroup in (mode, context, project, config, tools, prompts):
+for subgroup in (mode, context, project, config, tools, prompts, multi_project, tenant):
     top_level.add_command(subgroup)
 
 
