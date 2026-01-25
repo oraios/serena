@@ -293,6 +293,8 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         :return: a CommentedMap representing a full project configuration
         """
         data = load_yaml(yml_path, preserve_comments=True)
+        if data is None:
+            raise ValueError(f"Project configuration file is empty: {yml_path}")
         return cls._apply_defaults_to_dict(data)
 
     @classmethod
@@ -515,7 +517,7 @@ class ResourceManagementConfig:
 @dataclass
 class LazyInitConfig:
     """Configuration for lazy project initialization.
-    
+
     Controls automatic project configuration generation when Claude Code
     works in a directory without .murena/project.yml.
     """
@@ -625,6 +627,8 @@ class MurenaConfig(ToolInclusionDefinition, ToStringMixin):
         """
         log.info(f"Auto-generating Murena configuration file in {config_file_path}")
         loaded_commented_yaml = load_yaml(MURENA_CONFIG_TEMPLATE_FILE, preserve_comments=True)
+        if loaded_commented_yaml is None:
+            raise ValueError(f"Template configuration file is empty: {MURENA_CONFIG_TEMPLATE_FILE}")
         save_yaml(config_file_path, loaded_commented_yaml, preserve_comments=True)
 
     @classmethod
@@ -664,6 +668,18 @@ class MurenaConfig(ToolInclusionDefinition, ToStringMixin):
             loaded_commented_yaml = load_yaml(config_file_path, preserve_comments=True)
         except Exception as e:
             raise ValueError(f"Error loading Murena configuration from {config_file_path}: {e}") from e
+
+        # handle empty YAML files (load_yaml returns None for empty files)
+        if loaded_commented_yaml is None:
+            log.warning(f"Configuration file is empty, regenerating: {config_file_path}")
+            cls._generate_config_file(config_file_path)
+            try:
+                loaded_commented_yaml = load_yaml(config_file_path, preserve_comments=True)
+            except Exception as e:
+                raise ValueError(f"Error loading regenerated Murena configuration from {config_file_path}: {e}") from e
+
+        # at this point, loaded_commented_yaml must not be None
+        assert loaded_commented_yaml is not None, "Configuration could not be loaded or regenerated"
 
         # create the configuration instance
         instance = cls(_loaded_commented_yaml=loaded_commented_yaml, _config_file_path=config_file_path)

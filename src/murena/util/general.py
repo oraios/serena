@@ -19,10 +19,10 @@ def _create_YAML(preserve_comments: bool = False) -> YAML:
 
 
 @overload
-def load_yaml(path: str, preserve_comments: Literal[False]) -> dict: ...
+def load_yaml(path: str, preserve_comments: Literal[False]) -> dict | None: ...
 @overload
-def load_yaml(path: str, preserve_comments: Literal[True]) -> CommentedMap: ...
-def load_yaml(path: str, preserve_comments: bool = False) -> dict | CommentedMap:
+def load_yaml(path: str, preserve_comments: Literal[True]) -> CommentedMap | None: ...
+def load_yaml(path: str, preserve_comments: bool = False) -> dict | CommentedMap | None:
     with open(path, encoding=MURENA_FILE_ENCODING) as f:
         yaml = _create_YAML(preserve_comments)
         return yaml.load(f)
