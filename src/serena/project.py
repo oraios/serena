@@ -92,14 +92,14 @@ class MemoriesManager:
                     seen.add(f.stem)
                     result.append(f.stem)
         for folder in self._additional_folders:
-            for f in folder.iterdir():
-                if f.is_file() and f.suffix == ".md" and f.stem not in seen:
             try:
                 entries = folder.iterdir()
             except OSError as e:
                 log.warning("Unable to list additional memory folder %s: %s", folder, e)
                 continue
             for f in entries:
+                if f.is_file() and f.suffix == ".md" and f.stem not in seen:
+                    seen.add(f.stem)
                     result.append(f.stem)
         return result
 
