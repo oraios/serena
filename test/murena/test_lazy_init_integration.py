@@ -98,7 +98,7 @@ class TestLazyInitIntegration:
         config = MurenaConfig()
 
         # Verify lazy_init field exists
-        assert hasattr(config, 'lazy_init')
+        assert hasattr(config, "lazy_init")
 
         # Verify defaults
         assert config.lazy_init.enabled is True
@@ -112,7 +112,7 @@ class TestLazyInitIntegration:
             Path(tmpdir, "test.py").write_text("print('test')\n")
 
             # Create a mock agent config and project
-            with patch('murena.agent.MurenaConfig.from_config_file') as mock_config:
+            with patch("murena.agent.MurenaConfig.from_config_file") as mock_config:
                 mock_config_instance = Mock()
                 mock_config_instance.propagate_settings = Mock()
                 mock_config_instance.project_names = []
@@ -130,19 +130,19 @@ class TestLazyInitIntegration:
                 from murena.agent import MurenaAgent
 
                 # Mock to avoid actually starting language servers
-                with patch('murena.agent.MurenaAgentContext.load_default') as mock_ctx:
+                with patch("murena.agent.MurenaAgentContext.load_default") as mock_ctx:
                     mock_ctx_inst = Mock()
                     mock_ctx_inst.single_project = False
                     mock_ctx.return_value = mock_ctx_inst
 
-                    with patch('murena.agent.ToolRegistry') as mock_registry:
+                    with patch("murena.agent.ToolRegistry") as mock_registry:
                         mock_registry.return_value.get_all_tool_classes.return_value = []
 
                         try:
                             agent = MurenaAgent(project=tmpdir)
 
                             # Verify lazy initializer is set up
-                            assert hasattr(agent, '_lazy_initializer')
+                            assert hasattr(agent, "_lazy_initializer")
                             assert agent._lazy_initializer is not None
                         except Exception:
                             # Some mocking may be incomplete, but we're just checking

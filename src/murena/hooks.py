@@ -86,7 +86,7 @@ class Hook:
     name: str = ""
     enabled: bool = True
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.name:
             self.name = getattr(self.callback, "__name__", str(self.callback))
 
@@ -101,7 +101,7 @@ class HookRegistry:
     typically happen during agent initialization.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize an empty hook registry."""
         self._hooks: dict[HookEvent, list[Hook]] = {event: [] for event in HookEvent}
         self._global_hooks: list[Hook] = []  # Hooks that run on all events
@@ -231,7 +231,7 @@ class HookRegistry:
                 if result is not None:
                     context = result  # Allow hooks to modify context
             except Exception as e:
-                log.error(f"Error in hook '{hook.name}' for event {event.value}: {e}", exc_info=True)
+                log.exception(f"Error in hook '{hook.name}' for event {event.value}: {e}")
                 # Continue executing other hooks despite error
 
         return context
@@ -307,7 +307,7 @@ def get_global_registry() -> HookRegistry:
         The global HookRegistry instance
 
     """
-    global _global_registry
+    global _global_registry  # noqa: PLW0603
     if _global_registry is None:
         _global_registry = HookRegistry()
     return _global_registry
@@ -322,5 +322,5 @@ def set_global_registry(registry: Optional[HookRegistry]) -> None:
         registry: The registry to use, or None to reset
 
     """
-    global _global_registry
+    global _global_registry  # noqa: PLW0603
     _global_registry = registry

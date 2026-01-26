@@ -246,11 +246,7 @@ class LifecycleManager:
         # Sort by last activity (least recent first)
         tenants_by_activity = sorted(
             tenants,
-            key=lambda t: (
-                datetime.fromisoformat(t.last_activity)
-                if t.last_activity
-                else datetime.fromisoformat("1970-01-01T00:00:00")
-            ),
+            key=lambda t: (datetime.fromisoformat(t.last_activity) if t.last_activity else datetime.fromisoformat("1970-01-01T00:00:00")),
         )
 
         # Stop least-used tenants until memory is under threshold

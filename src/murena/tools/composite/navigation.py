@@ -6,6 +6,7 @@ with progressive disclosure and token optimization.
 """
 
 import logging
+from typing import Any
 
 from murena.tools.composite.base import CompositeResult, CompositeStep, CompositeTool
 
@@ -45,7 +46,7 @@ class AnalyzeModule(CompositeTool):
             analyze_module(relative_path="src/murena/agent.py", depth=1)
         """
 
-    def get_steps(self, **kwargs) -> list[CompositeStep]:
+    def get_steps(self, **kwargs: Any) -> list[CompositeStep]:
         relative_path = kwargs.get("relative_path")
         depth = kwargs.get("depth", 1)
 
@@ -103,7 +104,7 @@ class NavigateToSymbol(CompositeTool):
             navigate_to_symbol(description="MurenaAgent", paths_include_glob="src/**/*.py")
         """
 
-    def get_steps(self, **kwargs) -> list[CompositeStep]:
+    def get_steps(self, **kwargs: Any) -> list[CompositeStep]:
         description = kwargs.get("description")
         include_body = kwargs.get("include_body", True)
         paths_include_glob = kwargs.get("paths_include_glob", "**/*.py")
@@ -175,7 +176,7 @@ class NavigateDocumentation(CompositeTool):
             navigate_documentation(topic="API Authentication", doc_pattern="docs/**/*.md")
         """
 
-    def get_steps(self, **kwargs) -> list[CompositeStep]:
+    def get_steps(self, **kwargs: Any) -> list[CompositeStep]:
         topic = kwargs.get("topic")
         doc_pattern = kwargs.get("doc_pattern", "**/*.md")
 

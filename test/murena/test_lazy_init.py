@@ -179,7 +179,7 @@ class TestLazyProjectInitializer:
         initializer.set_project_root("/tmp/test_project")
 
         # Mock autogenerate to raise PermissionError
-        with patch('murena.config.murena_config.ProjectConfig.autogenerate') as mock_autogen:
+        with patch("murena.config.murena_config.ProjectConfig.autogenerate") as mock_autogen:
             mock_autogen.side_effect = PermissionError("Permission denied")
             msg = initializer.ensure_initialized()
 
@@ -215,5 +215,5 @@ class TestLazyProjectInitializer:
         config = MurenaConfig()
 
         # Verify lazy_init field exists and has correct type
-        assert hasattr(config, 'lazy_init')
+        assert hasattr(config, "lazy_init")
         assert config.lazy_init.enabled is True

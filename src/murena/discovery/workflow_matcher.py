@@ -39,7 +39,7 @@ class WorkflowMatcher:
     (sentence-transformers) for more sophisticated semantic matching.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the workflow matcher."""
         self._workflow_patterns: dict[str, list[str]] = {
             "navigate-codebase": [

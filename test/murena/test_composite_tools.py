@@ -2,7 +2,6 @@
 Unit tests for composite tools.
 """
 
-
 from murena.tools.composite.base import CompositeResult, CompositeStep, CompositeTool
 
 

@@ -30,7 +30,7 @@ class WorkflowComposer:
                 ".murena/workflows",
             ]
         self._workflow_dirs = workflow_dirs
-        self._fragment_cache: dict[str, dict[str, Any]] = {}
+        self._fragment_cache: dict[str, list[dict[str, Any]]] = {}
 
     def load_workflow(self, workflow_name: str) -> Optional[dict[str, Any]]:
         """Load a workflow definition by name.
@@ -143,7 +143,7 @@ class WorkflowComposer:
         return interpolated
 
 
-def create_example_workflows():
+def create_example_workflows() -> None:
     """Create example workflow files demonstrating composition."""
     workflows_dir = Path.home() / ".murena" / "workflows"
     workflows_dir.mkdir(parents=True, exist_ok=True)

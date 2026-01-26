@@ -167,9 +167,9 @@ def test_overall_phase2_summary():
     """
     Print summary of Phase 2 improvements.
     """
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("PHASE 2 OPTIMIZATION SUMMARY")
-    print("="*70)
+    print("=" * 70)
     print("\nImplemented features:")
     print("  Phase 2.1: Parallel tool execution via batch_execute_tools MCP tool")
     print("  Phase 2.2: Request coalescing with 5s TTL cache")
@@ -181,7 +181,7 @@ def test_overall_phase2_summary():
     print("\nTotal Phase 2: 50-70% improvement")
     print("Combined Phase 1+2: 85-95% improvement")
     print("Target achieved: 10-30 minutes → <2 minutes ✓")
-    print("="*70)
+    print("=" * 70)
 
 
 def test_combined_phases_comparison(test_repo_root):
@@ -242,9 +242,9 @@ def test_combined_phases_comparison(test_repo_root):
     print(f"  Phase 1 only:                {times['Phase 1']:.3f}s")
     print(f"  Phase 1+2 combined:          {times['Phase 1+2']:.3f}s")
 
-    if times['Baseline'] > 0:
-        phase1_improvement = (times['Baseline'] - times['Phase 1']) / times['Baseline'] * 100
-        combined_improvement = (times['Baseline'] - times['Phase 1+2']) / times['Baseline'] * 100
+    if times["Baseline"] > 0:
+        phase1_improvement = (times["Baseline"] - times["Phase 1"]) / times["Baseline"] * 100
+        combined_improvement = (times["Baseline"] - times["Phase 1+2"]) / times["Baseline"] * 100
         print(f"\n  Phase 1 improvement:   {phase1_improvement:.1f}%")
         print(f"  Combined improvement:  {combined_improvement:.1f}%")
         print("  Expected: 85-95% total improvement")

@@ -141,7 +141,14 @@ class TopLevelCommands(AutoRegisteringGroup):
 
     @staticmethod
     @click.command("start-mcp-server", help="Starts the Murena MCP server.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
-    @click.option("--project", "projects", type=PROJECT_TYPE, multiple=True, default=None, help="Path or name of project(s) to manage. Can be specified multiple times for grouped servers.")
+    @click.option(
+        "--project",
+        "projects",
+        type=PROJECT_TYPE,
+        multiple=True,
+        default=None,
+        help="Path or name of project(s) to manage. Can be specified multiple times for grouped servers.",
+    )
     @click.option("--project-file", "project", type=PROJECT_TYPE, default=None, help="[DEPRECATED] Use --project instead.")
     @click.argument("project_file_arg", type=PROJECT_TYPE, required=False, default=None, metavar="")
     @click.option(
@@ -322,7 +329,7 @@ class TopLevelCommands(AutoRegisteringGroup):
             projects=all_projects,
             primary_project=all_projects[0] if all_projects else None,
             server_name=effective_server_name,
-            memory_log_handler=memory_log_handler
+            memory_log_handler=memory_log_handler,
         )
         server = factory.create_mcp_server(
             host=host,
@@ -1446,7 +1453,6 @@ class MultiProjectCommands(AutoRegisteringGroup):
             click.echo()
             click.echo("Use --verbose to see detailed configurations.")
 
-
     @staticmethod
     @click.command(
         "auto-discover",
@@ -1666,7 +1672,7 @@ class TenantCommands(AutoRegisteringGroup):
 
                 click.echo(f"✅ Pinned tenant: {tenant_id}")
             else:
-                click.echo(f"ℹ️  Tenant already pinned: {tenant_id}")
+                click.echo(f"INFO: Tenant already pinned: {tenant_id}")
         except Exception as e:
             click.echo(f"❌ Failed to pin tenant: {e}", err=True)
             sys.exit(1)
@@ -1703,7 +1709,7 @@ class TenantCommands(AutoRegisteringGroup):
 
                 click.echo(f"✅ Unpinned tenant: {tenant_id}")
             else:
-                click.echo(f"ℹ️  Tenant not pinned: {tenant_id}")
+                click.echo(f"INFO: Tenant not pinned: {tenant_id}")
         except Exception as e:
             click.echo(f"❌ Failed to unpin tenant: {e}", err=True)
             sys.exit(1)
@@ -1742,7 +1748,7 @@ class TenantCommands(AutoRegisteringGroup):
         if removed > 0:
             click.echo(f"✅ Cleaned up {removed} stale entries")
         else:
-            click.echo("ℹ️  No stale entries found")
+            click.echo("INFO: No stale entries found")
 
 
 mode = ModeCommands()

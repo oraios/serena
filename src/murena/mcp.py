@@ -330,6 +330,7 @@ class MurenaMCPFactory:
 
             # Return results as JSON
             import json
+
             return json.dumps(results, indent=2)
 
         # Create parameter schema for batch execution
@@ -395,9 +396,7 @@ Performance impact: 40-70% reduction in multi-tool operation time."""
         # Create arg model from tool_calls parameter
         # Use pydantic.create_model to create the arg model dynamically
         class BatchExecuteArgs(ArgModelBase):
-            tool_calls: list[ToolCallSpec] = Field(
-                ..., description="List of tool calls to execute in parallel"
-            )
+            tool_calls: list[ToolCallSpec] = Field(..., description="List of tool calls to execute in parallel")
 
         fn_metadata = FuncMetadata(
             arg_model=BatchExecuteArgs,

@@ -554,9 +554,7 @@ class SolidLanguageServer(ABC):
             log.info("Using async cache loading for %s", self.language_id)
             self._cache_ready_event = threading.Event()
             self._cache_loading_thread = threading.Thread(
-                target=self._async_load_caches,
-                daemon=True,
-                name=f"cache-loader-{self.language_id}"
+                target=self._async_load_caches, daemon=True, name=f"cache-loader-{self.language_id}"
             )
             self._cache_loading_thread.start()
         else:
@@ -615,10 +613,12 @@ class SolidLanguageServer(ABC):
             coalescing_window_ms=performance_config.request_coalescing_window_ms if performance_config else 50,
         )
         if self._request_coalescer._enabled:
-            log.info("Request coalescing enabled for %s (TTL=%dms, window=%dms)",
-                    self.language_id,
-                    self._request_coalescer._cache_ttl_ms,
-                    self._request_coalescer._coalescing_window_ms)
+            log.info(
+                "Request coalescing enabled for %s (TTL=%dms, window=%dms)",
+                self.language_id,
+                self._request_coalescer._cache_ttl_ms,
+                self._request_coalescer._coalescing_window_ms,
+            )
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         """
@@ -1022,9 +1022,7 @@ class SolidLanguageServer(ABC):
             "context": {"includeDeclaration": False},
         }
         return self._request_coalescer.get_or_execute(
-            method="textDocument/references",
-            params=params,
-            execute_fn=lambda: self.server.send.references(cast(Any, params))
+            method="textDocument/references", params=params, execute_fn=lambda: self.server.send.references(cast(Any, params))
         )
 
     def request_references(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:
@@ -1289,9 +1287,7 @@ class SolidLanguageServer(ABC):
             # Phase 2.2: Use request coalescer to deduplicate requests
             params = {"textDocument": {"uri": pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()}}
             response = self._request_coalescer.get_or_execute(
-                method="textDocument/documentSymbol",
-                params=params,
-                execute_fn=lambda: self.server.send.document_symbol(cast(Any, params))
+                method="textDocument/documentSymbol", params=params, execute_fn=lambda: self.server.send.document_symbol(cast(Any, params))
             )
 
             # update cache
@@ -1814,7 +1810,7 @@ class SolidLanguageServer(ABC):
             "Batch processing %d references across %d files (avg %.1f refs/file)",
             len(references),
             len(refs_by_file),
-            len(references) / max(1, len(refs_by_file))
+            len(references) / max(1, len(refs_by_file)),
         )
 
         # Result dictionary

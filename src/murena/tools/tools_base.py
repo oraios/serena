@@ -252,11 +252,12 @@ class Tool(Component):
                 log.info(f"Failed to get client info: {e}.")
 
         def task() -> str:
+            nonlocal kwargs  # Allow modification of outer scope kwargs
             apply_fn = self.get_apply_fn()
 
             # NEW: Check lazy initialization before tool execution
             init_msg = None
-            if hasattr(self.agent, '_lazy_initializer') and self.agent._lazy_initializer is not None:
+            if hasattr(self.agent, "_lazy_initializer") and self.agent._lazy_initializer is not None:
                 init_msg = self.agent._lazy_initializer.ensure_initialized()
 
             try:

@@ -248,9 +248,7 @@ class TestQuickDiscoveryMode:
             config_path = Path(tmpdir) / "test_config.json"
 
             # Patch both the workspace and the config path
-            with patch.object(
-                AutoDiscoveryManager, "get_mcp_config_path", return_value=config_path
-            ):
+            with patch.object(AutoDiscoveryManager, "get_mcp_config_path", return_value=config_path):
                 result = QuickDiscoveryMode.quick_scan(workspace_root=temp_workspace)
 
                 assert result is True
@@ -315,9 +313,7 @@ class TestAutoDiscoveryIntegration:
                 project_dir = workspace / f"project{i+1}"
                 project_dir.mkdir()
                 (project_dir / ".murena").mkdir()
-                (project_dir / ".murena" / "project.yml").write_text(
-                    f"name: project{i+1}"
-                )
+                (project_dir / ".murena" / "project.yml").write_text(f"name: project{i+1}")
                 (project_dir / "src").mkdir()
                 (project_dir / "src" / "main.py").write_text("print('hello')")
 

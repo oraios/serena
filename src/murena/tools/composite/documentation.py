@@ -6,6 +6,7 @@ symbolic operations on markdown files.
 """
 
 import logging
+from typing import Any
 
 from murena.tools.composite.base import CompositeResult, CompositeStep, CompositeTool
 
@@ -47,7 +48,7 @@ class ExtractDocSection(CompositeTool):
             extract_doc_section(topic="API Reference", file_pattern="docs/api/**/*.md")
         """
 
-    def get_steps(self, **kwargs) -> list[CompositeStep]:
+    def get_steps(self, **kwargs: Any) -> list[CompositeStep]:
         topic = kwargs.get("topic")
         file_pattern = kwargs.get("file_pattern", "**/*.md")
         include_subsections = kwargs.get("include_subsections", True)

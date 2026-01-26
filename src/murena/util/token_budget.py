@@ -88,23 +88,27 @@ class TokenBudget:
         suggestions = []
 
         if self.is_critical():
-            suggestions.extend([
-                f"🚨 CRITICAL: Token budget at {self.usage_percentage():.1f}%",
-                "Auto-optimizations enabled:",
-                "  - Switching to compact_format=True for all operations",
-                "  - Using context_mode='line_only' for references",
-                "  - Enabling aggressive caching",
-                "  - Consider using haiku model for simple operations",
-            ])
+            suggestions.extend(
+                [
+                    f"🚨 CRITICAL: Token budget at {self.usage_percentage():.1f}%",
+                    "Auto-optimizations enabled:",
+                    "  - Switching to compact_format=True for all operations",
+                    "  - Using context_mode='line_only' for references",
+                    "  - Enabling aggressive caching",
+                    "  - Consider using haiku model for simple operations",
+                ]
+            )
         elif self.is_warning():
-            suggestions.extend([
-                f"⚠️  WARNING: Token budget at {self.usage_percentage():.1f}%",
-                "Optimization suggestions:",
-                "  - Use get-cached-symbols for repeated file access",
-                "  - Enable compact_format=True for large results",
-                "  - Use context_mode='line_only' instead of 'full'",
-                "  - Prefer composite tools over manual sequences",
-            ])
+            suggestions.extend(
+                [
+                    f"⚠️  WARNING: Token budget at {self.usage_percentage():.1f}%",
+                    "Optimization suggestions:",
+                    "  - Use get-cached-symbols for repeated file access",
+                    "  - Enable compact_format=True for large results",
+                    "  - Use context_mode='line_only' instead of 'full'",
+                    "  - Prefer composite tools over manual sequences",
+                ]
+            )
         else:
             suggestions.append(f"✓ Token budget healthy: {self.usage_percentage():.1f}% ({self.current_usage}/{self.max_tokens})")
 

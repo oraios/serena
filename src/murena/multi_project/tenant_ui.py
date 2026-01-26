@@ -98,14 +98,14 @@ class TenantUI:
             cpu_str = f"{tenant.cpu_percent or 0:.1f}%" if tenant.cpu_percent else "-"
             last_activity_str = self._format_last_activity(tenant.last_activity)
 
-            print(
-                f"{tenant.tenant_id:<20} {status_str:<20} {memory_str:<12} {cpu_str:<8} {'-':<8} {last_activity_str:<20}"
-            )
+            print(f"{tenant.tenant_id:<20} {status_str:<20} {memory_str:<12} {cpu_str:<8} {'-':<8} {last_activity_str:<20}")
 
         print("-" * 100)
-        print(f"Total: {len([t for t in tenants if t.is_running()])} running, "
-              f"{len([t for t in tenants if t.status == TenantStatus.IDLE])} idle, "
-              f"{len([t for t in tenants if t.status == TenantStatus.STOPPED])} stopped")
+        print(
+            f"Total: {len([t for t in tenants if t.is_running()])} running, "
+            f"{len([t for t in tenants if t.status == TenantStatus.IDLE])} idle, "
+            f"{len([t for t in tenants if t.status == TenantStatus.STOPPED])} stopped"
+        )
 
     def print_tenant_status_detailed(self, tenant_id: str) -> None:
         """Print detailed status for a specific tenant.
@@ -230,8 +230,7 @@ class TenantUI:
 
         # System memory
         memory = psutil.virtual_memory()
-        print(f"System Memory: {self.format_memory(memory.used)} / {self.format_memory(memory.total)} "
-              f"({memory.percent:.1f}%)")
+        print(f"System Memory: {self.format_memory(memory.used)} / {self.format_memory(memory.total)} ({memory.percent:.1f}%)")
 
     def print_tenant_logs(self, tenant_id: str, lines: int = 50, follow: bool = False) -> None:
         """Print or follow tenant logs.

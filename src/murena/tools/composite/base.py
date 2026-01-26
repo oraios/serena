@@ -9,9 +9,12 @@ import logging
 from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from murena.tools.tools_base import Tool
+
+if TYPE_CHECKING:
+    from murena.agent import MurenaAgent
 
 log = logging.getLogger(__name__)
 
@@ -76,7 +79,7 @@ class CompositeTool(Tool):
         self._context: dict[str, Any] = {}
 
     @abstractmethod
-    def get_steps(self, **kwargs) -> list[CompositeStep]:
+    def get_steps(self, **kwargs: Any) -> list[CompositeStep]:
         """Get the list of steps to execute for this composite tool.
 
         Args:
@@ -99,7 +102,7 @@ class CompositeTool(Tool):
 
         """
 
-    def execute_composite(self, **kwargs) -> str:
+    def execute_composite(self, **kwargs: Any) -> str:
         """Execute the composite workflow.
 
         This is the main entry point. It:
@@ -123,7 +126,7 @@ class CompositeTool(Tool):
         try:
             steps = self.get_steps(**kwargs)
         except Exception as e:
-            log.error(f"Error getting steps for {self.get_name()}: {e}", exc_info=True)
+            log.exception(f"Error getting steps for {self.get_name()}: {e}")
             return f"Error: Failed to plan composite operation: {e}"
 
         # Execute steps
@@ -159,7 +162,7 @@ class CompositeTool(Tool):
                 log.debug(f"Step {i+1} completed successfully")
             except Exception as e:
                 error_msg = f"Error executing step {i+1} ({step.tool_name}): {e}"
-                log.error(error_msg, exc_info=True)
+                log.exception(error_msg)
 
                 # Try error handler
                 if step.error_handler:
@@ -189,7 +192,7 @@ class CompositeTool(Tool):
             composite_result.final_result = final_result
             return final_result
         except Exception as e:
-            log.error(f"Error formatting result: {e}", exc_info=True)
+            log.exception(f"Error formatting result: {e}")
             return f"Error: Composite operation completed but failed to format result: {e}\n\nRaw results: {results}"
 
     def _interpolate_params(self, params: dict[str, Any], results: dict[str, Any]) -> dict[str, Any]:

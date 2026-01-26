@@ -368,11 +368,7 @@ class MurenaAgent:
             from murena.multi_project.health_monitor import BackgroundHealthMonitor
 
             # Determine tenant ID from project or use default
-            self._tenant_id = (
-                Path(self._active_project.project_root).name
-                if self._active_project
-                else "default"
-            )
+            self._tenant_id = Path(self._active_project.project_root).name if self._active_project else "default"
 
             registry = TenantRegistry()
             tenant_metadata = TenantMetadata(

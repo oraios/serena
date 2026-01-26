@@ -47,6 +47,7 @@ class SolidLSPSettings:
         # Create default PerformanceConfig if not provided
         if self.performance is None:
             from murena.config.murena_config import PerformanceConfig
+
             self.performance = PerformanceConfig()
 
     @property

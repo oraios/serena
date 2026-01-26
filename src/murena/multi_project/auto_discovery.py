@@ -228,9 +228,7 @@ class AutoDiscoveryManager:
 
         return results
 
-    def run_discovery(
-        self, workspace_root: Optional[Path] = None, max_depth: int = 3
-    ) -> DiscoveryResult:
+    def run_discovery(self, workspace_root: Optional[Path] = None, max_depth: int = 3) -> DiscoveryResult:
         """Run complete discovery and registration pipeline.
 
         Args:

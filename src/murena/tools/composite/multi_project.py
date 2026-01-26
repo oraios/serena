@@ -6,6 +6,7 @@ deduplication and result aggregation.
 """
 
 import logging
+from typing import Any
 
 from murena.tools.composite.base import CompositeResult, CompositeStep, CompositeTool
 
@@ -52,9 +53,9 @@ class CrossProjectSearch(CompositeTool):
             )
         """
 
-    def get_steps(self, **kwargs) -> list[CompositeStep]:
+    def get_steps(self, **kwargs: Any) -> list[CompositeStep]:
         pattern = kwargs.get("pattern")
-        projects = kwargs.get("projects", [])
+        _ = kwargs.get("projects", [])  # Reserved for future multi-project iteration
         file_pattern = kwargs.get("file_pattern", "**/*.py")
 
         # Note: This is a simplified implementation

@@ -6,6 +6,7 @@ and automatic rollback on errors.
 """
 
 import logging
+from typing import Any
 
 from murena.tools.composite.base import CompositeResult, CompositeStep, CompositeTool
 
@@ -54,7 +55,7 @@ class RefactorSymbol(CompositeTool):
             )
         """
 
-    def get_steps(self, **kwargs) -> list[CompositeStep]:
+    def get_steps(self, **kwargs: Any) -> list[CompositeStep]:
         symbol_name = kwargs.get("symbol_name")
         relative_path = kwargs.get("relative_path")
         operation = kwargs.get("operation", "rename")

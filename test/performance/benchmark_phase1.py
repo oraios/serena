@@ -132,16 +132,16 @@ def test_overall_phase1_summary():
     """
     Print summary of expected Phase 1 improvements.
     """
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("PHASE 1 OPTIMIZATION SUMMARY")
-    print("="*70)
+    print("=" * 70)
     print("\nExpected improvements:")
     print("  Phase 1.1 (Async cache):        1-3 seconds per LS init")
     print("  Phase 1.2 (Smart readiness):    1.5 seconds first reference")
     print("  Phase 1.3 (Batch processing):   5-20 seconds per find_referencing_symbols()")
     print("\nTotal expected: 40-60% improvement in planning operations")
     print("Target: 10-30 minutes → <2 minutes (85-95% improvement)")
-    print("="*70)
+    print("=" * 70)
 
 
 if __name__ == "__main__":
