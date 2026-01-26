@@ -543,38 +543,6 @@ Performance impact: 40-70% reduction in multi-tool operation time."""
                     mcp_tool.fn = make_wrapper(project_path, original_fn, self.agents_by_project[project_path])
                     mcp._tool_manager._tools[namespaced_name] = mcp_tool
 
-            # Add batch execution tool for all modes
-            # In single-project mode, add one batch tool
-            # In multi-project mode, add batch tool for each project
-            if len(self.agents_by_project) == 1:
-                # Single-project mode: add one batch execution tool
-                agent = next(iter(self.agents_by_project.values()))
-                batch_tool = self.make_batch_execution_tool(agent, compact_mode=compact_mode)
-                mcp._tool_manager._tools["batch_execute_tools"] = batch_tool
-            else:
-                # Multi-project mode: add batch execution tool for each project
-                for project_path, agent in self.agents_by_project.items():
-                    project_name = Path(project_path).name
-                    batch_tool_name = f"{self.server_name}__{project_name}__batch_execute_tools"
-                    batch_tool = self.make_batch_execution_tool(agent, compact_mode=compact_mode)
-
-                    # Wrap to activate project before execution
-                    original_batch_fn = batch_tool.fn
-
-                    def make_batch_wrapper(proj_path: str, orig_fn, proj_agent):  # type: ignore
-                        """Create a wrapper that activates the project before batch execution."""
-
-                        def wrapped_batch_fn(**kwargs) -> str:  # type: ignore
-                            # Activate the project on the agent
-                            proj_agent.activate_project_from_path_or_name(proj_path)
-                            # Execute the batch
-                            return orig_fn(**kwargs)
-
-                        return wrapped_batch_fn
-
-                    batch_tool.fn = make_batch_wrapper(project_path, original_batch_fn, agent)
-                    mcp._tool_manager._tools[batch_tool_name] = batch_tool
-
             log.info(f"Starting MCP server with {len(mcp._tool_manager._tools)} tools: {list(mcp._tool_manager._tools.keys())}")
 
     def _create_serena_agent(self, murena_config: MurenaConfig, modes: list[MurenaAgentMode], project: str | None = None) -> MurenaAgent:
