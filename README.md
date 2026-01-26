@@ -133,8 +133,57 @@ Only Rider is not supported.
 
 <a href="https://plugins.jetbrains.com/plugin/28946-murena/"><img src="docs/_static/images/jetbrains-marketplace-button.png"></a>
 
-The plugin offers the most robust and most powerful Murena experience.  
+The plugin offers the most robust and most powerful Murena experience.
 See our [documentation page](https://oraios.github.io/murena/02-usage/025_jetbrains_plugin.html) for further details and instructions.
+
+## Semantic Search
+
+Murena now includes **semantic search capabilities** that enable finding code by meaning rather than exact keyword matches. This closes the capability gap with semantic-first tools while maintaining Murena's superior token efficiency (67-77% savings).
+
+**Key Features:**
+- **Natural language queries** - "find all authentication logic" instead of exact symbol names
+- **Intelligent routing** - Automatic selection between LSP (structural), vector (semantic), or hybrid search
+- **Code similarity detection** - Find duplicated or similar code across your codebase
+- **Multi-level indexing** - File metadata, symbols, and code chunks for comprehensive coverage
+- **Incremental updates** - Only re-index changed files for fast updates
+- **Token-efficient results** - Compact JSON format maintains Murena's efficiency advantages
+
+**Installation:**
+
+Semantic search requires additional dependencies:
+
+```bash
+uv pip install "murena-agent[semantic]"
+```
+
+This installs ChromaDB for vector storage and Jina Code V2 embeddings (~400MB).
+
+**Quick Example:**
+
+```python
+# Index your project
+mcp__murena__index_project_semantic(incremental=False, skip_tests=True)
+
+# Semantic search
+mcp__murena__semantic_search(
+    query="find all authentication logic",
+    max_results=10,
+    min_score=0.5
+)
+
+# Intelligent auto-routing search
+mcp__murena__intelligent_search(
+    query="login method with JWT validation"
+)
+```
+
+**Learn More:**
+- [Semantic Search Guide](docs/semantic_search.md) - Complete documentation with examples
+- [Architecture Overview](docs/semantic_search.md#architecture) - Technical deep dive
+- [Performance Benchmarks](docs/semantic_search.md#performance) - Speed and token efficiency
+
+> [!NOTE]
+> Semantic search is an **optional feature**. Murena works perfectly without it using LSP-based structural search. Install semantic dependencies only if you need exploratory natural language queries.
 
 ## Quick Start
 

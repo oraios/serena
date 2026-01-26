@@ -579,6 +579,74 @@ class MurenaAgent:
         """
         return self._symbol_cache
 
+    def get_embedding_model(self) -> Any:
+        """
+        Get the embedding model for semantic search (lazy-loaded).
+
+        :return: SentenceTransformer model instance
+        :raises ImportError: If semantic search dependencies are not installed
+        """
+        if not hasattr(self, "_embedding_model"):
+            self._embedding_model = None
+
+        if self._embedding_model is None:
+            try:
+                from murena.semantic import SEMANTIC_AVAILABLE
+
+                if not SEMANTIC_AVAILABLE:
+                    raise ImportError("Semantic search dependencies not installed. Install with: uv pip install 'murena-agent[semantic]'")
+
+                from sentence_transformers import SentenceTransformer
+
+                log.info("Loading embedding model for semantic search")
+                self._embedding_model = SentenceTransformer("jinaai/jina-embeddings-v2-base-code")
+                log.info("Embedding model loaded successfully")
+
+            except Exception as e:
+                log.error(f"Failed to load embedding model: {e}")
+                raise
+
+        return self._embedding_model
+
+    def get_chroma_client(self) -> Any:
+        """
+        Get the ChromaDB client for semantic search (lazy-loaded).
+
+        :return: ChromaDB client instance
+        :raises ImportError: If semantic search dependencies are not installed
+        """
+        if not hasattr(self, "_chroma_client"):
+            self._chroma_client = None
+
+        if self._chroma_client is None:
+            try:
+                from murena.semantic import SEMANTIC_AVAILABLE
+
+                if not SEMANTIC_AVAILABLE:
+                    raise ImportError("Semantic search dependencies not installed. Install with: uv pip install 'murena-agent[semantic]'")
+
+                from pathlib import Path
+
+                import chromadb
+                from chromadb.config import Settings
+
+                project = self.get_active_project_or_raise()
+                persist_dir = Path(project.project_root) / ".murena" / "semantic_index"
+                persist_dir.mkdir(parents=True, exist_ok=True)
+
+                log.info(f"Initializing ChromaDB client at {persist_dir}")
+                self._chroma_client = chromadb.PersistentClient(
+                    path=str(persist_dir),
+                    settings=Settings(anonymized_telemetry=False),
+                )
+                log.info("ChromaDB client initialized successfully")
+
+            except Exception as e:
+                log.error(f"Failed to initialize ChromaDB client: {e}")
+                raise
+
+        return self._chroma_client
+
     def set_modes(self, modes: list[MurenaAgentMode]) -> None:
         """
         Set the current mode configurations.
