@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Literal, cast
 
 import docstring_parser
@@ -49,21 +50,46 @@ class MurenaMCPRequestContext:
 
 class MurenaMCPFactory:
     """
-    Factory for the creation of the Murena MCP server with an associated MurenaAgent.
+    Factory for the creation of the Murena MCP server with an associated MurenaAgent(s).
+    Supports both single-project and multi-project (grouped) configurations.
     """
 
-    def __init__(self, context: str = DEFAULT_CONTEXT, project: str | None = None, memory_log_handler: MemoryLogHandler | None = None):
+    def __init__(
+        self,
+        context: str = DEFAULT_CONTEXT,
+        project: str | None = None,
+        projects: list[str] | None = None,
+        primary_project: str | None = None,
+        server_name: str = "murena",
+        memory_log_handler: MemoryLogHandler | None = None,
+    ):
         """
         :param context: The context name or path to context file
-        :param project: Either an absolute path to the project directory or a name of an already registered project.
-            If the project passed here hasn't been registered yet, it will be registered automatically and can be activated by its name
-            afterward.
+        :param project: [DEPRECATED] Use projects instead. Single project path.
+        :param projects: List of project paths for grouped server configuration.
+        :param primary_project: The initial active project (first in list if not specified).
+        :param server_name: Name for this MCP server (used for namespacing in grouped mode).
         :param memory_log_handler: the in-memory log handler to use for the agent's logging
         """
         self.context = MurenaAgentContext.load(context)
-        self.project = project
-        self.agent: MurenaAgent | None = None
+        self.server_name = server_name
         self.memory_log_handler = memory_log_handler
+
+        # Handle both legacy (single project) and new (multiple projects) modes
+        if projects:
+            self.projects = projects
+            self.primary_project = primary_project or (projects[0] if projects else None)
+        elif project:
+            self.projects = [project]
+            self.primary_project = project
+        else:
+            self.projects = []
+            self.primary_project = None
+
+        # Single agent for backward compatibility (used in single-project mode)
+        self.agent: MurenaAgent | None = None
+        # Multiple agents for grouped mode (one per project)
+        self.agents_by_project: dict[str, MurenaAgent] = {}
 
     @staticmethod
     def _sanitize_for_openai_tools(schema: dict) -> dict:
@@ -246,24 +272,74 @@ class MurenaMCPFactory:
             title=tool_title,
         )
 
-    def _iter_tools(self) -> Iterator[Tool]:
-        assert self.agent is not None
-        yield from self.agent.get_exposed_tool_instances()
+    def _iter_tools(self) -> Iterator[tuple[str, Tool, str]]:
+        """
+        Iterate over all tools with their project context.
+
+        Yields tuples of (project_path, tool, project_name) for each tool from each agent.
+        """
+        for project_path, agent in self.agents_by_project.items():
+            project_name = Path(project_path).name
+            for tool in agent.get_exposed_tool_instances():
+                yield (project_path, tool, project_name)
 
     # noinspection PyProtectedMember
     def _set_mcp_tools(self, mcp: FastMCP, openai_tool_compatible: bool = False) -> None:
         """Update the tools in the MCP server"""
         if mcp is not None:
             mcp._tool_manager._tools = {}
-            for tool in self._iter_tools():
-                mcp_tool = self.make_mcp_tool(tool, openai_tool_compatible=openai_tool_compatible)
-                mcp._tool_manager._tools[tool.get_name()] = mcp_tool
+
+            # Handle both single-project and multi-project modes
+            if len(self.agents_by_project) == 1:
+                # Single-project mode: use simple tool names (backward compatible)
+                for project_path, tool, _ in self._iter_tools():
+                    mcp_tool = self.make_mcp_tool(tool, openai_tool_compatible=openai_tool_compatible)
+                    mcp._tool_manager._tools[tool.get_name()] = mcp_tool
+            else:
+                # Multi-project mode: use namespaced tool names
+                for project_path, tool, project_name in self._iter_tools():
+                    # Create namespaced tool name: {server_name}__{project_name}__{tool_name}
+                    namespaced_name = f"{self.server_name}__{project_name}__{tool.get_name()}"
+                    mcp_tool = self.make_mcp_tool(tool, openai_tool_compatible=openai_tool_compatible)
+
+                    # Wrap the tool to activate project before execution
+                    original_fn = mcp_tool.fn
+
+                    def make_wrapper(proj_path: str, orig_fn, agent):  # type: ignore
+                        """Create a wrapper that activates the project before executing the tool."""
+
+                        def wrapped_fn(**kwargs) -> str:  # type: ignore
+                            # Activate the project on the agent
+                            agent.activate_project_from_path_or_name(proj_path)
+                            # Execute the original tool
+                            return orig_fn(**kwargs)
+
+                        return wrapped_fn
+
+                    mcp_tool.fn = make_wrapper(project_path, original_fn, self.agents_by_project[project_path])
+                    mcp._tool_manager._tools[namespaced_name] = mcp_tool
+
             log.info(f"Starting MCP server with {len(mcp._tool_manager._tools)} tools: {list(mcp._tool_manager._tools.keys())}")
 
-    def _create_serena_agent(self, murena_config: MurenaConfig, modes: list[MurenaAgentMode]) -> MurenaAgent:
+    def _create_serena_agent(self, murena_config: MurenaConfig, modes: list[MurenaAgentMode], project: str | None = None) -> MurenaAgent:
+        """Create a single MurenaAgent for a specific project."""
         return MurenaAgent(
-            project=self.project, murena_config=murena_config, context=self.context, modes=modes, memory_log_handler=self.memory_log_handler
+            project=project, murena_config=murena_config, context=self.context, modes=modes, memory_log_handler=self.memory_log_handler
         )
+
+    def _create_all_agents(self, murena_config: MurenaConfig, modes: list[MurenaAgentMode]) -> None:
+        """Create agents for all registered projects."""
+        for project_path in self.projects:
+            agent = self._create_serena_agent(murena_config, modes, project=project_path)
+            self.agents_by_project[project_path] = agent
+
+            # Set primary agent for backward compatibility
+            if project_path == self.primary_project:
+                self.agent = agent
+
+        if not self.agent and self.agents_by_project:
+            # Fallback: use first agent if no primary was set
+            self.agent = next(iter(self.agents_by_project.values()))
 
     def _create_default_murena_config(self) -> MurenaConfig:
         return MurenaConfig.from_config_file()
@@ -322,7 +398,8 @@ class MurenaMCPFactory:
                 config.language_backend = language_backend
 
             modes_instances = [MurenaAgentMode.load(mode) for mode in modes]
-            self.agent = self._create_serena_agent(config, modes_instances)
+            # Create agents for all projects (primary agent set for backward compatibility)
+            self._create_all_agents(config, modes_instances)
 
         except Exception as e:
             show_fatal_exception_safe(e)

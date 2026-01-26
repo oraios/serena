@@ -88,9 +88,9 @@ class Language(str, Enum):
     Use Language.RUBY (ruby-lsp) for better performance and modern LSP features.
     """
     MARKDOWN = "markdown"
-    """Marksman language server for Markdown (experimental).
-    Must be explicitly specified as the main language, not auto-detected.
-    This is an edge case primarily useful when working on documentation-heavy projects.
+    """Marksman language server for Markdown.
+    Supports document navigation, symbol extraction, and reference finding.
+    Provides heading-based hierarchical structure for efficient section-by-section reading.
     """
     YAML = "yaml"
     """YAML language server (experimental).
@@ -120,7 +120,6 @@ class Language(str, Enum):
             self.PYTHON_JEDI,
             self.CSHARP_OMNISHARP,
             self.RUBY_SOLARGRAPH,
-            self.MARKDOWN,
             self.YAML,
             self.TOML,
             self.GROOVY,

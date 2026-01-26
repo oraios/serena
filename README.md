@@ -45,6 +45,40 @@ In general, Murena can be integrated with an LLM in several ways:
 * by incorporating Murena's tools into an agent framework of your choice, as illustrated [here](docs/03-special-guides/custom_agent.md).
   Murena's tool implementation is decoupled from the framework-specific code and can thus easily be adapted to any agent framework.
 
+## Multi-Project Support
+
+Murena MCP supports running multiple independent instances, allowing you to work seamlessly across multiple codebases in a single Claude Code session.
+
+### Quick Setup
+
+```bash
+# Auto-discover and configure all Murena projects
+murena multi-project setup-claude-code
+
+# Restart Claude Code to load the new MCP servers
+```
+
+This creates separate MCP server instances for each project (e.g., `murena-serena`, `murena-spec-kit`), each with:
+- **Isolated language servers** - No interference between projects
+- **Independent memory** - Project-specific knowledge and context
+- **Separate caches** - Symbol caches for fast lookups
+
+### Usage Example
+
+Work with multiple projects in the same conversation:
+
+```python
+# Work with serena project
+mcp__murena-serena__get_symbols_overview(relative_path="src/murena/agent.py")
+
+# Work with spec-kit project
+mcp__murena-spec-kit__find_symbol(name_path_pattern="SpecKitManager")
+
+# Cross-project operations in one session!
+```
+
+**📖 Full Guide:** See [docs/multi_project_setup.md](docs/multi_project_setup.md) for complete documentation, advanced configuration, and troubleshooting.
+
 ## Murena in Action
 
 #### Demonstration 1: Efficient Operation in Claude Code

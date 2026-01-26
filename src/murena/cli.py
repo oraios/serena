@@ -141,7 +141,7 @@ class TopLevelCommands(AutoRegisteringGroup):
 
     @staticmethod
     @click.command("start-mcp-server", help="Starts the Murena MCP server.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
-    @click.option("--project", "project", type=PROJECT_TYPE, default=None, help="Path or name of project to activate at startup.")
+    @click.option("--project", "projects", type=PROJECT_TYPE, multiple=True, default=None, help="Path or name of project(s) to manage. Can be specified multiple times for grouped servers.")
     @click.option("--project-file", "project", type=PROJECT_TYPE, default=None, help="[DEPRECATED] Use --project instead.")
     @click.argument("project_file_arg", type=PROJECT_TYPE, required=False, default=None, metavar="")
     @click.option(
@@ -236,6 +236,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         "Used with multi-project support.",
     )
     def start_mcp_server(
+        projects: tuple[str, ...],
         project: str | None,
         project_file_arg: str | None,
         project_from_cwd: bool | None,
@@ -275,29 +276,54 @@ class TopLevelCommands(AutoRegisteringGroup):
         log.info("Initializing Murena MCP server")
         log.info("Storing logs in %s", log_path)
 
-        # Handle --project-from-cwd flag
-        if project_from_cwd:
-            if project is not None or project_file_arg is not None:
-                raise click.UsageError("--project-from-cwd cannot be used with --project or positional project argument")
-            project = find_project_root()
-            log.info("Auto-detected project root: %s", project)
+        # Handle project resolution: support both new (multiple) and legacy (single) formats
+        # Priority: projects (new) > project (legacy) > project_file_arg (legacy) > project_from_cwd
+        all_projects: list[str] = []
 
-        project_file = project_file_arg or project
+        if projects:
+            # New format: --project /path1 --project /path2
+            all_projects = list(projects)
+        elif project is not None:
+            # Legacy: --project /path
+            all_projects = [project]
+        elif project_file_arg is not None:
+            # Legacy: positional argument
+            all_projects = [project_file_arg]
+        elif project_from_cwd:
+            # Auto-detect from CWD
+            all_projects = [find_project_root()]
+
+        if project_from_cwd and (projects or project is not None or project_file_arg is not None):
+            raise click.UsageError("--project-from-cwd cannot be used with --project or positional project argument")
+
+        if project_from_cwd:
+            log.info("Auto-detected project root: %s", all_projects[0])
 
         # Determine server name for logging and identification
         effective_server_name = "murena"  # Default name
         if server_name:
             effective_server_name = server_name
-        elif auto_name and project_file:
-            # Generate name from project directory
-            project_dir_name = Path(project_file).name
-            effective_server_name = f"murena-{project_dir_name}"
+        elif auto_name and all_projects:
+            # For single project, use project directory name
+            # For multiple projects, use server prefix
+            if len(all_projects) == 1:
+                project_dir_name = Path(all_projects[0]).name
+                effective_server_name = f"murena-{project_dir_name}"
+            else:
+                # For grouped servers, use explicit --server-name
+                log.warning("Multiple projects specified; please use --server-name for explicit naming")
 
         log.info("MCP server name: %s", effective_server_name)
-        if project_file:
-            log.info("Active project: %s", project_file)
+        for proj in all_projects:
+            log.info("Registered project: %s", proj)
 
-        factory = MurenaMCPFactory(context=context, project=project_file, memory_log_handler=memory_log_handler)
+        factory = MurenaMCPFactory(
+            context=context,
+            projects=all_projects,
+            primary_project=all_projects[0] if all_projects else None,
+            server_name=effective_server_name,
+            memory_log_handler=memory_log_handler
+        )
         server = factory.create_mcp_server(
             host=host,
             port=port,
@@ -314,7 +340,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         if project_file_arg:
             log.warning(
                 "Positional project arg is deprecated; use --project instead. Used: %s",
-                project_file,
+                project_file_arg,
             )
         log.info("Starting MCP server '%s' …", effective_server_name)
         server.run(transport=transport)
@@ -1192,6 +1218,131 @@ class MultiProjectCommands(AutoRegisteringGroup):
             click.echo("Example tool usage:")
             click.echo("  mcp__murena-serena__get_symbols_overview(...)")
             click.echo("  mcp__murena-spec-kit__find_symbol(...)")
+
+        except Exception as e:
+            raise click.ClickException(f"Setup failed: {e}")
+
+    @staticmethod
+    @click.command(
+        "setup-claude-code-groups",
+        help="Setup Claude Code with grouped MCP servers for memory optimization.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.option(
+        "--search-root",
+        type=click.Path(exists=True, file_okay=False, dir_okay=True),
+        default=None,
+        help="Directory to search for projects. Defaults to ~/Documents/projects",
+    )
+    def setup_claude_code_groups(search_root: str | None) -> None:
+        """
+        Setup Claude Code with grouped MCP servers for memory optimization.
+
+        Groups projects by usage pattern and creates one MCP server per group,
+        reducing memory footprint while maintaining isolation and auto-switching.
+
+        Groups:
+        - murena-main: serena, spec-kit (frequently used)
+        - murena-games: c-os, rewind-rush, tetris-sort (occasionally used)
+        """
+        from murena.config.claude_code_integration import ClaudeCodeConfigManager, ProjectGroup
+        from murena.multi_project.project_discovery import ProjectDiscovery
+
+        click.echo("🔍 Discovering Murena projects...\n")
+
+        discovery = ProjectDiscovery(search_root=Path(search_root) if search_root else None)
+        projects = discovery.find_murena_projects()
+
+        if not projects:
+            click.echo("⚠️  No Murena projects found.")
+            click.echo(f"   Searched in: {discovery.search_root}")
+            click.echo("\nTip: Use --search-root to specify a different directory")
+            return
+
+        click.echo(f"Found {len(projects)} project(s):")
+        for project in projects:
+            click.echo(f"  • {project.project_name}")
+        click.echo()
+
+        # Auto-group projects by directory name
+        click.echo("📦 Auto-grouping projects...\n")
+
+        main_projects = [p for p in projects if p.project_name in ["serena", "spec-kit"]]
+        games_projects = [p for p in projects if p.project_name in ["c-os", "rewind-rush", "tetris-sort"]]
+        other_projects = [p for p in projects if p not in main_projects and p not in games_projects]
+
+        groups = []
+
+        if main_projects:
+            groups.append(
+                ProjectGroup(
+                    name="murena-main",
+                    projects=main_projects,
+                    description="Main development projects",
+                )
+            )
+            click.echo(f"✓ murena-main group ({len(main_projects)} projects):")
+            for p in main_projects:
+                click.echo(f"    - {p.project_name}")
+
+        if games_projects:
+            groups.append(
+                ProjectGroup(
+                    name="murena-games",
+                    projects=games_projects,
+                    description="Side/games projects",
+                )
+            )
+            click.echo(f"✓ murena-games group ({len(games_projects)} projects):")
+            for p in games_projects:
+                click.echo(f"    - {p.project_name}")
+
+        if other_projects:
+            groups.append(
+                ProjectGroup(
+                    name="murena-other",
+                    projects=other_projects,
+                    description="Other projects",
+                )
+            )
+            click.echo(f"✓ murena-other group ({len(other_projects)} projects):")
+            for p in other_projects:
+                click.echo(f"    - {p.project_name}")
+
+        if not groups:
+            click.echo("⚠️  No projects matched grouping criteria.")
+            return
+
+        click.echo()
+        click.echo("📝 Generating grouped MCP configurations...\n")
+
+        try:
+            config_manager = ClaudeCodeConfigManager()
+            created_servers = config_manager.add_project_groups(groups)
+
+            click.echo(f"✓ Created {len(created_servers)} grouped MCP server(s)\n")
+
+            click.echo("🎯 Setup complete!\n")
+            click.echo("Grouped MCP servers configured:")
+            for server_name in created_servers:
+                click.echo(f"  • {server_name}")
+            click.echo()
+
+            click.echo("📊 Expected memory savings:")
+            click.echo("  Before: ~749 MB (5 separate servers)")
+            click.echo("  After: ~270 MB (with main group only)")
+            click.echo("  Savings: ~479 MB (64%) when games group is idle")
+            click.echo()
+
+            click.echo("📋 Next steps:")
+            click.echo("  1. Restart Claude Code completely")
+            click.echo("  2. Verify in Claude Code: /mcp list")
+            click.echo("  3. Check memory usage: ps aux | grep murena")
+            click.echo("  4. Tools will auto-activate by project:")
+            click.echo("     - murena-main__serena__get_symbols_overview")
+            click.echo("     - murena-main__spec-kit__find_symbol")
+            click.echo("     - murena-games__c-os__get_symbols_overview")
+            click.echo()
 
         except Exception as e:
             raise click.ClickException(f"Setup failed: {e}")

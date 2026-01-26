@@ -2,12 +2,22 @@
 
 import json
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from murena.config.murena_config import RegisteredProject
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class ProjectGroup:
+    """Group of related projects for grouped MCP server configuration."""
+
+    name: str  # e.g., "murena-main"
+    projects: list[RegisteredProject]  # Projects in this group
+    description: str = ""  # Optional description
 
 
 class ClaudeCodeConfigManager:
@@ -206,3 +216,52 @@ class ClaudeCodeConfigManager:
         existing = self._load_configs()
         existing.update(new_configs)
         return existing
+
+    def add_project_groups(self, groups: list[ProjectGroup]) -> list[str]:
+        """
+        Create MCP server configurations for project groups (hybrid multi-tenancy).
+
+        Each group gets its own MCP server with tools namespaced by project name.
+        Example: murena-main__serena__get_symbols_overview
+
+        :param groups: List of ProjectGroup instances
+        :return: List of created server names
+        """
+        configs = self._load_configs()
+        murena_root = Path(__file__).resolve().parent.parent.parent.parent
+        created_servers = []
+
+        for group in groups:
+            # Build arguments for multiple projects with server-name for namespacing
+            args = [
+                "run",
+                "--project",
+                str(murena_root),
+                "murena",
+                "start-mcp-server",
+            ]
+
+            # Add all projects in the group
+            for project in group.projects:
+                args.extend(["--project", str(project.project_root)])
+
+            # Add context and server-name for namespacing
+            args.extend(["--context", "claude-code", "--server-name", group.name])
+
+            server_config = {
+                "command": "uv",
+                "args": args,
+                "env": {},
+            }
+
+            configs[group.name] = server_config
+            created_servers.append(group.name)
+
+            log.info(f"Added grouped MCP server: {group.name} ({len(group.projects)} projects)")
+            for project in group.projects:
+                log.info(f"  - {project.project_name}: {project.project_root}")
+
+        # Save updated configurations
+        self._save_configs(configs)
+
+        return created_servers
