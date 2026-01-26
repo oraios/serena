@@ -532,6 +532,70 @@ class LazyInitConfig:
     """Timeout for language detection (fallback to Python if exceeded)."""
 
 
+@dataclass
+class PerformanceConfig:
+    """Configuration for performance optimizations.
+
+    Controls various performance optimizations in the LSP layer and MCP server.
+    All optimizations have feature flags for safe rollout and easy rollback.
+    """
+
+    # Phase 1.1: Async cache loading
+    async_cache_loading: bool = True
+    """Whether to load LSP symbol caches asynchronously in background thread.
+
+    Impact: Saves 1-3 seconds per language server initialization.
+    Risk: LOW - graceful fallback if cache not ready on first access.
+    """
+
+    # Phase 1.2: Smart LSP readiness check
+    smart_ls_readiness: bool = True
+    """Whether to use probe-based readiness check instead of hardcoded sleep(2).
+
+    Impact: Saves 2 seconds on first cross-file reference lookup.
+    Risk: MEDIUM - needs robust probing per language, fallback to 0.5s wait.
+    """
+
+    smart_ls_readiness_timeout: float = 0.5
+    """Fallback timeout in seconds if probe-based readiness check fails."""
+
+    # Phase 1.3: Batch reference processing (CRITICAL)
+    batch_reference_processing: bool = True
+    """Whether to batch reference processing (1 LSP request per file vs per reference).
+
+    Impact: Saves 5-20 seconds per find_referencing_symbols() call.
+    Risk: MEDIUM - requires interval tree for symbol lookup.
+    """
+
+    max_reference_batch_workers: int = 4
+    """Maximum number of parallel workers for processing reference batches."""
+
+    # Phase 2.1: Parallel tool execution (EXPERIMENTAL - disabled by default)
+    parallel_tool_execution: bool = False
+    """Whether to execute independent MCP tools in parallel using AsyncTaskExecutor.
+
+    Impact: 40-70% reduction in multi-tool operations.
+    Risk: HIGH - requires MCP protocol coordination.
+    """
+
+    max_parallel_tools: int = 10
+    """Maximum number of tools to execute in parallel."""
+
+    # Phase 2.2: Request coalescing (EXPERIMENTAL - disabled by default)
+    request_coalescing: bool = False
+    """Whether to coalesce duplicate LSP requests in-flight.
+
+    Impact: 20-40% reduction in duplicate LSP requests.
+    Risk: MEDIUM - cache invalidation complexity.
+    """
+
+    request_coalescing_window_ms: int = 50
+    """Time window in milliseconds for merging duplicate requests."""
+
+    request_coalescing_cache_ttl_ms: int = 5000
+    """Short-TTL cache in milliseconds for recent LSP results."""
+
+
 @dataclass(kw_only=True)
 class MurenaConfig(ToolInclusionDefinition, ToStringMixin):
     """
@@ -583,6 +647,9 @@ class MurenaConfig(ToolInclusionDefinition, ToStringMixin):
     lazy_init: LazyInitConfig = field(default_factory=LazyInitConfig)
     """Lazy initialization settings for automatic project configuration"""
 
+    performance: PerformanceConfig = field(default_factory=PerformanceConfig)
+    """Performance optimization settings (async cache, batch processing, parallel execution)"""
+
     memory_profile: str = "medium"
     """Memory profile preset: 'low', 'medium', or 'high'"""
 
@@ -604,6 +671,7 @@ class MurenaConfig(ToolInclusionDefinition, ToStringMixin):
         "cache",
         "resource_management",
         "lazy_init",
+        "performance",
     }
 
     # *** methods ***

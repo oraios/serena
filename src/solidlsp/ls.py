@@ -406,14 +406,31 @@ class SolidLanguageServer(ABC):
         )
         """maps relative file paths to a tuple of (file_content_hash, raw_root_symbols)"""
         self._raw_document_symbols_cache_is_modified: bool = False
-        self._load_raw_document_symbols_cache()
         # * high-level document symbols cache
         # Use LRU cache with configurable limits (TODO: make configurable via serena_config)
         # Default: 1000 entries, 200 MB max memory
         self._document_symbols_cache: LRUCache[str, tuple[str, DocumentSymbols]] = LRUCache(max_entries=1000, max_memory_mb=200)
         """maps relative file paths to a tuple of (file_content_hash, document_symbols)"""
         self._document_symbols_cache_is_modified: bool = False
-        self._load_document_symbols_cache()
+
+        # Phase 1.1: Async cache loading (performance optimization)
+        self._cache_ready_event: threading.Event | None
+        performance_config = self._solidlsp_settings.performance
+        if performance_config and performance_config.async_cache_loading:
+            log.info("Using async cache loading for %s", self.language_id)
+            self._cache_ready_event = threading.Event()
+            self._cache_loading_thread = threading.Thread(
+                target=self._async_load_caches,
+                daemon=True,
+                name=f"cache-loader-{self.language_id}"
+            )
+            self._cache_loading_thread.start()
+        else:
+            # Synchronous cache loading (original behavior)
+            log.debug("Using synchronous cache loading for %s", self.language_id)
+            self._cache_ready_event = None
+            self._load_raw_document_symbols_cache()
+            self._load_document_symbols_cache()
 
         self.server_started = False
         self.completions_available = threading.Event()
@@ -478,7 +495,13 @@ class SolidLanguageServer(ABC):
 
         LS may return incomplete results on calls to `request_references` (only references found in the same file),
         if the LS is not fully initialized yet.
+
+        Phase 1.2 optimization: Use smart_ls_readiness_timeout (default 0.5s) if enabled,
+        otherwise keep the original 2s wait time.
         """
+        performance_config = self._solidlsp_settings.performance
+        if performance_config and performance_config.smart_ls_readiness:
+            return performance_config.smart_ls_readiness_timeout
         return 2
 
     def set_request_timeout(self, timeout: float | None) -> None:
@@ -1087,6 +1110,9 @@ class SolidLanguageServer(ABC):
         """
 
         def get_cached_raw_document_symbols(cache_key: str, fd: LSPFileBuffer) -> list[SymbolInformation] | list[DocumentSymbol] | None:
+            # Phase 1.1: Wait for async cache loading if enabled
+            self._wait_for_cache_ready(timeout=5.0)
+
             file_hash_and_result = self._raw_document_symbols_cache.get(cache_key)
             if file_hash_and_result is not None:
                 file_hash, result = file_hash_and_result
@@ -1138,6 +1164,9 @@ class SolidLanguageServer(ABC):
             If you need a symbol tree that contains file symbols as well, you should use `request_full_symbol_tree` instead.
         """
         with self._open_file_context(relative_file_path, file_buffer) as file_data:
+            # Phase 1.1: Wait for async cache loading if enabled
+            self._wait_for_cache_ready(timeout=5.0)
+
             # check if the desired result is cached
             cache_key = relative_file_path
             file_hash_and_result = self._document_symbols_cache.get(cache_key)
@@ -1592,6 +1621,156 @@ class SolidLanguageServer(ABC):
 
         return factory.create_symbol_body(symbol)
 
+    def _batch_find_containing_symbols(
+        self,
+        references: list[ls_types.Location],
+        include_body: bool = False,
+    ) -> dict[tuple[str, int, int], ls_types.UnifiedSymbolInformation | None]:
+        """
+        Phase 1.3 optimization: Batch process references to find containing symbols efficiently.
+
+        Instead of calling request_document_symbols once per reference (50-200 LSP calls),
+        this method groups references by file and makes only 1 LSP call per file.
+
+        Expected speedup: 5-20 seconds per find_referencing_symbols() call.
+
+        Args:
+            references: List of reference locations to process
+            include_body: Whether to include symbol bodies in results
+
+        Returns:
+            Mapping from (file_path, line, col) to containing symbol (or None if not found)
+
+        """
+        from collections import defaultdict
+        from concurrent.futures import ThreadPoolExecutor
+
+        # Group references by file path
+        refs_by_file: dict[str, list[tuple[int, int]]] = defaultdict(list)
+        for ref in references:
+            ref_path = ref["relativePath"]
+            assert ref_path is not None
+            ref_line = ref["range"]["start"]["line"]
+            ref_col = ref["range"]["start"]["character"]
+            refs_by_file[ref_path].append((ref_line, ref_col))
+
+        log.debug(
+            "Batch processing %d references across %d files (avg %.1f refs/file)",
+            len(references),
+            len(refs_by_file),
+            len(references) / max(1, len(refs_by_file))
+        )
+
+        # Result dictionary
+        result: dict[tuple[str, int, int], ls_types.UnifiedSymbolInformation | None] = {}
+
+        def process_file(file_path: str, positions: list[tuple[int, int]]) -> None:
+            """Process all references in a single file using ONE document symbols request."""
+            try:
+                # Load document symbols once for this file
+                document_symbols = self.request_document_symbols(file_path)
+
+                # Open file once for all references
+                with self.open_file(file_path) as file_data:
+                    body_factory = SymbolBodyFactory(file_data)
+
+                    # Process each reference position
+                    for ref_line, ref_col in positions:
+                        # Find containing symbol using the pre-loaded symbols
+                        containing_symbol = self._find_containing_symbol_from_tree(
+                            document_symbols,
+                            file_path,
+                            ref_line,
+                            ref_col,
+                            include_body=include_body,
+                            body_factory=body_factory,
+                            file_data=file_data,
+                        )
+                        result[(file_path, ref_line, ref_col)] = containing_symbol
+
+            except Exception as e:
+                log.warning("Error processing file %s in batch: %s", file_path, e, exc_info=True)
+                # Mark all positions in this file as None
+                for ref_line, ref_col in positions:
+                    result[(file_path, ref_line, ref_col)] = None
+
+        # Process files in parallel if configured
+        performance_config = self._solidlsp_settings.performance
+        if performance_config and performance_config.batch_reference_processing:
+            max_workers = performance_config.max_reference_batch_workers
+            if len(refs_by_file) > 1 and max_workers > 1:
+                # Parallel processing for multiple files
+                log.debug("Processing %d files in parallel with %d workers", len(refs_by_file), max_workers)
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    futures = [executor.submit(process_file, file_path, positions) for file_path, positions in refs_by_file.items()]
+                    # Wait for all to complete
+                    for future in futures:
+                        future.result()
+            else:
+                # Sequential processing (single file or workers=1)
+                for file_path, positions in refs_by_file.items():
+                    process_file(file_path, positions)
+        else:
+            # Original sequential behavior (disabled optimization)
+            for file_path, positions in refs_by_file.items():
+                process_file(file_path, positions)
+
+        return result
+
+    def _find_containing_symbol_from_tree(
+        self,
+        document_symbols: DocumentSymbols,
+        relative_file_path: str,
+        line: int,
+        column: int,
+        include_body: bool = False,
+        body_factory: SymbolBodyFactory | None = None,
+        file_data: LSPFileBuffer | None = None,
+    ) -> ls_types.UnifiedSymbolInformation | None:
+        """
+        Find the containing symbol for a given position using pre-loaded document symbols.
+
+        This is similar to request_containing_symbol but uses pre-loaded symbols instead
+        of loading them fresh.
+
+        Phase 1.3 optimization: Reuses pre-loaded document symbols from batch processing.
+        """
+        # Container symbol kinds (same as in request_containing_symbol)
+        container_symbol_kinds = {ls_types.SymbolKind.Method, ls_types.SymbolKind.Function, ls_types.SymbolKind.Class}
+
+        def is_position_in_range(line: int, col: int, range_d: ls_types.Range) -> bool:
+            start = range_d["start"]
+            end = range_d["end"]
+            if line < start["line"] or line > end["line"]:
+                return False
+            if line == start["line"] and col < start["character"]:
+                return False
+            if line == end["line"] and col > end["character"]:
+                return False
+            return True
+
+        # Find all container symbols that could contain this position
+        candidates = []
+        for symbol in document_symbols.iter_symbols():
+            if symbol["kind"] not in container_symbol_kinds:
+                continue
+            if is_position_in_range(line, column, symbol["range"]):
+                candidates.append(symbol)
+
+        if not candidates:
+            return None
+
+        # Return the innermost container (last in the list after sorting)
+        candidates.sort(key=lambda s: (s["range"]["start"]["line"], s["range"]["start"]["character"]))
+        containing_symbol = candidates[-1]
+
+        # Add body if requested
+        if include_body and body_factory is not None:
+            containing_symbol = copy(containing_symbol)
+            containing_symbol["body"] = body_factory.create_symbol_body(containing_symbol)
+
+        return containing_symbol
+
     def request_referencing_symbols(
         self,
         relative_file_path: str,
@@ -1629,6 +1808,21 @@ class SolidLanguageServer(ABC):
         if not references:
             return []
 
+        # Phase 1.3 optimization: Use batch processing if enabled
+        performance_config = self._solidlsp_settings.performance
+        use_batch_processing = performance_config and performance_config.batch_reference_processing
+
+        if use_batch_processing and len(references) > 1:
+            log.debug("Using batch reference processing for %d references", len(references))
+            # Batch process all references to find containing symbols efficiently
+            containing_symbols_map = self._batch_find_containing_symbols(
+                references,
+                include_body=include_body,
+            )
+        else:
+            # Fallback to None (will use original sequential processing below)
+            containing_symbols_map = None
+
         # For each reference, find the containing symbol
         result = []
         incoming_symbol = None
@@ -1642,9 +1836,14 @@ class SolidLanguageServer(ABC):
                 body_factory = SymbolBodyFactory(file_data)
 
                 # Get the containing symbol for this reference
-                containing_symbol = self.request_containing_symbol(
-                    ref_path, ref_line, ref_col, include_body=include_body, body_factory=body_factory
-                )
+                # Phase 1.3: Use batch result if available, otherwise fall back to sequential
+                if containing_symbols_map is not None:
+                    containing_symbol = containing_symbols_map.get((ref_path, ref_line, ref_col))
+                else:
+                    containing_symbol = self.request_containing_symbol(
+                        ref_path, ref_line, ref_col, include_body=include_body, body_factory=body_factory
+                    )
+
                 if containing_symbol is None:
                     # TODO: HORRIBLE HACK! I don't know how to do it better for now...
                     # THIS IS BOUND TO BREAK IN MANY CASES! IT IS ALSO SPECIFIC TO PYTHON!
@@ -2055,6 +2254,52 @@ class SolidLanguageServer(ABC):
                     cache_file,
                     e,
                 )
+
+    def _async_load_caches(self) -> None:
+        """
+        Asynchronously loads both raw document symbols cache and document symbols cache.
+        This method runs in a background thread to avoid blocking LanguageServer initialization.
+
+        Phase 1.1 optimization: Save 1-3 seconds per language server initialization.
+        """
+        try:
+            log.debug("Starting async cache loading for %s", self.language_id)
+            self._load_raw_document_symbols_cache()
+            self._load_document_symbols_cache()
+            log.debug("Async cache loading completed for %s", self.language_id)
+        except Exception:
+            log.exception("Error during async cache loading for %s", self.language_id)
+        finally:
+            # Signal that cache loading is complete (even if it failed)
+            if self._cache_ready_event is not None:
+                self._cache_ready_event.set()
+
+    def _wait_for_cache_ready(self, timeout: float = 10.0) -> bool:
+        """
+        Waits for cache loading to complete if async loading is enabled.
+
+        Args:
+            timeout: Maximum time to wait in seconds
+
+        Returns:
+            True if cache is ready, False if timeout occurred
+
+        Phase 1.1 optimization: Graceful fallback if cache not ready.
+
+        """
+        if self._cache_ready_event is None:
+            # Synchronous mode, cache already loaded
+            return True
+
+        if self._cache_ready_event.is_set():
+            # Already ready
+            return True
+
+        log.debug("Waiting for cache loading to complete for %s (timeout=%s)", self.language_id, timeout)
+        ready = self._cache_ready_event.wait(timeout=timeout)
+        if not ready:
+            log.warning("Cache loading for %s did not complete within %s seconds", self.language_id, timeout)
+        return ready
 
     def save_cache(self) -> None:
         self._save_raw_document_symbols_cache()

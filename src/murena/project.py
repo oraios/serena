@@ -7,7 +7,7 @@ from typing import Any
 import pathspec
 from sensai.util.string import ToStringMixin
 
-from murena.config.murena_config import DEFAULT_TOOL_TIMEOUT, ProjectConfig, get_serena_managed_in_project_dir
+from murena.config.murena_config import DEFAULT_TOOL_TIMEOUT, PerformanceConfig, ProjectConfig, get_serena_managed_in_project_dir
 from murena.constants import MURENA_FILE_ENCODING, MURENA_MANAGED_DIR_NAME
 from murena.ls_manager import LanguageServerFactory, LanguageServerManager
 from murena.text_utils import MatchedConsecutiveLines, search_files
@@ -375,6 +375,7 @@ class Project(ToStringMixin):
         lsp_rate_limiting_enabled: bool = True,
         lsp_rate_limiting_rate: float = 50.0,
         lsp_rate_limiting_burst: int = 100,
+        performance_config: "PerformanceConfig | None" = None,
     ) -> LanguageServerManager:
         """
         Creates the language server manager for the project, starting one language server per configured programming language.
@@ -405,6 +406,7 @@ class Project(ToStringMixin):
             ls_timeout=ls_timeout,
             ls_specific_settings=ls_specific_settings,
             trace_lsp_communication=trace_lsp_communication,
+            performance_config=performance_config,
         )
         self.language_server_manager = LanguageServerManager.from_languages(
             self.project_config.languages,

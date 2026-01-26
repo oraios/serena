@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from sensai.util.string import ToStringMixin
 
 if TYPE_CHECKING:
+    from murena.config.murena_config import PerformanceConfig
     from solidlsp.ls_config import Language
 
 log = logging.getLogger(__name__)
@@ -34,10 +35,19 @@ class SolidLSPSettings:
     Have a look at the docstring of the constructors of the corresponding LS implementations within solidlsp to see which options are available.
     No documentation on options means no options are available.
     """
+    performance: "PerformanceConfig | None" = None
+    """
+    Performance optimization settings. If None, a default PerformanceConfig will be created.
+    """
 
     def __post_init__(self) -> None:
         os.makedirs(str(self.solidlsp_dir), exist_ok=True)
         os.makedirs(str(self.ls_resources_dir), exist_ok=True)
+
+        # Create default PerformanceConfig if not provided
+        if self.performance is None:
+            from murena.config.murena_config import PerformanceConfig
+            self.performance = PerformanceConfig()
 
     @property
     def ls_resources_dir(self) -> str:

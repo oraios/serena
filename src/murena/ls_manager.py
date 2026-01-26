@@ -4,7 +4,7 @@ from collections.abc import Iterator
 
 from sensai.util.logging import LogTime
 
-from murena.config.murena_config import MurenaPaths
+from murena.config.murena_config import MurenaPaths, PerformanceConfig
 from murena.constants import MURENA_MANAGED_DIR_NAME
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
@@ -23,6 +23,7 @@ class LanguageServerFactory:
         ls_timeout: float | None = None,
         ls_specific_settings: dict | None = None,
         trace_lsp_communication: bool = False,
+        performance_config: PerformanceConfig | None = None,
     ):
         self.project_root = project_root
         self.encoding = encoding
@@ -30,6 +31,7 @@ class LanguageServerFactory:
         self.ls_timeout = ls_timeout
         self.ls_specific_settings = ls_specific_settings
         self.trace_lsp_communication = trace_lsp_communication
+        self.performance_config = performance_config or PerformanceConfig()
 
     def create_language_server(self, language: Language) -> SolidLanguageServer:
         ls_config = LanguageServerConfig(
@@ -48,6 +50,7 @@ class LanguageServerFactory:
                 solidlsp_dir=MurenaPaths().serena_user_home_dir,
                 project_data_relative_path=MURENA_MANAGED_DIR_NAME,
                 ls_specific_settings=self.ls_specific_settings or {},
+                performance=self.performance_config,
             ),
         )
 

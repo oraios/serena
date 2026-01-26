@@ -933,6 +933,7 @@ class MurenaAgent:
             lsp_rate_limiting_enabled=rm_config.lsp_rate_limiting_enabled,
             lsp_rate_limiting_rate=rm_config.lsp_rate_limiting_rate_per_second,
             lsp_rate_limiting_burst=rm_config.lsp_rate_limiting_burst,
+            performance_config=self.murena_config.performance,
         )
 
     def add_language(self, language: Language) -> None:
