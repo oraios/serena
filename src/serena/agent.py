@@ -331,26 +331,20 @@ class SerenaAgent:
         self.prompt_factory = SerenaPromptFactory()
         self._project_activation_callback = project_activation_callback
 
-        # initialize active modes based on the global configuration
+        # initialize members for modes and tools
+        self._mode_overrides = modes
         self._active_modes = ActiveModes()
-        self._active_modes.apply(self.serena_config)
+        self._active_tools: AvailableTools = self._exposed_tools
 
         # activate a project configuration (if provided or if there is only a single project available)
         if project is not None:
             try:
-                # Note: This will apply the project's mode selections (if any).
-                # We do not yet update the tool set, as we need to apply mode overrides first (see below).
-                self.activate_project_from_path_or_name(project, update_tools=False)
+                self.activate_project_from_path_or_name(project, update_modes_and_tools=False)
             except Exception as e:
                 log.error(f"Error activating project '{project}' at startup: {e}", exc_info=e)
 
-        # apply modes from the provided mode selection overrides (precedence over project configuration)
-        if modes is not None:
-            self._active_modes.apply(modes)
-
-        # determine the subset of active tools (depending on active modes and the active project)
-        self._active_tools: AvailableTools = self._exposed_tools
-        self._update_active_tools()
+        # update active modes and active tools (considering the active project, if any)
+        self._update_active_modes_and_tools()
 
         # start the dashboard (web frontend), registering its log handler
         # should be the last thing to happen in the initialization since the dashboard
@@ -529,7 +523,7 @@ class SerenaAgent:
         :param mode_names: List of mode names or paths to use
         """
         self._active_modes.apply(ModeSelectionDefinition(default_modes=mode_names))
-        self._update_active_tools()
+        self._update_active_modes_and_tools()
 
         log.info(f"Set modes to {[mode.name for mode in self.get_active_modes()]}")
 
@@ -561,12 +555,20 @@ class SerenaAgent:
         log.info("System prompt:\n%s", system_prompt)
         return system_prompt
 
-    def _update_active_tools(self) -> None:
+    def _update_active_modes_and_tools(self) -> None:
         """
-        Update the active tools based on enabled modes and the active project.
+        Updates the active modes and, subsequently, the active tools based on the modes and the active project.
         The base tool set already takes the Serena configuration and the context into account
         (as well as any internal modes that are not handled dynamically, such as JetBrains mode).
         """
+        # determine active modes from serena config, active project, and mode overrides
+        self._active_modes = ActiveModes()
+        self._active_modes.apply(self.serena_config)
+        if self._active_project:
+            self._active_modes.apply(self._active_project.project_config)
+        if self._mode_overrides:
+            self._active_modes.apply(self._mode_overrides)
+
         # apply modes
         tool_set = self._base_tool_set.apply(*self._active_modes.get_modes())
 
@@ -615,15 +617,12 @@ class SerenaAgent:
         """
         return self.serena_config.language_backend == LanguageBackend.LSP
 
-    def _activate_project(self, project: Project, update_tools: bool = True) -> None:
+    def _activate_project(self, project: Project, update_modes_and_tools: bool = True) -> None:
         log.info(f"Activating {project.project_name} at {project.project_root}")
         self._active_project = project
 
-        # update the active modes based on the project configuration
-        self._active_modes.apply(project.project_config)
-
-        if update_tools:
-            self._update_active_tools()
+        if update_modes_and_tools:
+            self._update_active_modes_and_tools()
 
         def init_language_server_manager() -> None:
             # start the language server
@@ -654,7 +653,7 @@ class SerenaAgent:
             log.info(f"Added new project {project_instance.project_name} for path {project_instance.project_root}")
         return project_instance
 
-    def activate_project_from_path_or_name(self, project_root_or_name: str, update_tools: bool = True) -> Project:
+    def activate_project_from_path_or_name(self, project_root_or_name: str, update_modes_and_tools: bool = True) -> Project:
         """
         Activate a project from a path or a name.
         If the project was already registered, it will just be activated.
@@ -670,7 +669,7 @@ class SerenaAgent:
                 f"Project '{project_root_or_name}' not found: Not a valid project name or directory. "
                 f"Existing project names: {self.serena_config.project_names}"
             )
-        self._activate_project(project_instance, update_tools=update_tools)
+        self._activate_project(project_instance, update_modes_and_tools=update_modes_and_tools)
         return project_instance
 
     def get_active_tool_names(self) -> list[str]:
