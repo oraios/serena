@@ -285,6 +285,32 @@ mcp__murena-serena__replace_symbol_body(
 
 **Quick reference:** Full token optimization rules in [Global CLAUDE.md § TOKEN OPTIMIZATION RULES](/Users/dmitry.lazarenko/.claude/CLAUDE.md)
 
+## 🔄 Alternative Workflows for Phase 5 Token Optimization
+
+**Context:** Phase 5 of the token optimization removed 7 low-risk tools to save ~420 tokens (17% additional reduction). Below are the alternatives to use.
+
+### Removed Tools & Alternatives
+
+| Removed Tool | Alternative Workflow | Example |
+|--------------|---------------------|---------|
+| **`list_dir`** | Use `Bash("ls -la <dir>")` | `Bash("ls -la src/murena/tools/")` |
+| **`delete_lines`** | Use Claude's `Edit()` tool | `Edit(file_path="...", old_string="lines to delete", new_string="")` |
+| **`replace_lines`** | Use Claude's `Edit()` tool | `Edit(file_path="...", old_string="old lines", new_string="new lines")` |
+| **`insert_at_line`** | Use `Edit()` or symbolic tools | `insert_after_symbol()` for code, `Edit()` for other cases |
+| **`update_changelog`** | Use `Edit()`/`Write()` directly | `Edit("CHANGELOG.md", old_string="## Unreleased", new_string="## Unreleased\n- New change")` |
+| **`edit_memory`** | Use `delete_memory()` + `write_memory()` | Two-step: delete old, write new |
+| **`summarize_changes`** | Use git commands | `Bash("git diff --stat")` or `Bash("git log --oneline -5")` |
+
+### Best Practices
+
+1. **Directory Listing:** `Bash("ls -la")` is Claude's native feature and works identically to `list_dir`
+2. **Line Editing:** `Edit()` is more flexible than line-specific tools and works with exact string matching
+3. **Symbolic Editing:** For code changes, prefer symbolic tools (`replace_symbol_body()`, `insert_after_symbol()`) over line-based editing
+4. **Memory Operations:** Two-step workflow (delete + write) is acceptable for infrequent memory edits
+5. **Git Operations:** Native git commands provide richer output than `summarize_changes`
+
+**Impact:** Zero quality loss - all alternatives are equivalent or superior to removed tools.
+
 ## 🔀 Multi-Project Support
 
 Murena MCP supports running multiple independent instances for working with multiple projects simultaneously.

@@ -24,6 +24,7 @@ prompt: |
   For repeated access to same file: use cached symbols (~100 tokens, 99% savings!).
 
 excluded_tools:
+  # Phase 1-4: Built-in overlaps and IDE-specific tools
   - create_text_file
   - read_file
   - execute_shell_command
@@ -34,6 +35,20 @@ excluded_tools:
   - jetbrains_find_referencing_symbols
   - jetbrains_get_symbols_overview
   - jetbrains_type_hierarchy
+
+  # Phase 5: Low-risk removals (7 tools, ~420 tokens saved)
+  # Alternative: Use Bash("ls -la") instead
+  - list_dir
+  # Alternative: Use Edit() tool instead
+  - delete_lines
+  - replace_lines
+  - insert_at_line
+  # Alternative: Use Edit()/Write() directly on CHANGELOG.md
+  - update_changelog
+  # Alternative: Use delete_memory() + write_memory()
+  - edit_memory
+  # Alternative: Use git diff/log commands
+  - summarize_changes
 
 tool_description_overrides:
   search_for_pattern: >
