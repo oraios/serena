@@ -754,6 +754,22 @@ class MurenaAgent:
                 raise ValueError(f"Tool not found: {tc.tool_name}")
             return tool.apply_ex(**tc.params)
 
+        # Check if we're already in an async context (e.g., FastMCP server)
+        # If so, fall back to sequential execution to avoid event loop conflicts
+        try:
+            # This will raise RuntimeError if no event loop is running
+            asyncio.get_running_loop()
+            # We're in an async context - fall back to sequential execution
+            log.debug("execute_tools_parallel: Detected running event loop, falling back to sequential execution")
+            results = []
+            for tc in tool_calls:
+                result = execute_tool(tc)
+                results.append(result)
+            return results
+        except RuntimeError:
+            # No running event loop - safe to create new one for parallel execution
+            pass
+
         # Run async execution with reusable executor
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)

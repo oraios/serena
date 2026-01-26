@@ -296,9 +296,9 @@ class MurenaMCPFactory:
         :param compact_mode: Whether to use compact descriptions
         :return: An MCPTool for batch execution
         """
-        from typing import TypedDict
+        from pydantic import BaseModel
 
-        class ToolCallSpec(TypedDict):
+        class ToolCallSpec(BaseModel):
             """Specification for a single tool call in a batch."""
 
             tool_name: str
@@ -306,7 +306,9 @@ class MurenaMCPFactory:
 
         def execute_batch(**kwargs) -> str:  # type: ignore
             """Execute multiple tools in parallel with automatic dependency analysis."""
-            tool_calls: list[ToolCallSpec] = kwargs.get("tool_calls", [])
+            tool_calls_raw = kwargs.get("tool_calls", [])
+            # Convert to dicts if they're pydantic models
+            tool_calls = [tc if isinstance(tc, dict) else tc.model_dump() for tc in tool_calls_raw]
 
             if not tool_calls:
                 return "[]"
@@ -386,12 +388,30 @@ Performance impact: 40-70% reduction in multi-tool operation time."""
             destructiveHint=False,  # Not inherently destructive
         )
 
+        # Create FuncMetadata using pydantic's create_model
+        from mcp.server.fastmcp.utilities.func_metadata import ArgModelBase, FuncMetadata
+        from pydantic import Field
+
+        # Create arg model from tool_calls parameter
+        # Use pydantic.create_model to create the arg model dynamically
+        class BatchExecuteArgs(ArgModelBase):
+            tool_calls: list[ToolCallSpec] = Field(
+                ..., description="List of tool calls to execute in parallel"
+            )
+
+        fn_metadata = FuncMetadata(
+            arg_model=BatchExecuteArgs,
+            output_schema=None,
+            output_model=None,
+            wrap_output=False,
+        )
+
         return MCPTool(
             fn=execute_batch,
             name="batch_execute_tools",
             description=description,
             parameters=parameters,
-            fn_metadata=None,  # type: ignore
+            fn_metadata=fn_metadata,
             is_async=False,
             context_kwarg="mcp_ctx",
             annotations=annotations,
@@ -542,6 +562,39 @@ Performance impact: 40-70% reduction in multi-tool operation time."""
 
                     mcp_tool.fn = make_wrapper(project_path, original_fn, self.agents_by_project[project_path])
                     mcp._tool_manager._tools[namespaced_name] = mcp_tool
+
+            # Add batch execution tool for parallel tool execution
+            # Safe to use in async context now - execute_tools_parallel() is async-aware
+            # In single-project mode, add one batch tool
+            # In multi-project mode, add batch tool for each project
+            if len(self.agents_by_project) == 1:
+                # Single-project mode: add one batch execution tool
+                agent = next(iter(self.agents_by_project.values()))
+                batch_tool = self.make_batch_execution_tool(agent, compact_mode=compact_mode)
+                mcp._tool_manager._tools["batch_execute_tools"] = batch_tool
+            else:
+                # Multi-project mode: add batch execution tool for each project
+                for project_path, agent in self.agents_by_project.items():
+                    project_name = Path(project_path).name
+                    batch_tool_name = f"{self.server_name}__{project_name}__batch_execute_tools"
+                    batch_tool = self.make_batch_execution_tool(agent, compact_mode=compact_mode)
+
+                    # Wrap to activate project before execution
+                    original_batch_fn = batch_tool.fn
+
+                    def make_batch_wrapper(proj_path: str, orig_fn, proj_agent):  # type: ignore
+                        """Create a wrapper that activates the project before batch execution."""
+
+                        def wrapped_batch_fn(**kwargs) -> str:  # type: ignore
+                            # Activate the project on the agent
+                            proj_agent.activate_project_from_path_or_name(proj_path)
+                            # Execute the batch
+                            return orig_fn(**kwargs)
+
+                        return wrapped_batch_fn
+
+                    batch_tool.fn = make_batch_wrapper(project_path, original_batch_fn, agent)
+                    mcp._tool_manager._tools[batch_tool_name] = batch_tool
 
             log.info(f"Starting MCP server with {len(mcp._tool_manager._tools)} tools: {list(mcp._tool_manager._tools.keys())}")
 
