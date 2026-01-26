@@ -176,6 +176,7 @@ class SerenaAgent:
         context: SerenaAgentContext | None = None,
         modes: list[SerenaAgentMode] | None = None,
         memory_log_handler: MemoryLogHandler | None = None,
+        additional_memory_folders: list[str] | None = None,
     ):
         """
         :param project: the project to load immediately or None to not load any project; may be a path to the project or a name of
@@ -197,6 +198,7 @@ class SerenaAgent:
 
         # project-specific instances, which will be initialized upon project activation
         self._active_project: Project | None = None
+        self._additional_memory_folders = additional_memory_folders
 
         # dashboard URL (set when dashboard is started)
         self._dashboard_url: str | None = None
@@ -571,6 +573,7 @@ class SerenaAgent:
 
     def _activate_project(self, project: Project) -> None:
         log.info(f"Activating {project.project_name} at {project.project_root}")
+        project.set_additional_memory_folders(self._additional_memory_folders)
         self._active_project = project
         self._update_active_tools()
 

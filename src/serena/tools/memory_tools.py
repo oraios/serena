@@ -86,5 +86,8 @@ class EditMemoryTool(Tool, ToolMarkerCanEdit):
         :param mode: either "literal" or "regex", specifying how the `needle` parameter is to be interpreted.
         """
         replace_content_tool = self.agent.get_tool(ReplaceContentTool)
-        rel_path = self.memories_manager.get_memory_file_path(memory_file_name).relative_to(self.get_project_root())
+        memory_path = self.memories_manager._find_memory(memory_file_name)
+        if memory_path is None:
+            return f"Memory file {memory_file_name} not found."
+        rel_path = memory_path.relative_to(self.get_project_root())
         return replace_content_tool.replace_content(str(rel_path), needle, repl, mode=mode, require_not_ignored=False)
