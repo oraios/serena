@@ -203,13 +203,87 @@ find_symbol(
 
 **CRITICAL: This project has Murena MCP server running.**
 
-For comprehensive token optimization rules, see global CLAUDE.md. Project-specific rules:
+### Quick Rules
 
-1. ALWAYS use Murena MCP symbolic tools (`mcp__murena__*`) instead of built-in tools
-2. NEVER use Read() for Python files in `src/` - use `get_symbols_overview()` first
-3. Emergency override: Only use Read() if file < 100 lines or Murena MCP unavailable
+1. **ALWAYS use Murena MCP symbolic tools** (`mcp__murena-serena__*` namespace) for code files
+2. **NEVER use Read() for Python files in `src/`** - use `get_symbols_overview()` first
+3. **Emergency override:** Only use Read() if file < 100 lines or Murena MCP unavailable
 
-**Quick reference:** Global CLAUDE.md § TOKEN OPTIMIZATION RULES
+### File Size Decision Rules
+
+| File Size | Action |
+|-----------|--------|
+| **< 100 lines** | Prefer symbolic, Read() acceptable |
+| **100-200 lines** | MUST use `get_symbols_overview()` first |
+| **> 200 lines** | FORBIDDEN to use Read(), use symbolic tools ONLY |
+
+### Tool Categories (What to Use)
+
+**Use These - Massive Token Savings (70-95%):**
+- `mcp__murena-serena__get_symbols_overview()` - File structure
+- `mcp__murena-serena__find_symbol()` - Find specific function/class
+- `mcp__murena-serena__find_referencing_symbols()` - Find usage
+- `mcp__murena-serena__replace_symbol_body()` - Edit code safely
+- `mcp__murena-serena__insert_after_symbol()` - Add code after symbol
+
+**Don't Use (Claude has built-in equivalents):**
+- `mcp__murena-serena__read_file` → Use Claude's Read() tool instead
+- `mcp__murena-serena__create_text_file` → Use Claude's Write() tool instead
+- `mcp__murena-serena__execute_shell_command` → Use Claude's Bash() tool instead
+
+### Cache-First Pattern (99% Savings on Repeated Access)
+
+```python
+# First access to file
+overview = mcp__murena-serena__get_symbols_overview(relative_path="src/murena/agent.py", depth=2)
+# → ~1,000 tokens
+
+# Later in conversation: same file
+# ❌ DON'T: Re-fetch from disk
+overview2 = mcp__murena-serena__get_symbols_overview(relative_path="src/murena/agent.py")
+# → 1,000 tokens (wasted, already loaded)
+
+# ✅ DO: Use cache
+get_cached_symbols("src/murena/agent.py")
+# → ~100 tokens (99% savings!)
+```
+
+**Real-world savings in 5-turn conversation about same file:**
+- Without cache: 1,000 + 1,000 + 1,000 + 1,000 + 500 = 4,500 tokens
+- With cache: 1,000 + 100 + 100 + 100 + 500 = 1,800 tokens
+- **Savings: 60%**
+
+### Real-World Example
+
+**Task:** Read function "start_mcp_server" and make an edit
+
+```python
+# ✅ OPTIMAL (92.5% savings)
+
+# Step 1: Get file structure
+mcp__murena-serena__get_symbols_overview(relative_path="src/murena/cli.py", depth=1)
+# → 800 tokens (not 25,000 for full file read)
+
+# Step 2: Find the function
+mcp__murena-serena__find_symbol(
+    name_path_pattern="start_mcp_server",
+    relative_path="src/murena/cli.py",
+    include_body=True
+)
+# → 500 tokens (specific function, not full file)
+
+# Step 3: Edit the function
+mcp__murena-serena__replace_symbol_body(
+    name_path="start_mcp_server",
+    body="...new implementation..."
+)
+# → 300 tokens (symbolic editing, precise)
+
+# Total: 1,600 tokens vs 25,000+ for Read() approach
+# Savings: 93.6%
+```
+
+**Quick reference:** Full token optimization rules in [Global CLAUDE.md § TOKEN OPTIMIZATION RULES](/Users/dmitry.lazarenko/.claude/CLAUDE.md)
 
 ## 🔀 Multi-Project Support
 

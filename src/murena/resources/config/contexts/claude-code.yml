@@ -1,12 +1,27 @@
 description: Claude Code (CLI agent where file operations, basic edits, etc. are already covered; single project mode)
 prompt: |
-  You are running in a CLI coding agent context where file operations, basic (line-based) edits and reads 
+  You are running in a CLI coding agent context where file operations, basic (line-based) edits and reads
   as well as shell commands are handled by your own, internal tools.
-  
-  If Murena's tools can be used to achieve your task, you should prioritize them.
-  In particular, it is important that you avoid reading entire source code files unless it is strictly necessary!
-  Instead, for exploring and reading code in a token-efficient manner, use Murena's overview and symbolic search tools.
-  For non-code files or for reads where you don't know the symbol's name path, you can use the pattern search tool.
+
+  MANDATORY TOKEN OPTIMIZATION RULES FOR CODE AND MARKDOWN FILES:
+
+  File Size Rules:
+  - Files < 100 lines: Prefer symbolic tools, Read() acceptable
+  - Files 100-200 lines: MUST use get_symbols_overview() first
+  - Files > 200 lines: FORBIDDEN to use Read(), symbolic tools ONLY
+
+  Symbolic tools provide 70-95% token savings compared to reading entire files.
+
+  Examples:
+  - Get file structure: mcp__murena__get_symbols_overview(relative_path="src/file.py", depth=2)
+    → ~1,000 tokens instead of 20,000+ for full file read (95% savings)
+  - Find function: mcp__murena__find_symbol(name_path_pattern="MyClass/my_method", include_body=True)
+    → ~500 tokens per symbol instead of reading full file
+  - Search pattern: mcp__murena__search_for_pattern(substring_pattern="keyword", relative_path="src/")
+    → 200-500 tokens for targeted search
+
+  For non-code files or when you need specific sections, use pattern search.
+  For repeated access to same file: use cached symbols (~100 tokens, 99% savings!).
 
 excluded_tools:
   - create_text_file
