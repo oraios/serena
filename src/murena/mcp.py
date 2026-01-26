@@ -214,6 +214,11 @@ class MurenaMCPFactory:
         func_arg_metadata = tool.get_apply_fn_metadata()
         is_async = False
         parameters = func_arg_metadata.arg_model.model_json_schema()
+
+        # Apply schema optimizations
+        if compact_mode:
+            parameters = MurenaMCPFactory._strip_schema_metadata(parameters)
+
         if openai_tool_compatible:
             parameters = MurenaMCPFactory._sanitize_for_openai_tools(parameters)
 
@@ -337,6 +342,43 @@ class MurenaMCPFactory:
             first_sentence += "."
 
         return first_sentence
+
+    @staticmethod
+    def _strip_schema_metadata(schema: dict) -> dict:
+        """
+        Remove unnecessary JSON Schema metadata to reduce tokens.
+
+        :param schema: The JSON Schema to strip.
+        :return: Stripped JSON Schema.
+        """
+        # Remove top-level metadata
+        schema.pop("$schema", None)
+        schema.pop("title", None)
+        schema.pop("additionalProperties", None)
+
+        # For each property, remove verbose metadata
+        if "properties" in schema:
+            for prop_name, prop_schema in schema["properties"].items():
+                if isinstance(prop_schema, dict):
+                    # Keep only essential fields: type, description, enum, items, properties, required
+                    essential = {}
+                    for key in ["type", "description", "enum", "items", "properties", "required", "default"]:
+                        if key in prop_schema:
+                            essential[key] = prop_schema[key]
+
+                    # Recursively strip nested schemas
+                    if "items" in essential and isinstance(essential["items"], dict):
+                        essential["items"] = MurenaMCPFactory._strip_schema_metadata(essential["items"])
+
+                    if "properties" in essential:
+                        essential["properties"] = {
+                            k: MurenaMCPFactory._strip_schema_metadata(v) if isinstance(v, dict) else v
+                            for k, v in essential["properties"].items()
+                        }
+
+                    schema["properties"][prop_name] = essential
+
+        return schema
 
     def _iter_tools(self) -> Iterator[tuple[str, Tool, str]]:
         """
