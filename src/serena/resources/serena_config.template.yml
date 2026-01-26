@@ -77,6 +77,19 @@ fixed_tools: []
 # fixed set of tools to use as the base tool set (if non-empty), replacing Serena's default set of tools.
 # This cannot be combined with non-empty excluded_tools or included_optional_tools.
 
+base_modes:
+# list of mode names to that are always to be included in the set of active modes
+# The full set of modes to be activated is base_modes + default_modes.
+# If this is undefined, no base modes are included.
+# The project configuration (project.yml) may override this setting.
+
+default_modes:
+  - interactive
+  - editing
+# list of mode names that are to be activated by default.
+# The full set of modes to be activated is base_modes + default_modes.
+# These modes can be overridden by the project configuration (project.yml) or through the CLI (--mode).
+
 default_max_tool_answer_chars: 150000
 # Used as default for tools where the apply method has a default maximal answer length.
 # Even though the value of the max_answer_chars can be changed when calling the tool, it may make sense to adjust this default

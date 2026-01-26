@@ -5,7 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from logging import Logger
 from pathlib import Path
 from typing import Any, Literal
@@ -18,10 +18,16 @@ from tqdm import tqdm
 
 from serena.agent import SerenaAgent
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
-from serena.config.serena_config import LanguageBackend, ProjectConfig, RegisteredProject, SerenaConfig, SerenaPaths
+from serena.config.serena_config import (
+    LanguageBackend,
+    ModeSelectionDefinition,
+    ProjectConfig,
+    RegisteredProject,
+    SerenaConfig,
+    SerenaPaths,
+)
 from serena.constants import (
     DEFAULT_CONTEXT,
-    DEFAULT_MODES,
     PROMPT_TEMPLATES_DIR_INTERNAL,
     SERENA_LOG_FORMAT,
     SERENAS_OWN_CONTEXT_YAMLS_DIR,
@@ -152,7 +158,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         "modes",
         type=str,
         multiple=True,
-        default=DEFAULT_MODES,
+        default=(),
         show_default=True,
         help="Built-in mode names or paths to custom mode YAMLs.",
     )
@@ -221,7 +227,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         project_file_arg: str | None,
         project_from_cwd: bool | None,
         context: str,
-        modes: tuple[str, ...],
+        modes: Sequence[str],
         language_backend: str | None,
         transport: Literal["stdio", "sse", "streamable-http"],
         host: str,
@@ -302,11 +308,13 @@ class TopLevelCommands(AutoRegisteringGroup):
         "modes",
         type=str,
         multiple=True,
-        default=DEFAULT_MODES,
+        default=(),
         show_default=True,
         help="Built-in mode names or paths to custom mode YAMLs.",
     )
-    def print_system_prompt(project: str, log_level: str, only_instructions: bool, context: str, modes: tuple[str, ...]) -> None:
+    def print_system_prompt(
+        project: str, log_level: str, only_instructions: bool, context: str, modes: Sequence[str] | None = None
+    ) -> None:
         prefix = "You will receive access to Serena's symbolic tools. Below are instructions for using them, take them into account."
         postfix = "You begin by acknowledging that you understood the above instructions and are ready to receive tasks."
         from serena.tools.workflow_tools import InitialInstructionsTool
@@ -314,12 +322,14 @@ class TopLevelCommands(AutoRegisteringGroup):
         lvl = logging.getLevelNamesMapping()[log_level.upper()]
         logging.configure(level=lvl)
         context_instance = SerenaAgentContext.load(context)
-        mode_instances = [SerenaAgentMode.load(mode) for mode in modes]
+        modes_selection_def: ModeSelectionDefinition | None = None
+        if modes:
+            modes_selection_def = ModeSelectionDefinition(default_modes=modes)
         agent = SerenaAgent(
             project=os.path.abspath(project),
             serena_config=SerenaConfig(web_dashboard=False, log_level=lvl),
             context=context_instance,
-            modes=mode_instances,
+            modes=modes_selection_def,
         )
         tool = agent.get_tool(InitialInstructionsTool)
         instr = tool.apply()

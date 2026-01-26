@@ -127,6 +127,12 @@ class ToolInclusionDefinition:
         return num_fixed > 0
 
 
+@dataclass
+class ModeSelectionDefinition:
+    base_modes: Sequence[str] | None = None
+    default_modes: Sequence[str] | None = None
+
+
 class SerenaConfigError(Exception):
     pass
 
@@ -156,7 +162,7 @@ class LanguageBackend(Enum):
 
 
 @dataclass(kw_only=True)
-class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
+class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMixin):
     project_name: str
     languages: list[Language]
     ignored_paths: list[str] = field(default_factory=list)
@@ -166,6 +172,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
     encoding: str = DEFAULT_SOURCE_FILE_ENCODING
 
     SERENA_DEFAULT_PROJECT_FILE = "project.yml"
+    FIELDS_WITHOUT_DEFAULTS = {"project_name", "languages"}
 
     def _tostring_includes(self) -> list[str]:
         return ["project_name"]
@@ -258,20 +265,18 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
 
     @classmethod
     def _apply_defaults_to_dict(cls, data: TDict) -> TDict:
-        # apply defaults for new fields
-        data["languages"] = data.get("languages", [])
-        data["ignored_paths"] = data.get("ignored_paths", [])
-        data["excluded_tools"] = data.get("excluded_tools", [])
-        data["included_optional_tools"] = data.get("included_optional_tools", [])
-        data["read_only"] = data.get("read_only", False)
-        data["ignore_all_files_in_gitignore"] = data.get("ignore_all_files_in_gitignore", True)
-        data["initial_prompt"] = data.get("initial_prompt", "")
-        data["encoding"] = data.get("encoding", DEFAULT_SOURCE_FILE_ENCODING)
+        # apply defaults
+        for field_info in dataclasses.fields(cls):
+            key = field_info.name
+            if key in cls.FIELDS_WITHOUT_DEFAULTS:
+                continue
+            if key not in data:
+                default_value = get_dataclass_default(cls, key)
+                data.setdefault(key, default_value)
 
         # backward compatibility: handle single "language" field
-        if len(data["languages"]) == 0 and "language" in data:
+        if "languages" not in data and "language" in data:
             data["languages"] = [data["language"]]
-        if "language" in data:
             del data["language"]
 
         return data
@@ -314,11 +319,14 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
             languages=languages,
             ignored_paths=data["ignored_paths"],
             excluded_tools=data["excluded_tools"],
+            fixed_tools=data["fixed_tools"],
             included_optional_tools=data["included_optional_tools"],
             read_only=data["read_only"],
             ignore_all_files_in_gitignore=data["ignore_all_files_in_gitignore"],
             initial_prompt=data["initial_prompt"],
             encoding=data["encoding"],
+            base_modes=data["base_modes"],
+            default_modes=data["default_modes"],
         )
 
     def to_yaml_dict(self) -> dict:
@@ -404,7 +412,7 @@ class RegisteredProject(ToStringMixin):
 
 
 @dataclass(kw_only=True)
-class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
+class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMixin):
     """
     Holds the Serena agent configuration, which is typically loaded from a YAML configuration file
     (when instantiated via :method:`from_config_file`), which is updated when projects are added or removed.
@@ -443,6 +451,9 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     """
     ls_specific_settings: dict = field(default_factory=dict)
     """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""
+
+    # settings with overridden defaults
+    default_modes: Sequence[str] | None = ("interactive", "editing")
 
     # *** fields that are NOT mapped to/from the configuration file ***
 

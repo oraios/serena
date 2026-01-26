@@ -25,6 +25,7 @@ Some of the configurable settings include:
   * the language backend to use by default (i.e., the JetBrains plugin or language servers)
   * UI settings affecting the [Serena Dashboard and GUI tool](060_dashboard.md)
   * the set of tools to enable/disable by default
+  * the set of modes to use by default
   * tool execution parameters (timeout, max. answer length)
   * global ignore rules
   * logging settings
