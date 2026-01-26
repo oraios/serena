@@ -28,13 +28,14 @@ from serena.constants import (
     SERENA_FILE_ENCODING,
     SERENA_MANAGED_DIR_NAME,
 )
-from serena.util.general import get_dataclass_default, load_yaml, save_yaml
 from serena.util.inspection import determine_programming_language_composition
+from serena.util.yaml import load_yaml, save_yaml
 from solidlsp.ls_config import Language
 
 from ..analytics import RegisteredTokenCountEstimator
 from ..util.class_decorators import singleton
 from ..util.cli_util import ask_yes_no
+from ..util.dataclass import get_dataclass_default
 
 if TYPE_CHECKING:
     from ..project import Project
@@ -252,7 +253,7 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
             if save_to_disk:
                 project_yml_path = cls.path_to_project_yml(project_root)
                 log.info("Saving project configuration to %s", project_yml_path)
-                save_yaml(project_yml_path, config_with_comments, preserve_comments=True)
+                save_yaml(project_yml_path, config_with_comments)
             return cls._from_dict(config_with_comments)
 
     @classmethod
@@ -275,7 +276,7 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
           full project configuration and `was_complete` indicates whether the loaded configuration
           was complete (i.e., did not require any default values to be applied)
         """
-        data = load_yaml(yml_path, preserve_comments=True)
+        data = load_yaml(yml_path)
 
         # apply defaults
         was_complete = True
@@ -376,9 +377,12 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
         """
         config_path = self.path_to_project_yml(project_root)
         log.info("Saving updated project configuration to %s", config_path)
+
+        # load original commented map and update it with current values
         config_with_comments, _ = self._load_yaml(config_path)
         config_with_comments.update(self._to_yaml_dict())
-        save_yaml(config_path, config_with_comments, preserve_comments=True)
+
+        save_yaml(config_path, config_with_comments)
 
 
 class RegisteredProject(ToStringMixin):
@@ -521,8 +525,8 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
         :param config_file_path: the path where the configuration file should be generated
         """
         log.info(f"Auto-generating Serena configuration file in {config_file_path}")
-        loaded_commented_yaml = load_yaml(SERENA_CONFIG_TEMPLATE_FILE, preserve_comments=True)
-        save_yaml(config_file_path, loaded_commented_yaml, preserve_comments=True)
+        loaded_commented_yaml = load_yaml(SERENA_CONFIG_TEMPLATE_FILE)
+        save_yaml(config_file_path, loaded_commented_yaml)
 
     @classmethod
     def _determine_config_file_path(cls) -> str:
@@ -558,7 +562,7 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
         # load the configuration
         log.info(f"Loading Serena configuration from {config_file_path}")
         try:
-            loaded_commented_yaml = load_yaml(config_file_path, preserve_comments=True)
+            loaded_commented_yaml = load_yaml(config_file_path)
         except Exception as e:
             raise ValueError(f"Error loading Serena configuration from {config_file_path}: {e}") from e
 
@@ -766,7 +770,7 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
         # convert language backend to string
         commented_yaml["language_backend"] = self.language_backend.value
 
-        save_yaml(self.config_file_path, commented_yaml, preserve_comments=True)
+        save_yaml(self.config_file_path, commented_yaml)
 
     def propagate_settings(self) -> None:
         """
