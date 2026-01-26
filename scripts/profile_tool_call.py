@@ -5,7 +5,6 @@ from typing import Literal
 from sensai.util import logging
 from sensai.util.logging import LogTime
 from sensai.util.profiling import profiled
-
 from serena.agent import SerenaAgent
 from serena.config.serena_config import SerenaConfig
 from serena.tools import FindSymbolTool

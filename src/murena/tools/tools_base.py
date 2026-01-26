@@ -12,6 +12,7 @@ from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metada
 from sensai.util import logging
 from sensai.util.string import dict_string
 
+from murena.hooks import HookEvent, get_global_registry
 from murena.project import MemoriesManager, Project
 from murena.prompt_factory import PromptFactory
 from murena.util.class_decorators import singleton
@@ -275,6 +276,20 @@ class Tool(Component):
                             + f"{self.agent.murena_config.project_names}"
                         )
 
+                # Trigger BEFORE_EXECUTE hook
+                hook_registry = get_global_registry()
+                before_context = hook_registry.trigger(
+                    HookEvent.TOOL_BEFORE_EXECUTE,
+                    agent=self.agent,
+                    data={
+                        "tool_name": self.get_name_from_cls(),
+                        "tool_instance": self,
+                        "kwargs": kwargs,
+                    },
+                )
+                # Hooks can modify kwargs
+                kwargs = before_context.data.get("kwargs", kwargs)
+
                 # apply the actual tool
                 try:
                     result = apply_fn(**kwargs)
@@ -298,12 +313,40 @@ class Tool(Component):
                 # record tool usage
                 self.agent.record_tool_usage(kwargs, result, self)
 
+                # Trigger AFTER_EXECUTE hook (success case)
+                hook_registry.trigger(
+                    HookEvent.TOOL_AFTER_EXECUTE,
+                    agent=self.agent,
+                    data={
+                        "tool_name": self.get_name_from_cls(),
+                        "tool_instance": self,
+                        "kwargs": kwargs,
+                        "result": result,
+                        "success": True,
+                        "error": None,
+                    },
+                )
+
             except Exception as e:
                 if not catch_exceptions:
                     raise
                 msg = f"Error executing tool: {e.__class__.__name__} - {e}"
                 log.error(f"Error executing tool: {e}", exc_info=e)
                 result = msg
+
+                # Trigger AFTER_EXECUTE hook (error case)
+                hook_registry.trigger(
+                    HookEvent.TOOL_AFTER_EXECUTE,
+                    agent=self.agent,
+                    data={
+                        "tool_name": self.get_name_from_cls(),
+                        "tool_instance": self,
+                        "kwargs": kwargs,
+                        "result": result,
+                        "success": False,
+                        "error": e,
+                    },
+                )
 
             if log_call:
                 log.info(f"Result: {result}")

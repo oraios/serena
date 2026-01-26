@@ -2,6 +2,7 @@
 The Murena Model Context Protocol (MCP) Server
 """
 
+import re
 import sys
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
@@ -199,13 +200,14 @@ class MurenaMCPFactory:
         return walk(s)
 
     @staticmethod
-    def make_mcp_tool(tool: Tool, openai_tool_compatible: bool = True) -> MCPTool:
+    def make_mcp_tool(tool: Tool, openai_tool_compatible: bool = True, compact_mode: bool = False) -> MCPTool:
         """
         Create an MCP tool from a Murena Tool instance.
 
         :param tool: The Murena Tool instance to convert.
         :param openai_tool_compatible: whether to process the tool schema to be compatible with OpenAI tools
             (doesn't accept integer, needs number instead, etc.). This allows using Murena MCP within codex.
+        :param compact_mode: whether to compress descriptions to reduce token consumption.
         """
         func_name = tool.get_name()
         func_doc = tool.get_apply_docstring() or ""
@@ -235,6 +237,10 @@ class MurenaMCPFactory:
             prefix = " " if func_doc else ""
             func_doc = f"{func_doc}{prefix}Returns {docstring_returns_descr.strip().strip('.')}."
 
+        # Apply compression if enabled
+        if compact_mode and not overridden_description:
+            func_doc = MurenaMCPFactory._compress_docstring(func_doc)
+
         # Parse the parameter descriptions from the docstring and add pass its description
         # to the parameter schema.
         docstring_params = {param.arg_name: param for param in docstring.params}
@@ -242,6 +248,8 @@ class MurenaMCPFactory:
         for parameter, properties in parameters_properties.items():
             if (param_doc := docstring_params.get(parameter)) and param_doc.description:
                 param_desc = f"{param_doc.description.strip().strip('.') + '.'}"
+                if compact_mode:
+                    param_desc = MurenaMCPFactory._compress_param_description(param_desc)
                 properties["description"] = param_desc[0].upper() + param_desc[1:]
 
         def execute_fn(**kwargs) -> str:  # type: ignore
@@ -272,6 +280,64 @@ class MurenaMCPFactory:
             title=tool_title,
         )
 
+    @staticmethod
+    def _compress_docstring(doc: str) -> str:
+        """
+        Compress docstring by removing examples and verbose explanations.
+
+        :param doc: The docstring to compress.
+        :return: Compressed docstring.
+        """
+        # Split into sentences
+        sentences = doc.split(". ")
+
+        # Keep first 2 sentences (core description)
+        # Remove common verbose patterns
+        compressed = []
+        for i, sentence in enumerate(sentences):
+            # Skip examples, notes, and other verbose patterns
+            if any(
+                skip in sentence.lower()
+                for skip in [
+                    "example:",
+                    "note:",
+                    "important:",
+                    "for instance",
+                    "for example",
+                    "e.g.",
+                    "i.e.",
+                ]
+            ):
+                continue
+            compressed.append(sentence)
+            # Keep max 2 sentences
+            if len(compressed) >= 2:
+                break
+
+        result = ". ".join(compressed)
+        if not result.endswith("."):
+            result += "."
+
+        return result
+
+    @staticmethod
+    def _compress_param_description(desc: str) -> str:
+        """
+        Compress parameter description to essentials.
+
+        :param desc: The parameter description to compress.
+        :return: Compressed parameter description.
+        """
+        # Remove parenthetical explanations
+        desc = re.sub(r"\([^)]+\)", "", desc)
+
+        # Keep only first sentence
+        first_sentence = desc.split(". ")[0]
+        if not first_sentence.endswith("."):
+            first_sentence += "."
+
+        return first_sentence
+
     def _iter_tools(self) -> Iterator[tuple[str, Tool, str]]:
         """
         Iterate over all tools with their project context.
@@ -289,18 +355,21 @@ class MurenaMCPFactory:
         if mcp is not None:
             mcp._tool_manager._tools = {}
 
+            # Get compact mode setting from context
+            compact_mode = self.context.compact_descriptions
+
             # Handle both single-project and multi-project modes
             if len(self.agents_by_project) == 1:
                 # Single-project mode: use simple tool names (backward compatible)
                 for project_path, tool, _ in self._iter_tools():
-                    mcp_tool = self.make_mcp_tool(tool, openai_tool_compatible=openai_tool_compatible)
+                    mcp_tool = self.make_mcp_tool(tool, openai_tool_compatible=openai_tool_compatible, compact_mode=compact_mode)
                     mcp._tool_manager._tools[tool.get_name()] = mcp_tool
             else:
                 # Multi-project mode: use namespaced tool names
                 for project_path, tool, project_name in self._iter_tools():
                     # Create namespaced tool name: {server_name}__{project_name}__{tool_name}
                     namespaced_name = f"{self.server_name}__{project_name}__{tool.get_name()}"
-                    mcp_tool = self.make_mcp_tool(tool, openai_tool_compatible=openai_tool_compatible)
+                    mcp_tool = self.make_mcp_tool(tool, openai_tool_compatible=openai_tool_compatible, compact_mode=compact_mode)
 
                     # Wrap the tool to activate project before execution
                     original_fn = mcp_tool.fn

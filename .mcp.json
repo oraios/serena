@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "murena": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/Users/dmitry.lazarenko/Documents/projects/murena",
+        "murena",
+        "start-mcp-server",
+        "--project-from-cwd",
+        "--enable-web-dashboard",
+        "false",
+        "--open-web-dashboard",
+        "false"
+      ],
+      "env": {}
+    }
+  }
+}

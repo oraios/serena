@@ -21,6 +21,7 @@ from murena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
 from murena.config.context_mode import MurenaAgentContext, MurenaAgentMode
 from murena.config.murena_config import LanguageBackend, MurenaConfig, ToolInclusionDefinition
 from murena.dashboard import MurenaDashboardAPI
+from murena.hooks import HookEvent, get_global_registry
 from murena.ls_manager import LanguageServerManager
 from murena.project import Project
 from murena.prompt_factory import MurenaPromptFactory
@@ -245,6 +246,15 @@ class MurenaAgent:
         # instantiate all tool classes
         self._all_tools: dict[type[Tool], Tool] = {tool_class: tool_class(self) for tool_class in ToolRegistry().get_all_tool_classes()}
         tool_names = [tool.get_name_from_cls() for tool in self._all_tools.values()]
+
+        # Trigger TOOL_REGISTERED hooks for each tool
+        hook_registry = get_global_registry()
+        for tool in self._all_tools.values():
+            hook_registry.trigger(
+                HookEvent.TOOL_REGISTERED,
+                agent=self,
+                data={"tool_name": tool.get_name_from_cls(), "tool_instance": tool},
+            )
 
         # If GUI log window is enabled, set the tool names for highlighting
         if self._gui_log_viewer is not None:
@@ -579,10 +589,23 @@ class MurenaAgent:
 
         :param modes: List of mode names or paths to use
         """
+        old_modes = self._modes
         self._modes = modes
         self._update_active_tools()
 
         log.info(f"Set modes to {[mode.name for mode in modes]}")
+
+        # Trigger MODE_CHANGED hook
+        hook_registry = get_global_registry()
+        hook_registry.trigger(
+            HookEvent.MODE_CHANGED,
+            agent=self,
+            data={
+                "old_modes": [m.name for m in old_modes],
+                "new_modes": [m.name for m in modes],
+                "modes": modes,
+            },
+        )
 
     def get_active_modes(self) -> list[MurenaAgentMode]:
         """
@@ -784,6 +807,14 @@ class MurenaAgent:
 
         if self._project_activation_callback is not None:
             self._project_activation_callback()
+
+        # Trigger PROJECT_ACTIVATED hook
+        hook_registry = get_global_registry()
+        hook_registry.trigger(
+            HookEvent.PROJECT_ACTIVATED,
+            agent=self,
+            data={"project": project, "project_name": project.project_name, "project_root": project.project_root},
+        )
 
     def load_project_from_path_or_name(self, project_root_or_name: str, autogenerate: bool) -> Project | None:
         """

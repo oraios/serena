@@ -175,6 +175,13 @@ class MurenaAgentContext(ToolInclusionDefinition, ToStringMixin):
     The `activate_project` tool will, therefore, be disabled in this case, as project switching is not allowed.
     """
 
+    compact_descriptions: bool = False
+    """
+    Enable automatic docstring compression (50-70% token savings).
+    Recommended for contexts with large tool sets.
+    Uses intelligent compression: preserves key info, removes examples/verbosity.
+    """
+
     def _tostring_includes(self) -> list[str]:
         return ["name"]
 

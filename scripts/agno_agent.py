@@ -3,7 +3,6 @@ from agno.models.google.gemini import Gemini
 from agno.os import AgentOS
 from sensai.util import logging
 from sensai.util.helper import mark_used
-
 from serena.agno import SerenaAgnoAgentProvider
 
 mark_used(Gemini, Claude)

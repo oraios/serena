@@ -5,9 +5,9 @@ Autogenerates the `prompt_factory.py` module
 from pathlib import Path
 
 from sensai.util import logging
+from serena.constants import PROMPT_TEMPLATES_DIR_INTERNAL, REPO_ROOT
 
 from interprompt import autogenerate_prompt_factory_module
-from serena.constants import PROMPT_TEMPLATES_DIR_INTERNAL, REPO_ROOT
 
 log = logging.getLogger(__name__)
 

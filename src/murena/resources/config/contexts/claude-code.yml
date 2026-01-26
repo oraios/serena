@@ -29,8 +29,28 @@ excluded_tools:
   - execute_shell_command
   - prepare_for_new_conversation
   - replace_content
+  # JetBrains-specific tools (not needed in CLI context)
+  - jetbrains_find_symbol
+  - jetbrains_find_referencing_symbols
+  - jetbrains_get_symbols_overview
+  - jetbrains_type_hierarchy
 
-tool_description_overrides: {}
+tool_description_overrides:
+  search_for_pattern: >
+    Pattern search across files with context lines and glob filtering.
+    Prefer symbolic tools for code navigation. Returns file paths to matched lines.
+  find_symbol: >
+    Find symbols (classes, methods, etc.) by name path pattern.
+    Returns symbol info with optional body and children (specify depth).
+  get_symbols_overview: >
+    Get hierarchical overview of symbols in a file.
+    Returns grouped symbols by kind (Class, Method, Function, etc.).
+  find_referencing_symbols: >
+    Find all locations where a symbol is used.
+    Returns referencing symbols with context snippets.
+  replace_symbol_body: >
+    Replace the body of a symbol (function, method, class).
+    Safer than line-based edits (no line number dependencies).
 
 # whether to assume that Murena shall only work on a single project in this context (provided that a project is given
 # when Murena is started).
@@ -39,3 +59,6 @@ tool_description_overrides: {}
 # Tools explicitly disabled by the project will not be available at all.
 # The `activate_project` tool is always disabled in this case, as project switching cannot be allowed.
 single_project: true
+
+# Enable automatic docstring compression to reduce token consumption
+compact_descriptions: true
