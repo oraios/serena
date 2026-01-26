@@ -31,8 +31,8 @@ DOC_COMMENT_INDEX_POST = 0
 DOC_COMMENT_INDEX_PRE = 1
 
 # item comment indices: (post key, pre key, post value, pre value)
-ITEM_COMMENT_INDEX_BEFORE = 1  # Must be a list at this index
-ITEM_COMMENT_INDEX_AFTER = 2  # Not a list at this index
+ITEM_COMMENT_INDEX_BEFORE = 1  # (pre-key; must be a list at this index)
+ITEM_COMMENT_INDEX_AFTER = 2  # (post-value; typically no list at this index)
 
 
 def load_yaml(path: str, comment_normalisation: YamlCommentNormalisation = YamlCommentNormalisation.NONE) -> CommentedMap:
@@ -81,3 +81,38 @@ def save_yaml(path: str, data: dict | CommentedMap, preserve_comments: bool = Tr
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding=SERENA_FILE_ENCODING) as f:
         yaml.dump(data, f)
+
+
+def transfer_missing_yaml_comments_by_index(source: CommentedMap, target: CommentedMap, indices: list[int]) -> None:
+    """
+    :param source: the source, from which to transfer missing comments
+    :param target: the target map, whose comments will be updated
+    :param indices: list of comment indices to transfer
+    """
+    for key in target.keys():
+        if key in source:
+            source_comment = source.ca.items.get(key)
+            if source_comment is None:
+                continue
+            target_comment = target.ca.items.get(key, [None, None, None, None])
+            target.ca.items[key] = target_comment
+            for index in indices:
+                if target_comment[index] is None:
+                    target_comment[index] = source_comment[index]
+
+
+def transfer_missing_yaml_comments(source: CommentedMap, target: CommentedMap, comment_normalisation: YamlCommentNormalisation) -> None:
+    """
+    Transfers missing comments from source to target YAML.
+
+    :param source: the source, from which to transfer missing comments
+    :param target: the target map, whose comments will be updated.
+    :param comment_normalisation: the comment normalisation to assume; if NONE, no comments are transferred
+    """
+    match comment_normalisation:
+        case YamlCommentNormalisation.NONE:
+            pass
+        case YamlCommentNormalisation.LEADING:
+            transfer_missing_yaml_comments_by_index(source, target, [ITEM_COMMENT_INDEX_BEFORE])
+        case _:
+            raise ValueError(f"Unhandled comment normalisation: {comment_normalisation}")

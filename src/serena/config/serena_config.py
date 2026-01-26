@@ -29,7 +29,7 @@ from serena.constants import (
     SERENA_MANAGED_DIR_NAME,
 )
 from serena.util.inspection import determine_programming_language_composition
-from serena.util.yaml import load_yaml, save_yaml
+from serena.util.yaml import YamlCommentNormalisation, load_yaml, save_yaml, transfer_missing_yaml_comments
 from solidlsp.ls_config import Language
 
 from ..analytics import RegisteredTokenCountEstimator
@@ -174,6 +174,11 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
 
     SERENA_DEFAULT_PROJECT_FILE = "project.yml"
     FIELDS_WITHOUT_DEFAULTS = {"project_name", "languages"}
+    YAML_COMMENT_NORMALISATION = YamlCommentNormalisation.LEADING
+    """
+    the comment normalisation strategy to use when loading/saving project configuration files.
+    The template file must match this configuration (i.e. it must use leading comments if this is set to LEADING).
+    """
 
     def _tostring_includes(self) -> list[str]:
         return ["project_name"]
@@ -265,7 +270,9 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
         return os.path.join(SERENA_MANAGED_DIR_NAME, cls.SERENA_DEFAULT_PROJECT_FILE)
 
     @classmethod
-    def _load_yaml(cls, yml_path: str) -> tuple[CommentedMap, bool]:
+    def _load_yaml(
+        cls, yml_path: str, comment_normalisation: YamlCommentNormalisation = YamlCommentNormalisation.NONE
+    ) -> tuple[CommentedMap, bool]:
         """
         Load the project configuration as a CommentedMap, preserving comments and ensuring
         completeness of the configuration by applying default values for missing fields
@@ -276,7 +283,7 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
           full project configuration and `was_complete` indicates whether the loaded configuration
           was complete (i.e., did not require any default values to be applied)
         """
-        data = load_yaml(yml_path)
+        data = load_yaml(yml_path, comment_normalisation=comment_normalisation)
 
         # apply defaults
         was_complete = True
@@ -379,8 +386,12 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
         log.info("Saving updated project configuration to %s", config_path)
 
         # load original commented map and update it with current values
-        config_with_comments, _ = self._load_yaml(config_path)
+        config_with_comments, _ = self._load_yaml(config_path, self.YAML_COMMENT_NORMALISATION)
         config_with_comments.update(self._to_yaml_dict())
+
+        # transfer missing comments from the template file
+        template_config, _ = self._load_yaml(PROJECT_TEMPLATE_FILE, self.YAML_COMMENT_NORMALISATION)
+        transfer_missing_yaml_comments(template_config, config_with_comments, self.YAML_COMMENT_NORMALISATION)
 
         save_yaml(config_path, config_with_comments)
 
