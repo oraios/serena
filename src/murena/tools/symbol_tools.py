@@ -57,12 +57,9 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
         This should be the first tool to call when you want to understand a new file, unless you already know
         what you are looking for.
 
-        :param relative_path: the relative path to the file to get the overview of
-        :param depth: depth up to which descendants of top-level symbols shall be retrieved
-            (e.g. 1 retrieves immediate children). Default 0.
-        :param max_answer_chars: if the overview is longer than this number of characters,
-            no content will be returned. -1 means the default value from the config will be used.
-            Don't adjust unless there is really no other way to get the content required for the task.
+        :param relative_path: Relative path to the file to get the overview of
+        :param depth: Depth for descendants retrieval. Default 0.
+        :param max_answer_chars: Max characters for output. -1 uses default from config.
         :return: a JSON object containing symbols grouped by kind in a compact format.
         """
         result = self.get_symbol_overview(relative_path, depth=depth)
@@ -157,29 +154,16 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         Append an index `[i]` to match a specific overload only, e.g. "MyClass/my_method[1]".
 
         :param name_path_pattern: the name path matching pattern (see above)
-        :param depth: depth up to which descendants shall be retrieved (e.g. use 1 to also retrieve immediate children;
-            for the case where the symbol is a class, this will return its methods). Default 0.
-        :param relative_path: Optional. Restrict search to this file or directory. If None, searches entire codebase.
-            If a directory is passed, the search will be restricted to the files in that directory.
-            If a file is passed, the search will be restricted to that file.
-            If you have some knowledge about the codebase, you should use this parameter, as it will significantly
-            speed up the search as well as reduce the number of results.
-        :param include_body: whether to include the symbol's source code. Use judiciously.
-        :param include_info: whether to include additional info (hover-like, typically including docstring and signature),
-            about the symbol (ignored if include_body is True). Info is never included for child symbols.
-            Note: Depending on the language, this can be slow (e.g., C/C++).
+        :param depth: Depth for descendants retrieval. Default 0.
+        :param relative_path: Optional. Restrict search to this file or directory.
+        :param include_body: Include the symbol's source code.
+        :param include_info: Include additional info about the symbol. Ignored if include_body is True.
         :param include_kinds: List of LSP symbol kind integers to include.
-            If not provided, all kinds are included.
-        :param exclude_kinds: Optional. List of LSP symbol kind integers to exclude. Takes precedence over `include_kinds`.
-            If not provided, no kinds are excluded.
-        :param substring_matching: If True, use substring matching for the last element of the pattern, such that
-            "Foo/get" would match "Foo/getValue" and "Foo/getData".
-        :param max_answer_chars: Max characters for the JSON result. If exceeded, no content is returned.
-            -1 means the default value from the config will be used.
-        :param compact_format: Whether to use compact JSON encoding to reduce token usage (30-40% savings).
-            Default False for backward compatibility.
-        :param use_cache: Whether to use session symbol cache. Default True.
-            Cache provides 20-40% token savings in multi-turn conversations.
+        :param exclude_kinds: List of LSP symbol kind integers to exclude. Takes precedence over include_kinds.
+        :param substring_matching: Use substring matching for the last element of the pattern.
+        :param max_answer_chars: Max characters for output. -1 uses default from config.
+        :param compact_format: Use compact JSON encoding (30-40% token savings).
+        :param use_cache: Use session symbol cache. Default True.
         :return: a list of symbols (with locations) matching the name.
         """
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
@@ -239,21 +223,16 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         max_answer_chars: int = -1,
     ) -> str:
         """
-        Finds references to the symbol at the given `name_path`. The result will contain metadata about the referencing symbols
-        as well as a short code snippet around the reference.
+        Finds references to the symbol at the given name_path. Returns metadata about referencing symbols
+        with optional code snippets.
 
-        :param name_path: for finding the symbol to find references for, same logic as in the `find_symbol` tool.
-        :param relative_path: the relative path to the file containing the symbol for which to find references.
-            Note that here you can't pass a directory but must pass a file.
-        :param include_info: whether to include additional info (hover-like, typically including docstring and signature),
-            about the referencing symbols; can be slow depending on the language (e.g. C/C++).
-        :param include_kinds: same as in the `find_symbol` tool.
-        :param exclude_kinds: same as in the `find_symbol` tool.
-        :param context_mode: controls how much context to include around each reference.
-            - "none": Just metadata, no code context (~50 tokens/ref)
-            - "line_only": Line number only (~75 tokens/ref)
-            - "full": 3-line context (1 before + match + 1 after) (~150 tokens/ref, default)
-        :param max_answer_chars: same as in the `find_symbol` tool.
+        :param name_path: Name path of the symbol to find references for
+        :param relative_path: Relative path to file containing the symbol
+        :param include_info: Include additional info about referencing symbols
+        :param include_kinds: List of LSP symbol kind integers to include
+        :param exclude_kinds: List of LSP symbol kind integers to exclude
+        :param context_mode: Context level: "none" (metadata only), "line_only" (line numbers), "full" (3-line context)
+        :param max_answer_chars: Max characters for output. -1 uses default from config.
         :return: a list of JSON objects with the symbols referencing the requested symbol
         """
         include_body = False  # It is probably never a good idea to include the body of the referencing symbols

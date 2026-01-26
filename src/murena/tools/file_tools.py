@@ -388,57 +388,26 @@ class SearchForPatternTool(Tool):
         max_answer_chars: int = -1,
     ) -> str:
         """
-        Offers a flexible search for arbitrary patterns in the codebase, including the
-        possibility to search in non-code files.
+        Offers a flexible search for arbitrary patterns in the codebase, including non-code files.
         Generally, symbolic operations like find_symbol or find_referencing_symbols
         should be preferred if you know which symbols you are looking for.
 
         Pattern Matching Logic:
-            For each match, the returned result will contain the full lines where the
-            substring pattern is found, as well as optionally some lines before and after it. The pattern will be compiled with
-            DOTALL, meaning that the dot will match all characters including newlines.
-            This also means that it never makes sense to have .* at the beginning or end of the pattern,
-            but it may make sense to have it in the middle for complex patterns.
-            If a pattern matches multiple lines, all those lines will be part of the match.
-            Be careful to not use greedy quantifiers unnecessarily, it is usually better to use non-greedy quantifiers like .*? to avoid
-            matching too much content.
+            Returns full lines where the substring pattern is found, with optional context lines.
+            Pattern uses DOTALL (dot matches newlines). Use non-greedy quantifiers (.*?) for best results.
 
         File Selection Logic:
-            The files in which the search is performed can be restricted very flexibly.
-            Using `restrict_search_to_code_files` is useful if you are only interested in code symbols (i.e., those
-            symbols that can be manipulated with symbolic tools like find_symbol).
-            You can also restrict the search to a specific file or directory,
-            and provide glob patterns to include or exclude certain files on top of that.
-            The globs are matched against relative file paths from the project root (not to the `relative_path` parameter that
-            is used to further restrict the search).
-            Smartly combining the various restrictions allows you to perform very targeted searches.
+            Use restrict_search_to_code_files for code symbols only.
+            Combine relative_path with glob patterns for targeted searches.
 
-
-        :param substring_pattern: Regular expression for a substring pattern to search for
-        :param context_lines_before: Number of lines of context to include before each match
-        :param context_lines_after: Number of lines of context to include after each match
-        :param paths_include_glob: optional glob pattern specifying files to include in the search.
-            Matches against relative file paths from the project root (e.g., "*.py", "src/**/*.ts").
-            Supports standard glob patterns (*, ?, [seq], **, etc.) and brace expansion {a,b,c}.
-            Only matches files, not directories. If left empty, all non-ignored files will be included.
-        :param paths_exclude_glob: optional glob pattern specifying files to exclude from the search.
-            Matches against relative file paths from the project root (e.g., "*test*", "**/*_generated.py").
-            Supports standard glob patterns (*, ?, [seq], **, etc.) and brace expansion {a,b,c}.
-            Takes precedence over paths_include_glob. Only matches files, not directories. If left empty, no files are excluded.
-        :param relative_path: only subpaths of this path (relative to the repo root) will be analyzed. If a path to a single
-            file is passed, only that will be searched. The path must exist, otherwise a `FileNotFoundError` is raised.
-        :param max_answer_chars: if the output is longer than this number of characters,
-            no content will be returned.
-            -1 means the default value from the config will be used.
-            Don't adjust unless there is really no other way to get the content
-            required for the task. Instead, if the output is too long, you should
-            make a stricter query.
-        :param restrict_search_to_code_files: whether to restrict the search to only those files where
-            analyzed code symbols can be found. Otherwise, will search all non-ignored files.
-            Set this to True if your search is only meant to discover code that can be manipulated with symbolic tools.
-            For example, for finding classes or methods from a name pattern.
-            Setting to False is a better choice if you also want to search in non-code files, like in html or yaml files,
-            which is why it is the default.
+        :param substring_pattern: Regular expression pattern to search for
+        :param context_lines_before: Number of context lines before each match
+        :param context_lines_after: Number of context lines after each match
+        :param paths_include_glob: Glob pattern for files to include (e.g., "*.py", "src/**/*.ts")
+        :param paths_exclude_glob: Glob pattern for files to exclude. Takes precedence over include.
+        :param relative_path: Restrict search to this path. Must exist.
+        :param max_answer_chars: Max characters for output. -1 uses default from config.
+        :param restrict_search_to_code_files: Restrict to code files only. Default False.
         :return: A mapping of file paths to lists of matched consecutive lines.
         """
         abs_path = os.path.join(self.get_project_root(), relative_path)
