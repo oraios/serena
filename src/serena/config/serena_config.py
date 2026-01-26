@@ -246,7 +246,7 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
                 log.info("Using languages: %s", languages_to_use)
             else:
                 languages_to_use = [lang.value for lang in languages]
-            config_with_comments = cls.load_commented_map(PROJECT_TEMPLATE_FILE)
+            config_with_comments, _ = cls._load_yaml(PROJECT_TEMPLATE_FILE)
             config_with_comments["project_name"] = project_name
             config_with_comments["languages"] = languages_to_use
             if save_to_disk:
@@ -264,13 +264,27 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
         return os.path.join(SERENA_MANAGED_DIR_NAME, cls.SERENA_DEFAULT_PROJECT_FILE)
 
     @classmethod
-    def _apply_defaults_to_dict(cls, data: TDict) -> TDict:
+    def _load_yaml(cls, yml_path: str) -> tuple[CommentedMap, bool]:
+        """
+        Load the project configuration as a CommentedMap, preserving comments and ensuring
+        completeness of the configuration by applying default values for missing fields
+        and backward compatibility adjustments.
+
+        :param yml_path: the path to the project.yml file
+        :return: a tuple `(dict, was_complete)` where dict is a CommentedMap representing a
+          full project configuration and `was_complete` indicates whether the loaded configuration
+          was complete (i.e., did not require any default values to be applied)
+        """
+        data = load_yaml(yml_path, preserve_comments=True)
+
         # apply defaults
+        was_complete = True
         for field_info in dataclasses.fields(cls):
             key = field_info.name
             if key in cls.FIELDS_WITHOUT_DEFAULTS:
                 continue
             if key not in data:
+                was_complete = False
                 default_value = get_dataclass_default(cls, key)
                 data.setdefault(key, default_value)
 
@@ -279,20 +293,7 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
             data["languages"] = [data["language"]]
             del data["language"]
 
-        return data
-
-    @classmethod
-    def load_commented_map(cls, yml_path: str) -> CommentedMap:
-        """
-        Load the project configuration as a CommentedMap, preserving comments and ensuring
-        completeness of the configuration by applying default values for missing fields
-        and backward compatibility adjustments.
-
-        :param yml_path: the path to the project.yml file
-        :return: a CommentedMap representing a full project configuration
-        """
-        data = load_yaml(yml_path, preserve_comments=True)
-        return cls._apply_defaults_to_dict(data)
+        return data, was_complete
 
     @classmethod
     def _from_dict(cls, data: dict[str, Any]) -> Self:
@@ -329,7 +330,7 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
             default_modes=data["default_modes"],
         )
 
-    def to_yaml_dict(self) -> dict:
+    def _to_yaml_dict(self) -> dict:
         """
         :return: a yaml-serializable dictionary representation of this configuration
         """
@@ -344,15 +345,40 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
         """
         project_root = Path(project_root)
         yaml_path = project_root / cls.rel_path_to_project_yml()
+
+        # auto-generate if necessary
         if not yaml_path.exists():
             if autogenerate:
                 return cls.autogenerate(project_root)
             else:
                 raise FileNotFoundError(f"Project configuration file not found: {yaml_path}")
-        yaml_data = cls.load_commented_map(str(yaml_path))
+
+        # load the configuration dictionary
+        yaml_data, was_complete = cls._load_yaml(str(yaml_path))
         if "project_name" not in yaml_data:
             yaml_data["project_name"] = project_root.name
-        return cls._from_dict(yaml_data)
+
+        # instantiate the ProjectConfig
+        project_config = cls._from_dict(yaml_data)
+
+        # if the configuration was incomplete, re-save it to disk
+        if not was_complete:
+            log.info("Project configuration in %s was incomplete, re-saving with default values for missing fields", yaml_path)
+            project_config.save(project_root)
+
+        return project_config
+
+    def save(self, project_root: Path | str) -> None:
+        """
+        Saves the project configuration to disk.
+
+        :param project_root: the root directory of the project
+        """
+        config_path = self.path_to_project_yml(project_root)
+        log.info("Saving updated project configuration to %s", config_path)
+        config_with_comments, _ = self._load_yaml(config_path)
+        config_with_comments.update(self._to_yaml_dict())
+        save_yaml(config_path, config_with_comments, preserve_comments=True)
 
 
 class RegisteredProject(ToStringMixin):

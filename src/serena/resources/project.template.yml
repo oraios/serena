@@ -80,6 +80,13 @@ read_only: false
 #  * `write_memory`: Writes a named memory (for future reference) to Serena's project-specific memory store.
 excluded_tools: []
 
+# list of tools to include that would otherwise be disabled (particularly optional tools that are disabled by default)
+included_optional_tools: []
+
+# fixed set of tools to use as the base tool set (if non-empty), replacing Serena's default set of tools.
+# This cannot be combined with non-empty excluded_tools or included_optional_tools.
+fixed_tools: []
+
 # list of mode names to that are always to be included in the set of active modes
 # The full set of modes to be activated is base_modes + default_modes.
 # If the setting is undefined, the base_modes from the global configuration (serena_config.yml) apply.
