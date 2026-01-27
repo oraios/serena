@@ -29,7 +29,7 @@ from serena.constants import (
     SERENA_MANAGED_DIR_NAME,
 )
 from serena.util.inspection import determine_programming_language_composition
-from serena.util.yaml import YamlCommentNormalisation, load_yaml, save_yaml, transfer_missing_yaml_comments
+from serena.util.yaml import YamlCommentNormalisation, load_yaml, normalise_yaml_comments, save_yaml, transfer_missing_yaml_comments
 from solidlsp.ls_config import Language
 
 from ..analytics import RegisteredTokenCountEstimator
@@ -780,6 +780,13 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
 
         # convert language backend to string
         commented_yaml["language_backend"] = self.language_backend.value
+
+        # transfer comments from the template file
+        # NOTE: The template file now uses leading comments, but we previously used trailing comments,
+        #       so we apply a conversion, which detects the old style and transforms it.
+        normalise_yaml_comments(commented_yaml, YamlCommentNormalisation.LEADING_WITH_CONVERSION_FROM_TRAILING)
+        template_yaml = load_yaml(SERENA_CONFIG_TEMPLATE_FILE, comment_normalisation=YamlCommentNormalisation.LEADING)
+        transfer_missing_yaml_comments(template_yaml, commented_yaml, YamlCommentNormalisation.LEADING, fully_missing_only=False)
 
         save_yaml(self.config_file_path, commented_yaml)
 
