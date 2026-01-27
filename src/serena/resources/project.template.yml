@@ -20,8 +20,8 @@ project_name: "project_name"
 #   - For JavaScript, use typescript
 #   - For Free Pascal/Lazarus, use pascal
 # Special requirements:
-#   - csharp: Requires the presence of a .sln file in the project folder.
-#   - pascal: Requires Free Pascal Compiler (fpc) and optionally Lazarus.
+#   Some languages require additional setup/installations.
+#   See here for details: https://oraios.github.io/serena/01-about/020_programming-languages.html#language-servers
 # When using multiple languages, the first language server that supports a given file will be used for that file.
 # The first language is the default language and the respective language server will be used as a fallback.
 # Note that when using the JetBrains backend, language servers are not used and this list is correspondingly ignored.
