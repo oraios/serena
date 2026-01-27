@@ -247,6 +247,11 @@ class MurenaAgent:
         self._all_tools: dict[type[Tool], Tool] = {tool_class: tool_class(self) for tool_class in ToolRegistry().get_all_tool_classes()}
         tool_names = [tool.get_name_from_cls() for tool in self._all_tools.values()]
 
+        # Register built-in hooks (e.g., auto-indexing)
+        from murena.hooks import register_builtin_hooks
+
+        register_builtin_hooks()
+
         # Trigger TOOL_REGISTERED hooks for each tool
         hook_registry = get_global_registry()
         for tool in self._all_tools.values():

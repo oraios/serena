@@ -443,15 +443,26 @@ class FindSimilarCodeTool(Tool, ToolMarkerOptional):
         file_filter: Optional[str] = None,
         language_filter: Optional[str] = None,
         compact_format: bool = True,
+        language: str = "python",
+        use_ast: bool = True,
     ) -> str:
         """
         Find code similar to the given snippet.
 
-        This tool uses semantic embeddings to find code that is semantically similar
-        to the provided snippet, useful for:
-        - Detecting code duplication
+        This tool uses semantic embeddings and optional AST-based structural analysis
+        to find code that is similar to the provided snippet, useful for:
+        - Detecting code duplication (Type-1 through Type-4 clones)
         - Finding similar implementations
         - Identifying refactoring opportunities
+
+        When use_ast=True (default), performs multi-level clone detection:
+        - Semantic similarity via embeddings
+        - Structural similarity via AST analysis (tree-sitter)
+        - Combined scoring: 0.6 * structural + 0.4 * semantic
+        - Clone type classification: Type-1 (Exact), Type-2 (Renamed),
+          Type-3 (Modified), Type-4 (Semantic)
+
+        When use_ast=False, falls back to embedding-only similarity.
 
         :param code_snippet: Code snippet to find similar code for
         :param max_results: Maximum number of results to return. Default 5.
@@ -459,6 +470,8 @@ class FindSimilarCodeTool(Tool, ToolMarkerOptional):
         :param file_filter: Optional glob-style pattern to filter files. Default None.
         :param language_filter: Optional language filter (e.g., "python"). Default None.
         :param compact_format: If True, return compact JSON format. Default True.
+        :param language: Programming language for AST parsing (python, javascript, typescript, go). Default "python".
+        :param use_ast: If True, use AST-based clone detection. If False, use embedding-only. Default True.
         :return: A JSON string with similar code results including:
             - code_snippet: The original code snippet
             - results: List of similar code locations with:
@@ -468,6 +481,10 @@ class FindSimilarCodeTool(Tool, ToolMarkerOptional):
                 - k (kind): Symbol kind
                 - ln (line): Line number
                 - doc: Code preview
+                - ast_similarity: AST similarity score (if use_ast=True)
+                - embedding_similarity: Embedding similarity score (if use_ast=True)
+                - combined_score: Combined score (if use_ast=True)
+                - clone_type: Clone type classification (if use_ast=True)
             - total_results: Number of results returned
             - min_score: Minimum score threshold used
         """
@@ -485,17 +502,40 @@ class FindSimilarCodeTool(Tool, ToolMarkerOptional):
                     }
                 )
 
-            from murena.semantic.searcher import SemanticSearcher
+            if use_ast:
+                # Use CloneDetector for AST-based clone detection
+                from murena.semantic.clone_detector import CloneDetector
 
-            searcher = SemanticSearcher(self.agent)
-            results = searcher.find_similar_code(
-                code_snippet=code_snippet,
-                max_results=max_results,
-                min_score=min_score,
-            )
+                detector = CloneDetector(self.agent)
+                results = detector.find_clones(
+                    code_snippet=code_snippet,
+                    language=language,
+                    threshold=min_score,
+                    max_results=max_results,
+                )
 
-            # Add snippet to response
-            results["code_snippet"] = code_snippet[:100] + "..." if len(code_snippet) > 100 else code_snippet
+                # Add snippet to response
+                snippet_preview = code_snippet[:100] + "..." if len(code_snippet) > 100 else code_snippet
+                results["code_snippet"] = snippet_preview
+
+                # Rename 'clones' to 'results' for consistent API
+                if "clones" in results:
+                    results["results"] = results.pop("clones")
+                    results["total_results"] = results.pop("total", len(results["results"]))
+
+            else:
+                # Use SemanticSearcher for embedding-only similarity
+                from murena.semantic.searcher import SemanticSearcher
+
+                searcher = SemanticSearcher(self.agent)
+                results = searcher.find_similar_code(
+                    code_snippet=code_snippet,
+                    max_results=max_results,
+                    min_score=min_score,
+                )
+
+                # Add snippet to response
+                results["code_snippet"] = code_snippet[:100] + "..." if len(code_snippet) > 100 else code_snippet
 
             return self._to_json(results)
 

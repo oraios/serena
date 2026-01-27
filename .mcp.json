@@ -9,6 +9,8 @@
         "murena",
         "start-mcp-server",
         "--project-from-cwd",
+        "--context",
+        "claude-code",
         "--enable-web-dashboard",
         "false",
         "--open-web-dashboard",

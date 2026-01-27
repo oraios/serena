@@ -31,10 +31,10 @@ excluded_tools:
   - prepare_for_new_conversation
   - replace_content
   # JetBrains-specific tools (not needed in CLI context)
-  - jetbrains_find_symbol
-  - jetbrains_find_referencing_symbols
-  - jetbrains_get_symbols_overview
-  - jetbrains_type_hierarchy
+  - jet_brains_find_symbol
+  - jet_brains_find_referencing_symbols
+  - jet_brains_get_symbols_overview
+  - jet_brains_type_hierarchy
 
   # Phase 5: Low-risk removals (7 tools, ~420 tokens saved)
   # Alternative: Use Bash("ls -la") instead
@@ -49,6 +49,12 @@ excluded_tools:
   - edit_memory
   # Alternative: Use git diff/log commands
   - summarize_changes
+
+included_optional_tools:
+  # Phase 4: Semantic search tools (NEW)
+  - intelligent_search          # Universal search (LSP+VECTOR+HYBRID auto-routing)
+  - find_similar_code          # Clone detection with AST analysis
+  - get_semantic_index_status  # Check index status before search
 
 tool_description_overrides:
   search_for_pattern: >
@@ -66,6 +72,19 @@ tool_description_overrides:
   replace_symbol_body: >
     Replace the body of a symbol (function, method, class).
     Safer than line-based edits (no line number dependencies).
+
+  # Phase 4: Semantic search tools
+  intelligent_search: >
+    Universal search with automatic mode selection (LSP/VECTOR/HYBRID).
+    Phase 4 features: cross-encoder reranking, query expansion, confidence-based fallback.
+    Use for: "find auth logic", "UserService", "error handling patterns".
+  find_similar_code: >
+    Multi-level clone detection: AST structural similarity + semantic embeddings.
+    Detects Type-1 (exact), Type-2 (renamed), Type-3 (modified), Type-4 (semantic) clones.
+    Use for: duplicate detection, similar implementations, refactoring opportunities.
+  get_semantic_index_status: >
+    Check semantic index status for the current project.
+    Returns indexing progress, file counts, and whether search is available.
 
 # whether to assume that Murena shall only work on a single project in this context (provided that a project is given
 # when Murena is started).

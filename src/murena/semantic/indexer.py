@@ -108,6 +108,7 @@ class SemanticIndexer:
         skip_tests: bool = True,
         skip_generated: bool = True,
         max_file_size: int = 10000,
+        cleanup_orphans: bool = True,
     ) -> dict[str, Any]:
         """
         Index the entire project for semantic search.
@@ -117,10 +118,13 @@ class SemanticIndexer:
         :param skip_tests: If True, skip test files
         :param skip_generated: If True, skip generated/build files
         :param max_file_size: Maximum file size in lines to index
+        :param cleanup_orphans: If True, remove deleted files from index during incremental updates
         :return: Dictionary with indexing statistics
         """
         start_time = datetime.now()
-        log.info(f"[{datetime_tag()}] Starting semantic indexing (incremental={incremental}, rebuild={rebuild})")
+        log.info(
+            f"[{datetime_tag()}] Starting semantic indexing (incremental={incremental}, rebuild={rebuild}, cleanup_orphans={cleanup_orphans})"
+        )
 
         project = self.agent.get_active_project_or_raise()
         ls_manager = self.agent.get_language_server_manager_or_raise()
@@ -134,6 +138,30 @@ class SemanticIndexer:
         # Gather source files
         source_files = project.gather_source_files()
         log.info(f"Found {len(source_files)} source files")
+
+        # Cleanup orphaned files if requested and in incremental mode
+        orphans_removed = 0
+        if cleanup_orphans and incremental and not rebuild:
+            try:
+                collection = self.collection
+                all_data = collection.get()
+                indexed_metadata = all_data.get("metadatas")
+                if indexed_metadata:
+                    indexed_paths = {str(m.get("relative_path")) for m in indexed_metadata if m and "relative_path" in m}
+
+                    current_paths = set(source_files)  # source_files are already relative path strings
+                    orphaned = indexed_paths - current_paths
+
+                    if orphaned:
+                        log.info(f"Removing {len(orphaned)} orphaned files from index")
+                        for path in orphaned:
+                            try:
+                                self._remove_file_embeddings(path)
+                                orphans_removed += 1
+                            except Exception as e:
+                                log.warning(f"Error removing orphaned file {path}: {e}")
+            except Exception as e:
+                log.warning(f"Error during orphan cleanup: {e}")
 
         # Filter files
         filtered_files = self._filter_files(
@@ -149,6 +177,7 @@ class SemanticIndexer:
             "total_files": len(source_files),
             "indexed_files": 0,
             "skipped_files": len(source_files) - len(filtered_files),
+            "orphans_removed": orphans_removed,
             "total_symbols": 0,
             "total_chunks": 0,
             "errors": 0,
@@ -196,7 +225,9 @@ class SemanticIndexer:
         stats["duration_seconds"] = duration
         stats["embedding_model"] = self.DEFAULT_EMBEDDING_MODEL
 
-        log.info(f"Indexing complete: {stats['indexed_files']} files, {stats['total_symbols']} symbols in {duration:.2f}s")
+        log.info(
+            f"Indexing complete: {stats['indexed_files']} files, {stats['total_symbols']} symbols, {orphans_removed} orphans removed in {duration:.2f}s"
+        )
 
         return stats
 
@@ -417,6 +448,33 @@ class SemanticIndexer:
         except Exception:
             return ""
 
+    def _compute_freshness(self, stale_files: list[str], deleted_files: list[str], current_files: dict[str, str]) -> str:
+        """Compute index freshness rating.
+
+        Args:
+            stale_files: List of files that have changed since indexing
+            deleted_files: List of files that were deleted but still in index
+            current_files: Dictionary of current files
+
+        Returns:
+            Freshness rating: "fresh", "mostly_fresh", "stale", "very_stale", or "unknown"
+
+        """
+        if not current_files:
+            return "unknown"
+
+        total_issues = len(stale_files) + len(deleted_files)
+        issue_ratio = total_issues / len(current_files)
+
+        if issue_ratio == 0:
+            return "fresh"
+        elif issue_ratio < 0.1:
+            return "mostly_fresh"
+        elif issue_ratio < 0.3:
+            return "stale"
+        else:
+            return "very_stale"
+
     def _generate_id(self, relative_path: str, identifier: str) -> str:
         """Generate unique ID for an embedding."""
         combined = f"{relative_path}::{identifier}"
@@ -452,7 +510,7 @@ class SemanticIndexer:
             log.warning(f"Error removing embeddings for {relative_path}: {e}")
 
     def get_index_status(self) -> dict[str, Any]:
-        """Get the current status of the semantic index."""
+        """Get the current status of the semantic index with freshness analysis."""
         project = self.agent.get_active_project_or_raise()
         index_path = Path(project.project_root) / ".murena" / "semantic_index"
 
@@ -466,6 +524,42 @@ class SemanticIndexer:
             collection = self.collection
             count = collection.count()
 
+            # Get indexed files from ChromaDB
+            all_data = collection.get()
+            indexed_metadata = all_data.get("metadatas")
+            indexed_files: dict[str, str] = {}
+            if indexed_metadata:
+                for metadata in indexed_metadata:
+                    if metadata and "relative_path" in metadata and "file_hash" in metadata:
+                        rel_path = metadata.get("relative_path")
+                        file_hash = metadata.get("file_hash")
+                        if isinstance(rel_path, str) and isinstance(file_hash, str):
+                            indexed_files[rel_path] = file_hash
+
+            # Get current files from project
+            current_files: dict[str, str] = {}
+            for rel_path in project.gather_source_files():
+                try:
+                    abs_path = Path(project.project_root) / rel_path
+                    file_hash = self._compute_file_hash(abs_path)
+                    if file_hash:
+                        current_files[rel_path] = file_hash
+                except Exception:
+                    continue
+
+            # Analyze freshness
+            stale_files = []
+            for path, current_hash in current_files.items():
+                indexed_hash = indexed_files.get(path)
+                if indexed_hash and indexed_hash != current_hash:
+                    stale_files.append(path)
+
+            # Detect deletions
+            deleted_files = [p for p in indexed_files if p not in current_files]
+
+            # Compute freshness rating
+            freshness = self._compute_freshness(stale_files, deleted_files, current_files)
+
             # Calculate disk size
             disk_size = sum(f.stat().st_size for f in index_path.rglob("*") if f.is_file())
             disk_size_mb = disk_size / (1024 * 1024)
@@ -473,6 +567,11 @@ class SemanticIndexer:
             return {
                 "indexed": True,
                 "embedding_count": count,
+                "total_files": len(current_files),
+                "indexed_files": len(indexed_files),
+                "stale_files": len(stale_files),
+                "deleted_files": len(deleted_files),
+                "freshness": freshness,
                 "embedding_model": self.DEFAULT_EMBEDDING_MODEL,
                 "collection_name": self.DEFAULT_COLLECTION_NAME,
                 "index_path": str(index_path),

@@ -324,3 +324,113 @@ def set_global_registry(registry: Optional[HookRegistry]) -> None:
     """
     global _global_registry  # noqa: PLW0603
     _global_registry = registry
+
+
+# ============================================================================
+# Built-in Hooks
+# ============================================================================
+
+
+def auto_index_on_activation(context: HookContext) -> Optional[HookContext]:
+    """Automatically index project on activation.
+
+    This hook runs incremental semantic indexing when a project is activated,
+    ensuring the search index is always up-to-date. Users can disable this
+    via environment variable or project configuration.
+
+    Configuration:
+        - Environment variable: MURENA_AUTO_INDEX=false to disable
+        - Project config (.murena/project.yml):
+            semantic_indexing:
+              auto_index: true/false
+              incremental: true/false
+              skip_tests: true/false
+              skip_generated: true/false
+
+    """
+    agent = context.agent
+    if not agent:
+        return context
+
+    # Check if semantic dependencies are available
+    try:
+        from murena.semantic import SEMANTIC_AVAILABLE
+
+        if not SEMANTIC_AVAILABLE:
+            log.debug("Semantic search not available, skipping auto-indexing")
+            return context
+    except ImportError:
+        log.debug("Semantic search module not found, skipping auto-indexing")
+        return context
+
+    # Check user preference (from project config or env var)
+    if not _should_auto_index(agent):
+        log.debug("Auto-indexing disabled by configuration")
+        return context
+
+    # Run incremental indexing (non-blocking)
+    log.info("Auto-indexing project on activation...")
+    try:
+        from murena.semantic.indexer import SemanticIndexer
+
+        # Get configuration from project
+        project_config = getattr(agent, "project_config", {}) or {}
+        semantic_config = project_config.get("semantic_indexing", {})
+
+        indexer = SemanticIndexer(agent)
+        indexer.index_project(
+            incremental=semantic_config.get("incremental", True),
+            skip_tests=semantic_config.get("skip_tests", True),
+            skip_generated=semantic_config.get("skip_generated", True),
+            cleanup_orphans=semantic_config.get("cleanup_orphans", True),
+        )
+        log.info("Auto-indexing complete")
+    except Exception as e:
+        log.warning(f"Auto-indexing failed: {e}")
+
+    return context
+
+
+def _should_auto_index(agent: Any) -> bool:
+    """Check if auto-indexing is enabled.
+
+    Args:
+        agent: The MurenaAgent instance
+
+    Returns:
+        True if auto-indexing should run, False otherwise
+
+    """
+    import os
+
+    # Priority 1: Environment variable (allows global disable)
+    if os.getenv("MURENA_AUTO_INDEX", "").lower() == "false":
+        return False
+
+    # Priority 2: Project configuration
+    project_config = getattr(agent, "project_config", {}) or {}
+    semantic_config = project_config.get("semantic_indexing", {})
+    if semantic_config.get("auto_index") is False:
+        return False
+
+    # Default: enabled
+    return True
+
+
+def register_builtin_hooks() -> None:
+    """Register all built-in hooks with the global registry.
+
+    This function should be called once during agent initialization to
+    set up automatic behaviors like auto-indexing.
+
+    """
+    registry = get_global_registry()
+
+    # Register auto-indexing hook
+    registry.register(
+        event=HookEvent.PROJECT_ACTIVATED,
+        callback=auto_index_on_activation,
+        priority=50,  # Run early but after project setup
+        name="auto_index_on_activation",
+        enabled=True,
+    )
