@@ -186,7 +186,7 @@ class LearnedRanker:
         :param result: Search result dictionary
         :param query: Original query string
         :param position: Result position in original ranking
-        :return: Feature vector (15 features)
+        :return: Feature vector (20 features)
         """
         features = []
 
@@ -266,6 +266,29 @@ class LearnedRanker:
 
         # 15. result_position: Original rank position
         features.append(float(position))
+
+        # Call graph features (16-20) - added in Phase 3
+        # These features are populated when call graph analysis is available
+
+        # 16. is_direct_caller: Whether this is a direct caller (1.0) or not (0.0)
+        is_direct_caller = result.get("is_direct_caller", 0)
+        features.append(1.0 if is_direct_caller else 0.0)
+
+        # 17. call_depth: Depth in call graph (0 = direct, 1+ = indirect)
+        call_depth = result.get("call_depth", 0)
+        features.append(float(min(call_depth, 5)))  # Cap at 5
+
+        # 18. caller_importance: Importance based on num_references of caller
+        caller_importance = result.get("caller_importance", 0.0)
+        features.append(float(caller_importance))
+
+        # 19. is_test_caller: Whether caller is from test code
+        is_test_caller = result.get("is_test_caller", False)
+        features.append(1.0 if is_test_caller else 0.0)
+
+        # 20. call_frequency: Number of call sites (how many times this is called)
+        call_frequency = result.get("call_frequency", 0)
+        features.append(float(call_frequency))
 
         return features
 

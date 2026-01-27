@@ -256,6 +256,7 @@ class IntelligentSearchTool(Tool, ToolMarkerOptional):
         - "UserService" → LSP (exact identifier)
         - "find all authentication logic" → Vector (exploratory)
         - "login method with JWT validation" → Hybrid (mixed)
+        - "who calls authenticate?" → Call Graph (call hierarchy)
 
         :param query: Search query (natural language or identifier)
         :param max_results: Maximum number of results to return. Default 10.
@@ -314,6 +315,11 @@ class IntelligentSearchTool(Tool, ToolMarkerOptional):
                 )
                 results = search_results["results"]
                 sources = ["vector"]
+
+            elif search_mode == SearchMode.CALL_GRAPH:
+                # Call graph analysis mode
+                results = self._call_graph_search(query, max_results, file_filter, compact_format)
+                sources = ["call_graph"]
 
             else:  # HYBRID
                 # Get both LSP and vector results
@@ -427,6 +433,143 @@ class IntelligentSearchTool(Tool, ToolMarkerOptional):
 
         except Exception as e:
             log.warning(f"LSP search failed: {e}")
+            return []
+
+    def _call_graph_search(
+        self,
+        query: str,
+        max_results: int,
+        file_filter: Optional[str],
+        compact_format: bool,
+    ) -> list[dict[str, Any]]:
+        """
+        Perform call graph analysis search.
+
+        Extracts symbol names from natural language queries like:
+        - "who calls authenticate?"
+        - "what does UserService call?"
+        - "find callers of login"
+
+        :param query: Natural language query about call relationships
+        :param max_results: Maximum results
+        :param file_filter: Optional file filter
+        :param compact_format: Use compact format
+        :return: List of results with call hierarchy info
+        """
+        import json
+        import re
+
+        try:
+            # Extract symbol name from query using patterns
+            # Patterns: "who calls X", "what calls X", "callers of X", "X calls what", etc.
+            symbol_patterns = [
+                r"(?:who|what)\s+calls?\s+([a-zA-Z_][a-zA-Z0-9_]*)",  # "who calls X"
+                r"callers?\s+(?:of|for)\s+([a-zA-Z_][a-zA-Z0-9_]*)",  # "callers of X"
+                r"called?\s+by\s+([a-zA-Z_][a-zA-Z0-9_]*)",  # "called by X"
+                r"([a-zA-Z_][a-zA-Z0-9_]*)\s+calls?\s+(?:what|who)",  # "X calls what"
+                r"([a-zA-Z_][a-zA-Z0-9_]*)\s+(?:uses|depends)",  # "X uses/depends"
+                r"find\s+callers?\s+(?:of|for)?\s*([a-zA-Z_][a-zA-Z0-9_]*)",  # "find callers X"
+            ]
+
+            symbol_name = None
+            for pattern in symbol_patterns:
+                match = re.search(pattern, query, re.IGNORECASE)
+                if match:
+                    symbol_name = match.group(1)
+                    break
+
+            if not symbol_name:
+                log.warning(f"Could not extract symbol name from call graph query: '{query}'")
+                return []
+
+            # Find the symbol using LSP
+            retriever = self.create_language_server_symbol_retriever()
+            symbols = retriever.find(
+                name_path_pattern=symbol_name,
+                within_relative_path=file_filter or None,
+                substring_matching=True,
+            )
+
+            if not symbols:
+                log.warning(f"Symbol '{symbol_name}' not found for call graph analysis")
+                return []
+
+            # Use first matching symbol
+            symbol = symbols[0]
+
+            # Determine direction: incoming (who calls) vs outgoing (what calls)
+            query_lower = query.lower()
+            is_incoming = any(
+                kw in query_lower for kw in ["who calls", "called by", "callers", "incoming", "uses of", "used by", "depends on"]
+            )
+
+            # Get call graph data
+            from murena.tools.call_graph_tools import GetIncomingCallsTool, GetOutgoingCallsTool
+
+            if is_incoming:
+                tool: GetIncomingCallsTool | GetOutgoingCallsTool = GetIncomingCallsTool(self.agent)
+            else:
+                tool = GetOutgoingCallsTool(self.agent)
+
+            # Ensure relative_path is not None
+            relative_path = symbol.relative_path
+            if not relative_path:
+                log.warning(f"Symbol '{symbol_name}' has no relative path")
+                return []
+
+            call_result = tool.apply(
+                name_path=symbol.get_name_path(),
+                relative_path=relative_path,
+                include_call_sites=True,
+                max_depth=2,  # Limited depth for intelligent search
+                compact_format=False,  # Use verbose for easier parsing
+                max_answer_chars=-1,
+            )
+
+            call_data = json.loads(call_result)
+
+            # Check for errors
+            if "error" in call_data:
+                log.warning(f"Call graph analysis failed: {call_data.get('error')}")
+                return []
+
+            # Extract results from call graph data
+            results = []
+            call_list = call_data.get("incoming_calls", []) if is_incoming else call_data.get("outgoing_calls", [])
+
+            for call_info in call_list[:max_results]:
+                if compact_format:
+                    result = {
+                        "fp": call_info.get("file"),
+                        "np": call_info.get("name_path"),
+                        "k": call_info.get("kind", "Unknown"),
+                        "ln": call_info.get("line"),
+                        "t": "call_graph",
+                        "sc": 1.0,
+                        # Add call graph specific features
+                        "is_direct_caller": 1,
+                        "call_depth": 0,
+                        "call_frequency": len(call_info.get("call_sites", [])),
+                        "is_test_caller": "test" in call_info.get("file", "").lower(),
+                    }
+                else:
+                    result = {
+                        "relative_path": call_info.get("file"),
+                        "name_path": call_info.get("name_path"),
+                        "kind": call_info.get("kind", "Unknown"),
+                        "line": call_info.get("line"),
+                        "type": "call_graph",
+                        "score": 1.0,
+                        "call_sites": call_info.get("call_sites", []),
+                        "is_direct_caller": True,
+                        "call_depth": 0,
+                    }
+                results.append(result)
+
+            return results
+
+        except Exception as e:
+            log.exception(f"Call graph search failed: {e}")
             return []
 
 

@@ -285,6 +285,350 @@ mcp__murena-serena__replace_symbol_body(
 
 **Quick reference:** Full token optimization rules in [Global CLAUDE.md § TOKEN OPTIMIZATION RULES](/Users/dmitry.lazarenko/.claude/CLAUDE.md)
 
+## 📞 Call Graph & Dataflow Analysis
+
+Murena provides best-in-class call hierarchy analysis for understanding code dependencies, impact analysis, and safe refactoring. Supports natural language queries and 11+ languages with full LSP call hierarchy support.
+
+### Overview
+
+**Call hierarchy analysis** helps answer critical questions:
+- "Who calls this function?" → Impact analysis for safe refactoring
+- "What does this function call?" → Understanding dependencies
+- "How do I get from A to Z?" → Tracing execution paths
+- "What breaks if I change this?" → Dependency impact assessment
+
+**Key Features:**
+- **Natural language queries**: "who calls authenticate?" automatically routes to call graph tools
+- **Multi-level traversal**: Depth 1-5 for deep call chain analysis
+- **Cross-file support**: Finds calls across files, packages, and modules
+- **Token efficient**: 70% savings with compact JSON format
+- **95%+ precision**: Returns only actual function calls (not all references)
+- **Multi-language**: 11 languages with FULL support, 4 with PARTIAL support
+
+### Available Tools
+
+**1. GetIncomingCalls - "Who calls this?"**
+```python
+mcp__murena-serena__get_incoming_calls(
+    name_path="UserService/authenticate",
+    relative_path="src/services.py",
+    include_call_sites=True,  # Show line numbers where called
+    max_depth=1,              # 1-5 levels deep
+    compact_format=True       # 70% token savings
+)
+```
+
+**2. GetOutgoingCalls - "What does this call?"**
+```python
+mcp__murena-serena__get_outgoing_calls(
+    name_path="UserService/authenticate",
+    relative_path="src/services.py",
+    include_call_sites=True,
+    max_depth=1,
+    compact_format=True
+)
+```
+
+**3. BuildCallGraph - "Show me the complete call graph"**
+```python
+mcp__murena-serena__build_call_graph(
+    name_path="UserService/authenticate",
+    relative_path="src/services.py",
+    direction="both",         # "incoming" | "outgoing" | "both"
+    max_depth=2,             # Multi-level analysis
+    max_nodes=50,            # Limit graph size
+    compact_format=True
+)
+```
+
+**4. FindCallPath - "How do I get from A to Z?"**
+```python
+mcp__murena-serena__find_call_path(
+    from_name_path="UserAPI/login",
+    from_file="src/api.py",
+    to_name_path="Database/query",
+    to_file="src/db.py",
+    max_depth=5,             # Search up to 5 levels
+    find_all_paths=False     # First path only
+)
+```
+
+**5. AnalyzeCallDependencies - "What's the impact?"**
+```python
+mcp__murena-serena__analyze_call_dependencies(
+    name_path="UserService/authenticate",
+    relative_path="src/services.py",
+    analysis_type="impact",  # "impact" | "usage" | "hotspots"
+    max_depth=3
+)
+```
+
+### Natural Language Query Support
+
+The semantic search integration automatically detects call graph queries:
+
+**Supported query patterns:**
+- "who calls X?" → Incoming calls
+- "what calls X?" → Incoming calls
+- "callers of X" → Incoming calls
+- "find callers X" → Incoming calls
+- "called by X" → Incoming calls
+- "what does X call?" → Outgoing calls
+- "callees of X" → Outgoing calls
+- "X calls what?" → Outgoing calls
+- "show call graph for X" → Full call graph
+- "incoming calls to X" → Incoming calls
+- "outgoing calls from X" → Outgoing calls
+- "dependencies of X" → Dependency analysis
+- "impact of changing X" → Impact analysis
+
+**Example usage:**
+```python
+# Natural language query
+mcp__murena-serena__intelligent_search(
+    query="who calls the authenticate function?",
+    max_results=10
+)
+# → Automatically routes to GetIncomingCallsTool
+
+# Extract symbol and perform call graph analysis
+# Returns: List of callers with call sites and context
+```
+
+### Language Support
+
+**FULL Support (11 languages)** - Complete call hierarchy with cross-file support:
+- Python (pyright)
+- Go (gopls)
+- TypeScript/JavaScript (tsserver)
+- Java (eclipse.jdt.ls)
+- Rust (rust-analyzer)
+- C# (csharp-ls)
+- Kotlin (kotlin-language-server)
+- C/C++ (clangd)
+- Swift (sourcekit-lsp)
+- Vue (vue-language-server)
+- Scala (metals)
+
+**PARTIAL Support (4 languages)** - Basic call hierarchy, may miss dynamic calls:
+- PHP (intelephense)
+- Ruby (ruby-lsp)
+- Elixir (elixir-ls)
+- Dart (dart analysis server)
+
+**FALLBACK (27 languages)** - Uses `find_referencing_symbols` instead:
+- Perl, Clojure, Elm, Terraform, Bash, R, and 21 others
+
+**See:** [docs/api/language_support_matrix.md](docs/api/language_support_matrix.md) for full details.
+
+### Token Efficiency
+
+Call graph tools use **compact JSON format** for 70% token savings:
+
+**Compact format (default):**
+```json
+{
+  "s": {"np": "UserService/authenticate", "fp": "services.py", "ln": 15},
+  "callers": [
+    {"np": "UserAPI/login", "fp": "api.py", "ln": 42, "sites": [45, 47]}
+  ],
+  "tot": 2,
+  "d": 1,
+  "more": false
+}
+```
+**Token cost:** ~400 tokens for 10 callers at depth=1
+
+**Verbose format (opt-in with `compact_format=False`):**
+```json
+{
+  "symbol": {
+    "name_path": "UserService/authenticate",
+    "file": "services.py",
+    "line": 15,
+    "kind": "Method"
+  },
+  "incoming_calls": [
+    {
+      "name": "UserAPI/login",
+      "file": "api.py",
+      "call_sites": [{"line": 45, "column": 12}, {"line": 47, "column": 8}]
+    }
+  ],
+  "total_callers": 2,
+  "max_depth": 1,
+  "has_more": false
+}
+```
+**Token cost:** ~1,400 tokens for same data (3.5x more)
+
+**Token cost comparison:**
+
+| Operation | Depth | Compact | Verbose | Savings |
+|-----------|-------|---------|---------|---------|
+| Incoming calls (10 results) | 1 | 400 | 1,400 | 71% |
+| Outgoing calls (5 results) | 1 | 300 | 1,000 | 70% |
+| Build call graph (20 nodes) | 2 | 1,000 | 3,500 | 71% |
+| Find call path (3 hops) | 5 | 600 | 1,800 | 67% |
+
+### Usage Examples
+
+**Example 1: Impact analysis before refactoring**
+```python
+# Question: "What breaks if I change the authenticate function?"
+
+# Step 1: Find all callers (multi-level)
+callers = mcp__murena-serena__get_incoming_calls(
+    name_path="UserService/authenticate",
+    relative_path="src/services.py",
+    max_depth=3,  # Find indirect callers too
+    compact_format=True
+)
+
+# Step 2: Analyze impact
+impact = mcp__murena-serena__analyze_call_dependencies(
+    name_path="UserService/authenticate",
+    relative_path="src/services.py",
+    analysis_type="impact",
+    max_depth=3
+)
+
+# Result: Complete picture of what depends on this function
+# - Direct callers (depth=1)
+# - Indirect callers (depth=2-3)
+# - Hotspots (frequently called paths)
+# - Test coverage (which tests call this)
+```
+
+**Example 2: Understanding data flow**
+```python
+# Question: "How does user input reach the database?"
+
+# Find the path from API endpoint to database query
+path = mcp__murena-serena__find_call_path(
+    from_name_path="UserAPI/create_user",
+    from_file="src/api.py",
+    to_name_path="Database/insert",
+    to_file="src/db.py",
+    max_depth=5,
+    find_all_paths=True  # Show all possible paths
+)
+
+# Result: All execution paths between two points
+# - Path 1: API → Service → Validator → DB
+# - Path 2: API → Service → DB (direct)
+```
+
+**Example 3: Finding validation logic**
+```python
+# Natural language query
+results = mcp__murena-serena__intelligent_search(
+    query="who calls input validators?",
+    max_results=20
+)
+
+# Result: Semantic search with call graph features
+# - Automatically detects "who calls" → routes to call graph
+# - LTR ranking prioritizes important callers
+# - Returns callers with context and call sites
+```
+
+### Best Practices
+
+**1. Start with depth=1, increase as needed**
+```python
+# ✅ Good: Progressive disclosure
+callers_1 = get_incoming_calls(..., max_depth=1)  # Direct callers first
+if len(callers_1) < 10:
+    callers_2 = get_incoming_calls(..., max_depth=2)  # Then indirect
+```
+
+**2. Use compact format for exploration**
+```python
+# ✅ Good: Compact for quick overview (70% savings)
+overview = get_incoming_calls(..., compact_format=True)
+
+# Then verbose for detailed analysis
+details = get_incoming_calls(..., compact_format=False)
+```
+
+**3. Limit max_nodes for large codebases**
+```python
+# ✅ Good: Prevent token explosion
+graph = build_call_graph(..., max_nodes=50, max_depth=2)
+
+# ❌ Bad: Unlimited nodes can return thousands of results
+graph = build_call_graph(..., max_depth=5)  # No limit → huge output
+```
+
+**4. Use natural language queries for exploration**
+```python
+# ✅ Good: Natural language for broad questions
+results = intelligent_search(query="who calls authentication validators?")
+
+# Then specific tools for detailed analysis
+callers = get_incoming_calls(name_path="validate_auth", ...)
+```
+
+**5. Fallback behavior is automatic**
+```python
+# For FULL/PARTIAL support languages: uses call hierarchy
+# For FALLBACK languages: automatically uses find_referencing_symbols
+# No need to check language support manually
+```
+
+### Performance Characteristics
+
+**Latency targets:**
+- prepare_call_hierarchy: P50 <100ms, P95 <200ms
+- incoming_calls (depth=1): P50 <300ms, P95 <500ms
+- build_call_graph (depth=2): P50 <800ms, P95 <1500ms
+- find_call_path (depth=5): P50 <2000ms, P95 <3000ms
+
+**Cache hit rates:**
+- Call hierarchy items: >80%
+- Incoming/outgoing calls: >70%
+- Multi-level graphs: >60%
+
+**Precision:**
+- Call hierarchy: 95-100% (only actual calls)
+- References fallback: 70-85% (includes non-call references)
+
+### Common Use Cases
+
+**Safe Refactoring:**
+```python
+# Before renaming or changing signature
+impact = analyze_call_dependencies(..., analysis_type="impact")
+```
+
+**Code Navigation:**
+```python
+# Understanding execution flow
+path = find_call_path(from_name_path="entry_point", to_name_path="target")
+```
+
+**Architecture Analysis:**
+```python
+# Understanding component dependencies
+graph = build_call_graph(..., direction="both", max_depth=3)
+```
+
+**Test Coverage Analysis:**
+```python
+# Finding what tests exercise a function
+callers = get_incoming_calls(..., max_depth=2)
+# Filter: callers with "test" in file path
+```
+
+**Dead Code Detection:**
+```python
+# Functions with no callers (depth=1)
+callers = get_incoming_calls(...)
+if len(callers) == 0:
+    print("Potentially dead code")
+```
+
 ## 🔄 Alternative Workflows for Phase 5 Token Optimization
 
 **Context:** Phase 5 of the token optimization removed 7 low-risk tools to save ~420 tokens (17% additional reduction). Below are the alternatives to use.

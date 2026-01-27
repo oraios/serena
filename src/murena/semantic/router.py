@@ -19,6 +19,7 @@ class SearchMode(Enum):
     LSP = "lsp"  # Structural/exact search via LSP
     VECTOR = "vector"  # Semantic search via embeddings
     HYBRID = "hybrid"  # Both LSP and vector, merged with reranking
+    CALL_GRAPH = "call_graph"  # Call hierarchy analysis (who calls, what calls)
 
 
 class QueryRouter:
@@ -72,6 +73,24 @@ class QueryRouter:
         "in",
     ]
 
+    # Keywords indicating call graph analysis
+    CALL_GRAPH_KEYWORDS = [
+        "who calls",
+        "what calls",
+        "called by",
+        "callers",
+        "callees",
+        "call graph",
+        "call hierarchy",
+        "incoming calls",
+        "outgoing calls",
+        "uses",
+        "used by",
+        "depends on",
+        "dependencies",
+        "impact",
+    ]
+
     def __init__(self) -> None:
         """Initialize the query router."""
         self._lsp_patterns = [re.compile(pattern) for pattern in self.LSP_INDICATORS]
@@ -99,13 +118,20 @@ class QueryRouter:
         Classify query based on patterns and keywords.
 
         Classification logic:
-        1. Check if query matches LSP patterns (identifiers)
-        2. Check for vector keywords (exploratory)
-        3. Check for hybrid keywords (mixed)
-        4. Default to vector for natural language
+        1. Check for call graph keywords (highest priority)
+        2. Check if query matches LSP patterns (identifiers)
+        3. Check for vector keywords (exploratory)
+        4. Check for hybrid keywords (mixed)
+        5. Default to vector for natural language
         """
         query_lower = query.lower().strip()
         words = query_lower.split()
+
+        # Check for call graph keywords first (most specific)
+        call_graph_count = sum(1 for kw in self.CALL_GRAPH_KEYWORDS if kw in query_lower)
+        if call_graph_count >= 1:
+            log.debug(f"Routing to CALL_GRAPH: {call_graph_count} call graph keywords in '{query}'")
+            return SearchMode.CALL_GRAPH
 
         # Single-word queries matching identifier patterns → LSP
         if len(words) == 1:

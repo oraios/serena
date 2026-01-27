@@ -2,6 +2,7 @@
 from .tools_base import *
 from .file_tools import *
 from .symbol_tools import *
+from .call_graph_tools import *
 from .memory_tools import *
 from .cmd_tools import *
 from .config_tools import *

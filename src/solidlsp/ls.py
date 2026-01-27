@@ -547,6 +547,14 @@ class SolidLanguageServer(ABC):
         """maps relative file paths to a tuple of (file_content_hash, document_symbols)"""
         self._document_symbols_cache_is_modified: bool = False
 
+        # Call hierarchy cache (Phase 1: Call Graph Implementation)
+        # Cache key: (relative_file_path, line, column) -> CallHierarchyItem
+        # TTL: 60 seconds (shorter than document symbols since call sites change less frequently)
+        self._call_hierarchy_cache: LRUCache[tuple[str, int, int], list[lsp_types.CallHierarchyItem]] = LRUCache(
+            max_entries=500, max_memory_mb=50
+        )
+        """maps (relative_file_path, line, column) to CallHierarchyItem list"""
+
         # Phase 1.1: Async cache loading (performance optimization)
         self._cache_ready_event: threading.Event | None
         performance_config = self._solidlsp_settings.performance
@@ -1088,6 +1096,133 @@ class SolidLanguageServer(ABC):
             ret.append(ls_types.Location(**new_item))  # type: ignore
 
         return ret
+
+    def _has_call_hierarchy_capability(self) -> bool:
+        """
+        Check if the language server supports call hierarchy.
+
+        Uses the CapabilityMatrix to determine if the language has call hierarchy support.
+        This is a quick check based on language type, not a runtime capability check.
+
+        :return: True if call hierarchy is supported for this language
+        """
+        from solidlsp.ls_capabilities import CapabilityMatrix
+
+        return CapabilityMatrix.has_call_hierarchy(self.language)
+
+    def request_call_hierarchy_prepare(self, relative_file_path: str, line: int, column: int) -> list[lsp_types.CallHierarchyItem] | None:
+        """
+        Prepare call hierarchy for a symbol at the given position.
+
+        This is the first step in call hierarchy analysis. Returns CallHierarchyItem(s)
+        that can be used with request_incoming_calls() or request_outgoing_calls().
+
+        Results are cached using LRU cache (500 entries, 50 MB) with automatic invalidation.
+
+        LSP Method: textDocument/prepareCallHierarchy
+        @since 3.16.0
+
+        :param relative_file_path: The relative path of the file containing the symbol
+        :param line: The line number (0-indexed)
+        :param column: The column number (0-indexed)
+        :return: List of CallHierarchyItem or None if not found
+        :raises SolidLSPException: If server not started or if call hierarchy not supported
+        """
+        if not self.server_started:
+            log.error("request_call_hierarchy_prepare called before Language Server started")
+            raise SolidLSPException("Language Server not started")
+
+        if not self._has_call_hierarchy_capability():
+            raise SolidLSPException(f"Call hierarchy not supported for {self.language}. Use find_referencing_symbols as fallback.")
+
+        # Check cache first
+        cache_key = (relative_file_path, line, column)
+        cached_result = self._call_hierarchy_cache.get(cache_key)
+        if cached_result is not None:
+            log.debug(f"Cache HIT for call hierarchy prepare: {relative_file_path}:{line}:{column}")
+            return cached_result
+
+        # Wait for cross-file analysis if needed
+        if not self._has_waited_for_cross_file_references:
+            sleep(self._get_wait_time_for_cross_file_referencing())
+            self._has_waited_for_cross_file_references = True
+
+        abs_path = self.repository_root_path / Path(relative_file_path)
+
+        with self.open_file(relative_file_path):
+            params = lsp_types.CallHierarchyPrepareParams(
+                textDocument=lsp_types.TextDocumentIdentifier(uri=PathUtils.path_to_uri(str(abs_path))),
+                position=lsp_types.Position(line=line, character=column),
+            )
+
+            try:
+                response = self.server.send.prepare_call_hierarchy(params)
+            except Exception as e:
+                if isinstance(e, LSPError):
+                    log.warning(f"Call hierarchy prepare failed for {relative_file_path}:{line}:{column}: {e}")
+                    return None
+                raise
+
+        # Cache the result
+        if response is not None:
+            self._call_hierarchy_cache.put(cache_key, response)
+            log.debug(f"Cache MISS for call hierarchy prepare: {relative_file_path}:{line}:{column} - cached result")
+
+        return response
+
+    def request_incoming_calls(self, item: lsp_types.CallHierarchyItem) -> list[lsp_types.CallHierarchyIncomingCall] | None:
+        """
+        Get incoming calls for a CallHierarchyItem (who calls this symbol).
+
+        LSP Method: callHierarchy/incomingCalls
+        @since 3.16.0
+
+        :param item: CallHierarchyItem from request_call_hierarchy_prepare()
+        :return: List of incoming calls or None if not found
+        :raises SolidLSPException: If server not started
+        """
+        if not self.server_started:
+            log.error("request_incoming_calls called before Language Server started")
+            raise SolidLSPException("Language Server not started")
+
+        params = lsp_types.CallHierarchyIncomingCallsParams(item=item)
+
+        try:
+            response = self.server.send.incoming_calls(params)
+        except Exception as e:
+            if isinstance(e, LSPError):
+                log.warning(f"Incoming calls request failed for {item.get('name', 'unknown')}: {e}")
+                return None
+            raise
+
+        return response
+
+    def request_outgoing_calls(self, item: lsp_types.CallHierarchyItem) -> list[lsp_types.CallHierarchyOutgoingCall] | None:
+        """
+        Get outgoing calls for a CallHierarchyItem (what this symbol calls).
+
+        LSP Method: callHierarchy/outgoingCalls
+        @since 3.16.0
+
+        :param item: CallHierarchyItem from request_call_hierarchy_prepare()
+        :return: List of outgoing calls or None if not found
+        :raises SolidLSPException: If server not started
+        """
+        if not self.server_started:
+            log.error("request_outgoing_calls called before Language Server started")
+            raise SolidLSPException("Language Server not started")
+
+        params = lsp_types.CallHierarchyOutgoingCallsParams(item=item)
+
+        try:
+            response = self.server.send.outgoing_calls(params)
+        except Exception as e:
+            if isinstance(e, LSPError):
+                log.warning(f"Outgoing calls request failed for {item.get('name', 'unknown')}: {e}")
+                return None
+            raise
+
+        return response
 
     def request_text_document_diagnostics(self, relative_file_path: str) -> list[ls_types.Diagnostic]:
         """
