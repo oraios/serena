@@ -82,6 +82,17 @@ def normalise_yaml_comments(commented_map: CommentedMap, comment_normalisation: 
         else:
             return comment_entry
 
+    def trailing_to_leading(comment_entry: Any) -> Any:
+        if comment_entry is None:
+            return None
+        token_list = make_list(comment_entry)
+        first_token = token_list[0]
+        if isinstance(first_token, CommentToken):
+            # remove leading newline if present
+            if first_token.value.startswith("\n"):
+                first_token.value = first_token.value[1:]
+        return token_list
+
     match comment_normalisation:
         case YamlCommentNormalisation.NONE:
             pass
@@ -104,7 +115,7 @@ def normalise_yaml_comments(commented_map: CommentedMap, comment_normalisation: 
                         doc_comment[DOC_COMMENT_INDEX_PRE] = None
                     elif preceding_comment is not None and preceding_comment[ITEM_COMMENT_INDEX_AFTER] is not None:
                         # move trailing comment of preceding key to leading comment of current key
-                        current_comment[ITEM_COMMENT_INDEX_BEFORE] = make_list(preceding_comment[ITEM_COMMENT_INDEX_AFTER])
+                        current_comment[ITEM_COMMENT_INDEX_BEFORE] = trailing_to_leading(preceding_comment[ITEM_COMMENT_INDEX_AFTER])
                         preceding_comment[ITEM_COMMENT_INDEX_AFTER] = None
                 preceding_comment = current_comment
 
@@ -112,7 +123,7 @@ def normalise_yaml_comments(commented_map: CommentedMap, comment_normalisation: 
                 # Second pass: conversion of trailing comments
                 # If a leading comment ends with "\n\n", i.e. it has an empty line between the comment and the key,
                 # it was actually intended as a trailing comment for the preceding key, so we associate it with
-                # the preceding key instead.
+                # the preceding key instead (if the preceding key has no leading comment already).
                 preceding_comment = None
                 for key in keys:
                     current_comment = comment_items.get(key, [None] * 4)
@@ -121,11 +132,18 @@ def normalise_yaml_comments(commented_map: CommentedMap, comment_normalisation: 
                         if len(token_list) > 0:
                             last_token = token_list[-1]
                             if isinstance(last_token, CommentToken) and last_token.value.endswith("\n\n"):
-                                # move comment to preceding key, removing the empty line
+                                # move comment to preceding key, removing the empty line,
+                                # and adding an empty line at the beginning instead
                                 if preceding_comment is not None and yaml_comment_entry_is_empty(
                                     preceding_comment[ITEM_COMMENT_INDEX_BEFORE]
                                 ):
                                     last_token.value = last_token.value[:-1]
+
+                                    first_token = token_list[0]
+                                    if isinstance(first_token, CommentToken):
+                                        if not first_token.value.startswith("\n"):
+                                            first_token.value = "\n" + first_token.value
+
                                     preceding_comment[ITEM_COMMENT_INDEX_BEFORE] = token_list
                                     current_comment[ITEM_COMMENT_INDEX_BEFORE] = None
                     preceding_comment = current_comment
