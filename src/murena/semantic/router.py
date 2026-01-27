@@ -199,3 +199,96 @@ class QueryRouter:
         vector_count = sum(1 for kw in self.VECTOR_KEYWORDS if kw in query_lower)
         hybrid_count = sum(1 for kw in self.HYBRID_KEYWORDS if kw in query_lower)
         return f"Mixed query (vector keywords: {vector_count}, structural keywords: {hybrid_count})"
+
+    def route_with_confidence(self, query: str, mode: Optional[str] = None) -> tuple[SearchMode, float]:
+        """
+        Determine search mode with confidence score.
+
+        :param query: Search query
+        :param mode: Optional explicit mode override
+        :return: (SearchMode, confidence) where confidence is 0.0-1.0
+        """
+        # Explicit mode = high confidence
+        if mode and mode != "auto":
+            try:
+                return SearchMode(mode.lower()), 1.0
+            except ValueError:
+                pass
+
+        # Auto-routing with confidence
+        return self._classify_query_with_confidence(query)
+
+    def _classify_query_with_confidence(self, query: str) -> tuple[SearchMode, float]:
+        """
+        Classify query and assign confidence score.
+
+        Confidence scoring:
+        - 0.9-1.0: Very high confidence (single identifier, clear pattern)
+        - 0.7-0.9: High confidence (strong indicators)
+        - 0.5-0.7: Medium confidence (mixed signals)
+        - 0.3-0.5: Low confidence (ambiguous)
+        - 0.0-0.3: Very low (fallback to vector)
+        """
+        query_lower = query.lower().strip()
+        words = query_lower.split()
+
+        # Count indicators
+        identifier_matches = sum(1 for pattern in self._lsp_patterns if pattern.match(query))
+        vector_count = sum(1 for kw in self.VECTOR_KEYWORDS if kw in query_lower)
+        hybrid_count = sum(1 for kw in self.HYBRID_KEYWORDS if kw in query_lower)
+
+        # Single-word identifier (very high confidence LSP)
+        if len(words) == 1 and identifier_matches > 0:
+            return SearchMode.LSP, 0.95
+
+        # Symbol path pattern (high confidence LSP)
+        if "/" in query and len(words) == 1:
+            return SearchMode.LSP, 0.90
+
+        # Strong vector indicators (high confidence)
+        if vector_count >= 2:
+            confidence = min(0.7 + vector_count * 0.05, 0.90)
+            return SearchMode.VECTOR, confidence
+
+        # Mixed query with identifier (medium-high confidence hybrid)
+        if identifier_matches > 0 and (vector_count > 0 or hybrid_count > 0):
+            confidence = min(0.6 + (vector_count + hybrid_count) * 0.1, 0.85)
+            return SearchMode.HYBRID, confidence
+
+        # Single vector keyword with multiple words (medium confidence vector)
+        if vector_count >= 1 and len(words) >= 3:
+            return SearchMode.VECTOR, 0.70
+
+        # Structural keywords (medium confidence hybrid)
+        if hybrid_count >= 1 and len(words) >= 2:
+            return SearchMode.HYBRID, 0.60
+
+        # Short query (low-medium confidence LSP)
+        if len(words) <= 2:
+            return SearchMode.LSP, 0.55
+
+        # Default: natural language (low-medium confidence vector)
+        return SearchMode.VECTOR, 0.50
+
+    def should_use_fallback(self, confidence: float) -> bool:
+        """
+        Determine if confidence is low enough to try fallback mode.
+
+        :param confidence: Confidence score from routing
+        :return: True if should try fallback mode
+        """
+        return confidence < 0.60  # Threshold for low confidence
+
+    def get_fallback_mode(self, primary_mode: SearchMode) -> SearchMode:
+        """
+        Get fallback mode for low-confidence routing.
+
+        Fallback strategy:
+        - LSP → HYBRID (expand to semantic)
+        - VECTOR → HYBRID (add structural)
+        - HYBRID → no fallback (already combines both)
+        """
+        if primary_mode == SearchMode.LSP or primary_mode == SearchMode.VECTOR:
+            return SearchMode.HYBRID
+        else:
+            return primary_mode  # HYBRID already uses both

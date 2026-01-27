@@ -209,3 +209,108 @@ class ResultReranker:
             "both_sources": both,
             "top_scores": [r["rrf_score"] for r in merged[:5]],
         }
+
+
+class CrossEncoderReranker(ResultReranker):
+    """Enhanced reranker with cross-encoder for semantic relevance scoring."""
+
+    MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"  # 80MB, CPU-friendly
+
+    def __init__(self, k: int = 60, use_cross_encoder: bool = True):
+        """
+        Initialize cross-encoder reranker.
+
+        :param k: RRF constant parameter (inherited from ResultReranker)
+        :param use_cross_encoder: Whether to use cross-encoder scoring (default True)
+        """
+        super().__init__(k)
+        self._cross_encoder = None  # Lazy load
+        self.use_cross_encoder = use_cross_encoder
+
+    @property
+    def cross_encoder(self):  # type: ignore[no-untyped-def]
+        """Lazy-load cross-encoder model."""
+        if self._cross_encoder is None:
+            try:
+                from sentence_transformers import CrossEncoder
+
+                self._cross_encoder = CrossEncoder(self.MODEL)  # type: ignore[assignment]
+                log.info(f"Loaded cross-encoder model: {self.MODEL}")
+            except ImportError:
+                log.warning("sentence-transformers not available, cross-encoder reranking disabled")
+                self.use_cross_encoder = False
+            except Exception as e:
+                log.error(f"Failed to load cross-encoder: {e}")
+                self.use_cross_encoder = False
+        return self._cross_encoder
+
+    def rerank_with_cross_encoder(self, query: str, results: list[dict[str, Any]], top_k: int = 10) -> list[dict[str, Any]]:
+        """
+        Rerank results using cross-encoder for semantic relevance.
+
+        Two-stage pipeline:
+        1. Fast retrieval: Get top 50 candidates (LSP + vector)
+        2. Slow reranking: Score top 50 with cross-encoder, return top K
+
+        :param query: Original search query
+        :param results: Candidate results to rerank
+        :param top_k: Number of top results to return
+        :return: Reranked results with cross-encoder scores
+        """
+        if not self.use_cross_encoder or not results:
+            return results[:top_k]
+
+        # Skip if cross-encoder failed to load
+        if self.cross_encoder is None:
+            log.debug("Cross-encoder not available, skipping reranking")
+            return results[:top_k]
+
+        # Extract text from results
+        pairs = [(query, self._extract_text(result)) for result in results]
+
+        # Score with cross-encoder
+        try:
+            ce_scores = self.cross_encoder.predict(pairs)
+        except Exception as e:
+            log.error(f"Cross-encoder prediction failed: {e}")
+            return results[:top_k]
+
+        # Combine scores: 0.7 * cross_encoder + 0.3 * base_score
+        for result, ce_score in zip(results, ce_scores, strict=False):
+            result["ce_score"] = float(ce_score)
+            base_score = result.get("score", result.get("sc", 0.0))
+            if "rrf_score" in result:
+                # Normalize RRF score to 0-1 range for combination
+                normalized_rrf = result["rrf_score"] / (1.0 / self.k)
+                result["combined_score"] = 0.7 * ce_score + 0.3 * normalized_rrf
+            else:
+                result["combined_score"] = 0.7 * ce_score + 0.3 * base_score
+
+        # Sort by combined score and return top_k
+        results.sort(key=lambda x: x["combined_score"], reverse=True)
+
+        log.debug(f"Cross-encoder reranking: {len(results)} candidates → top {top_k} results")
+
+        return results[:top_k]
+
+    def _extract_text(self, result: dict[str, Any]) -> str:
+        """
+        Extract searchable text from result.
+
+        Combines file path, symbol path, and documentation for scoring.
+        """
+        parts = []
+
+        # File path (compact or standard format)
+        if "fp" in result or "file_path" in result:
+            parts.append(result.get("fp", result.get("file_path", "")))
+
+        # Symbol name path (compact or standard format)
+        if "np" in result or "name_path" in result:
+            parts.append(result.get("np", result.get("name_path", "")))
+
+        # Documentation/docstring
+        if "doc" in result:
+            parts.append(result["doc"])
+
+        return " ".join(parts)

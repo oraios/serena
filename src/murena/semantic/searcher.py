@@ -43,6 +43,7 @@ class SemanticSearcher:
 
         self.agent = agent
         self._indexer: Optional[Any] = None
+        self._query_expander: Optional[Any] = None  # Lazy load
 
     @property
     def indexer(self) -> Any:
@@ -53,6 +54,15 @@ class SemanticSearcher:
             self._indexer = SemanticIndexer(self.agent)
         return self._indexer
 
+    @property
+    def query_expander(self) -> Any:
+        """Lazy-load query expander."""
+        if self._query_expander is None:
+            from murena.semantic.query_expander import QueryExpander
+
+            self._query_expander = QueryExpander(max_expansions=3)
+        return self._query_expander
+
     def search(
         self,
         query: str,
@@ -62,6 +72,7 @@ class SemanticSearcher:
         language_filter: Optional[str] = None,
         type_filter: Optional[str] = None,
         compact_format: bool = True,
+        expand_query: bool = True,
     ) -> dict[str, Any]:
         """
         Perform semantic search over the indexed code.
@@ -73,8 +84,14 @@ class SemanticSearcher:
         :param language_filter: Optional language filter (e.g., "python", "typescript")
         :param type_filter: Optional type filter ("symbol", "file_metadata", "chunk")
         :param compact_format: If True, return compact JSON format for token efficiency
+        :param expand_query: If True, expand query with synonyms (default True)
         :return: Dictionary with search results and metadata
         """
+        # Expand query if enabled
+        original_query = query
+        if expand_query:
+            query = self.query_expander.expand(query, expand_enabled=True)
+
         log.info(f"Semantic search query: '{query}' (max_results={max_results}, min_score={min_score})")
 
         try:
@@ -98,18 +115,24 @@ class SemanticSearcher:
                 compact_format=compact_format,
             )
 
-            return {
-                "query": query,
+            result_dict = {
+                "query": original_query,
                 "results": formatted_results,
                 "total_results": len(formatted_results),
                 "max_results": max_results,
                 "min_score": min_score,
             }
 
+            # Include expanded query if different
+            if expand_query and query != original_query:
+                result_dict["expanded_query"] = query
+
+            return result_dict
+
         except Exception as e:
             log.error(f"Error performing semantic search: {e}")
             return {
-                "query": query,
+                "query": original_query,
                 "results": [],
                 "total_results": 0,
                 "error": str(e),

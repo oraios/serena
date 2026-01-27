@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
-from sensai_utils.logging import datetime_tag
+from sensai.util.logging import datetime_tag
 
 if TYPE_CHECKING:
     from murena.agent import MurenaAgent
@@ -399,10 +399,10 @@ class SemanticIndexer:
     ) -> None:
         """Insert a batch of embeddings into ChromaDB."""
         try:
-            self.collection.upsert(
-                embeddings=embeddings,
+            self.collection.upsert(  # type: ignore[call-arg]
+                embeddings=embeddings,  # type: ignore[arg-type]
                 documents=documents,
-                metadatas=metadatas,
+                metadatas=metadatas,  # type: ignore[arg-type]
                 ids=ids,
             )
             log.debug(f"Inserted batch of {len(ids)} embeddings")
@@ -430,7 +430,7 @@ class SemanticIndexer:
                 limit=1,
             )
             if results and results["metadatas"]:
-                return results["metadatas"][0]
+                return results["metadatas"][0]  # type: ignore[return-value]
         except Exception:
             pass
         return None

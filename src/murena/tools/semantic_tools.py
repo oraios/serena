@@ -239,6 +239,7 @@ class IntelligentSearchTool(Tool, ToolMarkerOptional):
         file_filter: Optional[str] = None,
         language_filter: Optional[str] = None,
         compact_format: bool = True,
+        use_ltr: bool = True,
     ) -> str:
         """
         Perform intelligent search with automatic mode selection.
@@ -291,10 +292,10 @@ class IntelligentSearchTool(Tool, ToolMarkerOptional):
 
             # Route query
             router = QueryRouter()
-            search_mode = router.route(query, mode)
+            search_mode, confidence = router.route_with_confidence(query, mode)
             routing_info = router.get_routing_explanation(query, mode)
 
-            log.info(f"Intelligent search: '{query}' → {search_mode.value}")
+            log.info(f"Intelligent search: '{query}' → {search_mode.value} (confidence: {confidence:.2f})")
 
             # Execute search based on mode
             if search_mode == SearchMode.LSP:
@@ -331,14 +332,34 @@ class IntelligentSearchTool(Tool, ToolMarkerOptional):
 
                 # Merge with RRF
                 reranker = ResultReranker()
-                results = reranker.merge_results(lsp_results, vector_results, max_results)
+                results = reranker.merge_results(lsp_results, vector_results, max_results * 2)
                 sources = ["lsp", "vector"]
+
+            # Apply learned ranking if enabled
+            reranker_used = "rrf"  # Default
+            if use_ltr and len(results) > 0:
+                try:
+                    from murena.semantic.learned_ranker import LearnedRanker
+
+                    learned_ranker = LearnedRanker(self.agent)
+                    if learned_ranker.is_available:
+                        results = learned_ranker.rerank(query, results, max_results, use_cold_start_fallback=True)
+                        reranker_used = "ltr" if learned_ranker.is_trained else "cross_encoder"
+                    else:
+                        results = results[:max_results]
+                except Exception as e:
+                    log.warning(f"LTR reranking failed: {e}")
+                    results = results[:max_results]
+            else:
+                results = results[:max_results]
 
             return self._to_json(
                 {
                     "query": query,
                     "mode": search_mode.value,
+                    "confidence": confidence,
                     "routing_reason": routing_info["reason"],
+                    "reranker": reranker_used,
                     "results": results,
                     "total_results": len(results),
                     "sources": sources,
