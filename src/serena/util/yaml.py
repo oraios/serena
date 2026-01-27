@@ -2,7 +2,7 @@ import os
 from enum import Enum
 from typing import Any
 
-from ruamel.yaml import YAML
+from ruamel.yaml import YAML, CommentToken
 from ruamel.yaml.comments import CommentedMap
 
 from serena.constants import SERENA_FILE_ENCODING
@@ -89,6 +89,23 @@ def transfer_missing_yaml_comments_by_index(source: CommentedMap, target: Commen
     :param target: the target map, whose comments will be updated
     :param indices: list of comment indices to transfer
     """
+
+    def is_empty(comment_entry: Any) -> bool:
+        if comment_entry is None:
+            return True
+        elif isinstance(comment_entry, list):
+            for item in comment_entry:
+                if isinstance(item, CommentToken):
+                    if item.value.strip() != "":
+                        return False
+                else:
+                    return False
+            return True
+        elif isinstance(comment_entry, CommentToken):
+            return comment_entry.value.strip() == ""
+        else:
+            return False
+
     for key in target.keys():
         if key in source:
             source_comment = source.ca.items.get(key)
@@ -97,7 +114,7 @@ def transfer_missing_yaml_comments_by_index(source: CommentedMap, target: Commen
             target_comment = target.ca.items.get(key, [None, None, None, None])
             target.ca.items[key] = target_comment
             for index in indices:
-                if target_comment[index] is None:
+                if is_empty(target_comment[index]):
                     target_comment[index] = source_comment[index]
 
 
