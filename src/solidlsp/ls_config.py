@@ -100,6 +100,11 @@ class Language(str, Enum):
     """TOML language server using Taplo.
     Supports TOML validation, formatting, and schema support.
     """
+    APEX = "apex"
+    """Apex language for Salesforce (experimental).
+    No LSP available, but basic file operations (read_file) are supported.
+    Must be explicitly specified as the main language, not auto-detected.
+    """
 
     @classmethod
     def iter_all(cls, include_experimental: bool = False) -> Iterable[Self]:
@@ -124,6 +129,7 @@ class Language(str, Enum):
             self.YAML,
             self.TOML,
             self.GROOVY,
+            self.APEX,
         }
 
     def __str__(self) -> str:
@@ -239,6 +245,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.groovy", "*.gvy")
             case self.MATLAB:
                 return FilenameMatcher("*.m", "*.mlx", "*.mlapp")
+            case self.APEX:
+                return FilenameMatcher("*.cls", "*.trigger", "*.apex")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -412,6 +420,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.matlab_language_server import MatlabLanguageServer
 
                 return MatlabLanguageServer
+            case self.APEX:
+                from solidlsp.language_servers.apex_language_server import ApexLanguageServer
+
+                return ApexLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

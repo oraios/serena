@@ -316,6 +316,7 @@ markers = [
   "slow: tests that require additional Expert instances and have long startup times (~60-90s each)",
   "toml: language server running for TOML",
   "matlab: language server running for MATLAB (requires MATLAB R2021b+)",
+  "apex: Apex language support (no LSP, basic file operations only)",
 ]
 
 [tool.codespell]
