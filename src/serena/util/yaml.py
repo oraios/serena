@@ -22,6 +22,16 @@ def _create_yaml(preserve_comments: bool = False) -> YAML:
 
 
 class YamlCommentNormalisation(Enum):
+    """
+    Defines a normalisation to be applied to the comment representation in a ruamel CommentedMap.
+
+    Note that even though a YAML document may seem to consistently contain, for example, leading comments
+    before a key only, ruamel may still parse some comments as trailing comments of the previous key
+    or as document-level comments.
+    The normalisations define ways to adjust the comment representation accordingly, clearly associating
+    comments with the keys they belong to.
+    """
+
     NONE = "none"
     """
     No comment normalisation is performed.
@@ -33,6 +43,10 @@ class YamlCommentNormalisation(Enum):
     This normalisation achieves that comments are properly associated with keys as leading comments.
     """
     LEADING_WITH_CONVERSION_FROM_TRAILING = "leading_with_conversion_from_trailing"
+    """
+    Document is assumed to have a mixture of leading comments (before keys) and trailing comments (after values), only full-line comments.
+    This normalisation achieves that all comments are converted to leading comments and properly associated with keys.
+    """
     # NOTE: Normalisation for trailing comments was attempted but is extremely hard, because
     #  it is difficult to position the comments properly after values, especially for complex values.
 
@@ -46,6 +60,11 @@ ITEM_COMMENT_INDEX_AFTER = 2  # (post-value; must be an instance of CommentToken
 
 
 def load_yaml(path: str, comment_normalisation: YamlCommentNormalisation = YamlCommentNormalisation.NONE) -> CommentedMap:
+    """
+    :param path: the path to the YAML file to load
+    :param comment_normalisation: the comment normalisation to apply after loading
+    :return: the loaded commented map
+    """
     with open(path, encoding=SERENA_FILE_ENCODING) as f:
         yaml = _create_yaml(preserve_comments=True)
         commented_map: CommentedMap = yaml.load(f)
@@ -54,6 +73,13 @@ def load_yaml(path: str, comment_normalisation: YamlCommentNormalisation = YamlC
 
 
 def normalise_yaml_comments(commented_map: CommentedMap, comment_normalisation: YamlCommentNormalisation) -> None:
+    """
+    Applies the given comment normalisation to the given commented map in-place.
+
+    :param commented_map: the commented map whose comments are to be normalised
+    :param comment_normalisation: the comment normalisation to apply
+    """
+
     def make_list(comment_entry: Any) -> list:
         if not isinstance(comment_entry, list):
             return [comment_entry]
