@@ -190,11 +190,12 @@ class ActiveModes:
     def get_mode_names(self) -> Sequence[str]:
         if self._active_mode_names is not None:
             return self._active_mode_names
-        self._active_mode_names = []
+        active_mode_names: set[str] = set()
         if self._base_modes is not None:
-            self._active_mode_names.extend(self._base_modes)
+            active_mode_names.update(self._base_modes)
         if self._default_modes is not None:
-            self._active_mode_names.extend(self._default_modes)
+            active_mode_names.update(self._default_modes)
+        self._active_mode_names = sorted(active_mode_names)
         log.info("Active modes: %s", self._active_mode_names)
         return self._active_mode_names
 
