@@ -786,7 +786,7 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
         #       so we apply a conversion, which detects the old style and transforms it.
         normalise_yaml_comments(commented_yaml, YamlCommentNormalisation.LEADING_WITH_CONVERSION_FROM_TRAILING)
         template_yaml = load_yaml(SERENA_CONFIG_TEMPLATE_FILE, comment_normalisation=YamlCommentNormalisation.LEADING)
-        transfer_missing_yaml_comments(template_yaml, commented_yaml, YamlCommentNormalisation.LEADING, fully_missing_only=False)
+        transfer_missing_yaml_comments(template_yaml, commented_yaml, YamlCommentNormalisation.LEADING)
 
         save_yaml(self.config_file_path, commented_yaml)
 
