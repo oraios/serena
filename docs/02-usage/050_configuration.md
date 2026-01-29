@@ -115,21 +115,36 @@ Examples of built-in modes include:
 
 Find the concrete definitions of these modes [here](https://github.com/oraios/serena/tree/main/src/serena/resources/config/modes).
 
-:::{important}
-By default, Serena activates the two modes `interactive` and `editing`.  
+Active modes are configured in (from lowest to highest precedence):
+  * the global configuration file (`serena_config.yml`)
+  * the project configuration file (`project.yml`)
+  * at startup via command-line parameters
 
-As soon as you start to specify modes, only the modes you explicitly specify will be active, however.
+The two former sources define both **base modes** and **default modes**.
+Ultimately, the active modes are the union of base modes and default modes (after applying all overrides).
+Command-line parameters override default modes but not base modes.
+Base modes should thus be used to define modes that you always want to be active, regardless of command-line parameters.
+
+Command-line parameters for overriding default modes:
+When launching the MCP sever, specify modes using `--mode <mode-name>`; multiple modes can be specified, e.g. `--mode planning --mode no-onboarding`.
+
+:::{important}
+By default, Serena activates the two modes `interactive` and `editing` (as defined in the global configuration).
+
+As soon as you start to specify modes via the command line, only the modes you explicitly specify will be active, however.
 Therefore, if you want to keep the default modes, you must specify them as well.  
 For example, to add mode `no-memories` to the default behaviour, specify
 ```shell
 --mode interactive --mode editing --mode no-memories
 ```
+
+If you want to keep certain modes as always active, regardless of command-line parameters, 
+define them as *base modes* in the global or project configuration.
 :::
 
-Modes can be set at startup (similar to contexts) but can also be _switched dynamically_ during a session. 
+Modes can also be _switched dynamically_ during a session. 
 You can instruct the LLM to use the `switch_modes` tool to activate a different set of modes (e.g., "Switch to planning and one-shot modes").
-
-When launching Serena, specify modes using `--mode <mode-name>`; multiple modes can be specified, e.g. `--mode planning --mode no-onboarding`.
+Like command-line parameters, this only affects default modes, not base modes (which remain active).
 
 :::{note}
 **Mode Compatibility**: While you can combine modes, some may be semantically incompatible (e.g., `interactive` and `one-shot`). 
