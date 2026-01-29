@@ -36,6 +36,7 @@ from serena.constants import (
 from serena.mcp import SerenaMCPFactory
 from serena.project import Project
 from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsOverviewTool, SearchForPatternTool, ToolRegistry
+from serena.util.dataclass import get_dataclass_default
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
 from solidlsp.util.subprocess_util import subprocess_kwargs
@@ -43,9 +44,15 @@ from solidlsp.util.subprocess_util import subprocess_kwargs
 log = logging.getLogger(__name__)
 
 _MAX_CONTENT_WIDTH = 100
-_MODES_EXPLANATION = """Built-in mode names or paths to custom mode YAMLs. 
-By default, the `default_modes` entry from your serena config (at `~/.serena/serena_config.yml`) will be used. 
-If not configured otherwise, this will result in ('interactive', 'editing')."""
+_MODES_EXPLANATION = f"""\b\nBuilt-in mode names or paths to custom mode YAMLs with which to 
+override the default modes defined in the global Serena configuration or 
+the active project.
+For details on mode configuration, see 
+  https://oraios.github.io/serena/02-usage/050_configuration.html#modes.
+If no configuration changes were made, the base defaults are: 
+  {get_dataclass_default(SerenaConfig, "default_modes")}.
+Overriding them means that they no longer apply, so you will need to 
+re-specify them in addition to further modes if you want to keep them."""
 
 
 def find_project_root(root: str | Path | None = None) -> str:
