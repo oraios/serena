@@ -43,6 +43,9 @@ from solidlsp.util.subprocess_util import subprocess_kwargs
 log = logging.getLogger(__name__)
 
 _MAX_CONTENT_WIDTH = 100
+_MODES_EXPLANATION = """Built-in mode names or paths to custom mode YAMLs. 
+By default, the `default_modes` entry from your serena config (at `~/.serena/serena_config.yml`) will be used. 
+If not configured otherwise, this will result in ('interactive', 'editing')."""
 
 
 def find_project_root(root: str | Path | None = None) -> str:
@@ -159,8 +162,8 @@ class TopLevelCommands(AutoRegisteringGroup):
         type=str,
         multiple=True,
         default=(),
-        show_default=True,
-        help="Built-in mode names or paths to custom mode YAMLs.",
+        show_default=False,
+        help=_MODES_EXPLANATION,
     )
     @click.option(
         "--language-backend",
@@ -309,8 +312,8 @@ class TopLevelCommands(AutoRegisteringGroup):
         type=str,
         multiple=True,
         default=(),
-        show_default=True,
-        help="Built-in mode names or paths to custom mode YAMLs.",
+        show_default=False,
+        help=_MODES_EXPLANATION,
     )
     def print_system_prompt(
         project: str, log_level: str, only_instructions: bool, context: str, modes: Sequence[str] | None = None
