@@ -552,11 +552,27 @@ class LanguageServerSymbolRetriever:
             return None
         return self._request_info(relative_file_path=symbol.relative_path, line=symbol.line, column=symbol.column)  # type: ignore[arg-type]
 
+    def _get_hover_budget(self, default_budget: float = 5) -> float:
+        """Project -> global -> default"""
+        hover_budget_seconds = default_budget
+        if self.agent is not None:
+            hover_budget_seconds = self.agent.serena_config.include_info_hover_budget_seconds
+            active_project = self.agent.get_active_project()
+            if active_project is not None:
+                project_hover_budget = active_project.project_config.include_info_hover_budget_seconds
+                if project_hover_budget is not None:
+                    hover_budget_seconds = project_hover_budget
+        return hover_budget_seconds
+
     def request_info_for_symbol_batch(
         self,
         symbols: list[LanguageServerSymbol],
     ) -> dict[LanguageServerSymbol, str | None]:
-        """Retrieves information for multiple symbols, optimizing by grouping by file.
+        """Retrieves information for multiple symbols while staying within a time budget.
+
+        The request_hover operation used here is potentially expensive, we optimize by grouping by file
+        and stop executing it (returning the info as None) after the hover_budget is exceeded.
+        The hover budget is 5s by default
 
         Groups symbols by file path to minimize file switching overhead and uses a per-file
         cache keyed by (line, col) to avoid duplicate hover lookups.
@@ -573,27 +589,12 @@ class LanguageServerSymbolRetriever:
         debug_enabled = log.isEnabledFor(logging.DEBUG)
         t0_total = perf_counter() if debug_enabled else 0.0
 
-        # Resolve effective hover budget: project -> global -> default 5.0
-        budget_seconds = 5.0
-        if self.agent is not None:
-            budget_seconds = self.agent.serena_config.include_info_hover_budget_seconds
-            active_project = self.agent.get_active_project()
-            if active_project is not None:
-                project_budget = active_project.project_config.include_info_hover_budget_seconds
-                if project_budget is not None:
-                    budget_seconds = project_budget
-
         info_by_symbol: dict[LanguageServerSymbol, str | None] = {}
         skipped_symbols = 0
-        detail_present_count = 0
 
         # Group symbols by file path, filtering invalid symbols.
         symbols_by_file: dict[str, list[LanguageServerSymbol]] = {}
         for sym in symbols:
-            detail = sym.symbol_root.get("detail")
-            if isinstance(detail, str) and detail.strip():
-                detail_present_count += 1
-
             file_path = sym.relative_path
             line = sym.line
             column = sym.column
@@ -603,10 +604,12 @@ class LanguageServerSymbolRetriever:
 
             symbols_by_file.setdefault(file_path, []).append(sym)
 
+        hover_spent_seconds = 0.0
+        hover_budget_seconds = self._get_hover_budget()
+        # the vars below are only for debug logging
         per_file_stats: list[tuple[str, int, float]] = []
         total_hover_lookups = 0
         hover_cache_hits = 0
-        hover_spent_seconds = 0.0
         skipped_due_to_budget = 0
 
         for file_path, file_symbols in symbols_by_file.items():
@@ -625,8 +628,9 @@ class LanguageServerSymbolRetriever:
                     info = hover_cache[cache_key]
                 else:
                     # Check budget before starting new hover request
-                    if budget_seconds > 0 and hover_spent_seconds >= budget_seconds:
+                    if 0 < hover_budget_seconds <= hover_spent_seconds:
                         skipped_due_to_budget += 1
+                        log.debug("Skipped hover lookup for symbol %s due to budget exceeded", sym)
                         info = None
                     else:
                         t0_hover = perf_counter()
@@ -647,34 +651,16 @@ class LanguageServerSymbolRetriever:
             total_elapsed_ms = (perf_counter() - t0_total) * 1000
             total_symbols = len(symbols)
             unique_files = len(symbols_by_file)
-            detail_rate = (detail_present_count / total_symbols * 100) if total_symbols > 0 else 0.0
             budget_exceeded = skipped_due_to_budget > 0
 
             log.debug(
-                "perf: request_info_for_symbols total_elapsed_ms=%.2f symbols=%d skipped=%d "
-                "detail_present=%d detail_rate=%.1f%% hover_lookups=%d hover_cache_hits=%d unique_files=%d "
-                "hover_budget_seconds=%.1f hover_spent_seconds=%.2f budget_exceeded=%s skipped_due_to_budget=%d",
-                total_elapsed_ms,
-                total_symbols,
-                skipped_symbols,
-                detail_present_count,
-                detail_rate,
-                total_hover_lookups,
-                hover_cache_hits,
-                unique_files,
-                budget_seconds,
-                hover_spent_seconds,
-                budget_exceeded,
-                skipped_due_to_budget,
+                f"perf: request_info_for_symbols {total_elapsed_ms=:.2f} {total_symbols=} {skipped_symbols=} "
+                f"{total_hover_lookups=} {hover_cache_hits=} {unique_files=} "
+                f"{hover_budget_seconds=:.1f} {hover_spent_seconds=:.2f} {budget_exceeded=} {skipped_due_to_budget=}"
             )
 
             for file_path, lookup_count, elapsed_ms in per_file_stats:
-                log.debug(
-                    "perf: request_info_for_symbols file=%s hover_count=%d elapsed_ms=%.2f",
-                    file_path,
-                    lookup_count,
-                    elapsed_ms,
-                )
+                log.debug(f"perf: {file_path=} {lookup_count=} {elapsed_ms=:.2f}")
 
         return info_by_symbol
 
