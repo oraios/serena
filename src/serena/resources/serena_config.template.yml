@@ -91,5 +91,10 @@ token_count_estimator: CHAR_COUNT
 # data files on first run), or ANTHROPIC_CLAUDE_SONNET_4 which will use the (free of cost) Anthropic API to
 # estimate the token count using the Claude Sonnet 4 tokenizer.
 
+include_info_hover_budget_seconds: 5
+# Time budget (seconds) for LSP hover requests when tools request include_info.
+# If budget is exceeded, Serena stops issuing further hover requests and returns partial info results.
+# 0 disables the budget (no early stopping). Negative values are invalid.
+
 # The list of registered project paths (updated automatically).
 projects: []
