@@ -630,8 +630,10 @@ class LanguageServerSymbolRetriever:
                     # Check budget before starting new hover request
                     if 0 < hover_budget_seconds <= hover_spent_seconds:
                         skipped_due_to_budget += 1
-                        log.debug("Skipped hover lookup for symbol %s due to budget exceeded", sym)
                         info = None
+                        # log once when budget exceeded
+                        if skipped_due_to_budget == 1:
+                            log.debug(f"Skipping further hover operations due to budget exceeded")
                     else:
                         t0_hover = perf_counter()
                         info = self._request_info(file_path, line, column)
