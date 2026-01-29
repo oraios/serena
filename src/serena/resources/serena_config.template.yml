@@ -35,7 +35,7 @@ gui_log_window: False
 # Further information: https://oraios.github.io/serena/02-usage/060_dashboard.html
 web_dashboard: True
 
-# The address where the web dashboard will listen on
+# the address the web dashboard will listen on (bind address).
 web_dashboard_listen_address: 127.0.0.1
 
 # whether to open a browser window with the web dashboard when Serena starts (provided that web_dashboard
@@ -57,7 +57,7 @@ log_level: 20
 # This is useful for debugging language server issues.
 trace_lsp_communication: False
 
-# Advanced configuration option allowing to configure language server-specific options.
+# advanced configuration option allowing to configure language server-specific options.
 # Maps the language key to the options.
 # Have a look at the docstring of the constructors of the LS implementations within solidlsp (e.g., for C# or PHP) to see which options are available.
 # No documentation on options means no options are available.
@@ -103,5 +103,5 @@ default_max_tool_answer_chars: 150000
 # estimate the token count using the Claude Sonnet 4 tokenizer.
 token_count_estimator: CHAR_COUNT
 
-# The list of registered project paths (updated automatically).
+# the list of registered project paths (updated automatically).
 projects: []
