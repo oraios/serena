@@ -49,6 +49,9 @@ from solidlsp.util.cache import load_cache, save_cache
 GenericDocumentSymbol = Union[LSPTypes.DocumentSymbol, LSPTypes.SymbolInformation, ls_types.UnifiedSymbolInformation]
 log = logging.getLogger(__name__)
 
+_debug_enabled = log.isEnabledFor(logging.DEBUG)
+"""Serves as a flag that triggers additional computation when debug logging is enabled."""
+
 
 @dataclasses.dataclass(kw_only=True)
 class ReferenceInSymbol:
@@ -868,8 +871,7 @@ class SolidLanguageServer(ABC):
             sleep(self._get_wait_time_for_cross_file_referencing())
             self._has_waited_for_cross_file_references = True
 
-        debug_enabled = log.isEnabledFor(logging.DEBUG)
-        t0 = perf_counter() if debug_enabled else 0.0
+        t0 = perf_counter() if _debug_enabled else 0.0
         with self.open_file(relative_file_path):
             try:
                 response = self._send_references_request(relative_file_path, line=line, column=column)
@@ -882,7 +884,7 @@ class SolidLanguageServer(ABC):
                     ) from e
                 raise
         if response is None:
-            if debug_enabled:
+            if _debug_enabled:
                 elapsed_ms = (perf_counter() - t0) * 1000
                 log.debug("perf: request_references path=%s elapsed_ms=%.2f count=0", relative_file_path, elapsed_ms)
             return []
@@ -913,7 +915,7 @@ class SolidLanguageServer(ABC):
             new_item["relativePath"] = str(rel_path)
             ret.append(ls_types.Location(**new_item))  # type: ignore
 
-        if debug_enabled:
+        if _debug_enabled:
             elapsed_ms = (perf_counter() - t0) * 1000
             unique_files = len({r["relativePath"] for r in ret})
             log.debug(
