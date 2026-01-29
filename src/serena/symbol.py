@@ -614,7 +614,6 @@ class LanguageServerSymbolRetriever:
 
         for file_path, file_symbols in symbols_by_file.items():
             t0_file = perf_counter() if debug_enabled else 0.0
-            hover_cache: dict[tuple[int, int], str | None] = {}
             file_hover_lookups = 0
 
             for sym in file_symbols:
@@ -622,26 +621,19 @@ class LanguageServerSymbolRetriever:
                 column = sym.column
                 assert line is not None and column is not None
 
-                cache_key = (line, column)
-                if cache_key in hover_cache:
-                    hover_cache_hits += 1
-                    info = hover_cache[cache_key]
+                # Check budget before starting new hover request
+                if 0 < hover_budget_seconds <= hover_spent_seconds:
+                    skipped_due_to_budget += 1
+                    info = None
+                    # log once when budget exceeded
+                    if skipped_due_to_budget == 1:
+                        log.debug("Skipping further hover operations due to budget exceeded")
                 else:
-                    # Check budget before starting new hover request
-                    if 0 < hover_budget_seconds <= hover_spent_seconds:
-                        skipped_due_to_budget += 1
-                        info = None
-                        # log once when budget exceeded
-                        if skipped_due_to_budget == 1:
-                            log.debug(f"Skipping further hover operations due to budget exceeded")
-                    else:
-                        t0_hover = perf_counter()
-                        info = self._request_info(file_path, line, column)
-                        hover_spent_seconds += perf_counter() - t0_hover
-                        file_hover_lookups += 1
-                        total_hover_lookups += 1
-
-                    hover_cache[cache_key] = info
+                    t0_hover = perf_counter()
+                    info = self._request_info(file_path, line, column)
+                    hover_spent_seconds += perf_counter() - t0_hover
+                    file_hover_lookups += 1
+                    total_hover_lookups += 1
 
                 info_by_symbol[sym] = info
 
