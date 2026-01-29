@@ -784,9 +784,10 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
         # transfer comments from the template file
         # NOTE: The template file now uses leading comments, but we previously used trailing comments,
         #       so we apply a conversion, which detects the old style and transforms it.
+        # For some keys, we force updates, because old comments are problematic/misleading.
         normalise_yaml_comments(commented_yaml, YamlCommentNormalisation.LEADING_WITH_CONVERSION_FROM_TRAILING)
         template_yaml = load_yaml(SERENA_CONFIG_TEMPLATE_FILE, comment_normalisation=YamlCommentNormalisation.LEADING)
-        transfer_missing_yaml_comments(template_yaml, commented_yaml, YamlCommentNormalisation.LEADING)
+        transfer_missing_yaml_comments(template_yaml, commented_yaml, YamlCommentNormalisation.LEADING, forced_update_keys=["projects"])
 
         save_yaml(self.config_file_path, commented_yaml)
 
