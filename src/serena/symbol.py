@@ -617,10 +617,6 @@ class LanguageServerSymbolRetriever:
             file_hover_lookups = 0
 
             for sym in file_symbols:
-                line = sym.line
-                column = sym.column
-                assert line is not None and column is not None
-
                 # Check budget before starting new hover request
                 if 0 < hover_budget_seconds <= hover_spent_seconds:
                     skipped_due_to_budget += 1
@@ -629,6 +625,9 @@ class LanguageServerSymbolRetriever:
                     if skipped_due_to_budget == 1:
                         log.debug("Skipping further hover operations due to budget exceeded")
                 else:
+                    line = sym.line
+                    column = sym.column
+                    assert line is not None and column is not None  # for mypy, we filtered invalid symbols above
                     t0_hover = perf_counter()
                     info = self._request_info(file_path, line, column)
                     hover_spent_seconds += perf_counter() - t0_hover

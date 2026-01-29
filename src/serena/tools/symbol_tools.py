@@ -191,7 +191,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             for s, s_dict in zip(symbols, symbol_dicts, strict=True):
                 if symbol_info := info_by_symbol.get(s):
                     s_dict["info"] = symbol_info
-                s_dict.pop("name", None)  # name is included in the info
+                    s_dict.pop("name", None)  # name is included in the info
         result = self._to_json(symbol_dicts)
         return self._limit_length(result, max_answer_chars)
 
