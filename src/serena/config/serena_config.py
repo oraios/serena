@@ -28,13 +28,14 @@ from serena.constants import (
     SERENA_FILE_ENCODING,
     SERENA_MANAGED_DIR_NAME,
 )
-from serena.util.general import get_dataclass_default, load_yaml, save_yaml
 from serena.util.inspection import determine_programming_language_composition
+from serena.util.yaml import YamlCommentNormalisation, load_yaml, normalise_yaml_comments, save_yaml, transfer_missing_yaml_comments
 from solidlsp.ls_config import Language
 
 from ..analytics import RegisteredTokenCountEstimator
 from ..util.class_decorators import singleton
 from ..util.cli_util import ask_yes_no
+from ..util.dataclass import get_dataclass_default
 
 if TYPE_CHECKING:
     from ..project import Project
@@ -127,6 +128,12 @@ class ToolInclusionDefinition:
         return num_fixed > 0
 
 
+@dataclass
+class ModeSelectionDefinition:
+    base_modes: Sequence[str] | None = None
+    default_modes: Sequence[str] | None = None
+
+
 class SerenaConfigError(Exception):
     pass
 
@@ -156,7 +163,7 @@ class LanguageBackend(Enum):
 
 
 @dataclass(kw_only=True)
-class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
+class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMixin):
     project_name: str
     languages: list[Language]
     ignored_paths: list[str] = field(default_factory=list)
@@ -166,6 +173,12 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
     encoding: str = DEFAULT_SOURCE_FILE_ENCODING
 
     SERENA_DEFAULT_PROJECT_FILE = "project.yml"
+    FIELDS_WITHOUT_DEFAULTS = {"project_name", "languages"}
+    YAML_COMMENT_NORMALISATION = YamlCommentNormalisation.LEADING
+    """
+    the comment normalisation strategy to use when loading/saving project configuration files.
+    The template file must match this configuration (i.e. it must use leading comments if this is set to LEADING).
+    """
 
     def _tostring_includes(self) -> list[str]:
         return ["project_name"]
@@ -239,13 +252,13 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                 log.info("Using languages: %s", languages_to_use)
             else:
                 languages_to_use = [lang.value for lang in languages]
-            config_with_comments = cls.load_commented_map(PROJECT_TEMPLATE_FILE)
+            config_with_comments, _ = cls._load_yaml(PROJECT_TEMPLATE_FILE)
             config_with_comments["project_name"] = project_name
             config_with_comments["languages"] = languages_to_use
             if save_to_disk:
                 project_yml_path = cls.path_to_project_yml(project_root)
                 log.info("Saving project configuration to %s", project_yml_path)
-                save_yaml(project_yml_path, config_with_comments, preserve_comments=True)
+                save_yaml(project_yml_path, config_with_comments)
             return cls._from_dict(config_with_comments)
 
     @classmethod
@@ -257,37 +270,38 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         return os.path.join(SERENA_MANAGED_DIR_NAME, cls.SERENA_DEFAULT_PROJECT_FILE)
 
     @classmethod
-    def _apply_defaults_to_dict(cls, data: TDict) -> TDict:
-        # apply defaults for new fields
-        data["languages"] = data.get("languages", [])
-        data["ignored_paths"] = data.get("ignored_paths", [])
-        data["excluded_tools"] = data.get("excluded_tools", [])
-        data["included_optional_tools"] = data.get("included_optional_tools", [])
-        data["read_only"] = data.get("read_only", False)
-        data["ignore_all_files_in_gitignore"] = data.get("ignore_all_files_in_gitignore", True)
-        data["initial_prompt"] = data.get("initial_prompt", "")
-        data["encoding"] = data.get("encoding", DEFAULT_SOURCE_FILE_ENCODING)
-
-        # backward compatibility: handle single "language" field
-        if len(data["languages"]) == 0 and "language" in data:
-            data["languages"] = [data["language"]]
-        if "language" in data:
-            del data["language"]
-
-        return data
-
-    @classmethod
-    def load_commented_map(cls, yml_path: str) -> CommentedMap:
+    def _load_yaml(
+        cls, yml_path: str, comment_normalisation: YamlCommentNormalisation = YamlCommentNormalisation.NONE
+    ) -> tuple[CommentedMap, bool]:
         """
         Load the project configuration as a CommentedMap, preserving comments and ensuring
         completeness of the configuration by applying default values for missing fields
         and backward compatibility adjustments.
 
         :param yml_path: the path to the project.yml file
-        :return: a CommentedMap representing a full project configuration
+        :return: a tuple `(dict, was_complete)` where dict is a CommentedMap representing a
+          full project configuration and `was_complete` indicates whether the loaded configuration
+          was complete (i.e., did not require any default values to be applied)
         """
-        data = load_yaml(yml_path, preserve_comments=True)
-        return cls._apply_defaults_to_dict(data)
+        data = load_yaml(yml_path, comment_normalisation=comment_normalisation)
+
+        # apply defaults
+        was_complete = True
+        for field_info in dataclasses.fields(cls):
+            key = field_info.name
+            if key in cls.FIELDS_WITHOUT_DEFAULTS:
+                continue
+            if key not in data:
+                was_complete = False
+                default_value = get_dataclass_default(cls, key)
+                data.setdefault(key, default_value)
+
+        # backward compatibility: handle single "language" field
+        if "languages" not in data and "language" in data:
+            data["languages"] = [data["language"]]
+            del data["language"]
+
+        return data, was_complete
 
     @classmethod
     def _from_dict(cls, data: dict[str, Any]) -> Self:
@@ -314,14 +328,17 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
             languages=languages,
             ignored_paths=data["ignored_paths"],
             excluded_tools=data["excluded_tools"],
+            fixed_tools=data["fixed_tools"],
             included_optional_tools=data["included_optional_tools"],
             read_only=data["read_only"],
             ignore_all_files_in_gitignore=data["ignore_all_files_in_gitignore"],
             initial_prompt=data["initial_prompt"],
             encoding=data["encoding"],
+            base_modes=data["base_modes"],
+            default_modes=data["default_modes"],
         )
 
-    def to_yaml_dict(self) -> dict:
+    def _to_yaml_dict(self) -> dict:
         """
         :return: a yaml-serializable dictionary representation of this configuration
         """
@@ -336,15 +353,47 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         """
         project_root = Path(project_root)
         yaml_path = project_root / cls.rel_path_to_project_yml()
+
+        # auto-generate if necessary
         if not yaml_path.exists():
             if autogenerate:
                 return cls.autogenerate(project_root)
             else:
                 raise FileNotFoundError(f"Project configuration file not found: {yaml_path}")
-        yaml_data = cls.load_commented_map(str(yaml_path))
+
+        # load the configuration dictionary
+        yaml_data, was_complete = cls._load_yaml(str(yaml_path))
         if "project_name" not in yaml_data:
             yaml_data["project_name"] = project_root.name
-        return cls._from_dict(yaml_data)
+
+        # instantiate the ProjectConfig
+        project_config = cls._from_dict(yaml_data)
+
+        # if the configuration was incomplete, re-save it to disk
+        if not was_complete:
+            log.info("Project configuration in %s was incomplete, re-saving with default values for missing fields", yaml_path)
+            project_config.save(project_root)
+
+        return project_config
+
+    def save(self, project_root: Path | str) -> None:
+        """
+        Saves the project configuration to disk.
+
+        :param project_root: the root directory of the project
+        """
+        config_path = self.path_to_project_yml(project_root)
+        log.info("Saving updated project configuration to %s", config_path)
+
+        # load original commented map and update it with current values
+        config_with_comments, _ = self._load_yaml(config_path, self.YAML_COMMENT_NORMALISATION)
+        config_with_comments.update(self._to_yaml_dict())
+
+        # transfer missing comments from the template file
+        template_config, _ = self._load_yaml(PROJECT_TEMPLATE_FILE, self.YAML_COMMENT_NORMALISATION)
+        transfer_missing_yaml_comments(template_config, config_with_comments, self.YAML_COMMENT_NORMALISATION)
+
+        save_yaml(config_path, config_with_comments)
 
 
 class RegisteredProject(ToStringMixin):
@@ -404,7 +453,7 @@ class RegisteredProject(ToStringMixin):
 
 
 @dataclass(kw_only=True)
-class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
+class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMixin):
     """
     Holds the Serena agent configuration, which is typically loaded from a YAML configuration file
     (when instantiated via :method:`from_config_file`), which is updated when projects are added or removed.
@@ -443,6 +492,9 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     """
     ls_specific_settings: dict = field(default_factory=dict)
     """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""
+
+    # settings with overridden defaults
+    default_modes: Sequence[str] | None = ("interactive", "editing")
 
     # *** fields that are NOT mapped to/from the configuration file ***
 
@@ -484,8 +536,8 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         :param config_file_path: the path where the configuration file should be generated
         """
         log.info(f"Auto-generating Serena configuration file in {config_file_path}")
-        loaded_commented_yaml = load_yaml(SERENA_CONFIG_TEMPLATE_FILE, preserve_comments=True)
-        save_yaml(config_file_path, loaded_commented_yaml, preserve_comments=True)
+        loaded_commented_yaml = load_yaml(SERENA_CONFIG_TEMPLATE_FILE)
+        save_yaml(config_file_path, loaded_commented_yaml)
 
     @classmethod
     def _determine_config_file_path(cls) -> str:
@@ -521,7 +573,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         # load the configuration
         log.info(f"Loading Serena configuration from {config_file_path}")
         try:
-            loaded_commented_yaml = load_yaml(config_file_path, preserve_comments=True)
+            loaded_commented_yaml = load_yaml(config_file_path)
         except Exception as e:
             raise ValueError(f"Error loading Serena configuration from {config_file_path}: {e}") from e
 
@@ -729,7 +781,15 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         # convert language backend to string
         commented_yaml["language_backend"] = self.language_backend.value
 
-        save_yaml(self.config_file_path, commented_yaml, preserve_comments=True)
+        # transfer comments from the template file
+        # NOTE: The template file now uses leading comments, but we previously used trailing comments,
+        #       so we apply a conversion, which detects the old style and transforms it.
+        # For some keys, we force updates, because old comments are problematic/misleading.
+        normalise_yaml_comments(commented_yaml, YamlCommentNormalisation.LEADING_WITH_CONVERSION_FROM_TRAILING)
+        template_yaml = load_yaml(SERENA_CONFIG_TEMPLATE_FILE, comment_normalisation=YamlCommentNormalisation.LEADING)
+        transfer_missing_yaml_comments(template_yaml, commented_yaml, YamlCommentNormalisation.LEADING, forced_update_keys=["projects"])
+
+        save_yaml(self.config_file_path, commented_yaml)
 
     def propagate_settings(self) -> None:
         """
