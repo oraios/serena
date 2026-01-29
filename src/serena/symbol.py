@@ -552,7 +552,7 @@ class LanguageServerSymbolRetriever:
             return None
         return self._request_info(relative_file_path=symbol.relative_path, line=symbol.line, column=symbol.column)  # type: ignore[arg-type]
 
-    def request_info_for_symbols(
+    def request_info_for_symbol_batch(
         self,
         symbols: list[LanguageServerSymbol],
     ) -> dict[LanguageServerSymbol, str | None]:

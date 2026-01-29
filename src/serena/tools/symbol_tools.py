@@ -187,7 +187,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         )
         symbol_dicts = [_sanitize_symbol_dict(s.to_dict(kind=True, location=True, depth=depth, include_body=include_body)) for s in symbols]
         if not include_body and include_info:
-            info_by_symbol = symbol_retriever.request_info_for_symbols(symbols)
+            info_by_symbol = symbol_retriever.request_info_for_symbol_batch(symbols)
             for s, s_dict in zip(symbols, symbol_dicts, strict=True):
                 if symbol_info := info_by_symbol.get(s):
                     s_dict["info"] = symbol_info
@@ -241,7 +241,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         info_by_symbol = {}
         if not include_body and include_info:
             ref_symbols = [ref.symbol for ref in references_in_symbols]
-            info_by_symbol = symbol_retriever.request_info_for_symbols(ref_symbols)
+            info_by_symbol = symbol_retriever.request_info_for_symbol_batch(ref_symbols)
 
         reference_dicts = []
         for ref in references_in_symbols:
