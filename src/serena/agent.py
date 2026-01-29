@@ -332,11 +332,6 @@ class SerenaAgent:
         self.prompt_factory = SerenaPromptFactory()
         self._project_activation_callback = project_activation_callback
 
-        # initialize members for modes and tools
-        self._mode_overrides = modes
-        self._active_modes = ActiveModes()
-        self._active_tools: AvailableTools = self._exposed_tools
-
         # activate a project configuration (if provided or if there is only a single project available)
         if project is not None:
             try:
@@ -345,6 +340,10 @@ class SerenaAgent:
                 log.error(f"Error activating project '{project}' at startup: {e}", exc_info=e)
 
         # update active modes and active tools (considering the active project, if any)
+        # declared attributes are set in the call to _update_active_modes_and_tools()
+        self._mode_overrides = modes
+        self._active_modes: ActiveModes
+        self._active_tools: AvailableTools
         self._update_active_modes_and_tools()
 
         # start the dashboard (web frontend), registering its log handler
