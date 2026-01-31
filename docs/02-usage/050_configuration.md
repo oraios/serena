@@ -173,6 +173,11 @@ You can change this location by setting the `SERENA_HOME` environment variable t
 (ls-specific-settings)=
 ### Language Server-Specific Settings
 
+:::note 
+**Advanced Users Only**: The settings described in this section are intended for advanced users who need to fine-tune language server behavior.
+Most users will not need to adjust these settings.
+:::
+
 Under the key `ls_specific_settings` in `serena_config.yml`, you can you pass per-language, 
 language server-specific configuration.
 
