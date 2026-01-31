@@ -43,7 +43,6 @@ class CclsLanguageServer(SolidLanguageServer):
         """
         super().__init__(config, repository_root_path, None, "cpp", solidlsp_settings)
         self.server_ready = threading.Event()
-        self.service_ready_event = threading.Event()
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
@@ -105,18 +104,14 @@ class CclsLanguageServer(SolidLanguageServer):
 
     def _start_server(self) -> None:
         """
-        Starts the ccls Language Server, waits for the server to be ready and yields the LanguageServer instance.
+        Starts the ccls language server and initializes the LSP connection.
         """
 
         def do_nothing(params: Any) -> None:
-            return
+            pass
 
         def window_log_message(msg: dict) -> None:
             log.info(f"LSP: window/logMessage: {msg}")
-
-        def service_ready_handler(params: Any) -> None:
-            # Some servers emit service-ready messages; ccls may not.
-            self.service_ready_event.set()
 
         # Register minimal handlers
         self.server.on_notification("window/logMessage", window_log_message)
