@@ -1,0 +1,145 @@
+{
+  "dashboard": {
+    "title": "Serena ダッシュボード",
+    "theme": {
+      "dark": "ダーク",
+      "light": "ライト"
+    },
+    "menu": {
+      "menu": "メニュー",
+      "overview": "概要",
+      "logs": "ログ",
+      "advancedStats": "詳細統計",
+      "shutdownServer": "サーバー停止"
+    },
+    "common": {
+      "loading": "読み込み中...",
+      "loadingNews": "ニュースを読み込み中...",
+      "loadingConfig": "設定を読み込み中...",
+      "loadingStats": "統計を読み込み中...",
+      "loadingExecutions": "実行を読み込み中...",
+      "loadingTools": "ツールを読み込み中...",
+      "loadingModes": "モードを読み込み中...",
+      "loadingContexts": "コンテキストを読み込み中...",
+      "loadingProjects": "プロジェクトを読み込み中...",
+      "cancel": "キャンセル",
+      "save": "保存",
+      "ok": "OK",
+      "create": "作成",
+      "none": "なし",
+      "na": "N/A"
+    },
+    "sections": {
+      "whatsNew": "新着情報",
+      "currentConfiguration": "現在の設定",
+      "toolUsage": "ツール使用状況",
+      "executionsQueue": "実行キュー",
+      "lastExecution": "最後の実行",
+      "cancelledExecutions": "キャンセルされた実行",
+      "registeredProjects": "登録済みプロジェクト",
+      "availableToolsDisabled": "利用可能なツール（無効）",
+      "availableModes": "利用可能なモード",
+      "availableContexts": "利用可能なコンテキスト"
+    },
+    "config": {
+      "activeProject": "アクティブプロジェクト:",
+      "languages": "言語:",
+      "usingJetBrains": "JetBrainsバックエンドを使用中",
+      "addLanguage": "+ 言語を追加",
+      "context": "コンテキスト:",
+      "activeModes": "アクティブモード:",
+      "fileEncoding": "ファイルエンコーディング:",
+      "currentClient": "現在のクライアント:",
+      "activeTools": "アクティブツール",
+      "availableMemories": "利用可能なメモリ",
+      "addMemory": "+ メモリを追加",
+      "viewConfigGuide": "設定ガイドを見る",
+      "editGlobalConfig": "グローバル設定を編集"
+    },
+    "stats": {
+      "refreshStats": "統計を更新",
+      "clearStats": "統計をクリア",
+      "noStatsYet": "まだツール統計がありません。",
+      "toolCalls": "ツール呼び出し",
+      "inputTokens": "入力トークン",
+      "outputTokens": "出力トークン",
+      "inputVsOutput": "入力 vs 出力トークン"
+    },
+    "logs": {
+      "copyLogs": "ログをコピー",
+      "noLogs": "コピーするログがありません",
+      "copyFailed": "ログのコピーに失敗しました"
+    },
+    "modal": {
+      "addLanguage": {
+        "title": "言語を追加",
+        "info": "プロジェクトのserena設定に言語を追加します:",
+        "note": "言語サーバーに必要な依存関係のダウンロードと起動に数秒かかる場合があります。",
+        "selectLabel": "言語を選択:",
+        "noLanguages": "追加可能な言語がありません",
+        "addButton": "言語を追加"
+      },
+      "removeLanguage": {
+        "confirm": "言語を削除:",
+        "fromConfig": "を設定から削除しますか？"
+      },
+      "editMemory": {
+        "title": "メモリ:"
+      },
+      "deleteMemory": {
+        "confirm": "メモリを削除:"
+      },
+      "createMemory": {
+        "title": "新しいメモリを作成（プロジェクト:",
+        "nameHint": "メモリ名は説明的で、スペースの代わりにアンダースコアを使用してください（例: \"api_architecture\", \"testing_guidelines\"）。",
+        "nameLabel": "メモリ名:",
+        "namePlaceholder": "例: project_overview"
+      },
+      "cancelExecution": {
+        "confirm": "本当によろしいですか？実行はタイムアウトまで継続しますが、キューからは削除されます。実行中のタスクの放棄は、Serenaのブロック解除のための措置としてのみ推奨されます。"
+      },
+      "editSerenaConfig": {
+        "title": "グローバルSerena設定",
+        "note": "注意: 設定の変更はSerenaを再起動するまで反映されません。",
+        "saveSuccess": "設定が保存されました。変更を反映するにはSerenaを再起動してください。"
+      }
+    },
+    "messages": {
+      "noCancelledExecutions": "キャンセルされた実行はありません。",
+      "unsavedChanges": "保存されていない変更があります。閉じてもよろしいですか？",
+      "pleaseEnterMemoryName": "メモリ名を入力してください",
+      "memoryNameInvalid": "メモリ名には英数字とアンダースコアのみ使用できます",
+      "markAsRead": "既読にする"
+    },
+    "errors": {
+      "loadingConfig": "設定の読み込みエラー",
+      "loadingStats": "統計の読み込みエラー",
+      "loadingProjects": "プロジェクトの読み込みエラー",
+      "loadingTools": "ツールの読み込みエラー",
+      "loadingModes": "モードの読み込みエラー",
+      "loadingContexts": "コンテキストの読み込みエラー",
+      "removingLanguage": "言語削除エラー",
+      "addingLanguage": "言語追加エラー",
+      "loadingMemory": "メモリ読み込みエラー",
+      "savingMemory": "メモリ保存エラー",
+      "deletingMemory": "メモリ削除エラー",
+      "creatingMemory": "メモリ作成エラー",
+      "cancellingTask": "タスクキャンセルエラー",
+      "unexpectedResponse": "サーバーから予期しない応答",
+      "loadingSerenaConfig": "Serena設定の読み込みエラー",
+      "noLanguageSelected": "言語が選択されていないか、追加可能な言語がありません",
+      "noMemorySelected": "メモリが選択されていません"
+    },
+    "executions": {
+      "running": "実行中",
+      "queued": "キュー待ち",
+      "noActiveExecutions": "アクティブな実行がありません",
+      "noQueuedExecutions": "キューに実行がありません"
+    },
+    "language": {
+      "label": "言語",
+      "en": "English",
+      "ja": "日本語"
+    }
+  }
+}

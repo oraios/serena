@@ -1,0 +1,145 @@
+{
+  "dashboard": {
+    "title": "Serena Dashboard",
+    "theme": {
+      "dark": "Dark",
+      "light": "Light"
+    },
+    "menu": {
+      "menu": "Menu",
+      "overview": "Overview",
+      "logs": "Logs",
+      "advancedStats": "Advanced Stats",
+      "shutdownServer": "Shutdown Server"
+    },
+    "common": {
+      "loading": "Loading...",
+      "loadingNews": "Loading news...",
+      "loadingConfig": "Loading configuration...",
+      "loadingStats": "Loading stats...",
+      "loadingExecutions": "Loading executions...",
+      "loadingTools": "Loading tools...",
+      "loadingModes": "Loading modes...",
+      "loadingContexts": "Loading contexts...",
+      "loadingProjects": "Loading projects...",
+      "cancel": "Cancel",
+      "save": "Save",
+      "ok": "OK",
+      "create": "Create",
+      "none": "None",
+      "na": "N/A"
+    },
+    "sections": {
+      "whatsNew": "What's New",
+      "currentConfiguration": "Current Configuration",
+      "toolUsage": "Tool Usage",
+      "executionsQueue": "Executions Queue",
+      "lastExecution": "Last Execution",
+      "cancelledExecutions": "Cancelled Executions",
+      "registeredProjects": "Registered Projects",
+      "availableToolsDisabled": "Available Tools (Disabled)",
+      "availableModes": "Available Modes",
+      "availableContexts": "Available Contexts"
+    },
+    "config": {
+      "activeProject": "Active Project:",
+      "languages": "Languages:",
+      "usingJetBrains": "Using JetBrains backend",
+      "addLanguage": "+ Add Language",
+      "context": "Context:",
+      "activeModes": "Active Modes:",
+      "fileEncoding": "File Encoding:",
+      "currentClient": "Current Client:",
+      "activeTools": "Active Tools",
+      "availableMemories": "Available Memories",
+      "addMemory": "+ Add Memory",
+      "viewConfigGuide": "View Configuration Guide",
+      "editGlobalConfig": "Edit Global Serena Config"
+    },
+    "stats": {
+      "refreshStats": "Refresh Stats",
+      "clearStats": "Clear Stats",
+      "noStatsYet": "No tool stats collected yet.",
+      "toolCalls": "Tool Calls",
+      "inputTokens": "Input Tokens",
+      "outputTokens": "Output Tokens",
+      "inputVsOutput": "Input vs Output Tokens"
+    },
+    "logs": {
+      "copyLogs": "copy logs",
+      "noLogs": "No logs to copy",
+      "copyFailed": "Failed to copy logs to clipboard"
+    },
+    "modal": {
+      "addLanguage": {
+        "title": "Add Language",
+        "info": "Adding a language to serena config of project",
+        "note": "Note that this may download some dependencies needed for the language server and then start it, it may take a few seconds before the LS is responsive.",
+        "selectLabel": "Select Language:",
+        "noLanguages": "No languages available to add",
+        "addButton": "Add Language"
+      },
+      "removeLanguage": {
+        "confirm": "Remove language",
+        "fromConfig": "from configuration?"
+      },
+      "editMemory": {
+        "title": "Memory:"
+      },
+      "deleteMemory": {
+        "confirm": "Delete memory"
+      },
+      "createMemory": {
+        "title": "Create a new memory for project",
+        "nameHint": "Memory names should be descriptive and use underscores instead of spaces (e.g., \"api_architecture\", \"testing_guidelines\").",
+        "nameLabel": "Memory Name:",
+        "namePlaceholder": "e.g., project_overview"
+      },
+      "cancelExecution": {
+        "confirm": "Are you sure? The execution will continue running until timeout, it will simply no longer be in the queue. Abandoning a running execution is only advised as a measure for unblocking Serena."
+      },
+      "editSerenaConfig": {
+        "title": "Global Serena Configuration",
+        "note": "Note: Changes to the configuration will only take effect after Serena is restarted.",
+        "saveSuccess": "Configuration saved successfully. Please restart Serena for changes to take effect."
+      }
+    },
+    "messages": {
+      "noCancelledExecutions": "No cancelled executions.",
+      "unsavedChanges": "You have unsaved changes. Are you sure you want to close?",
+      "pleaseEnterMemoryName": "Please enter a memory name",
+      "memoryNameInvalid": "Memory name can only contain letters, numbers, and underscores",
+      "markAsRead": "Mark as read"
+    },
+    "errors": {
+      "loadingConfig": "Error loading configuration",
+      "loadingStats": "Error loading stats",
+      "loadingProjects": "Error loading projects",
+      "loadingTools": "Error loading tools",
+      "loadingModes": "Error loading modes",
+      "loadingContexts": "Error loading contexts",
+      "removingLanguage": "Error removing language",
+      "addingLanguage": "Error adding language",
+      "loadingMemory": "Error loading memory",
+      "savingMemory": "Error saving memory",
+      "deletingMemory": "Error deleting memory",
+      "creatingMemory": "Error creating memory",
+      "cancellingTask": "Error cancelling task",
+      "unexpectedResponse": "Unexpected response from server",
+      "loadingSerenaConfig": "Error loading serena config",
+      "noLanguageSelected": "No language selected or no languages available to add",
+      "noMemorySelected": "No memory selected"
+    },
+    "executions": {
+      "running": "Running",
+      "queued": "Queued",
+      "noActiveExecutions": "No active executions",
+      "noQueuedExecutions": "No executions in queue"
+    },
+    "language": {
+      "label": "Language",
+      "en": "English",
+      "ja": "日本語"
+    }
+  }
+}

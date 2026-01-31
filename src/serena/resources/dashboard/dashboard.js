@@ -1,3 +1,96 @@
+// Internationalization (i18n) support
+class I18n {
+    constructor() {
+        this.locale = this.detectLocale();
+        this.translations = {};
+        this.fallbackLocale = 'en';
+        this.loaded = false;
+    }
+
+    detectLocale() {
+        // Check localStorage first
+        const savedLocale = localStorage.getItem('serena-locale');
+        if (savedLocale) {
+            return savedLocale;
+        }
+        // Fall back to browser language
+        const browserLang = navigator.language || navigator.userLanguage;
+        if (browserLang.startsWith('ja')) {
+            return 'ja';
+        }
+        return 'en';
+    }
+
+    async loadTranslations() {
+        try {
+            const [enResponse, jaResponse] = await Promise.all([
+                fetch('locales/en.json'),
+                fetch('locales/ja.json')
+            ]);
+            this.translations['en'] = await enResponse.json();
+            this.translations['ja'] = await jaResponse.json();
+            this.loaded = true;
+        } catch (error) {
+            console.error('Error loading translations:', error);
+            this.loaded = false;
+        }
+    }
+
+    t(key) {
+        const keys = key.split('.');
+        let value = this.translations[this.locale];
+
+        // Try current locale
+        for (const k of keys) {
+            if (value && typeof value === 'object' && k in value) {
+                value = value[k];
+            } else {
+                value = null;
+                break;
+            }
+        }
+
+        // Fallback to default locale
+        if (value === null && this.locale !== this.fallbackLocale) {
+            value = this.translations[this.fallbackLocale];
+            for (const k of keys) {
+                if (value && typeof value === 'object' && k in value) {
+                    value = value[k];
+                } else {
+                    value = null;
+                    break;
+                }
+            }
+        }
+
+        return value || key;
+    }
+
+    setLocale(locale) {
+        this.locale = locale;
+        localStorage.setItem('serena-locale', locale);
+    }
+
+    getLocale() {
+        return this.locale;
+    }
+
+    getAvailableLocales() {
+        return [
+            { code: 'en', name: 'English' },
+            { code: 'ja', name: '日本語' }
+        ];
+    }
+}
+
+// Global i18n instance
+const i18n = new I18n();
+
+// Shorthand translation function
+function t(key) {
+    return i18n.t(key);
+}
+
 class LogMessage {
     constructor(message, toolNames) {
         message = this.escapeHtml(message);
@@ -401,7 +494,11 @@ class Dashboard {
         });
 
         // Initialize the application
-        this.loadToolNames().then(function () {
+        i18n.loadTranslations().then(function() {
+            self.initializeLocaleUI();
+            self.updateStaticTranslations();
+            return self.loadToolNames();
+        }).then(function () {
             // Start on overview page
             self.loadNews();
             self.loadConfigOverview();
@@ -518,12 +615,12 @@ class Dashboard {
                 }
             }, error: function (xhr, status, error) {
                 console.error('Error loading config overview:', error);
-                self.$configDisplay.html('<div class="error-message">Error loading configuration</div>');
-                self.$basicStatsDisplay.html('<div class="error-message">Error loading stats</div>');
-                self.$projectsDisplay.html('<div class="error-message">Error loading projects</div>');
-                self.$availableToolsDisplay.html('<div class="error-message">Error loading tools</div>');
-                self.$availableModesDisplay.html('<div class="error-message">Error loading modes</div>');
-                self.$availableContextsDisplay.html('<div class="error-message">Error loading contexts</div>');
+                self.$configDisplay.html('<div class="error-message">' + t('dashboard.errors.loadingConfig') + '</div>');
+                self.$basicStatsDisplay.html('<div class="error-message">' + t('dashboard.errors.loadingStats') + '</div>');
+                self.$projectsDisplay.html('<div class="error-message">' + t('dashboard.errors.loadingProjects') + '</div>');
+                self.$availableToolsDisplay.html('<div class="error-message">' + t('dashboard.errors.loadingTools') + '</div>');
+                self.$availableModesDisplay.html('<div class="error-message">' + t('dashboard.errors.loadingModes') + '</div>');
+                self.$availableContextsDisplay.html('<div class="error-message">' + t('dashboard.errors.loadingContexts') + '</div>');
             }, complete: function () {
                 self.waitingForConfigPollingResult = false;
             }
@@ -555,17 +652,17 @@ class Dashboard {
             let html = '<div class="config-grid">';
 
             // Project info
-            html += '<div class="config-label">Active Project:</div>';
+            html += '<div class="config-label">' + t('dashboard.config.activeProject') + '</div>';
             if (config.active_project.name && config.active_project.path) {
                 const configPath = config.active_project.path + '/.serena/project.yml';
                 html += '<div class="config-value"><span title="Project configuration in ' + configPath + '">' + config.active_project.name + '</span></div>';
             } else {
-                html += '<div class="config-value">' + (config.active_project.name || 'None') + '</div>';
+                html += '<div class="config-value">' + (config.active_project.name || t('dashboard.common.none')) + '</div>';
             }
 
-            html += '<div class="config-label">Languages:</div>';
+            html += '<div class="config-label">' + t('dashboard.config.languages') + '</div>';
             if (this.jetbrainsMode) {
-                html += '<div class="config-value">Using JetBrains backend</div>';
+                html += '<div class="config-value">' + t('dashboard.config.usingJetBrains') + '</div>';
             } else {
                 html += '<div class="config-value">';
                 if (config.languages && config.languages.length > 0) {
@@ -585,7 +682,7 @@ class Dashboard {
                         if (this.isAddingLanguage) {
                             html += '<div id="add-language-spinner" class="language-spinner">';
                         } else {
-                            html += '<button id="add-language-btn" class="btn language-add-btn">+ Add Language</button>';
+                            html += '<button id="add-language-btn" class="btn language-add-btn">' + t('dashboard.config.addLanguage') + '</button>';
                             html += '<div id="add-language-spinner" class="language-spinner" style="display:none;">';
                         }
                         html += '<div class="spinner"></div>';
@@ -593,17 +690,17 @@ class Dashboard {
                     }
                     html += '</div>';
                 } else {
-                    html += 'N/A';
+                    html += t('dashboard.common.na');
                 }
                 html += '</div>';
             }
 
             // Context info
-            html += '<div class="config-label">Context:</div>';
+            html += '<div class="config-label">' + t('dashboard.config.context') + '</div>';
             html += '<div class="config-value"><span title="' + config.context.path + '">' + config.context.name + '</span></div>';
 
             // Modes info
-            html += '<div class="config-label">Active Modes:</div>';
+            html += '<div class="config-label">' + t('dashboard.config.activeModes') + '</div>';
             html += '<div class="config-value">';
             if (config.modes.length > 0) {
                 const modeSpans = config.modes.map(function (mode) {
@@ -611,24 +708,24 @@ class Dashboard {
                 });
                 html += modeSpans.join(', ');
             } else {
-                html += 'None';
+                html += t('dashboard.common.none');
             }
             html += '</div>';
 
             // File Encoding info
-            html += '<div class="config-label">File Encoding:</div>';
-            html += '<div class="config-value">' + (config.encoding || 'N/A') + '</div>';
+            html += '<div class="config-label">' + t('dashboard.config.fileEncoding') + '</div>';
+            html += '<div class="config-value">' + (config.encoding || t('dashboard.common.na')) + '</div>';
 
             // Current Client info
-            html += '<div class="config-label">Current Client:</div>';
-            html += '<div class="config-value">' + (config.current_client || 'None') + '</div>';
+            html += '<div class="config-label">' + t('dashboard.config.currentClient') + '</div>';
+            html += '<div class="config-value">' + (config.current_client || t('dashboard.common.none')) + '</div>';
 
             html += '</div>';
 
             // Active tools - collapsible
             html += '<div style="margin-top: 20px;">';
             html += '<h3 class="collapsible-header" id="tools-header" style="font-size: 16px; margin: 0;">';
-            html += '<span>Active Tools (' + config.active_tools.length + ')</span>';
+            html += '<span>' + t('dashboard.config.activeTools') + ' (' + config.active_tools.length + ')</span>';
             html += '<span class="toggle-icon' + (wasToolsExpanded ? ' expanded' : '') + '">▼</span>';
             html += '</h3>';
             html += '<div class="collapsible-content tools-grid" id="tools-content" style="' + (wasToolsExpanded ? '' : 'display:none;') + ' margin-top: 10px;">';
@@ -643,7 +740,7 @@ class Dashboard {
                 html += '<div style="margin-top: 20px;">';
                 html += '<h3 class="collapsible-header" id="memories-header" style="font-size: 16px; margin: 0;">';
                 const memoryCount = (config.available_memories && config.available_memories.length) || 0;
-                html += '<span>Available Memories (' + memoryCount + ')</span>';
+                html += '<span>' + t('dashboard.config.availableMemories') + ' (' + memoryCount + ')</span>';
                 html += '<span class="toggle-icon' + (wasMemoriesExpanded ? ' expanded' : '') + '">▼</span>';
                 html += '</h3>';
                 html += '<div class="collapsible-content memories-container" id="memories-content" style="' + (wasMemoriesExpanded ? '' : 'display:none;') + ' margin-top: 10px;">';
@@ -656,7 +753,7 @@ class Dashboard {
                     });
                 }
                 // Add Create Memory button
-                html += '<button id="create-memory-btn" class="memory-add-btn">+ Add Memory</button>';
+                html += '<button id="create-memory-btn" class="memory-add-btn">' + t('dashboard.config.addMemory') + '</button>';
                 html += '</div>';
                 html += '</div>';
             }
@@ -665,9 +762,9 @@ class Dashboard {
             html += '<div style="margin-top: 15px; display: flex; gap: 10px; align-items: center;">';
             html += '<div style="flex: 1; padding: 10px; background: var(--bg-secondary); border-radius: 4px; font-size: 13px; border: 1px solid var(--border-color);">';
             html += '<span style="color: var(--text-muted);">📖</span> ';
-            html += '<a href="https://oraios.github.io/serena/02-usage/050_configuration.html" target="_blank" rel="noopener noreferrer" style="color: var(--btn-primary); text-decoration: none; font-weight: 500;">View Configuration Guide</a>';
+            html += '<a href="https://oraios.github.io/serena/02-usage/050_configuration.html" target="_blank" rel="noopener noreferrer" style="color: var(--btn-primary); text-decoration: none; font-weight: 500;">' + t('dashboard.config.viewConfigGuide') + '</a>';
             html += '</div>';
-            html += '<button id="edit-serena-config-btn" class="btn language-add-btn" style="white-space: nowrap; padding: 10px; ">Edit Global Serena Config</button>';
+            html += '<button id="edit-serena-config-btn" class="btn language-add-btn" style="white-space: nowrap; padding: 10px; ">' + t('dashboard.config.editGlobalConfig') + '</button>';
             html += '</div>';
 
             this.$configDisplay.html(html);
@@ -1433,6 +1530,142 @@ class Dashboard {
         $('#stats-summary').html(tableHtml);
     }
 
+    // ===== Locale/i18n Methods =====
+
+    initializeLocaleUI() {
+        const self = this;
+        const $langToggle = $('#lang-toggle');
+        const $langText = $('#lang-text');
+        const $langDropdown = $('#lang-dropdown');
+
+        // Set initial display
+        const currentLocale = i18n.getLocale();
+        $langText.text(currentLocale.toUpperCase());
+
+        // Toggle dropdown
+        $langToggle.click(function(e) {
+            e.stopPropagation();
+            $langDropdown.toggle();
+        });
+
+        // Handle language selection
+        $langDropdown.find('a').click(function(e) {
+            e.preventDefault();
+            const newLocale = $(this).data('lang');
+            self.changeLocale(newLocale);
+            $langDropdown.hide();
+        });
+
+        // Close dropdown when clicking outside
+        $(document).click(function(e) {
+            if (!$(e.target).closest('#lang-toggle').length) {
+                $langDropdown.hide();
+            }
+        });
+    }
+
+    changeLocale(locale) {
+        i18n.setLocale(locale);
+        $('#lang-text').text(locale.toUpperCase());
+        this.updateStaticTranslations();
+        // Refresh dynamic content
+        if (this.configData) {
+            this.displayConfig(this.configData);
+            this.displayBasicStats(this.configData.tool_stats_summary);
+            this.displayProjects(this.configData.registered_projects);
+            this.displayAvailableTools(this.configData.available_tools);
+            this.displayAvailableModes(this.configData.available_modes);
+            this.displayAvailableContexts(this.configData.available_contexts);
+        }
+    }
+
+    updateStaticTranslations() {
+        // Update page title
+        document.title = t('dashboard.title');
+
+        // Update theme toggle text
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+        $('#theme-text').text(currentTheme === 'dark' ? t('dashboard.theme.light') : t('dashboard.theme.dark'));
+
+        // Update menu items
+        $('#menu-toggle span:last').text(t('dashboard.menu.menu'));
+        $('[data-page="overview"]').text(t('dashboard.menu.overview'));
+        $('[data-page="logs"]').text(t('dashboard.menu.logs'));
+        $('[data-page="stats"]').text(t('dashboard.menu.advancedStats'));
+        $('#menu-shutdown').text(t('dashboard.menu.shutdownServer'));
+
+        // Update section headers
+        $('#news-section h2').text(t('dashboard.sections.whatsNew'));
+        $('.config-section h2').text(t('dashboard.sections.currentConfiguration'));
+        $('.basic-stats-section h2').text(t('dashboard.sections.toolUsage'));
+        $('.executions-section h2').first().text(t('dashboard.sections.executionsQueue'));
+        $('.executions-section h2').eq(1).text(t('dashboard.sections.lastExecution'));
+        $('#projects-header span:first').text(t('dashboard.sections.registeredProjects'));
+        $('#available-tools-header span:first').text(t('dashboard.sections.availableToolsDisabled'));
+        $('#available-modes-header span:first').text(t('dashboard.sections.availableModes'));
+        $('#available-contexts-header span:first').text(t('dashboard.sections.availableContexts'));
+
+        // Update stats page buttons
+        $('#refresh-stats').text(t('dashboard.stats.refreshStats'));
+        $('#clear-stats').text(t('dashboard.stats.clearStats'));
+        $('#no-stats-message').text(t('dashboard.stats.noStatsYet'));
+
+        // Update chart labels
+        $('.chart-group h3').eq(0).text(t('dashboard.stats.toolCalls'));
+        $('.chart-group h3').eq(1).text(t('dashboard.stats.inputTokens'));
+        $('.chart-group h3').eq(2).text(t('dashboard.stats.outputTokens'));
+        $('.chart-group h3').eq(3).text(t('dashboard.stats.inputVsOutput'));
+
+        // Update logs page
+        $('.copy-logs-text').text(t('dashboard.logs.copyLogs'));
+
+        // Update modal titles and buttons
+        this.updateModalTranslations();
+    }
+
+    updateModalTranslations() {
+        // Add Language Modal
+        $('#add-language-modal h3').text(t('dashboard.modal.addLanguage.title'));
+        $('#modal-project-info').html(t('dashboard.modal.addLanguage.info') + ' <strong id="modal-project-name"></strong>.');
+        $('#add-language-modal p').eq(1).text(t('dashboard.modal.addLanguage.note'));
+        $('label[for="modal-language-select"]').text(t('dashboard.modal.addLanguage.selectLabel'));
+        $('#modal-cancel-btn').text(t('dashboard.common.cancel'));
+        $('#modal-add-btn').text(t('dashboard.modal.addLanguage.addButton'));
+
+        // Remove Language Modal
+        // Content is dynamically set
+
+        // Edit Memory Modal - button text
+        $('#edit-memory-cancel-btn').text(t('dashboard.common.cancel'));
+        $('#edit-memory-save-btn').text(t('dashboard.common.save'));
+
+        // Delete Memory Modal
+        $('#delete-memory-cancel-btn').text(t('dashboard.common.cancel'));
+        $('#delete-memory-ok-btn').text(t('dashboard.common.ok'));
+
+        // Create Memory Modal
+        $('#create-memory-modal p').eq(1).text(t('dashboard.modal.createMemory.nameHint'));
+        $('label[for="create-memory-name-input"]').text(t('dashboard.modal.createMemory.nameLabel'));
+        $('#create-memory-name-input').attr('placeholder', t('dashboard.modal.createMemory.namePlaceholder'));
+        $('#create-memory-cancel-btn').text(t('dashboard.common.cancel'));
+        $('#create-memory-create-btn').text(t('dashboard.common.create'));
+
+        // Cancel Execution Modal
+        $('#cancel-execution-modal p').first().text(t('dashboard.modal.cancelExecution.confirm'));
+        $('#cancel-execution-cancel-btn').text(t('dashboard.common.cancel'));
+        $('#cancel-execution-ok-btn').text(t('dashboard.common.ok'));
+
+        // Edit Serena Config Modal
+        $('#edit-serena-config-modal h3').text(t('dashboard.modal.editSerenaConfig.title'));
+        $('#edit-serena-config-modal p').first().text(t('dashboard.modal.editSerenaConfig.note'));
+        $('#edit-serena-config-cancel-btn').text(t('dashboard.common.cancel'));
+        $('#edit-serena-config-save-btn').text(t('dashboard.common.save'));
+
+        // Remove Language Modal buttons
+        $('#remove-modal-cancel-btn').text(t('dashboard.common.cancel'));
+        $('#remove-modal-ok-btn').text(t('dashboard.common.ok'));
+    }
+
     // ===== Theme Methods =====
 
     initializeTheme() {
@@ -1499,10 +1732,10 @@ class Dashboard {
         // Update the theme toggle button
         if (theme === 'dark') {
             this.$themeIcon.text('☀️');
-            this.$themeText.text('Light');
+            this.$themeText.text(t('dashboard.theme.light'));
         } else {
             this.$themeIcon.text('🌙');
-            this.$themeText.text('Dark');
+            this.$themeText.text(t('dashboard.theme.dark'));
         }
 
         // Update theme-aware images

@@ -214,7 +214,7 @@ body {
     position: relative;
     display: flex;
     align-items: flex-end;
-    width: 200px;
+    width: 280px;
     height: 100%;
     gap: 10px;
     flex-shrink: 0;
@@ -836,6 +836,67 @@ body {
 
 .theme-toggle span {
     line-height: 1;
+}
+
+/* Language toggle button */
+.lang-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+#lang-toggle {
+    position: relative;
+}
+
+.lang-toggle:hover {
+    background-color: var(--border-color);
+}
+
+.lang-toggle #lang-icon {
+    font-size: 16px;
+}
+
+.lang-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 5px;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    box-shadow: var(--shadow);
+    min-width: 100px;
+    z-index: 1000;
+}
+
+.lang-dropdown a {
+    display: block;
+    padding: 10px 15px;
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 14px;
+    transition: background-color 0.2s ease;
+}
+
+.lang-dropdown a:hover {
+    background-color: var(--border-color);
+}
+
+.lang-dropdown a:first-child {
+    border-radius: 4px 4px 0 0;
+}
+
+.lang-dropdown a:last-child {
+    border-radius: 0 0 4px 4px;
 }
 
 .log-debug {
