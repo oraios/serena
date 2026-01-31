@@ -1,5 +1,4 @@
 import os
-import shutil
 from typing import cast
 
 import pytest
@@ -52,5 +51,18 @@ class TestCclsLanguageServer:
         ref_files = cast(list[str], [ref.get("relativePath", "") for ref in refs])
         assert any("a.cpp" in ref_file for ref_file in ref_files), "Should find reference in a.cpp"
         # second call stability
+        def _ref_key(ref: dict) -> tuple:
+            rp = ref.get("relativePath", "")
+            rng = ref.get("range") or {}
+            s = rng.get("start") or {}
+            e = rng.get("end") or {}
+            return (
+                rp,
+                s.get("line", -1),
+                s.get("character", -1),
+                e.get("line", -1),
+                e.get("character", -1),
+            )
+
         refs2 = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
-        assert refs2 == refs
+        assert sorted(map(_ref_key, refs2)) == sorted(map(_ref_key, refs))

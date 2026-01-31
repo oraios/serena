@@ -33,6 +33,7 @@ class CclsLanguageServer(SolidLanguageServer):
     Notes:
     - ccls should be installed and on PATH (or specify ls_path in settings)
     - compile_commands.json at repo root is recommended for accurate indexing
+
     """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
@@ -127,11 +128,10 @@ class CclsLanguageServer(SolidLanguageServer):
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
         log.info("Sending initialize request from LSP client to ccls and awaiting response")
-        init_response = self.server.send.initialize(initialize_params)
+        self.server.send.initialize(initialize_params)
         # Do not assert clangd-specific capability shapes; ccls differs
         self.server.notify.initialized({})
 
         # Basic readiness
         self.completions_available.set()
         self.server_ready.set()
-        self.server_ready.wait()
