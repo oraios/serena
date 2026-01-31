@@ -11,6 +11,7 @@ from solidlsp.ls_utils import SymbolUtils
 def _ccls_available() -> bool:
     try:
         import shutil as _sh
+
         return _sh.which("ccls") is not None
     except Exception:
         return False
@@ -50,6 +51,7 @@ class TestCclsLanguageServer:
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
         ref_files = cast(list[str], [ref.get("relativePath", "") for ref in refs])
         assert any("a.cpp" in ref_file for ref_file in ref_files), "Should find reference in a.cpp"
+
         # second call stability
         def _ref_key(ref: dict) -> tuple:
             rp = ref.get("relativePath", "")
