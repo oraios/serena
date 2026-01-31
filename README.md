@@ -84,6 +84,8 @@ The underlying language servers are typically open-source projects (like Serena)
 With Serena's LSP library, we provide **support for over 30 programming languages**, including
 AL, Bash, C#, C/C++, Clojure, Dart, Elixir, Elm, Erlang, Fortran, Go, Groovy (partial support), Haskell, Java, Javascript, Julia, Kotlin, Lua, Markdown, MATLAB, Nix, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Scala, Swift, TOML, TypeScript, YAML, and Zig.
 
+Note: For **C/C++**, Serena uses **clangd** by default and also supports **ccls** as an experimental, opt-in alternative (`cpp_ccls`). For best results, provide a `compile_commands.json` at the repository root.
+
 > [!IMPORTANT]
 > Some language servers require additional dependencies to be installed; see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
 
