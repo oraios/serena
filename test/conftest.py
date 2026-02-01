@@ -1,17 +1,20 @@
 import logging
 import os
+import shutil as _sh
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 import pytest
+
 try:
     from sensai.util.logging import configure
 except Exception:
     # Fallback if 'sensai' is not installed: basic logging configuration
     def configure(level: int = logging.INFO) -> None:
         logging.basicConfig(level=level)
+
 
 from serena.config.serena_config import SerenaPaths
 from serena.constants import SERENA_MANAGED_DIR_NAME
@@ -22,7 +25,6 @@ from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
 
 from .solidlsp.clojure import is_clojure_cli_available
-import shutil as _sh
 
 configure(level=logging.INFO)
 
@@ -60,7 +62,11 @@ def _create_ls(
     gitignore_parser = GitignoreParser(str(repo_path))
     for spec in gitignore_parser.get_ignore_specs():
         ignored_paths.extend(spec.patterns)
-    config = LanguageServerConfig(code_language=language, ignored_paths=ignored_paths, trace_lsp_communication=trace_lsp_communication)
+    config = LanguageServerConfig(
+        code_language=language,
+        ignored_paths=ignored_paths,
+        trace_lsp_communication=trace_lsp_communication,
+    )
     effective_solidlsp_dir = solidlsp_dir if solidlsp_dir is not None else SerenaPaths().serena_user_home_dir
     return SolidLanguageServer.create(
         config,
