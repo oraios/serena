@@ -1,4 +1,3 @@
-language_backend: LSP
 # the language backend to use for code understanding and manipulation.
 # Possible values are:
 #  * LSP: Use the language server protocol (LSP), spawning freely available language servers
@@ -6,8 +5,8 @@ language_backend: LSP
 #  * JetBrains: Use the Serena plugin in your JetBrains IDE.
 #      (requires the plugin to be installed and the project being worked on to be open
 #      in your IDE).
+language_backend: LSP
 
-gui_log_window: False
 # whether to open a graphical window with Serena's logs.
 # This is mainly supported on Windows and (partly) on Linux; not available on macOS.
 # If you prefer a browser-based tool, use the `web_dashboard` option instead.
@@ -22,8 +21,8 @@ gui_log_window: False
 # previous instances. This can lead to multiple log windows being opened, and only the last
 # window being updated. Since we can't control how agno or Claude Desktop start Serena,
 # we have to live with this limitation for now.
+gui_log_window: False
 
-web_dashboard: True
 # whether to open the Serena web dashboard (which will be accessible through your web browser) that
 # provides access to Serena's configuration and state as well as the current session logs.
 # The web dashboard is supported on all platforms.
@@ -34,11 +33,11 @@ web_dashboard: True
 # You can then open the dashboard by asking your agent to do so (e.g., by saying "open the dashboard"), Serena provides
 # a tool for this.
 # Further information: https://oraios.github.io/serena/02-usage/060_dashboard.html
+web_dashboard: True
 
+# the address the web dashboard will listen on (bind address).
 web_dashboard_listen_address: 127.0.0.1
-# The address where the web dashboard will listen on
 
-web_dashboard_open_on_launch: True
 # whether to open a browser window with the web dashboard when Serena starts (provided that web_dashboard
 # is enabled). See also the web_dashboard option.
 # If set to false, you can still open the dashboard manually by
@@ -46,43 +45,55 @@ web_dashboard_open_on_launch: True
 # b) manually navigating to http://localhost:24282/dashboard/ in your web browser (actual port
 #    may be higher if you have multiple instances running; try ports 24283, 24284, etc.)
 # See also: https://oraios.github.io/serena/02-usage/060_dashboard.html
+web_dashboard_open_on_launch: True
 
-jetbrains_plugin_server_address: 127.0.0.1
 # address where JetBrains plugin servers are running (only relevant when using the JetBrains language backend)
+jetbrains_plugin_server_address: 127.0.0.1
 
-log_level: 20
 # the minimum log level for the GUI log window and the dashboard (10 = debug, 20 = info, 30 = warning, 40 = error)
+log_level: 20
 
-trace_lsp_communication: False
 # whether to trace the communication between Serena and the language servers.
 # This is useful for debugging language server issues.
+trace_lsp_communication: False
 
-ls_specific_settings: {}
-# Added on 23.08.2025
-# Advanced configuration option allowing to configure language server implementation specific options. Maps the language
-# (same entry as in project.yml) to the options.
+# advanced configuration option allowing to configure language server-specific options.
+# Maps the language key to the options.
 # Have a look at the docstring of the constructors of the LS implementations within solidlsp (e.g., for C# or PHP) to see which options are available.
 # No documentation on options means no options are available.
+ls_specific_settings: {}
 
-tool_timeout: 240
 # timeout, in seconds, after which tool executions are terminated
+tool_timeout: 240
 
-excluded_tools: []
 # list of tools to be globally excluded
+excluded_tools: []
 
-included_optional_tools: []
 # list of optional tools (which are disabled by default) to be included
+included_optional_tools: []
 
-fixed_tools: []
 # fixed set of tools to use as the base tool set (if non-empty), replacing Serena's default set of tools.
 # This cannot be combined with non-empty excluded_tools or included_optional_tools.
+fixed_tools: []
 
-default_max_tool_answer_chars: 150000
+# list of mode names to that are always to be included in the set of active modes
+# The full set of modes to be activated is base_modes + default_modes.
+# If this is undefined, no base modes are included.
+# The project configuration (project.yml) may override this setting.
+base_modes:
+
+# list of mode names that are to be activated by default.
+# The full set of modes to be activated is base_modes + default_modes.
+# These modes can be overridden by the project configuration (project.yml) or through the CLI (--mode).
+default_modes:
+  - interactive
+  - editing
+
 # Used as default for tools where the apply method has a default maximal answer length.
 # Even though the value of the max_answer_chars can be changed when calling the tool, it may make sense to adjust this default
 # through the global configuration.
+default_max_tool_answer_chars: 150000
 
-token_count_estimator: CHAR_COUNT
 # the name of the token count estimator to use for tool usage statistics.
 # See the `RegisteredTokenCountEstimator` enum for available options.
 #
@@ -90,11 +101,12 @@ token_count_estimator: CHAR_COUNT
 # You can configure this to TIKTOKEN_GPT4 to use a local tiktoken-based estimator for GPT-4 (will download tiktoken
 # data files on first run), or ANTHROPIC_CLAUDE_SONNET_4 which will use the (free of cost) Anthropic API to
 # estimate the token count using the Claude Sonnet 4 tokenizer.
+token_count_estimator: CHAR_COUNT
 
-include_info_hover_budget_seconds: 5
 # Time budget (seconds) for LSP hover requests when tools request include_info.
 # If budget is exceeded, Serena stops issuing further hover requests and returns partial info results.
 # 0 disables the budget (no early stopping). Negative values are invalid.
+include_info_hover_budget_seconds: 5
 
-# The list of registered project paths (updated automatically).
+# the list of registered project paths (updated automatically).
 projects: []

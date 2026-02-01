@@ -1,8 +1,15 @@
 # Contributing to Serena
 
-Serena is under active development. We are just discovering what it can do and where the limitations lie.
+Thank you for your interest in contributing to Serena!
 
-Feel free to share your learnings by opening new issues, feature requests and extensions.
+## Scope of Contributions
+
+The following types of contributions can be submitted directly via pull requests:
+  * isolated additions which do not change the behaviour of Serena and only extend it along existing lines (e.g., adding support for a new language server)
+  * small bug fixes
+  * documentation improvements
+
+For other changes, please open an issue first to discuss your ideas with the maintainers.
 
 ## Developer Environment Setup
 

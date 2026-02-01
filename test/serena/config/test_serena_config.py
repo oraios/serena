@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from serena.config.serena_config import ProjectConfig
+from serena.constants import PROJECT_TEMPLATE_FILE
 from solidlsp.ls_config import Language
 
 
@@ -117,6 +118,12 @@ class TestProjectConfigAutogenerate:
 
         assert config.project_name == custom_name
         assert config.languages == [Language.TYPESCRIPT]
+
+
+class TestProjectConfig:
+    def test_template_is_complete(self):
+        _, is_complete = ProjectConfig._load_yaml(PROJECT_TEMPLATE_FILE)
+        assert is_complete, "Project template YAML is incomplete; all fields must be present (with descriptions)."
 
 
 class TestProjectConfigHoverBudget:
