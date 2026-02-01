@@ -13,10 +13,9 @@ from typing import cast
 
 from overrides import override
 
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -43,136 +42,140 @@ class RustAnalyzer(SolidLanguageServer):
 
         return SolidLanguageServer._determine_log_level(line)
 
-    @staticmethod
-    def _get_rustup_version() -> str | None:
-        """Get installed rustup version or None if not found."""
-        try:
-            result = subprocess.run(["rustup", "--version"], capture_output=True, text=True, check=False)
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except FileNotFoundError:
+    class DependencyProvider(LanguageServerDependencyProviderSinglePath):
+        @staticmethod
+        def _get_rustup_version() -> str | None:
+            """Get installed rustup version or None if not found."""
+            try:
+                result = subprocess.run(["rustup", "--version"], capture_output=True, text=True, check=False)
+                if result.returncode == 0:
+                    return result.stdout.strip()
+            except FileNotFoundError:
+                return None
             return None
-        return None
 
-    @staticmethod
-    def _get_rust_analyzer_via_rustup() -> str | None:
-        """Get rust-analyzer path via rustup. Returns None if not found."""
-        try:
-            result = subprocess.run(["rustup", "which", "rust-analyzer"], capture_output=True, text=True, check=False)
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except FileNotFoundError:
-            pass
-        return None
+        @staticmethod
+        def _get_rust_analyzer_via_rustup() -> str | None:
+            """Get rust-analyzer path via rustup. Returns None if not found."""
+            try:
+                result = subprocess.run(["rustup", "which", "rust-analyzer"], capture_output=True, text=True, check=False)
+                if result.returncode == 0:
+                    return result.stdout.strip()
+            except FileNotFoundError:
+                pass
+            return None
 
-    @staticmethod
-    def _ensure_rust_analyzer_installed() -> str:
-        """
-        Ensure rust-analyzer is available.
+        @staticmethod
+        def _ensure_rust_analyzer_installed() -> str:
+            """
+            Ensure rust-analyzer is available.
 
-        Priority order:
-        1. Rustup existing installation (preferred - matches toolchain version)
-        2. Rustup auto-install if rustup is available (ensures correct version)
-        3. Common installation locations as fallback (only if rustup not available)
-        4. System PATH last (can pick up incompatible versions)
+            Priority order:
+            1. Rustup existing installation (preferred - matches toolchain version)
+            2. Rustup auto-install if rustup is available (ensures correct version)
+            3. Common installation locations as fallback (only if rustup not available)
+            4. System PATH last (can pick up incompatible versions)
 
-        :return: path to rust-analyzer executable
-        """
-        # Try rustup FIRST (preferred - avoids picking up incompatible versions from PATH)
-        rustup_path = RustAnalyzer._get_rust_analyzer_via_rustup()
-        if rustup_path:
-            return rustup_path
+            :return: path to rust-analyzer executable
+            """
+            # Try rustup FIRST (preferred - avoids picking up incompatible versions from PATH)
+            rustup_path = RustAnalyzer.DependencyProvider._get_rust_analyzer_via_rustup()
+            if rustup_path:
+                return rustup_path
 
-        # If rustup is available but rust-analyzer not installed, auto-install it BEFORE
-        # checking common paths. This ensures we get the correct version matching the toolchain.
-        if RustAnalyzer._get_rustup_version():
-            result = subprocess.run(["rustup", "component", "add", "rust-analyzer"], check=False, capture_output=True, text=True)
-            if result.returncode == 0:
-                # Verify installation worked
-                rustup_path = RustAnalyzer._get_rust_analyzer_via_rustup()
-                if rustup_path:
-                    return rustup_path
-            # If auto-install failed, fall through to common paths as last resort
+            # If rustup is available but rust-analyzer not installed, auto-install it BEFORE
+            # checking common paths. This ensures we get the correct version matching the toolchain.
+            if RustAnalyzer.DependencyProvider._get_rustup_version():
+                result = subprocess.run(["rustup", "component", "add", "rust-analyzer"], check=False, capture_output=True, text=True)
+                if result.returncode == 0:
+                    # Verify installation worked
+                    rustup_path = RustAnalyzer.DependencyProvider._get_rust_analyzer_via_rustup()
+                    if rustup_path:
+                        return rustup_path
+                # If auto-install failed, fall through to common paths as last resort
 
-        # Determine platform-specific binary name and paths
-        is_windows = platform.system() == "Windows"
-        binary_name = "rust-analyzer.exe" if is_windows else "rust-analyzer"
+            # Determine platform-specific binary name and paths
+            is_windows = platform.system() == "Windows"
+            binary_name = "rust-analyzer.exe" if is_windows else "rust-analyzer"
 
-        # Fallback to common installation locations (only used if rustup not available)
-        common_paths: list[str | None] = []
+            # Fallback to common installation locations (only used if rustup not available)
+            common_paths: list[str | None] = []
 
-        if is_windows:
-            # Windows-specific paths
-            home = pathlib.Path.home()
-            common_paths.extend(
-                [
-                    str(home / ".cargo" / "bin" / binary_name),  # cargo install / rustup
-                    str(home / "scoop" / "shims" / binary_name),  # Scoop package manager
-                    str(home / "scoop" / "apps" / "rust-analyzer" / "current" / binary_name),  # Scoop direct
-                    str(
-                        pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "rust-analyzer" / binary_name
-                    ),  # Standalone install
-                ]
+            if is_windows:
+                # Windows-specific paths
+                home = pathlib.Path.home()
+                common_paths.extend(
+                    [
+                        str(home / ".cargo" / "bin" / binary_name),  # cargo install / rustup
+                        str(home / "scoop" / "shims" / binary_name),  # Scoop package manager
+                        str(home / "scoop" / "apps" / "rust-analyzer" / "current" / binary_name),  # Scoop direct
+                        str(
+                            pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "rust-analyzer" / binary_name
+                        ),  # Standalone install
+                    ]
+                )
+            else:
+                # Unix-like paths (macOS, Linux)
+                common_paths.extend(
+                    [
+                        "/opt/homebrew/bin/rust-analyzer",  # macOS Homebrew (Apple Silicon)
+                        "/usr/local/bin/rust-analyzer",  # macOS Homebrew (Intel) / Linux system
+                        os.path.expanduser("~/.cargo/bin/rust-analyzer"),  # cargo install
+                        os.path.expanduser("~/.local/bin/rust-analyzer"),  # User local bin
+                    ]
+                )
+
+            for path in common_paths:
+                if path and os.path.isfile(path) and os.access(path, os.X_OK):
+                    return path
+
+            # Last resort: check system PATH (can pick up incorrect aliases, hence checked last)
+            path_result = shutil.which("rust-analyzer")
+            if path_result and os.path.isfile(path_result) and os.access(path_result, os.X_OK):
+                return path_result
+
+            # Provide helpful error message with all searched locations
+            searched = [p for p in common_paths if p]
+            install_instructions = [
+                "  - Rustup: rustup component add rust-analyzer",
+                "  - Cargo: cargo install rust-analyzer",
+            ]
+            if is_windows:
+                install_instructions.extend(
+                    [
+                        "  - Scoop: scoop install rust-analyzer",
+                        "  - Chocolatey: choco install rust-analyzer",
+                        "  - Standalone: Download from https://github.com/rust-lang/rust-analyzer/releases",
+                    ]
+                )
+            else:
+                install_instructions.extend(
+                    [
+                        "  - Homebrew (macOS): brew install rust-analyzer",
+                        "  - System package manager (Linux): apt/dnf/pacman install rust-analyzer",
+                    ]
+                )
+
+            raise RuntimeError(
+                "rust-analyzer is not installed or not in PATH.\n"
+                "Searched locations:\n" + "\n".join(f"  - {p}" for p in searched) + "\n"
+                "Please install rust-analyzer via:\n" + "\n".join(install_instructions)
             )
-        else:
-            # Unix-like paths (macOS, Linux)
-            common_paths.extend(
-                [
-                    "/opt/homebrew/bin/rust-analyzer",  # macOS Homebrew (Apple Silicon)
-                    "/usr/local/bin/rust-analyzer",  # macOS Homebrew (Intel) / Linux system
-                    os.path.expanduser("~/.cargo/bin/rust-analyzer"),  # cargo install
-                    os.path.expanduser("~/.local/bin/rust-analyzer"),  # User local bin
-                ]
-            )
 
-        for path in common_paths:
-            if path and os.path.isfile(path) and os.access(path, os.X_OK):
-                return path
+        def _get_or_install_core_dependency(self) -> str:
+            return self._ensure_rust_analyzer_installed()
 
-        # Last resort: check system PATH (can pick up incorrect aliases, hence checked last)
-        path_result = shutil.which("rust-analyzer")
-        if path_result and os.path.isfile(path_result) and os.access(path_result, os.X_OK):
-            return path_result
-
-        # Provide helpful error message with all searched locations
-        searched = [p for p in common_paths if p]
-        install_instructions = [
-            "  - Rustup: rustup component add rust-analyzer",
-            "  - Cargo: cargo install rust-analyzer",
-        ]
-        if is_windows:
-            install_instructions.extend(
-                [
-                    "  - Scoop: scoop install rust-analyzer",
-                    "  - Chocolatey: choco install rust-analyzer",
-                    "  - Standalone: Download from https://github.com/rust-lang/rust-analyzer/releases",
-                ]
-            )
-        else:
-            install_instructions.extend(
-                [
-                    "  - Homebrew (macOS): brew install rust-analyzer",
-                    "  - System package manager (Linux): apt/dnf/pacman install rust-analyzer",
-                ]
-            )
-
-        raise RuntimeError(
-            "rust-analyzer is not installed or not in PATH.\n"
-            "Searched locations:\n" + "\n".join(f"  - {p}" for p in searched) + "\n"
-            "Please install rust-analyzer via:\n" + "\n".join(install_instructions)
-        )
+        def _create_launch_command(self, core_path: str) -> list[str] | str:
+            return [core_path]
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a RustAnalyzer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        rustanalyzer_executable_path = self._ensure_rust_analyzer_installed()
-        log.info(f"Using rust-analyzer at: {rustanalyzer_executable_path}")
-
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd=rustanalyzer_executable_path, cwd=repository_root_path),
+            None,
             "rust",
             solidlsp_settings,
         )
@@ -180,6 +183,9 @@ class RustAnalyzer(SolidLanguageServer):
         self.service_ready_event = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
         self.resolve_main_method_available = threading.Event()
+
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
