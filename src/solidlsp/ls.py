@@ -409,7 +409,6 @@ class SolidLanguageServer(ABC):
         self._load_document_symbols_cache()
 
         self.server_started = False
-        self.completions_available = threading.Event()
         if config.trace_lsp_communication:
 
             def logging_fn(source: str, target: str, msg: StringDict | str) -> None:
@@ -1005,7 +1004,6 @@ class SolidLanguageServer(ABC):
 
             num_retries = 0
             while response is None or (response["isIncomplete"] and num_retries < 30):  # type: ignore
-                self.completions_available.wait()
                 response = self.server.send.completion(completion_params)
                 if isinstance(response, list):
                     response = {"items": response, "isIncomplete": False}

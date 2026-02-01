@@ -374,7 +374,6 @@ class HaskellLanguageServer(SolidLanguageServer):
         log.info(f"HLS capabilities: {list(capabilities.keys())}")
 
         self.server.notify.initialized({})
-        self.completions_available.set()
 
         # Give HLS time to index the project
         # HLS can be slow to index, especially on first run

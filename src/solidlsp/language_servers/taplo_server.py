@@ -11,7 +11,6 @@ import platform
 import shutil
 import socket
 import stat
-import threading
 import urllib.request
 from typing import Any
 
@@ -128,7 +127,6 @@ class TaploServer(SolidLanguageServer):
             "toml",
             solidlsp_settings,
         )
-        self.server_ready = threading.Event()
 
     @classmethod
     def _setup_runtime_dependencies(cls, solidlsp_settings: SolidLSPSettings) -> str:
@@ -308,8 +306,6 @@ class TaploServer(SolidLanguageServer):
         self.server.notify.initialized({})
 
         log.info("Taplo server initialization complete")
-        self.server_ready.set()
-        self.completions_available.set()
 
     def is_ignored_dirname(self, dirname: str) -> bool:
         """Define TOML-specific directories to ignore."""

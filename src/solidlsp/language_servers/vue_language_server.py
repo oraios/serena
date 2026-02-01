@@ -633,7 +633,6 @@ class VueLanguageServer(SolidLanguageServer):
             if "initialized" in message_text.lower() or "ready" in message_text.lower():
                 log.info("Vue language server ready signal detected")
                 self.server_ready.set()
-                self.completions_available.set()
 
         def tsserver_request_notification_handler(params: list) -> None:
             try:
@@ -683,7 +682,6 @@ class VueLanguageServer(SolidLanguageServer):
         if not self.server_ready.wait(timeout=self.VUE_SERVER_READY_TIMEOUT):
             log.info("Timeout waiting for Vue server ready signal, proceeding anyway")
             self.server_ready.set()
-            self.completions_available.set()
         else:
             log.info("Vue server initialization complete")
 

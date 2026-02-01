@@ -350,7 +350,6 @@ class RubyLsp(SolidLanguageServer):
             if params.get("type") == "ready":
                 log.info("ruby-lsp service is ready.")
                 self.analysis_complete.set()
-                self.completions_available.set()
 
         def execute_client_command_handler(params: dict) -> list:
             return []
@@ -370,7 +369,6 @@ class RubyLsp(SolidLanguageServer):
                 if value.get("kind") == "end":
                     log.info("ruby-lsp indexing complete ($/progress end)")
                     self.analysis_complete.set()
-                    self.completions_available.set()
                 elif value.get("kind") == "begin":
                     log.info("ruby-lsp indexing started ($/progress begin)")
                 elif "percentage" in value:
@@ -384,7 +382,6 @@ class RubyLsp(SolidLanguageServer):
                     if value.get("kind") == "end" or value.get("percentage") == 100:
                         log.info("ruby-lsp indexing complete (token progress)")
                         self.analysis_complete.set()
-                        self.completions_available.set()
 
         def window_work_done_progress_create(params: dict) -> dict:
             """Handle workDoneProgress/create requests from ruby-lsp"""
@@ -429,7 +426,6 @@ class RubyLsp(SolidLanguageServer):
             log.warning("Timeout waiting for ruby-lsp indexing completion, proceeding anyway")
             # Fallback: assume indexing is complete after timeout
             self.analysis_complete.set()
-            self.completions_available.set()
 
     def _handle_initialization_response(self, init_response: InitializeResult) -> None:
         """
