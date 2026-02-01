@@ -6,6 +6,31 @@ better for indexing and navigation. Requires ccls to be installed and available
 on PATH, or configured via ls_specific_settings with key "ls_path".
 
 For best results, ensure a compile_commands.json exists at the repository root.
+
+Installation
+------------
+ccls must be installed manually as there are no prebuilt binaries available for
+direct download. Install using your system package manager:
+
+**Linux:**
+- Ubuntu/Debian (22.04+): ``sudo apt-get install ccls``
+- Fedora/RHEL: ``sudo dnf install ccls``
+- Arch Linux: ``sudo pacman -S ccls``
+- openSUSE Tumbleweed: ``sudo zypper install ccls``
+- Gentoo: ``sudo emerge dev-util/ccls``
+
+**macOS:**
+- Homebrew: ``brew install ccls``
+
+**Windows:**
+- MSYS2 (MinGW): Build from source using MSYS2 toolchain
+- No native prebuilt binaries available; must build from source
+
+For build-from-source instructions (required on Windows), see:
+https://github.com/MaskRay/ccls/wiki/Build
+
+Official documentation:
+https://github.com/MaskRay/ccls
 """
 
 import logging
@@ -59,11 +84,14 @@ class CclsLanguageServer(SolidLanguageServer):
             if not ccls_path:
                 raise FileNotFoundError(
                     "ccls is not installed on your system.\n"
-                    + "Please install ccls using your system package manager:\n"
-                    + "  Ubuntu/Debian: sudo apt-get install ccls\n"
-                    + "  Fedora/RHEL: sudo dnf install ccls\n"
-                    + "  Arch Linux: sudo pacman -S ccls\n"
-                    + "See https://github.com/MaskRay/ccls for more details."
+                    "Please install ccls using your system package manager:\n"
+                    "  Linux (Ubuntu/Debian): sudo apt-get install ccls\n"
+                    "  Linux (Fedora/RHEL):   sudo dnf install ccls\n"
+                    "  Linux (Arch):          sudo pacman -S ccls\n"
+                    "  macOS (Homebrew):      brew install ccls\n"
+                    "  Windows:               Build from source (see wiki)\n\n"
+                    "For build instructions and more details, see:\n"
+                    "  https://github.com/MaskRay/ccls/wiki/Build"
                 )
             log.info(f"Using system-installed ccls at {ccls_path}")
             return ccls_path

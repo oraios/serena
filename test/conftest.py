@@ -6,7 +6,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sensai.util.logging import configure
+try:
+    from sensai.util.logging import configure
+except Exception:
+    # Fallback if 'sensai' is not installed: basic logging configuration
+    def configure(level: int = logging.INFO) -> None:
+        logging.basicConfig(level=level)
 
 from serena.config.serena_config import SerenaPaths
 from serena.constants import SERENA_MANAGED_DIR_NAME
@@ -17,6 +22,7 @@ from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
 
 from .solidlsp.clojure import is_clojure_cli_available
+import shutil as _sh
 
 configure(level=logging.INFO)
 
@@ -35,7 +41,9 @@ class LanguageParamRequest:
 
 
 def get_repo_path(language: Language) -> Path:
-    return Path(__file__).parent / "resources" / "repos" / language / "test_repo"
+    # Map both CPP variants to the shared cpp test repo
+    repo_dir = "cpp" if language in (Language.CPP, Language.CPP_CCLS) else str(language)
+    return Path(__file__).parent / "resources" / "repos" / repo_dir / "test_repo"
 
 
 def _create_ls(
@@ -211,6 +219,16 @@ def _determine_disabled_languages() -> list[Language]:
     clojure_tests_enabled = is_clojure_cli_available()
     if not clojure_tests_enabled:
         result.append(Language.CLOJURE)
+
+    # Disable CPP_CCLS tests if ccls is not available
+    ccls_tests_enabled = _sh.which("ccls") is not None
+    if not ccls_tests_enabled:
+        result.append(Language.CPP_CCLS)
+
+    # Disable CPP (clangd) tests if clangd is not available
+    clangd_tests_enabled = _sh.which("clangd") is not None
+    if not clangd_tests_enabled:
+        result.append(Language.CPP)
 
     al_tests_enabled = True
     if not al_tests_enabled:
