@@ -565,14 +565,33 @@ class LanguageServerSymbolRetriever:
         optionally limited to a specific file and filtered by kind.
         """
         symbols: list[LanguageServerSymbol] = []
-        for lang_server in self._ls_manager.iter_language_servers():
-            symbol_roots = lang_server.request_full_symbol_tree(within_relative_path=within_relative_path)
-            for root in symbol_roots:
-                symbols.extend(
-                    LanguageServerSymbol(root).find(
-                        name_path_pattern, include_kinds=include_kinds, exclude_kinds=exclude_kinds, substring_matching=substring_matching
+        
+        # If searching within a specific file, only check language servers that support that file type
+        # This avoids false "file is ignored" errors from language servers that don't support the file type
+        if within_relative_path is not None and os.path.isfile(os.path.join(self._ls_manager.get_root_path(), within_relative_path)):
+            # For a specific file, only use the language server that supports it
+            try:
+                lang_server = self._ls_manager.get_language_server(within_relative_path)
+                symbol_roots = lang_server.request_full_symbol_tree(within_relative_path=within_relative_path)
+                for root in symbol_roots:
+                    symbols.extend(
+                        LanguageServerSymbol(root).find(
+                            name_path_pattern, include_kinds=include_kinds, exclude_kinds=exclude_kinds, substring_matching=substring_matching
+                        )
                     )
-                )
+            except FileNotFoundError:
+                # File doesn't exist, return empty list
+                pass
+        else:
+            # For directory or None (entire codebase), check all language servers
+            for lang_server in self._ls_manager.iter_language_servers():
+                symbol_roots = lang_server.request_full_symbol_tree(within_relative_path=within_relative_path)
+                for root in symbol_roots:
+                    symbols.extend(
+                        LanguageServerSymbol(root).find(
+                            name_path_pattern, include_kinds=include_kinds, exclude_kinds=exclude_kinds, substring_matching=substring_matching
+                        )
+                    )
         return symbols
 
     def find_unique(

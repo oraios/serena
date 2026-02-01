@@ -161,7 +161,14 @@ class YamlLanguageServer(SolidLanguageServer):
         def window_log_message(msg: dict) -> None:
             log.info(f"LSP: window/logMessage: {msg}")
 
+        def workspace_configuration(params: dict) -> list[dict]:
+            """Handle workspace/configuration request."""
+            items = params.get("items", [])
+            # Return empty configuration for each requested item to use defaults
+            return [{} for _ in items]
+
         self.server.on_request("client/registerCapability", register_capability_handler)
+        self.server.on_request("workspace/configuration", workspace_configuration)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
