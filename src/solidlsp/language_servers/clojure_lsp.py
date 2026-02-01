@@ -214,4 +214,3 @@ class ClojureLSP(SolidLanguageServer):
         self.server.notify.initialized({})
         # after initialize, Clojure-lsp is ready to serve
         self.server_ready.set()
-        self.completions_available.set()

@@ -721,6 +721,5 @@ class RustAnalyzer(SolidLanguageServer):
             "completionItem": {"labelDetailsSupport": True},
         }
         self.server.notify.initialized({})
-        self.completions_available.set()
 
         self.server_ready.wait()

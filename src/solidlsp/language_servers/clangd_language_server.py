@@ -214,7 +214,9 @@ class ClangdLanguageServer(SolidLanguageServer):
 
         self.server.notify.initialized({})
 
-        self.completions_available.set()
         # set ready flag
+        # TODO This defeats the purpose of the event; we should wait for the server to actually be ready
         self.server_ready.set()
+
+        # wait for server to be ready
         self.server_ready.wait()

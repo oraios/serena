@@ -172,7 +172,6 @@ class Intelephense(SolidLanguageServer):
         assert "definitionProvider" in init_response["capabilities"]
 
         self.server.notify.initialized({})
-        self.completions_available.set()
 
         # Intelephense server is typically ready immediately after initialization
         # TODO: This is probably incorrect; the server does send an initialized notification, which we could wait for!

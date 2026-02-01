@@ -213,8 +213,6 @@ class CSharpLanguageServer(SolidLanguageServer):
         """
         super().__init__(config, repository_root_path, None, "csharp", solidlsp_settings)
 
-        self.initialization_complete = threading.Event()
-
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir, self._solidlsp_settings, self.repository_root_path)
 
@@ -538,6 +536,8 @@ class CSharpLanguageServer(SolidLanguageServer):
         )
 
     def _start_server(self) -> None:
+        indexing_complete = threading.Event()
+
         def do_nothing(params: dict) -> None:
             return
 
@@ -645,7 +645,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             return
 
         def handle_workspace_indexing_complete(params: dict) -> None:
-            self.completions_available.set()
+            indexing_complete.set()
 
         # Set up notification handlers
         self.server.on_notification("window/logMessage", window_log_message)
@@ -699,19 +699,16 @@ class CSharpLanguageServer(SolidLanguageServer):
         # Open solution and project files
         self._open_solution_and_projects()
 
-        self.initialization_complete.set()
-
         log.info(
             "Microsoft.CodeAnalysis.LanguageServer initialized and ready\n"
             "Waiting for language server to index project files...\n"
             "This may take a while for large projects"
         )
 
-        if self.completions_available.wait(30):  # Wait up to 30 seconds for indexing
+        if indexing_complete.wait(30):  # Wait up to 30 seconds for indexing
             log.info("Indexing complete")
         else:
             log.warning("Timeout waiting for indexing to complete, proceeding anyway")
-            self.completions_available.set()
 
     def _force_pull_diagnostics(self, init_response: dict | InitializeResult) -> None:
         """
