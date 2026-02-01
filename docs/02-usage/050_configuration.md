@@ -173,7 +173,7 @@ You can change this location by setting the `SERENA_HOME` environment variable t
 (ls-specific-settings)=
 ### Language Server-Specific Settings
 
-:::note 
+:::{note} 
 **Advanced Users Only**: The settings described in this section are intended for advanced users who need to fine-tune language server behavior.
 Most users will not need to adjust these settings.
 :::
@@ -209,7 +209,7 @@ ls_specific_settings:
 ```
 
 This is supported by all language servers deriving their dependency provider from  `LanguageServerDependencyProviderSinglePath`.
-Currently, this includes the following languages: `clojure`, `cpp`, `php`, `python`, `typescript`. 
+Currently, this includes the following languages: `clojure`, `cpp`, `php`, `python`, `rust`, `typescript`. 
 We will add support for more languages over time.
 
 #### Go (`gopls`)
