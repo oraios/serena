@@ -132,6 +132,11 @@ class ClangdLanguageServer(SolidLanguageServer):
                     "synchronization": {"didSave": True, "dynamicRegistration": True},
                     "completion": {"dynamicRegistration": True, "completionItem": {"snippetSupport": True}},
                     "definition": {"dynamicRegistration": True},
+                    "references": {"dynamicRegistration": True},
+                    "documentSymbol": {
+                        "dynamicRegistration": True,
+                        "hierarchicalDocumentSymbolSupport": True,
+                    },
                 },
                 "workspace": {"workspaceFolders": True, "didChangeConfiguration": {"dynamicRegistration": True}},
             },

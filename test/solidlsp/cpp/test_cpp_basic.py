@@ -8,7 +8,6 @@ server is not available.
 
 import os
 import shutil
-from typing import cast
 
 import pytest
 
@@ -17,18 +16,11 @@ from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
 
 
-def _clangd_available() -> bool:
-    return shutil.which("clangd") is not None
-
-
 def _ccls_available() -> bool:
     return shutil.which("ccls") is not None
 
 
-# Build parametrize list based on availability
-_cpp_servers: list[Language] = []
-if _clangd_available():
-    _cpp_servers.append(Language.CPP)
+_cpp_servers: list[Language] = [Language.CPP]
 if _ccls_available():
     _cpp_servers.append(Language.CPP_CCLS)
 
@@ -70,9 +62,9 @@ class TestCppLanguageServer:
         assert add_symbol is not None, "Could not find 'add' function symbol in b.cpp"
 
         sel_start = add_symbol["selectionRange"]["start"]
-        refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
-        ref_files = cast(list[str], [ref.get("relativePath", "") for ref in refs])
-        assert any("a.cpp" in ref_file for ref_file in ref_files), "Should find reference in a.cpp"
+        refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
+        ref_files = [ref.get("relativePath", "") for ref in refs]
+        assert any("a.cpp" in ref_file for ref_file in ref_files), f"Should find reference in a.cpp, {refs=}"
 
         # Verify second call returns same results (stability check)
         def _ref_key(ref: dict) -> tuple:
@@ -88,5 +80,5 @@ class TestCppLanguageServer:
                 e.get("character", -1),
             )
 
-        refs2 = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
+        refs2 = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         assert sorted(map(_ref_key, refs2)) == sorted(map(_ref_key, refs)), "Reference results should be stable across calls"
