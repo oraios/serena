@@ -118,13 +118,15 @@ jobs:
             sudo apt-get install -y ccls
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
             brew install ccls
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            choco install ccls -y
           fi
-          # Windows: ccls requires building from source with MSYS2/LLVM, skipped in CI
           # Verify installation
           if command -v ccls &> /dev/null; then
             echo "ccls installed: $(ccls --version 2>&1 | head -1)"
           else
-            echo "ccls not available on this platform (expected on Windows)"
+            echo "ERROR: ccls installation failed"
+            exit 1
           fi
       - name: Setup Java (for JVM based languages)
         uses: actions/setup-java@v4

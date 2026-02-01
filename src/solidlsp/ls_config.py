@@ -307,9 +307,9 @@ class Language(str, Enum):
 
                 return ClangdLanguageServer
             case self.CPP_CCLS:
-                from solidlsp.language_servers.ccls_language_server import CclsLanguageServer
+                from solidlsp.language_servers.ccls_language_server import CCLSLanguageServer
 
-                return CclsLanguageServer
+                return CCLSLanguageServer
             case self.PHP:
                 from solidlsp.language_servers.intelephense import Intelephense
 

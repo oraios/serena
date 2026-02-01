@@ -51,7 +51,7 @@ from solidlsp.settings import SolidLSPSettings
 log = logging.getLogger(__name__)
 
 
-class CclsLanguageServer(SolidLanguageServer):
+class CCLSLanguageServer(SolidLanguageServer):
     """
     C/C++ language server implementation using ccls.
 
@@ -89,7 +89,7 @@ class CclsLanguageServer(SolidLanguageServer):
                     "  Linux (Fedora/RHEL):   sudo dnf install ccls\n"
                     "  Linux (Arch):          sudo pacman -S ccls\n"
                     "  macOS (Homebrew):      brew install ccls\n"
-                    "  Windows:               Build from source (see wiki)\n\n"
+                    "  Windows:               choco install ccls\n\n"
                     "For build instructions and more details, see:\n"
                     "  https://github.com/MaskRay/ccls/wiki/Build"
                 )
