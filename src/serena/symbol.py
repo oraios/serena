@@ -552,17 +552,17 @@ class LanguageServerSymbolRetriever:
             return None
         return self._request_info(relative_file_path=symbol.relative_path, line=symbol.line, column=symbol.column)  # type: ignore[arg-type]
 
-    def _get_hover_budget(self, default_budget: float = 5) -> float:
+    def _get_hover_budget(self, default_budget: float = 10) -> float:
         """Project -> global -> default"""
-        hover_budget_seconds = default_budget
+        hover_budget = default_budget
         if self.agent is not None:
-            hover_budget_seconds = self.agent.serena_config.include_info_hover_budget_seconds
+            hover_budget = self.agent.serena_config.hover_budget
             active_project = self.agent.get_active_project()
             if active_project is not None:
-                project_hover_budget = active_project.project_config.include_info_hover_budget_seconds
+                project_hover_budget = active_project.project_config.hover_budget
                 if project_hover_budget is not None:
-                    hover_budget_seconds = project_hover_budget
-        return hover_budget_seconds
+                    hover_budget = project_hover_budget
+        return hover_budget
 
     def request_info_for_symbol_batch(
         self,
@@ -577,7 +577,7 @@ class LanguageServerSymbolRetriever:
         Groups symbols by file path to minimize file switching overhead and uses a per-file
         cache keyed by (line, col) to avoid duplicate hover lookups.
 
-        The hover budget (include_info_hover_budget_seconds) limits total time spent on hover
+        The hover budget (hover_budget) limits total time spent on hover
         requests. If exceeded, remaining symbols get info=None (partial results).
 
         :param symbols: list of symbols to get info for
@@ -617,7 +617,8 @@ class LanguageServerSymbolRetriever:
             file_hover_lookups = 0
 
             for sym in file_symbols:
-                # Check budget before starting new hover request
+                # Check budget before starting a new hover request
+                # hover_budget_seconds=0 disables the budget mechanism (the first inequality)
                 if 0 < hover_budget_seconds <= hover_spent_seconds:
                     skipped_due_to_budget += 1
                     info = None

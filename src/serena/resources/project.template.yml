@@ -110,7 +110,6 @@ default_modes:
 # (contrary to the memories, which are loaded on demand).
 initial_prompt: ""
 
-# Per-project override for include_info hover budget (seconds).
-# If null or missing, global config is used.
-# 0 disables the budget (no early stopping). Negative values are invalid.
-include_info_hover_budget_seconds: null
+# Override of the correspounding setting in serena_config.yml, see the documentation there.
+# If null or missing, the value from the global config is used.
+hover_budget: null

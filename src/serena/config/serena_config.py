@@ -171,7 +171,7 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
     ignore_all_files_in_gitignore: bool = True
     initial_prompt: str = ""
     encoding: str = DEFAULT_SOURCE_FILE_ENCODING
-    include_info_hover_budget_seconds: float | None = None
+    hover_budget: float | None = None
     """
     Per-project override for include_info hover budget (seconds).
 
@@ -329,16 +329,16 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
                     f"Invalid language: {orig_language_str}.\nValid language_strings are: {[l.value for l in Language]}"
                 ) from e
 
-        # Validate include_info_hover_budget_seconds
-        hover_budget_raw = data["include_info_hover_budget_seconds"]
+        # Validate hover_budget
+        hover_budget_raw = data["hover_budget"]
         hover_budget = hover_budget_raw
         if hover_budget is not None:
             try:
                 hover_budget = float(hover_budget_raw)
             except (TypeError, ValueError) as e:
-                raise ValueError(f"include_info_hover_budget_seconds must be a number or null, got: {hover_budget_raw}") from e
+                raise ValueError(f"hover_budget must be a number or null, got: {hover_budget_raw}") from e
             if hover_budget < 0:
-                raise ValueError(f"include_info_hover_budget_seconds cannot be negative, got: {hover_budget}")
+                raise ValueError(f"hover_budget cannot be negative, got: {hover_budget}")
 
         return cls(
             project_name=data["project_name"],
@@ -353,7 +353,7 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
             encoding=data["encoding"],
             base_modes=data["base_modes"],
             default_modes=data["default_modes"],
-            include_info_hover_budget_seconds=hover_budget,
+            hover_budget=hover_budget,
         )
 
     def _to_yaml_dict(self) -> dict:
@@ -511,7 +511,7 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
     ls_specific_settings: dict = field(default_factory=dict)
     """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""
 
-    include_info_hover_budget_seconds: float = 5.0
+    hover_budget: float = 5.0
     """
     Time budget (seconds) for LSP hover requests when tools request include_info.
 
@@ -660,15 +660,15 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
                 instance.log_level = loaded_commented_yaml["gui_log_level"]
             del loaded_commented_yaml["gui_log_level"]
 
-        # Load and validate include_info_hover_budget_seconds
-        hover_budget_raw = get_value_or_default("include_info_hover_budget_seconds")
+        # Load and validate hover_budget
+        hover_budget_raw = get_value_or_default("hover_budget")
         try:
             hover_budget = float(hover_budget_raw)
         except (TypeError, ValueError) as e:
-            raise ValueError(f"include_info_hover_budget_seconds must be a number, got: {hover_budget_raw}") from e
+            raise ValueError(f"hover_budget must be a number, got: {hover_budget_raw}") from e
         if hover_budget < 0:
-            raise ValueError(f"include_info_hover_budget_seconds cannot be negative, got: {hover_budget}")
-        instance.include_info_hover_budget_seconds = hover_budget
+            raise ValueError(f"hover_budget cannot be negative, got: {hover_budget}")
+        instance.hover_budget = hover_budget
 
         # re-save the configuration file if any migrations were performed
         if num_migrations > 0:

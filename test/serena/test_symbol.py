@@ -256,14 +256,14 @@ def _make_mock_symbols(count: int, *, relative_path: str = "test_repo/services.p
 
 @pytest.mark.python
 class TestHoverBudget:
-    """Tests for include_info_hover_budget_seconds time budget behavior."""
+    """Tests for hover_budget time budget behavior."""
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
     def test_budget_not_exceeded_all_lookups_performed(self, language_server: SolidLanguageServer, monkeypatch: pytest.MonkeyPatch):
         """With a large budget, all hover lookups are performed."""
         # Create symbol retriever with a mock agent that has large budget
         mock_agent = MagicMock()
-        mock_agent.serena_config.include_info_hover_budget_seconds = 10.0
+        mock_agent.serena_config.hover_budget = 10.0
         mock_agent.get_active_project.return_value = None
 
         symbol_retriever = LanguageServerSymbolRetriever(language_server, agent=mock_agent)
@@ -293,7 +293,7 @@ class TestHoverBudget:
         """With a small budget, hover lookups stop and remaining symbols get None info."""
         # Create symbol retriever with a mock agent that has small budget (0.1s)
         mock_agent = MagicMock()
-        mock_agent.serena_config.include_info_hover_budget_seconds = 0.1
+        mock_agent.serena_config.hover_budget = 0.1
         mock_agent.get_active_project.return_value = None
 
         symbol_retriever = LanguageServerSymbolRetriever(language_server, agent=mock_agent)
@@ -339,7 +339,7 @@ class TestHoverBudget:
         """With budget=0, all hover lookups proceed (no early stopping)."""
         # Create symbol retriever with budget=0 (unlimited)
         mock_agent = MagicMock()
-        mock_agent.serena_config.include_info_hover_budget_seconds = 0.0
+        mock_agent.serena_config.hover_budget = 0.0
         mock_agent.get_active_project.return_value = None
 
         symbol_retriever = LanguageServerSymbolRetriever(language_server, agent=mock_agent)
@@ -368,10 +368,10 @@ class TestHoverBudget:
         """Project-level budget overrides global budget."""
         # Create symbol retriever with global budget 10.0 but project budget 0.05
         mock_project = MagicMock()
-        mock_project.project_config.include_info_hover_budget_seconds = 0.05
+        mock_project.project_config.hover_budget = 0.05
 
         mock_agent = MagicMock()
-        mock_agent.serena_config.include_info_hover_budget_seconds = 10.0
+        mock_agent.serena_config.hover_budget = 10.0
         mock_agent.get_active_project.return_value = mock_project
 
         symbol_retriever = LanguageServerSymbolRetriever(language_server, agent=mock_agent)
@@ -410,10 +410,10 @@ class TestHoverBudget:
         """When project budget is None, global budget is used."""
         # Create symbol retriever with project budget=None (inherit global)
         mock_project = MagicMock()
-        mock_project.project_config.include_info_hover_budget_seconds = None
+        mock_project.project_config.hover_budget = None
 
         mock_agent = MagicMock()
-        mock_agent.serena_config.include_info_hover_budget_seconds = 10.0
+        mock_agent.serena_config.hover_budget = 10.0
         mock_agent.get_active_project.return_value = mock_project
 
         symbol_retriever = LanguageServerSymbolRetriever(language_server, agent=mock_agent)
