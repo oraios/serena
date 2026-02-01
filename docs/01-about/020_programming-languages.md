@@ -31,7 +31,8 @@ Some languages require additional installations or setup steps, as noted.
 * **Bash**
 * **C#**
 * **C/C++**  
-  (you may experience issues with finding references, we are working on it)
+  Default: clangd. Optional alternate: ccls (experimental, opt-in). 
+  For best results, provide a `compile_commands.json` at the repository root.
 * **Clojure**
 * **Dart**
 * **Elixir**  
