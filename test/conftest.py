@@ -7,14 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
-try:
-    from sensai.util.logging import configure
-except Exception:
-    # Fallback if 'sensai' is not installed: basic logging configuration
-    def configure(level: int = logging.INFO) -> None:
-        logging.basicConfig(level=level)
-
+from sensai.util.logging import configure
 
 from serena.config.serena_config import SerenaPaths
 from serena.constants import SERENA_MANAGED_DIR_NAME
