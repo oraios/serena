@@ -1,14 +1,73 @@
 """
-Provides C/C++ specific instantiation of the LanguageServer class. Contains various configurations and settings specific to C/C++.
+Provides C/C++ specific instantiation of the LanguageServer class using clangd.
+
+Clangd Language Server Setup and Limitations:
+----------------------------------------------
+
+1. compile_commands.json Requirements:
+   clangd requires a properly configured compile_commands.json in your project root
+   for correct parsing and cross-file reference finding. The file must:
+
+   - Use "clang++" as the compiler command (clangd will emulate this if not installed)
+   - Include proper C++ standard flags (e.g., -std=c++17)
+   - Include all necessary include paths (-I flags)
+
+   Directory paths in compile_commands.json can be relative (e.g., ".") or absolute.
+   Serena automatically converts relative directory paths to absolute paths and
+   creates a transformed compilation database at .serena/compile_commands.json.
+   The original compile_commands.json is never modified.
+
+   The serena compilation database persists across runs and is reused, avoiding
+   repeated transformations while keeping the user's files untouched.
+
+   The output directory can be customized via ls_specific_settings:
+
+   # .serena/project.yml
+   language_servers:
+     cpp:
+       compile_commands_dir: custom/rel/path (defaults to .serena)
+
+   Example compile_commands.json entry (with relative directory):
+   {
+     "directory": ".",
+     "command": "clang++ -std=c++17 -I /path/to/includes -c file.cpp",
+     "file": "file.cpp"
+   }
+
+   Generating compile_commands.json:
+   - CMake: set(CMAKE_EXPORT_COMPILE_COMMANDS ON) in CMakeLists.txt
+   - Non-CMake: use 'bear -- your-build-command' or 'intercept-build your-build-command'
+
+2. Cross-File Reference Finding:
+   clangd's background indexer will find cross-file references for all files listed
+   in compile_commands.json. For reliable cross-file reference finding:
+
+   - Ensure all source files are present in compile_commands.json
+   - Use clang++ as the compiler command (not g++)
+
+3. Files Created After Server Initialization:
+   Files created AFTER the language server starts are NOT automatically indexed.
+   Cross-file references to/from these files will NOT work until:
+   - The file is added to compile_commands.json
+   - The language server is restarted
+
+   This is a fundamental limitation of both clangd and ccls indexing architecture.
+
+4. Choosing Between clangd and ccls:
+   - clangd: Automatically downloaded, easier setup, actively maintained by LLVM
+   - ccls: May have better performance for some projects, but requires manual installation
+
+   See docs/03-special-guides/cpp_setup.md for detailed comparison and setup instructions.
 """
 
+import json
 import logging
 import os
 import pathlib
 import threading
 from typing import Any, cast
 
-from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
+from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, ProcessLaunchInfo, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
@@ -34,6 +93,90 @@ class ClangdLanguageServer(SolidLanguageServer):
         self.service_ready_event = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
         self.resolve_main_method_available = threading.Event()
+
+    def _prepare_compile_commands(self) -> str | None:
+        """
+        Prepare clangd compilation database with absolute directory paths.
+
+        Clangd requires absolute directory paths in compile_commands.json for correct
+        cross-file reference finding. This method reads the compile_commands.json,
+        converts relative directory paths to absolute paths, and writes a transformed
+        compilation database to the serena managed directory.
+
+        The transformed file is persisted in .serena/serena_compile_commands.json
+        (or a configurable directory via ls_specific_settings) and is not deleted
+        on cleanup. This allows clangd to use the absolute-path version without
+        modifying the user's original compile_commands.json.
+
+        Returns the path to the serena directory containing the transformed database,
+        or None if no transformation was needed.
+        """
+        compile_db_path = os.path.join(self.repository_root_path, "compile_commands.json")
+
+        if not os.path.exists(compile_db_path):
+            # No compile_commands.json, nothing to do
+            return None
+
+        try:
+            with open(compile_db_path, encoding="utf-8") as f:
+                compile_commands = json.load(f)
+
+            if not compile_commands:
+                return None
+
+            # Check if any entries have relative directory paths
+            has_relative = False
+            for entry in compile_commands:
+                directory = entry.get("directory", "")
+                if directory and not os.path.isabs(directory):
+                    has_relative = True
+                    # Convert to absolute path
+                    entry["directory"] = os.path.abspath(os.path.join(self.repository_root_path, directory))
+
+            if not has_relative:
+                # No relative paths found, no need to create transformed database
+                return None
+
+            # Get the target directory from ls_specific_settings, default to .serena
+            cpp_settings: dict[str, Any] = self._custom_settings or {}
+            compile_commands_rel_dir = cpp_settings.get("compile_commands_dir", ".serena")
+            compile_commands_dir = os.path.join(self.repository_root_path, compile_commands_rel_dir)
+            os.makedirs(compile_commands_dir, exist_ok=True)
+
+            # Write the transformed compile_commands.json
+            # clangd looks for compile_commands.json in the --compile-commands-dir
+            compile_commands_path = os.path.join(compile_commands_dir, "compile_commands.json")
+            with open(compile_commands_path, "w", encoding="utf-8") as f:
+                json.dump(compile_commands, f, indent=2)
+
+            # Track the directory for --compile-commands-dir
+
+            log.info(f"Created serena compilation database with absolute paths at {compile_commands_path}")
+            return compile_commands_dir
+
+        except (OSError, json.JSONDecodeError) as e:
+            log.warning(f"Failed to prepare compile_commands.json: {e}")
+            return None
+
+    def _create_process_launch_info(self) -> ProcessLaunchInfo:
+        """
+        Override to add --compile-commands-dir argument if we created a serena compilation database.
+        """
+        # First, ensure the serena compile commands database is prepared
+        compile_commands_dir = self._prepare_compile_commands()
+
+        # Get the default launch info from parent
+        launch_info = super()._create_process_launch_info()
+
+        # If we created a serena compilation database, add --compile-commands-dir to the command
+        if compile_commands_dir:
+            # Insert --compile-commands-dir after the executable path
+            cmd = launch_info.cmd
+            if isinstance(cmd, str):
+                cmd = [cmd]
+            launch_info.cmd = [cmd[0], f"--compile-commands-dir={compile_commands_dir}"] + cmd[1:]
+
+        return launch_info
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
@@ -116,8 +259,10 @@ class ClangdLanguageServer(SolidLanguageServer):
                 os.chmod(clangd_executable_path, 0o755)
             return clangd_executable_path
 
-        def _create_launch_command(self, core_path: str) -> list[str] | str:
-            return [core_path]
+        def _create_launch_command(self, core_path: str) -> list[str]:
+            # --background-index enables clangd to index all files in the project,
+            # which is required for finding cross-file references
+            return [core_path, "--background-index"]
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
@@ -165,6 +310,7 @@ class ClangdLanguageServer(SolidLanguageServer):
             await lsp.request_references(...)
             # Shutdown the LanguageServer on exit from scope
         # LanguageServer has been shutdown
+        ```
         """
 
         def register_capability_handler(params: Any) -> None:
@@ -220,6 +366,12 @@ class ClangdLanguageServer(SolidLanguageServer):
         self.server.notify.initialized({})
 
         self.completions_available.set()
-        # set ready flag
+        # set ready flag, clangd sends no meaningful notification when ready
         self.server_ready.set()
         self.server_ready.wait()
+
+    def _shutdown(self, timeout: float = 5.0) -> None:
+        """Shutdown the clangd language server."""
+        # The serena compilation database persists in .serena/ for reuse
+        # Call parent shutdown
+        super()._shutdown(timeout=timeout)
