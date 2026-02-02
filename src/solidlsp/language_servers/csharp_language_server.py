@@ -334,11 +334,23 @@ class CSharpLanguageServer(SolidLanguageServer):
             """
             runtime_dependency_overrides = cast(list[dict[str, Any]], self._custom_settings.get("runtime_dependencies", []))
 
+            # Filter out deprecated DotNetRuntime overrides and warn users
+            filtered_overrides = []
+            for dep_override in runtime_dependency_overrides:
+                if dep_override.get("id") == "DotNetRuntime":
+                    log.warning(
+                        "The 'DotNetRuntime' runtime_dependencies override is no longer supported. "
+                        ".NET is now installed automatically via Microsoft's official install scripts. "
+                        "Please remove this override from your configuration."
+                    )
+                else:
+                    filtered_overrides.append(dep_override)
+
             log.debug("Resolving runtime dependencies")
 
             runtime_dependencies = RuntimeDependencyCollection(
                 _RUNTIME_DEPENDENCIES,
-                overrides=runtime_dependency_overrides,
+                overrides=filtered_overrides,
             )
 
             log.debug(
