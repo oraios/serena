@@ -1128,9 +1128,27 @@ class SolidLanguageServer(ABC):
             where the parent attribute will be the file symbol which in turn may have a package symbol as parent.
             If you need a symbol tree that contains file symbols as well, you should use `request_full_symbol_tree` instead.
         """
+        # Check cache before opening file (to avoid unnecessary didOpen/didClose)
+        cache_key = relative_file_path
+        if file_buffer is None:
+            file_hash_and_result = self._document_symbols_cache.get(cache_key)
+            if file_hash_and_result is not None:
+                file_hash, document_symbols = file_hash_and_result
+                # Read file and compute hash without sending didOpen
+                absolute_file_path = str(PurePath(self.repository_root_path, relative_file_path))
+                try:
+                    contents = FileUtils.read_file(absolute_file_path, self._encoding)
+                    current_hash = hashlib.md5(contents.encode(self._encoding)).hexdigest()
+                    if file_hash == current_hash:
+                        log.debug("Returning cached document symbols for %s (early cache hit)", relative_file_path)
+                        return document_symbols
+                    else:
+                        log.debug("Cached document symbol content for %s has changed", relative_file_path)
+                except Exception:
+                    log.debug("Failed to read file for early cache check: %s", relative_file_path)
+
         with self._open_file_context(relative_file_path, file_buffer) as file_data:
-            # check if the desired result is cached
-            cache_key = relative_file_path
+            # check if the desired result is cached (for file_buffer case or cache miss above)
             file_hash_and_result = self._document_symbols_cache.get(cache_key)
             if file_hash_and_result is not None:
                 file_hash, document_symbols = file_hash_and_result
@@ -1321,28 +1339,51 @@ class SolidLanguageServer(ABC):
                         child["parent"] = package_symbol
 
                 elif os.path.isfile(contained_dir_or_file_abs_path):
-                    with self._open_file_context(contained_dir_or_file_rel_path) as file_data:
-                        document_symbols = self.request_document_symbols(contained_dir_or_file_rel_path, file_data)
-                        file_root_nodes = document_symbols.root_symbols
+                    # Check cache before opening file (to avoid unnecessary didOpen/didClose)
+                    cache_key = contained_dir_or_file_rel_path
+                    file_hash_and_result = self._document_symbols_cache.get(cache_key)
+                    cache_hit = False
+                    if file_hash_and_result is not None:
+                        file_hash, cached_document_symbols = file_hash_and_result
+                        try:
+                            contents = FileUtils.read_file(contained_dir_or_file_abs_path, self._encoding)
+                            current_hash = hashlib.md5(contents.encode(self._encoding)).hexdigest()
+                            if file_hash == current_hash:
+                                # Cache hit - use cached symbols without opening file
+                                log.debug(
+                                    "Using cached document symbols for %s in full symbol tree (early cache hit)",
+                                    contained_dir_or_file_rel_path,
+                                )
+                                file_root_nodes = cached_document_symbols.root_symbols
+                                file_range = self._get_range_from_file_content(contents)
+                                cache_hit = True
+                        except Exception:
+                            log.debug("Failed to read file for early cache check: %s", contained_dir_or_file_rel_path)
 
-                        # Create file symbol, link with children
-                        file_range = self._get_range_from_file_content(file_data.contents)
-                        file_symbol = ls_types.UnifiedSymbolInformation(  # type: ignore
-                            name=os.path.splitext(contained_dir_or_file_name)[0],
-                            kind=ls_types.SymbolKind.File,
+                    if not cache_hit:
+                        # Cache miss or error - use normal processing
+                        with self._open_file_context(contained_dir_or_file_rel_path) as file_data:
+                            document_symbols = self.request_document_symbols(contained_dir_or_file_rel_path, file_data)
+                            file_root_nodes = document_symbols.root_symbols
+                            file_range = self._get_range_from_file_content(file_data.contents)
+
+                    # Create file symbol, link with children
+                    file_symbol = ls_types.UnifiedSymbolInformation(  # type: ignore
+                        name=os.path.splitext(contained_dir_or_file_name)[0],
+                        kind=ls_types.SymbolKind.File,
+                        range=file_range,
+                        selectionRange=file_range,
+                        location=ls_types.Location(
+                            uri=str(pathlib.Path(contained_dir_or_file_abs_path).as_uri()),
                             range=file_range,
-                            selectionRange=file_range,
-                            location=ls_types.Location(
-                                uri=str(pathlib.Path(contained_dir_or_file_abs_path).as_uri()),
-                                range=file_range,
-                                absolutePath=str(contained_dir_or_file_abs_path),
-                                relativePath=str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path)),
-                            ),
-                            children=file_root_nodes,
-                            parent=package_symbol,
-                        )
-                        for child in file_root_nodes:
-                            child["parent"] = file_symbol
+                            absolutePath=str(contained_dir_or_file_abs_path),
+                            relativePath=str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path)),
+                        ),
+                        children=file_root_nodes,
+                        parent=package_symbol,
+                    )
+                    for child in file_root_nodes:
+                        child["parent"] = file_symbol
 
                     # Link file symbol with package
                     package_symbol["children"].append(file_symbol)
