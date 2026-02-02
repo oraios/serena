@@ -18,7 +18,7 @@ from overrides import override
 from solidlsp.ls import DocumentSymbols, LanguageServerDependencyProvider, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
-from solidlsp.ls_types import UnifiedSymbolInformation
+from solidlsp.ls_types import Hover, UnifiedSymbolInformation
 from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams, InitializeResult
 from solidlsp.settings import SolidLSPSettings
@@ -209,6 +209,31 @@ class CSharpLanguageServer(SolidLanguageServer):
             self._normalize_symbol_name(symbol, relative_file_path)
 
         return symbols
+
+    @override
+    def request_hover(self, relative_file_path: str, line: int, column: int) -> Hover | None:
+        """
+        Override to inject original Roslyn symbol names (with type annotations) into hover responses.
+
+        When hovering over a symbol whose name was normalized, we prepend the original
+        full name (e.g., 'Add(int, int) : int') to the hover content.
+        """
+        hover = super().request_hover(relative_file_path, line, column)
+
+        if hover is None:
+            return None
+
+        # Check if we have an original name for this position
+        original_name = self._original_symbol_names.get((relative_file_path, line, column))
+
+        if original_name and "contents" in hover:
+            contents = hover["contents"]
+            if isinstance(contents, dict) and "value" in contents:
+                # Prepend the original full name with type information to the hover content
+                prefix = f"**{original_name}**\n\n---\n\n"
+                contents["value"] = prefix + contents["value"]
+
+        return hover
 
     def _normalize_symbol_name(self, symbol: UnifiedSymbolInformation, relative_file_path: str) -> None:
         """
