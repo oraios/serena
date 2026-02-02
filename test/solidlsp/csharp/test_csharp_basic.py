@@ -56,8 +56,8 @@ class TestCSharpLanguageServer:
         # Handle nested symbol structure
         symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
         for sym in symbol_list:
-            # New Roslyn format includes type annotations (e.g., "Add(int, int) : int")
-            if sym.get("name", "").startswith("Add"):
+            # Symbol names are normalized to base form (e.g., "Add" not "Add(int, int) : int")
+            if sym.get("name") == "Add":
                 add_symbol = sym
                 break
         assert add_symbol is not None, "Could not find 'Add' method symbol in Program.cs"
@@ -83,13 +83,13 @@ class TestCSharpLanguageServer:
         # Check that we have the Person class
         assert any(s.get("name") == "Person" and s.get("kind") == 5 for s in symbols)
 
-        # Check for properties and methods (new Roslyn format includes type annotations)
+        # Check for properties and methods (names are normalized to base form)
         symbol_names = [s.get("name") for s in symbols]
-        assert any(name.startswith("Name") for name in symbol_names), "Name property not found"
-        assert any(name.startswith("Age") for name in symbol_names), "Age property not found"
-        assert any(name.startswith("Email") for name in symbol_names), "Email property not found"
-        assert any(name.startswith("ToString") for name in symbol_names), "ToString method not found"
-        assert any(name.startswith("IsAdult") for name in symbol_names), "IsAdult method not found"
+        assert "Name" in symbol_names, "Name property not found"
+        assert "Age" in symbol_names, "Age property not found"
+        assert "Email" in symbol_names, "Email property not found"
+        assert "ToString" in symbol_names, "ToString method not found"
+        assert "IsAdult" in symbol_names, "IsAdult method not found"
 
     @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
     def test_find_referencing_symbols_across_files(self, language_server: SolidLanguageServer) -> None:
@@ -103,8 +103,8 @@ class TestCSharpLanguageServer:
 
         subtract_symbol = None
         for sym in symbol_list:
-            # New Roslyn format includes type annotations (e.g., "Subtract(int, int) : int")
-            if sym.get("name", "").startswith("Subtract"):
+            # Symbol names are normalized to base form (e.g., "Subtract" not "Subtract(int, int) : int")
+            if sym.get("name") == "Subtract":
                 subtract_symbol = sym
                 break
 
