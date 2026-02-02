@@ -15,9 +15,10 @@ from typing import Any, cast
 
 from overrides import override
 
-from solidlsp.ls import LanguageServerDependencyProvider, SolidLanguageServer
+from solidlsp.ls import DocumentSymbols, LanguageServerDependencyProvider, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
+from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams, InitializeResult
 from solidlsp.settings import SolidLSPSettings
@@ -171,6 +172,9 @@ class CSharpLanguageServer(SolidLanguageServer):
         Use LanguageServer.create() instead.
         """
         super().__init__(config, repository_root_path, None, "csharp", solidlsp_settings)
+        # Cache for original Roslyn symbol names with type annotations
+        # Key: (relative_file_path, line, character) -> Value: original name
+        self._original_symbol_names: dict[tuple[str, int, int], str] = {}
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir, self._solidlsp_settings, self.repository_root_path)
@@ -178,6 +182,96 @@ class CSharpLanguageServer(SolidLanguageServer):
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["bin", "obj", "packages", ".vs"]
+
+    @override
+    def request_document_symbols(self, relative_file_path: str, file_buffer: Any = None) -> DocumentSymbols:
+        """
+        Override to normalize Roslyn symbol names and cache originals.
+
+        Roslyn 5.5.0+ returns symbol names with type annotations:
+        - Properties: "Name : string"
+        - Methods: "Add(int, int) : int"
+
+        This method:
+        1. Normalizes names to base form ("Name", "Add")
+        2. Caches original names for rich information display
+        3. Populates LSP spec's 'detail' field with type/signature info
+        """
+        symbols = super().request_document_symbols(relative_file_path, file_buffer)
+
+        # Normalize all symbols recursively
+        # DocumentSymbols.get_all_symbols_and_roots() returns tuple of (all_symbols, root_symbols)
+        all_symbols_tuple = symbols.get_all_symbols_and_roots()
+        all_symbols, _ = all_symbols_tuple
+
+        # Process each symbol (which is a UnifiedSymbolInformation dict)
+        for symbol in all_symbols:
+            self._normalize_symbol_name(symbol, relative_file_path)
+
+        return symbols
+
+    def _normalize_symbol_name(self, symbol: UnifiedSymbolInformation, relative_file_path: str) -> None:
+        """
+        Normalize a single symbol's name and cache the original.
+        Processes children recursively.
+        """
+        original_name = symbol.get("name", "")
+
+        # Extract base name and type/signature info
+        normalized_name, type_info = self._extract_base_name_and_type(original_name)
+
+        # Store original name if it was normalized
+        if original_name != normalized_name:
+            sel_range = symbol.get("selectionRange")
+            if sel_range:
+                start = sel_range.get("start")
+                if start and "line" in start and "character" in start:
+                    line = start["line"]
+                    char = start["character"]
+                    cache_key = (relative_file_path, line, char)
+                    self._original_symbol_names[cache_key] = original_name
+
+            # Populate LSP spec's 'detail' field with type/signature information
+            if type_info and "detail" not in symbol:
+                symbol["detail"] = type_info
+
+        # Update the symbol name
+        symbol["name"] = normalized_name
+
+        # Process children recursively
+        children = symbol.get("children", [])
+        for child in children:
+            self._normalize_symbol_name(child, relative_file_path)
+
+    @staticmethod
+    def _extract_base_name_and_type(roslyn_name: str) -> tuple[str, str]:
+        """
+        Extract base name and type/signature information from Roslyn symbol names.
+
+        Examples:
+            "Name : string" -> ("Name", ": string")
+            "Add(int, int) : int" -> ("Add", "(int, int) : int")
+            "ToString()" -> ("ToString", "()")
+            "SimpleMethod" -> ("SimpleMethod", "")
+
+        Returns:
+            Tuple of (base_name, type_info)
+
+        """
+        # Check for property pattern: "Name : Type"
+        if " : " in roslyn_name and "(" not in roslyn_name:
+            base_name, type_part = roslyn_name.split(" : ", 1)
+            return base_name.strip(), f": {type_part.strip()}"
+
+        # Check for method pattern: "MethodName(params) : ReturnType"
+        if "(" in roslyn_name:
+            paren_idx = roslyn_name.index("(")
+            base_name = roslyn_name[:paren_idx].strip()
+            signature = roslyn_name[paren_idx:].strip()
+            return base_name, signature
+
+        # No type annotation
+        return roslyn_name, ""
 
     class DependencyProvider(LanguageServerDependencyProvider):
         def __init__(
