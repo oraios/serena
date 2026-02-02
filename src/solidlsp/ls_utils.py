@@ -416,13 +416,9 @@ class SymbolUtils:
     def symbol_tree_contains_name(roots: list[UnifiedSymbolInformation], name: str) -> bool:
         """
         Check if any symbol in the tree has a name matching the given name.
-        Supports both old format (exact match) and new Roslyn format with type annotations
-        (e.g., "Add(int, int) : int" matches "Add").
         """
         for symbol in roots:
-            symbol_name = symbol["name"]
-            # Check for exact match (old format) or prefix match (new format with type annotations)
-            if symbol_name == name or symbol_name.startswith((name + "(", name + " :")):
+            if symbol["name"] == name:
                 return True
             if SymbolUtils.symbol_tree_contains_name(symbol["children"], name):
                 return True
