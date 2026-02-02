@@ -212,6 +212,50 @@ This is supported by all language servers deriving their dependency provider fro
 Currently, this includes the following languages: `clojure`, `cpp`, `php`, `python`, `rust`, `typescript`. 
 We will add support for more languages over time.
 
+#### C# (Roslyn Language Server)
+
+Serena uses [Microsoft's Roslyn Language Server](https://github.com/dotnet/roslyn) for C# support.
+
+**Runtime Requirements:**
+
+- .NET 10 or higher is required. If not found in PATH, Serena automatically installs it using Microsoft's official install scripts.
+- The Roslyn Language Server is automatically downloaded from NuGet.org.
+
+**Supported Platforms:**
+
+Automatic download is supported for: Windows (x64, ARM64), macOS (x64, ARM64), Linux (x64, ARM64).
+
+**Configuration:**
+
+The `runtime_dependencies` setting allows you to override the download URLs for the Roslyn Language Server. This is useful if you need to use a private package mirror or a specific version.
+
+Example configuration to override the language server download URL:
+
+```yaml
+ls_specific_settings:
+  csharp:
+    runtime_dependencies:
+      - id: "CSharpLanguageServer"
+        platform_id: "linux-x64"  # or win-x64, win-arm64, osx-x64, osx-arm64, linux-arm64
+        url: "https://your-mirror.example.com/roslyn-language-server.linux-x64.5.5.0-2.26078.4.nupkg"
+        package_version: "5.5.0-2.26078.4"
+```
+
+Available fields for `runtime_dependencies` entries:
+
+| Field             | Description                                                                 |
+| ----------------- | --------------------------------------------------------------------------- |
+| `id`              | Dependency identifier (use `CSharpLanguageServer`)                          |
+| `platform_id`     | Target platform: `win-x64`, `win-arm64`, `osx-x64`, `osx-arm64`, `linux-x64`, `linux-arm64` |
+| `url`             | Download URL for the NuGet package                                          |
+| `package_version` | Package version string                                                      |
+| `extract_path`    | Path within the package to extract (default: `tools/net10.0/<platform>`)    |
+
+Notes:
+- Only specify the platforms you want to override; others will use the defaults.
+- The language server package is a `.nupkg` file (ZIP format) downloaded from NuGet.org by default.
+- If you have .NET 10+ already installed, Serena will use your system installation.
+
 #### Go (`gopls`)
 
 Serena forwards `ls_specific_settings.go.gopls_settings` to `gopls` as LSP `initializationOptions` when the Go language server is started.
