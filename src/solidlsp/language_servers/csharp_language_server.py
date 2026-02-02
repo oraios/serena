@@ -1,8 +1,7 @@
 """
-CSharp Language Server using Microsoft.CodeAnalysis.LanguageServer (Official Roslyn-based LSP server)
+CSharp Language Server using Roslyn Language Server (Official Roslyn-based LSP server from NuGet.org)
 """
 
-import json
 import logging
 import os
 import platform
@@ -33,63 +32,69 @@ log = logging.getLogger(__name__)
 _RUNTIME_DEPENDENCIES = [
     RuntimeDependency(
         id="CSharpLanguageServer",
-        description="Microsoft.CodeAnalysis.LanguageServer for Windows (x64)",
-        package_name="Microsoft.CodeAnalysis.LanguageServer.win-x64",
-        package_version="5.0.0-1.25329.6",
+        description="Roslyn Language Server for Windows (x64)",
+        package_name="roslyn-language-server.win-x64",
+        package_version="5.5.0-2.26078.4",
+        url="https://www.nuget.org/api/v2/package/roslyn-language-server.win-x64/5.5.0-2.26078.4",
         platform_id="win-x64",
         archive_type="nupkg",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
-        extract_path="content/LanguageServer/win-x64",
+        extract_path="tools/net10.0/win-x64",
     ),
     RuntimeDependency(
         id="CSharpLanguageServer",
-        description="Microsoft.CodeAnalysis.LanguageServer for Windows (ARM64)",
-        package_name="Microsoft.CodeAnalysis.LanguageServer.win-arm64",
-        package_version="5.0.0-1.25329.6",
+        description="Roslyn Language Server for Windows (ARM64)",
+        package_name="roslyn-language-server.win-arm64",
+        package_version="5.5.0-2.26078.4",
+        url="https://www.nuget.org/api/v2/package/roslyn-language-server.win-arm64/5.5.0-2.26078.4",
         platform_id="win-arm64",
         archive_type="nupkg",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
-        extract_path="content/LanguageServer/win-arm64",
+        extract_path="tools/net10.0/win-arm64",
     ),
     RuntimeDependency(
         id="CSharpLanguageServer",
-        description="Microsoft.CodeAnalysis.LanguageServer for macOS (x64)",
-        package_name="Microsoft.CodeAnalysis.LanguageServer.osx-x64",
-        package_version="5.0.0-1.25329.6",
+        description="Roslyn Language Server for macOS (x64)",
+        package_name="roslyn-language-server.osx-x64",
+        package_version="5.5.0-2.26078.4",
+        url="https://www.nuget.org/api/v2/package/roslyn-language-server.osx-x64/5.5.0-2.26078.4",
         platform_id="osx-x64",
         archive_type="nupkg",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
-        extract_path="content/LanguageServer/osx-x64",
+        extract_path="tools/net10.0/osx-x64",
     ),
     RuntimeDependency(
         id="CSharpLanguageServer",
-        description="Microsoft.CodeAnalysis.LanguageServer for macOS (ARM64)",
-        package_name="Microsoft.CodeAnalysis.LanguageServer.osx-arm64",
-        package_version="5.0.0-1.25329.6",
+        description="Roslyn Language Server for macOS (ARM64)",
+        package_name="roslyn-language-server.osx-arm64",
+        package_version="5.5.0-2.26078.4",
+        url="https://www.nuget.org/api/v2/package/roslyn-language-server.osx-arm64/5.5.0-2.26078.4",
         platform_id="osx-arm64",
         archive_type="nupkg",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
-        extract_path="content/LanguageServer/osx-arm64",
+        extract_path="tools/net10.0/osx-arm64",
     ),
     RuntimeDependency(
         id="CSharpLanguageServer",
-        description="Microsoft.CodeAnalysis.LanguageServer for Linux (x64)",
-        package_name="Microsoft.CodeAnalysis.LanguageServer.linux-x64",
-        package_version="5.0.0-1.25329.6",
+        description="Roslyn Language Server for Linux (x64)",
+        package_name="roslyn-language-server.linux-x64",
+        package_version="5.5.0-2.26078.4",
+        url="https://www.nuget.org/api/v2/package/roslyn-language-server.linux-x64/5.5.0-2.26078.4",
         platform_id="linux-x64",
         archive_type="nupkg",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
-        extract_path="content/LanguageServer/linux-x64",
+        extract_path="tools/net10.0/linux-x64",
     ),
     RuntimeDependency(
         id="CSharpLanguageServer",
-        description="Microsoft.CodeAnalysis.LanguageServer for Linux (ARM64)",
-        package_name="Microsoft.CodeAnalysis.LanguageServer.linux-arm64",
-        package_version="5.0.0-1.25329.6",
+        description="Roslyn Language Server for Linux (ARM64)",
+        package_name="roslyn-language-server.linux-arm64",
+        package_version="5.5.0-2.26078.4",
+        url="https://www.nuget.org/api/v2/package/roslyn-language-server.linux-arm64/5.5.0-2.26078.4",
         platform_id="linux-arm64",
         archive_type="nupkg",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
-        extract_path="content/LanguageServer/linux-arm64",
+        extract_path="tools/net10.0/linux-arm64",
     ),
     RuntimeDependency(
         id="DotNetRuntime",
@@ -309,26 +314,24 @@ class CSharpLanguageServer(SolidLanguageServer):
             server_dll = server_dir / lang_server_dep.binary_name
 
             if server_dll.exists():
-                log.info(f"Using cached Microsoft.CodeAnalysis.LanguageServer from {server_dll}")
+                log.info(f"Using cached Roslyn Language Server from {server_dll}")
                 return str(server_dll)
 
             # Download and install the language server
-            log.info(f"Downloading {package_name} version {package_version}...")
-            assert package_version is not None
-            assert package_name is not None
-            package_path = self._download_nuget_package_direct(package_name, package_version)
+            log.info(f"Downloading {package_name} version {package_version} from NuGet.org...")
+            package_path = self._download_nuget_package(lang_server_dep)
 
             # Extract and install
             self._extract_language_server(lang_server_dep, package_path, server_dir)
 
             if not server_dll.exists():
-                raise SolidLSPException("Microsoft.CodeAnalysis.LanguageServer.dll not found after extraction")
+                raise SolidLSPException("Roslyn Language Server DLL not found after extraction")
 
             # Make executable on Unix systems
             if platform.system().lower() != "windows":
                 server_dll.chmod(0o755)
 
-            log.info(f"Successfully installed Microsoft.CodeAnalysis.LanguageServer to {server_dll}")
+            log.info(f"Successfully installed Roslyn Language Server to {server_dll}")
             return str(server_dll)
 
         @staticmethod
@@ -354,43 +357,28 @@ class CSharpLanguageServer(SolidLanguageServer):
             server_dir.mkdir(parents=True, exist_ok=True)
             shutil.copytree(source_dir, server_dir, dirs_exist_ok=True)
 
-        def _download_nuget_package_direct(self, package_name: str, package_version: str) -> Path:
+        def _download_nuget_package(self, dependency: RuntimeDependency) -> Path:
             """
-            Download a NuGet package directly from the Azure NuGet feed.
+            Download a NuGet package from NuGet.org and extract it.
             Returns the path to the extracted package directory.
             """
-            azure_feed_url = "https://pkgs.dev.azure.com/azure-public/vside/_packaging/vs-impl/nuget/v3/index.json"
+            package_name = dependency.package_name
+            package_version = dependency.package_version
+            url = dependency.url
+
+            if url is None:
+                raise SolidLSPException(f"No URL specified for package {package_name} version {package_version}")
 
             # Create temporary directory for package download
             temp_dir = Path(self._ls_resources_dir) / "temp_downloads"
             temp_dir.mkdir(parents=True, exist_ok=True)
 
             try:
-                # First, get the service index from the Azure feed
-                log.debug("Fetching NuGet service index from Azure feed...")
-                with urllib.request.urlopen(azure_feed_url) as response:
-                    service_index = json.loads(response.read().decode())
-
-                # Find the package base address (for downloading packages)
-                package_base_address = None
-                for resource in service_index.get("resources", []):
-                    if resource.get("@type") == "PackageBaseAddress/3.0.0":
-                        package_base_address = resource.get("@id")
-                        break
-
-                if not package_base_address:
-                    raise SolidLSPException("Could not find package base address in Azure NuGet feed")
-
-                # Construct the download URL for the specific package
-                package_id_lower = package_name.lower()
-                package_version_lower = package_version.lower()
-                package_url = f"{package_base_address.rstrip('/')}/{package_id_lower}/{package_version_lower}/{package_id_lower}.{package_version_lower}.nupkg"
-
-                log.debug(f"Downloading package from: {package_url}")
+                log.debug(f"Downloading package from: {url}")
 
                 # Download the .nupkg file
                 nupkg_file = temp_dir / f"{package_name}.{package_version}.nupkg"
-                urllib.request.urlretrieve(package_url, nupkg_file)
+                urllib.request.urlretrieve(url, nupkg_file)
 
                 # Extract the .nupkg file (it's just a zip file)
                 package_extract_dir = temp_dir / f"{package_name}.{package_version}"
@@ -403,13 +391,11 @@ class CSharpLanguageServer(SolidLanguageServer):
                 # Clean up the nupkg file
                 nupkg_file.unlink()
 
-                log.info(f"Successfully downloaded and extracted {package_name} version {package_version}")
+                log.info(f"Successfully downloaded and extracted {package_name} version {package_version} from NuGet.org")
                 return package_extract_dir
 
             except Exception as e:
-                raise SolidLSPException(
-                    f"Failed to download package {package_name} version {package_version} from Azure NuGet feed: {e}"
-                ) from e
+                raise SolidLSPException(f"Failed to download package {package_name} version {package_version} from NuGet.org: {e}") from e
 
         def _ensure_dotnet_runtime_from_config(self, dotnet_runtime_dep: RuntimeDependency) -> str:
             """
