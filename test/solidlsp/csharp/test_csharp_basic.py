@@ -56,7 +56,8 @@ class TestCSharpLanguageServer:
         # Handle nested symbol structure
         symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
         for sym in symbol_list:
-            if sym.get("name") == "Add":
+            # New Roslyn format includes type annotations (e.g., "Add(int, int) : int")
+            if sym.get("name", "").startswith("Add"):
                 add_symbol = sym
                 break
         assert add_symbol is not None, "Could not find 'Add' method symbol in Program.cs"
@@ -82,13 +83,13 @@ class TestCSharpLanguageServer:
         # Check that we have the Person class
         assert any(s.get("name") == "Person" and s.get("kind") == 5 for s in symbols)
 
-        # Check for properties and methods
+        # Check for properties and methods (new Roslyn format includes type annotations)
         symbol_names = [s.get("name") for s in symbols]
-        assert "Name" in symbol_names
-        assert "Age" in symbol_names
-        assert "Email" in symbol_names
-        assert "ToString" in symbol_names
-        assert "IsAdult" in symbol_names
+        assert any(name.startswith("Name") for name in symbol_names), "Name property not found"
+        assert any(name.startswith("Age") for name in symbol_names), "Age property not found"
+        assert any(name.startswith("Email") for name in symbol_names), "Email property not found"
+        assert any(name.startswith("ToString") for name in symbol_names), "ToString method not found"
+        assert any(name.startswith("IsAdult") for name in symbol_names), "IsAdult method not found"
 
     @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
     def test_find_referencing_symbols_across_files(self, language_server: SolidLanguageServer) -> None:
@@ -102,7 +103,8 @@ class TestCSharpLanguageServer:
 
         subtract_symbol = None
         for sym in symbol_list:
-            if sym.get("name") == "Subtract":
+            # New Roslyn format includes type annotations (e.g., "Subtract(int, int) : int")
+            if sym.get("name", "").startswith("Subtract"):
                 subtract_symbol = sym
                 break
 
@@ -112,16 +114,17 @@ class TestCSharpLanguageServer:
         sel_start = subtract_symbol["selectionRange"]["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
 
-        # Should find references in both Program.cs and Models/Person.cs
+        # Should find references where the method is called
         ref_files = cast(list[str], [ref.get("relativePath", "") for ref in refs])
         print(f"Found references: {refs}")
         print(f"Reference files: {ref_files}")
 
-        # Check that we have references from both files
-        assert any("Program.cs" in ref_file for ref_file in ref_files), "Should find reference in Program.cs"
+        # Check that we have reference in Models/Person.cs where Calculator.Subtract is called
+        # Note: New Roslyn version doesn't include the definition itself as a reference (more correct behavior)
         assert any(
             os.path.join("Models", "Person.cs") in ref_file for ref_file in ref_files
         ), "Should find reference in Models/Person.cs where Calculator.Subtract is called"
+        assert len(refs) > 0, "Should find at least one reference"
 
         # check for a second time, since the first call may trigger initialization and change the state of the LS
         refs_second_call = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
