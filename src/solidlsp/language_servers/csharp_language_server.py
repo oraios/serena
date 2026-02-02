@@ -143,22 +143,26 @@ def find_solution_or_project_file(root_dir: str) -> str | None:
 
 class CSharpLanguageServer(SolidLanguageServer):
     """
-    Provides C# specific instantiation of the LanguageServer class using `Microsoft.CodeAnalysis.LanguageServer`,
-    the official Roslyn-based language server from Microsoft.
+    Provides C# specific instantiation of the LanguageServer class using the official Roslyn-based
+    language server from NuGet.org.
 
-    You can pass a list of runtime dependency overrides in ls_specific_settings["csharp"]["runtime_dependencies"]. This is a list of
-    dicts, each containing at least the "id" key, and optionally "platform_id" to uniquely identify the dependency to override.
-    For example, to override the URL of the .NET runtime on windows-x64, add the entry:
+    You can pass a list of runtime dependency overrides in ls_specific_settings["csharp"]["runtime_dependencies"].
+    This is a list of dicts, each containing at least the "id" key, and optionally "platform_id" to uniquely
+    identify the dependency to override.
 
+    Example - Override Roslyn Language Server URL:
     ```
         {
-            "id": "DotNetRuntime",
+            "id": "CSharpLanguageServer",
             "platform_id": "win-x64",
-            "url": "https://example.com/custom-dotnet-runtime.zip"
+            "url": "https://example.com/custom-roslyn-server.nupkg"
         }
     ```
 
     See the `_RUNTIME_DEPENDENCIES` variable above for the available dependency ids and platform_ids.
+
+    Note: .NET runtime (version 10+) is required and installed automatically via Microsoft's official install
+    scripts. If you have a custom .NET installation, ensure 'dotnet' is available in PATH with version 10 or higher.
     """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
