@@ -142,35 +142,36 @@ class TestCSharpLanguageServer:
         # public string Name { get; set; }
         hover_info = language_server.request_hover(file_path, 6, 23)
 
-        if hover_info is not None:
-            # Verify hover has content
-            assert isinstance(hover_info, dict), "Hover should be a dict"
-            assert "contents" in hover_info, "Hover should have contents"
+        # Verify hover has content
+        assert hover_info is not None, "Hover should return information for Name property"
+        assert isinstance(hover_info, dict), "Hover should be a dict"
+        assert "contents" in hover_info, "Hover should have contents"
 
-            contents = hover_info["contents"]
-            if isinstance(contents, dict) and "value" in contents:
-                hover_text = contents["value"]
-                assert hover_text is not None and len(hover_text) > 0, "Hover should have content"
+        contents = hover_info["contents"]
+        if isinstance(contents, dict) and "value" in contents:
+            hover_text = contents["value"]
+            assert hover_text is not None and len(hover_text) > 0, "Hover should have content"
 
-                # Check if the injected type annotation appears in hover
-                # Original name should be "Name : string" which we inject at the top
-                # Note: This might not always appear if Roslyn's hover already includes it
-                # So we just verify there's meaningful content
-                assert len(hover_text) > 10, "Hover should have substantial content"
+            # Check if the injected type annotation appears in hover
+            # Original name should be "Name : string" which we inject at the top
+            # Note: This might not always appear if Roslyn's hover already includes it
+            # So we just verify there's meaningful content
+            assert len(hover_text) > 10, "Hover should have substantial content"
 
         # Test 2: Hover over the IsAdult method name (line 22, column 21 - on "IsAdult")
         # public bool IsAdult()
         hover_method = language_server.request_hover(file_path, 22, 21)
 
-        if hover_method is not None:
-            assert isinstance(hover_method, dict), "Hover should be a dict"
-            assert "contents" in hover_method, "Hover should have contents"
+        # Verify method hover has content
+        assert hover_method is not None, "Hover should return information for IsAdult method"
+        assert isinstance(hover_method, dict), "Hover should be a dict"
+        assert "contents" in hover_method, "Hover should have contents"
 
-            contents = hover_method["contents"]
-            if isinstance(contents, dict) and "value" in contents:
-                method_hover_text = contents["value"]
-                # Original name should be "IsAdult() : bool" injected at the top
-                assert method_hover_text is not None and len(method_hover_text) > 10, "Method hover should have substantial content"
+        contents = hover_method["contents"]
+        if isinstance(contents, dict) and "value" in contents:
+            method_hover_text = contents["value"]
+            # Original name should be "IsAdult() : bool" injected at the top
+            assert method_hover_text is not None and len(method_hover_text) > 10, "Method hover should have substantial content"
 
 
 @pytest.mark.csharp

@@ -200,12 +200,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         symbols = super().request_document_symbols(relative_file_path, file_buffer)
 
         # Normalize all symbols recursively
-        # DocumentSymbols.get_all_symbols_and_roots() returns tuple of (all_symbols, root_symbols)
-        all_symbols_tuple = symbols.get_all_symbols_and_roots()
-        all_symbols, _ = all_symbols_tuple
-
-        # Process each symbol (which is a UnifiedSymbolInformation dict)
-        for symbol in all_symbols:
+        for symbol in symbols.iter_symbols():
             self._normalize_symbol_name(symbol, relative_file_path)
 
         return symbols
