@@ -15,13 +15,19 @@ class TestDotNetInstallScript:
     """Test .NET runtime installation using Microsoft's official install scripts."""
 
     @patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer.DependencyProvider._ensure_language_server")
+    @patch("solidlsp.language_servers.common.PlatformUtils.get_platform_id")
     @patch("solidlsp.language_servers.csharp_language_server.platform.system")
     @patch("solidlsp.language_servers.csharp_language_server.subprocess.run")
     @patch("solidlsp.language_servers.csharp_language_server.urllib.request.urlretrieve")
     @patch("solidlsp.language_servers.csharp_language_server.shutil.which")
-    def test_install_dotnet_uses_bash_script_on_linux(self, mock_which, mock_urlretrieve, mock_subprocess, mock_platform, mock_ensure_ls):
+    def test_install_dotnet_uses_bash_script_on_linux(
+        self, mock_which, mock_urlretrieve, mock_subprocess, mock_platform, mock_platform_id, mock_ensure_ls
+    ):
         """Test that Linux uses bash install script."""
+        from solidlsp.ls_utils import PlatformId
+
         mock_platform.return_value = "Linux"
+        mock_platform_id.return_value = PlatformId.LINUX_x64
         mock_which.return_value = None  # No system dotnet
         mock_ensure_ls.return_value = "/fake/server.dll"
 
@@ -57,15 +63,19 @@ class TestDotNetInstallScript:
             assert script_url == "https://dot.net/v1/dotnet-install.sh"
 
     @patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer.DependencyProvider._ensure_language_server")
+    @patch("solidlsp.language_servers.common.PlatformUtils.get_platform_id")
     @patch("solidlsp.language_servers.csharp_language_server.platform.system")
     @patch("solidlsp.language_servers.csharp_language_server.subprocess.run")
     @patch("solidlsp.language_servers.csharp_language_server.urllib.request.urlretrieve")
     @patch("solidlsp.language_servers.csharp_language_server.shutil.which")
     def test_install_dotnet_uses_powershell_script_on_windows(
-        self, mock_which, mock_urlretrieve, mock_subprocess, mock_platform, mock_ensure_ls
+        self, mock_which, mock_urlretrieve, mock_subprocess, mock_platform, mock_platform_id, mock_ensure_ls
     ):
         """Test that Windows uses PowerShell install script."""
+        from solidlsp.ls_utils import PlatformId
+
         mock_platform.return_value = "Windows"
+        mock_platform_id.return_value = PlatformId.WIN_x64
         mock_which.return_value = None  # No system dotnet
         mock_ensure_ls.return_value = "/fake/server.dll"
 
