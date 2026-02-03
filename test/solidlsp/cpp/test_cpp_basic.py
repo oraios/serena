@@ -91,10 +91,7 @@ class TestCppLanguageServer:
     @pytest.mark.parametrize("language_server", _cpp_servers, indirect=True)
     @pytest.mark.xfail(
         strict=True,
-        reason=(
-            "Both clangd and ccls do not support cross-file references for newly created files "
-            "that were never opened by the LS."
-        ),
+        reason=("Both clangd and ccls do not support cross-file references for newly created files that were never opened by the LS."),
     )
     def test_find_references_in_newly_written_file(self, language_server: SolidLanguageServer) -> None:
         # Wait for background file opening to complete

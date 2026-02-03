@@ -1,65 +1,3 @@
-"""
-Provides C/C++ specific instantiation of the LanguageServer class using clangd.
-
-Clangd Language Server Setup and Limitations:
-----------------------------------------------
-
-1. compile_commands.json Requirements:
-   clangd requires a properly configured compile_commands.json in your project root
-   for correct parsing and cross-file reference finding. The file must:
-
-   - Use "clang++" as the compiler command (clangd will emulate this if not installed)
-   - Include proper C++ standard flags (e.g., -std=c++17)
-   - Include all necessary include paths (-I flags)
-
-   Directory paths in compile_commands.json can be relative (e.g., ".") or absolute.
-   Serena automatically converts relative directory paths to absolute paths and
-   creates a transformed compilation database at .serena/compile_commands.json.
-   The original compile_commands.json is never modified.
-
-   The serena compilation database persists across runs and is reused, avoiding
-   repeated transformations while keeping the user's files untouched.
-
-   The output directory can be customized via ls_specific_settings:
-
-   # .serena/project.yml
-   language_servers:
-     cpp:
-       compile_commands_dir: custom/rel/path (defaults to .serena)
-
-   Example compile_commands.json entry (with relative directory):
-   {
-     "directory": ".",
-     "command": "clang++ -std=c++17 -I /path/to/includes -c file.cpp",
-     "file": "file.cpp"
-   }
-
-   Generating compile_commands.json:
-   - CMake: set(CMAKE_EXPORT_COMPILE_COMMANDS ON) in CMakeLists.txt
-   - Non-CMake: use 'bear -- your-build-command' or 'intercept-build your-build-command'
-
-2. Cross-File Reference Finding:
-   clangd's background indexer will find cross-file references for all files listed
-   in compile_commands.json. For reliable cross-file reference finding:
-
-   - Ensure all source files are present in compile_commands.json
-   - Use clang++ as the compiler command (not g++)
-
-3. Files Created After Server Initialization:
-   Files created AFTER the language server starts are NOT automatically indexed.
-   Cross-file references to/from these files will NOT work until:
-   - The file is added to compile_commands.json
-   - The language server is restarted
-
-   This is a fundamental limitation of both clangd and ccls indexing architecture.
-
-4. Choosing Between clangd and ccls:
-   - clangd: Automatically downloaded, easier setup, actively maintained by LLVM
-   - ccls: May have better performance for some projects, but requires manual installation
-
-   See docs/03-special-guides/cpp_setup.md for detailed comparison and setup instructions.
-"""
-
 import json
 import logging
 import os
@@ -364,8 +302,6 @@ class ClangdLanguageServer(SolidLanguageServer):
         }
 
         self.server.notify.initialized({})
-
-        self.completions_available.set()
         # set ready flag, clangd sends no meaningful notification when ready
         # TODO This defeats the purpose of the event; we should wait for the server to actually be ready
         self.server_ready.set()

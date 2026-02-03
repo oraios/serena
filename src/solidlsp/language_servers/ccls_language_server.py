@@ -1,57 +1,7 @@
 """
-Provides C/C++ specific instantiation of the LanguageServer class using ccls.
-
-CCLS Language Server Setup and Limitations:
--------------------------------------------
-
-1. Manual Installation Required:
-   Unlike clangd, ccls is NOT automatically downloaded. You must install ccls
-   manually on your system before use. This gives ccls users more control but
-   requires additional setup effort.
-
-   See installation instructions below for your platform.
-
-2. compile_commands.json Requirements:
-   ccls requires a properly configured compile_commands.json in your project root
-   for correct parsing and cross-file reference finding. The file must:
-
-   - Include proper C++ standard flags (e.g., -std=c++17)
-   - Include all necessary include paths (-I flags)
-
-   Directory paths in compile_commands.json can be relative (e.g., ".") or absolute.
-   ccls handles relative paths correctly without requiring transformation.
-
-   Example compile_commands.json entry (with relative directory):
-   {
-     "directory": ".",
-     "command": "clang++ -std=c++17 -I /path/to/includes -c file.cpp",
-     "file": "file.cpp"
-   }
-
-   Generating compile_commands.json:
-   - CMake: set(CMAKE_EXPORT_COMPILE_COMMANDS ON) in CMakeLists.txt
-   - Non-CMake: use 'bear -- your-build-command' or 'intercept-build your-build-command'
-
-3. Cross-File Reference Finding:
-   ccls's background indexer will find cross-file references for all files listed
-   in compile_commands.json. For reliable cross-file reference finding:
-
-   - Ensure all source files are present in compile_commands.json
-   - Use absolute directory paths in compile_commands.json
-
-4. Files Created After Server Initialization:
-   Files created AFTER the language server starts are NOT automatically indexed.
-   Cross-file references to/from these files will NOT work until:
-   - The file is added to compile_commands.json
-   - The language server is restarted
-
-   This is a fundamental limitation of both ccls and clangd indexing architecture.
-
-5. When to Use ccls vs clangd:
-   - ccls: May have better performance for large codebases, requires manual installation
-   - clangd: Automatically downloaded, easier setup, actively maintained by LLVM
-
-   See docs/03-special-guides/cpp_setup.md for detailed comparison and setup instructions.
+This is an alternative to clangd for large C++ codebases where ccls may perform
+better for indexing and navigation. Requires ccls to be installed and available
+on PATH, or configured via ls_specific_settings with key "ls_path".
 
 Installation
 ------------
