@@ -367,7 +367,10 @@ class ClangdLanguageServer(SolidLanguageServer):
 
         self.completions_available.set()
         # set ready flag, clangd sends no meaningful notification when ready
+        # TODO This defeats the purpose of the event; we should wait for the server to actually be ready
         self.server_ready.set()
+
+        # wait for server to be ready
         self.server_ready.wait()
 
     def _shutdown(self, timeout: float = 5.0) -> None:

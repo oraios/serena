@@ -203,5 +203,4 @@ class CCLSLanguageServer(SolidLanguageServer):
         self.server.notify.initialized({})
 
         # Basic readiness
-        self.completions_available.set()
         self.server_ready.set()

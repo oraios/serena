@@ -3,7 +3,6 @@
 import logging
 import os
 import shutil
-import threading
 
 from overrides import override
 
@@ -53,7 +52,6 @@ class RegalLanguageServer(SolidLanguageServer):
             "rego",
             solidlsp_settings,
         )
-        self.server_ready = threading.Event()
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
@@ -129,8 +127,5 @@ class RegalLanguageServer(SolidLanguageServer):
         assert "textDocumentSync" in init_response["capabilities"]
 
         self.server.notify.initialized({})
-        self.completions_available.set()
 
         # Regal server is ready immediately after initialization
-        self.server_ready.set()
-        self.server_ready.wait()
