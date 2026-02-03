@@ -731,6 +731,7 @@ class TestGitWorktree:
             cwd=cwd or self.repo_path,
             capture_output=True,
             text=True,
+            check=False,
         )
         if result.returncode != 0:
             raise RuntimeError(f"Git command failed: {result.stderr}")

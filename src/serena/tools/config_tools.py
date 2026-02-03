@@ -51,8 +51,8 @@ class ListWorktreesTool(Tool, ToolMarkerOptional):
             if result.returncode != 0:
                 return f"Failed to list worktrees: {result.stderr}"
 
-            worktrees = []
-            current_path = None
+            worktrees: list[dict[str, str | bool]] = []
+            current_path: str | None = None
 
             for line in result.stdout.splitlines():
                 if line.startswith("worktree "):
@@ -67,7 +67,8 @@ class ListWorktreesTool(Tool, ToolMarkerOptional):
             # Mark the current worktree
             current_resolved = project_root.resolve()
             for wt in worktrees:
-                if Path(wt["path"]).resolve() == current_resolved:
+                wt_path = wt["path"]
+                if isinstance(wt_path, str) and Path(wt_path).resolve() == current_resolved:
                     wt["is_current"] = True
                     break
 
@@ -77,12 +78,15 @@ class ListWorktreesTool(Tool, ToolMarkerOptional):
             output = [f"Git worktrees for {active_project.project_name}:"]
             for wt in worktrees:
                 marker = " (current)" if wt["is_current"] else ""
-                path_display = wt["path"]
+                wt_path = wt["path"]
+                if not isinstance(wt_path, str):
+                    continue
+                path_display = wt_path
                 # Try to show relative path if it's a subdirectory
                 try:
-                    rel_path = os.path.relpath(wt["path"], project_root.parent.parent)
+                    rel_path = os.path.relpath(wt_path, project_root.parent.parent)
                     if not rel_path.startswith(".."):
-                        path_display = f"{wt['path']} (relative: {rel_path})"
+                        path_display = f"{wt_path} (relative: {rel_path})"
                 except ValueError:
                     pass
                 output.append(f"  - {path_display}{marker}")

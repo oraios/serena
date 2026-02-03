@@ -26,7 +26,7 @@ class GitState:
         worktree_info = f" (worktree: {self.worktree_path})" if self.is_worktree else ""
         return f"branch={self.branch}{worktree_info}, commit={self.commit[:8]}"
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, GitState):
             return False
         return (
@@ -157,7 +157,8 @@ def get_git_common_dir(path: str | Path) -> Path | None:
     if git_path.is_dir():
         return git_path
     elif is_git_worktree(path):
-        return find_git_main_repo_path(path) / ".git" if find_git_main_repo_path(path) else None
+        main_repo_path = find_git_main_repo_path(path)
+        return main_repo_path / ".git" if main_repo_path else None
 
     return None
 

@@ -211,11 +211,11 @@ class Project(ToStringMixin):
     def path_to_project_yml(self) -> str:
         return os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
 
-    def check_git_state_changes(self) -> tuple[bool, str]:
+    def check_git_state_changes(self) -> tuple[bool, str, GitState | None]:
         """
         Check if the git state (branch, worktree, commit) has changed.
 
-        :return: Tuple of (has_changed, message describing the change)
+        :return: Tuple of (has_changed, message describing the change, new_state)
         """
         return self.git_state_manager.has_state_changed()
 

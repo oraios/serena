@@ -273,7 +273,7 @@ class Tool(Component):
                 # Check for git state changes before file/symbol operations
                 # This detects when the user has switched branches or worktrees externally
                 if hasattr(self.agent, "_check_git_state_with_cache"):
-                    if isinstance(self, (ToolMarkerSymbolicRead, ToolMarkerSymbolicEdit)):
+                    if isinstance(self, ToolMarkerSymbolicRead | ToolMarkerSymbolicEdit):
                         # Symbolic operations depend on file content being in sync
                         change_message = self.agent._check_git_state_with_cache(self.agent.get_project_root())
                         if change_message:
