@@ -365,6 +365,42 @@ class SerenaAgent:
             if self._gui_log_viewer is not None:
                 self._gui_log_viewer.set_dashboard_url(dashboard_url)
 
+        # Git state check cache for automatic detection of branch/worktree changes
+        self._git_state_check_cache: dict[str, tuple[float, str | None]] = {}
+        """Maps project root to (timestamp, last_change_message). Cache expires after 5 seconds."""
+
+    def _check_git_state_with_cache(self, project_root: str) -> str | None:
+        """
+        Check for git state changes with caching to avoid redundant checks.
+        Returns a message if a change was detected, None otherwise.
+        """
+        import time
+
+        CACHE_TTL = 5.0  # Cache for 5 seconds to avoid redundant checks within a single operation
+        now = time.time()
+        
+        # Check cache
+        if project_root in self._git_state_check_cache:
+            timestamp, last_message = self._git_state_check_cache[project_root]
+            if now - timestamp < CACHE_TTL:
+                # Return cached message (if any) - we only report the change once
+                return None  # Already notified
+        
+        # Perform the actual check
+        project = self.get_active_project()
+        if project is None:
+            return None
+        
+        has_changed, message, _ = project.check_git_state_changes()
+        
+        # Update cache
+        self._git_state_check_cache[project_root] = (now, message if has_changed else None)
+        
+        if has_changed:
+            log.info(f"Git state change detected: {message}")
+            return message
+        return None
+
     def get_current_tasks(self) -> list[TaskExecutor.TaskInfo]:
         """
         Gets the list of tasks currently running or queued for execution.

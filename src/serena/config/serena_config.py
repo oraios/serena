@@ -5,6 +5,7 @@ The Serena Model Context Protocol (MCP) Server
 import dataclasses
 import os
 import shutil
+import subprocess
 from collections.abc import Iterator, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -28,6 +29,7 @@ from serena.constants import (
     SERENA_FILE_ENCODING,
     SERENA_MANAGED_DIR_NAME,
 )
+from serena.util.file_system import find_git_main_repo_path, is_git_worktree
 from serena.util.inspection import determine_programming_language_composition
 from serena.util.yaml import YamlCommentNormalisation, load_yaml, normalise_yaml_comments, save_yaml, transfer_missing_yaml_comments
 from solidlsp.ls_config import Language
@@ -195,10 +197,16 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
         """
         Autogenerate a project configuration for a given project root.
 
+        For git worktrees:
+        1. Languages are inherited from the main repo's config if available
+        2. The .serena/memories directory is shared with the main repo
+        3. The project.yml is created in the worktree with the worktree's project_root
+
         :param project_root: the path to the project root
         :param project_name: the name of the project; if None, the name of the project will be the name of the directory
             containing the project
         :param languages: the languages of the project; if None, they will be determined automatically
+            (or inherited from main repo for worktrees)
         :param save_to_disk: whether to save the project configuration to disk
         :param interactive: whether to run in interactive CLI mode, asking the user for input where appropriate
         :return: the project configuration
@@ -206,6 +214,16 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
         project_root = Path(project_root).resolve()
         if not project_root.exists():
             raise FileNotFoundError(f"Project root not found: {project_root}")
+
+        # For git worktrees, try to inherit languages from main repo
+        if is_git_worktree(project_root) and languages is None:
+            main_config = cls._get_main_repo_config_if_exists(project_root)
+            if main_config is not None:
+                languages = main_config.languages
+                log.info(f"Worktree {project_root} inheriting languages from main repo: {languages}")
+            # Ensure shared memories are set up
+            cls._ensure_worktree_shared_memories(project_root)
+
         with LogTime("Project configuration auto-generation", logger=log):
             log.info("Project root: %s", project_root)
             project_name = project_name or project_root.name
@@ -347,11 +365,121 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
         return d
 
     @classmethod
+    def _ensure_worktree_shared_memories(cls, project_root: Path) -> bool:
+        """
+        Ensure that a git worktree has access to shared memories.
+
+        For worktrees, the .serena/memories directory is symlinked to the main
+        repo's .serena/memories, allowing multiple worktrees to share knowledge
+        while maintaining separate project configurations.
+
+        On Windows, a junction is used instead of a symlink to avoid requiring
+        administrator privileges.
+
+        :param project_root: Path to the worktree root
+        :return: True if the memories directory was set up (symlinked/junctioned or created), False otherwise
+        """
+        if not is_git_worktree(project_root):
+            return False
+
+        worktree_serena = project_root / SERENA_MANAGED_DIR_NAME
+        worktree_memories = worktree_serena / "memories"
+
+        # If memories already exists (real dir or symlink/junction), nothing to do
+        if worktree_memories.exists():
+            return False
+
+        # Find the main repo path
+        main_repo_path = find_git_main_repo_path(project_root)
+        if main_repo_path is None:
+            log.warning(f"Could not find main repo for worktree {project_root}")
+            return False
+
+        main_memories = main_repo_path / SERENA_MANAGED_DIR_NAME / "memories"
+
+        # Create the symlink/junction if main repo has memories
+        if main_memories.exists():
+            try:
+                worktree_serena.mkdir(parents=True, exist_ok=True)
+                cls._create_directory_link(main_memories, worktree_memories)
+                log.info(f"Created {'junction' if cls._is_windows() else 'symlink'} from {worktree_memories} to {main_memories} for shared worktree memories")
+                return True
+            except OSError as e:
+                log.warning(f"Failed to create {'junction' if cls._is_windows() else 'symlink'} for worktree memories: {e}")
+                return False
+        else:
+            # Main repo doesn't have memories yet - create directory structure
+            # so it's ready when memories are added
+            worktree_memories.mkdir(parents=True, exist_ok=True)
+            return True
+
+    @staticmethod
+    def _is_windows() -> bool:
+        """Check if running on Windows."""
+        import platform
+        return platform.system() == "Windows"
+
+    @staticmethod
+    def _create_directory_link(source: Path, target: Path) -> None:
+        """
+        Create a directory link (symlink on Unix/macOS, junction on Windows).
+
+        On Windows, junctions are used instead of symbolic links to avoid
+        requiring administrator privileges or developer mode.
+
+        :param source: The source directory (where the link points to)
+        :param target: The target location (where the link will be created)
+        """
+        if ProjectConfig._is_windows():
+            # Use mklink /J to create a junction (directory symbolic link)
+            # This requires fewer privileges than creating a symbolic link
+            subprocess.run(
+                ["mklink", "/J", str(target), str(source)],
+                shell=True,
+                check=True,
+                capture_output=True,
+            )
+        else:
+            # Use standard symlink on Unix/macOS
+            os.symlink(source, target, target_is_directory=True)
+
+    @classmethod
+    def _get_main_repo_config_if_exists(cls, project_root: Path) -> Self | None:
+        """
+        Check if the main repo has an existing project config and return it.
+
+        :param project_root: Path to the worktree root
+        :return: ProjectConfig from main repo if exists, None otherwise
+        """
+        main_repo_path = find_git_main_repo_path(project_root)
+        if main_repo_path is None:
+            return None
+
+        main_yaml_path = main_repo_path / cls.rel_path_to_project_yml()
+        if not main_yaml_path.exists():
+            return None
+
+        try:
+            return cls.load(main_repo_path, autogenerate=False)
+        except Exception:
+            return None
+
+    @classmethod
     def load(cls, project_root: Path | str, autogenerate: bool = False) -> Self:
         """
         Load a ProjectConfig instance from the path to the project root.
+
+        For git worktrees, this will:
+        1. Link the .serena/memories directory to the main repo's memories
+        2. Use the main repo's language settings as a default when autogenerating
+        3. Store a worktree-specific project.yml with the correct project_root
         """
         project_root = Path(project_root)
+
+        # Handle git worktrees: set up shared memories
+        if is_git_worktree(project_root):
+            cls._ensure_worktree_shared_memories(project_root)
+
         yaml_path = project_root / cls.rel_path_to_project_yml()
 
         # auto-generate if necessary

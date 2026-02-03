@@ -1,5 +1,6 @@
 import logging
 import os
+import subprocess
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,6 +11,206 @@ from pathspec import PathSpec
 from sensai.util.logging import LogTime
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class GitState:
+    """Represents the current git state of a repository."""
+
+    branch: str
+    commit: str
+    worktree_path: str | None = None  # Stored as string for hashability
+    is_worktree: bool = False
+
+    def __str__(self) -> str:
+        worktree_info = f" (worktree: {self.worktree_path})" if self.is_worktree else ""
+        return f"branch={self.branch}{worktree_info}, commit={self.commit[:8]}"
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, GitState):
+            return False
+        return (
+            self.branch == other.branch
+            and self.commit == other.commit
+            and self.worktree_path == other.worktree_path
+            and self.is_worktree == other.is_worktree
+        )
+
+    def __hash__(self) -> int:
+        return hash((self.branch, self.commit, self.worktree_path, self.is_worktree))
+
+
+def is_git_worktree(path: str | Path) -> bool:
+    """
+    Detect if the given path is inside a git worktree.
+
+    A git worktree has a `.git` file (not directory) that contains a reference
+    to the main repository's git directory.
+
+    :param path: the path to check
+    :return: True if the path is inside a git worktree, False otherwise
+    """
+    git_path = Path(path) / ".git"
+    # A worktree has a .git file (not directory) with "gitdir:" inside
+    return git_path.is_file() and _is_git_worktree_file(git_path)
+
+
+def _is_git_worktree_file(git_file: Path) -> bool:
+    """Check if the given .git file is a worktree reference."""
+    try:
+        with open(git_file) as f:
+            content = f.read().strip()
+            return content.startswith("gitdir:")
+    except OSError:
+        return False
+
+
+def find_git_main_repo_path(path: str | Path) -> Path | None:
+    """
+    Find the main repository path for a given path.
+
+    If the path is inside a git worktree, this returns the path to the main
+    repository (the one containing the actual .git directory).
+
+    :param path: the path to check
+    :return: Path to the main repository, or None if not a worktree
+    """
+    path = Path(path).resolve()
+    git_path = path / ".git"
+
+    if not is_git_worktree(path):
+        return None
+
+    # Read the gitdir from the .git file
+    try:
+        with open(git_path) as f:
+            content = f.read().strip()
+            if content.startswith("gitdir:"):
+                gitdir = content.split(":", 1)[1].strip()
+                gitdir_path = Path(gitdir).resolve()
+
+                # The worktrees directory structure is:
+                # <main-repo>/.git/worktrees/<worktree-name>/
+                # The main repo is before .git/worktrees/<name>
+                if ".git/worktrees/" in str(gitdir_path):
+                    # Extract the main repo path
+                    parts = gitdir_path.parts
+                    worktrees_idx = parts.index(".git")
+                    # The main repo is before .git/worktrees/<name>
+                    main_repo = Path(*parts[:worktrees_idx])
+                    return main_repo
+    except (OSError, ValueError):
+        pass
+
+    # Fallback: try using git command
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            check=False,
+            cwd=path,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            toplevel = Path(result.stdout.strip()).resolve()
+            # If toplevel differs from input path, we're in a worktree
+            if toplevel != path:
+                return toplevel
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+
+    return None
+
+
+def get_git_common_dir(path: str | Path) -> Path | None:
+    """
+    Get the common git directory for a repository or worktree.
+
+    For a regular repo, this is <path>/.git.
+    For a worktree, this is the main repo's .git directory.
+
+    :param path: the path to check
+    :return: Path to the common git directory, or None if not a git repo
+    """
+    path = Path(path).resolve()
+
+    # Try git rev-parse --git-common-dir first (most reliable)
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            check=False,
+            cwd=path,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            common_dir = result.stdout.strip()
+            if common_dir:
+                return Path(common_dir).resolve()
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+
+    # Fallback to checking .git directly
+    git_path = path / ".git"
+    if git_path.is_dir():
+        return git_path
+    elif is_git_worktree(path):
+        return find_git_main_repo_path(path) / ".git" if find_git_main_repo_path(path) else None
+
+    return None
+
+
+def get_git_state(path: str | Path) -> GitState | None:
+    """
+    Get the current git state (branch, commit, worktree info) for a path.
+
+    :param path: The path to check
+    :return: GitState with current branch, commit, and worktree info, or None if not a git repo
+    """
+    path = Path(path).resolve()
+
+    # Check if this is a worktree
+    is_wt = is_git_worktree(path)
+    worktree_path_obj = find_git_main_repo_path(path) if is_wt else None
+    worktree_path = str(worktree_path_obj) if worktree_path_obj else None
+
+    try:
+        # Get the current branch name
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            check=False,
+            cwd=path,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return None
+        branch = result.stdout.strip()
+
+        # Get the current commit hash
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=False,
+            cwd=path,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return None
+        commit = result.stdout.strip()
+
+        return GitState(
+            branch=branch,
+            commit=commit,
+            worktree_path=worktree_path,
+            is_worktree=is_wt,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
 
 
 class ScanResult(NamedTuple):

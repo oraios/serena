@@ -706,3 +706,159 @@ src/*.o
 
         # foo.txt in other/ should NOT be ignored (outside foo/ subtree)
         assert not parser.should_ignore("other/foo.txt"), "other/foo.txt should NOT be ignored by foo/.gitignore"
+
+
+import subprocess
+
+
+class TestGitWorktree:
+    """Test class for Git worktree functionality."""
+
+    def setup_method(self):
+        """Set up test environment before each test method."""
+        self.test_dir = tempfile.mkdtemp()
+        self.repo_path = Path(self.test_dir) / "main_repo"
+        self.repo_path.mkdir()
+
+    def teardown_method(self):
+        """Clean up test environment after each test method."""
+        shutil.rmtree(self.test_dir)
+
+    def _run_git(self, args, cwd=None):
+        """Helper to run git commands."""
+        result = subprocess.run(
+            ["git"] + args,
+            cwd=cwd or self.repo_path,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"Git command failed: {result.stderr}")
+        return result
+
+    def _init_repo(self):
+        """Initialize a git repository with a commit."""
+        self._run_git(["init"])
+        self._run_git(["config", "user.name", "Test User"])
+        self._run_git(["config", "user.email", "test@example.com"])
+        (self.repo_path / "test.txt").write_text("initial content")
+        self._run_git(["add", "test.txt"])
+        self._run_git(["commit", "-m", "Initial commit"])
+
+    def test_is_git_worktree_main_repo(self):
+        """Test that main repo is not detected as a worktree."""
+        self._init_repo()
+        from serena.util.file_system import is_git_worktree
+
+        assert not is_git_worktree(self.repo_path)
+
+    def test_is_git_worktree_worktree(self):
+        """Test that worktree is correctly detected."""
+        self._init_repo()
+        from serena.util.file_system import is_git_worktree
+
+        # Create a branch for the worktree
+        self._run_git(["branch", "test-branch"])
+
+        # Create a worktree
+        worktree_path = Path(self.test_dir) / "worktree1"
+        self._run_git(["worktree", "add", str(worktree_path), "test-branch"])
+
+        assert is_git_worktree(worktree_path)
+        assert not is_git_worktree(self.repo_path)
+
+    def test_find_git_main_repo_path_from_worktree(self):
+        """Test finding main repo path from a worktree."""
+        self._init_repo()
+        from serena.util.file_system import find_git_main_repo_path
+
+        # Create a branch for the worktree
+        self._run_git(["branch", "test-branch"])
+
+        # Create a worktree
+        worktree_path = Path(self.test_dir) / "worktree1"
+        self._run_git(["worktree", "add", str(worktree_path), "test-branch"])
+
+        # From worktree, should find main repo
+        main_repo = find_git_main_repo_path(worktree_path)
+        assert main_repo is not None
+        assert main_repo.resolve() == self.repo_path.resolve()
+
+        # From main repo, should return None (not a worktree)
+        main_repo_from_main = find_git_main_repo_path(self.repo_path)
+        assert main_repo_from_main is None
+
+    def test_get_git_state(self):
+        """Test getting git state information."""
+        self._init_repo()
+        from serena.util.file_system import get_git_state
+
+        state = get_git_state(self.repo_path)
+
+        assert state is not None
+        assert state.branch == "main" or state.branch == "master"  # Git default varies
+        assert len(state.commit) == 40  # Full commit hash
+        assert state.is_worktree is False
+        assert state.worktree_path is None
+
+    def test_get_git_state_from_worktree(self):
+        """Test getting git state from a worktree."""
+        self._init_repo()
+        from serena.util.file_system import get_git_state
+
+        # Create a branch for the worktree
+        self._run_git(["branch", "feature-branch"])
+
+        # Create a worktree
+        worktree_path = Path(self.test_dir) / "worktree1"
+        self._run_git(["worktree", "add", str(worktree_path), "feature-branch"])
+
+        state = get_git_state(worktree_path)
+
+        assert state is not None
+        assert state.branch == "feature-branch"
+        assert state.is_worktree is True
+        assert state.worktree_path is not None
+        assert state.worktree_path == str(self.repo_path.resolve())
+
+    def test_get_git_common_dir(self):
+        """Test getting the common git directory."""
+        self._init_repo()
+        from serena.util.file_system import get_git_common_dir
+
+        # Main repo common dir is .git
+        common_dir = get_git_common_dir(self.repo_path)
+        assert common_dir is not None
+        assert common_dir.name == ".git"
+
+    def test_get_git_common_dir_from_worktree(self):
+        """Test getting common git directory from worktree."""
+        self._init_repo()
+        from serena.util.file_system import get_git_common_dir
+
+        # Create a worktree
+        self._run_git(["branch", "test-branch"])
+        worktree_path = Path(self.test_dir) / "worktree1"
+        self._run_git(["worktree", "add", str(worktree_path), "test-branch"])
+
+        # From worktree, common dir should still be main repo's .git
+        common_dir = get_git_common_dir(worktree_path)
+        assert common_dir is not None
+        # Should point to main repo's .git
+        assert self.repo_path.resolve() in common_dir.parents or common_dir == self.repo_path / ".git"
+
+    def test_git_state_equality(self):
+        """Test GitState equality and hashing."""
+        from serena.util.file_system import GitState
+
+        state1 = GitState(branch="main", commit="abc123", worktree_path=None, is_worktree=False)
+        state2 = GitState(branch="main", commit="abc123", worktree_path=None, is_worktree=False)
+        state3 = GitState(branch="main", commit="def456", worktree_path=None, is_worktree=False)
+
+        assert state1 == state2
+        assert state1 != state3
+        assert hash(state1) == hash(state2)
+
+        # Can be used in sets
+        state_set = {state1, state2, state3}
+        assert len(state_set) == 2  # state1 and state2 are duplicates

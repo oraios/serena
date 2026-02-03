@@ -13,12 +13,86 @@ from serena.config.serena_config import DEFAULT_TOOL_TIMEOUT, ProjectConfig, get
 from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_NAME
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.text_utils import MatchedConsecutiveLines, search_files
-from serena.util.file_system import GitignoreParser, match_path
+from serena.util.file_system import GitignoreParser, GitState, get_git_state, match_path
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import FileUtils
 
 log = logging.getLogger(__name__)
+
+
+class GitStateManager:
+    """
+    Tracks git state changes to detect when branches or worktrees are switched.
+    """
+
+    def __init__(self, project_root: str):
+        self.project_root = Path(project_root)
+        self._current_state: GitState | None = None
+        self._lock = threading.Lock()
+        self.refresh_state()
+
+    def refresh_state(self) -> GitState | None:
+        """Refresh the cached git state by querying git."""
+        with self._lock:
+            new_state = get_git_state(self.project_root)
+            if new_state is not None:
+                self._current_state = new_state
+            return new_state
+
+    def get_current_state(self) -> GitState | None:
+        """Get the currently tracked git state."""
+        with self._lock:
+            return self._current_state
+
+    def has_state_changed(self) -> tuple[bool, str, GitState | None]:
+        """
+        Check if the git state has changed since the last check.
+
+        :return: Tuple of (has_changed, message, new_state)
+        """
+        new_state = self.refresh_state()
+        if new_state is None:
+            return False, "Not a git repository", None
+
+        if self._current_state is None:
+            return False, "No previous state", new_state
+
+        if new_state != self._current_state:
+            old_state = self._current_state
+            # Refresh to update the cached state
+            self.refresh_state()
+
+            changes = []
+            if old_state.branch != new_state.branch:
+                changes.append(f"branch changed from '{old_state.branch}' to '{new_state.branch}'")
+            if old_state.commit != new_state.commit and old_state.branch == new_state.branch:
+                changes.append(f"HEAD moved (new commit: {new_state.commit[:8]})")
+            if old_state.worktree_path != new_state.worktree_path:
+                if new_state.worktree_path:
+                    changes.append(f"now in worktree: {new_state.worktree_path}")
+                else:
+                    changes.append("now in main repository (not a worktree)")
+            if old_state.is_worktree != new_state.is_worktree:
+                changes.append("worktree status changed")
+
+            if changes:
+                message = "Git state detected: " + ", ".join(changes)
+                return True, message, new_state
+
+        return False, "", new_state
+
+    def get_state_summary(self) -> str:
+        """Get a human-readable summary of the current git state."""
+        state = self._current_state
+        if state is None:
+            return "Not a git repository"
+
+        parts = [f"Branch: {state.branch}"]
+        if state.is_worktree:
+            parts.append(f"Worktree: {state.worktree_path}")
+        parts.append(f"Commit: {state.commit[:8]}")
+        return " | ".join(parts)
 
 
 class MemoriesManager:
@@ -62,6 +136,9 @@ class Project(ToStringMixin):
         self.memories_manager = MemoriesManager(project_root)
         self.language_server_manager: LanguageServerManager | None = None
         self._is_newly_created = is_newly_created
+
+        # Track git state to detect branch/worktree changes
+        self.git_state_manager = GitStateManager(project_root)
 
         # create .gitignore file in the project's Serena data folder if not yet present
         serena_data_gitignore_path = os.path.join(self.path_to_serena_data_folder(), ".gitignore")
@@ -134,6 +211,18 @@ class Project(ToStringMixin):
     def path_to_project_yml(self) -> str:
         return os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
 
+    def check_git_state_changes(self) -> tuple[bool, str]:
+        """
+        Check if the git state (branch, worktree, commit) has changed.
+
+        :return: Tuple of (has_changed, message describing the change)
+        """
+        return self.git_state_manager.has_state_changed()
+
+    def get_git_state_summary(self) -> str:
+        """Get a summary of the current git state."""
+        return self.git_state_manager.get_state_summary()
+
     def get_activation_message(self) -> str:
         """
         :return: a message providing information about the project upon activation (e.g. programming language, memories, initial prompt)
@@ -144,6 +233,12 @@ class Project(ToStringMixin):
             msg = f"The project with name '{self.project_name}' at {self.project_root} is activated."
         languages_str = ", ".join([lang.value for lang in self.project_config.languages])
         msg += f"\nProgramming languages: {languages_str}; file encoding: {self.project_config.encoding}"
+
+        # Add git state info if available
+        git_summary = self.git_state_manager.get_state_summary()
+        if git_summary and "Not a git repository" not in git_summary:
+            msg += f"\nGit: {git_summary}"
+
         memories = self.memories_manager.list_memories()
         if memories:
             msg += (

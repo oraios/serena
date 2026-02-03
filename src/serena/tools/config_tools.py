@@ -1,4 +1,192 @@
+import logging
+import os
+import subprocess
+from pathlib import Path
+
 from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional
+from serena.util.file_system import find_git_main_repo_path, is_git_worktree
+
+log = logging.getLogger(__name__)
+
+
+class ListWorktreesTool(Tool, ToolMarkerOptional):
+    """
+    Lists all git worktrees for the current project.
+
+    This tool shows all available worktrees, making it easy to see which
+    worktrees exist and which one is currently active.
+    """
+
+    def apply(self) -> str:
+        """
+        List all git worktrees for the current project.
+
+        :return: A formatted list of all worktrees with the current one highlighted
+        """
+        active_project = self.agent.get_active_project()
+        if active_project is None:
+            return "No active project. Please activate a project first."
+
+        project_root = Path(active_project.project_root)
+
+        # Determine the git common dir (main repo)
+        if is_git_worktree(project_root):
+            main_repo = find_git_main_repo_path(project_root)
+            if main_repo is None:
+                return f"Current directory '{project_root}' appears to be a worktree but main repo could not be found."
+            git_dir = main_repo / ".git"
+        else:
+            git_dir = project_root / ".git"
+
+        try:
+            result = subprocess.run(
+                ["git", "worktree", "list", "--porcelain"],
+                check=False,
+                cwd=git_dir.parent if git_dir.is_dir() else project_root,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            if result.returncode != 0:
+                return f"Failed to list worktrees: {result.stderr}"
+
+            worktrees = []
+            current_path = None
+
+            for line in result.stdout.splitlines():
+                if line.startswith("worktree "):
+                    if current_path is not None:
+                        worktrees.append({"path": current_path, "is_current": False})
+                    current_path = line.split(" ", 1)[1]
+
+            # Add the last worktree
+            if current_path is not None:
+                worktrees.append({"path": current_path, "is_current": False})
+
+            # Mark the current worktree
+            current_resolved = project_root.resolve()
+            for wt in worktrees:
+                if Path(wt["path"]).resolve() == current_resolved:
+                    wt["is_current"] = True
+                    break
+
+            if not worktrees:
+                return f"No git worktrees found for project at {project_root}."
+
+            output = [f"Git worktrees for {active_project.project_name}:"]
+            for wt in worktrees:
+                marker = " (current)" if wt["is_current"] else ""
+                path_display = wt["path"]
+                # Try to show relative path if it's a subdirectory
+                try:
+                    rel_path = os.path.relpath(wt["path"], project_root.parent.parent)
+                    if not rel_path.startswith(".."):
+                        path_display = f"{wt['path']} (relative: {rel_path})"
+                except ValueError:
+                    pass
+                output.append(f"  - {path_display}{marker}")
+
+            output.append(f"\nCurrent project root: {project_root}")
+            if is_git_worktree(project_root):
+                main_repo = find_git_main_repo_path(project_root)
+                if main_repo:
+                    output.append(f"Main repository: {main_repo}")
+
+            return "\n".join(output)
+
+        except subprocess.TimeoutExpired:
+            return "Command timed out while listing worktrees."
+        except Exception as e:
+            return f"Error listing worktrees: {e}"
+
+
+class CheckGitStateTool(Tool, ToolMarkerOptional):
+    """
+    Checks for git state changes (branch switches, worktree changes, etc.).
+
+    This tool detects when the user has changed branches or switched worktrees
+    outside of Serena (e.g., via terminal commands), allowing Serena to stay
+    in sync with the current repository state.
+    """
+
+    def apply(self) -> str:
+        """
+        Check for git state changes and report any differences.
+
+        :return: Message describing any detected changes or current state
+        """
+        active_project = self.agent.get_active_project()
+        if active_project is None:
+            return "No active project. Please activate a project first."
+
+        has_changed, message, new_state = active_project.check_git_state_changes()
+
+        if has_changed:
+            result = f"⚠️ Git state change detected!\n{message}\n\n"
+            result += f"Current state: {active_project.get_git_state_summary()}"
+            result += "\n\nNote: File locations and available content may have changed."
+            return result
+        else:
+            return f"No git state changes detected.\n\nCurrent: {active_project.get_git_state_summary()}"
+
+
+class SwitchWorktreeTool(Tool, ToolMarkerOptional):
+    """
+    Switches to a different git worktree of the current project.
+
+    This tool allows switching between worktrees while maintaining the same
+    project configuration and shared memories.
+    """
+
+    def apply(self, worktree: str) -> str:
+        """
+        Switch to a different git worktree.
+
+        :param worktree: The path to the worktree, or the worktree name (relative to main repo)
+        :return: Confirmation message with the new worktree path
+        """
+        active_project = self.agent.get_active_project()
+        if active_project is None:
+            return "No active project. Please activate a project first."
+
+        project_root = Path(active_project.project_root)
+
+        # Find the main repo
+        if is_git_worktree(project_root):
+            main_repo = find_git_main_repo_path(project_root)
+        else:
+            main_repo = project_root
+
+        if main_repo is None:
+            return f"Could not determine main repository for project at {project_root}."
+
+        # Resolve the worktree path
+        worktree_path = Path(worktree)
+        if not worktree_path.is_absolute():
+            # Assume it's relative to the main repo
+            worktree_path = (main_repo / worktree).resolve()
+
+        if not worktree_path.exists():
+            return f"Worktree path does not exist: {worktree_path}"
+
+        # Verify it's actually a worktree of the same repo
+        if not is_git_worktree(worktree_path) and worktree_path != main_repo:
+            return f"Path '{worktree_path}' does not appear to be a git worktree of the current project."
+
+        worktree_main = find_git_main_repo_path(worktree_path) if is_git_worktree(worktree_path) else worktree_path
+        if worktree_main != main_repo:
+            return f"Path '{worktree_path}' is not a worktree of the current project (main repo: {main_repo})."
+
+        # Activate the project at the new worktree path
+        try:
+            new_project = self.agent.activate_project_from_path_or_name(str(worktree_path))
+            result = f"Switched to worktree at {worktree_path}"
+            result += f"\n{new_project.get_activation_message()}"
+            result += "\nNote: Memories are shared across all worktrees of this project."
+            return result
+        except Exception as e:
+            return f"Error switching to worktree: {e}"
 
 
 class OpenDashboardTool(Tool, ToolMarkerOptional, ToolMarkerDoesNotRequireActiveProject):
