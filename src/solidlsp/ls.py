@@ -87,7 +87,7 @@ class LSPFileBuffer:
         if open_in_ls:
             self._open_in_ls()
 
-    def _open_in_ls(self):
+    def _open_in_ls(self) -> None:
         """
         Open the file in the language server if it is not already open.
         """
@@ -105,7 +105,7 @@ class LSPFileBuffer:
             }
         )
 
-    def close(self):
+    def close(self) -> None:
         if self._is_open_in_ls:
             self.language_server.server.notify.did_close_text_document(
                 {
