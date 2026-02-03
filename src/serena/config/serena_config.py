@@ -402,7 +402,9 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
             try:
                 worktree_serena.mkdir(parents=True, exist_ok=True)
                 cls._create_directory_link(main_memories, worktree_memories)
-                log.info(f"Created {'junction' if cls._is_windows() else 'symlink'} from {worktree_memories} to {main_memories} for shared worktree memories")
+                log.info(
+                    f"Created {'junction' if cls._is_windows() else 'symlink'} from {worktree_memories} to {main_memories} for shared worktree memories"
+                )
                 return True
             except OSError as e:
                 log.warning(f"Failed to create {'junction' if cls._is_windows() else 'symlink'} for worktree memories: {e}")
@@ -417,6 +419,7 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
     def _is_windows() -> bool:
         """Check if running on Windows."""
         import platform
+
         return platform.system() == "Windows"
 
     @staticmethod

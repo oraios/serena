@@ -378,24 +378,24 @@ class SerenaAgent:
 
         CACHE_TTL = 5.0  # Cache for 5 seconds to avoid redundant checks within a single operation
         now = time.time()
-        
+
         # Check cache
         if project_root in self._git_state_check_cache:
             timestamp, last_message = self._git_state_check_cache[project_root]
             if now - timestamp < CACHE_TTL:
                 # Return cached message (if any) - we only report the change once
                 return None  # Already notified
-        
+
         # Perform the actual check
         project = self.get_active_project()
         if project is None:
             return None
-        
+
         has_changed, message, _ = project.check_git_state_changes()
-        
+
         # Update cache
         self._git_state_check_cache[project_root] = (now, message if has_changed else None)
-        
+
         if has_changed:
             log.info(f"Git state change detected: {message}")
             return message
