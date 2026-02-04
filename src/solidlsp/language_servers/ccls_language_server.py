@@ -19,11 +19,9 @@ direct download. Install using your system package manager:
 - Homebrew: ``brew install ccls``
 
 **Windows:**
-- MSYS2 (MinGW): Build from source using MSYS2 toolchain
-- Chocolatey: ``choco install ccls`` (if available)
-- No native prebuilt binaries available; may need to build from source
+- Chocolatey: ``choco install ccls``
 
-For build-from-source instructions (required on Windows), see:
+For alternative installation methods and build-from-source instructions, see:
 https://github.com/MaskRay/ccls/wiki/Build
 
 Official documentation:
