@@ -12,7 +12,7 @@ from datetime import datetime
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, Self, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, Optional, Self, TypeVar
 
 import yaml
 from ruamel.yaml.comments import CommentedMap
@@ -138,6 +138,45 @@ class SerenaConfigError(Exception):
     pass
 
 
+@dataclass
+class LSConfig:
+    """
+    Configuration for language server behavior.
+    In YAML, this is represented as a dictionary with the same field names.
+
+    An instance will be associated with the global serena_config, providing defaults,
+    and with the project level configuration, providing overrides.
+    By convention, each field can take the value `"use_global"` to indicate that
+    the value from the global config (or the default, if the latter is also missing) should be used.
+    Defaults are defined in the method `with_global_defaults`.
+    """
+
+    hover_budget: float | Literal["use_global"] = "use_global"
+    """
+    Time budget (seconds) for LSP hover requests when tools request include_info.
+
+    If budget is exceeded, Serena stops issuing further hover requests and returns partial info results.
+    0 disables the budget (no early stopping).
+    """
+
+    def apply_overrides(self, other: "LSConfig") -> None:
+        for f in dataclasses.fields(self):
+            other_value = getattr(other, f.name)
+            if other_value != "use_global":
+                setattr(self, f.name, other_value)
+
+    def assert_all_values_set(self) -> None:
+        for f in dataclasses.fields(self):
+            value = getattr(self, f.name)
+            if value == "use_global":
+                raise ValueError(f"Field {f.name} is set to 'use_global', expected a value to ne set.")
+
+    @classmethod
+    def with_global_defaults(cls) -> Self:
+        """Returns a new LSConfig with global defaults (i.e., no value is "use_global")"""
+        return cls(hover_budget=10)
+
+
 def get_serena_managed_in_project_dir(project_root: str | Path) -> str:
     return os.path.join(project_root, SERENA_MANAGED_DIR_NAME)
 
@@ -171,14 +210,11 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
     ignore_all_files_in_gitignore: bool = True
     initial_prompt: str = ""
     encoding: str = DEFAULT_SOURCE_FILE_ENCODING
-    hover_budget: float | None = None
+    ls_config: LSConfig = field(default_factory=LSConfig)
     """
-    Per-project override for include_info hover budget (seconds).
-
-    If None, global config is used. 0 disables the budget. Negative values are invalid.
+    Per-project override for language server configuration.
+    Values here override the global serena_config.yml settings.
     """
-
-    SERENA_DEFAULT_PROJECT_FILE = "project.yml"
     FIELDS_WITHOUT_DEFAULTS = {"project_name", "languages"}
     YAML_COMMENT_NORMALISATION = YamlCommentNormalisation.LEADING
     """
@@ -329,17 +365,6 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
                     f"Invalid language: {orig_language_str}.\nValid language_strings are: {[l.value for l in Language]}"
                 ) from e
 
-        # Validate hover_budget
-        hover_budget_raw = data["hover_budget"]
-        hover_budget = hover_budget_raw
-        if hover_budget is not None:
-            try:
-                hover_budget = float(hover_budget_raw)
-            except (TypeError, ValueError) as e:
-                raise ValueError(f"hover_budget must be a number or null, got: {hover_budget_raw}") from e
-            if hover_budget < 0:
-                raise ValueError(f"hover_budget cannot be negative, got: {hover_budget}")
-
         return cls(
             project_name=data["project_name"],
             languages=languages,
@@ -353,7 +378,7 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
             encoding=data["encoding"],
             base_modes=data["base_modes"],
             default_modes=data["default_modes"],
-            hover_budget=hover_budget,
+            ls_config=LSConfig(**data.get("ls_config", {})),
         )
 
     def _to_yaml_dict(self) -> dict:
@@ -511,12 +536,10 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
     ls_specific_settings: dict = field(default_factory=dict)
     """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""
 
-    hover_budget: float = 10.0
+    ls_config: LSConfig = field(default_factory=LSConfig.with_global_defaults)
     """
-    Time budget (seconds) for LSP hover requests when tools request include_info.
-
-    If budget is exceeded, Serena stops issuing further hover requests and returns partial info results.
-    0 disables the budget (no early stopping). Negative values are invalid.
+    Configuration for language server behavior.
+    These are the default values that can be overridden per-project.
     """
 
     # settings with overridden defaults
@@ -534,7 +557,7 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
     # *** static members ***
 
     CONFIG_FILE = "serena_config.yml"
-    CONFIG_FIELDS_WITH_TYPE_CONVERSION = {"projects", "language_backend"}
+    CONFIG_FIELDS_WITH_TYPE_CONVERSION = {"projects", "language_backend", "ls_config"}
 
     # *** methods ***
 
@@ -652,6 +675,15 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
                     language_backend = LanguageBackend.JETBRAINS
                 del loaded_commented_yaml["jetbrains"]
         instance.language_backend = language_backend
+
+        # load LSConfig, applying defaults and overrides
+        # we use the same mechanism for defaults and user-provided overrides as for the project-level
+        # overrides of the global config. Could be considered a slight abuse (due to the keyword use_global
+        # that forms part of that mechanism not being semantically applicable here).
+        ls_config = LSConfig.with_global_defaults()
+        ls_config_overrides = LSConfig(**loaded_commented_yaml.get("ls_config", {}))
+        ls_config.apply_overrides(ls_config_overrides)
+        instance.ls_config = ls_config
 
         # migrate deprecated "gui_log_level" field if necessary
         if "gui_log_level" in loaded_commented_yaml:
@@ -806,6 +838,9 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
 
         # convert language backend to string
         commented_yaml["language_backend"] = self.language_backend.value
+
+        # convert ls_config to dict
+        commented_yaml["ls_config"] = dataclasses.asdict(self.ls_config)
 
         # transfer comments from the template file
         # NOTE: The template file now uses leading comments, but we previously used trailing comments,

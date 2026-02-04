@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import asdict, dataclass
 from time import perf_counter
-from typing import TYPE_CHECKING, Any, Self, Union
+from typing import TYPE_CHECKING, Any, Self, Union, cast
 
 from sensai.util.string import ToStringMixin
 
@@ -14,6 +14,7 @@ from solidlsp import SolidLanguageServer
 from solidlsp.ls import ReferenceInSymbol as LSPReferenceInSymbol
 from solidlsp.ls_types import Position, SymbolKind, UnifiedSymbolInformation
 
+from .config.serena_config import LSConfig
 from .ls_manager import LanguageServerManager
 from .project import Project
 
@@ -552,17 +553,12 @@ class LanguageServerSymbolRetriever:
             return None
         return self._request_info(relative_file_path=symbol.relative_path, line=symbol.line, column=symbol.column)  # type: ignore[arg-type]
 
-    def _get_hover_budget(self, default_budget: float = 10) -> float:
+    def _get_ls_config(self) -> LSConfig:
         """Project -> global -> default"""
-        hover_budget = default_budget
         if self.agent is not None:
-            hover_budget = self.agent.serena_config.hover_budget
-            active_project = self.agent.get_active_project()
-            if active_project is not None:
-                project_hover_budget = active_project.project_config.hover_budget
-                if project_hover_budget is not None:
-                    hover_budget = project_hover_budget
-        return hover_budget
+            return self.agent.get_ls_config()
+        else:
+            return LSConfig.with_global_defaults()
 
     def request_info_for_symbol_batch(
         self,
@@ -605,7 +601,7 @@ class LanguageServerSymbolRetriever:
             symbols_by_file.setdefault(file_path, []).append(sym)
 
         hover_spent_seconds = 0.0
-        hover_budget_seconds = self._get_hover_budget()
+        hover_budget_seconds = cast(float, self._get_ls_config().hover_budget)
         # the vars below are only for debug logging
         per_file_stats: list[tuple[str, int, float]] = []
         total_hover_lookups = 0

@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from serena.config.serena_config import LSConfig
 from serena.symbol import LanguageServerSymbolRetriever, NamePathComponent, NamePathMatcher
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
@@ -263,8 +264,7 @@ class TestHoverBudget:
         """With a large budget, all hover lookups are performed."""
         # Create symbol retriever with a mock agent that has large budget
         mock_agent = MagicMock()
-        mock_agent.serena_config.hover_budget = 10.0
-        mock_agent.get_active_project.return_value = None
+        mock_agent.get_ls_config.return_value = LSConfig(hover_budget=10.0)
 
         symbol_retriever = LanguageServerSymbolRetriever(language_server, agent=mock_agent)
 
@@ -293,8 +293,7 @@ class TestHoverBudget:
         """With a small budget, hover lookups stop and remaining symbols get None info."""
         # Create symbol retriever with a mock agent that has small budget (0.1s)
         mock_agent = MagicMock()
-        mock_agent.serena_config.hover_budget = 0.1
-        mock_agent.get_active_project.return_value = None
+        mock_agent.get_ls_config.return_value = LSConfig(hover_budget=0.1)
 
         symbol_retriever = LanguageServerSymbolRetriever(language_server, agent=mock_agent)
 
@@ -339,8 +338,7 @@ class TestHoverBudget:
         """With budget=0, all hover lookups proceed (no early stopping)."""
         # Create symbol retriever with budget=0 (unlimited)
         mock_agent = MagicMock()
-        mock_agent.serena_config.hover_budget = 0.0
-        mock_agent.get_active_project.return_value = None
+        mock_agent.get_ls_config.return_value = LSConfig(hover_budget=0.0)
 
         symbol_retriever = LanguageServerSymbolRetriever(language_server, agent=mock_agent)
 
@@ -366,13 +364,15 @@ class TestHoverBudget:
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
     def test_project_budget_overrides_global(self, language_server: SolidLanguageServer, monkeypatch: pytest.MonkeyPatch):
         """Project-level budget overrides global budget."""
-        # Create symbol retriever with global budget 10.0 but project budget 0.05
-        mock_project = MagicMock()
-        mock_project.project_config.hover_budget = 0.05
+        # Simulate the real get_ls_config() behavior: global config + project override
+        global_config = LSConfig(hover_budget=10.0)  # Global budget is 10s
+        project_config = LSConfig(hover_budget=0.05)  # Project overrides to 0.05s
+
+        global_config.apply_overrides(project_config)
+        # After apply_overrides, global_config should have hover_budget=0.05
 
         mock_agent = MagicMock()
-        mock_agent.serena_config.hover_budget = 10.0
-        mock_agent.get_active_project.return_value = mock_project
+        mock_agent.get_ls_config.return_value = global_config
 
         symbol_retriever = LanguageServerSymbolRetriever(language_server, agent=mock_agent)
 
@@ -407,14 +407,16 @@ class TestHoverBudget:
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
     def test_project_null_inherits_global(self, language_server: SolidLanguageServer, monkeypatch: pytest.MonkeyPatch):
-        """When project budget is None, global budget is used."""
-        # Create symbol retriever with project budget=None (inherit global)
-        mock_project = MagicMock()
-        mock_project.project_config.hover_budget = None
+        """When project budget is use_global, global budget is used."""
+        # Simulate the real get_ls_config() behavior: global config with use_global in project
+        global_config = LSConfig(hover_budget=10.0)  # Global budget is 10s
+        project_config = LSConfig(hover_budget="use_global")  # Project uses global
+
+        global_config.apply_overrides(project_config)
+        # After apply_overrides, global_config should still have hover_budget=10.0 (not changed)
 
         mock_agent = MagicMock()
-        mock_agent.serena_config.hover_budget = 10.0
-        mock_agent.get_active_project.return_value = mock_project
+        mock_agent.get_ls_config.return_value = global_config
 
         symbol_retriever = LanguageServerSymbolRetriever(language_server, agent=mock_agent)
 
