@@ -511,7 +511,7 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
     ls_specific_settings: dict = field(default_factory=dict)
     """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""
 
-    hover_budget: float = 5.0
+    hover_budget: float = 10.0
     """
     Time budget (seconds) for LSP hover requests when tools request include_info.
 
@@ -659,16 +659,6 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
             if "log_level" not in loaded_commented_yaml:
                 instance.log_level = loaded_commented_yaml["gui_log_level"]
             del loaded_commented_yaml["gui_log_level"]
-
-        # Load and validate hover_budget
-        hover_budget_raw = get_value_or_default("hover_budget")
-        try:
-            hover_budget = float(hover_budget_raw)
-        except (TypeError, ValueError) as e:
-            raise ValueError(f"hover_budget must be a number, got: {hover_budget_raw}") from e
-        if hover_budget < 0:
-            raise ValueError(f"hover_budget cannot be negative, got: {hover_budget}")
-        instance.hover_budget = hover_budget
 
         # re-save the configuration file if any migrations were performed
         if num_migrations > 0:
