@@ -762,8 +762,10 @@ class ProjectCommands(AutoRegisteringGroup):
             try:
                 # Create SerenaAgent with dashboard disabled
                 log.info("Creating SerenaAgent with disabled dashboard...")
-                config = SerenaConfig(gui_log_window=False, web_dashboard=False)
-                agent = SerenaAgent(project=project_path, serena_config=config)
+                serena_config = SerenaConfig.from_config_file()
+                serena_config.gui_log_window = False
+                serena_config.web_dashboard = False
+                agent = SerenaAgent(project=project_path, serena_config=serena_config)
                 log.info("SerenaAgent created successfully")
 
                 # Find first non-empty file that can be analyzed
