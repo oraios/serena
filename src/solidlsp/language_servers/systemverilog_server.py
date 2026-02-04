@@ -1,5 +1,5 @@
 """
-SystemVerilog language server using slang-server.
+SystemVerilog language server using verible-verilog-ls.
 """
 
 import logging
@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 
 class SystemVerilogLanguageServer(SolidLanguageServer):
     """
-    SystemVerilog language server using slang-server.
+    SystemVerilog language server using verible-verilog-ls.
     Supports .sv, .svh, .v, .vh files.
     """
 
@@ -38,41 +38,49 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
             deps = RuntimeDependencyCollection(
                 [
                     RuntimeDependency(
-                        id="slang-server",
-                        description="slang-server for Linux (x64)",
-                        url="https://github.com/MikePopoloski/slang/releases/download/v7.0/slang-linux-x64-clang-Release.tar.gz",
+                        id="verible-ls",
+                        description="verible-verilog-ls for Linux (x64)",
+                        url="https://github.com/chipsalliance/verible/releases/download/v0.0-4051-g9fdb4057/verible-v0.0-4051-g9fdb4057-linux-static-x86_64.tar.gz",
                         platform_id="linux-x64",
                         archive_type="gztar",
-                        binary_name="slang-linux-x64-clang-Release/bin/slang-langserver",
+                        binary_name="verible-v0.0-4051-g9fdb4057/bin/verible-verilog-ls",
                     ),
                     RuntimeDependency(
-                        id="slang-server",
-                        description="slang-server for macOS (x64)",
-                        url="https://github.com/MikePopoloski/slang/releases/download/v7.0/slang-macOS-x64-Release.tar.gz",
+                        id="verible-ls",
+                        description="verible-verilog-ls for Linux (arm64)",
+                        url="https://github.com/chipsalliance/verible/releases/download/v0.0-4051-g9fdb4057/verible-v0.0-4051-g9fdb4057-linux-static-arm64.tar.gz",
+                        platform_id="linux-arm64",
+                        archive_type="gztar",
+                        binary_name="verible-v0.0-4051-g9fdb4057/bin/verible-verilog-ls",
+                    ),
+                    RuntimeDependency(
+                        id="verible-ls",
+                        description="verible-verilog-ls for macOS",
+                        url="https://github.com/chipsalliance/verible/releases/download/v0.0-4051-g9fdb4057/verible-v0.0-4051-g9fdb4057-macOS.tar.gz",
                         platform_id="osx-x64",
                         archive_type="gztar",
-                        binary_name="slang-macOS-x64-Release/bin/slang-langserver",
+                        binary_name="verible-v0.0-4051-g9fdb4057/bin/verible-verilog-ls",
                     ),
                     RuntimeDependency(
-                        id="slang-server",
-                        description="slang-server for macOS (Arm64)",
-                        url="https://github.com/MikePopoloski/slang/releases/download/v7.0/slang-macOS-arm64-Release.tar.gz",
+                        id="verible-ls",
+                        description="verible-verilog-ls for macOS",
+                        url="https://github.com/chipsalliance/verible/releases/download/v0.0-4051-g9fdb4057/verible-v0.0-4051-g9fdb4057-macOS.tar.gz",
                         platform_id="osx-arm64",
                         archive_type="gztar",
-                        binary_name="slang-macOS-arm64-Release/bin/slang-langserver",
+                        binary_name="verible-v0.0-4051-g9fdb4057/bin/verible-verilog-ls",
                     ),
                     RuntimeDependency(
-                        id="slang-server",
-                        description="slang-server for Windows (x64)",
-                        url="https://github.com/MikePopoloski/slang/releases/download/v7.0/slang-win64-Release.zip",
+                        id="verible-ls",
+                        description="verible-verilog-ls for Windows (x64)",
+                        url="https://github.com/chipsalliance/verible/releases/download/v0.0-4051-g9fdb4057/verible-v0.0-4051-g9fdb4057-win64.zip",
                         platform_id="win-x64",
                         archive_type="zip",
-                        binary_name="slang-win64-Release/bin/slang-langserver.exe",
+                        binary_name="verible-v0.0-4051-g9fdb4057/bin/verible-verilog-ls.exe",
                     ),
                 ]
             )
 
-            slang_ls_dir = os.path.join(self._ls_resources_dir, "slang-server")
+            verible_ls_dir = os.path.join(self._ls_resources_dir, "verible-ls")
 
             try:
                 dep = deps.get_single_dep_for_current_platform()
@@ -80,22 +88,22 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
                 dep = None
 
             if dep is None:
-                # Fallback to system-installed slang-langserver
-                executable_path = shutil.which("slang-langserver")
+                # Fallback to system-installed verible-verilog-ls
+                executable_path = shutil.which("verible-verilog-ls")
                 if not executable_path:
                     raise FileNotFoundError(
-                        "slang-langserver is not installed on your system.\n"
-                        + "Please install slang manually or use a supported platform.\n"
-                        + "See https://github.com/MikePopoloski/slang for installation instructions."
+                        "verible-verilog-ls is not installed on your system.\n"
+                        + "Please install verible manually or use a supported platform.\n"
+                        + "See https://github.com/chipsalliance/verible for installation instructions."
                     )
-                log.info(f"Using system-installed slang-langserver at {executable_path}")
+                log.info(f"Using system-installed verible-verilog-ls at {executable_path}")
             else:
-                executable_path = deps.binary_path(slang_ls_dir)
+                executable_path = deps.binary_path(verible_ls_dir)
                 if not os.path.exists(executable_path):
-                    log.info(f"slang-langserver not found at {executable_path}. Downloading from {dep.url}")
-                    _ = deps.install(slang_ls_dir)
+                    log.info(f"verible-verilog-ls not found at {executable_path}. Downloading from {dep.url}")
+                    _ = deps.install(verible_ls_dir)
                 if not os.path.exists(executable_path):
-                    raise FileNotFoundError(f"slang-langserver not found at {executable_path}")
+                    raise FileNotFoundError(f"verible-verilog-ls not found at {executable_path}")
                 os.chmod(executable_path, 0o755)
             return executable_path
 
@@ -131,7 +139,7 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        log.info("Starting slang-langserver process")
+        log.info("Starting verible-verilog-ls process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
