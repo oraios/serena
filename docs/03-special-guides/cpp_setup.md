@@ -44,7 +44,7 @@ language_servers:
 
 ### With ccls
 
-ccls requires manual installation but may perform better in some situations.
+ccls requires manual installation and configuration. It may perform better in some situations.
 
 #### Installation
 
@@ -73,16 +73,11 @@ choco install ccls
 
 #### Configuration
 
-After installing ccls, configure Serena to use it via project settings:
+After installing ccls, configure Serena to use it via project settings (in `.serena/project.yml`)
+by adding `cpp_ccls` to the `languages` list. Replace `cpp` with `cpp_ccls` if you already have the `cpp` entry.
 
-```yaml
-# .serena/project.yml
-language_servers:
-  cpp:
-    ls: cpp_ccls  # Use ccls instead of clangd
-```
-
-ccls can handle relative paths in `compile_commands.json`.
+ccls can handle relative paths in `compile_commands.json`, so no transformation is necessary
+and no transformed `compile_commands.json` file will be created.
 
 ---
 
@@ -90,24 +85,11 @@ ccls can handle relative paths in `compile_commands.json`.
 
 ### Files Created After Server Initialization
 
-Both clangd and ccls have a fundamental limitation: **files created AFTER the language server starts are NOT automatically indexed**.
+Both clangd and ccls have a fundamental limitation: 
+**files created by external mechanisms after the language server starts are not automatically indexed**.
 
-Cross-file references to/from newly created files will NOT work until:
-1. The file is added to `compile_commands.json`
-2. The language server is restarted
-
-**Workaround:** Regenerate `compile_commands.json` after creating new files and restart Serena.
-
-### Cross-File Reference Finding
-
-Cross-file references only work for files that:
-- Are present in `compile_commands.json`
-- Use correct configuration (proper compiler and flags)
-
-If cross-file references don't work, check:
-1. All files are listed in `compile_commands.json`
-2. Compiler is `clang++` (although `g++` may work with ccls)
-3. Include paths are correct
+Cross-file references to newly created files will not work unless the new file is at some point opened by the language server (for example, by a symbol lookup in it), or until `compile_commands.json` is updated and 
+the language server is restarted.
 
 ---
 
