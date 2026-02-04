@@ -65,9 +65,12 @@ jobs:
           if [ ! -d ".venv" ]; then
             uv venv
           fi
-      - name: Install dependencies
+      - name: Install Python environment
         shell: bash
         run: uv pip install -e ".[dev]"
+      - name: List Python dependencies
+        shell: bash
+        run: uv pip list
       - name: Check formatting
         shell: bash
         run: uv run poe lint
