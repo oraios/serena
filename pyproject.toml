@@ -317,6 +317,7 @@ markers = [
   "slow: tests that require additional Expert instances and have long startup times (~60-90s each)",
   "toml: language server running for TOML",
   "matlab: language server running for MATLAB (requires MATLAB R2021b+)",
+  "systemverilog: language server running for SystemVerilog (uses slang-langserver)",
 ]
 
 [tool.codespell]
