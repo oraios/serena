@@ -1,11 +1,9 @@
 """
-Basic tests for SystemVerilog language server integration (slang-langserver).
+Basic tests for SystemVerilog language server integration (verible-verilog-ls).
 
-This module tests Language.SYSTEMVERILOG using slang-langserver.
+This module tests Language.SYSTEMVERILOG using verible-verilog-ls.
 Tests are skipped if the language server is not available.
 """
-
-import shutil
 
 import pytest
 
@@ -14,13 +12,9 @@ from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
 
 
-def _slang_available() -> bool:
-    return shutil.which("slang-langserver") is not None
-
-
 @pytest.mark.systemverilog
 class TestSystemVerilogLanguageServer:
-    """Tests for SystemVerilog language server (slang-langserver)."""
+    """Tests for SystemVerilog language server (verible-verilog-ls)."""
 
     @pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
