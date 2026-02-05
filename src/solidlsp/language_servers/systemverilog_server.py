@@ -59,7 +59,7 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
                         url="https://github.com/chipsalliance/verible/releases/download/v0.0-4051-g9fdb4057/verible-v0.0-4051-g9fdb4057-macOS.tar.gz",
                         platform_id="osx-x64",
                         archive_type="gztar",
-                        binary_name="verible-v0.0-4051-g9fdb4057/bin/verible-verilog-ls",
+                        binary_name="verible-v0.0-4051-g9fdb4057-macOS/bin/verible-verilog-ls",
                     ),
                     RuntimeDependency(
                         id="verible-ls",
@@ -67,7 +67,7 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
                         url="https://github.com/chipsalliance/verible/releases/download/v0.0-4051-g9fdb4057/verible-v0.0-4051-g9fdb4057-macOS.tar.gz",
                         platform_id="osx-arm64",
                         archive_type="gztar",
-                        binary_name="verible-v0.0-4051-g9fdb4057/bin/verible-verilog-ls",
+                        binary_name="verible-v0.0-4051-g9fdb4057-macOS/bin/verible-verilog-ls",
                     ),
                     RuntimeDependency(
                         id="verible-ls",
@@ -75,7 +75,7 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
                         url="https://github.com/chipsalliance/verible/releases/download/v0.0-4051-g9fdb4057/verible-v0.0-4051-g9fdb4057-win64.zip",
                         platform_id="win-x64",
                         archive_type="zip",
-                        binary_name="verible-v0.0-4051-g9fdb4057/bin/verible-verilog-ls.exe",
+                        binary_name="verible-v0.0-4051-g9fdb4057-win64/verible-verilog-ls.exe",
                     ),
                 ]
             )
@@ -98,7 +98,7 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
                     )
                 log.info(f"Using system-installed verible-verilog-ls at {executable_path}")
             else:
-                executable_path = deps.binary_path(verible_ls_dir)
+                executable_path = os.path.normpath(deps.binary_path(verible_ls_dir))
                 if not os.path.exists(executable_path):
                     log.info(f"verible-verilog-ls not found at {executable_path}. Downloading from {dep.url}")
                     _ = deps.install(verible_ls_dir)
