@@ -33,6 +33,7 @@ Some languages require additional installations or setup steps, as noted.
 * **C/C++**  
   Default: clangd. Optional alternate: ccls (experimental, opt-in). 
   For best results, provide a `compile_commands.json` at the repository root.
+  See the [C/C++ Setup Guide](../03-special-guides/cpp_setup) for details.
 * **Clojure**
 * **Dart**
 * **Elixir**  
