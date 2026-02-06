@@ -2,7 +2,6 @@ import logging
 import os
 import pathlib
 import subprocess
-import threading
 from typing import Any
 
 from overrides import override
@@ -68,7 +67,6 @@ class RLanguageServer(SolidLanguageServer):
         r_cmd = 'R --vanilla --quiet --slave -e "options(languageserver.debug_mode = FALSE); languageserver::run()"'
 
         super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=r_cmd, cwd=repository_root_path), "r", solidlsp_settings)
-        self.server_ready = threading.Event()
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
@@ -158,7 +156,5 @@ class RLanguageServer(SolidLanguageServer):
             log.info("R LSP definition provider available")
 
         self.server.notify.initialized({})
-        self.completions_available.set()
 
         # R Language Server is ready after initialization
-        self.server_ready.set()

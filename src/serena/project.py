@@ -1,10 +1,12 @@
 import json
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import Any
 
 import pathspec
+from sensai.util.logging import LogTime
 from sensai.util.string import ToStringMixin
 
 from serena.config.serena_config import DEFAULT_TOOL_TIMEOUT, ProjectConfig, get_serena_managed_in_project_dir
@@ -12,7 +14,6 @@ from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_NAME
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.text_utils import MatchedConsecutiveLines, search_files
 from serena.util.file_system import GitignoreParser, match_path
-from serena.util.general import save_yaml
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import FileUtils
@@ -136,27 +137,38 @@ class Project(ToStringMixin):
             with open(serena_data_gitignore_path, "w", encoding="utf-8") as f:
                 f.write(f"/{SolidLanguageServer.CACHE_FOLDER_NAME}\n")
 
-        # gather ignored paths from the project configuration and gitignore files
-        ignored_patterns = list(project_config.ignored_paths)
-        if len(ignored_patterns) > 0:
-            log.info(f"Using {len(ignored_patterns)} ignored paths from the explicit project configuration.")
-            log.debug(f"Ignored paths: {ignored_patterns}")
-        if project_config.ignore_all_files_in_gitignore:
-            gitignore_parser = GitignoreParser(self.project_root)
-            for spec in gitignore_parser.get_ignore_specs():
-                log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
-                ignored_patterns.extend(spec.patterns)
-        self._ignored_patterns = ignored_patterns
+        # prepare ignore spec asynchronously, ensuring immediate project activation.
+        self.__ignored_patterns: list[str]
+        self.__ignore_spec: pathspec.PathSpec
+        self._ignore_spec_available = threading.Event()
+        threading.Thread(name=f"gather-ignorespec[{self.project_config.project_name}]", target=self._gather_ignorespec, daemon=True).start()
 
-        # Set up the pathspec matcher for the ignored paths
-        # for all absolute paths in ignored_paths, convert them to relative paths
-        processed_patterns = []
-        for pattern in set(ignored_patterns):
-            # Normalize separators (pathspec expects forward slashes)
-            pattern = pattern.replace(os.path.sep, "/")
-            processed_patterns.append(pattern)
-        log.debug(f"Processing {len(processed_patterns)} ignored paths")
-        self._ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
+    def _gather_ignorespec(self) -> None:
+        with LogTime(f"Gathering ignore spec for project {self.project_config.project_name}", logger=log):
+
+            # gather ignored paths from the project configuration and gitignore files
+            ignored_patterns = list(self.project_config.ignored_paths)
+            if len(ignored_patterns) > 0:
+                log.info(f"Using {len(ignored_patterns)} ignored paths from the explicit project configuration.")
+                log.debug(f"Ignored paths: {ignored_patterns}")
+            if self.project_config.ignore_all_files_in_gitignore:
+                gitignore_parser = GitignoreParser(self.project_root)
+                for spec in gitignore_parser.get_ignore_specs():
+                    log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
+                    ignored_patterns.extend(spec.patterns)
+            self.__ignored_patterns = ignored_patterns
+
+            # Set up the pathspec matcher for the ignored paths
+            # for all absolute paths in ignored_paths, convert them to relative paths
+            processed_patterns = []
+            for pattern in set(ignored_patterns):
+                # Normalize separators (pathspec expects forward slashes)
+                pattern = pattern.replace(os.path.sep, "/")
+                processed_patterns.append(pattern)
+            log.debug(f"Processing {len(processed_patterns)} ignored paths")
+            self.__ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
+
+        self._ignore_spec_available.set()
 
     def _tostring_includes(self) -> list[str]:
         return []
@@ -183,11 +195,7 @@ class Project(ToStringMixin):
         """
         Saves the current project configuration to disk.
         """
-        config_path = os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
-        log.info("Saving updated project configuration to %s", config_path)
-        config_with_comments = ProjectConfig.load_commented_map(config_path)
-        config_with_comments.update(self.project_config.to_yaml_dict())
-        save_yaml(config_path, config_with_comments, preserve_comments=True)
+        self.project_config.save(self.project_root)
 
     def path_to_serena_data_folder(self) -> str:
         return os.path.join(self.project_root, SERENA_MANAGED_DIR_NAME)
@@ -225,12 +233,28 @@ class Project(ToStringMixin):
         abs_path = Path(self.project_root) / relative_path
         return FileUtils.read_file(str(abs_path), self.project_config.encoding)
 
-    def get_ignore_spec(self) -> pathspec.PathSpec:
+    @property
+    def _ignore_spec(self) -> pathspec.PathSpec:
         """
         :return: the pathspec matcher for the paths that were configured to be ignored,
             either explicitly or implicitly through .gitignore files.
         """
-        return self._ignore_spec
+        if not self._ignore_spec_available.is_set():
+            log.info("Waiting for ignore spec to become available ...")
+            self._ignore_spec_available.wait()
+            log.info("Ignore spec is now available for project; proceeding")
+        return self.__ignore_spec
+
+    @property
+    def _ignored_patterns(self) -> list[str]:
+        """
+        :return: the list of ignored path patterns
+        """
+        if not self._ignore_spec_available.is_set():
+            log.info("Waiting for ignored patterns to become available ...")
+            self._ignore_spec_available.wait()
+            log.info("Ignore patterns are now available for project; proceeding")
+        return self.__ignored_patterns
 
     def _is_ignored_relative_path(self, relative_path: str | Path, ignore_non_source_files: bool = True) -> bool:
         """
@@ -272,7 +296,7 @@ class Project(ToStringMixin):
         if len(rel_path.parts) > 0 and rel_path.parts[0] == ".git":
             return True
 
-        return match_path(str(relative_path), self.get_ignore_spec(), root_path=self.project_root)
+        return match_path(str(relative_path), self._ignore_spec, root_path=self.project_root)
 
     def is_ignored_path(self, path: str | Path, ignore_non_source_files: bool = False) -> bool:
         """

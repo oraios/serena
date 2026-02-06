@@ -1,5 +1,6 @@
 import logging
 import os
+import shutil as _sh
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -35,7 +36,9 @@ class LanguageParamRequest:
 
 
 def get_repo_path(language: Language) -> Path:
-    return Path(__file__).parent / "resources" / "repos" / language / "test_repo"
+    # Map both CPP variants to the shared cpp test repo
+    repo_dir = "cpp" if language in (Language.CPP, Language.CPP_CCLS) else str(language)
+    return Path(__file__).parent / "resources" / "repos" / repo_dir / "test_repo"
 
 
 def _create_ls(
@@ -52,7 +55,11 @@ def _create_ls(
     gitignore_parser = GitignoreParser(str(repo_path))
     for spec in gitignore_parser.get_ignore_specs():
         ignored_paths.extend(spec.patterns)
-    config = LanguageServerConfig(code_language=language, ignored_paths=ignored_paths, trace_lsp_communication=trace_lsp_communication)
+    config = LanguageServerConfig(
+        code_language=language,
+        ignored_paths=ignored_paths,
+        trace_lsp_communication=trace_lsp_communication,
+    )
     effective_solidlsp_dir = solidlsp_dir if solidlsp_dir is not None else SerenaPaths().serena_user_home_dir
     return SolidLanguageServer.create(
         config,
@@ -211,6 +218,16 @@ def _determine_disabled_languages() -> list[Language]:
     clojure_tests_enabled = is_clojure_cli_available()
     if not clojure_tests_enabled:
         result.append(Language.CLOJURE)
+
+    # Disable CPP_CCLS tests if ccls is not available
+    ccls_tests_enabled = _sh.which("ccls") is not None
+    if not ccls_tests_enabled:
+        result.append(Language.CPP_CCLS)
+
+    # Disable CPP (clangd) tests if clangd is not available
+    clangd_tests_enabled = _sh.which("clangd") is not None
+    if not clangd_tests_enabled:
+        result.append(Language.CPP)
 
     al_tests_enabled = True
     if not al_tests_enabled:

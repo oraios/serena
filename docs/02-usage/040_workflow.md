@@ -53,6 +53,7 @@ The file allows you to configure ...
   * write access
   * an initial prompt that shall be passed to the LLM whenever the project is activated 
   * the name by which you want to refer to the project (relevant when telling the LLM to dynamically activate the project)
+  * the set of tools and modes to use by default
 
 For detailed information on the parameters and possible settings, see the 
 [template file](https://github.com/oraios/serena/blob/main/src/serena/resources/project.template.yml). 

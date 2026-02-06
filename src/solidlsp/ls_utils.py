@@ -414,6 +414,9 @@ class PlatformUtils:
 class SymbolUtils:
     @staticmethod
     def symbol_tree_contains_name(roots: list[UnifiedSymbolInformation], name: str) -> bool:
+        """
+        Check if any symbol in the tree has a name matching the given name.
+        """
         for symbol in roots:
             if symbol["name"] == name:
                 return True

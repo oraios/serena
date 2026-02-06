@@ -1,4 +1,3 @@
-from serena.config.context_mode import SerenaAgentMode
 from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional
 
 
@@ -61,11 +60,11 @@ class SwitchModesTool(Tool, ToolMarkerOptional):
 
         :param modes: the names of the modes to activate
         """
-        mode_instances = [SerenaAgentMode.load(mode) for mode in modes]
-        self.agent.set_modes(mode_instances)
+        self.agent.set_modes(modes)
 
         # Inform the Agent about the activated modes and the currently active tools
-        result_str = f"Successfully activated modes: {', '.join([mode.name for mode in mode_instances])}" + "\n"
+        mode_instances = self.agent.get_active_modes()
+        result_str = f"Active modes: {', '.join([mode.name for mode in mode_instances])}" + "\n"
         result_str += "\n".join([mode_instance.prompt for mode_instance in mode_instances]) + "\n"
         result_str += f"Currently active tools: {', '.join(self.agent.get_active_tool_names())}"
         return result_str

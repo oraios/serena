@@ -2,7 +2,6 @@ import logging
 import os
 import pathlib
 import subprocess
-import threading
 import time
 
 from overrides import override
@@ -53,7 +52,6 @@ class SourceKitLSP(SolidLanguageServer):
         super().__init__(
             config, repository_root_path, ProcessLaunchInfo(cmd="sourcekit-lsp", cwd=repository_root_path), "swift", solidlsp_settings
         )
-        self.server_ready = threading.Event()
         self.request_id = 0
         self._did_sleep_before_requesting_references = False
         self._initialization_timestamp: float | None = None
@@ -332,10 +330,6 @@ class SourceKitLSP(SolidLanguageServer):
         assert "definitionProvider" in capabilities, "definitionProvider capability missing"
 
         self.server.notify.initialized({})
-        self.completions_available.set()
-
-        self.server_ready.set()
-        self.server_ready.wait()
 
         # Mark initialization timestamp for smarter delay calculation
         self._initialization_timestamp = time.time()
