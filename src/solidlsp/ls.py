@@ -911,13 +911,13 @@ class SolidLanguageServer(ABC):
             log.error("request_references called before Language Server started")
             raise SolidLSPException("Language Server not started")
 
-        if not self._has_waited_for_cross_file_references:
-            # Some LS require waiting for a while before they can return cross-file references.
-            # This is a workaround for such LS that don't have a reliable "finished initializing" signal.
-            sleep(self._get_wait_time_for_cross_file_referencing())
-            self._has_waited_for_cross_file_references = True
-
         with self.open_file(relative_file_path):
+            if not self._has_waited_for_cross_file_references:
+                # Some LS require waiting for a while before they can return cross-file references.
+                # This is a workaround for such LS that don't have a reliable "finished initializing" signal.
+                # The waiting has to happen after at least one file was opened in the ls
+                sleep(self._get_wait_time_for_cross_file_referencing())
+                self._has_waited_for_cross_file_references = True
             try:
                 response = self._send_references_request(relative_file_path, line=line, column=column)
             except Exception as e:
