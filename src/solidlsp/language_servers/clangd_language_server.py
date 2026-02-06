@@ -307,9 +307,3 @@ class ClangdLanguageServer(SolidLanguageServer):
 
         # wait for server to be ready
         self.server_ready.wait()
-
-    def _shutdown(self, timeout: float = 5.0) -> None:
-        """Shutdown the clangd language server."""
-        # The serena compilation database persists in .serena/ for reuse
-        # Call parent shutdown
-        super()._shutdown(timeout=timeout)
