@@ -110,8 +110,7 @@ class ClangdLanguageServer(SolidLanguageServer):
         if compile_commands_dir:
             # Insert --compile-commands-dir after the executable path
             cmd = launch_info.cmd
-            if isinstance(cmd, str):
-                cmd = [cmd]
+            assert isinstance(cmd, list)
             launch_info.cmd = [cmd[0], f"--compile-commands-dir={compile_commands_dir}"] + cmd[1:]
 
         return launch_info
