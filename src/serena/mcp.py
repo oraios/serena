@@ -342,6 +342,7 @@ class SerenaMCPFactory:
         self._set_mcp_tools(mcp_server, openai_tool_compatible=openai_tool_compatible)
         log.info("MCP server lifetime setup complete")
         yield
+        log.info("MCP server shutting down")
 
     def _get_initial_instructions(self) -> str:
         assert self.agent is not None
