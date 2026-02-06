@@ -287,7 +287,6 @@ class PowerShellLanguageServer(SolidLanguageServer):
             if "started" in message_text.lower() or "ready" in message_text.lower():
                 log.info("PowerShell Editor Services ready signal detected")
                 self.server_ready.set()
-                self.completions_available.set()
 
         def do_nothing(params: dict) -> None:
             return
@@ -320,6 +319,5 @@ class PowerShellLanguageServer(SolidLanguageServer):
             # Fallback: assume server is ready after timeout
             log.info("Timeout waiting for PSES ready signal, proceeding anyway")
             self.server_ready.set()
-            self.completions_available.set()
         else:
             log.info("PowerShell Editor Services initialization complete")

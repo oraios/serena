@@ -50,7 +50,6 @@ class ElmLanguageServer(SolidLanguageServer):
             "elm",
             solidlsp_settings,
         )
-        self.server_ready = threading.Event()
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -196,8 +195,6 @@ class ElmLanguageServer(SolidLanguageServer):
         else:
             log.warning("Timeout waiting for Elm workspace scan, proceeding anyway")
 
-        self.server_ready.set()
-        self.completions_available.set()
         log.info("Elm server ready")
 
     @override

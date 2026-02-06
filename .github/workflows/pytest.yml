@@ -58,16 +58,19 @@ jobs:
         uses: actions/cache@v3
         with:
           path: .venv
-          key: uv-venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}
+          key: uv-venv-${{ runner.os }}-${{ matrix.python-version }}-lock-${{ hashFiles('uv.lock') }}
       - name: Create virtual environment
         shell: bash
         run: |
           if [ ! -d ".venv" ]; then
             uv venv
           fi
-      - name: Install dependencies
+      - name: Install Python environment
         shell: bash
-        run: uv pip install -e ".[dev]"
+        run: uv sync --extra dev --locked
+      - name: List Python dependencies
+        shell: bash
+        run: uv pip list
       - name: Check formatting
         shell: bash
         run: uv run poe lint
@@ -110,6 +113,22 @@ jobs:
         uses: DeLaGuardo/setup-clojure@13.4
         with:
           cli: latest
+      - name: Install ccls (C/C++ Language Server)
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y ccls
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            brew install ccls
+          fi
+          # Windows: ccls requires building from source with MSYS2/LLVM, skipped in CI
+          # Verify installation
+          if command -v ccls &> /dev/null; then
+            echo "ccls installed: $(ccls --version 2>&1 | head -1)"
+          else
+            echo "ccls not available on this platform (expected on Windows)"
+          fi
       - name: Setup Java (for JVM based languages)
         uses: actions/setup-java@v4
         with:

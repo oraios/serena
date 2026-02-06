@@ -481,7 +481,7 @@ class RegisteredProject(ToStringMixin):
         :param path: the path to check
         :return: True if the path matches the project root, False otherwise
         """
-        return self.project_root == Path(path).resolve()
+        return self.project_root.samefile(Path(path).resolve())
 
     def get_project_instance(self) -> "Project":
         """
