@@ -51,10 +51,6 @@ class TestCppLanguageServer:
     @pytest.mark.parametrize("language_server", _cpp_servers, indirect=True)
     def test_find_referencing_symbols_across_files(self, language_server: SolidLanguageServer) -> None:
         """Test finding references to 'add' function across files."""
-        # Wait for background file opening to complete
-        if hasattr(language_server, "_files_opened_event"):
-            language_server._files_opened_event.wait(timeout=1)
-
         # Locate 'add' in b.cpp
         file_path = os.path.join("b.cpp")
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
@@ -94,10 +90,6 @@ class TestCppLanguageServer:
         reason=("Both clangd and ccls do not support cross-file references for newly created files that were never opened by the LS."),
     )
     def test_find_references_in_newly_written_file(self, language_server: SolidLanguageServer) -> None:
-        # Wait for background file opening to complete
-        if hasattr(language_server, "_files_opened_event"):
-            language_server._files_opened_event.wait(timeout=1)
-
         # Create a new file that references the 'add' function from b.cpp
         new_file_path = os.path.join("temp_new_file.cpp")
         new_file_abs_path = os.path.join(language_server.repository_root_path, new_file_path)
