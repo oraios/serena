@@ -46,7 +46,7 @@ from solidlsp.settings import SolidLSPSettings
 log = logging.getLogger(__name__)
 
 
-class CCLSLanguageServer(SolidLanguageServer):
+class CCLS(SolidLanguageServer):
     """
     C/C++ language server implementation using ccls.
 
