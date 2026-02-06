@@ -260,7 +260,12 @@ class SerenaMCPFactory:
                 mcp._tool_manager._tools[tool.get_name()] = mcp_tool
             log.info(f"Starting MCP server with {len(mcp._tool_manager._tools)} tools: {list(mcp._tool_manager._tools.keys())}")
 
-    def _create_serena_agent(self, serena_config: SerenaConfig, modes: ModeSelectionDefinition | None = None) -> SerenaAgent:
+    def _create_serena_agent(
+        self,
+        serena_config: SerenaConfig,
+        modes: ModeSelectionDefinition | None = None,
+        additional_memory_folders: list[str] | None = None,
+    ) -> SerenaAgent:
         return SerenaAgent(
             project=self.project,
             serena_config=serena_config,
