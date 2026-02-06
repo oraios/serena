@@ -4,10 +4,27 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from solidlsp.ls_utils import SymbolUtils
 
 
 @pytest.mark.php
 class TestPhpLanguageServer:
+    @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
+    def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
+        """Test that document symbols are properly retrieved."""
+        symbols = language_server.request_full_symbol_tree()
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "helperFunction"), "helperFunction not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "greet"), "greet function not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "useHelperFunction"), "useHelperFunction not found in symbol tree"
+
+    @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
+    def test_document_symbols(self, language_server: SolidLanguageServer) -> None:
+        """Test that document symbols are properly retrieved for a specific file."""
+        doc_symbols = language_server.request_document_symbols("helper.php")
+        all_symbols = doc_symbols.get_all_symbols_and_roots()
+        symbol_names = [sym.get("name") for sym in all_symbols[0] if sym.get("name")]
+        assert "helperFunction" in symbol_names, f"helperFunction not found in document symbols. Found: {symbol_names}"
+
     @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
     def test_ls_is_running(self, language_server: SolidLanguageServer, repo_path: Path) -> None:

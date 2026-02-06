@@ -112,8 +112,19 @@ class Intelephense(SolidLanguageServer):
                 "textDocument": {
                     "synchronization": {"didSave": True, "dynamicRegistration": True},
                     "definition": {"dynamicRegistration": True},
+                    "references": {"dynamicRegistration": True},
+                    "documentSymbol": {
+                        "dynamicRegistration": True,
+                        "hierarchicalDocumentSymbolSupport": True,
+                        "symbolKind": {"valueSet": list(range(1, 27))},
+                    },
+                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
                 },
-                "workspace": {"workspaceFolders": True, "didChangeConfiguration": {"dynamicRegistration": True}},
+                "workspace": {
+                    "workspaceFolders": True,
+                    "didChangeConfiguration": {"dynamicRegistration": True},
+                    "symbol": {"dynamicRegistration": True},
+                },
             },
             "processId": os.getpid(),
             "rootPath": repository_absolute_path,
@@ -167,9 +178,11 @@ class Intelephense(SolidLanguageServer):
         log.info("After sent initialize params")
 
         # Verify server capabilities
-        assert "textDocumentSync" in init_response["capabilities"]
-        assert "completionProvider" in init_response["capabilities"]
-        assert "definitionProvider" in init_response["capabilities"]
+        capabilities = init_response["capabilities"]
+        assert "textDocumentSync" in capabilities
+        assert "completionProvider" in capabilities
+        assert "definitionProvider" in capabilities
+        assert "documentSymbolProvider" in capabilities, "Server must support document symbols"
 
         self.server.notify.initialized({})
         self.completions_available.set()
