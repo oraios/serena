@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Any, Union
 from solidlsp.lsp_protocol_handler import lsp_types
 
 if TYPE_CHECKING:
-    from .ls_handler import LanguageServerProcess
+    from .ls_process import LanguageServerProcess
 
 
 class LanguageServerRequest:
