@@ -397,16 +397,25 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
 
 
 class RegisteredProject(ToStringMixin):
-    def __init__(self, project_root: str, project_config: "ProjectConfig", project_instance: Optional["Project"] = None) -> None:
+    def __init__(
+        self,
+        project_root: str,
+        project_config: "ProjectConfig",
+        project_instance: Optional["Project"] = None,
+        global_ignored_paths: Sequence[str] = (),
+    ) -> None:
         """
         Represents a registered project in the Serena configuration.
 
         :param project_root: the root directory of the project
         :param project_config: the configuration of the project
+        :param project_instance: an existing project instance (if already loaded)
+        :param global_ignored_paths: global ignored paths from SerenaConfig, merged additively with project-level patterns
         """
         self.project_root = Path(project_root).resolve()
         self.project_config = project_config
         self._project_instance = project_instance
+        self._global_ignored_paths = global_ignored_paths
 
     def _tostring_exclude_private(self) -> bool:
         return True
@@ -416,19 +425,21 @@ class RegisteredProject(ToStringMixin):
         return self.project_config.project_name
 
     @classmethod
-    def from_project_instance(cls, project_instance: "Project") -> "RegisteredProject":
+    def from_project_instance(cls, project_instance: "Project", global_ignored_paths: Sequence[str] = ()) -> "RegisteredProject":
         return RegisteredProject(
             project_root=project_instance.project_root,
             project_config=project_instance.project_config,
             project_instance=project_instance,
+            global_ignored_paths=global_ignored_paths,
         )
 
     @classmethod
-    def from_project_root(cls, project_root: str | Path) -> "RegisteredProject":
+    def from_project_root(cls, project_root: str | Path, global_ignored_paths: Sequence[str] = ()) -> "RegisteredProject":
         project_config = ProjectConfig.load(project_root)
         return RegisteredProject(
             project_root=str(project_root),
             project_config=project_config,
+            global_ignored_paths=global_ignored_paths,
         )
 
     def matches_root_path(self, path: str | Path) -> bool:
@@ -448,7 +459,11 @@ class RegisteredProject(ToStringMixin):
             from ..project import Project
 
             with LogTime(f"Loading project instance for {self}", logger=log):
-                self._project_instance = Project(project_root=str(self.project_root), project_config=self.project_config)
+                self._project_instance = Project(
+                    project_root=str(self.project_root),
+                    project_config=self.project_config,
+                    global_ignored_paths=self._global_ignored_paths,
+                )
         return self._project_instance
 
 
@@ -492,6 +507,10 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
     """
     ls_specific_settings: dict = field(default_factory=dict)
     """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""
+
+    ignored_paths: list[str] = field(default_factory=list)
+    """List of paths to ignore across all projects. Same syntax as gitignore, so you can use * and **.
+    These patterns are merged additively with each project's own ignored_paths."""
 
     # settings with overridden defaults
     default_modes: Sequence[str] | None = ("interactive", "editing")
@@ -610,6 +629,7 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
             project = RegisteredProject(
                 project_root=str(path),
                 project_config=project_config,
+                global_ignored_paths=instance.ignored_paths,
             )
             instance.projects.append(project)
 
@@ -700,7 +720,7 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
         if autoregister:
             config_path = ProjectConfig.path_to_project_yml(project_root_or_name)
             if os.path.isfile(config_path):
-                registered_project = RegisteredProject.from_project_root(project_root_or_name)
+                registered_project = RegisteredProject.from_project_root(project_root_or_name, global_ignored_paths=self.ignored_paths)
                 self.add_registered_project(registered_project)
                 return registered_project
         # nothing found
@@ -745,8 +765,13 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
 
         project_config = ProjectConfig.load(project_root, autogenerate=True)
 
-        new_project = Project(project_root=str(project_root), project_config=project_config, is_newly_created=True)
-        self.add_registered_project(RegisteredProject.from_project_instance(new_project))
+        new_project = Project(
+            project_root=str(project_root),
+            project_config=project_config,
+            is_newly_created=True,
+            global_ignored_paths=self.ignored_paths,
+        )
+        self.add_registered_project(RegisteredProject.from_project_instance(new_project, global_ignored_paths=self.ignored_paths))
 
         return new_project
 
