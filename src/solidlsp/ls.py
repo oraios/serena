@@ -24,7 +24,7 @@ from serena.util.file_system import match_path
 from solidlsp import ls_types
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
-from solidlsp.ls_handler import SolidLanguageServerHandler
+from solidlsp.ls_process import LanguageServerProcess
 from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils, PathUtils, TextUtils
 from solidlsp.lsp_protocol_handler import lsp_types
@@ -470,7 +470,7 @@ class SolidLanguageServer(ABC):
             self._dependency_provider = self._create_dependency_provider()
             process_launch_info = self._create_process_launch_info()
         log.debug(f"Creating language server instance with {language_id=} and process launch info: {process_launch_info}")
-        self.server = SolidLanguageServerHandler(
+        self.server = LanguageServerProcess(
             process_launch_info,
             language=self.language,
             determine_log_level=self._determine_log_level,
@@ -2152,7 +2152,7 @@ class SolidLanguageServer(ABC):
         return self
 
     @property
-    def handler(self) -> SolidLanguageServerHandler:
+    def handler(self) -> LanguageServerProcess:
         """Access the underlying language server handler.
 
         Useful for advanced operations like sending custom commands
