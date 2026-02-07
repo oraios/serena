@@ -155,7 +155,7 @@ class SerenaDashboardAPI:
 
         # If SERENA_HOME doesn't exist yet, return today's date
         if not os.path.exists(serena_home):
-            today = datetime.now(tz=UTC)
+            today = datetime.now(UTC)
             return int(today.strftime("%Y%m%d"))
 
         # Get the creation/modification time of the SERENA_HOME directory
@@ -163,7 +163,7 @@ class SerenaDashboardAPI:
         # Use st_ctime on Unix-like systems (change time, closest to creation time)
         # or st_mtime if ctime is not reliable
         creation_timestamp = stat_info.st_ctime
-        creation_date = datetime.fromtimestamp(creation_timestamp, tz=UTC)
+        creation_date = datetime.fromtimestamp(creation_timestamp, UTC)
 
         # Return as YYYYMMDD integer
         return int(creation_date.strftime("%Y%m%d"))
