@@ -5,8 +5,10 @@ Provides PHP specific instantiation of the LanguageServer class using Phpactor.
 import logging
 import os
 import pathlib
+import re
 import shutil
 import stat
+import subprocess
 
 from overrides import override
 
@@ -47,6 +49,18 @@ class PhpactorServer(SolidLanguageServer):
             assert (
                 php_path is not None
             ), "PHP is not installed or not found in PATH. Phpactor requires PHP 8.1+. Please install PHP and try again."
+
+            # Check PHP version (Phpactor requires PHP 8.1+)
+            result = subprocess.run(["php", "--version"], capture_output=True, text=True, check=False)
+            php_version_output = result.stdout.strip()
+            log.info(f"PHP version: {php_version_output}")
+            version_match = re.search(r"PHP (\d+)\.(\d+)", php_version_output)
+            if version_match:
+                major, minor = int(version_match.group(1)), int(version_match.group(2))
+                if major < 8 or (major == 8 and minor < 1):
+                    raise RuntimeError(f"PHP {major}.{minor} detected, but Phpactor requires PHP 8.1+. Please upgrade PHP.")
+            else:
+                log.warning("Could not parse PHP version from output. Continuing anyway.")
 
             phpactor_phar_path = os.path.join(self._ls_resources_dir, "phpactor.phar")
             if not os.path.exists(phpactor_phar_path):
