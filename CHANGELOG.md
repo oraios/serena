@@ -38,6 +38,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Language support:
 
+  * **Add Phpactor as alternative PHP language server** (specify `php_phpactor` as language; requires PHP 8.1+)
   * **Add support for Fortran** via fortls language server (requires `pip install fortls`)
   * **Add partial support for Groovy** requires user-provided Groovy language server JAR (see [setup guide](docs/03-special-guides/groovy_setup_guide_for_serena.md))
   * **Add support for Julia** via LanguageServer.jl

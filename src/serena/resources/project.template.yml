@@ -8,10 +8,10 @@ project_name: "project_name"
 #   fortran             fsharp              go                  groovy              haskell
 #   java                julia               kotlin              lua                 markdown
 #   matlab              nix                 pascal              perl                php
-#   powershell          python              python_jedi         r                   rego
-#   ruby                ruby_solargraph     rust                scala               swift
-#   terraform           toml                typescript          typescript_vts      vue
-#   yaml                zig
+#   php_phpactor        powershell          python              python_jedi         r
+#   rego                ruby                ruby_solargraph     rust                scala
+#   swift               terraform           toml                typescript          typescript_vts
+#   vue                 yaml                zig
 #   (This list may be outdated. For the current list, see values of Language enum here:
 #   https://github.com/oraios/serena/blob/main/src/solidlsp/ls_config.py
 #   For some languages, there are alternative language servers, e.g. csharp_omnisharp, ruby_solargraph.)

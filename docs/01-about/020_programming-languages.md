@@ -66,8 +66,8 @@ Some languages require additional installations or setup steps, as noted.
   (Free Pascal/Lazarus; automatically downloads pasls binary; set PP and FPCDIR environment variables for source navigation)
 * **Perl**
   (requires installation of Perl::LanguageServer)
-* **PHP**  
-  (uses Intelephense LSP; set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features)
+* **PHP**
+  (by default, uses Intelephense LSP; set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features; specify `php_phpactor` as your language to use the open-source [Phpactor](https://github.com/phpactor/phpactor) implementation, requires PHP 8.1+)
 * **Python**
 * **R**  
   (requires installation of the `languageserver` R package)
