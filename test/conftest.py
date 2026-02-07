@@ -34,8 +34,16 @@ class LanguageParamRequest:
     param: Language
 
 
+_LANGUAGE_REPO_ALIASES: dict[Language, Language] = {
+    Language.PHP_PHPACTOR: Language.PHP,
+    Language.PYTHON_JEDI: Language.PYTHON,
+    Language.RUBY_SOLARGRAPH: Language.RUBY,
+}
+
+
 def get_repo_path(language: Language) -> Path:
-    return Path(__file__).parent / "resources" / "repos" / language / "test_repo"
+    repo_language = _LANGUAGE_REPO_ALIASES.get(language, language)
+    return Path(__file__).parent / "resources" / "repos" / repo_language / "test_repo"
 
 
 def _create_ls(
