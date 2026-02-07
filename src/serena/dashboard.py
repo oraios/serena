@@ -2,6 +2,7 @@ import os
 import socket
 import threading
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
@@ -141,6 +142,31 @@ class SerenaDashboardAPI:
     @property
     def memory_log_handler(self) -> MemoryLogHandler:
         return self._memory_log_handler
+
+    @staticmethod
+    def _get_installation_date_id() -> int:
+        """
+        Get the installation date ID (YYYYMMDD format) based on the creation time
+        of the SERENA_HOME directory.
+        
+        :return: Installation date as an integer in YYYYMMDD format
+        """
+        serena_home = SerenaPaths().serena_user_home_dir
+        
+        # If SERENA_HOME doesn't exist yet, return today's date
+        if not os.path.exists(serena_home):
+            today = datetime.now()
+            return int(today.strftime("%Y%m%d"))
+        
+        # Get the creation/modification time of the SERENA_HOME directory
+        stat_info = os.stat(serena_home)
+        # Use st_ctime on Unix-like systems (change time, closest to creation time)
+        # or st_mtime if ctime is not reliable
+        creation_timestamp = stat_info.st_ctime
+        creation_date = datetime.fromtimestamp(creation_timestamp)
+        
+        # Return as YYYYMMDD integer
+        return int(creation_date.strftime("%Y%m%d"))
 
     def _setup_routes(self) -> None:
         # Static files
@@ -324,6 +350,12 @@ class SerenaDashboardAPI:
             def _get_unread_news_ids() -> list[int]:
                 all_news_files = (Path(SERENA_DASHBOARD_DIR) / "news").glob("*.html")
                 all_news_ids = [int(f.stem) for f in all_news_files]
+                
+                # Filter news items by installation date
+                installation_date_id = self._get_installation_date_id()
+                # Only include news items published on or after the installation date
+                all_news_ids = [news_id for news_id in all_news_ids if news_id >= installation_date_id]
+                
                 news_snippet_id_file = SerenaPaths().news_snippet_id_file
                 if not os.path.exists(news_snippet_id_file):
                     return all_news_ids
