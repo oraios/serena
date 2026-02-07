@@ -93,11 +93,10 @@ class Request(ToStringMixin):
             raise e
 
 
-class SolidLanguageServerHandler:
+class LanguageServerProcess:
     """
-    This class provides the implementation of Python client for the Language Server Protocol.
-    A class that launches the language server and communicates with it
-    using the Language Server Protocol (LSP).
+    Represents a language server process and provides methods for communicating with it using the
+    Language Server Protocol (LSP).
 
     It provides methods for sending requests, responses, and notifications to the server
     and for registering handlers for requests and notifications from the server.
