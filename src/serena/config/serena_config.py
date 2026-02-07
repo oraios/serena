@@ -8,7 +8,7 @@ import shutil
 from collections.abc import Iterator, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
@@ -511,6 +511,19 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
     CONFIG_FIELDS_WITH_TYPE_CONVERSION = {"projects", "language_backend"}
 
     # *** methods ***
+    @classmethod
+    def get_config_file_creation_date(cls) -> datetime | None:
+        """
+        :return: the creation date of the configuration file, or None if the configuration file does not exist
+        """
+        config_file_path = cls._determine_config_file_path()
+        if not os.path.exists(config_file_path):
+            return None
+
+        # for unix systems st_ctime is the inode change time (change of metadata),
+        # which is good enough for our purposes
+        creation_timestamp = os.stat(config_file_path).st_ctime
+        return datetime.fromtimestamp(creation_timestamp, UTC)
 
     @property
     def config_file_path(self) -> str | None:
