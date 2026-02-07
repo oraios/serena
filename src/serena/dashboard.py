@@ -2,7 +2,6 @@ import os
 import socket
 import threading
 from collections.abc import Callable
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
@@ -11,7 +10,7 @@ from pydantic import BaseModel
 from sensai.util import logging
 
 from serena.analytics import ToolUsageStats
-from serena.config.serena_config import LanguageBackend, SerenaPaths
+from serena.config.serena_config import LanguageBackend, SerenaConfig, SerenaPaths
 from serena.constants import SERENA_DASHBOARD_DIR
 from serena.task_executor import TaskExecutor
 from serena.util.logging import MemoryLogHandler
@@ -142,31 +141,6 @@ class SerenaDashboardAPI:
     @property
     def memory_log_handler(self) -> MemoryLogHandler:
         return self._memory_log_handler
-
-    @staticmethod
-    def _get_installation_date_id() -> int:
-        """
-        Get the installation date ID (YYYYMMDD format) based on the creation time
-        of the SERENA_HOME directory.
-
-        :return: Installation date as an integer in YYYYMMDD format
-        """
-        serena_home = SerenaPaths().serena_user_home_dir
-
-        # If SERENA_HOME doesn't exist yet, return today's date
-        if not os.path.exists(serena_home):
-            today = datetime.now(UTC)
-            return int(today.strftime("%Y%m%d"))
-
-        # Get the creation/modification time of the SERENA_HOME directory
-        stat_info = os.stat(serena_home)
-        # Use st_ctime on Unix-like systems (change time, closest to creation time)
-        # or st_mtime if ctime is not reliable
-        creation_timestamp = stat_info.st_ctime
-        creation_date = datetime.fromtimestamp(creation_timestamp, UTC)
-
-        # Return as YYYYMMDD integer
-        return int(creation_date.strftime("%Y%m%d"))
 
     def _setup_routes(self) -> None:
         # Static files
@@ -350,18 +324,25 @@ class SerenaDashboardAPI:
             def _get_unread_news_ids() -> list[int]:
                 all_news_files = (Path(SERENA_DASHBOARD_DIR) / "news").glob("*.html")
                 all_news_ids = [int(f.stem) for f in all_news_files]
+                """News ids are ints of format YYYYMMDD (publication dates)"""
 
                 # Filter news items by installation date
-                installation_date_id = self._get_installation_date_id()
+                serena_config_creation_date = SerenaConfig.get_config_file_creation_date()
+                if serena_config_creation_date is None:
+                    # should not normally happen, since config file should exist when the dashboard is started
+                    # We assume a fresh installation in this case
+                    log.error("Serena config file not found when starting the dashboard")
+                    return []
+                serena_config_creation_date_int = int(serena_config_creation_date.strftime("%Y%m%d"))
                 # Only include news items published on or after the installation date
-                all_news_ids = [news_id for news_id in all_news_ids if news_id >= installation_date_id]
+                post_installation_news_ids = [news_id for news_id in all_news_ids if news_id >= serena_config_creation_date_int]
 
                 news_snippet_id_file = SerenaPaths().news_snippet_id_file
                 if not os.path.exists(news_snippet_id_file):
-                    return all_news_ids
+                    return post_installation_news_ids
                 with open(news_snippet_id_file, encoding="utf-8") as f:
                     last_read_news_id = int(f.read().strip())
-                return [news_id for news_id in all_news_ids if news_id > last_read_news_id]
+                return [news_id for news_id in post_installation_news_ids if news_id > last_read_news_id]
 
             try:
                 unread_news_ids = _get_unread_news_ids()
