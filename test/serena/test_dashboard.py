@@ -8,8 +8,6 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from serena.dashboard import SerenaDashboardAPI
 
 
@@ -30,7 +28,7 @@ class TestNewsDisplayLogic:
                 # Should return a valid YYYYMMDD format integer
                 assert isinstance(result, int)
                 assert 20000101 <= result <= 99991231  # Valid date range
-                
+
                 # Should match today's or recent date (since we just created the directory)
                 result_str = str(result)
                 assert len(result_str) == 8
