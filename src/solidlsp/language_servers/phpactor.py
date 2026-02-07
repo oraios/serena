@@ -159,4 +159,3 @@ class PhpactorServer(SolidLanguageServer):
         assert init_response["capabilities"].get("definitionProvider"), "Phpactor did not advertise definition support"
 
         self.server.notify.initialized({})
-        self.completions_available.set()

@@ -6,7 +6,6 @@ Contains various configurations and settings specific to Markdown.
 import logging
 import os
 import pathlib
-import threading
 
 from overrides import override
 
@@ -99,7 +98,6 @@ class Marksman(SolidLanguageServer):
             "markdown",
             solidlsp_settings,
         )
-        self.server_ready = threading.Event()
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -181,5 +179,3 @@ class Marksman(SolidLanguageServer):
 
         # marksman is typically ready immediately after initialization
         log.info("Marksman server initialization complete")
-        self.server_ready.set()
-        self.completions_available.set()

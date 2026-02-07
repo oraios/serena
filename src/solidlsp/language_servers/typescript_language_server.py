@@ -269,7 +269,6 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             """
             if params.get("quiescent") == True:
                 self.server_ready.set()
-                self.completions_available.set()
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
@@ -302,11 +301,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             log.info("Timeout waiting for TypeScript server to become ready, proceeding anyway")
             # Fallback: assume server is ready after timeout
             self.server_ready.set()
-        self.completions_available.set()
 
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
-        return 1
+        return 2
 
     @override
     def _get_preferred_definition(self, definitions: list[ls_types.Location]) -> ls_types.Location:

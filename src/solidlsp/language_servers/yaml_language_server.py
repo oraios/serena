@@ -7,7 +7,6 @@ import logging
 import os
 import pathlib
 import shutil
-import threading
 from typing import Any
 
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
@@ -55,7 +54,6 @@ class YamlLanguageServer(SolidLanguageServer):
             "yaml",
             solidlsp_settings,
         )
-        self.server_ready = threading.Event()
 
     @classmethod
     def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> str:
@@ -184,5 +182,3 @@ class YamlLanguageServer(SolidLanguageServer):
 
         # YAML language server is ready immediately after initialization
         log.info("YAML server initialization complete")
-        self.server_ready.set()
-        self.completions_available.set()

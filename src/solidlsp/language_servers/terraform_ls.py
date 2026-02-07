@@ -1,7 +1,6 @@
 import logging
 import os
 import shutil
-import threading
 from typing import cast
 
 from overrides import override
@@ -166,7 +165,6 @@ class TerraformLS(SolidLanguageServer):
             "terraform",
             solidlsp_settings,
         )
-        self.server_ready = threading.Event()
         self.request_id = 0
 
     @staticmethod
@@ -232,8 +230,5 @@ class TerraformLS(SolidLanguageServer):
         assert "definitionProvider" in init_response["capabilities"]
 
         self.server.notify.initialized({})
-        self.completions_available.set()
 
         # terraform-ls server is typically ready immediately after initialization
-        self.server_ready.set()
-        self.server_ready.wait()

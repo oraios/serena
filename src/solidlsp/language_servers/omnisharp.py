@@ -108,6 +108,7 @@ class OmniSharp(SolidLanguageServer):
         self.server_ready = threading.Event()
         self.definition_available = threading.Event()
         self.references_available = threading.Event()
+        self.completions_available = threading.Event()
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:

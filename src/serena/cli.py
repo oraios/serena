@@ -55,15 +55,14 @@ Overriding them means that they no longer apply, so you will need to
 re-specify them in addition to further modes if you want to keep them."""
 
 
-def find_project_root(root: str | Path | None = None) -> str:
+def find_project_root(root: str | Path | None = None) -> str | None:
     """Find project root by walking up from CWD.
 
     Checks for .serena/project.yml first (explicit Serena project), then .git (git root).
-    Falls back to CWD if no marker is found.
 
     :param root: If provided, constrains the search to this directory and below
                  (acts as a virtual filesystem root). Search stops at this boundary.
-    :return: absolute path to project root (falls back to CWD if no marker found)
+    :return: absolute path to project root or None if not suitable root is found
     """
     current = Path.cwd().resolve()
     boundary = Path(root).resolve() if root is not None else None
@@ -86,8 +85,7 @@ def find_project_root(root: str | Path | None = None) -> str:
         if (directory / ".git").exists():  # .git can be file (worktree) or dir
             return str(directory)
 
-    # Fall back to CWD
-    return str(current)
+    return None
 
 
 # --------------------- Utilities -------------------------------------
@@ -274,7 +272,10 @@ class TopLevelCommands(AutoRegisteringGroup):
             if project is not None or project_file_arg is not None:
                 raise click.UsageError("--project-from-cwd cannot be used with --project or positional project argument")
             project = find_project_root()
-            log.info("Auto-detected project root: %s", project)
+            if project is not None:
+                log.info("Auto-detected project root: %s", project)
+            else:
+                log.warning("No project root found from %s; not activating any project", os.getcwd())
 
         project_file = project_file_arg or project
         factory = SerenaMCPFactory(context=context, project=project_file, memory_log_handler=memory_log_handler)
@@ -762,8 +763,10 @@ class ProjectCommands(AutoRegisteringGroup):
             try:
                 # Create SerenaAgent with dashboard disabled
                 log.info("Creating SerenaAgent with disabled dashboard...")
-                config = SerenaConfig(gui_log_window=False, web_dashboard=False)
-                agent = SerenaAgent(project=project_path, serena_config=config)
+                serena_config = SerenaConfig.from_config_file()
+                serena_config.gui_log_window = False
+                serena_config.web_dashboard = False
+                agent = SerenaAgent(project=project_path, serena_config=serena_config)
                 log.info("SerenaAgent created successfully")
 
                 # Find first non-empty file that can be analyzed
