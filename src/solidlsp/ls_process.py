@@ -22,7 +22,6 @@ from solidlsp.lsp_protocol_handler.lsp_types import ErrorCodes
 from solidlsp.lsp_protocol_handler.server import (
     ENCODING,
     LSPError,
-    MessageType,
     PayloadLike,
     ProcessLaunchInfo,
     StringDict,
@@ -116,7 +115,7 @@ class LanguageServerProcess:
             that handle requests from the server.
         on_notification_handlers: A dictionary that maps method names to callback functions
             that handle notifications from the server.
-        logger: An optional function that takes two strings (source and destination) and
+        _trace_log_fn: An optional function that takes two strings (source and destination) and
             a payload dictionary, and logs the communication between the client and the server.
         tasks: A dictionary that maps task ids to asyncio.Task objects that represent
             the asynchronous tasks created by the handler.
@@ -151,7 +150,7 @@ class LanguageServerProcess:
         self._pending_requests: dict[Any, Request] = {}
         self.on_request_handlers: dict[str, Callable[[Any], Any]] = {}
         self.on_notification_handlers: dict[str, Callable[[Any], None]] = {}
-        self.logger = logger
+        self._trace_log_fn = logger
         self.tasks: dict[int, Any] = {}
         self.task_counter = 0
         self.loop = None
@@ -300,19 +299,19 @@ class LanguageServerProcess:
         Perform the shutdown sequence for the client, including sending the shutdown request to the server and notifying it of exit
         """
         self._is_shutting_down = True
-        self._log("Sending shutdown request to server")
+        log.info("Sending shutdown request to server")
         self.send.shutdown()
-        self._log("Received shutdown response from server")
-        self._log("Sending exit notification to server")
+        log.info("Received shutdown response from server")
+        log.info("Sending exit notification to server")
         self.notify.exit()
-        self._log("Sent exit notification to server")
+        log.info("Sent exit notification to server")
 
-    def _log(self, message: str | StringDict) -> None:
+    def _trace(self, src: str, dest: str, message: str | StringDict) -> None:
         """
-        Create a log message
+        Traces LS communication by logging the message with the source and destination of the message
         """
-        if self.logger is not None:
-            self.logger("client", "logger", message)
+        if self._trace_log_fn is not None:
+            self._trace_log_fn(src, dest, message)
 
     def _read_bytes_from_process(self, process, stream, num_bytes) -> bytes:  # type: ignore
         """Read exactly num_bytes from process stdout"""
@@ -401,18 +400,17 @@ class LanguageServerProcess:
         try:
             self._receive_payload(json.loads(body))
         except OSError as ex:
-            self._log(f"malformed {ENCODING}: {ex}")
+            log.error(f"Error processing payload: {ex}", exc_info=ex)
         except UnicodeDecodeError as ex:
-            self._log(f"malformed {ENCODING}: {ex}")
+            log.error(f"Decoding error for encoding={ENCODING}: {ex}")
         except json.JSONDecodeError as ex:
-            self._log(f"malformed JSON: {ex}")
+            log.error(f"JSON decoding error: {ex}")
 
     def _receive_payload(self, payload: StringDict) -> None:
         """
         Determine if the payload received from server is for a request, response, or notification and invoke the appropriate handler
         """
-        if self.logger:
-            self.logger("server", "client", payload)
+        self._trace("ls", "solidlsp", payload)
         try:
             if "method" in payload:
                 if "id" in payload:
@@ -422,9 +420,9 @@ class LanguageServerProcess:
             elif "id" in payload:
                 self._response_handler(payload)
             else:
-                self._log(f"Unknown payload type: {payload}")
+                log.error(f"Unknown payload type: {payload}")
         except Exception as err:
-            self._log(f"Error handling server payload: {err}")
+            log.error(f"Error handling server payload: {err}")
 
     def send_notification(self, method: str, params: dict | None = None) -> None:
         """
@@ -442,7 +440,6 @@ class LanguageServerProcess:
         """
         Send error response to the given request id to the server with the given error
         """
-        # Use lock to prevent race conditions on tasks and task_counter
         self._send_payload(make_error_response(request_id, err))
 
     def _cancel_pending_requests(self, exception: Exception) -> None:
@@ -472,15 +469,14 @@ class LanguageServerProcess:
 
         self._send_payload(make_request(method, request_id, params))
 
-        self._log(f"Waiting for response to request {method} with params:\n{params}")
+        log.debug("Waiting for response to request %s with params:\n%s", method, params)
         result = request.get_result(timeout=self._request_timeout)
         log.debug("Completed: %s", request)
 
-        self._log("Processing result")
         if result.is_error():
             raise SolidLSPException(f"Error processing request {method} with params:\n{params}", cause=result.error) from result.error
 
-        self._log(f"Returning non-error result, which is:\n{result.payload}")
+        log.debug("Returning result:\n%s", result.payload)
         return result.payload
 
     def _send_payload(self, payload: StringDict) -> None:
@@ -489,7 +485,7 @@ class LanguageServerProcess:
         """
         if not self.process or not self.process.stdin:
             return
-        self._log(payload)
+        self._trace("solidlsp", "ls", payload)
         msg = create_message(payload)
 
         # Use lock to prevent concurrent writes to stdin that cause buffer corruption
@@ -499,8 +495,7 @@ class LanguageServerProcess:
                 self.process.stdin.flush()
             except (BrokenPipeError, ConnectionResetError, OSError) as e:
                 # Log the error but don't raise to prevent cascading failures
-                if self.logger:
-                    self.logger("client", "logger", f"Failed to write to stdin: {e}")
+                log.error(f"Failed to write to stdin: {e}")
                 return
 
     def on_request(self, method: str, cb: Callable[[Any], Any]) -> None:
@@ -568,23 +563,12 @@ class LanguageServerProcess:
         params = response.get("params")
         handler = self.on_notification_handlers.get(method)
         if not handler:
-            self._log(f"unhandled {method}")
+            log.warning("Unhandled method '%s'", method)
             return
         try:
             handler(params)
         except asyncio.CancelledError:
             return
         except Exception as ex:
-            if (not self._is_shutting_down) and self.logger:
-                self.logger(
-                    "client",
-                    "logger",
-                    str(
-                        {
-                            "type": MessageType.error,
-                            "message": str(ex),
-                            "method": method,
-                            "params": params,
-                        }
-                    ),
-                )
+            if not self._is_shutting_down:
+                log.error("Error handling notification for method '%s': %s", method, ex, exc_info=ex)
