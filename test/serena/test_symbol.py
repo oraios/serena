@@ -1,5 +1,8 @@
+from unittest.mock import MagicMock
+
 import pytest
 
+from serena.config.serena_config import LSConfig
 from serena.symbol import LanguageServerSymbolRetriever, NamePathComponent, NamePathMatcher
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
@@ -238,3 +241,225 @@ class TestLanguageServerSymbolRetriever:
         create_user_method_symbol = symbol_retriever.find("UserService/create_user", within_relative_path="test_repo/services.py")[0]
         create_user_method_symbol_info = symbol_retriever.request_info_for_symbol(create_user_method_symbol)
         assert "Create a new user and store it" in create_user_method_symbol_info
+
+
+def _make_mock_symbols(count: int, *, relative_path: str = "test_repo/services.py") -> list[MagicMock]:
+    symbols: list[MagicMock] = []
+    for i in range(count):
+        sym = MagicMock()
+        sym.relative_path = relative_path
+        sym.line = i + 1
+        sym.column = 0
+        sym.symbol_root = {}
+        symbols.append(sym)
+    return symbols
+
+
+@pytest.mark.python
+class TestHoverBudget:
+    """Tests for hover_budget time budget behavior."""
+
+    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    def test_budget_not_exceeded_all_lookups_performed(self, language_server: SolidLanguageServer, monkeypatch: pytest.MonkeyPatch):
+        """With a large budget, all hover lookups are performed."""
+        # Create symbol retriever with a mock agent that has large budget
+        mock_agent = MagicMock()
+        mock_agent.get_ls_config.return_value = LSConfig(hover_budget=10.0)
+
+        symbol_retriever = LanguageServerSymbolRetriever(language_server, agent=mock_agent)
+
+        # Track _request_info calls
+        call_count = 0
+
+        def counting_request_info(file_path, line, column):
+            nonlocal call_count
+            call_count += 1
+            return f"info:{line}:{column}"
+
+        monkeypatch.setattr(symbol_retriever, "_request_info", counting_request_info)
+
+        # Create mock symbols with unique (line, col) pairs
+        symbols = _make_mock_symbols(3)
+
+        result = symbol_retriever.request_info_for_symbol_batch(symbols)
+
+        # All 3 symbols should have info (no budget exceeded)
+        assert call_count == 3
+        assert all(info is not None for info in result.values())
+        assert len(result) == 3
+
+    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    def test_budget_exceeded_partial_info(self, language_server: SolidLanguageServer, monkeypatch: pytest.MonkeyPatch):
+        """With a small budget, hover lookups stop and remaining symbols get None info."""
+        # Create symbol retriever with a mock agent that has small budget (0.1s)
+        mock_agent = MagicMock()
+        mock_agent.get_ls_config.return_value = LSConfig(hover_budget=0.1)
+
+        symbol_retriever = LanguageServerSymbolRetriever(language_server, agent=mock_agent)
+
+        # Track _request_info calls and simulate 0.05s per call
+        call_count = 0
+        simulated_time = [0.0]
+
+        def slow_request_info(file_path, line, column):
+            nonlocal call_count
+            call_count += 1
+            # Simulate each hover taking 0.05s
+            simulated_time[0] += 0.05
+            return f"info:{line}:{column}"
+
+        # Mock perf_counter to return simulated time for hover duration
+        def mock_perf_counter():
+            return simulated_time[0]
+
+        monkeypatch.setattr(symbol_retriever, "_request_info", slow_request_info)
+        monkeypatch.setattr("serena.symbol.perf_counter", mock_perf_counter)
+
+        # Create 5 mock symbols with unique (line, col) pairs
+        symbols = _make_mock_symbols(5)
+
+        result = symbol_retriever.request_info_for_symbol_batch(symbols)
+
+        # Budget is 0.1s, each call takes 0.05s, so only 2 calls should succeed
+        # After 2 calls: 0.1s >= 0.1s budget, remaining 3 should be skipped
+        assert call_count == 2
+        assert len(result) == 5
+
+        # First 2 symbols should have info, last 3 should be None
+        result_list = list(result.values())
+        assert result_list[0] is not None
+        assert result_list[1] is not None
+        assert result_list[2] is None
+        assert result_list[3] is None
+        assert result_list[4] is None
+
+    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    def test_budget_zero_means_unlimited(self, language_server: SolidLanguageServer, monkeypatch: pytest.MonkeyPatch):
+        """With budget=0, all hover lookups proceed (no early stopping)."""
+        # Create symbol retriever with budget=0 (unlimited)
+        mock_agent = MagicMock()
+        mock_agent.get_ls_config.return_value = LSConfig(hover_budget=0.0)
+
+        symbol_retriever = LanguageServerSymbolRetriever(language_server, agent=mock_agent)
+
+        # Track _request_info calls
+        call_count = 0
+
+        def counting_request_info(file_path, line, column):
+            nonlocal call_count
+            call_count += 1
+            return f"info:{line}:{column}"
+
+        monkeypatch.setattr(symbol_retriever, "_request_info", counting_request_info)
+
+        # Create mock symbols
+        symbols = _make_mock_symbols(5)
+
+        result = symbol_retriever.request_info_for_symbol_batch(symbols)
+
+        # All 5 symbols should be looked up (no budget limit)
+        assert call_count == 5
+        assert all(info is not None for info in result.values())
+
+    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    def test_project_budget_overrides_global(self, language_server: SolidLanguageServer, monkeypatch: pytest.MonkeyPatch):
+        """Project-level budget overrides global budget."""
+        # Simulate the real get_ls_config() behavior: global config + project override
+        global_config = LSConfig(hover_budget=10.0)  # Global budget is 10s
+        project_config = LSConfig(hover_budget=0.05)  # Project overrides to 0.05s
+
+        global_config.apply_overrides(project_config)
+        # After apply_overrides, global_config should have hover_budget=0.05
+
+        mock_agent = MagicMock()
+        mock_agent.get_ls_config.return_value = global_config
+
+        symbol_retriever = LanguageServerSymbolRetriever(language_server, agent=mock_agent)
+
+        # Track _request_info calls and simulate time
+        call_count = 0
+        simulated_time = [0.0]
+
+        def slow_request_info(file_path, line, column):
+            nonlocal call_count
+            call_count += 1
+            simulated_time[0] += 0.03
+            return f"info:{line}:{column}"
+
+        def mock_perf_counter():
+            return simulated_time[0]
+
+        monkeypatch.setattr(symbol_retriever, "_request_info", slow_request_info)
+        monkeypatch.setattr("serena.symbol.perf_counter", mock_perf_counter)
+
+        # Create 5 mock symbols
+        symbols = _make_mock_symbols(5)
+
+        symbol_retriever.request_info_for_symbol_batch(symbols)
+
+        # Project budget is 0.05s, each call takes 0.03s
+        # Budget check happens BEFORE starting a new call:
+        # - Before call 1: spent=0 < 0.05, proceed, spent becomes 0.03
+        # - Before call 2: spent=0.03 < 0.05, proceed, spent becomes 0.06
+        # - Before call 3: spent=0.06 >= 0.05, skip
+        # So 2 calls succeed (proving project budget 0.05 overrode global 10.0)
+        assert call_count == 2
+
+    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    def test_project_null_inherits_global(self, language_server: SolidLanguageServer, monkeypatch: pytest.MonkeyPatch):
+        """When project budget is use_global, global budget is used."""
+        # Simulate the real get_ls_config() behavior: global config with use_global in project
+        global_config = LSConfig(hover_budget=10.0)  # Global budget is 10s
+        project_config = LSConfig(hover_budget="use_global")  # Project uses global
+
+        global_config.apply_overrides(project_config)
+        # After apply_overrides, global_config should still have hover_budget=10.0 (not changed)
+
+        mock_agent = MagicMock()
+        mock_agent.get_ls_config.return_value = global_config
+
+        symbol_retriever = LanguageServerSymbolRetriever(language_server, agent=mock_agent)
+
+        # Track _request_info calls
+        call_count = 0
+
+        def counting_request_info(file_path, line, column):
+            nonlocal call_count
+            call_count += 1
+            return f"info:{line}:{column}"
+
+        monkeypatch.setattr(symbol_retriever, "_request_info", counting_request_info)
+
+        # Create 3 mock symbols
+        symbols = _make_mock_symbols(3)
+
+        result = symbol_retriever.request_info_for_symbol_batch(symbols)
+
+        # Global budget is 10s, all 3 should succeed
+        assert call_count == 3
+        assert all(info is not None for info in result.values())
+
+    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    def test_no_agent_uses_default_budget(self, language_server: SolidLanguageServer, monkeypatch: pytest.MonkeyPatch):
+        """When agent is None, default budget of 5s is used."""
+        # Create symbol retriever without agent
+        symbol_retriever = LanguageServerSymbolRetriever(language_server, agent=None)
+
+        # Track _request_info calls
+        call_count = 0
+
+        def counting_request_info(file_path, line, column):
+            nonlocal call_count
+            call_count += 1
+            return f"info:{line}:{column}"
+
+        monkeypatch.setattr(symbol_retriever, "_request_info", counting_request_info)
+
+        # Create 3 mock symbols
+        symbols = _make_mock_symbols(3)
+
+        result = symbol_retriever.request_info_for_symbol_batch(symbols)
+
+        # Default budget is 5s, all 3 should succeed
+        assert call_count == 3
+        assert all(info is not None for info in result.values())

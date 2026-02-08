@@ -7,6 +7,7 @@ import platform
 import subprocess
 import sys
 from collections.abc import Callable, Sequence
+from copy import deepcopy
 from logging import Logger
 from typing import TYPE_CHECKING, Optional, TypeVar
 
@@ -17,7 +18,7 @@ from interprompt.jinja_template import JinjaTemplate
 from serena import serena_version
 from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
-from serena.config.serena_config import LanguageBackend, ModeSelectionDefinition, SerenaConfig, ToolInclusionDefinition
+from serena.config.serena_config import LanguageBackend, LSConfig, ModeSelectionDefinition, SerenaConfig, ToolInclusionDefinition
 from serena.dashboard import SerenaDashboardAPI
 from serena.ls_manager import LanguageServerManager
 from serena.project import Project
@@ -801,3 +802,11 @@ class SerenaAgent:
         if ls_manager is None:
             return []
         return ls_manager.get_active_languages()
+
+    def get_ls_config(self) -> LSConfig:
+        ls_config = deepcopy(self.serena_config.ls_config)
+        if self._active_project is not None:
+            project_ls_config = self._active_project.project_config.ls_config
+            ls_config.apply_overrides(project_ls_config)
+        ls_config.assert_all_values_set()
+        return ls_config

@@ -103,5 +103,18 @@ default_max_tool_answer_chars: 150000
 # estimate the token count using the Claude Sonnet 4 tokenizer.
 token_count_estimator: CHAR_COUNT
 
+# Language server configuration that applies to all language servers (different from ls_specific_settings,
+# which has no uniform structure and applies to selected language servers).
+# These are the default global values. Individual projects can override these settings
+# in their project.yml file by specifying values under the ls_config key.
+ls_config:
+  # Time budget (seconds) for LSP hover requests when tools request include_info.
+  # This is an advanced setting that can help alleviate problems with LSP servers
+  # that have a slow implementation of request_hover (clangd is one of those)
+  # or with tool calls that find very many symbols.
+  # If the configured budget is exceeded, Serena stops issuing further hover requests and returns partial info results.
+  # 0 disables the budget (no early stopping).
+  hover_budget: 10
+
 # the list of registered project paths (updated automatically).
 projects: []
