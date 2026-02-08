@@ -567,7 +567,7 @@ class ProjectCommands(AutoRegisteringGroup):
         serena_config = SerenaConfig.from_config_file()
         registered_project = serena_config.get_registered_project(str(project_root))
         if registered_project is None:
-            registered_project = RegisteredProject(str(project_root), generated_conf)
+            registered_project = RegisteredProject(str(project_root), generated_conf, global_ignored_paths=serena_config.ignored_paths)
             serena_config.add_registered_project(registered_project)
 
         return registered_project
@@ -690,7 +690,8 @@ class ProjectCommands(AutoRegisteringGroup):
         :param path: The path to check.
         :param project: The path to the project directory, defaults to the current working directory.
         """
-        proj = Project.load(os.path.abspath(project))
+        serena_config = SerenaConfig.from_config_file()
+        proj = Project.load(os.path.abspath(project), global_ignored_paths=serena_config.ignored_paths)
         if os.path.isabs(path):
             path = os.path.relpath(path, start=proj.project_root)
         is_ignored = proj.is_ignored_path(path)
@@ -712,7 +713,8 @@ class ProjectCommands(AutoRegisteringGroup):
         :param project: path to the project directory, defaults to the current working directory.
         :param verbose: if set, prints detailed information about the indexed symbols.
         """
-        proj = Project.load(os.path.abspath(project))
+        serena_config = SerenaConfig.from_config_file()
+        proj = Project.load(os.path.abspath(project), global_ignored_paths=serena_config.ignored_paths)
         if os.path.isabs(file):
             file = os.path.relpath(file, start=proj.project_root)
         if proj.is_ignored_path(file, ignore_non_source_files=True):
@@ -749,7 +751,8 @@ class ProjectCommands(AutoRegisteringGroup):
         # NOTE: completely written by Claude Code, only functionality was reviewed, not implementation
         logging.configure(level=logging.INFO)
         project_path = os.path.abspath(project)
-        proj = Project.load(project_path)
+        serena_config = SerenaConfig.from_config_file()
+        proj = Project.load(project_path, global_ignored_paths=serena_config.ignored_paths)
 
         # Create log file with timestamp
         timestamp = datetime_tag()

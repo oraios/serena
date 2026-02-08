@@ -63,6 +63,11 @@ trace_lsp_communication: False
 # No documentation on options means no options are available.
 ls_specific_settings: {}
 
+# list of paths to ignore across all projects.
+# Same syntax as gitignore, so you can use * and **.
+# These patterns are merged additively with each project's own ignored_paths.
+ignored_paths: []
+
 # timeout, in seconds, after which tool executions are terminated
 tool_timeout: 240
 

@@ -34,8 +34,9 @@ encoding: "utf-8"
 # whether to use project's .gitignore files to ignore files
 ignore_all_files_in_gitignore: true
 
-# list of additional paths to ignore in all projects
-# same syntax as gitignore, so you can use * and **
+# list of additional paths to ignore in this project.
+# Same syntax as gitignore, so you can use * and **.
+# Note: global ignored_paths from serena_config.yml are also applied additively.
 ignored_paths: []
 
 # whether the project is in read-only mode
