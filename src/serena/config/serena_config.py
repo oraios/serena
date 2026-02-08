@@ -215,6 +215,7 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
     Per-project override for language server configuration.
     Values here override the global serena_config.yml settings.
     """
+    SERENA_DEFAULT_PROJECT_FILE = "project.yml"
     FIELDS_WITHOUT_DEFAULTS = {"project_name", "languages"}
     YAML_COMMENT_NORMALISATION = YamlCommentNormalisation.LEADING
     """
@@ -555,7 +556,6 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
     """
 
     # *** static members ***
-
     CONFIG_FILE = "serena_config.yml"
     CONFIG_FIELDS_WITH_TYPE_CONVERSION = {"projects", "language_backend", "ls_config"}
 
