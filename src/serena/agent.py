@@ -522,7 +522,7 @@ class SerenaAgent:
 
         :param mode_names: List of mode names or paths to use
         """
-        self._active_modes.apply(ModeSelectionDefinition(default_modes=mode_names))
+        self._mode_overrides = ModeSelectionDefinition(default_modes=mode_names)
         self._update_active_modes_and_tools()
 
         log.info(f"Set modes to {[mode.name for mode in self.get_active_modes()]}")
