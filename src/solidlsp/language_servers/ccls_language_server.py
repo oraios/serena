@@ -1,11 +1,7 @@
 """
-Provides C/C++ specific instantiation of the LanguageServer class using ccls.
-
 This is an alternative to clangd for large C++ codebases where ccls may perform
 better for indexing and navigation. Requires ccls to be installed and available
 on PATH, or configured via ls_specific_settings with key "ls_path".
-
-For best results, ensure a compile_commands.json exists at the repository root.
 
 Installation
 ------------
@@ -23,10 +19,9 @@ direct download. Install using your system package manager:
 - Homebrew: ``brew install ccls``
 
 **Windows:**
-- MSYS2 (MinGW): Build from source using MSYS2 toolchain
-- No native prebuilt binaries available; must build from source
+- Chocolatey: ``choco install ccls``
 
-For build-from-source instructions (required on Windows), see:
+For alternative installation methods and build-from-source instructions, see:
 https://github.com/MaskRay/ccls/wiki/Build
 
 Official documentation:
@@ -51,7 +46,7 @@ from solidlsp.settings import SolidLSPSettings
 log = logging.getLogger(__name__)
 
 
-class CclsLanguageServer(SolidLanguageServer):
+class CCLS(SolidLanguageServer):
     """
     C/C++ language server implementation using ccls.
 
@@ -89,7 +84,7 @@ class CclsLanguageServer(SolidLanguageServer):
                     "  Linux (Fedora/RHEL):   sudo dnf install ccls\n"
                     "  Linux (Arch):          sudo pacman -S ccls\n"
                     "  macOS (Homebrew):      brew install ccls\n"
-                    "  Windows:               Build from source (see wiki)\n\n"
+                    "  Windows:               choco install ccls\n\n"
                     "For build instructions and more details, see:\n"
                     "  https://github.com/MaskRay/ccls/wiki/Build"
                 )

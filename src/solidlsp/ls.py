@@ -24,7 +24,7 @@ from serena.util.file_system import match_path
 from solidlsp import ls_types
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
-from solidlsp.ls_handler import SolidLanguageServerHandler
+from solidlsp.ls_process import LanguageServerProcess
 from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils, PathUtils, TextUtils
 from solidlsp.lsp_protocol_handler import lsp_types
@@ -473,7 +473,7 @@ class SolidLanguageServer(ABC):
             self._dependency_provider = self._create_dependency_provider()
             process_launch_info = self._create_process_launch_info()
         log.debug(f"Creating language server instance with {language_id=} and process launch info: {process_launch_info}")
-        self.server = SolidLanguageServerHandler(
+        self.server = LanguageServerProcess(
             process_launch_info,
             language=self.language,
             determine_log_level=self._determine_log_level,
@@ -914,14 +914,14 @@ class SolidLanguageServer(ABC):
             log.error("request_references called before Language Server started")
             raise SolidLSPException("Language Server not started")
 
-        if not self._has_waited_for_cross_file_references:
-            # Some LS require waiting for a while before they can return cross-file references.
-            # This is a workaround for such LS that don't have a reliable "finished initializing" signal.
-            sleep(self._get_wait_time_for_cross_file_referencing())
-            self._has_waited_for_cross_file_references = True
-
-        t0 = perf_counter() if _debug_enabled else 0.0
         with self.open_file(relative_file_path):
+            if not self._has_waited_for_cross_file_references:
+                # Some LS require waiting for a while before they can return cross-file references.
+                # This is a workaround for such LS that don't have a reliable "finished initializing" signal.
+                # The waiting has to happen after at least one file was opened in the ls
+                sleep(self._get_wait_time_for_cross_file_referencing())
+                self._has_waited_for_cross_file_references = True
+            t0 = perf_counter() if _debug_enabled else 0.0
             try:
                 response = self._send_references_request(relative_file_path, line=line, column=column)
             except Exception as e:
@@ -2191,7 +2191,7 @@ class SolidLanguageServer(ABC):
         return self
 
     @property
-    def handler(self) -> SolidLanguageServerHandler:
+    def handler(self) -> LanguageServerProcess:
         """Access the underlying language server handler.
 
         Useful for advanced operations like sending custom commands
