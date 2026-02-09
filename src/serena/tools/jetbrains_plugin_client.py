@@ -96,7 +96,7 @@ class JetBrainsPluginClient(ToStringMixin):
         except ConnectionError:  # expected if no server is running at the port
             pass
         except Exception as e:
-            log.warning("Failed to obtain status from JetBrains plugin service at port %d: %s", e, port, exc_info=True)
+            log.warning("Failed to obtain status from JetBrains plugin service at port %d: %s", port, e, exc_info=e)
 
     @property
     def _base_url(self) -> str:
