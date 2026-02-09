@@ -24,8 +24,11 @@ log = logging.getLogger(__name__)
 
 
 class MemoriesManager:
-    def __init__(self, project_root: str):
-        self._memory_dir = Path(get_serena_managed_in_project_dir(project_root)) / "memories"
+    def __init__(self, project_root: str, *, memory_dir: Path | None = None):
+        if memory_dir is not None:
+            self._memory_dir = memory_dir
+        else:
+            self._memory_dir = Path(get_serena_managed_in_project_dir(project_root)) / "memories"
         self._memory_dir.mkdir(parents=True, exist_ok=True)
         self._encoding = SERENA_FILE_ENCODING
 

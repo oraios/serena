@@ -9,6 +9,7 @@ import subprocess
 import sys
 from collections.abc import Callable, Sequence
 from logging import Logger
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional, TypeVar
 
 from sensai.util import logging
@@ -242,7 +243,7 @@ class SerenaAgent:
         self._active_project: Project | None = None
 
         # global memories manager (not tied to any project)
-        self._global_memories_manager = MemoriesManager(SerenaPaths().serena_user_home_dir)
+        self._global_memories_manager = MemoriesManager("", memory_dir=Path(SerenaPaths().serena_user_home_dir) / "memories")
 
         # dashboard URL (set when dashboard is started)
         self._dashboard_url: str | None = None
