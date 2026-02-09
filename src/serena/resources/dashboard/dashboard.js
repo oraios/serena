@@ -187,9 +187,11 @@ class Dashboard {
         this.activeProjectName = null;
         this.languageToRemove = null;
         this.currentMemoryName = null;
+        this.currentMemoryScope = null;
         this.originalMemoryContent = null;
         this.memoryContentDirty = false;
         this.memoryToDelete = null;
+        this.memoryToDeleteScope = null;
         this.isAddingLanguage = false;
         this.waitingForConfigPollingResult = false;
         this.waitingForExecutionsPollingResult = false;
@@ -638,25 +640,53 @@ class Dashboard {
             html += '</div>';
             html += '</div>';
 
-            // Available memories - collapsible (show if memories exist or if project exists)
-            if (config.active_project && config.active_project.name) {
+            // Available memories - collapsible (show both project and global memories)
+            const hasProject = config.active_project && config.active_project.name;
+            const projectMemoryCount = (config.available_memories && config.available_memories.length) || 0;
+            const globalMemoryCount = (config.available_global_memories && config.available_global_memories.length) || 0;
+            const totalMemoryCount = projectMemoryCount + globalMemoryCount;
+            if (hasProject || globalMemoryCount > 0) {
                 html += '<div style="margin-top: 20px;">';
                 html += '<h3 class="collapsible-header" id="memories-header" style="font-size: 16px; margin: 0;">';
-                const memoryCount = (config.available_memories && config.available_memories.length) || 0;
-                html += '<span>Available Memories (' + memoryCount + ')</span>';
+                html += '<span>Available Memories (' + totalMemoryCount + ')</span>';
                 html += '<span class="toggle-icon' + (wasMemoriesExpanded ? ' expanded' : '') + '">▼</span>';
                 html += '</h3>';
-                html += '<div class="collapsible-content memories-container" id="memories-content" style="' + (wasMemoriesExpanded ? '' : 'display:none;') + ' margin-top: 10px;">';
-                if (config.available_memories && config.available_memories.length > 0) {
-                    config.available_memories.forEach(function (memory) {
-                        html += '<div class="memory-item removable" data-memory="' + memory + '">';
+                html += '<div class="collapsible-content" id="memories-content" style="' + (wasMemoriesExpanded ? '' : 'display:none;') + ' margin-top: 10px;">';
+
+                // Project memories sub-section
+                if (hasProject) {
+                    html += '<div class="memory-scope-section">';
+                    html += '<span class="memory-scope-label">Project</span>';
+                    html += '<div class="memories-container">';
+                    if (config.available_memories && config.available_memories.length > 0) {
+                        config.available_memories.forEach(function (memory) {
+                            html += '<div class="memory-item removable" data-memory="' + memory + '" data-scope="project">';
+                            html += memory;
+                            html += '<span class="memory-remove" data-memory="' + memory + '" data-scope="project">&times;</span>';
+                            html += '</div>';
+                        });
+                    }
+                    html += '<button class="memory-add-btn create-memory-btn" data-scope="project">+ Add Memory</button>';
+                    html += '</div>';
+                    html += '</div>';
+                }
+
+                // Global memories sub-section
+                html += '<div class="memory-scope-section">';
+                html += '<span class="memory-scope-label">Global</span>';
+                html += '<div class="memories-container">';
+                if (config.available_global_memories && config.available_global_memories.length > 0) {
+                    config.available_global_memories.forEach(function (memory) {
+                        html += '<div class="memory-item removable" data-memory="' + memory + '" data-scope="global">';
                         html += memory;
-                        html += '<span class="memory-remove" data-memory="' + memory + '">&times;</span>';
+                        html += '<span class="memory-remove" data-memory="' + memory + '" data-scope="global">&times;</span>';
                         html += '</div>';
                     });
                 }
-                // Add Create Memory button
-                html += '<button id="create-memory-btn" class="memory-add-btn">+ Add Memory</button>';
+                html += '<button class="memory-add-btn create-memory-btn" data-scope="global">+ Add Memory</button>';
+                html += '</div>';
+                html += '</div>';
+
                 html += '</div>';
                 html += '</div>';
             }
@@ -691,7 +721,8 @@ class Dashboard {
             $('.memory-item').click(function (e) {
                 e.preventDefault();
                 const memoryName = $(this).data('memory');
-                self.openEditMemoryModal(memoryName);
+                const scope = $(this).data('scope');
+                self.openEditMemoryModal(memoryName, scope);
             });
 
             // Attach event handlers for memory remove buttons
@@ -699,11 +730,15 @@ class Dashboard {
                 e.preventDefault();
                 e.stopPropagation();
                 const memoryName = $(this).data('memory');
-                self.confirmDeleteMemory(memoryName);
+                const scope = $(this).data('scope');
+                self.confirmDeleteMemory(memoryName, scope);
             });
 
-            // Attach event handler for create memory button
-            $('#create-memory-btn').click(this.openCreateMemoryModal.bind(this));
+            // Attach event handlers for create memory buttons
+            $('.create-memory-btn').click(function () {
+                const scope = $(this).data('scope');
+                self.openCreateMemoryModal(scope);
+            });
 
             // Re-attach collapsible handler for the newly created tools header
             $('#tools-header').click(function () {
@@ -1692,18 +1727,20 @@ class Dashboard {
 
     // ===== Memory Editing Methods =====
 
-    openEditMemoryModal(memoryName) {
+    openEditMemoryModal(memoryName, scope) {
         const self = this;
         this.currentMemoryName = memoryName;
+        this.currentMemoryScope = scope || 'project';
         this.memoryContentDirty = false;
 
-        // Set memory name in modal
+        // Set memory name and scope in modal
         this.$editMemoryName.text(memoryName);
+        $('#edit-memory-scope-badge').text(this.currentMemoryScope).attr('class', 'memory-scope-badge memory-scope-badge-' + this.currentMemoryScope);
 
         // Load memory content
         $.ajax({
             url: '/get_memory', type: 'POST', contentType: 'application/json', data: JSON.stringify({
-                memory_name: memoryName
+                memory_name: memoryName, scope: this.currentMemoryScope
             }), success: function (response) {
                 if (response.status === 'error') {
                     alert('Error: ' + response.message);
@@ -1730,6 +1767,7 @@ class Dashboard {
 
         this.$editMemoryModal.fadeOut(200);
         this.currentMemoryName = null;
+        this.currentMemoryScope = null;
         this.originalMemoryContent = null;
         this.memoryContentDirty = false;
     }
@@ -1754,7 +1792,7 @@ class Dashboard {
 
         $.ajax({
             url: '/save_memory', type: 'POST', contentType: 'application/json', data: JSON.stringify({
-                memory_name: memoryName, content: content
+                memory_name: memoryName, content: content, scope: self.currentMemoryScope || 'project'
             }), success: function (response) {
                 if (response.status === 'success') {
                     // Update original content and reset dirty flag
@@ -1763,6 +1801,7 @@ class Dashboard {
                     // Close modal
                     self.$editMemoryModal.fadeOut(200);
                     self.currentMemoryName = null;
+                    self.currentMemoryScope = null;
                 } else {
                     alert('Error: ' + response.message);
                 }
@@ -1776,12 +1815,14 @@ class Dashboard {
         });
     }
 
-    confirmDeleteMemory(memoryName) {
-        // Set memory name to delete
+    confirmDeleteMemory(memoryName, scope) {
+        // Set memory name and scope to delete
         this.memoryToDelete = memoryName;
+        this.memoryToDeleteScope = scope || 'project';
 
-        // Set memory name in modal
+        // Set memory name and scope in modal
         this.$deleteMemoryName.text(memoryName);
+        $('#delete-memory-scope-badge').text(this.memoryToDeleteScope).attr('class', 'memory-scope-badge memory-scope-badge-' + this.memoryToDeleteScope);
 
         // Show modal
         this.$deleteMemoryModal.fadeIn(200);
@@ -1790,21 +1831,22 @@ class Dashboard {
     closeDeleteMemoryModal() {
         this.$deleteMemoryModal.fadeOut(200);
         this.memoryToDelete = null;
+        this.memoryToDeleteScope = null;
     }
 
     confirmDeleteMemoryOk() {
         if (this.memoryToDelete) {
-            this.deleteMemory(this.memoryToDelete);
+            this.deleteMemory(this.memoryToDelete, this.memoryToDeleteScope);
             this.closeDeleteMemoryModal();
         }
     }
 
-    deleteMemory(memoryName) {
+    deleteMemory(memoryName, scope) {
         const self = this;
 
         $.ajax({
             url: '/delete_memory', type: 'POST', contentType: 'application/json', data: JSON.stringify({
-                memory_name: memoryName
+                memory_name: memoryName, scope: scope || 'project'
             }), success: function (response) {
                 if (response.status === 'success') {
                     // Reload config to show updated memory list
@@ -1819,9 +1861,15 @@ class Dashboard {
         });
     }
 
-    openCreateMemoryModal() {
-        // Set project name in modal
-        this.$createMemoryProjectName.text(this.activeProjectName || 'Unknown');
+    openCreateMemoryModal(scope) {
+        this.createMemoryScope = scope || 'project';
+
+        // Update modal text based on scope
+        if (this.createMemoryScope === 'global') {
+            $('#create-memory-project-info').html('Create a new <strong>global</strong> memory (shared across all projects).');
+        } else {
+            $('#create-memory-project-info').html('Create a new <strong>project</strong> memory for project <strong>' + (this.activeProjectName || 'Unknown') + '</strong>.');
+        }
 
         // Clear the input field
         this.$createMemoryNameInput.val('');
@@ -1860,9 +1908,10 @@ class Dashboard {
         // Disable button during request
         self.$createMemoryCreateBtn.prop('disabled', true).text('Creating...');
 
+        const createScope = self.createMemoryScope || 'project';
         $.ajax({
             url: '/save_memory', type: 'POST', contentType: 'application/json', data: JSON.stringify({
-                memory_name: memoryName, content: ''
+                memory_name: memoryName, content: '', scope: createScope
             }), success: function (response) {
                 if (response.status === 'success') {
                     // Close the create modal
@@ -1871,7 +1920,7 @@ class Dashboard {
                     self.loadConfigOverview();
                     // Open the edit modal for the newly created memory
                     setTimeout(() => {
-                        self.openEditMemoryModal(memoryName);
+                        self.openEditMemoryModal(memoryName, createScope);
                     }, 500);
                 } else {
                     alert('Error: ' + response.message);
