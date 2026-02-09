@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import tempfile
 import threading
 from pathlib import Path
 from typing import Any, Literal
@@ -43,10 +44,14 @@ class MemoriesManager:
 
     def save_memory(self, name: str, content: str) -> str:
         memory_file_path = self.get_memory_file_path(name)
-        tmp_path = memory_file_path.with_suffix(".md.tmp")
-        with open(tmp_path, "w", encoding=self._encoding) as f:
-            f.write(content)
-        os.replace(tmp_path, memory_file_path)
+        fd, tmp_path = tempfile.mkstemp(dir=self._memory_dir, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding=self._encoding) as f:
+                f.write(content)
+            os.replace(tmp_path, memory_file_path)
+        except BaseException:
+            os.unlink(tmp_path)
+            raise
         return f"Memory {name} written."
 
     def list_memories(self) -> list[str]:
