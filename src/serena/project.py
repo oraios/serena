@@ -1,9 +1,10 @@
 import json
 import logging
 import os
+import re
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pathspec
 from sensai.util.logging import LogTime
@@ -42,8 +43,10 @@ class MemoriesManager:
 
     def save_memory(self, name: str, content: str) -> str:
         memory_file_path = self.get_memory_file_path(name)
-        with open(memory_file_path, "w", encoding=self._encoding) as f:
+        tmp_path = memory_file_path.with_suffix(".md.tmp")
+        with open(tmp_path, "w", encoding=self._encoding) as f:
             f.write(content)
+        os.replace(tmp_path, memory_file_path)
         return f"Memory {name} written."
 
     def list_memories(self) -> list[str]:
@@ -53,6 +56,24 @@ class MemoriesManager:
         memory_file_path = self.get_memory_file_path(name)
         memory_file_path.unlink()
         return f"Memory {name} deleted."
+
+    def edit_memory(self, name: str, needle: str, repl: str, mode: Literal["literal", "regex"]) -> str:
+        """Read-modify-write with regex/literal replacement, independent of any project/CodeEditor."""
+        path = self.get_memory_file_path(name)
+        if not path.exists():
+            raise FileNotFoundError(f"Memory file {name} not found.")
+        content = path.read_text(encoding=self._encoding)
+        if mode == "literal":
+            regex = re.escape(needle)
+        elif mode == "regex":
+            regex = needle
+        else:
+            raise ValueError(f"Invalid mode: '{mode}'")
+        updated, n = re.subn(regex, repl, content, flags=re.DOTALL | re.MULTILINE)
+        if n == 0:
+            raise ValueError(f"No matches found in memory '{name}'.")
+        self.save_memory(name, updated)
+        return f"Replaced {n} occurrence(s) in memory '{name}'."
 
 
 class Project(ToStringMixin):
@@ -79,7 +100,6 @@ class Project(ToStringMixin):
 
     def _gather_ignorespec(self) -> None:
         with LogTime(f"Gathering ignore spec for project {self.project_config.project_name}", logger=log):
-
             # gather ignored paths from the project configuration and gitignore files
             ignored_patterns = list(self.project_config.ignored_paths)
             if len(ignored_patterns) > 0:

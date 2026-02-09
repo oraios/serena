@@ -46,6 +46,18 @@ class Component(ABC):
     def memories_manager(self) -> "MemoriesManager":
         return self.project.memories_manager
 
+    @property
+    def global_memories_manager(self) -> "MemoriesManager":
+        return self.agent.global_memories_manager
+
+    def _get_memories_manager_for_scope(self, scope: str) -> "MemoriesManager":
+        if scope == "global":
+            return self.global_memories_manager
+        project = self.agent.get_active_project()
+        if project is None:
+            raise ValueError("No active project. Use scope='global' for global memories, or activate a project first.")
+        return project.memories_manager
+
     def create_language_server_symbol_retriever(self) -> "LanguageServerSymbolRetriever":
         from serena.symbol import LanguageServerSymbolRetriever
 

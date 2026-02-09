@@ -2,6 +2,7 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
+import json
 import os
 import platform
 import subprocess
@@ -17,10 +18,10 @@ from interprompt.jinja_template import JinjaTemplate
 from serena import serena_version
 from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
-from serena.config.serena_config import LanguageBackend, ModeSelectionDefinition, SerenaConfig, ToolInclusionDefinition
+from serena.config.serena_config import LanguageBackend, ModeSelectionDefinition, SerenaConfig, SerenaPaths, ToolInclusionDefinition
 from serena.dashboard import SerenaDashboardAPI
 from serena.ls_manager import LanguageServerManager
-from serena.project import Project
+from serena.project import MemoriesManager, Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.task_executor import TaskExecutor
 from serena.tools import ActivateProjectTool, GetCurrentConfigTool, OpenDashboardTool, ReplaceContentTool, Tool, ToolMarker, ToolRegistry
@@ -239,6 +240,9 @@ class SerenaAgent:
 
         # project-specific instances, which will be initialized upon project activation
         self._active_project: Project | None = None
+
+        # global memories manager (not tied to any project)
+        self._global_memories_manager = MemoriesManager(SerenaPaths().serena_user_home_dir)
 
         # dashboard URL (set when dashboard is started)
         self._dashboard_url: str | None = None
@@ -516,6 +520,10 @@ class SerenaAgent:
             raise ValueError("No active project. Please activate a project first.")
         return project
 
+    @property
+    def global_memories_manager(self) -> MemoriesManager:
+        return self._global_memories_manager
+
     def set_modes(self, mode_names: list[str]) -> None:
         """
         Set the current mode configurations.
@@ -551,6 +559,14 @@ class SerenaAgent:
         # If a project is active at startup, append its activation message
         if self._active_project is not None:
             system_prompt += "\n\n" + self._active_project.get_activation_message()
+
+        # Append global memories info if any exist
+        global_memories = self._global_memories_manager.list_memories()
+        if global_memories:
+            system_prompt += (
+                f"\nAvailable global memories (shared across all projects): {json.dumps(global_memories)}\n"
+                + 'Use the `read_memory` tool with `scope="global"` to read these memories.'
+            )
 
         log.info("System prompt:\n%s", system_prompt)
         return system_prompt
