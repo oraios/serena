@@ -76,10 +76,6 @@ Metals uses an H2 database (`.metals/metals.mv.db`) to cache semantic informatio
 - **Bloop Build Server**: All instances share a single Bloop process (port 8212)
 - **Compilation Results**: Shared via Bloop — no duplicate compilation
 
-### Memory Considerations
-
-Each Metals JVM uses approximately **500MB of heap** by default. Running multiple instances (e.g., VS Code + Serena) will consume additional memory. For large projects, ensure you have sufficient RAM available.
-
 ### Stale Lock Detection
 
 If a Metals process crashes without proper cleanup, it may leave a stale lock file (`.metals/metals.mv.db.lock.db`). This can prevent proper AUTO_SERVER coordination, causing new instances to fall back to in-memory database mode (degraded experience).
@@ -101,15 +97,6 @@ ls_specific_settings:
 | `auto-clean` | **(Default, Recommended)** Automatically removes stale lock files and proceeds normally. |
 | `warn` | Logs a warning but proceeds. Metals may use in-memory database (slower). |
 | `fail` | Raises an error and refuses to start. Useful for debugging lock issues. |
-
-### Additional Configuration
-
-```yaml
-ls_specific_settings:
-  scala:
-    metals_version: "1.6.4"    # Specify Metals version
-    client_name: "Serena"      # Client identifier sent to Metals
-```
 
 ---
 ## Reference 
