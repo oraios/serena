@@ -24,6 +24,12 @@ if not PlatformUtils.get_platform_id().value.startswith("win"):
 
 log = logging.getLogger(__name__)
 
+# Default configuration constants
+DEFAULT_METALS_VERSION = "1.6.4"
+DEFAULT_CLIENT_NAME = "Serena"
+DEFAULT_ON_STALE_LOCK = "auto-clean"
+DEFAULT_LOG_MULTI_INSTANCE_NOTICE = True
+
 
 class StaleLockMode(Enum):
     """Mode for handling stale Metals H2 database locks."""
@@ -36,6 +42,46 @@ class StaleLockMode(Enum):
 
     FAIL = "fail"
     """Raise an error and refuse to start."""
+
+
+def _get_scala_settings(solidlsp_settings: SolidLSPSettings) -> dict[str, object]:
+    """
+    Extract Scala-specific settings with defaults applied.
+
+    Returns a dictionary with keys:
+        - metals_version: str
+        - client_name: str
+        - on_stale_lock: StaleLockMode
+        - log_multi_instance_notice: bool
+    """
+    from solidlsp.ls_config import Language
+
+    defaults: dict[str, object] = {
+        "metals_version": DEFAULT_METALS_VERSION,
+        "client_name": DEFAULT_CLIENT_NAME,
+        "on_stale_lock": StaleLockMode.AUTO_CLEAN,
+        "log_multi_instance_notice": DEFAULT_LOG_MULTI_INSTANCE_NOTICE,
+    }
+
+    if not solidlsp_settings.ls_specific_settings:
+        return defaults
+
+    scala_settings = solidlsp_settings.get_ls_specific_settings(Language.SCALA)
+
+    # Parse stale lock mode with validation
+    on_stale_lock_str = scala_settings.get("on_stale_lock", DEFAULT_ON_STALE_LOCK)
+    try:
+        on_stale_lock = StaleLockMode(on_stale_lock_str)
+    except ValueError:
+        log.warning(f"Invalid on_stale_lock value '{on_stale_lock_str}', using '{DEFAULT_ON_STALE_LOCK}'")
+        on_stale_lock = StaleLockMode.AUTO_CLEAN
+
+    return {
+        "metals_version": scala_settings.get("metals_version", DEFAULT_METALS_VERSION),
+        "client_name": scala_settings.get("client_name", DEFAULT_CLIENT_NAME),
+        "on_stale_lock": on_stale_lock,
+        "log_multi_instance_notice": scala_settings.get("log_multi_instance_notice", DEFAULT_LOG_MULTI_INSTANCE_NOTICE),
+    }
 
 
 class ScalaLanguageServer(SolidLanguageServer):
@@ -51,9 +97,9 @@ class ScalaLanguageServer(SolidLanguageServer):
             on_stale_lock: 'auto-clean'
             # Log notice when another Metals instance is detected
             log_multi_instance_notice: true
-            # Metals version to bootstrap
+            # Metals version to bootstrap (default: DEFAULT_METALS_VERSION)
             metals_version: '1.6.4'
-            # Client identifier sent to Metals
+            # Client identifier sent to Metals (default: DEFAULT_CLIENT_NAME)
             client_name: 'Serena'
 
     Multi-instance support:
@@ -89,7 +135,6 @@ class ScalaLanguageServer(SolidLanguageServer):
         """
         from pathlib import Path
 
-        from solidlsp.ls_config import Language
         from solidlsp.ls_exceptions import MetalsStaleLockError
         from solidlsp.util.metals_db_utils import (
             MetalsDbStatus,
@@ -100,19 +145,10 @@ class ScalaLanguageServer(SolidLanguageServer):
         project_path = Path(repository_root_path)
         status, lock_info = check_metals_db_status(project_path)
 
-        # Get settings
-        on_stale_lock = StaleLockMode.AUTO_CLEAN
-        log_multi_instance_notice = True
-
-        if solidlsp_settings.ls_specific_settings:
-            scala_settings = solidlsp_settings.get_ls_specific_settings(Language.SCALA)
-            on_stale_lock_str = scala_settings.get("on_stale_lock", "auto-clean")
-            try:
-                on_stale_lock = StaleLockMode(on_stale_lock_str)
-            except ValueError:
-                log.warning(f"Invalid on_stale_lock value '{on_stale_lock_str}', using 'auto-clean'")
-                on_stale_lock = StaleLockMode.AUTO_CLEAN
-            log_multi_instance_notice = scala_settings.get("log_multi_instance_notice", True)
+        # Get settings using the shared helper function
+        settings = _get_scala_settings(solidlsp_settings)
+        on_stale_lock: StaleLockMode = settings["on_stale_lock"]  # type: ignore[assignment]
+        log_multi_instance_notice: bool = settings["log_multi_instance_notice"]  # type: ignore[assignment]
 
         if status == MetalsDbStatus.ACTIVE_INSTANCE:
             if log_multi_instance_notice and lock_info:
@@ -123,20 +159,17 @@ class ScalaLanguageServer(SolidLanguageServer):
                 )
 
         elif status == MetalsDbStatus.STALE_LOCK:
-            if lock_info is None:
-                lock_path_str = str(project_path / ".metals" / "metals.mv.db.lock.db")
-            else:
-                lock_path_str = str(lock_info.lock_path)
+            lock_path = lock_info.lock_path if lock_info else project_path / ".metals" / "metals.mv.db.lock.db"
+            lock_path_str = str(lock_path)
 
             if on_stale_lock == StaleLockMode.AUTO_CLEAN:
                 log.info(f"Stale Metals lock detected, cleaning up: {lock_path_str}")
-                if lock_info:
-                    cleanup_stale_lock(lock_info.lock_path)
-                else:
-                    # Try to clean up even without lock_info
-                    from solidlsp.util.metals_db_utils import cleanup_stale_lock as do_cleanup
-
-                    do_cleanup(Path(lock_path_str))
+                cleanup_success = cleanup_stale_lock(lock_path)
+                if not cleanup_success:
+                    log.warning(
+                        f"Failed to clean up stale lock at {lock_path_str}. "
+                        "Metals may fall back to in-memory database (degraded experience)."
+                    )
 
             elif on_stale_lock == StaleLockMode.WARN:
                 log.warning(
@@ -162,18 +195,12 @@ class ScalaLanguageServer(SolidLanguageServer):
         """
         Setup runtime dependencies for Scala Language Server and return the command to start the server.
         """
-        from solidlsp.ls_config import Language
-
         assert shutil.which("java") is not None, "JDK is not installed or not in PATH."
 
-        # Get metals version from settings or use default
-        metals_version = "1.6.4"
-        client_name = "Serena"
-
-        if solidlsp_settings.ls_specific_settings:
-            scala_settings = solidlsp_settings.get_ls_specific_settings(Language.SCALA)
-            metals_version = scala_settings.get("metals_version", metals_version)
-            client_name = scala_settings.get("client_name", client_name)
+        # Get settings using the shared helper function
+        settings = _get_scala_settings(solidlsp_settings)
+        metals_version: str = settings["metals_version"]  # type: ignore[assignment]
+        client_name: str = settings["client_name"]  # type: ignore[assignment]
 
         metals_home = os.path.join(cls.ls_resources_dir(solidlsp_settings), "metals-lsp")
         os.makedirs(metals_home, exist_ok=True)
