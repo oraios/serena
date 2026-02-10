@@ -7,7 +7,6 @@ import os
 import pathlib
 import shutil
 import subprocess
-import threading
 from typing import Any, cast
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
@@ -28,7 +27,6 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings) -> None:
         super().__init__(config, repository_root_path, None, "systemverilog", solidlsp_settings)
-        self.server_ready = threading.Event()
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
@@ -110,8 +108,11 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
             if dep is None:
                 raise FileNotFoundError(
                     "verible-verilog-ls is not installed on your system.\n"
-                    + "Please install verible manually or use a supported platform.\n"
-                    + "See https://github.com/chipsalliance/verible for installation instructions."
+                    + "Please install verible using one of the following methods:\n"
+                    + "  conda:      conda install -c conda-forge verible\n"
+                    + "  Homebrew:   brew install verible\n"
+                    + "  GitHub:     Download from https://github.com/chipsalliance/verible/releases\n"
+                    + "See https://github.com/chipsalliance/verible for more details."
                 )
 
             verible_ls_dir = os.path.join(self._ls_resources_dir, "verible-ls")
@@ -155,6 +156,9 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
                         "hierarchicalDocumentSymbolSupport": True,
                         "symbolKind": {"valueSet": list(range(1, 27))},
                     },
+                    "codeAction": {"dynamicRegistration": True},
+                    "formatting": {"dynamicRegistration": True},
+                    "documentHighlight": {"dynamicRegistration": True},
                     "publishDiagnostics": {"relatedInformation": True},
                 },
                 "workspace": {
@@ -170,8 +174,13 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
         def do_nothing(params: Any) -> None:
             return
 
+        def on_log_message(params: Any) -> None:
+            message = params.get("message", "") if isinstance(params, dict) else str(params)
+            log.debug(f"verible-verilog-ls: {message}")
+
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
+        self.server.on_notification("window/logMessage", on_log_message)
 
         log.info("Starting verible-verilog-ls process")
         self.server.start()
@@ -179,8 +188,14 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
 
         log.info("Sending initialize request")
         init_response = self.server.send.initialize(initialize_params)
-        log.info(f"Initialize response capabilities: {init_response.get('capabilities', {}).keys()}")
+
+        # Validate server capabilities (follows Gopls/Bash pattern)
+        capabilities = init_response.get("capabilities", {})
+        log.info(f"Initialize response capabilities: {list(capabilities.keys())}")
+        assert "textDocumentSync" in capabilities, "verible-verilog-ls must support textDocumentSync"
+        if "documentSymbolProvider" not in capabilities:
+            log.warning("verible-verilog-ls does not advertise documentSymbolProvider")
+        if "definitionProvider" not in capabilities:
+            log.warning("verible-verilog-ls does not advertise definitionProvider")
 
         self.server.notify.initialized({})
-        self.server_ready.set()
-        self.server_ready.wait()
