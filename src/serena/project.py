@@ -3,13 +3,16 @@ import logging
 import os
 import threading
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pathspec
 from sensai.util.logging import LogTime
 from sensai.util.string import ToStringMixin
 
 from serena.config.serena_config import DEFAULT_TOOL_TIMEOUT, ProjectConfig, get_serena_managed_in_project_dir
+
+if TYPE_CHECKING:
+    from serena.config.serena_config import SerenaConfig
 from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_NAME
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.text_utils import MatchedConsecutiveLines, search_files
@@ -56,9 +59,16 @@ class MemoriesManager:
 
 
 class Project(ToStringMixin):
-    def __init__(self, project_root: str, project_config: ProjectConfig, is_newly_created: bool = False):
+    def __init__(
+        self,
+        project_root: str,
+        project_config: ProjectConfig,
+        is_newly_created: bool = False,
+        serena_config: "SerenaConfig | None" = None,
+    ):
         self.project_root = project_root
         self.project_config = project_config
+        self.serena_config = serena_config
         self.memories_manager = MemoriesManager(project_root)
         self.language_server_manager: LanguageServerManager | None = None
         self._is_newly_created = is_newly_created
@@ -115,12 +125,12 @@ class Project(ToStringMixin):
         return self.project_config.project_name
 
     @classmethod
-    def load(cls, project_root: str | Path, autogenerate: bool = True) -> "Project":
+    def load(cls, project_root: str | Path, autogenerate: bool = True, serena_config: "SerenaConfig | None" = None) -> "Project":
         project_root = Path(project_root).resolve()
         if not project_root.exists():
             raise FileNotFoundError(f"Project root not found: {project_root}")
         project_config = ProjectConfig.load(project_root, autogenerate=autogenerate)
-        return Project(project_root=str(project_root), project_config=project_config)
+        return Project(project_root=str(project_root), project_config=project_config, serena_config=serena_config)
 
     def save_config(self) -> None:
         """
@@ -147,16 +157,16 @@ class Project(ToStringMixin):
         if self.project_config.languages:
             languages_str = ", ".join([lang.value for lang in self.project_config.languages])
             msg += f"\nProgramming languages: {languages_str}; file encoding: {self.project_config.encoding}"
-            if self.project_config.extra_source_file_extensions:
-                msg += f"\nExtra source file extensions: {', '.join(self.project_config.extra_source_file_extensions)}"
+            if self.serena_config and self.serena_config.extra_source_file_extensions:
+                msg += f"\nExtra source file extensions: {', '.join(self.serena_config.extra_source_file_extensions)}"
         else:
             msg += (
                 f"\nNo language servers configured (file encoding: {self.project_config.encoding}). "
                 "File-based tools (read_file, list_dir, search_for_pattern, etc.) are available, "
                 "but symbolic tools (find_symbol, rename_symbol, etc.) are not available."
             )
-            if self.project_config.extra_source_file_extensions:
-                msg += f"\nSource file extensions: {', '.join(self.project_config.extra_source_file_extensions)}"
+            if self.serena_config and self.serena_config.extra_source_file_extensions:
+                msg += f"\nSource file extensions: {', '.join(self.serena_config.extra_source_file_extensions)}"
 
         memories = self.memories_manager.list_memories()
         if memories:
@@ -234,11 +244,13 @@ class Project(ToStringMixin):
                     is_file_in_supported_language = True
                     break
 
-            # Check extra source file extensions
-            if not is_file_in_supported_language and self.project_config.extra_source_file_extensions:
-                file_ext = os.path.splitext(abs_path)[1].lower()
-                if file_ext in self.project_config.extra_source_file_extensions:
-                    is_file_in_supported_language = True
+            # Check extra source file extensions from global config
+            if not is_file_in_supported_language and self.serena_config is not None:
+                extra_extensions = self.serena_config.extra_source_file_extensions
+                if extra_extensions:
+                    file_ext = os.path.splitext(abs_path)[1].lower()
+                    if file_ext in extra_extensions:
+                        is_file_in_supported_language = True
 
             if not is_file_in_supported_language:
                 return True
@@ -437,17 +449,17 @@ class Project(ToStringMixin):
 
         # Handle empty languages list
         if not self.project_config.languages:
-            if self.project_config.extra_source_file_extensions:
+            if self.serena_config and self.serena_config.extra_source_file_extensions:
                 log.info(
                     f"No language servers configured for {self.project_root}, "
-                    f"but extra_source_file_extensions is set: {self.project_config.extra_source_file_extensions}"
+                    f"but extra_source_file_extensions is set: {self.serena_config.extra_source_file_extensions}"
                 )
                 self.language_server_manager = None
                 return None
             else:
                 raise ValueError(
                     f"Project at {self.project_root} has no languages configured. "
-                    f"To use file-based tools without language servers, set extra_source_file_extensions in project.yml"
+                    f"To use file-based tools without language servers, set extra_source_file_extensions in serena_config.yml"
                 )
 
         log.info(f"Creating language server manager for {self.project_root}")
