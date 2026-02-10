@@ -63,5 +63,54 @@ These instructions cover the setup for projects that use sbt as the build tool, 
 Notes:
 - Ensure you completed the manual or auto‑import steps so that the build is compiled and indexed; otherwise, code navigation and references may be incomplete until the first successful compile.
 
+---
+## Running Multiple Metals Instances
+
+Serena can run alongside other Metals instances (e.g., VS Code with Metals extension) on the same project. This is **fully supported** by Metals via H2 AUTO_SERVER mode.
+
+### How It Works
+
+Metals uses an H2 database (`.metals/metals.mv.db`) to cache semantic information. When multiple Metals instances run on the same project:
+
+- **H2 AUTO_SERVER**: The first instance becomes the TCP server; subsequent instances connect as clients
+- **Bloop Build Server**: All instances share a single Bloop process (port 8212)
+- **Compilation Results**: Shared via Bloop — no duplicate compilation
+
+### Memory Considerations
+
+Each Metals JVM uses approximately **500MB of heap** by default. Running multiple instances (e.g., VS Code + Serena) will consume additional memory. For large projects, ensure you have sufficient RAM available.
+
+### Stale Lock Detection
+
+If a Metals process crashes without proper cleanup, it may leave a stale lock file (`.metals/metals.mv.db.lock.db`). This can prevent proper AUTO_SERVER coordination, causing new instances to fall back to in-memory database mode (degraded experience).
+
+Serena automatically detects and handles stale locks based on your configuration:
+
+```yaml
+# ~/.serena/serena_config.yml or .serena/project.yml
+ls_specific_settings:
+  scala:
+    on_stale_lock: "auto-clean"      # auto-clean | warn | fail
+    log_multi_instance_notice: true  # Log info when another Metals detected
+```
+
+#### Stale Lock Modes
+
+| Mode | Behavior |
+|------|----------|
+| `auto-clean` | **(Default, Recommended)** Automatically removes stale lock files and proceeds normally. |
+| `warn` | Logs a warning but proceeds. Metals may use in-memory database (slower). |
+| `fail` | Raises an error and refuses to start. Useful for debugging lock issues. |
+
+### Additional Configuration
+
+```yaml
+ls_specific_settings:
+  scala:
+    metals_version: "1.6.4"    # Specify Metals version
+    client_name: "Serena"      # Client identifier sent to Metals
+```
+
+---
 ## Reference 
 - Metals + sbt: [https://scalameta.org/metals/docs/build-tools/sbt](https://scalameta.org/metals/docs/build-tools/sbt)
