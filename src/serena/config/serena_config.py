@@ -434,6 +434,7 @@ class RegisteredProject(ToStringMixin):
             project_root=project_instance.project_root,
             project_config=project_instance.project_config,
             project_instance=project_instance,
+            serena_config=project_instance.serena_config,
         )
 
     @classmethod
@@ -772,7 +773,6 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
 
         new_project = Project(project_root=str(project_root), project_config=project_config, is_newly_created=True, serena_config=self)
         registered_project = RegisteredProject.from_project_instance(new_project)
-        registered_project._serena_config = self
         self.add_registered_project(registered_project)
 
         return new_project

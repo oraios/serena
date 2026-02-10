@@ -87,6 +87,13 @@ class Project(ToStringMixin):
         self._ignore_spec_available = threading.Event()
         threading.Thread(name=f"gather-ignorespec[{self.project_config.project_name}]", target=self._gather_ignorespec, daemon=True).start()
 
+    @property
+    def extra_source_file_extensions(self) -> list[str]:
+        """Get extra source file extensions from global config, or empty list if not available."""
+        if self.serena_config is not None:
+            return self.serena_config.extra_source_file_extensions
+        return []
+
     def _gather_ignorespec(self) -> None:
         with LogTime(f"Gathering ignore spec for project {self.project_config.project_name}", logger=log):
 
@@ -157,16 +164,16 @@ class Project(ToStringMixin):
         if self.project_config.languages:
             languages_str = ", ".join([lang.value for lang in self.project_config.languages])
             msg += f"\nProgramming languages: {languages_str}; file encoding: {self.project_config.encoding}"
-            if self.serena_config and self.serena_config.extra_source_file_extensions:
-                msg += f"\nExtra source file extensions: {', '.join(self.serena_config.extra_source_file_extensions)}"
+            if self.extra_source_file_extensions:
+                msg += f"\nExtra source file extensions: {', '.join(self.extra_source_file_extensions)}"
         else:
             msg += (
                 f"\nNo language servers configured (file encoding: {self.project_config.encoding}). "
                 "File-based tools (read_file, list_dir, search_for_pattern, etc.) are available, "
                 "but symbolic tools (find_symbol, rename_symbol, etc.) are not available."
             )
-            if self.serena_config and self.serena_config.extra_source_file_extensions:
-                msg += f"\nSource file extensions: {', '.join(self.serena_config.extra_source_file_extensions)}"
+            if self.extra_source_file_extensions:
+                msg += f"\nSource file extensions: {', '.join(self.extra_source_file_extensions)}"
 
         memories = self.memories_manager.list_memories()
         if memories:
@@ -245,12 +252,10 @@ class Project(ToStringMixin):
                     break
 
             # Check extra source file extensions from global config
-            if not is_file_in_supported_language and self.serena_config is not None:
-                extra_extensions = self.serena_config.extra_source_file_extensions
-                if extra_extensions:
-                    file_ext = os.path.splitext(abs_path)[1].lower()
-                    if file_ext in extra_extensions:
-                        is_file_in_supported_language = True
+            if not is_file_in_supported_language and self.extra_source_file_extensions:
+                file_ext = os.path.splitext(abs_path)[1].lower()
+                if file_ext in self.extra_source_file_extensions:
+                    is_file_in_supported_language = True
 
             if not is_file_in_supported_language:
                 return True
@@ -449,10 +454,10 @@ class Project(ToStringMixin):
 
         # Handle empty languages list
         if not self.project_config.languages:
-            if self.serena_config and self.serena_config.extra_source_file_extensions:
+            if self.extra_source_file_extensions:
                 log.info(
                     f"No language servers configured for {self.project_root}, "
-                    f"but extra_source_file_extensions is set: {self.serena_config.extra_source_file_extensions}"
+                    f"but extra_source_file_extensions is set: {self.extra_source_file_extensions}"
                 )
                 self.language_server_manager = None
                 return None
