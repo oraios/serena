@@ -102,9 +102,9 @@ class Language(str, Enum):
     Supports TOML validation, formatting, and schema support.
     """
     SYSTEMVERILOG = "systemverilog"
-    """SystemVerilog language server using slang-server.
+    """SystemVerilog language server using verible-verilog-ls.
     Supports .sv, .svh, .v, .vh files.
-    Automatically downloads slang-server binary.
+    Automatically downloads verible binary.
     """
 
     @classmethod

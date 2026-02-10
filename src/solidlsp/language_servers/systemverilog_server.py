@@ -5,6 +5,8 @@ SystemVerilog language server using verible-verilog-ls.
 import logging
 import os
 import pathlib
+import shutil
+import subprocess
 import threading
 from typing import Any, cast
 
@@ -33,8 +35,28 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
 
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
         def _get_or_install_core_dependency(self) -> str:
-            import shutil
+            # 1. Check PATH first for system-installed verible
+            system_verible = shutil.which("verible-verilog-ls")
+            if system_verible:
+                # Log version information
+                try:
+                    result = subprocess.run(
+                        [system_verible, "--version"],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        timeout=5,
+                    )
+                    if result.returncode == 0:
+                        version_info = result.stdout.strip().split("\n")[0]
+                        log.info(f"Using system-installed verible-verilog-ls: {version_info}")
+                    else:
+                        log.info(f"Using system-installed verible-verilog-ls at {system_verible}")
+                except Exception:
+                    log.info(f"Using system-installed verible-verilog-ls at {system_verible}")
+                return system_verible
 
+            # 2. Not found in PATH, try to download
             deps = RuntimeDependencyCollection(
                 [
                     RuntimeDependency(
@@ -80,31 +102,29 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
                 ]
             )
 
-            verible_ls_dir = os.path.join(self._ls_resources_dir, "verible-ls")
-
             try:
                 dep = deps.get_single_dep_for_current_platform()
             except RuntimeError:
                 dep = None
 
             if dep is None:
-                # Fallback to system-installed verible-verilog-ls
-                executable_path = shutil.which("verible-verilog-ls")
-                if not executable_path:
-                    raise FileNotFoundError(
-                        "verible-verilog-ls is not installed on your system.\n"
-                        + "Please install verible manually or use a supported platform.\n"
-                        + "See https://github.com/chipsalliance/verible for installation instructions."
-                    )
-                log.info(f"Using system-installed verible-verilog-ls at {executable_path}")
-            else:
-                executable_path = deps.binary_path(verible_ls_dir)
-                if not os.path.exists(executable_path):
-                    log.info(f"verible-verilog-ls not found at {executable_path}. Downloading from {dep.url}")
-                    _ = deps.install(verible_ls_dir)
-                if not os.path.exists(executable_path):
-                    raise FileNotFoundError(f"verible-verilog-ls not found at {executable_path}")
-                os.chmod(executable_path, 0o755)
+                raise FileNotFoundError(
+                    "verible-verilog-ls is not installed on your system.\n"
+                    + "Please install verible manually or use a supported platform.\n"
+                    + "See https://github.com/chipsalliance/verible for installation instructions."
+                )
+
+            verible_ls_dir = os.path.join(self._ls_resources_dir, "verible-ls")
+            executable_path = deps.binary_path(verible_ls_dir)
+
+            if not os.path.exists(executable_path):
+                log.info(f"verible-verilog-ls not found. Downloading from {dep.url}")
+                _ = deps.install(verible_ls_dir)
+
+            if not os.path.exists(executable_path):
+                raise FileNotFoundError(f"verible-verilog-ls not found at {executable_path}")
+
+            os.chmod(executable_path, 0o755)
             return executable_path
 
         def _create_launch_command(self, core_path: str) -> list[str] | str:
@@ -119,14 +139,28 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
             "rootUri": root_uri,
             "capabilities": {
                 "textDocument": {
-                    "synchronization": {"didSave": True},
-                    "completion": {"completionItem": {"snippetSupport": True}},
-                    "definition": {},
-                    "references": {},
-                    "hover": {},
-                    "documentSymbol": {},
+                    "synchronization": {"didSave": True, "dynamicRegistration": True},
+                    "completion": {
+                        "dynamicRegistration": True,
+                        "completionItem": {"snippetSupport": True},
+                    },
+                    "definition": {"dynamicRegistration": True},
+                    "references": {"dynamicRegistration": True},
+                    "hover": {
+                        "dynamicRegistration": True,
+                        "contentFormat": ["markdown", "plaintext"],
+                    },
+                    "documentSymbol": {
+                        "dynamicRegistration": True,
+                        "hierarchicalDocumentSymbolSupport": True,
+                        "symbolKind": {"valueSet": list(range(1, 27))},
+                    },
+                    "publishDiagnostics": {"relatedInformation": True},
                 },
-                "workspace": {"workspaceFolders": True},
+                "workspace": {
+                    "workspaceFolders": True,
+                    "didChangeConfiguration": {"dynamicRegistration": True},
+                },
             },
             "workspaceFolders": [{"uri": root_uri, "name": os.path.basename(repository_absolute_path)}],
         }

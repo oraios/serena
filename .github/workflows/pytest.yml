@@ -58,16 +58,19 @@ jobs:
         uses: actions/cache@v3
         with:
           path: .venv
-          key: uv-venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}
+          key: uv-venv-${{ runner.os }}-${{ matrix.python-version }}-lock-${{ hashFiles('uv.lock') }}
       - name: Create virtual environment
         shell: bash
         run: |
           if [ ! -d ".venv" ]; then
             uv venv
           fi
-      - name: Install dependencies
+      - name: Install Python environment
         shell: bash
-        run: uv pip install -e ".[dev]"
+        run: uv sync --extra dev --locked
+      - name: List Python dependencies
+        shell: bash
+        run: uv pip list
       - name: Check formatting
         shell: bash
         run: uv run poe lint
