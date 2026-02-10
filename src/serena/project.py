@@ -147,12 +147,16 @@ class Project(ToStringMixin):
         if self.project_config.languages:
             languages_str = ", ".join([lang.value for lang in self.project_config.languages])
             msg += f"\nProgramming languages: {languages_str}; file encoding: {self.project_config.encoding}"
+            if self.project_config.extra_source_file_extensions:
+                msg += f"\nExtra source file extensions: {', '.join(self.project_config.extra_source_file_extensions)}"
         else:
             msg += (
                 f"\nNo language servers configured (file encoding: {self.project_config.encoding}). "
                 "File-based tools (read_file, list_dir, search_for_pattern, etc.) are available, "
                 "but symbolic tools (find_symbol, rename_symbol, etc.) are not available."
             )
+            if self.project_config.extra_source_file_extensions:
+                msg += f"\nSource file extensions: {', '.join(self.project_config.extra_source_file_extensions)}"
 
         memories = self.memories_manager.list_memories()
         if memories:
@@ -222,11 +226,20 @@ class Project(ToStringMixin):
         is_file = os.path.isfile(abs_path)
         if is_file and ignore_non_source_files:
             is_file_in_supported_language = False
+
+            # Check configured languages
             for language in self.project_config.languages:
                 fn_matcher = language.get_source_fn_matcher()
                 if fn_matcher.is_relevant_filename(abs_path):
                     is_file_in_supported_language = True
                     break
+
+            # Check extra source file extensions
+            if not is_file_in_supported_language and self.project_config.extra_source_file_extensions:
+                file_ext = os.path.splitext(abs_path)[1].lower()
+                if file_ext in self.project_config.extra_source_file_extensions:
+                    is_file_in_supported_language = True
+
             if not is_file_in_supported_language:
                 return True
 
@@ -404,7 +417,6 @@ class Project(ToStringMixin):
         ls_timeout: float | None = DEFAULT_TOOL_TIMEOUT - 5,
         trace_lsp_communication: bool = False,
         ls_specific_settings: dict[Language, Any] | None = None,
-        allow_no_language_servers: bool = False,
     ) -> LanguageServerManager | None:
         """
         Creates the language server manager for the project, starting one language server per configured programming language.
@@ -414,8 +426,7 @@ class Project(ToStringMixin):
         :param trace_lsp_communication: whether to trace LSP communication
         :param ls_specific_settings: optional LS specific configuration of the language server,
             see docstrings in the inits of subclasses of SolidLanguageServer to see what values may be passed.
-        :param allow_no_language_servers: if True, allows creating a project with no language servers (returns None)
-        :return: the language server manager (or None if no languages configured and allow_no_language_servers is True),
+        :return: the language server manager (or None if no languages configured but extra_source_file_extensions is set),
             which is also stored in the project instance
         """
         # if there is an existing instance, stop its language servers first
@@ -424,16 +435,19 @@ class Project(ToStringMixin):
             self.language_server_manager.stop_all()
             self.language_server_manager = None
 
-        # Handle empty languages list when allow_no_language_servers is enabled
+        # Handle empty languages list
         if not self.project_config.languages:
-            if allow_no_language_servers:
-                log.info(f"No language servers configured for {self.project_root} (allow_no_language_servers=True)")
+            if self.project_config.extra_source_file_extensions:
+                log.info(
+                    f"No language servers configured for {self.project_root}, "
+                    f"but extra_source_file_extensions is set: {self.project_config.extra_source_file_extensions}"
+                )
                 self.language_server_manager = None
                 return None
             else:
                 raise ValueError(
                     f"Project at {self.project_root} has no languages configured. "
-                    "To enable projects without language servers, set allow_no_language_servers=True in serena_config.yml"
+                    f"To use file-based tools without language servers, set extra_source_file_extensions in project.yml"
                 )
 
         log.info(f"Creating language server manager for {self.project_root}")

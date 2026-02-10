@@ -31,6 +31,13 @@ languages: ["python"]
 # For a list of possible encodings, see https://docs.python.org/3.11/library/codecs.html#standard-encodings
 encoding: "utf-8"
 
+# additional file extensions to treat as source files (beyond those defined by configured languages)
+# Useful for:
+#   - Projects with languages + additional file types (e.g., Python + SQL: extra_source_file_extensions: [".sql"])
+#   - Projects without language servers (e.g., SQL-only: languages: [], extra_source_file_extensions: [".sql"])
+# Extensions should include the dot (e.g., ".sql", ".md")
+extra_source_file_extensions: []
+
 # whether to use project's .gitignore files to ignore files
 ignore_all_files_in_gitignore: true
 

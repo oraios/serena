@@ -645,7 +645,7 @@ class ProjectCommands(AutoRegisteringGroup):
 
         if ls_mgr is None:
             click.echo("Error: Project has no language servers configured. Cannot index symbols.")
-            click.echo("Hint: Set allow_no_language_servers=True in serena_config.yml if this is intentional.")
+            click.echo("Hint: Projects without language servers (languages: [] with extra_source_file_extensions) cannot be indexed.")
             return
 
         try:
@@ -728,7 +728,7 @@ class ProjectCommands(AutoRegisteringGroup):
 
         if ls_mgr is None:
             click.echo("Error: Project has no language servers configured. Cannot index file.")
-            click.echo("Hint: Set allow_no_language_servers=True in serena_config.yml if this is intentional.")
+            click.echo("Hint: Projects without language servers (languages: [] with extra_source_file_extensions) cannot be indexed.")
             exit(1)
 
         try:

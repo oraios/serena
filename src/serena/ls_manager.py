@@ -66,7 +66,7 @@ class LanguageServerManager:
         :param language_servers: a mapping from language to language server; the servers are assumed to be already started.
             The first server in the iteration order is used as the default server.
             All servers are assumed to serve the same project root.
-            Can be empty when allow_no_language_servers is enabled.
+            Can be empty when project has no languages but extra_source_file_extensions is set.
         :param language_server_factory: factory for language server creation; if None, dynamic (re)creation of language servers
             is not supported
         :param project_root: the project root path; required when language_servers is empty
@@ -74,7 +74,7 @@ class LanguageServerManager:
         self._language_servers = language_servers
         self._language_server_factory = language_server_factory
 
-        # Handle empty language servers (when allow_no_language_servers is enabled)
+        # Handle empty language servers (when no languages configured but extra_source_file_extensions is set)
         if language_servers:
             self._default_language_server: SolidLanguageServer | None = next(iter(language_servers.values()))
             self._root_path = self._default_language_server.repository_root_path
@@ -90,13 +90,13 @@ class LanguageServerManager:
         Creates a manager with language servers for the given languages using the given factory.
         The language servers are started in parallel threads.
 
-        :param languages: the languages for which to spawn language servers; can be empty when allow_no_language_servers is enabled
+        :param languages: the languages for which to spawn language servers; can be empty when extra_source_file_extensions is set
         :param factory: the factory for language server creation
         :return: the instance
         """
         language_servers: dict[Language, SolidLanguageServer] = {}
 
-        # Handle empty languages list (when allow_no_language_servers is enabled)
+        # Handle empty languages list (when no languages configured but extra_source_file_extensions is set)
         if not languages:
             return LanguageServerManager(language_servers, factory, project_root=factory.project_root)
 
