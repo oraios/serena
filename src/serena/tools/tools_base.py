@@ -50,7 +50,11 @@ class Component(ABC):
         from serena.symbol import LanguageServerSymbolRetriever
 
         if not self.agent.is_using_language_server():
-            raise Exception("Cannot create LanguageServerSymbolRetriever; agent is not in language server mode.")
+            raise Exception(
+                "Cannot create LanguageServerSymbolRetriever; agent is not in language server mode. "
+                "Symbolic operations require language servers. If your project has no supported languages, "
+                "only file-based operations (read_file, list_dir, search_for_pattern, etc.) are available."
+            )
         language_server_manager = self.agent.get_language_server_manager_or_raise()
         return LanguageServerSymbolRetriever(language_server_manager, agent=self.agent)
 

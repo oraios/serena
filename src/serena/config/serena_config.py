@@ -178,6 +178,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         languages: list[Language] | None = None,
         save_to_disk: bool = True,
         interactive: bool = False,
+        allow_no_language_servers: bool = False,
     ) -> Self:
         """
         Autogenerate a project configuration for a given project root.
@@ -188,6 +189,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         :param languages: the languages of the project; if None, they will be determined automatically
         :param save_to_disk: whether to save the project configuration to disk
         :param interactive: whether to run in interactive CLI mode, asking the user for input where appropriate
+        :param allow_no_language_servers: if True, allows creating a project with no language servers
         :return: the project configuration
         """
         project_root = Path(project_root).resolve()
@@ -202,41 +204,48 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                 language_composition = determine_programming_language_composition(str(project_root))
                 log.info("Language composition: %s", language_composition)
                 if len(language_composition) == 0:
-                    language_values = ", ".join([lang.value for lang in Language])
-                    raise ValueError(
-                        f"No source files found in {project_root}\n\n"
-                        f"To use Serena with this project, you need to either\n"
-                        f"  1. specify a programming language by adding parameters --language <language>\n"
-                        f"     when creating the project via the Serena CLI command OR\n"
-                        f"  2. add source files in one of the supported languages first.\n\n"
-                        f"Supported languages are: {language_values}\n"
-                        f"Read the documentation for more information."
+                    if allow_no_language_servers:
+                        # Allow empty languages when the option is enabled
+                        log.info("No source files found, but allow_no_language_servers=True, creating project with empty languages")
+                        languages_to_use: list[str] = []
+                    else:
+                        language_values = ", ".join([lang.value for lang in Language])
+                        raise ValueError(
+                            f"No source files found in {project_root}\n\n"
+                            f"To use Serena with this project, you need to either\n"
+                            f"  1. specify a programming language by adding parameters --language <language>\n"
+                            f"     when creating the project via the Serena CLI command OR\n"
+                            f"  2. add source files in one of the supported languages first OR\n"
+                            f"  3. set allow_no_language_servers=True in serena_config.yml to enable projects without language servers.\n\n"
+                            f"Supported languages are: {language_values}\n"
+                            f"Read the documentation for more information."
+                        )
+                else:
+                    # sort languages by number of files found
+                    languages_and_percentages = sorted(
+                        language_composition.items(), key=lambda item: (item[1], item[0].get_priority()), reverse=True
                     )
-                # sort languages by number of files found
-                languages_and_percentages = sorted(
-                    language_composition.items(), key=lambda item: (item[1], item[0].get_priority()), reverse=True
-                )
-                # find the language with the highest percentage and enable it
-                top_language_pair = languages_and_percentages[0]
-                other_language_pairs = languages_and_percentages[1:]
-                languages_to_use: list[str] = [top_language_pair[0].value]
-                # if in interactive mode, ask the user which other languages to enable
-                if len(other_language_pairs) > 0 and interactive:
-                    print(
-                        "Detected and enabled main language '%s' (%.2f%% of source files)."
-                        % (top_language_pair[0].value, top_language_pair[1])
-                    )
-                    print(f"Additionally detected {len(other_language_pairs)} other language(s).\n")
-                    print("Note: Enable only languages you need symbolic retrieval/editing capabilities for.")
-                    print("      Additional language servers use resources and some languages may require additional")
-                    print("      system-level installations/configuration (see Serena documentation).")
-                    print("\nWhich additional languages do you want to enable?")
-                    for lang, perc in other_language_pairs:
-                        enable = ask_yes_no("Enable %s (%.2f%% of source files)?" % (lang.value, perc), default=False)
-                        if enable:
-                            languages_to_use.append(lang.value)
-                    print()
-                log.info("Using languages: %s", languages_to_use)
+                    # find the language with the highest percentage and enable it
+                    top_language_pair = languages_and_percentages[0]
+                    other_language_pairs = languages_and_percentages[1:]
+                    languages_to_use = [top_language_pair[0].value]
+                    # if in interactive mode, ask the user which other languages to enable
+                    if len(other_language_pairs) > 0 and interactive:
+                        print(
+                            "Detected and enabled main language '%s' (%.2f%% of source files)."
+                            % (top_language_pair[0].value, top_language_pair[1])
+                        )
+                        print(f"Additionally detected {len(other_language_pairs)} other language(s).\n")
+                        print("Note: Enable only languages you need symbolic retrieval/editing capabilities for.")
+                        print("      Additional language servers use resources and some languages may require additional")
+                        print("      system-level installations/configuration (see Serena documentation).")
+                        print("\nWhich additional languages do you want to enable?")
+                        for lang, perc in other_language_pairs:
+                            enable = ask_yes_no("Enable %s (%.2f%% of source files)?" % (lang.value, perc), default=False)
+                            if enable:
+                                languages_to_use.append(lang.value)
+                        print()
+                    log.info("Using languages: %s", languages_to_use)
             else:
                 languages_to_use = [lang.value for lang in languages]
             config_with_comments = cls.load_commented_map(PROJECT_TEMPLATE_FILE)
@@ -330,15 +339,19 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         return d
 
     @classmethod
-    def load(cls, project_root: Path | str, autogenerate: bool = False) -> Self:
+    def load(cls, project_root: Path | str, autogenerate: bool = False, allow_no_language_servers: bool = False) -> Self:
         """
         Load a ProjectConfig instance from the path to the project root.
+
+        :param project_root: the path to the project root
+        :param autogenerate: whether to autogenerate the project configuration if it does not exist
+        :param allow_no_language_servers: if True, allows creating a project with no language servers (only used when autogenerate=True)
         """
         project_root = Path(project_root)
         yaml_path = project_root / cls.rel_path_to_project_yml()
         if not yaml_path.exists():
             if autogenerate:
-                return cls.autogenerate(project_root)
+                return cls.autogenerate(project_root, allow_no_language_servers=allow_no_language_servers)
             else:
                 raise FileNotFoundError(f"Project configuration file not found: {yaml_path}")
         yaml_data = cls.load_commented_map(str(yaml_path))
@@ -426,6 +439,15 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     language_backend: LanguageBackend = LanguageBackend.LSP
     """
     the language backend to use for code understanding features
+    """
+
+    allow_no_language_servers: bool = False
+    """
+    Allow projects to run without any language servers configured.
+    When enabled, projects with empty languages list can be activated, providing access to file-based tools
+    (read_file, list_dir, search_for_pattern, etc.) but not symbolic tools (find_symbol, rename_symbol, etc.).
+    This is useful for projects containing files in unsupported languages (e.g., SQL, plain text, documentation).
+    Default: False (maintains backward compatibility - projects must have at least one language configured)
     """
 
     token_count_estimator: str = RegisteredTokenCountEstimator.CHAR_COUNT.name
@@ -691,7 +713,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
                     f"Project with path {project_root} was already added with name '{already_registered_project.project_name}'."
                 )
 
-        project_config = ProjectConfig.load(project_root, autogenerate=True)
+        project_config = ProjectConfig.load(project_root, autogenerate=True, allow_no_language_servers=self.allow_no_language_servers)
 
         new_project = Project(project_root=str(project_root), project_config=project_config, is_newly_created=True)
         self.add_registered_project(RegisteredProject.from_project_instance(new_project))

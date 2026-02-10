@@ -57,6 +57,28 @@ trace_lsp_communication: False
 # whether to trace the communication between Serena and the language servers.
 # This is useful for debugging language server issues.
 
+allow_no_language_servers: False
+# Allow projects to run without any language servers configured.
+# When enabled, projects with an empty languages list can be activated, providing access to
+# file-based tools (read_file, list_dir, search_for_pattern, create_text_file, etc.) but not
+# symbolic tools (find_symbol, rename_symbol, get_symbols_overview, etc.).
+#
+# Use cases:
+#  * Projects containing only files in unsupported languages (e.g., SQL, plain text)
+#  * Documentation-only projects (Markdown, reStructuredText, etc.)
+#  * Configuration file repositories (YAML, JSON, TOML, etc.)
+#
+# When this option is enabled and a project has no supported language files, Serena will:
+#  1. Skip language server initialization (faster startup, no resource overhead)
+#  2. Enable all file-based tools for reading, writing, and searching files
+#  3. Disable symbolic tools that require language server support
+#
+# To use this feature:
+#  1. Set allow_no_language_servers: True in this config file
+#  2. Create a project with languages: [] in the project.yml file
+#
+# Default: False (maintains backward compatibility - projects must have at least one language)
+
 ls_specific_settings: {}
 # Added on 23.08.2025
 # Advanced configuration option allowing to configure language server implementation specific options. Maps the language

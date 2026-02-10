@@ -621,6 +621,12 @@ class ProjectCommands(AutoRegisteringGroup):
         ls_mgr = proj.create_language_server_manager(
             log_level=lvl, ls_timeout=timeout, ls_specific_settings=serena_config.ls_specific_settings
         )
+
+        if ls_mgr is None:
+            click.echo("Error: Project has no language servers configured. Cannot index symbols.")
+            click.echo("Hint: Set allow_no_language_servers=True in serena_config.yml if this is intentional.")
+            return
+
         try:
             log_file = os.path.join(proj.project_root, ".serena", "logs", "indexing.txt")
 
@@ -698,6 +704,12 @@ class ProjectCommands(AutoRegisteringGroup):
             click.echo(f"'{file}' is ignored or declared as non-code file by the project configuration, won't index.")
             exit(1)
         ls_mgr = proj.create_language_server_manager()
+
+        if ls_mgr is None:
+            click.echo("Error: Project has no language servers configured. Cannot index file.")
+            click.echo("Hint: Set allow_no_language_servers=True in serena_config.yml if this is intentional.")
+            exit(1)
+
         try:
             for ls in ls_mgr.iter_language_servers():
                 click.echo(f"Indexing for language {ls.language.value} …")

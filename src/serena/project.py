@@ -134,8 +134,18 @@ class Project(ToStringMixin):
             msg = f"Created and activated a new project with name '{self.project_name}' at {self.project_root}. "
         else:
             msg = f"The project with name '{self.project_name}' at {self.project_root} is activated."
-        languages_str = ", ".join([lang.value for lang in self.project_config.languages])
-        msg += f"\nProgramming languages: {languages_str}; file encoding: {self.project_config.encoding}"
+
+        # Handle empty languages list
+        if self.project_config.languages:
+            languages_str = ", ".join([lang.value for lang in self.project_config.languages])
+            msg += f"\nProgramming languages: {languages_str}; file encoding: {self.project_config.encoding}"
+        else:
+            msg += (
+                f"\nNo language servers configured (file encoding: {self.project_config.encoding}). "
+                "File-based tools (read_file, list_dir, search_for_pattern, etc.) are available, "
+                "but symbolic tools (find_symbol, rename_symbol, etc.) are not available."
+            )
+
         memories = self.memories_manager.list_memories()
         if memories:
             msg += (
@@ -370,7 +380,8 @@ class Project(ToStringMixin):
         ls_timeout: float | None = DEFAULT_TOOL_TIMEOUT - 5,
         trace_lsp_communication: bool = False,
         ls_specific_settings: dict[Language, Any] | None = None,
-    ) -> LanguageServerManager:
+        allow_no_language_servers: bool = False,
+    ) -> LanguageServerManager | None:
         """
         Creates the language server manager for the project, starting one language server per configured programming language.
 
@@ -379,13 +390,27 @@ class Project(ToStringMixin):
         :param trace_lsp_communication: whether to trace LSP communication
         :param ls_specific_settings: optional LS specific configuration of the language server,
             see docstrings in the inits of subclasses of SolidLanguageServer to see what values may be passed.
-        :return: the language server manager, which is also stored in the project instance
+        :param allow_no_language_servers: if True, allows creating a project with no language servers (returns None)
+        :return: the language server manager (or None if no languages configured and allow_no_language_servers is True),
+            which is also stored in the project instance
         """
         # if there is an existing instance, stop its language servers first
         if self.language_server_manager is not None:
             log.info("Stopping existing language server manager ...")
             self.language_server_manager.stop_all()
             self.language_server_manager = None
+
+        # Handle empty languages list when allow_no_language_servers is enabled
+        if not self.project_config.languages:
+            if allow_no_language_servers:
+                log.info(f"No language servers configured for {self.project_root} (allow_no_language_servers=True)")
+                self.language_server_manager = None
+                return None
+            else:
+                raise ValueError(
+                    f"Project at {self.project_root} has no languages configured. "
+                    "To enable projects without language servers, set allow_no_language_servers=True in serena_config.yml"
+                )
 
         log.info(f"Creating language server manager for {self.project_root}")
         factory = LanguageServerFactory(

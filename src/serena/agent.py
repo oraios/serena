@@ -351,9 +351,12 @@ class SerenaAgent:
         language_server_manager = self.get_language_server_manager()
         if language_server_manager is None:
             raise Exception(
-                "The language server manager is not initialized, indicating a problem during project activation. "
-                "Inform the user, telling them to inspect Serena's logs in order to determine the issue. "
-                "IMPORTANT: Wait for further instructions before you continue!"
+                "The language server manager is not initialized. This could indicate either:\n"
+                "1. A problem during project activation (check Serena's logs for errors), or\n"
+                "2. The project has no language servers configured (allow_no_language_servers=True).\n"
+                "Symbolic operations (find_symbol, rename_symbol, etc.) require language servers. "
+                "Only file-based operations (read_file, list_dir, search_for_pattern, etc.) are available.\n"
+                "Inform the user and wait for further instructions before continuing!"
             )
         return language_server_manager
 
@@ -697,6 +700,7 @@ class SerenaAgent:
             ls_timeout=ls_timeout,
             trace_lsp_communication=self.serena_config.trace_lsp_communication,
             ls_specific_settings=self.serena_config.ls_specific_settings,
+            allow_no_language_servers=self.serena_config.allow_no_language_servers,
         )
 
     def add_language(self, language: Language) -> None:

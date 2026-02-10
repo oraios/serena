@@ -60,18 +60,29 @@ class LanguageServerManager:
         self,
         language_servers: dict[Language, SolidLanguageServer],
         language_server_factory: LanguageServerFactory | None = None,
+        project_root: str | None = None,
     ) -> None:
         """
         :param language_servers: a mapping from language to language server; the servers are assumed to be already started.
             The first server in the iteration order is used as the default server.
             All servers are assumed to serve the same project root.
+            Can be empty when allow_no_language_servers is enabled.
         :param language_server_factory: factory for language server creation; if None, dynamic (re)creation of language servers
             is not supported
+        :param project_root: the project root path; required when language_servers is empty
         """
         self._language_servers = language_servers
         self._language_server_factory = language_server_factory
-        self._default_language_server = next(iter(language_servers.values()))
-        self._root_path = self._default_language_server.repository_root_path
+
+        # Handle empty language servers (when allow_no_language_servers is enabled)
+        if language_servers:
+            self._default_language_server: SolidLanguageServer | None = next(iter(language_servers.values()))
+            self._root_path = self._default_language_server.repository_root_path
+        else:
+            self._default_language_server = None
+            if project_root is None:
+                raise ValueError("project_root must be provided when no language servers are available")
+            self._root_path = project_root
 
     @staticmethod
     def from_languages(languages: list[Language], factory: LanguageServerFactory) -> "LanguageServerManager":
@@ -79,11 +90,16 @@ class LanguageServerManager:
         Creates a manager with language servers for the given languages using the given factory.
         The language servers are started in parallel threads.
 
-        :param languages: the languages for which to spawn language servers
+        :param languages: the languages for which to spawn language servers; can be empty when allow_no_language_servers is enabled
         :param factory: the factory for language server creation
         :return: the instance
         """
         language_servers: dict[Language, SolidLanguageServer] = {}
+
+        # Handle empty languages list (when allow_no_language_servers is enabled)
+        if not languages:
+            return LanguageServerManager(language_servers, factory, project_root=factory.project_root)
+
         threads = []
         exceptions = {}
         lock = threading.Lock()
@@ -129,6 +145,14 @@ class LanguageServerManager:
         return ls
 
     def get_language_server(self, relative_path: str) -> SolidLanguageServer:
+        # Raise helpful error if no language servers are available
+        if not self._language_servers:
+            raise RuntimeError(
+                "No language servers are available. This project was configured with an empty languages list. "
+                "Symbolic operations (find_symbol, rename_symbol, etc.) are not available. "
+                "Only file-based operations (read_file, list_dir, search_for_pattern, etc.) can be used."
+            )
+
         ls: SolidLanguageServer | None = None
         if len(self._language_servers) > 1:
             for candidate in self._language_servers.values():
@@ -137,7 +161,7 @@ class LanguageServerManager:
                     break
         if ls is None:
             ls = self._default_language_server
-        return self._ensure_functional_ls(ls)
+        return self._ensure_functional_ls(ls)  # type: ignore[arg-type]
 
     def _create_and_start_language_server(self, language: Language) -> SolidLanguageServer:
         if self._language_server_factory is None:
