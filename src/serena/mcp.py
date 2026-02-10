@@ -21,9 +21,9 @@ from serena.agent import (
     SerenaAgent,
     SerenaConfig,
 )
-from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
-from serena.config.serena_config import LanguageBackend
-from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES, SERENA_LOG_FORMAT
+from serena.config.context_mode import SerenaAgentContext
+from serena.config.serena_config import LanguageBackend, ModeSelectionDefinition
+from serena.constants import DEFAULT_CONTEXT, SERENA_LOG_FORMAT
 from serena.tools import Tool
 from serena.util.exception import show_fatal_exception_safe
 from serena.util.logging import MemoryLogHandler
@@ -260,7 +260,7 @@ class SerenaMCPFactory:
                 mcp._tool_manager._tools[tool.get_name()] = mcp_tool
             log.info(f"Starting MCP server with {len(mcp._tool_manager._tools)} tools: {list(mcp._tool_manager._tools.keys())}")
 
-    def _create_serena_agent(self, serena_config: SerenaConfig, modes: list[SerenaAgentMode]) -> SerenaAgent:
+    def _create_serena_agent(self, serena_config: SerenaConfig, modes: ModeSelectionDefinition | None = None) -> SerenaAgent:
         return SerenaAgent(
             project=self.project, serena_config=serena_config, context=self.context, modes=modes, memory_log_handler=self.memory_log_handler
         )
@@ -272,7 +272,7 @@ class SerenaMCPFactory:
         self,
         host: str = "0.0.0.0",
         port: int = 8000,
-        modes: Sequence[str] = DEFAULT_MODES,
+        modes: Sequence[str] = (),
         language_backend: LanguageBackend | None = None,
         enable_web_dashboard: bool | None = None,
         enable_gui_log_window: bool | None = None,
@@ -318,8 +318,10 @@ class SerenaMCPFactory:
             if language_backend is not None:
                 config.language_backend = language_backend
 
-            modes_instances = [SerenaAgentMode.load(mode) for mode in modes]
-            self.agent = self._create_serena_agent(config, modes_instances)
+            mode_selection_def: ModeSelectionDefinition | None = None
+            if modes:
+                mode_selection_def = ModeSelectionDefinition(default_modes=modes)
+            self.agent = self._create_serena_agent(config, mode_selection_def)
 
         except Exception as e:
             show_fatal_exception_safe(e)
@@ -340,6 +342,7 @@ class SerenaMCPFactory:
         self._set_mcp_tools(mcp_server, openai_tool_compatible=openai_tool_compatible)
         log.info("MCP server lifetime setup complete")
         yield
+        log.info("MCP server shutting down")
 
     def _get_initial_instructions(self) -> str:
         assert self.agent is not None

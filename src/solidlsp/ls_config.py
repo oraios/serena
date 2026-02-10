@@ -41,6 +41,7 @@ class Language(str, Enum):
     RUBY = "ruby"
     DART = "dart"
     CPP = "cpp"
+    CPP_CCLS = "cpp_ccls"
     PHP = "php"
     R = "r"
     PERL = "perl"
@@ -124,6 +125,7 @@ class Language(str, Enum):
             self.YAML,
             self.TOML,
             self.GROOVY,
+            self.CPP_CCLS,
         }
 
     def __str__(self) -> str:
@@ -170,7 +172,7 @@ class Language(str, Enum):
                 return FilenameMatcher("*.rb", "*.erb")
             case self.RUBY_SOLARGRAPH:
                 return FilenameMatcher("*.rb")
-            case self.CPP:
+            case self.CPP | self.CPP_CCLS:
                 return FilenameMatcher("*.cpp", "*.h", "*.hpp", "*.c", "*.hxx", "*.cc", "*.cxx")
             case self.KOTLIN:
                 return FilenameMatcher("*.kt", "*.kts")
@@ -304,6 +306,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.clangd_language_server import ClangdLanguageServer
 
                 return ClangdLanguageServer
+            case self.CPP_CCLS:
+                from solidlsp.language_servers.ccls_language_server import CCLS
+
+                return CCLS
             case self.PHP:
                 from solidlsp.language_servers.intelephense import Intelephense
 

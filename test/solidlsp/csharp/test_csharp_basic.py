@@ -56,6 +56,7 @@ class TestCSharpLanguageServer:
         # Handle nested symbol structure
         symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
         for sym in symbol_list:
+            # Symbol names are normalized to base form (e.g., "Add" not "Add(int, int) : int")
             if sym.get("name") == "Add":
                 add_symbol = sym
                 break
@@ -82,13 +83,13 @@ class TestCSharpLanguageServer:
         # Check that we have the Person class
         assert any(s.get("name") == "Person" and s.get("kind") == 5 for s in symbols)
 
-        # Check for properties and methods
+        # Check for properties and methods (names are normalized to base form)
         symbol_names = [s.get("name") for s in symbols]
-        assert "Name" in symbol_names
-        assert "Age" in symbol_names
-        assert "Email" in symbol_names
-        assert "ToString" in symbol_names
-        assert "IsAdult" in symbol_names
+        assert "Name" in symbol_names, "Name property not found"
+        assert "Age" in symbol_names, "Age property not found"
+        assert "Email" in symbol_names, "Email property not found"
+        assert "ToString" in symbol_names, "ToString method not found"
+        assert "IsAdult" in symbol_names, "IsAdult method not found"
 
     @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
     def test_find_referencing_symbols_across_files(self, language_server: SolidLanguageServer) -> None:
@@ -102,6 +103,7 @@ class TestCSharpLanguageServer:
 
         subtract_symbol = None
         for sym in symbol_list:
+            # Symbol names are normalized to base form (e.g., "Subtract" not "Subtract(int, int) : int")
             if sym.get("name") == "Subtract":
                 subtract_symbol = sym
                 break
@@ -112,20 +114,65 @@ class TestCSharpLanguageServer:
         sel_start = subtract_symbol["selectionRange"]["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
 
-        # Should find references in both Program.cs and Models/Person.cs
+        # Should find references where the method is called
         ref_files = cast(list[str], [ref.get("relativePath", "") for ref in refs])
         print(f"Found references: {refs}")
         print(f"Reference files: {ref_files}")
 
-        # Check that we have references from both files
-        assert any("Program.cs" in ref_file for ref_file in ref_files), "Should find reference in Program.cs"
+        # Check that we have reference in Models/Person.cs where Calculator.Subtract is called
+        # Note: New Roslyn version doesn't include the definition itself as a reference (more correct behavior)
         assert any(
             os.path.join("Models", "Person.cs") in ref_file for ref_file in ref_files
         ), "Should find reference in Models/Person.cs where Calculator.Subtract is called"
+        assert len(refs) > 0, "Should find at least one reference"
 
         # check for a second time, since the first call may trigger initialization and change the state of the LS
         refs_second_call = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
         assert refs_second_call == refs, "Second call to request_references should return the same results"
+
+    @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
+    def test_hover_includes_type_information(self, language_server: SolidLanguageServer) -> None:
+        """Test that hover information is available and includes type information."""
+        file_path = os.path.join("Models", "Person.cs")
+
+        # Open the file first
+        language_server.open_file(file_path)
+
+        # Test 1: Hover over the Name property (line 6, column 23 - on "Name")
+        # Source: public string Name { get; set; }
+        hover_info = language_server.request_hover(file_path, 6, 23)
+
+        # Verify hover returns content
+        assert hover_info is not None, "Hover should return information for Name property"
+        assert isinstance(hover_info, dict), "Hover should be a dict"
+        assert "contents" in hover_info, "Hover should have contents"
+
+        contents = hover_info["contents"]
+        assert isinstance(contents, dict), "Hover contents should be a dict"
+        assert "value" in contents, "Hover contents should have value"
+        hover_text = contents["value"]
+
+        # Verify the hover contains property signature with type
+        assert "string" in hover_text, f"Hover should include 'string' type, got: {hover_text}"
+        assert "Name" in hover_text, f"Hover should include 'Name' property name, got: {hover_text}"
+
+        # Test 2: Hover over the IsAdult method (line 22, column 21 - on "IsAdult")
+        # Source: public bool IsAdult()
+        hover_method = language_server.request_hover(file_path, 22, 21)
+
+        # Verify method hover returns content
+        assert hover_method is not None, "Hover should return information for IsAdult method"
+        assert isinstance(hover_method, dict), "Hover should be a dict"
+        assert "contents" in hover_method, "Hover should have contents"
+
+        contents = hover_method["contents"]
+        assert isinstance(contents, dict), "Hover contents should be a dict"
+        assert "value" in contents, "Hover contents should have value"
+        method_hover_text = contents["value"]
+
+        # Verify the hover contains method signature with return type
+        assert "bool" in method_hover_text, f"Hover should include 'bool' return type, got: {method_hover_text}"
+        assert "IsAdult" in method_hover_text, f"Hover should include 'IsAdult' method name, got: {method_hover_text}"
 
 
 @pytest.mark.csharp

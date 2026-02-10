@@ -48,7 +48,7 @@ class TestRustAnalyzerDetection:
         from solidlsp.language_servers.rust_analyzer import RustAnalyzer
 
         # Mock rustup to be unavailable
-        with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=None):
+        with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None):
             # Mock common locations to NOT exist
             with patch("os.path.isfile", return_value=False):
                 # Mock PATH to have rust-analyzer
@@ -60,7 +60,7 @@ class TestRustAnalyzerDetection:
                             return path == "/custom/bin/rust-analyzer"
 
                         with patch("os.path.isfile", side_effect=selective_isfile):
-                            result = RustAnalyzer._ensure_rust_analyzer_installed()
+                            result = RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
 
         assert result == "/custom/bin/rust-analyzer"
         mock_which.assert_called_with("rust-analyzer")
@@ -86,11 +86,11 @@ class TestRustAnalyzerDetection:
         def mock_access(path, mode):
             return path == "/opt/homebrew/bin/rust-analyzer"
 
-        with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=None):
+        with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None):
             with patch("shutil.which", return_value=None):
                 with patch("os.path.isfile", side_effect=mock_isfile):
                     with patch("os.access", side_effect=mock_access):
-                        result = RustAnalyzer._ensure_rust_analyzer_installed()
+                        result = RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
 
         assert result == "/opt/homebrew/bin/rust-analyzer"
 
@@ -115,11 +115,11 @@ class TestRustAnalyzerDetection:
         def mock_access(path, mode):
             return path == "/usr/local/bin/rust-analyzer"
 
-        with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=None):
+        with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None):
             with patch("shutil.which", return_value=None):
                 with patch("os.path.isfile", side_effect=mock_isfile):
                     with patch("os.access", side_effect=mock_access):
-                        result = RustAnalyzer._ensure_rust_analyzer_installed()
+                        result = RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
 
         assert result == "/usr/local/bin/rust-analyzer"
 
@@ -146,11 +146,11 @@ class TestRustAnalyzerDetection:
         def mock_access(path, mode):
             return path == cargo_path
 
-        with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=None):
+        with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None):
             with patch("shutil.which", return_value=None):
                 with patch("os.path.isfile", side_effect=mock_isfile):
                     with patch("os.access", side_effect=mock_access):
-                        result = RustAnalyzer._ensure_rust_analyzer_installed()
+                        result = RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
 
         assert result == cargo_path
 
@@ -169,11 +169,11 @@ class TestRustAnalyzerDetection:
         with patch("shutil.which", return_value=None):
             with patch("os.path.isfile", return_value=False):
                 with patch.object(
-                    RustAnalyzer,
+                    RustAnalyzer.DependencyProvider,
                     "_get_rust_analyzer_via_rustup",
                     return_value="/home/user/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rust-analyzer",
                 ):
-                    result = RustAnalyzer._ensure_rust_analyzer_installed()
+                    result = RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
 
         assert "rustup" in result or ".rustup" in result
 
@@ -193,10 +193,10 @@ class TestRustAnalyzerDetection:
 
         with patch("shutil.which", return_value=None):
             with patch("os.path.isfile", return_value=False):
-                with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=None):
-                    with patch.object(RustAnalyzer, "_get_rustup_version", return_value=None):
+                with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None):
+                    with patch.object(RustAnalyzer.DependencyProvider, "_get_rustup_version", return_value=None):
                         with pytest.raises(RuntimeError) as exc_info:
-                            RustAnalyzer._ensure_rust_analyzer_installed()
+                            RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
 
         error_message = str(exc_info.value)
         # Error should list the locations that were searched (Unix paths)
@@ -222,11 +222,11 @@ class TestRustAnalyzerDetection:
         rustup_path = "/home/user/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rust-analyzer"
 
         # Rustup has rust-analyzer, PATH also has it, common locations also exist
-        with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=rustup_path):
+        with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=rustup_path):
             with patch("shutil.which", return_value="/custom/path/rust-analyzer"):
                 with patch("os.path.isfile", return_value=True):
                     with patch("os.access", return_value=True):
-                        result = RustAnalyzer._ensure_rust_analyzer_installed()
+                        result = RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
 
         # Should use rustup version, NOT PATH or common locations
         assert result == rustup_path
@@ -260,11 +260,11 @@ class TestRustAnalyzerDetection:
         def mock_isfile_for_cargo(path):
             return path in ["/opt/homebrew/bin/rust-analyzer", os.path.expanduser("~/.cargo/bin/rust-analyzer")]
 
-        with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=None):
+        with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None):
             with patch("shutil.which", return_value=None):
                 with patch("os.path.isfile", side_effect=mock_isfile_for_cargo):
                     with patch("os.access", side_effect=mock_access):
-                        result = RustAnalyzer._ensure_rust_analyzer_installed()
+                        result = RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
 
         # Should skip non-executable Homebrew and use cargo
         assert result == os.path.expanduser("~/.cargo/bin/rust-analyzer")
@@ -292,12 +292,12 @@ class TestRustAnalyzerDetection:
         def mock_access(path, mode):
             return path == scoop_path
 
-        with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=None):
+        with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None):
             with patch("platform.system", return_value="Windows"):
                 with patch("shutil.which", return_value=None):
                     with patch("os.path.isfile", side_effect=mock_isfile):
                         with patch("os.access", side_effect=mock_access):
-                            result = RustAnalyzer._ensure_rust_analyzer_installed()
+                            result = RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
 
         assert result == scoop_path
 
@@ -324,12 +324,12 @@ class TestRustAnalyzerDetection:
         def mock_access(path, mode):
             return path == cargo_path
 
-        with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=None):
+        with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None):
             with patch("platform.system", return_value="Windows"):
                 with patch("shutil.which", return_value=None):
                     with patch("os.path.isfile", side_effect=mock_isfile):
                         with patch("os.access", side_effect=mock_access):
-                            result = RustAnalyzer._ensure_rust_analyzer_installed()
+                            result = RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
 
         assert result == cargo_path
 
@@ -349,10 +349,10 @@ class TestRustAnalyzerDetection:
         with patch("platform.system", return_value="Windows"):
             with patch("shutil.which", return_value=None):
                 with patch("os.path.isfile", return_value=False):
-                    with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=None):
-                        with patch.object(RustAnalyzer, "_get_rustup_version", return_value=None):
+                    with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None):
+                        with patch.object(RustAnalyzer.DependencyProvider, "_get_rustup_version", return_value=None):
                             with pytest.raises(RuntimeError) as exc_info:
-                                RustAnalyzer._ensure_rust_analyzer_installed()
+                                RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
 
         error_message = str(exc_info.value)
         # Error should suggest Windows-specific package managers
@@ -377,13 +377,13 @@ class TestRustAnalyzerDetection:
 
         with patch("shutil.which", return_value=None):
             with patch("os.path.isfile", return_value=False):
-                with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup") as mock_rustup_path:
+                with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup") as mock_rustup_path:
                     # First call returns None (not installed), second returns path (after install)
                     mock_rustup_path.side_effect = [None, "/home/user/.rustup/toolchains/stable/bin/rust-analyzer"]
-                    with patch.object(RustAnalyzer, "_get_rustup_version", return_value="1.70.0"):
+                    with patch.object(RustAnalyzer.DependencyProvider, "_get_rustup_version", return_value="1.70.0"):
                         with patch("subprocess.run") as mock_run:
                             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-                            result = RustAnalyzer._ensure_rust_analyzer_installed()
+                            result = RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
 
         assert result == "/home/user/.rustup/toolchains/stable/bin/rust-analyzer"
         mock_run.assert_called_once()
@@ -407,14 +407,14 @@ class TestRustAnalyzerDetection:
 
         with patch("shutil.which", return_value=None):
             with patch("os.path.isfile", return_value=False):
-                with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=None):
-                    with patch.object(RustAnalyzer, "_get_rustup_version", return_value="1.70.0"):
+                with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None):
+                    with patch.object(RustAnalyzer.DependencyProvider, "_get_rustup_version", return_value="1.70.0"):
                         with patch("subprocess.run") as mock_run:
                             mock_run.return_value = MagicMock(
                                 returncode=1, stdout="", stderr="error: component 'rust-analyzer' is not available"
                             )
                             with pytest.raises(RuntimeError) as exc_info:
-                                RustAnalyzer._ensure_rust_analyzer_installed()
+                                RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
 
         error_message = str(exc_info.value)
         # Error should provide helpful installation instructions
@@ -439,12 +439,12 @@ class TestRustAnalyzerDetection:
 
         with patch("shutil.which", return_value=None):
             with patch("os.path.isfile", return_value=False):
-                with patch.object(RustAnalyzer, "_get_rust_analyzer_via_rustup", return_value=None):
-                    with patch.object(RustAnalyzer, "_get_rustup_version", return_value="1.70.0"):
+                with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None):
+                    with patch.object(RustAnalyzer.DependencyProvider, "_get_rustup_version", return_value="1.70.0"):
                         with patch("subprocess.run") as mock_run:
                             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
                             with pytest.raises(RuntimeError) as exc_info:
-                                RustAnalyzer._ensure_rust_analyzer_installed()
+                                RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
 
         error_message = str(exc_info.value)
         # Error should indicate rust-analyzer is not available and provide install instructions
@@ -482,7 +482,7 @@ class TestRustAnalyzerDetectionIntegration:
             if not any(os.path.isfile(p) and os.access(p, os.X_OK) for p in common_paths):
                 pytest.skip("rust-analyzer not installed on this system")
 
-        result = RustAnalyzer._ensure_rust_analyzer_installed()
+        result = RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
 
         assert result is not None
         assert os.path.isfile(result)

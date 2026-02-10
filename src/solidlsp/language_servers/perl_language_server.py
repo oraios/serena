@@ -206,8 +206,6 @@ class PerlLanguageServer(SolidLanguageServer):
         log.info(f"Sending workspace/didChangeConfiguration notification with config: {perl_config}")
         self.server.notify.workspace_did_change_configuration(perl_config)
 
-        self.completions_available.set()
-
         # Perl::LanguageServer needs time to index files and resolve cross-file references
         # Without this delay, requests for definitions/references may return empty results
         settling_time = 0.5

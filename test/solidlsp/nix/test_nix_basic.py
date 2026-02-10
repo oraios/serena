@@ -119,7 +119,7 @@ class TestNixLanguageServer:
     def test_hover_information(self, language_server: SolidLanguageServer) -> None:
         """Test hover information for symbols."""
         # Get hover info for makeGreeting function
-        hover_info = language_server.request_hover("default.nix", 9, 5)  # Position near makeGreeting
+        hover_info = language_server.request_hover("default.nix", 12, 5)  # Position at makeGreeting
 
         assert hover_info is not None, "Should provide hover information"
 

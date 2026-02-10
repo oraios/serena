@@ -141,7 +141,6 @@ class PascalLanguageServer(SolidLanguageServer):
             solidlsp_settings,
         )
         self.server_ready = threading.Event()
-        self.completions_available_event = threading.Event()
 
     # ============== Metadata Directory Management ==============
 
@@ -859,7 +858,6 @@ class PascalLanguageServer(SolidLanguageServer):
             if "initialized" in message_text.lower() or "ready" in message_text.lower():
                 log.info("Pascal language server ready signal detected")
                 self.server_ready.set()
-                self.completions_available.set()
 
         def publish_diagnostics(params: dict) -> None:
             log.debug(f"Diagnostics: {params}")
@@ -904,7 +902,6 @@ class PascalLanguageServer(SolidLanguageServer):
             # pasls may not send explicit ready signals, so we proceed after timeout
             log.info("Timeout waiting for Pascal server ready signal, assuming server is ready")
             self.server_ready.set()
-            self.completions_available.set()
         else:
             log.info("Pascal server initialization complete")
 

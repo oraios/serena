@@ -315,8 +315,8 @@ class TestFindProjectRoot:
         finally:
             os.chdir(original_cwd)
 
-    def test_falls_back_to_cwd_when_no_markers(self, temp_project_dir):
-        """Test falls back to CWD when no markers exist within boundary."""
+    def test_falls_back_to_none_when_no_markers(self, temp_project_dir):
+        """Test falls back to None when no markers exist within boundary."""
         subdir = os.path.join(temp_project_dir, "src")
         os.makedirs(subdir)
 
@@ -324,7 +324,7 @@ class TestFindProjectRoot:
         try:
             os.chdir(subdir)
             result = find_project_root(root=temp_project_dir)
-            assert os.path.samefile(result, subdir)
+            assert result is None
         finally:
             os.chdir(original_cwd)
 

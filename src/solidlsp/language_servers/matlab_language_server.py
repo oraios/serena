@@ -463,7 +463,6 @@ class MatlabLanguageServer(SolidLanguageServer):
             if "mvm attach success" in message_text.lower() or "adding workspace folder" in message_text.lower():
                 log.info("MATLAB language server ready signal detected (MVM attached)")
                 self.server_ready.set()
-                self.completions_available.set()
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
@@ -508,7 +507,6 @@ class MatlabLanguageServer(SolidLanguageServer):
             # Fallback: assume server is ready after timeout
             log.info("Timeout waiting for MATLAB server ready signal, proceeding anyway")
             self.server_ready.set()
-            self.completions_available.set()
         else:
             log.info("MATLAB server initialization complete")
 

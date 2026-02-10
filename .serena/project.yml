@@ -1,14 +1,45 @@
+# the name by which the project can be referenced within Serena
+project_name: "serena"
+
+
+# list of languages for which language servers are started; choose from:
+#   al                  bash                clojure             cpp                 csharp
+#   csharp_omnisharp    dart                elixir              elm                 erlang
+#   fortran             fsharp              go                  groovy              haskell
+#   java                julia               kotlin              lua                 markdown
+#   matlab              nix                 pascal              perl                php
+#   powershell          python              python_jedi         r                   rego
+#   ruby                ruby_solargraph     rust                scala               swift
+#   terraform           toml                typescript          typescript_vts      vue
+#   yaml                zig
+#   (This list may be outdated. For the current list, see values of Language enum here:
+#   https://github.com/oraios/serena/blob/main/src/solidlsp/ls_config.py
+#   For some languages, there are alternative language servers, e.g. csharp_omnisharp, ruby_solargraph.)
+# Note:
+#   - For C, use cpp
+#   - For JavaScript, use typescript
+#   - For Free Pascal/Lazarus, use pascal
+# Special requirements:
+#   - csharp: Requires the presence of a .sln file in the project folder.
+#   - pascal: Requires Free Pascal Compiler (fpc) and optionally Lazarus.
+# When using multiple languages, the first language server that supports a given file will be used for that file.
+# The first language is the default language and the respective language server will be used as a fallback.
+# Note that when using the JetBrains backend, language servers are not used and this list is correspondingly ignored.
+languages:
+- python
+- typescript
+
+
+# whether to use project's .gitignore files to ignore files
 ignore_all_files_in_gitignore: true
 
-# list of additional paths to ignore
+
+# list of additional paths to ignore in all projects
 # same syntax as gitignore, so you can use * and **
-# Was previously called `ignored_dirs`, please update your config if you are using that.
-# Added (renamed)on 2025-04-07
 ignored_paths: []
 
 # whether the project is in read-only mode
 # If set to true, all editing tools will be disabled and attempts to use them will result in an error
-# Added on 2025-04-18
 read_only: false
 
 
@@ -53,13 +84,34 @@ read_only: false
 #  * `write_memory`: Writes a named memory (for future reference) to Serena's project-specific memory store.
 excluded_tools: []
 
+# list of tools to include that would otherwise be disabled (particularly optional tools that are disabled by default)
+included_optional_tools: []
+
+# fixed set of tools to use as the base tool set (if non-empty), replacing Serena's default set of tools.
+# This cannot be combined with non-empty excluded_tools or included_optional_tools.
 # initial prompt for the project. It will always be given to the LLM upon activating the project
 # (contrary to the memories, which are loaded on demand).
 initial_prompt: ""
 
-project_name: "serena"
-languages:
-- python
-- typescript
-included_optional_tools: []
+
 encoding: utf-8
+
+
+# list of mode names to that are always to be included in the set of active modes
+# The full set of modes to be activated is base_modes + default_modes.
+# If the setting is undefined, the base_modes from the global configuration (serena_config.yml) apply.
+# Otherwise, this setting overrides the global configuration.
+# Set this to [] to disable base modes for this project.
+# Set this to a list of mode names to always include the respective modes for this project.
+base_modes:
+
+# list of mode names that are to be activated by default.
+# The full set of modes to be activated is base_modes + default_modes.
+# If the setting is undefined, the default_modes from the global configuration (serena_config.yml) apply.
+# Otherwise, this overrides the setting from the global configuration (serena_config.yml).
+# This setting can, in turn, be overridden by CLI parameters (--mode).
+default_modes:
+
+# fixed set of tools to use as the base tool set (if non-empty), replacing Serena's default set of tools.
+# This cannot be combined with non-empty excluded_tools or included_optional_tools.
+fixed_tools: []

@@ -739,7 +739,6 @@ class EclipseJDTLS(SolidLanguageServer):
                         "*",
                         " ",
                     ]
-                    self.completions_available.set()
                 if registration["method"] == "workspace/executeCommand":
                     if "java.intellicode.enable" in registration["registerOptions"]["commands"]:
                         self._intellicode_enable_command_available.set()

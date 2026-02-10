@@ -96,7 +96,7 @@ claude mcp add --scope user serena -- uvx --from git+https://github.com/oraios/s
 ```
 
 Whenever you start Claude Code, Serena will search up from the current directory for `.serena/project.yml` or `.git` markers,
-activating the current directory as the project if neither is found. 
+activating the containing directory as the project (if any). 
 This mechanism makes it suitable for a single global MCP configuration.
 
 **Maximum Token Efficiency.** To maximize token efficiency, you may want to use Claude Code's 
@@ -159,9 +159,11 @@ args = ["--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-s
 
 After codex has started, you need to activate the project, which you can do by saying:
 
-"Activate the current dir as project using serena"
+> Call serena.activate_project, serena.check_onboarding_performed and serena.initial_instructions
 
-> If you don't activate the project, you will not be able to use Serena's tools!
+**If you don't activate the project, you will not be able to use Serena's tools!**
+
+It is recommend to set this prompt as a [custom prompt](https://developers.openai.com/codex/custom-prompts), so you don't need to type this every time.
 
 That's it! Have a look at `~/.codex/log/codex-tui.log` to see if any errors occurred.
 

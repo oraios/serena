@@ -148,7 +148,6 @@ class BashLanguageServer(SolidLanguageServer):
             if "Analyzing" in message_text or "analysis complete" in message_text.lower():
                 log.info("Bash language server analysis signals detected")
                 self.server_ready.set()
-                self.completions_available.set()
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
@@ -183,7 +182,6 @@ class BashLanguageServer(SolidLanguageServer):
             # This is common. bash-language-server doesn't always send explicit ready signals. Log as info
             log.info("Timeout waiting for bash server ready signal, proceeding anyway")
             self.server_ready.set()
-            self.completions_available.set()
         else:
             log.info("Bash server initialization complete")
 

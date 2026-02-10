@@ -166,5 +166,4 @@ class JuliaLanguageServer(SolidLanguageServer):
         assert "documentSymbolProvider" in init_response["capabilities"]
 
         self.server.notify.initialized({})
-        self.completions_available.set()
         log.info("Julia Language Server is initialized and ready.")

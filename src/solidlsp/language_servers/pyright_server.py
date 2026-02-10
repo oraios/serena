@@ -154,7 +154,6 @@ class PyrightServer(SolidLanguageServer):
                 log.info("Pyright workspace scanning complete")
                 self.found_source_files = True
                 self.analysis_complete.set()
-                self.completions_available.set()
 
         def check_experimental_status(params: dict) -> None:
             """
@@ -164,7 +163,6 @@ class PyrightServer(SolidLanguageServer):
                 log.info("Received experimental/serverStatus with quiescent=true")
                 if not self.found_source_files:
                     self.analysis_complete.set()
-                    self.completions_available.set()
 
         # Set up notification handlers
         self.server.on_request("client/registerCapability", do_nothing)
@@ -203,4 +201,3 @@ class PyrightServer(SolidLanguageServer):
             log.warning("Timeout waiting for Pyright analysis completion, proceeding anyway")
             # Fallback: assume analysis is complete after timeout
             self.analysis_complete.set()
-            self.completions_available.set()
