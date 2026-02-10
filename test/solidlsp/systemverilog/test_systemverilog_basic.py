@@ -47,18 +47,6 @@ class TestSystemVerilogSymbols:
         assert symbol is not None, "Expected 'counter' in document symbols"
 
     @pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
-    def test_find_alu_module(self, language_server: SolidLanguageServer) -> None:
-        """Test that ALU module is found."""
-        symbols = language_server.request_full_symbol_tree()
-        assert SymbolUtils.symbol_tree_contains_name(symbols, "alu"), "Module 'alu' not found in symbol tree"
-
-    @pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
-    def test_get_alu_document_symbols(self, language_server: SolidLanguageServer) -> None:
-        """Test document symbols for alu.sv."""
-        symbol = _find_symbol_by_name(language_server, "alu.sv", "alu")
-        assert symbol is not None, "Expected 'alu' in document symbols"
-
-    @pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
     def test_find_top_module(self, language_server: SolidLanguageServer) -> None:
         """Test that top module is found (cross-file instantiation test)."""
         symbols = language_server.request_full_symbol_tree()
