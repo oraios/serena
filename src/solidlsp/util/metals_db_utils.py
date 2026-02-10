@@ -75,7 +75,7 @@ def parse_h2_lock_file(lock_path: Path) -> MetalsLockInfo | None:
 
     Returns:
         MetalsLockInfo if the file can be parsed, None if file doesn't exist
-        or is completely unparseable.
+        or is completely unparsable.
 
     """
     if not lock_path.exists():
@@ -119,7 +119,7 @@ def parse_h2_lock_file(lock_path: Path) -> MetalsLockInfo | None:
         # Can't determine - assume stale if lock exists but we can't parse it
         # and no Metals processes are running for this project
         log.debug(f"Could not parse PID or port from lock file: {lock_path}")
-        is_stale = True  # Conservative: treat unparseable as stale
+        is_stale = True  # Conservative: treat unparsable as stale
 
     return MetalsLockInfo(
         pid=pid,
