@@ -252,11 +252,14 @@ class JetBrainsPluginClient(ToStringMixin):
                 else:
                     del symbol[key]
 
-        # convert documentation and quick info from HTML to plain text (if present)
-        symbols = response_dict["symbols"]
-        for s in symbols:
-            convert_html("documentation", s)
-            convert_html("quick_info", s)
+        def convert_symbol_list(l: list) -> None:
+            for s in l:
+                convert_html("documentation", s)
+                convert_html("quick_info", s)
+                if "children" in s:
+                    convert_symbol_list(s["children"])
+
+        convert_symbol_list(response_dict["symbols"])
 
     def find_symbol(
         self,
