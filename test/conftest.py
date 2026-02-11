@@ -35,10 +35,17 @@ class LanguageParamRequest:
     param: Language
 
 
+_LANGUAGE_REPO_ALIASES: dict[Language, Language] = {
+    Language.CPP_CCLS: Language.CPP,
+    Language.PHP_PHPACTOR: Language.PHP,
+    Language.PYTHON_JEDI: Language.PYTHON,
+    Language.RUBY_SOLARGRAPH: Language.RUBY,
+}
+
+
 def get_repo_path(language: Language) -> Path:
-    # Map both CPP variants to the shared cpp test repo
-    repo_dir = "cpp" if language in (Language.CPP, Language.CPP_CCLS) else str(language)
-    return Path(__file__).parent / "resources" / "repos" / repo_dir / "test_repo"
+    repo_language = _LANGUAGE_REPO_ALIASES.get(language, language)
+    return Path(__file__).parent / "resources" / "repos" / repo_language / "test_repo"
 
 
 def _create_ls(
