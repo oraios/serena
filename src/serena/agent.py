@@ -338,6 +338,10 @@ class SerenaAgent:
                 self.activate_project_from_path_or_name(project, update_modes_and_tools=False)
             except Exception as e:
                 log.error(f"Error activating project '{project}' at startup: {e}", exc_info=e)
+                from serena.tools.jetbrains_plugin_client import ServerNotFoundError
+
+                if isinstance(e, ServerNotFoundError):
+                    raise
 
         # update active modes and active tools (considering the active project, if any)
         # declared attributes are set in the call to _update_active_modes_and_tools()
@@ -617,6 +621,12 @@ class SerenaAgent:
         """
         return self.serena_config.language_backend == LanguageBackend.LSP
 
+    def is_using_jetbrains(self) -> bool:
+        """
+        :return: whether this agent uses the JetBrains IDE plugin for code analysis
+        """
+        return self.serena_config.language_backend == LanguageBackend.JETBRAINS
+
     def _activate_project(self, project: Project, update_modes_and_tools: bool = True) -> None:
         log.info(f"Activating {project.project_name} at {project.project_root}")
         self._active_project = project
@@ -632,6 +642,19 @@ class SerenaAgent:
         # initialize the language server in the background (if in language server mode)
         if self.is_using_language_server():
             self.issue_task(init_language_server_manager)
+
+        # verify that a JetBrains IDE instance is running and reachable (if in JetBrains mode)
+        if self.is_using_jetbrains():
+            from serena.tools.jetbrains_plugin_client import JetBrainsPluginClient, ServerNotFoundError
+
+            try:
+                JetBrainsPluginClient.from_project(project)
+            except ServerNotFoundError:
+                raise ServerNotFoundError(
+                    f"Failed to activate project '{project.project_name}' in JetBrains mode: "
+                    f"No running JetBrains IDE instance found for the project at {project.project_root}. "
+                    f"Please start your JetBrains IDE with the Serena plugin and open the project before activating."
+                )
 
         if self._project_activation_callback is not None:
             self._project_activation_callback()

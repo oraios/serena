@@ -10,9 +10,10 @@ from typing import Literal
 import pytest
 
 from serena.agent import SerenaAgent
-from serena.config.serena_config import ProjectConfig, RegisteredProject, SerenaConfig
+from serena.config.serena_config import LanguageBackend, ProjectConfig, RegisteredProject, SerenaConfig
 from serena.project import Project
 from serena.tools import SUCCESS_RESULT, FindReferencingSymbolsTool, FindSymbolTool, ReplaceContentTool, ReplaceSymbolBodyTool
+from serena.tools.jetbrains_plugin_client import ServerNotFoundError
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
 from test.conftest import get_repo_path, language_tests_enabled
@@ -484,3 +485,32 @@ class TestSerenaAgent:
                 relative_path="ws_manager.js",
                 mode="regex",
             )
+
+
+class TestJetBrainsActivation:
+    def test_activate_project_fails_when_no_jetbrains_ide_running(self):
+        """Test that activating a project in JetBrains mode fails if no IDE instance is running."""
+        repo_path = get_repo_path(Language.PYTHON)
+        project = Project(
+            project_root=str(repo_path),
+            project_config=ProjectConfig(
+                project_name="test_jetbrains",
+                languages=[Language.PYTHON],
+                ignored_paths=[],
+                excluded_tools=set(),
+                read_only=False,
+                ignore_all_files_in_gitignore=True,
+                initial_prompt="",
+                encoding="utf-8",
+            ),
+        )
+        config = SerenaConfig(
+            gui_log_window=False,
+            web_dashboard=False,
+            log_level=logging.ERROR,
+            language_backend=LanguageBackend.JETBRAINS,
+        )
+        config.projects = [RegisteredProject.from_project_instance(project)]
+
+        with pytest.raises(ServerNotFoundError, match="No running JetBrains IDE instance found"):
+            SerenaAgent(project="test_jetbrains", serena_config=config)
