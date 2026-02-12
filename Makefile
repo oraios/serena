@@ -23,7 +23,8 @@ gcp-sql-proxy: ## Start Cloud SQL Auth Proxy for local development
 		--port=$(SQL_PROXY_PORT) \
 		--auto-iam-authn
 
-gcp-storage-sync: ## Sync local uploads directory to GCS media bucket
+gcp-storage-sync: ## Sync local uploads directory to GCS media bucket (WARNING: deletes remote files not present locally)
+	@echo "WARNING: This will delete remote files not present in local uploads/ directory."
 	@echo "Syncing uploads/ to gs://$(GCS_BUCKET)/..."
 	gsutil -m rsync -r -d uploads/ gs://$(GCS_BUCKET)/uploads/
 	@echo "Sync complete."

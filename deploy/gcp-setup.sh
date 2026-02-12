@@ -53,14 +53,13 @@ Optional environment variables:
   SA_NAME               Service account name (default: serena-sa)
   WIF_POOL              Workload Identity Federation pool (default: github-pool)
   WIF_PROVIDER          WIF provider name (default: github-provider)
-  GITHUB_REPO           GitHub repo for WIF (owner/repo)
 
   SQL_INSTANCE_NAME     Cloud SQL instance name (default: serena-db)
   SQL_TIER              Cloud SQL machine tier (default: db-f1-micro)
   SQL_DB_NAME           Database name (default: serena)
   SQL_USER              Database user (default: serena)
 
-  GCS_BUCKET            Cloud Storage bucket name (default: {PROJECT_ID}-media)
+  GCS_BUCKET            Cloud Storage bucket name (default: ${PROJECT_ID}-media)
   GCS_LIFECYCLE_DAYS    Object lifecycle in days (default: 365)
 
   VPC_CONNECTOR_NAME    VPC connector name (default: serena-connector)
@@ -196,7 +195,7 @@ if ! gcloud sql instances describe "${SQL_INSTANCE_NAME}" &>/dev/null; then
     --instance="${SQL_INSTANCE_NAME}"
 
   echo "    Creating user ${SQL_USER}..."
-  SQL_PASSWORD=$(openssl rand -base64 24)
+  SQL_PASSWORD=$(openssl rand -hex 24)
   gcloud sql users create "${SQL_USER}" \
     --instance="${SQL_INSTANCE_NAME}" \
     --password="${SQL_PASSWORD}"
@@ -301,6 +300,20 @@ if ! gcloud compute security-policies describe "${ARMOR_POLICY_NAME}" &>/dev/nul
     --expression="evaluatePreconfiguredExpr('xss-v33-stable')" \
     --action=deny-403 \
     --description="Block XSS attacks"
+
+  # LFI protection rule
+  gcloud compute security-policies rules create 2002 \
+    --security-policy="${ARMOR_POLICY_NAME}" \
+    --expression="evaluatePreconfiguredExpr('lfi-v33-stable')" \
+    --action=deny-403 \
+    --description="Block local file inclusion attacks"
+
+  # RFI protection rule
+  gcloud compute security-policies rules create 2003 \
+    --security-policy="${ARMOR_POLICY_NAME}" \
+    --expression="evaluatePreconfiguredExpr('rfi-v33-stable')" \
+    --action=deny-403 \
+    --description="Block remote file inclusion attacks"
 
   echo "    Cloud Armor policy ${ARMOR_POLICY_NAME} created with rate limiting and WAF rules."
 else
