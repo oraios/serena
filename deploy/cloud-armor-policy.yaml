@@ -2,9 +2,15 @@
 # Apply via: gcloud compute security-policies import serena-security-policy --file-path=deploy/cloud-armor-policy.yaml
 #
 # This policy provides:
-#   - Rate limiting (100 requests/min per IP)
+#   - Rate limiting (300 requests/min per IP for general, 60/min for API endpoints)
 #   - SQL injection protection (WAF)
 #   - XSS protection (WAF)
+#   - LFI/RFI protection (WAF)
+#
+# Rate limit tuning guide:
+#   - SPA frontend: 300 req/min allows normal page loads with asset fetches
+#   - API endpoints: 60 req/min is suitable for typical CRUD operations
+#   - Adjust thresholds based on monitoring data after initial deployment
 
 name: serena-security-policy
 description: Security policy for Serena Cloud Run services
@@ -21,9 +27,10 @@ rules:
         srcIpRanges:
           - "*"
 
-  # Rate limiting: 100 requests per minute per IP
-  - description: "Rate limit - 100 requests per minute per IP"
-    priority: 1000
+  # General rate limiting: 300 requests per minute per IP
+  # Covers frontend asset loading, page navigation, etc.
+  - description: "General rate limit - 300 requests per minute per IP"
+    priority: 900
     action: throttle
     match:
       versionedExpr: SRC_IPS_V1
@@ -32,7 +39,23 @@ rules:
           - "*"
     rateLimitOptions:
       rateLimitThreshold:
-        count: 100
+        count: 300
+        intervalSec: 60
+      conformAction: allow
+      exceedAction: deny-429
+      enforceOnKey: IP
+
+  # API rate limiting: 60 requests per minute per IP
+  # Stricter limit for API endpoints to prevent abuse
+  - description: "API rate limit - 60 requests per minute per IP"
+    priority: 1000
+    action: throttle
+    match:
+      expr:
+        expression: "request.path.matches('/api/.*')"
+    rateLimitOptions:
+      rateLimitThreshold:
+        count: 60
         intervalSec: 60
       conformAction: allow
       exceedAction: deny-429

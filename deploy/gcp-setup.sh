@@ -70,6 +70,10 @@ HELP
   exit 0
 fi
 
+# Create secure temporary directory for config files (cleaned up on exit)
+TMPDIR=$(mktemp -d)
+trap 'rm -rf "${TMPDIR}"' EXIT
+
 echo "==> Setting project to ${PROJECT_ID}"
 gcloud config set project "${PROJECT_ID}"
 
@@ -180,12 +184,13 @@ CLOUD_SQL_CONNECTION_NAME="${PROJECT_ID}:${REGION}:${SQL_INSTANCE_NAME}"
 
 if ! gcloud sql instances describe "${SQL_INSTANCE_NAME}" &>/dev/null; then
   echo "    Creating Cloud SQL instance ${SQL_INSTANCE_NAME} (this may take several minutes)..."
+  # NOTE: --backup-start-time is in UTC. 18:00 UTC = 03:00 JST (next day).
   gcloud sql instances create "${SQL_INSTANCE_NAME}" \
     --database-version=POSTGRES_15 \
     --tier="${SQL_TIER}" \
     --region="${REGION}" \
     --storage-auto-increase \
-    --backup-start-time=03:00 \
+    --backup-start-time=18:00 \
     --availability-type=zonal \
     --storage-type=SSD \
     --database-flags=log_checkpoints=on,log_connections=on,log_disconnections=on
@@ -216,7 +221,7 @@ if ! gsutil ls -b "gs://${GCS_BUCKET}" &>/dev/null; then
   gsutil mb -l "${REGION}" -p "${PROJECT_ID}" "gs://${GCS_BUCKET}"
 
   # Set lifecycle rule
-  cat > /tmp/lifecycle.json <<EOF
+  cat > ${TMPDIR}/lifecycle.json <<EOF
 {
   "rule": [
     {
@@ -226,14 +231,13 @@ if ! gsutil ls -b "gs://${GCS_BUCKET}" &>/dev/null; then
   ]
 }
 EOF
-  gsutil lifecycle set /tmp/lifecycle.json "gs://${GCS_BUCKET}"
-  rm -f /tmp/lifecycle.json
+  gsutil lifecycle set ${TMPDIR}/lifecycle.json "gs://${GCS_BUCKET}"
 
   # Enable uniform bucket-level access
   gsutil uniformbucketlevelaccess set on "gs://${GCS_BUCKET}"
 
   # Set CORS for web access
-  cat > /tmp/cors.json <<EOF
+  cat > ${TMPDIR}/cors.json <<EOF
 [
   {
     "origin": ["*"],
@@ -243,8 +247,7 @@ EOF
   }
 ]
 EOF
-  gsutil cors set /tmp/cors.json "gs://${GCS_BUCKET}"
-  rm -f /tmp/cors.json
+  gsutil cors set ${TMPDIR}/cors.json "gs://${GCS_BUCKET}"
 
   # Store bucket name in Secret Manager
   printf "%s" "${GCS_BUCKET}" | gcloud secrets versions add GCS_BUCKET --data-file=-
@@ -257,13 +260,19 @@ fi
 # 8. VPC Connector (for Cloud SQL access)
 # ============================================================
 echo "==> Setting up Serverless VPC Access connector..."
+# NOTE: --min-instances=2 is the minimum for production stability.
+# For dev/staging environments, consider using --min-instances=2 --max-instances=3
+# to minimize cost. For production, increase --max-instances as needed (e.g. 10).
+# Each instance costs ~$0.01/hr. Adjust VPC_CONNECTOR_MIN/MAX_INSTANCES env vars.
+VPC_MIN_INSTANCES="${VPC_CONNECTOR_MIN_INSTANCES:-2}"
+VPC_MAX_INSTANCES="${VPC_CONNECTOR_MAX_INSTANCES:-3}"
 if ! gcloud compute networks vpc-access connectors describe "${VPC_CONNECTOR_NAME}" \
     --region="${REGION}" &>/dev/null; then
   gcloud compute networks vpc-access connectors create "${VPC_CONNECTOR_NAME}" \
     --region="${REGION}" \
     --range="${VPC_CONNECTOR_RANGE}" \
-    --min-instances=2 \
-    --max-instances=3
+    --min-instances="${VPC_MIN_INSTANCES}" \
+    --max-instances="${VPC_MAX_INSTANCES}"
 else
   echo "    VPC connector ${VPC_CONNECTOR_NAME} already exists, skipping."
 fi
@@ -276,12 +285,23 @@ if ! gcloud compute security-policies describe "${ARMOR_POLICY_NAME}" &>/dev/nul
   gcloud compute security-policies create "${ARMOR_POLICY_NAME}" \
     --description="Security policy for ${SERVICE_NAME}"
 
-  # Rate limiting rule: 100 requests per minute per IP
-  gcloud compute security-policies rules create 1000 \
+  # General rate limiting: 300 requests per minute per IP
+  gcloud compute security-policies rules create 900 \
     --security-policy="${ARMOR_POLICY_NAME}" \
     --expression="true" \
     --action=throttle \
-    --rate-limit-threshold-count=100 \
+    --rate-limit-threshold-count=300 \
+    --rate-limit-threshold-interval-sec=60 \
+    --conform-action=allow \
+    --exceed-action=deny-429 \
+    --enforce-on-key=IP
+
+  # API rate limiting: 60 requests per minute per IP
+  gcloud compute security-policies rules create 1000 \
+    --security-policy="${ARMOR_POLICY_NAME}" \
+    --expression="request.path.matches('/api/.*')" \
+    --action=throttle \
+    --rate-limit-threshold-count=60 \
     --rate-limit-threshold-interval-sec=60 \
     --conform-action=allow \
     --exceed-action=deny-429 \

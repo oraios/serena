@@ -10,7 +10,6 @@ env:
   REGION: asia-northeast1
   SERVICE_NAME: serena
   REPO_NAME: serena-repo
-  IMAGE: asia-northeast1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/serena-repo/serena
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -35,17 +34,18 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ${{ secrets.SA_EMAIL }}
+          service_account: ${{ secrets.DEPLOY_SA_EMAIL }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
       - name: Set image tag
         id: meta
         run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}"
           TAG="${IMAGE}:${{ github.sha }}"
           echo "tags=${TAG}" >> "$GITHUB_OUTPUT"
 
@@ -66,28 +66,28 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ${{ secrets.SA_EMAIL }}
+          service_account: ${{ secrets.DEPLOY_SA_EMAIL }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Deploy backend to Cloud Run
         run: |
-          gcloud run deploy ${SERVICE_NAME}-backend \
+          gcloud run deploy ${{ env.SERVICE_NAME }}-backend \
             --image=${{ needs.build-and-push.outputs.image_tag }} \
-            --region=${REGION} \
+            --region=${{ env.REGION }} \
             --platform=managed \
-            --allow-unauthenticated \
-            --service-account=${{ secrets.SA_EMAIL }} \
+            --no-allow-unauthenticated \
+            --service-account=${{ secrets.BACKEND_RUNTIME_SA_EMAIL }} \
             --min-instances=0 \
             --max-instances=10 \
             --memory=512Mi \
             --cpu=1 \
             --port=8080 \
-            --vpc-connector=projects/${PROJECT_ID}/locations/${REGION}/connectors/${{ vars.VPC_CONNECTOR_NAME || 'serena-connector' }} \
+            --vpc-connector=projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/${{ vars.VPC_CONNECTOR_NAME || 'serena-connector' }} \
             --add-cloudsql-instances=${{ secrets.CLOUD_SQL_CONNECTION_NAME }} \
             --set-secrets=DATABASE_URL=DATABASE_URL:latest,SECRET_KEY=SECRET_KEY:latest,GCS_BUCKET=GCS_BUCKET:latest \
-            --set-env-vars=CLOUD_SQL_CONNECTION_NAME=${{ secrets.CLOUD_SQL_CONNECTION_NAME }},GCP_PROJECT_ID=${PROJECT_ID},ENVIRONMENT=production
+            --set-env-vars=CLOUD_SQL_CONNECTION_NAME=${{ secrets.CLOUD_SQL_CONNECTION_NAME }},GCP_PROJECT_ID=${{ env.PROJECT_ID }},ENVIRONMENT=production
 
   deploy-frontend:
     needs: build-and-push
@@ -101,19 +101,19 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ${{ secrets.SA_EMAIL }}
+          service_account: ${{ secrets.DEPLOY_SA_EMAIL }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Deploy frontend to Cloud Run
         run: |
-          gcloud run deploy ${SERVICE_NAME}-frontend \
+          gcloud run deploy ${{ env.SERVICE_NAME }}-frontend \
             --image=${{ needs.build-and-push.outputs.image_tag }} \
-            --region=${REGION} \
+            --region=${{ env.REGION }} \
             --platform=managed \
             --allow-unauthenticated \
-            --service-account=${{ secrets.SA_EMAIL }} \
+            --service-account=${{ secrets.FRONTEND_RUNTIME_SA_EMAIL }} \
             --min-instances=0 \
             --max-instances=10 \
             --memory=256Mi \
@@ -125,7 +125,7 @@ jobs:
           # Cloud Armor requires a backend service (NEG-based).
           # If using a load balancer in front of Cloud Run, attach the policy:
           ARMOR_POLICY="${{ vars.ARMOR_POLICY_NAME || 'serena-security-policy' }}"
-          BACKEND_SERVICE="${SERVICE_NAME}-frontend-backend"
+          BACKEND_SERVICE="${{ env.SERVICE_NAME }}-frontend-backend"
           if gcloud compute backend-services describe "${BACKEND_SERVICE}" --global &>/dev/null; then
             gcloud compute backend-services update "${BACKEND_SERVICE}" \
               --global \
@@ -147,16 +147,18 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ${{ secrets.SA_EMAIL }}
+          service_account: ${{ secrets.DEPLOY_SA_EMAIL }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Verify backend deployment
         run: |
-          URL=$(gcloud run services describe ${SERVICE_NAME}-backend --region=${REGION} --format='value(status.url)')
+          URL=$(gcloud run services describe ${{ env.SERVICE_NAME }}-backend --region=${{ env.REGION }} --format='value(status.url)')
           echo "Backend URL: ${URL}"
-          STATUS=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/health" || true)
+          # Backend requires IAM auth; use identity token for health check
+          TOKEN=$(gcloud auth print-identity-token --audiences="${URL}")
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${TOKEN}" "${URL}/health" || true)
           if [ "${STATUS}" = "200" ]; then
             echo "Backend health check passed."
           else
@@ -165,7 +167,7 @@ jobs:
 
       - name: Verify frontend deployment
         run: |
-          URL=$(gcloud run services describe ${SERVICE_NAME}-frontend --region=${REGION} --format='value(status.url)')
+          URL=$(gcloud run services describe ${{ env.SERVICE_NAME }}-frontend --region=${{ env.REGION }} --format='value(status.url)')
           echo "Frontend URL: ${URL}"
           STATUS=$(curl -s -o /dev/null -w '%{http_code}' "${URL}" || true)
           if [ "${STATUS}" = "200" ]; then
