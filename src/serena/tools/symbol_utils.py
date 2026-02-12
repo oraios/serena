@@ -11,7 +11,7 @@ def group_symbols_by_kind(
     symbols: Sequence[Mapping[str, Any]],
     kind_key: str,
     name_extractor: Callable[[Mapping[str, Any]], str],
-    recurse: Callable[[Sequence[Mapping[str, Any]]], dict[str, list]] | None = None,
+    recurse: bool = True,
 ) -> dict[str, list]:
     """
     Group symbols by their kind, producing a compact representation.
@@ -22,8 +22,8 @@ def group_symbols_by_kind(
     :param symbols: list of symbol dictionaries
     :param kind_key: the key in each symbol dict that contains the kind/type
     :param name_extractor: callable to extract the display name from a symbol dict
-    :param recurse: callable to recursively group children. If None, children are not
-        recursively grouped (they remain as-is).
+    :param recurse: if True, recursively apply the same grouping to children.
+        If False, symbols with children are represented by just their name (children ignored).
     :return: a dict mapping kind to a list of symbol representations
     """
     result: dict[str, list] = defaultdict(list)
@@ -33,8 +33,8 @@ def group_symbols_by_kind(
         name = name_extractor(symbol)
         children = symbol.get("children", [])
 
-        if children and recurse is not None:
-            children_dict = recurse(children)
+        if children and recurse:
+            children_dict = group_symbols_by_kind(children, kind_key=kind_key, name_extractor=name_extractor)
             result[kind].append({name: children_dict})
         else:
             result[kind].append(name)

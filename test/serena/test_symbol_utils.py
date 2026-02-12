@@ -33,10 +33,7 @@ class TestGroupSymbolsByKind:
             {"name": "helper", "kind": "Function"},
         ]
 
-        def recurse(children):
-            return group_symbols_by_kind(children, kind_key="kind", name_extractor=lambda s: s["name"], recurse=recurse)
-
-        result = group_symbols_by_kind(symbols, kind_key="kind", name_extractor=lambda s: s["name"], recurse=recurse)
+        result = group_symbols_by_kind(symbols, kind_key="kind", name_extractor=lambda s: s["name"])
         assert dict(result) == {
             "Class": [{"MyClass": {"Method": ["method_a", "method_b"]}}],
             "Function": ["helper"],
@@ -59,7 +56,7 @@ class TestGroupSymbolsByKind:
         }
 
     def test_children_without_recurse(self) -> None:
-        """When recurse is None, symbols with children are still added by name (not recursed)."""
+        """When recurse is False, symbols with children are still added by name (not recursed)."""
         symbols = [
             {
                 "name": "MyClass",
@@ -67,7 +64,7 @@ class TestGroupSymbolsByKind:
                 "children": [{"name": "method_a", "kind": "Method"}],
             },
         ]
-        result = group_symbols_by_kind(symbols, kind_key="kind", name_extractor=lambda s: s["name"], recurse=None)
+        result = group_symbols_by_kind(symbols, kind_key="kind", name_extractor=lambda s: s["name"], recurse=False)
         assert dict(result) == {"Class": ["MyClass"]}
 
 

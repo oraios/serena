@@ -104,7 +104,6 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
             symbols,
             kind_key="kind",
             name_extractor=lambda s: s.get("name", "unknown"),
-            recurse=GetSymbolsOverviewTool._transform_symbols_to_compact_format,
         )
 
 

@@ -148,7 +148,6 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
             symbols,
             kind_key="type",
             name_extractor=lambda s: s["name_path"].split("/")[-1],
-            recurse=JetBrainsGetSymbolsOverviewTool._transform_symbols_to_compact_format,
         )
 
     def apply(
