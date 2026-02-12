@@ -1,0 +1,71 @@
+# Cloud Armor Security Policy for Serena
+# Apply via: gcloud compute security-policies import serena-security-policy --file-path=deploy/cloud-armor-policy.yaml
+#
+# This policy provides:
+#   - Rate limiting (100 requests/min per IP)
+#   - SQL injection protection (WAF)
+#   - XSS protection (WAF)
+
+name: serena-security-policy
+description: Security policy for Serena Cloud Run services
+type: CLOUD_ARMOR
+
+rules:
+  # Default rule: allow all traffic
+  - description: "Default allow rule"
+    priority: 2147483647
+    action: allow
+    match:
+      versionedExpr: SRC_IPS_V1
+      config:
+        srcIpRanges:
+          - "*"
+
+  # Rate limiting: 100 requests per minute per IP
+  - description: "Rate limit - 100 requests per minute per IP"
+    priority: 1000
+    action: throttle
+    match:
+      versionedExpr: SRC_IPS_V1
+      config:
+        srcIpRanges:
+          - "*"
+    rateLimitOptions:
+      rateLimitThreshold:
+        count: 100
+        intervalSec: 60
+      conformAction: allow
+      exceedAction: deny-429
+      enforceOnKey: IP
+
+  # SQL injection protection
+  - description: "Block SQL injection attacks"
+    priority: 2000
+    action: deny-403
+    match:
+      expr:
+        expression: "evaluatePreconfiguredExpr('sqli-v33-stable')"
+
+  # XSS protection
+  - description: "Block XSS attacks"
+    priority: 2001
+    action: deny-403
+    match:
+      expr:
+        expression: "evaluatePreconfiguredExpr('xss-v33-stable')"
+
+  # Local file inclusion protection
+  - description: "Block local file inclusion attacks"
+    priority: 2002
+    action: deny-403
+    match:
+      expr:
+        expression: "evaluatePreconfiguredExpr('lfi-v33-stable')"
+
+  # Remote file inclusion protection
+  - description: "Block remote file inclusion attacks"
+    priority: 2003
+    action: deny-403
+    match:
+      expr:
+        expression: "evaluatePreconfiguredExpr('rfi-v33-stable')"
