@@ -71,8 +71,8 @@ HELP
 fi
 
 # Create secure temporary directory for config files (cleaned up on exit)
-TMPDIR=$(mktemp -d)
-trap 'rm -rf "${TMPDIR}"' EXIT
+_TMPDIR=$(mktemp -d)
+trap 'rm -rf "${_TMPDIR}"' EXIT
 
 echo "==> Setting project to ${PROJECT_ID}"
 gcloud config set project "${PROJECT_ID}"
@@ -105,30 +105,78 @@ else
 fi
 
 # ============================================================
-# 3. Service Account & IAM
+# 3. Service Accounts & IAM
 # ============================================================
-SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+DEPLOY_SA_NAME="${SA_NAME}-deploy"
+BACKEND_SA_NAME="${SA_NAME}-backend"
+FRONTEND_SA_NAME="${SA_NAME}-frontend"
+DEPLOY_SA_EMAIL="${DEPLOY_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+BACKEND_SA_EMAIL="${BACKEND_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+FRONTEND_SA_EMAIL="${FRONTEND_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 
-echo "==> Creating service account..."
-if ! gcloud iam service-accounts describe "${SA_EMAIL}" &>/dev/null; then
-  gcloud iam service-accounts create "${SA_NAME}" \
-    --display-name="${SERVICE_NAME} service account"
+# -- Deploy SA: used by GitHub Actions to deploy services
+echo "==> Creating deploy service account..."
+if ! gcloud iam service-accounts describe "${DEPLOY_SA_EMAIL}" &>/dev/null; then
+  gcloud iam service-accounts create "${DEPLOY_SA_NAME}" \
+    --display-name="${SERVICE_NAME} deploy service account"
 else
-  echo "    Service account ${SA_EMAIL} already exists, skipping."
+  echo "    Service account ${DEPLOY_SA_EMAIL} already exists, skipping."
 fi
 
-echo "==> Granting IAM roles..."
-ROLES=(
+echo "==> Granting deploy SA roles..."
+DEPLOY_ROLES=(
   roles/run.admin
   roles/artifactregistry.writer
-  roles/secretmanager.secretAccessor
   roles/iam.serviceAccountUser
+)
+for role in "${DEPLOY_ROLES[@]}"; do
+  gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+    --member="serviceAccount:${DEPLOY_SA_EMAIL}" \
+    --role="${role}" \
+    --condition=None \
+    --quiet
+done
+
+# -- Backend runtime SA: used by Cloud Run backend at runtime
+echo "==> Creating backend runtime service account..."
+if ! gcloud iam service-accounts describe "${BACKEND_SA_EMAIL}" &>/dev/null; then
+  gcloud iam service-accounts create "${BACKEND_SA_NAME}" \
+    --display-name="${SERVICE_NAME} backend runtime service account"
+else
+  echo "    Service account ${BACKEND_SA_EMAIL} already exists, skipping."
+fi
+
+echo "==> Granting backend runtime SA roles..."
+BACKEND_ROLES=(
   roles/cloudsql.client
   roles/storage.objectAdmin
+  roles/secretmanager.secretAccessor
 )
-for role in "${ROLES[@]}"; do
+for role in "${BACKEND_ROLES[@]}"; do
   gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
-    --member="serviceAccount:${SA_EMAIL}" \
+    --member="serviceAccount:${BACKEND_SA_EMAIL}" \
+    --role="${role}" \
+    --condition=None \
+    --quiet
+done
+
+# -- Frontend runtime SA: minimal permissions for serving static content
+echo "==> Creating frontend runtime service account..."
+if ! gcloud iam service-accounts describe "${FRONTEND_SA_EMAIL}" &>/dev/null; then
+  gcloud iam service-accounts create "${FRONTEND_SA_NAME}" \
+    --display-name="${SERVICE_NAME} frontend runtime service account"
+else
+  echo "    Service account ${FRONTEND_SA_EMAIL} already exists, skipping."
+fi
+
+echo "==> Granting frontend runtime SA roles..."
+FRONTEND_ROLES=(
+  roles/storage.objectViewer
+  roles/secretmanager.secretAccessor
+)
+for role in "${FRONTEND_ROLES[@]}"; do
+  gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+    --member="serviceAccount:${FRONTEND_SA_EMAIL}" \
     --role="${role}" \
     --condition=None \
     --quiet
@@ -158,7 +206,7 @@ else
   echo "    WIF provider ${WIF_PROVIDER} already exists, skipping."
 fi
 
-gcloud iam service-accounts add-iam-policy-binding "${SA_EMAIL}" \
+gcloud iam service-accounts add-iam-policy-binding "${DEPLOY_SA_EMAIL}" \
   --role="roles/iam.workloadIdentityUser" \
   --member="principalSet://iam.googleapis.com/projects/$(gcloud projects describe ${PROJECT_ID} --format='value(projectNumber)')/locations/global/workloadIdentityPools/${WIF_POOL}/attribute.repository/${GITHUB_REPO}" \
   --quiet
@@ -221,7 +269,7 @@ if ! gsutil ls -b "gs://${GCS_BUCKET}" &>/dev/null; then
   gsutil mb -l "${REGION}" -p "${PROJECT_ID}" "gs://${GCS_BUCKET}"
 
   # Set lifecycle rule
-  cat > ${TMPDIR}/lifecycle.json <<EOF
+  cat > ${_TMPDIR}/lifecycle.json <<EOF
 {
   "rule": [
     {
@@ -231,13 +279,13 @@ if ! gsutil ls -b "gs://${GCS_BUCKET}" &>/dev/null; then
   ]
 }
 EOF
-  gsutil lifecycle set ${TMPDIR}/lifecycle.json "gs://${GCS_BUCKET}"
+  gsutil lifecycle set ${_TMPDIR}/lifecycle.json "gs://${GCS_BUCKET}"
 
   # Enable uniform bucket-level access
   gsutil uniformbucketlevelaccess set on "gs://${GCS_BUCKET}"
 
   # Set CORS for web access
-  cat > ${TMPDIR}/cors.json <<EOF
+  cat > ${_TMPDIR}/cors.json <<EOF
 [
   {
     "origin": ["*"],
@@ -247,7 +295,7 @@ EOF
   }
 ]
 EOF
-  gsutil cors set ${TMPDIR}/cors.json "gs://${GCS_BUCKET}"
+  gsutil cors set ${_TMPDIR}/cors.json "gs://${GCS_BUCKET}"
 
   # Store bucket name in Secret Manager
   printf "%s" "${GCS_BUCKET}" | gcloud secrets versions add GCS_BUCKET --data-file=-
@@ -349,7 +397,9 @@ echo "  GCP Setup Complete"
 echo "============================================"
 echo "Project:              ${PROJECT_ID}"
 echo "Region:               ${REGION}"
-echo "Service Account:      ${SA_EMAIL}"
+echo "Deploy SA:            ${DEPLOY_SA_EMAIL}"
+echo "Backend Runtime SA:   ${BACKEND_SA_EMAIL}"
+echo "Frontend Runtime SA:  ${FRONTEND_SA_EMAIL}"
 echo "Artifact Registry:    ${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}"
 echo "Cloud SQL Instance:   ${CLOUD_SQL_CONNECTION_NAME}"
 echo "Cloud SQL Database:   ${SQL_DB_NAME}"
@@ -358,8 +408,10 @@ echo "VPC Connector:        projects/${PROJECT_ID}/locations/${REGION}/connector
 echo "Cloud Armor Policy:   ${ARMOR_POLICY_NAME}"
 echo ""
 echo "Next steps:"
-echo "  1. Update DATABASE_URL secret with the actual connection string"
-echo "  2. Update SECRET_KEY secret with a secure random value"
-echo "  3. Configure GitHub repository secrets for CD pipeline"
-echo "  4. Run your first deployment via GitHub Actions"
+echo "  1. Update SECRET_KEY secret with a secure random value"
+echo "  2. Configure GitHub repository secrets for CD pipeline:"
+echo "       DEPLOY_SA_EMAIL=${DEPLOY_SA_EMAIL}"
+echo "       BACKEND_RUNTIME_SA_EMAIL=${BACKEND_SA_EMAIL}"
+echo "       FRONTEND_RUNTIME_SA_EMAIL=${FRONTEND_SA_EMAIL}"
+echo "  3. Run your first deployment via GitHub Actions"
 echo "============================================"
