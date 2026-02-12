@@ -1,10 +1,11 @@
 import logging
-from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
 import serena.tools.jetbrains_types as jb
 from serena.tools import Tool, ToolMarkerOptional, ToolMarkerSymbolicRead
 from serena.tools.jetbrains_plugin_client import JetBrainsPluginClient
+from serena.tools.symbol_utils import group_refs_by_path_and_kind, group_symbols_by_kind
 
 log = logging.getLogger(__name__)
 
@@ -110,7 +111,7 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
             about the referencing symbols. Default False.
         :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned. -1 means the
             default value from the config will be used.
-        :return: a list of JSON objects with the symbols referencing the requested symbol
+        :return: a JSON object with the referencing symbols grouped by file path and symbol kind
         """
         with JetBrainsPluginClient.from_project(self.project) as client:
             response_dict = client.find_references(
@@ -118,7 +119,8 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
                 relative_path=relative_path,
                 include_quick_info=include_info,
             )
-            result = self._to_json(response_dict)
+            grouped = group_refs_by_path_and_kind(response_dict["symbols"], path_key="relative_path", kind_key="type")
+            result = self._to_json(grouped)
         return self._limit_length(result, max_answer_chars)
 
 
@@ -130,7 +132,7 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
     USE_COMPACT_FORMAT = True
 
     @staticmethod
-    def _transform_symbols_to_compact_format(symbols: list[jb.SymbolDTO]) -> dict[str, list]:
+    def _transform_symbols_to_compact_format(symbols: Sequence[Mapping[str, Any]]) -> dict[str, list]:
         """
         Transform symbol overview from verbose format to compact grouped format.
 
@@ -142,23 +144,12 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
         - Nested symbols: name_path = parent_name + "/" + name
         For example, "convert" under class "ProjectType" has name_path "ProjectType/convert".
         """
-        result = defaultdict(list)
-
-        for symbol in symbols:
-            kind = symbol.get("type", "Unknown")
-            name_path = symbol["name_path"]
-            name = name_path.split("/")[-1]
-            children = symbol.get("children", [])
-
-            if children:
-                # Symbol has children: create nested dict {name: children_dict}
-                children_dict = JetBrainsGetSymbolsOverviewTool._transform_symbols_to_compact_format(children)
-                result[kind].append({name: children_dict})
-            else:
-                # Symbol has no children: just add the name
-                result[kind].append(name)  # type: ignore
-
-        return result
+        return group_symbols_by_kind(
+            symbols,
+            kind_key="type",
+            name_extractor=lambda s: s["name_path"].split("/")[-1],
+            recurse=JetBrainsGetSymbolsOverviewTool._transform_symbols_to_compact_format,
+        )
 
     def apply(
         self,

@@ -72,7 +72,7 @@ class TextUtils:
         num_newlines_in_gen_text = text_to_be_inserted.count("\n")
         if num_newlines_in_gen_text > 0:
             l += num_newlines_in_gen_text
-            c = len(text_to_be_inserted.split("\n")[-1])
+            c = len(text_to_be_inserted.rsplit("\n", maxsplit=1)[-1])
         else:
             c += len(text_to_be_inserted)
         return (l, c)

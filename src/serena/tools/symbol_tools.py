@@ -3,8 +3,7 @@ Language server-related tools
 """
 
 import os
-from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from copy import copy
 from typing import Any
 
@@ -14,6 +13,7 @@ from serena.tools import (
     ToolMarkerSymbolicEdit,
     ToolMarkerSymbolicRead,
 )
+from serena.tools.symbol_utils import group_refs_by_path_and_kind, group_symbols_by_kind
 from serena.tools.tools_base import ToolMarkerOptional
 from solidlsp.ls_types import SymbolKind
 
@@ -88,7 +88,7 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
         return symbol_retriever.get_symbol_overview(relative_path, depth=depth)[relative_path]
 
     @staticmethod
-    def _transform_symbols_to_compact_format(symbols: list[dict[str, Any]]) -> dict[str, list]:
+    def _transform_symbols_to_compact_format(symbols: Sequence[Mapping[str, Any]]) -> dict[str, list]:
         """
         Transform symbol overview from verbose format to compact grouped format.
 
@@ -100,22 +100,12 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
         - Nested symbols: name_path = parent_name + "/" + name
         For example, "convert" under class "ProjectType" has name_path "ProjectType/convert".
         """
-        result = defaultdict(list)
-
-        for symbol in symbols:
-            kind = symbol.get("kind", "Unknown")
-            name = symbol.get("name", "unknown")
-            children = symbol.get("children", [])
-
-            if children:
-                # Symbol has children: create nested dict {name: children_dict}
-                children_dict = GetSymbolsOverviewTool._transform_symbols_to_compact_format(children)
-                result[kind].append({name: children_dict})
-            else:
-                # Symbol has no children: just add the name
-                result[kind].append(name)
-
-        return result
+        return group_symbols_by_kind(
+            symbols,
+            kind_key="kind",
+            name_extractor=lambda s: s.get("name", "unknown"),
+            recurse=GetSymbolsOverviewTool._transform_symbols_to_compact_format,
+        )
 
 
 class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
@@ -223,7 +213,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         :param include_kinds: same as in the `find_symbol` tool.
         :param exclude_kinds: same as in the `find_symbol` tool.
         :param max_answer_chars: same as in the `find_symbol` tool.
-        :return: a list of JSON objects with the symbols referencing the requested symbol
+        :return: a JSON object with the referencing symbols grouped by file path and symbol kind
         """
         include_body = False  # It is probably never a good idea to include the body of the referencing symbols
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
@@ -250,7 +240,8 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
                 )
                 ref_dict["content_around_reference"] = content_around_ref.to_display_string()
             reference_dicts.append(ref_dict)
-        result = self._to_json(reference_dicts)
+        grouped = group_refs_by_path_and_kind(reference_dicts, path_key="relative_path", kind_key="kind")
+        result = self._to_json(grouped)
         return self._limit_length(result, max_answer_chars)
 
 

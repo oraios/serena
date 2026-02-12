@@ -209,9 +209,7 @@ class TestSerenaAgent:
         result = find_refs_tool.apply_ex(name_path=def_symbol["name_path"], relative_path=def_symbol["relative_path"])
 
         refs = json.loads(result)
-        assert any(
-            ref["relative_path"] == ref_file for ref in refs
-        ), f"Expected to find reference to {symbol_name} in {ref_file}. refs={refs}"
+        assert ref_file in refs, f"Expected to find reference to {symbol_name} in {ref_file}. refs={refs}"
 
     @pytest.mark.parametrize(
         "serena_agent,name_path,substring_matching,expected_symbol_name,expected_kind,expected_file",
