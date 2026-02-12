@@ -73,6 +73,66 @@ If you need to work on multiple projects in the same agent session, create a mon
 containing all the projects and open that folder in both Serena and your IDE.
 :::
 
+## Advanced Usage and Configuration
+
+### Using Serena with Multi-Module Projects
+
+JetBrains IDEs support *multi-module projects*, where a project can reference other projects as modules.
+Serena, however, requires that a project is self-contained within a single root folder. 
+There has to be a one-to-one relationship between the project root folder and the folder that is open in the IDE.
+
+Therefore, to get a multi-module setup working with Serena, the recommended approach is to create a **monorepo folder**,
+i.e. a folder that contains all the projects as sub-folders, and open that monorepo folder in both Serena and your IDE.
+
+You do not necessarily need to physically move your projects into a common parent folder; 
+you can also use symbolic links to achieve the same effect 
+(i.e. use `mklink` on Windows or `ln` on Linux/macOS to link the project folders into a common parent folder).
+
+### Using Serena with Windows Subsystem for Linux (WSL)
+
+JetBrains IDEs have built-in support for WSL, allowing you to run the IDE on Windows while working with code in the WSL environment. 
+The Serena JetBrains plugin works seamlessly in this setup as well. You have two options:
+
+ * **Windows-centric approach** (keeping things mainly in Windows)
+   * run both Serena and the IDE on Windows
+   * keep your project in the Windows file system, access it in WSL via `/mnt/` 
+     (optionally linking the folder where you need it to be in the WSL file system)
+     
+ * **WSL-centric approach** (keeping things mainly in WSL)
+   * run Serena in WSL (while the IDE runs in Windows)
+   * make sure Serena in WSL can communicate with services running on Windows. 
+     This will normally be the case when using mirrored networking; 
+     otherwise, you can configure `jetbrains_plugin_server_address` in your [serena_config.yml](050_configuration) and, 
+     if necessary, configure the listen address of the Serena plugin in the IDE (Settings / Tools / Serena).
+
+The WSL-centric approach has the downside that the WSL file system cannot be efficiently monitored by the IDE,
+which can result in slower performance, especially for larger projects. If this is a problem, consider
+  * using the Windows-centric approach instead, or
+  * disabling the automatic synchronisation in the plugin and manually triggering synchronisation when needed (see below).
+
+## Serena Plugin Configuration Options
+
+You can configure plugin options in the IDE under Settings / Tools / Serena.
+
+ * **Listen address** (default: `127.0.0.1`)  
+   the address the plugin's server listens on.  
+   The default will work as long as Serena is running on the same machine (or on a virtual machine using mirrored networking).
+   But if the Serena MCP server is running on a different machine, configure the listen address to ensure that connections are possible.
+   You can use `0.0.0.0` to listen on all interfaces (but be aware of the security implications of doing so).
+
+ * **Sync file system before every operation** (default: enabled)  
+   whether to synchronise the file system state before processing requests from Serena.  
+   This is important to ensure that the plugin does not read stale data, but it can have a performance impact, 
+   especially when using slow file systems (e.g. WSL file system while the IDE is running on Windows).
+   Note, however, that without synchronisation being forced by the Serena plugin, you will have to ensure synchronisation yourself.
+   Operations that apply changes to files in your project that are *not* made either in the IDE itself or by Serena may not be seen by the IDE. 
+   Normally, the IDE synchronises automatically when it has the focus, using file watchers to achieve this (though this may or may not work reliably for the WSL file system). 
+   Also, if you are working primarily in another application (e.g. AI chat), the IDE may not have the focus frequently. 
+   So when external changes are made to your project, you will have to either give the IDE the focus (if that works) or trigger a sync manually (right-click root folder / Reload from Disk).  
+   Further, note that even an edit made using, for example, Claude Code's internal editing tools would count as an external modification.
+   Only Serena's editing tools are "JetBrains-aware" and will tell the IDE to update the state of the edited file.
+   So if you are making AI-based edits using tools other than Serena's tools, do make sure that the lack of synchronisation is not a problem if you decide to disable this option.
+
 ## Usage with Other Editors
 
 We realize that not everyone uses a JetBrains IDE as their main code editor.
