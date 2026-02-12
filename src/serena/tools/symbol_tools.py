@@ -13,7 +13,7 @@ from serena.tools import (
     ToolMarkerSymbolicEdit,
     ToolMarkerSymbolicRead,
 )
-from serena.tools.symbol_utils import group_refs_by_path_and_kind, group_symbols_by_kind
+from serena.tools.symbol_utils import group_symbols
 from serena.tools.tools_base import ToolMarkerOptional
 from solidlsp.ls_types import SymbolKind
 
@@ -100,10 +100,11 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
         - Nested symbols: name_path = parent_name + "/" + name
         For example, "convert" under class "ProjectType" has name_path "ProjectType/convert".
         """
-        return group_symbols_by_kind(
+        return group_symbols(
             symbols,
-            kind_key="kind",
+            group_keys=["kind"],
             name_extractor=lambda s: s.get("name", "unknown"),
+            recurse_children=True,
         )
 
 
@@ -239,7 +240,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
                 )
                 ref_dict["content_around_reference"] = content_around_ref.to_display_string()
             reference_dicts.append(ref_dict)
-        grouped = group_refs_by_path_and_kind(reference_dicts, path_key="relative_path", kind_key="kind")
+        grouped = group_symbols(reference_dicts, group_keys=["relative_path", "kind"])
         result = self._to_json(grouped)
         return self._limit_length(result, max_answer_chars)
 

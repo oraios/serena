@@ -5,7 +5,7 @@ from typing import Any, Literal
 import serena.tools.jetbrains_types as jb
 from serena.tools import Tool, ToolMarkerOptional, ToolMarkerSymbolicRead
 from serena.tools.jetbrains_plugin_client import JetBrainsPluginClient
-from serena.tools.symbol_utils import group_refs_by_path_and_kind, group_symbols_by_kind
+from serena.tools.symbol_utils import group_symbols
 
 log = logging.getLogger(__name__)
 
@@ -119,7 +119,7 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
                 relative_path=relative_path,
                 include_quick_info=include_info,
             )
-            grouped = group_refs_by_path_and_kind(response_dict["symbols"], path_key="relative_path", kind_key="type")
+            grouped = group_symbols(response_dict["symbols"], group_keys=["relative_path", "type"])
             result = self._to_json(grouped)
         return self._limit_length(result, max_answer_chars)
 
@@ -144,10 +144,11 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
         - Nested symbols: name_path = parent_name + "/" + name
         For example, "convert" under class "ProjectType" has name_path "ProjectType/convert".
         """
-        return group_symbols_by_kind(
+        return group_symbols(
             symbols,
-            kind_key="type",
+            group_keys=["type"],
             name_extractor=lambda s: s["name_path"].split("/")[-1],
+            recurse_children=True,
         )
 
     def apply(

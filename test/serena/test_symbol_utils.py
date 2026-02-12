@@ -1,11 +1,13 @@
 """Tests for symbol_utils grouping functions."""
 
-from serena.tools.symbol_utils import group_refs_by_path_and_kind, group_symbols_by_kind
+from serena.tools.symbol_utils import group_symbols
 
 
-class TestGroupSymbolsByKind:
+class TestGroupSymbolsCompact:
+    """Tests for group_symbols with name_extractor (compact mode)."""
+
     def test_empty_list(self) -> None:
-        result = group_symbols_by_kind([], kind_key="kind", name_extractor=lambda s: s.get("name", "unknown"))
+        result = group_symbols([], group_keys=["kind"], name_extractor=lambda s: s.get("name", "unknown"))
         assert result == {}
 
     def test_simple_grouping(self) -> None:
@@ -14,8 +16,8 @@ class TestGroupSymbolsByKind:
             {"name": "bar", "kind": "Function"},
             {"name": "MyClass", "kind": "Class"},
         ]
-        result = group_symbols_by_kind(symbols, kind_key="kind", name_extractor=lambda s: s["name"])
-        assert dict(result) == {
+        result = group_symbols(symbols, group_keys=["kind"], name_extractor=lambda s: s["name"])
+        assert result == {
             "Function": ["foo", "bar"],
             "Class": ["MyClass"],
         }
@@ -33,30 +35,30 @@ class TestGroupSymbolsByKind:
             {"name": "helper", "kind": "Function"},
         ]
 
-        result = group_symbols_by_kind(symbols, kind_key="kind", name_extractor=lambda s: s["name"])
-        assert dict(result) == {
+        result = group_symbols(symbols, group_keys=["kind"], name_extractor=lambda s: s["name"], recurse_children=True)
+        assert result == {
             "Class": [{"MyClass": {"Method": ["method_a", "method_b"]}}],
             "Function": ["helper"],
         }
 
     def test_missing_kind_defaults_to_unknown(self) -> None:
         symbols = [{"name": "foo"}]
-        result = group_symbols_by_kind(symbols, kind_key="kind", name_extractor=lambda s: s["name"])
-        assert dict(result) == {"Unknown": ["foo"]}
+        result = group_symbols(symbols, group_keys=["kind"], name_extractor=lambda s: s["name"])
+        assert result == {"Unknown": ["foo"]}
 
     def test_custom_kind_key(self) -> None:
         symbols = [
             {"name_path": "MyClass", "type": "CLASS"},
             {"name_path": "helper", "type": "FUNCTION"},
         ]
-        result = group_symbols_by_kind(symbols, kind_key="type", name_extractor=lambda s: s["name_path"].split("/")[-1])
-        assert dict(result) == {
+        result = group_symbols(symbols, group_keys=["type"], name_extractor=lambda s: s["name_path"].split("/")[-1])
+        assert result == {
             "CLASS": ["MyClass"],
             "FUNCTION": ["helper"],
         }
 
     def test_children_without_recurse(self) -> None:
-        """When recurse is False, symbols with children are still added by name (not recursed)."""
+        """When recurse_children is False, symbols with children are still added by name (not recursed)."""
         symbols = [
             {
                 "name": "MyClass",
@@ -64,20 +66,22 @@ class TestGroupSymbolsByKind:
                 "children": [{"name": "method_a", "kind": "Method"}],
             },
         ]
-        result = group_symbols_by_kind(symbols, kind_key="kind", name_extractor=lambda s: s["name"], recurse=False)
-        assert dict(result) == {"Class": ["MyClass"]}
+        result = group_symbols(symbols, group_keys=["kind"], name_extractor=lambda s: s["name"], recurse_children=False)
+        assert result == {"Class": ["MyClass"]}
 
 
-class TestGroupRefsByPathAndKind:
+class TestGroupSymbolsFullDict:
+    """Tests for group_symbols without name_extractor (full-dict mode)."""
+
     def test_empty_list(self) -> None:
-        result = group_refs_by_path_and_kind([], path_key="relative_path", kind_key="kind")
+        result = group_symbols([], group_keys=["relative_path", "kind"])
         assert result == {}
 
     def test_single_ref(self) -> None:
         refs = [
             {"relative_path": "src/foo.py", "kind": "Function", "name_path": "my_func", "content_around_reference": "..."},
         ]
-        result = group_refs_by_path_and_kind(refs, path_key="relative_path", kind_key="kind")
+        result = group_symbols(refs, group_keys=["relative_path", "kind"])
         assert result == {
             "src/foo.py": {
                 "Function": [{"name_path": "my_func", "content_around_reference": "..."}],
@@ -91,7 +95,7 @@ class TestGroupRefsByPathAndKind:
             {"relative_path": "b.py", "kind": "Function", "name_path": "func_b"},
             {"relative_path": "a.py", "kind": "Function", "name_path": "func_c"},
         ]
-        result = group_refs_by_path_and_kind(refs, path_key="relative_path", kind_key="kind")
+        result = group_symbols(refs, group_keys=["relative_path", "kind"])
         assert result == {
             "a.py": {
                 "Function": [{"name_path": "func_a"}, {"name_path": "func_c"}],
@@ -102,11 +106,11 @@ class TestGroupRefsByPathAndKind:
             },
         }
 
-    def test_path_and_kind_removed_from_entries(self) -> None:
+    def test_group_keys_removed_from_entries(self) -> None:
         refs = [
             {"relative_path": "x.py", "kind": "Method", "name_path": "foo", "info": "some info"},
         ]
-        result = group_refs_by_path_and_kind(refs, path_key="relative_path", kind_key="kind")
+        result = group_symbols(refs, group_keys=["relative_path", "kind"])
         entry = result["x.py"]["Method"][0]
         assert "relative_path" not in entry
         assert "kind" not in entry
@@ -117,19 +121,19 @@ class TestGroupRefsByPathAndKind:
         refs = [
             {"relative_path": "src/Main.java", "type": "CLASS", "name_path": "Main"},
         ]
-        result = group_refs_by_path_and_kind(refs, path_key="relative_path", kind_key="type")
+        result = group_symbols(refs, group_keys=["relative_path", "type"])
         assert result == {
             "src/Main.java": {
                 "CLASS": [{"name_path": "Main"}],
             },
         }
 
-    def test_missing_path_defaults_to_unknown(self) -> None:
+    def test_missing_key_defaults_to_unknown(self) -> None:
         refs = [{"kind": "Function", "name_path": "foo"}]
-        result = group_refs_by_path_and_kind(refs, path_key="relative_path", kind_key="kind")
-        assert "unknown" in result
+        result = group_symbols(refs, group_keys=["relative_path", "kind"])
+        assert "Unknown" in result
 
     def test_missing_kind_defaults_to_unknown(self) -> None:
         refs = [{"relative_path": "a.py", "name_path": "foo"}]
-        result = group_refs_by_path_and_kind(refs, path_key="relative_path", kind_key="kind")
+        result = group_symbols(refs, group_keys=["relative_path", "kind"])
         assert result == {"a.py": {"Unknown": [{"name_path": "foo"}]}}
