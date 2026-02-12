@@ -282,8 +282,8 @@ jobs:
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
             wget https://github.com/chipsalliance/verible/releases/download/${VERIBLE_VERSION}/verible-${VERIBLE_VERSION}-macOS.tar.gz
             tar -xzf verible-${VERIBLE_VERSION}-macOS.tar.gz
-            sudo mv verible-${VERIBLE_VERSION}/bin/verible-verilog-ls /usr/local/bin/
-            rm -rf verible-${VERIBLE_VERSION} verible-${VERIBLE_VERSION}-macOS.tar.gz
+            sudo mv verible-${VERIBLE_VERSION}-macOS/bin/verible-verilog-ls /usr/local/bin/
+            rm -rf verible-${VERIBLE_VERSION}-macOS verible-${VERIBLE_VERSION}-macOS.tar.gz
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
             curl -L -o verible.zip https://github.com/chipsalliance/verible/releases/download/${VERIBLE_VERSION}/verible-${VERIBLE_VERSION}-win64.zip
             unzip -o verible.zip
