@@ -17,16 +17,15 @@ WHY these tests matter:
 """
 
 import os
+import shutil
 import subprocess
-import sys
 import tempfile
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-# Platform detection for skipping platform-specific tests
-IS_WINDOWS = sys.platform == "win32"
-IS_UNIX = sys.platform != "win32"
+from solidlsp.language_servers.systemverilog_server import SystemVerilogLanguageServer
+from solidlsp.settings import SolidLSPSettings
 
 
 class TestVeribleVerilogLsDetection:
@@ -43,9 +42,6 @@ class TestVeribleVerilogLsDetection:
         should use that version instead of downloading. This is faster and
         respects user's environment management.
         """
-        from solidlsp.language_servers.systemverilog_server import SystemVerilogLanguageServer
-        from solidlsp.settings import SolidLSPSettings
-
         with tempfile.TemporaryDirectory() as temp_dir:
             custom_settings = SolidLSPSettings.CustomLSSettings({})
             provider = SystemVerilogLanguageServer.DependencyProvider(custom_settings, temp_dir)
@@ -75,9 +71,6 @@ class TestVeribleVerilogLsDetection:
         WHY: Version information helps debug compatibility issues.
         Users and developers need to know which verible version is being used.
         """
-        from solidlsp.language_servers.systemverilog_server import SystemVerilogLanguageServer
-        from solidlsp.settings import SolidLSPSettings
-
         with tempfile.TemporaryDirectory() as temp_dir:
             custom_settings = SolidLSPSettings.CustomLSSettings({})
             provider = SystemVerilogLanguageServer.DependencyProvider(custom_settings, temp_dir)
@@ -107,9 +100,6 @@ class TestVeribleVerilogLsDetection:
         Detection should not fail just because version check fails - the binary
         might still work fine for LSP operations.
         """
-        from solidlsp.language_servers.systemverilog_server import SystemVerilogLanguageServer
-        from solidlsp.settings import SolidLSPSettings
-
         with tempfile.TemporaryDirectory() as temp_dir:
             custom_settings = SolidLSPSettings.CustomLSSettings({})
             provider = SystemVerilogLanguageServer.DependencyProvider(custom_settings, temp_dir)
@@ -133,9 +123,6 @@ class TestVeribleVerilogLsDetection:
         WHY: Version check has a timeout to avoid hanging. If it times out,
         we should still use the detected binary.
         """
-        from solidlsp.language_servers.systemverilog_server import SystemVerilogLanguageServer
-        from solidlsp.settings import SolidLSPSettings
-
         with tempfile.TemporaryDirectory() as temp_dir:
             custom_settings = SolidLSPSettings.CustomLSSettings({})
             provider = SystemVerilogLanguageServer.DependencyProvider(custom_settings, temp_dir)
@@ -159,9 +146,6 @@ class TestVeribleVerilogLsDetection:
         WHY: Users need clear guidance on how to install verible when it's missing.
         Error message should mention conda, Homebrew, and GitHub releases.
         """
-        from solidlsp.language_servers.systemverilog_server import SystemVerilogLanguageServer
-        from solidlsp.settings import SolidLSPSettings
-
         with tempfile.TemporaryDirectory() as temp_dir:
             custom_settings = SolidLSPSettings.CustomLSSettings({})
             provider = SystemVerilogLanguageServer.DependencyProvider(custom_settings, temp_dir)
@@ -193,9 +177,6 @@ class TestVeribleVerilogLsDetection:
         WHY: When verible is not installed system-wide and platform is supported,
         Serena should auto-download it. This enables zero-setup experience.
         """
-        from solidlsp.language_servers.systemverilog_server import SystemVerilogLanguageServer
-        from solidlsp.settings import SolidLSPSettings
-
         with tempfile.TemporaryDirectory() as temp_dir:
             custom_settings = SolidLSPSettings.CustomLSSettings({})
             provider = SystemVerilogLanguageServer.DependencyProvider(custom_settings, temp_dir)
@@ -216,7 +197,7 @@ class TestVeribleVerilogLsDetection:
                     mock_deps_class.return_value = mock_deps
 
                     with patch("os.path.exists") as mock_exists:
-                        # First call (line 121 check) returns False, second call (line 125 check) returns True
+                        # Before download: binary doesn't exist yet → after download: binary exists
                         mock_exists.side_effect = [False, True]
 
                         with patch("os.chmod"):
@@ -235,9 +216,6 @@ class TestVeribleVerilogLsDetection:
         WHY: System-installed verible should always take precedence.
         This respects user's environment and avoids unnecessary downloads.
         """
-        from solidlsp.language_servers.systemverilog_server import SystemVerilogLanguageServer
-        from solidlsp.settings import SolidLSPSettings
-
         with tempfile.TemporaryDirectory() as temp_dir:
             custom_settings = SolidLSPSettings.CustomLSSettings({})
             provider = SystemVerilogLanguageServer.DependencyProvider(custom_settings, temp_dir)
@@ -263,9 +241,6 @@ class TestVeribleVerilogLsDetection:
 
         WHY: If download/extraction fails silently, we should catch it and report clearly.
         """
-        from solidlsp.language_servers.systemverilog_server import SystemVerilogLanguageServer
-        from solidlsp.settings import SolidLSPSettings
-
         with tempfile.TemporaryDirectory() as temp_dir:
             custom_settings = SolidLSPSettings.CustomLSSettings({})
             provider = SystemVerilogLanguageServer.DependencyProvider(custom_settings, temp_dir)
@@ -301,9 +276,6 @@ class TestVeribleVerilogLsDetection:
         WHY: Avoid redundant downloads if verible was already downloaded in previous session.
         This speeds up subsequent runs.
         """
-        from solidlsp.language_servers.systemverilog_server import SystemVerilogLanguageServer
-        from solidlsp.settings import SolidLSPSettings
-
         with tempfile.TemporaryDirectory() as temp_dir:
             custom_settings = SolidLSPSettings.CustomLSSettings({})
             provider = SystemVerilogLanguageServer.DependencyProvider(custom_settings, temp_dir)
@@ -343,11 +315,6 @@ class TestVeribleVerilogLsDetectionIntegration:
 
         This test verifies the detection logic works end-to-end on the current system.
         """
-        import shutil
-
-        from solidlsp.language_servers.systemverilog_server import SystemVerilogLanguageServer
-        from solidlsp.settings import SolidLSPSettings
-
         # Skip if verible-verilog-ls is not installed
         if not shutil.which("verible-verilog-ls"):
             pytest.skip("verible-verilog-ls not installed on this system")

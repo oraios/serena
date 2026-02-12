@@ -138,6 +138,7 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
             "processId": os.getpid(),
             "rootPath": repository_absolute_path,
             "rootUri": root_uri,
+            "locale": "en",
             "capabilities": {
                 "textDocument": {
                     "synchronization": {"didSave": True, "dynamicRegistration": True},
@@ -176,8 +177,9 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
 
         def on_log_message(params: Any) -> None:
             message = params.get("message", "") if isinstance(params, dict) else str(params)
-            log.debug(f"verible-verilog-ls: {message}")
+            log.info(f"verible-verilog-ls: {message}")
 
+        self.server.on_request("client/registerCapability", do_nothing)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("window/logMessage", on_log_message)

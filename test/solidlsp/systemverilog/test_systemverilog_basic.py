@@ -101,7 +101,8 @@ class TestSystemVerilogReferences:
         line, char = _get_symbol_selection_start(language_server, "counter.sv", "counter")
         references = language_server.request_references("counter.sv", line, char)
         ref_paths = [ref.get("relativePath", "") for ref in references]
-        if not any("top.sv" in p for p in ref_paths):
+        cross_file_refs = [p for p in ref_paths if p and p != "counter.sv"]
+        if not cross_file_refs:
             pytest.skip("Cross-file references not supported by verible-verilog-ls")
         assert any("top.sv" in p for p in ref_paths), f"Expected reference from top.sv, got: {ref_paths}"
 
