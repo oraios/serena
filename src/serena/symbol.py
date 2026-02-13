@@ -807,19 +807,19 @@ class SymbolDictGrouper(Generic[TSymbolDict], ABC):
     ) -> None:
         """
         :param symbol_dict_type: the TypedDict type that represents the type of the symbol dictionaries to be grouped
-        :param children_key: the key in the symbol dictionaries that contains the list of child symbols. This is necessary for recursive grouping.
+        :param children_key: the key in the symbol dictionaries that contains the list of child symbols (for recursive grouping).
         :param group_keys: keys by which to group the symbol dictionaries. Must be a subset of the keys of `symbol_dict_type`.
         :param group_children_keys: keys by which to group the child symbol dictionaries. Must be a subset of the keys of `symbol_dict_type`.
         :param collapse_singleton: whether to collapse dictionaries containing a single entry after regrouping to just the entry's value
         """
-        # symbol_dict_type must be a TypedDict type.
-        # We check whether the type contains all the keys specified in `keys` and raise an error if not.
+        # check whether the type contains all the keys specified in `keys` and raise an error if not.
         if not hasattr(symbol_dict_type, "__annotations__"):
             raise ValueError(f"symbol_dict_type must be a TypedDict type, got {symbol_dict_type}")
         symbol_dict_keys = set(symbol_dict_type.__annotations__.keys())
         for key in group_keys + [children_key] + group_children_keys:
             if key not in symbol_dict_keys:
                 raise ValueError(f"symbol_dict_type {symbol_dict_type} does not contain key '{key}'")
+
         self._children_key = children_key
         self._group_keys = group_keys
         self._group_children_keys = group_children_keys
@@ -863,7 +863,7 @@ class SymbolDictGrouper(Generic[TSymbolDict], ABC):
             elif len(item) == 2 and self._children_key in item:
                 # {"name": "foo", "children": {...}} -> {"foo": {...}}
                 # if there are exactly two entries and one of them is the children key,
-                # convert to {other_value: children} if there are exactly two entries and one of them is the children key
+                # convert to {other_value: children}
                 other_key = next(k for k in item.keys() if k != self._children_key)
                 new_item = {item[other_key]: item[self._children_key]}
                 return new_item
