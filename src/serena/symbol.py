@@ -396,9 +396,10 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         return result
 
     class OutputDict(TypedDict):
-        name: str
-        name_path: str
+        name_path: NotRequired[str]
+        name: NotRequired[str]
         location: NotRequired[dict[str, Any]]
+        relative_path: NotRequired[str | None]
         body_location: NotRequired[dict[str, Any]]
         body: NotRequired[str | None]
         kind: NotRequired[str]
@@ -408,17 +409,23 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
 
     def to_dict(
         self,
+        *,
+        name_path: bool = True,
+        name: bool = False,
         kind: bool = False,
         location: bool = False,
         depth: int = 0,
         include_body: bool = False,
+        body_location: bool = False,
         include_children_body: bool = False,
-        include_relative_path: bool = True,
+        include_relative_path: bool = False,
         child_inclusion_predicate: Callable[[Self], bool] | None = None,
     ) -> OutputDict:
         """
         Converts the symbol to a dictionary.
 
+        :param name_path: whether to include the name path of the symbol
+        :param name: whether to include the name of the symbol
         :param kind: whether to include the kind of the symbol
         :param location: whether to include the location of the symbol
         :param depth: the depth up to which to include child symbols (0 = do not include children)
@@ -427,19 +434,30 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
             Note that the body of the children is part of the body of the parent symbol,
             so there is usually no need to set this to True unless you want process the output
             and pass the children without passing the parent body to the LM.
-        :param include_relative_path: whether to include the relative path of the symbol in the location
-            entry. Relative paths of the symbol's children are always excluded.
+        :param include_relative_path: whether to include the relative path of the symbol.
+            If `location` is True, this defines whether to include the path in the location entry.
+            If `location` is False, this defines whether to include the relative path as a top-level entry.
+            Relative paths of the symbol's children are always excluded.
         :param child_inclusion_predicate: an optional predicate that decides whether a child symbol
             should be included.
         :return: a dictionary representation of the symbol
         """
-        result: LanguageServerSymbol.OutputDict = {"name": self.name, "name_path": self.get_name_path()}
+        result: LanguageServerSymbol.OutputDict = {}
+
+        if name_path:
+            result["name_path"] = self.get_name_path()
+        if name:
+            result["name"] = self.name
 
         if kind:
             result["kind"] = self.kind
 
         if location:
             result["location"] = self.location.to_dict(include_relative_path=include_relative_path)
+        elif include_relative_path:
+            result["relative_path"] = self.relative_path
+
+        if body_location:
             body_start_line, body_end_line = self.get_body_line_numbers()
             result["body_location"] = {"start_line": body_start_line, "end_line": body_end_line}
 
@@ -459,8 +477,11 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
                     continue
                 children.append(
                     c.to_dict(
+                        name_path=name_path,
+                        name=name,
                         kind=kind,
                         location=location,
+                        body_location=body_location,
                         depth=depth - 1,
                         child_inclusion_predicate=child_inclusion_predicate,
                         include_body=include_children_body,
@@ -700,36 +721,15 @@ class LanguageServerSymbolRetriever:
 
         return [ReferenceInLanguageServerSymbol.from_lsp_reference(r) for r in references]
 
-    def get_symbol_overview(self, relative_path: str, depth: int = 0) -> dict[str, list[LanguageServerSymbol.OutputDict]]:
+    def get_symbol_overview(self, relative_path: str) -> dict[str, list[LanguageServerSymbol]]:
         """
         :param relative_path: the path of the file or directory for which to get the symbol overview
-        :param depth: the depth up to which to include child symbols (0 = only top-level symbols)
-        :return: a mapping from file paths to lists of symbol dictionaries.
+        :return: a mapping from file paths to lists of symbols.
             For the case where a file is passed, the mapping will contain a single entry.
         """
         lang_server = self.get_language_server(relative_path)
         path_to_unified_symbols = lang_server.request_overview(relative_path)
-
-        def child_inclusion_predicate(s: LanguageServerSymbol) -> bool:
-            return not s.is_low_level()
-
-        result = {}
-        for file_path, unified_symbols in path_to_unified_symbols.items():
-            symbols_in_file = []
-            for us in unified_symbols:
-                symbol = LanguageServerSymbol(us)
-                symbols_in_file.append(
-                    symbol.to_dict(
-                        depth=depth,
-                        kind=True,
-                        include_relative_path=False,
-                        location=False,
-                        child_inclusion_predicate=child_inclusion_predicate,
-                    )
-                )
-            result[file_path] = symbols_in_file
-
-        return result
+        return {k: [LanguageServerSymbol(us) for us in v] for k, v in path_to_unified_symbols.items()}
 
 
 class JetBrainsSymbol(Symbol):
