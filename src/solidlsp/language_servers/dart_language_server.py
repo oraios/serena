@@ -2,6 +2,8 @@ import logging
 import os
 import pathlib
 
+from overrides import override
+
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -86,6 +88,17 @@ class DartLanguageServer(SolidLanguageServer):
         os.chmod(dart_executable_path, 0o755)
 
         return f"{dart_executable_path} language-server --client-id multilspy.dart --client-version 1.2"
+
+    @override
+    def download_dependencies(self) -> tuple[bool, str]:
+        """
+        Download and setup dependencies for dart Language Server.
+        """
+        try:
+            self._setup_runtime_dependencies(self.logger, self._solidlsp_settings)
+            return True, "dart ls installed successfully"
+        except Exception as e:
+            return False, f"Failed to setup dart ls dependencies: {e}"
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str):

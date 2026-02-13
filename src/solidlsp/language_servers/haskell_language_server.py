@@ -70,6 +70,13 @@ class HaskellLanguageServer(SolidLanguageServer):
             "  - Homebrew (macOS): brew install haskell-language-server"
         )
 
+    @override
+    def download_dependencies(self) -> tuple[bool, str]:
+
+        status = True if self._ensure_hls_installed() else False
+        message = "haskell found successfully" if status else "You must set haskell LS manually"
+        return status, message
+
     def __init__(
         self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
     ):

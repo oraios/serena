@@ -66,7 +66,7 @@ class EclipseJDTLS(SolidLanguageServer):
         Creates a new EclipseJDTLS instance initializing the language server settings appropriately.
         This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        runtime_dependency_paths = self._setupRuntimeDependencies(logger, config, solidlsp_settings)
+        runtime_dependency_paths = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
         self.runtime_dependency_paths = runtime_dependency_paths
 
         # ws_dir is the workspace directory for the EclipseJDTLS server
@@ -172,7 +172,7 @@ class EclipseJDTLS(SolidLanguageServer):
         ]
 
     @classmethod
-    def _setupRuntimeDependencies(
+    def _setup_runtime_dependencies(
         cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
     ) -> RuntimeDependencyPaths:
         """
@@ -331,6 +331,17 @@ class EclipseJDTLS(SolidLanguageServer):
             intellicode_jar_path=intellicode_jar_path,
             intellisense_members_path=intellisense_members_path,
         )
+
+    @override
+    def download_dependencies(self) -> tuple[bool, str]:
+        """
+        Download and setup dependencies for java Language Server.
+        """
+        try:
+            self._setup_runtime_dependencies(self.logger, self._solidlsp_config, self._solidlsp_settings)
+            return True, "java ls installed successfully"
+        except Exception as e:
+            return False, f"Failed to setup java ls dependencies: {e}"
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """

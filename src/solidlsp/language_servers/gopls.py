@@ -71,6 +71,15 @@ class Gopls(SolidLanguageServer):
 
         return True
 
+    @override
+    def download_dependencies(self) -> tuple[bool, str]:
+        """
+        Verify runtime dependencies for go Language Server.
+        """
+
+        return self._setup_runtime_dependency(), "go installed successfully"
+
+
     def __init__(
         self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
     ):

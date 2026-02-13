@@ -96,6 +96,17 @@ class ElmLanguageServer(SolidLanguageServer):
             )
         return [elm_ls_executable_path, "--stdio"]
 
+    @override
+    def download_dependencies(self) -> tuple[bool, str]:
+        """
+        Download and setup dependencies for elm Language Server.
+        """
+        try:
+            self._setup_runtime_dependencies(self.logger, self._solidlsp_config, self._solidlsp_settings)
+            return True, "elm ls installed successfully"
+        except Exception as e:
+            return False, f"Failed to setup elm ls dependencies: {e}"
+
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """

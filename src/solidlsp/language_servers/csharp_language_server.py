@@ -280,7 +280,7 @@ class CSharpLanguageServer(SolidLanguageServer):
     @override
     def download_dependencies(self) -> tuple[bool, str]:
         """
-        Download and setup dependencies for AL Language Server.
+        Download and setup dependencies for csharp Language Server.
         """
         try:
             self._ensure_server_installed(self.logger, self._solidlsp_config, self._solidlsp_settings)

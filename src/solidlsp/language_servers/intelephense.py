@@ -84,6 +84,17 @@ class Intelephense(SolidLanguageServer):
 
         return [intelephense_executable_path, "--stdio"]
 
+    @override
+    def download_dependencies(self) -> tuple[bool, str]:
+        """
+        Download and setup dependencies for php ls.
+        """
+        try:
+            self._setup_runtime_dependencies(self.logger, self._solidlsp_settings)
+            return True, "php ls installed successfully"
+        except Exception as e:
+            return False, f"Failed to setup php ls dependencies: {e}"
+
     def __init__(
         self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
     ):

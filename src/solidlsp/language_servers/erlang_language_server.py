@@ -52,6 +52,12 @@ class ErlangLanguageServer(SolidLanguageServer):
         # Set generous timeout for Erlang LS initialization
         self.set_request_timeout(120.0)
 
+    @override
+    def download_dependencies(self) -> tuple[bool, str]:
+        status = True if self._check_erlang_installation() else False
+        message = "Erlang LS found successfully" if status else "You must set Erlang LS manually"
+        return status, message
+
     def _check_erlang_installation(self) -> bool:
         """Check if Erlang/OTP is available."""
         try:

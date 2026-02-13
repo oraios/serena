@@ -182,9 +182,17 @@ class FortranLanguageServer(SolidLanguageServer):
     def _check_fortls_installation():
         """Check if fortls is available."""
         fortls_path = shutil.which("fortls")
+        print(fortls_path)
         if fortls_path is None:
             raise RuntimeError("fortls is not installed or not in PATH.\nInstall it with: pip install fortls")
         return fortls_path
+
+    @override
+    def download_dependencies(self) -> tuple[bool, str]:
+
+        status = True if self._check_fortls_installation() else False
+        message = "fortls found successfully" if status else "You must set fortran LS manually"
+        return status, message
 
     def __init__(
         self,

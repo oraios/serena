@@ -92,7 +92,7 @@ class BashLanguageServer(SolidLanguageServer):
     @override
     def download_dependencies(self) -> tuple[bool, str]:
         """
-        Download and setup dependencies for AL Language Server.
+        Download and setup dependencies for Bash Language Server.
         """
         try:
             self._setup_runtime_dependencies(self.logger, self._solidlsp_config, self._solidlsp_settings)
