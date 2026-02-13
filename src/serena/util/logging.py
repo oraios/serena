@@ -72,7 +72,7 @@ class LogBuffer:
 
     def __init__(self, max_messages: int | None = None) -> None:
         self._max_messages = max_messages
-        self._log_messages = []
+        self._log_messages: list[str] = []
         self._lock = threading.Lock()
         self._max_idx = -1
         """
