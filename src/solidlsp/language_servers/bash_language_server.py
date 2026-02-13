@@ -30,11 +30,11 @@ class BashLanguageServer(SolidLanguageServer):
         Creates a BashLanguageServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        bash_lsp_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
+        cmd = self._setup_runtime_dependencies(config, solidlsp_settings)
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd=bash_lsp_executable_path, cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path),
             "bash",
             solidlsp_settings,
         )
@@ -42,7 +42,7 @@ class BashLanguageServer(SolidLanguageServer):
         self.initialize_searcher_command_available = threading.Event()
 
     @classmethod
-    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> str:
+    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> list[str]:
         """
         Setup runtime dependencies for Bash Language Server and return the command to start the server.
         """
@@ -80,7 +80,7 @@ class BashLanguageServer(SolidLanguageServer):
             raise FileNotFoundError(
                 f"bash-language-server executable not found at {bash_executable_path}, something went wrong with the installation."
             )
-        return f"{bash_executable_path} start"
+        return [bash_executable_path, "start"]
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
