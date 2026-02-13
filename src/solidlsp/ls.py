@@ -1706,3 +1706,99 @@ class SolidLanguageServer(ABC):
 
     def is_running(self) -> bool:
         return self.server.is_running()
+
+    @classmethod
+    def prepare_runtime_dependencies(
+        cls,
+        logger: LanguageServerLogger,
+        config: LanguageServerConfig | None = None,
+        repository_root_path: str | None = None,
+        solidlsp_settings: SolidLSPSettings | None = None,
+    ) -> tuple[bool, str]:
+        """
+        Standard wrapper to prepare runtime dependencies for a language server class.
+
+        Returns (success: bool, message: str).
+        Strategy:
+         - If class has `runtime_dependencies` with `.install(logger, target_dir)` => use it.
+         - Else try to call `_setup_runtime_dependencies` filling kwargs by name (logger, config, repository_root_path, solidlsp_settings).
+         - If named-call fails due to missing params, try a best-effort positional call.
+        """
+        import inspect
+        import os
+
+        if solidlsp_settings is None:
+            try:
+                solidlsp_settings = SolidLSPSettings()
+            except Exception:
+                solidlsp_settings = None
+
+        # 1) runtime_dependencies.install preferred
+        deps = getattr(cls, "runtime_dependencies", None)
+        if deps is not None and hasattr(deps, "install"):
+            try:
+                target_dir = cls.ls_resources_dir(solidlsp_settings or SolidLSPSettings())
+                deps.install(logger, target_dir)
+                return True, "installed via runtime_dependencies"
+            except Exception as e:
+                return False, f"runtime_dependencies.install failed: {e}"
+
+        # 2) try _setup_runtime_dependencies
+        setup = getattr(cls, "_setup_runtime_dependencies", None)
+        if setup is None:
+            return False, "no runtime installer available (no runtime_dependencies and no _setup_runtime_dependencies)"
+
+        # prepare common helpers
+        repo = repository_root_path or os.getcwd()
+        cfg = config
+        if cfg is None:
+            try:
+                cfg = LanguageServerConfig(code_language=None, ignored_paths=[])
+            except Exception:
+                cfg = None
+
+        sig = inspect.signature(setup)
+        # try to call by matching parameter names
+        kwargs = {}
+        for pname in sig.parameters.keys():
+            if pname in ("logger",):
+                kwargs[pname] = logger
+            elif pname in ("config", "language_server_config", "ls_config"):
+                if cfg is not None:
+                    kwargs[pname] = cfg
+            elif pname in ("repository_root_path", "repository_root", "project_root", "root_path"):
+                kwargs[pname] = repo
+            elif pname in ("solidlsp_settings", "settings"):
+                if solidlsp_settings is not None:
+                    kwargs[pname] = solidlsp_settings
+
+        try:
+            # only call with kwargs if we satisfied all required params
+            missing = [
+                n
+                for n, p in sig.parameters.items()
+                if p.default is inspect._empty and n not in kwargs and p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+            ]
+            if not missing:
+                setup(**kwargs)
+                return True, f"installed via _setup_runtime_dependencies (kwargs: {list(kwargs.keys())})"
+        except Exception as e:
+            # fallthrough to positional attempt
+            logger.log(f"named call to _setup_runtime_dependencies failed: {e}", logging.WARNING)
+
+        # 3) positional best-effort
+        pos_args = []
+        if "logger" in sig.parameters:
+            pos_args.append(logger)
+        if any(p in sig.parameters for p in ("config", "language_server_config", "ls_config")) and cfg is not None:
+            pos_args.append(cfg)
+        if any(p in sig.parameters for p in ("repository_root_path", "repository_root", "project_root", "root_path")):
+            pos_args.append(repo)
+        if any(p in sig.parameters for p in ("solidlsp_settings", "settings")) and solidlsp_settings is not None:
+            pos_args.append(solidlsp_settings)
+
+        try:
+            setup(*pos_args)
+            return True, f"installed via _setup_runtime_dependencies (positional args: {[type(a).__name__ for a in pos_args]})"
+        except Exception as e:
+            return False, f"_setup_runtime_dependencies failed: {e}"

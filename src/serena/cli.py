@@ -6,7 +6,7 @@ import subprocess
 import sys
 from logging import Logger
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Tuple
 
 import click
 from sensai.util import logging
@@ -419,6 +419,92 @@ class ProjectCommands(AutoRegisteringGroup):
         super().__init__(
             name="project", help="Manage Serena projects. You can run `project <command> --help` for more info on each command."
         )
+
+    @staticmethod
+    @click.command(
+        "download-language-deps",
+        help="Download runtime dependencies for languages (pass names or --all).",
+    )
+    @click.option("--language", "-l", "languages", multiple=True, help="Language server name (use enum Language names ex. allanguageserver).")
+    @click.option("--all", "download_all", is_flag=True, help="Download dependencies for all languages.")
+    def download_language_deps(languages: Tuple[str, ...], download_all: bool = True) -> None:
+        import importlib
+        import inspect
+        import logging
+        import pkgutil
+
+        import click
+
+        from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
+        from solidlsp.ls import SolidLanguageServer
+        from solidlsp.ls_logger import LanguageServerLogger
+        from solidlsp.settings import SolidLSPSettings
+
+        logger = LanguageServerLogger(json_format=False, log_level=logging.INFO)
+        solidlsp_settings = SolidLSPSettings(
+            solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME, project_data_relative_path=SERENA_MANAGED_DIR_NAME
+        )
+
+        requested = {l.lower() for l in languages}
+        total = success = failed = skipped = 0
+        details: list[tuple[str, str, str]] = []
+
+        try:
+            pkg = importlib.import_module("solidlsp.language_servers")
+        except Exception as e:
+            click.echo(f"Error importing package solidlsp.language_servers: {e}")
+            return
+
+        for finder, mod_name, ispkg in pkgutil.iter_modules(pkg.__path__):
+            full_name = f"{pkg.__name__}.{mod_name}"
+            try:
+                mod = importlib.import_module(full_name)
+            except Exception as e:
+                logger.log(f"Import failed {full_name}: {e}", logging.WARNING)
+                continue
+
+            for _, cls in inspect.getmembers(mod, inspect.isclass):
+                if cls is SolidLanguageServer or not issubclass(cls, SolidLanguageServer):
+                    continue
+
+                total += 1
+                lang_name = getattr(cls, "language_name", cls.__name__).lower()
+
+                if not download_all and requested and lang_name not in requested:
+                    skipped += 1
+                    continue
+
+                try:
+                    result, log = cls.prepare_runtime_dependencies(
+                        logger=logger,
+                        solidlsp_settings=solidlsp_settings
+                    )
+
+                    if result:
+                        success += 1
+                        details.append((lang_name, 'ok', log))
+
+                    else:
+                        failed += 1
+                        details.append((lang_name, 'failed', log))
+
+                except Exception as e:
+                    failed += 1
+                    logger.log(f"Exception in {cls.__name__}: {e}", logging.WARNING)
+                    error_msg = str(e)
+                    details.append((lang_name, 'error', error_msg))
+
+        # Print summary
+        click.echo("\n" + "=" * 80)
+        click.echo(f"Summary: Total={total} | success={success} | failed={failed} | skipped={skipped}")
+        click.echo("=" * 80)
+        click.echo(f"{'language':<20} {'Status':<15} {'message':<45}")
+        click.echo("-" * 80)
+        for lang, status, msg in details:
+            click.echo(f"{lang:<20} {status:<15} {msg:<45}")
+        click.echo("=" * 80 + "\n")
+
+        
 
     @staticmethod
     @click.command("generate-yml", help="Generate a project.yml file.")
