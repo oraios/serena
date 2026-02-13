@@ -209,7 +209,7 @@ ls_specific_settings:
 ```
 
 This is supported by all language servers deriving their dependency provider from  `LanguageServerDependencyProviderSinglePath`.
-Currently, this includes the following languages: `clojure`, `cpp`, `php`, `python`, `rust`, `typescript`. 
+Currently, this includes the following languages: `bash`, `clojure`, `cpp`, `markdown`, `php`, `php_phpactor`, `python`, `rust`, `toml`, `typescript`, `yaml`. 
 We will add support for more languages over time.
 
 #### C# (Roslyn Language Server)
