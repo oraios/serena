@@ -3,7 +3,6 @@ Language server-related tools
 """
 
 import os
-from collections import defaultdict
 from collections.abc import Sequence
 
 from serena.symbol import LanguageServerSymbol, LanguageServerSymbolDictGrouper
@@ -33,7 +32,7 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
     Gets an overview of the top-level symbols defined in a given file.
     """
 
-    symbol_dict_grouper = LanguageServerSymbolDictGrouper(["kind"], ["kind"])
+    symbol_dict_grouper = LanguageServerSymbolDictGrouper(["kind"], ["kind"], collapse_singleton=True)
 
     def apply(self, relative_path: str, depth: int = 0, max_answer_chars: int = -1) -> str:
         """
@@ -50,8 +49,7 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
         :return: a JSON object containing symbols grouped by kind in a compact format.
         """
         result = self.get_symbol_overview(relative_path, depth=depth)
-        compact_result = self._transform_symbols_to_compact_format(result)
-        # compact_result = self.symbol_dict_grouper.group(result)
+        compact_result = self.symbol_dict_grouper.group(result)
         result_json_str = self._to_json(compact_result)
         return self._limit_length(result_json_str, max_answer_chars)
 
@@ -90,36 +88,6 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
                 )
             )
         return symbol_dicts
-
-    @staticmethod
-    def _transform_symbols_to_compact_format(symbols: list[LanguageServerSymbol.OutputDict]) -> dict[str, list]:
-        """
-        Transform symbol overview from verbose format to compact grouped format.
-
-        Groups symbols by kind and uses names instead of full symbol objects.
-        For symbols with children, creates nested dictionaries.
-
-        The name_path can be inferred from the hierarchical structure:
-        - Top-level symbols: name_path = name
-        - Nested symbols: name_path = parent_name + "/" + name
-        For example, "convert" under class "ProjectType" has name_path "ProjectType/convert".
-        """
-        result = defaultdict(list)
-
-        for symbol in symbols:
-            kind = symbol.get("kind", "Unknown")
-            name = symbol.get("name", "unknown")
-            children = symbol.get("children", [])
-
-            if children:
-                # Symbol has children: create nested dict {name: children_dict}
-                children_dict = GetSymbolsOverviewTool._transform_symbols_to_compact_format(children)
-                result[kind].append({name: children_dict})
-            else:
-                # Symbol has no children: just add the name
-                result[kind].append(name)
-
-        return result
 
 
 class FindSymbolTool(Tool, ToolMarkerSymbolicRead):

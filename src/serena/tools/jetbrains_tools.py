@@ -1,9 +1,9 @@
 import logging
-from collections import defaultdict
 from typing import Any, Literal
 
 import serena.jetbrains.jetbrains_types as jb
 from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
+from serena.symbol import JetBrainsSymbolDictGrouper
 from serena.tools import Tool, ToolMarkerOptional, ToolMarkerSymbolicRead
 
 log = logging.getLogger(__name__)
@@ -128,37 +128,7 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
     """
 
     USE_COMPACT_FORMAT = True
-
-    @staticmethod
-    def _transform_symbols_to_compact_format(symbols: list[jb.SymbolDTO]) -> dict[str, list]:
-        """
-        Transform symbol overview from verbose format to compact grouped format.
-
-        Groups symbols by kind and uses names instead of full symbol objects.
-        For symbols with children, creates nested dictionaries.
-
-        The name_path can be inferred from the hierarchical structure:
-        - Top-level symbols: name_path = name
-        - Nested symbols: name_path = parent_name + "/" + name
-        For example, "convert" under class "ProjectType" has name_path "ProjectType/convert".
-        """
-        result = defaultdict(list)
-
-        for symbol in symbols:
-            kind = symbol.get("type", "Unknown")
-            name_path = symbol["name_path"]
-            name = name_path.split("/")[-1]
-            children = symbol.get("children", [])
-
-            if children:
-                # Symbol has children: create nested dict {name: children_dict}
-                children_dict = JetBrainsGetSymbolsOverviewTool._transform_symbols_to_compact_format(children)
-                result[kind].append({name: children_dict})
-            else:
-                # Symbol has no children: just add the name
-                result[kind].append(name)  # type: ignore
-
-        return result
+    symbol_dict_grouper = JetBrainsSymbolDictGrouper(["type"], ["type"], collapse_singleton=True, map_name_path_to_name=True)
 
     def apply(
         self,
@@ -187,7 +157,7 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
             )
         if self.USE_COMPACT_FORMAT:
             symbols = symbol_overview["symbols"]
-            result: dict[str, Any] = {"symbols": self._transform_symbols_to_compact_format(symbols)}
+            result: dict[str, Any] = {"symbols": self.symbol_dict_grouper.group(symbols)}
             documentation = symbol_overview.pop("documentation", None)
             if documentation:
                 result["docstring"] = documentation

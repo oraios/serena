@@ -802,13 +802,19 @@ class SymbolDictGrouper(Generic[TSymbolDict], ABC):
     """
 
     def __init__(
-        self, symbol_dict_type: type[TSymbolDict], children_key: Any, group_keys: list[Any], group_children_keys: list[Any]
+        self,
+        symbol_dict_type: type[TSymbolDict],
+        children_key: Any,
+        group_keys: list[Any],
+        group_children_keys: list[Any],
+        collapse_singleton: bool,
     ) -> None:
         """
         :param symbol_dict_type: the TypedDict type that represents the type of the symbol dictionaries to be grouped
         :param children_key: the key in the symbol dictionaries that contains the list of child symbols. This is necessary for recursive grouping.
         :param group_keys: keys by which to group the symbol dictionaries. Must be a subset of the keys of `symbol_dict_type`.
         :param group_children_keys: keys by which to group the child symbol dictionaries. Must be a subset of the keys of `symbol_dict_type`.
+        :param collapse_singleton: whether to collapse dictionaries containing a single entry after regrouping to just the entry's value
         """
         # symbol_dict_type must be a TypedDict type.
         # We check whether the type contains all the keys specified in `keys` and raise an error if not.
@@ -821,26 +827,51 @@ class SymbolDictGrouper(Generic[TSymbolDict], ABC):
         self._children_key = children_key
         self._group_keys = group_keys
         self._group_children_keys = group_children_keys
+        self._collapse_singleton = collapse_singleton
 
     def _group_by(self, l: list[dict], keys: list[str], children_keys: list[str]) -> dict[str, Any]:
-        key = keys[0]
+        assert len(keys) > 0, "keys must not be empty"
+        # group by the first key
         grouped: dict[str, Any] = {}
         for item in l:
-            key_value = item.pop(key)
+            key_value = item.pop(keys[0], "unknown")
             if key_value not in grouped:
                 grouped[key_value] = []
             grouped[key_value].append(item)
         if len(keys) > 1:
+            # continue grouping by the remaining keys
             for k, group in grouped.items():
                 grouped[k] = self._group_by(group, keys[1:], children_keys)
         else:
+            # grouping is complete; now group the children if necessary
             if children_keys:
                 for k, group in grouped.items():
                     for item in group:
                         if self._children_key in item:
                             children = item[self._children_key]
                             item[self._children_key] = self._group_by(children, children_keys, children_keys)
+            # post-process final group items
+            grouped = {k: [self._transform_item(i) for i in v] for k, v in grouped.items()}
         return grouped
+
+    def _transform_item(self, item: dict) -> dict:
+        """
+        Post-processes a final group item (which has been regrouped, i.e. some keys may have been removed),
+        collapsing singleton items (and items containing only a single non-children key)
+        """
+        if self._collapse_singleton:
+            if len(item) == 1:
+                # {"name": "foo"} -> "foo"
+                # if there is only a single entry, collapse the dictionary to just the value of that entry
+                return next(iter(item.values()))
+            elif len(item) == 2 and self._children_key in item:
+                # {"name": "foo", "children": {...}} -> {"foo": {...}}
+                # if there are exactly two entries and one of them is the children key,
+                # convert to {other_value: children} if there are exactly two entries and one of them is the children key
+                other_key = next(k for k in item.keys() if k != self._children_key)
+                new_item = {item[other_key]: item[self._children_key]}
+                return new_item
+        return item
 
     def group(self, symbols: list[TSymbolDict]) -> GroupedSymbolDict:
         """
@@ -855,10 +886,29 @@ class LanguageServerSymbolDictGrouper(SymbolDictGrouper[LanguageServerSymbol.Out
         self,
         group_keys: list[LanguageServerSymbol.OutputDictKey],
         group_children_keys: list[LanguageServerSymbol.OutputDictKey],
+        collapse_singleton: bool = False,
     ) -> None:
-        super().__init__(LanguageServerSymbol.OutputDict, "children", group_keys, group_children_keys)
+        super().__init__(LanguageServerSymbol.OutputDict, "children", group_keys, group_children_keys, collapse_singleton)
 
 
 class JetBrainsSymbolDictGrouper(SymbolDictGrouper[jb.SymbolDTO]):
-    def __init__(self, group_keys: list[jb.SymbolDTOKey], group_children_keys: list[jb.SymbolDTOKey]) -> None:
-        super().__init__(jb.SymbolDTO, "children", group_keys, group_children_keys)
+    def __init__(
+        self,
+        group_keys: list[jb.SymbolDTOKey],
+        group_children_keys: list[jb.SymbolDTOKey],
+        collapse_singleton: bool = False,
+        map_name_path_to_name: bool = False,
+    ) -> None:
+        super().__init__(jb.SymbolDTO, "children", group_keys, group_children_keys, collapse_singleton)
+        self._map_name_path_to_name = map_name_path_to_name
+
+    def _transform_item(self, item: dict) -> dict:
+        if self._map_name_path_to_name:
+            # {"name_path: "Class/myMethod"} -> {"name: "myMethod"}
+            new_item = dict(item)
+            if "name_path" in item:
+                name_path = new_item.pop("name_path")
+                new_item["name"] = name_path.split("/")[-1]
+            return super()._transform_item(new_item)
+        else:
+            return super()._transform_item(item)
