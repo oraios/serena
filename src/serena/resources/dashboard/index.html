@@ -30,20 +30,24 @@
     </div>
 
     <nav class="header-nav">
-        <button id="theme-toggle" class="theme-toggle">
-            <span id="theme-icon" style="height: 21px">🌙</span>
-            <span id="theme-text">Dark</span>
-        </button>
-        <button id="menu-toggle" class="menu-button">
-            <span>☰</span>
-            <span>Menu</span>
-        </button>
-        <div id="menu-dropdown" class="menu-dropdown" style="display:none">
-            <a href="#" data-page="overview" class="active">Overview</a>
-            <a href="#" data-page="logs">Logs</a>
-            <a href="#" data-page="stats">Advanced Stats</a>
-            <hr>
-            <a href="#" id="menu-shutdown">Shutdown Server</a>
+        <div class="header-actions">
+            <button id="theme-toggle" class="theme-toggle">
+                <span id="theme-icon" style="height: 21px">🌙</span>
+                <span id="theme-text">Dark</span>
+            </button>
+            <button id="menu-toggle" class="menu-button">
+                <span>☰</span>
+                <span>Menu</span>
+            </button>
+            <div id="menu-dropdown" class="menu-dropdown" style="display:none">
+                <a href="#" data-page="stats">Advanced Stats</a>
+                <hr>
+                <a href="#" id="menu-shutdown">Shutdown Server</a>
+            </div>
+        </div>
+        <div class="header-tabs">
+            <a href="#" data-page="overview" class="header-tab active">Overview</a>
+            <a href="#" data-page="logs" class="header-tab">Logs</a>
         </div>
     </nav>
 </header>
