@@ -415,10 +415,10 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         kind: bool = False,
         location: bool = False,
         depth: int = 0,
-        include_body: bool = False,
+        body: bool = False,
         body_location: bool = False,
-        include_children_body: bool = False,
-        include_relative_path: bool = False,
+        children_body: bool = False,
+        relative_path: bool = False,
         child_inclusion_predicate: Callable[[Self], bool] | None = None,
     ) -> OutputDict:
         """
@@ -429,12 +429,12 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         :param kind: whether to include the kind of the symbol
         :param location: whether to include the location of the symbol
         :param depth: the depth up to which to include child symbols (0 = do not include children)
-        :param include_body: whether to include the body of the top-level symbol.
-        :param include_children_body: whether to also include the body of the children.
+        :param body: whether to include the body of the top-level symbol.
+        :param children_body: whether to also include the body of the children.
             Note that the body of the children is part of the body of the parent symbol,
             so there is usually no need to set this to True unless you want process the output
             and pass the children without passing the parent body to the LM.
-        :param include_relative_path: whether to include the relative path of the symbol.
+        :param relative_path: whether to include the relative path of the symbol.
             If `location` is True, this defines whether to include the path in the location entry.
             If `location` is False, this defines whether to include the relative path as a top-level entry.
             Relative paths of the symbol's children are always excluded.
@@ -453,19 +453,16 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
             result["kind"] = self.kind
 
         if location:
-            result["location"] = self.location.to_dict(include_relative_path=include_relative_path)
-        elif include_relative_path:
+            result["location"] = self.location.to_dict(include_relative_path=relative_path)
+        elif relative_path:
             result["relative_path"] = self.relative_path
 
         if body_location:
             body_start_line, body_end_line = self.get_body_line_numbers()
             result["body_location"] = {"start_line": body_start_line, "end_line": body_end_line}
 
-        if include_body:
-            body = self.body
-            if body is None:
-                log.warning("Requested body for symbol, but it is not present. The symbol might have been loaded with include_body=False.")
-            result["body"] = body
+        if body:
+            result["body"] = self.body
 
         if child_inclusion_predicate is None:
             child_inclusion_predicate = lambda s: True
@@ -484,10 +481,10 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
                         body_location=body_location,
                         depth=depth - 1,
                         child_inclusion_predicate=child_inclusion_predicate,
-                        include_body=include_children_body,
-                        include_children_body=include_children_body,
+                        body=children_body,
+                        children_body=children_body,
                         # all children have the same relative path as the parent
-                        include_relative_path=False,
+                        relative_path=False,
                     )
                 )
             return children
@@ -636,8 +633,7 @@ class LanguageServerSymbolRetriever:
             include_rel_path = within_relative_path is not None
             raise ValueError(
                 f"Found multiple {len(symbol_candidates)} symbols matching '{name_path_pattern}'. "
-                "They are: \n"
-                + json.dumps([s.to_dict(kind=True, include_relative_path=include_rel_path) for s in symbol_candidates], indent=2)
+                "They are: \n" + json.dumps([s.to_dict(kind=True, relative_path=include_rel_path) for s in symbol_candidates], indent=2)
             )
 
     def find_by_location(self, location: LanguageServerSymbolLocation) -> LanguageServerSymbol | None:

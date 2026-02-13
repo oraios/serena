@@ -82,7 +82,7 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
                     name=True,
                     depth=depth,
                     kind=True,
-                    include_relative_path=False,
+                    relative_path=False,
                     location=False,
                     child_inclusion_predicate=child_inclusion_predicate,
                 )
@@ -157,10 +157,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             substring_matching=substring_matching,
             within_relative_path=relative_path,
         )
-        symbol_dicts = [
-            dict(s.to_dict(kind=True, include_relative_path=True, body_location=True, depth=depth, include_body=include_body))
-            for s in symbols
-        ]
+        symbol_dicts = [dict(s.to_dict(kind=True, relative_path=True, body_location=True, depth=depth, body=include_body)) for s in symbols]
         if not include_body and include_info:
             # we add an info field to the symbol dicts if requested
             for s, s_dict in zip(symbols, symbol_dicts, strict=True):
@@ -217,9 +214,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
 
         reference_dicts = []
         for ref in references_in_symbols:
-            ref_dict_orig = ref.symbol.to_dict(
-                kind=True, include_relative_path=True, depth=0, include_body=include_body, body_location=True
-            )
+            ref_dict_orig = ref.symbol.to_dict(kind=True, relative_path=True, depth=0, body=include_body, body_location=True)
             ref_dict = dict(ref_dict_orig)
             if not include_body:
                 ref_relative_path = ref.symbol.location.relative_path
