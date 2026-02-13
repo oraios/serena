@@ -363,11 +363,10 @@ class SerenaDashboardAPI:
                 return {"status": "error", "message": str(e)}
 
     def _get_log_messages(self, request_log: RequestLog) -> ResponseLog:
-        all_messages = self._memory_log_handler.get_log_messages()
-        requested_messages = all_messages[request_log.start_idx :] if request_log.start_idx <= len(all_messages) else []
+        messages = self._memory_log_handler.get_log_messages(from_idx=request_log.start_idx)
         project = self._agent.get_active_project()
         project_name = project.project_name if project else None
-        return ResponseLog(messages=requested_messages, max_idx=len(all_messages) - 1, active_project=project_name)
+        return ResponseLog(messages=messages.messages, max_idx=messages.max_idx, active_project=project_name)
 
     def _get_tool_names(self) -> ResponseToolNames:
         return ResponseToolNames(tool_names=self._tool_names)

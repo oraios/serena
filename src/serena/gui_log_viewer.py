@@ -68,7 +68,7 @@ class GuiLogViewer:
         }
 
         if memory_log_handler is not None:
-            for msg in memory_log_handler.get_log_messages():
+            for msg in memory_log_handler.get_log_messages().messages:
                 self.message_queue.put(msg)
             memory_log_handler.add_emit_callback(lambda msg: self.message_queue.put(msg))
 
