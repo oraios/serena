@@ -10,10 +10,15 @@ import shutil
 import threading
 
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
-from solidlsp.ls import DocumentSymbols, LSPFileBuffer, SolidLanguageServer
+from solidlsp.ls import (
+    DocumentSymbols,
+    LanguageServerDependencyProvider,
+    LanguageServerDependencyProviderSinglePath,
+    LSPFileBuffer,
+    SolidLanguageServer,
+)
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -30,57 +35,63 @@ class BashLanguageServer(SolidLanguageServer):
         Creates a BashLanguageServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        bash_lsp_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd=bash_lsp_executable_path, cwd=repository_root_path),
+            None,
             "bash",
             solidlsp_settings,
         )
         self.server_ready = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
 
-    @classmethod
-    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> str:
-        """
-        Setup runtime dependencies for Bash Language Server and return the command to start the server.
-        """
-        # Verify both node and npm are installed
-        is_node_installed = shutil.which("node") is not None
-        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which("npm") is not None
-        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
-        deps = RuntimeDependencyCollection(
-            [
-                RuntimeDependency(
-                    id="bash-language-server",
-                    description="bash-language-server package",
-                    command="npm install --prefix ./ bash-language-server@5.6.0",
-                    platform_id="any",
-                ),
-            ]
-        )
+    class DependencyProvider(LanguageServerDependencyProviderSinglePath):
+        def _get_or_install_core_dependency(self) -> str:
+            """
+            Setup runtime dependencies for Bash Language Server and return the command to start the server.
+            """
+            # Verify both node and npm are installed
+            is_node_installed = shutil.which("node") is not None
+            assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
+            is_npm_installed = shutil.which("npm") is not None
+            assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
-        # Install bash-language-server if not already installed
-        bash_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "bash-lsp")
-        bash_executable_path = os.path.join(bash_ls_dir, "node_modules", ".bin", "bash-language-server")
-
-        # Handle Windows executable extension
-        if os.name == "nt":
-            bash_executable_path += ".cmd"
-
-        if not os.path.exists(bash_executable_path):
-            log.info(f"Bash Language Server executable not found at {bash_executable_path}. Installing...")
-            deps.install(bash_ls_dir)
-            log.info("Bash language server dependencies installed successfully")
-
-        if not os.path.exists(bash_executable_path):
-            raise FileNotFoundError(
-                f"bash-language-server executable not found at {bash_executable_path}, something went wrong with the installation."
+            deps = RuntimeDependencyCollection(
+                [
+                    RuntimeDependency(
+                        id="bash-language-server",
+                        description="bash-language-server package",
+                        command="npm install --prefix ./ bash-language-server@5.6.0",
+                        platform_id="any",
+                    ),
+                ]
             )
-        return f"{bash_executable_path} start"
+
+            # Install bash-language-server if not already installed
+            bash_ls_dir = os.path.join(self._ls_resources_dir, "bash-lsp")
+            bash_executable_path = os.path.join(bash_ls_dir, "node_modules", ".bin", "bash-language-server")
+
+            # Handle Windows executable extension
+            if os.name == "nt":
+                bash_executable_path += ".cmd"
+
+            if not os.path.exists(bash_executable_path):
+                log.info(f"Bash Language Server executable not found at {bash_executable_path}. Installing...")
+                deps.install(bash_ls_dir)
+                log.info("Bash language server dependencies installed successfully")
+
+            if not os.path.exists(bash_executable_path):
+                raise FileNotFoundError(
+                    f"bash-language-server executable not found at {bash_executable_path}, something went wrong with the installation."
+                )
+
+            return bash_executable_path
+
+        def _create_launch_command(self, core_path: str) -> list[str]:
+            return [core_path, "start"]
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:

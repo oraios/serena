@@ -91,7 +91,7 @@ class CCLS(SolidLanguageServer):
             log.info(f"Using system-installed ccls at {ccls_path}")
             return ccls_path
 
-        def _create_launch_command(self, core_path: str) -> list[str] | str:
+        def _create_launch_command(self, core_path: str) -> list[str]:
             return [core_path]
 
     @staticmethod

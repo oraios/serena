@@ -165,7 +165,7 @@ class RustAnalyzer(SolidLanguageServer):
         def _get_or_install_core_dependency(self) -> str:
             return self._ensure_rust_analyzer_installed()
 
-        def _create_launch_command(self, core_path: str) -> list[str] | str:
+        def _create_launch_command(self, core_path: str) -> list[str]:
             return [core_path]
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):

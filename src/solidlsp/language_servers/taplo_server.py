@@ -17,11 +17,10 @@ from typing import Any
 # Download timeout in seconds (prevents indefinite hangs)
 DOWNLOAD_TIMEOUT_SECONDS = 120
 
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -119,115 +118,120 @@ class TaploServer(SolidLanguageServer):
         Creates a TaploServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        taplo_executable_path = self._setup_runtime_dependencies(solidlsp_settings)
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd=f"{taplo_executable_path} lsp stdio", cwd=repository_root_path),
+            None,
             "toml",
             solidlsp_settings,
         )
 
-    @classmethod
-    def _setup_runtime_dependencies(cls, solidlsp_settings: SolidLSPSettings) -> str:
-        """
-        Setup runtime dependencies for Taplo and return the command to start the server.
-        """
-        # First check if taplo is already installed system-wide
-        system_taplo = shutil.which("taplo")
-        if system_taplo:
-            log.info(f"Using system-installed Taplo at: {system_taplo}")
-            return system_taplo
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
-        # Setup local installation directory
-        taplo_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "taplo")
-        os.makedirs(taplo_dir, exist_ok=True)
+    class DependencyProvider(LanguageServerDependencyProviderSinglePath):
+        def _get_or_install_core_dependency(self) -> str:
+            """
+            Setup runtime dependencies for Taplo and return the command to start the server.
+            """
+            # First check if taplo is already installed system-wide
+            system_taplo = shutil.which("taplo")
+            if system_taplo:
+                log.info(f"Using system-installed Taplo at: {system_taplo}")
+                return system_taplo
 
-        _, executable_name = _get_taplo_download_url()
-        taplo_executable = os.path.join(taplo_dir, executable_name)
+            # Setup local installation directory
+            taplo_dir = os.path.join(self._ls_resources_dir, "taplo")
+            os.makedirs(taplo_dir, exist_ok=True)
 
-        if os.path.exists(taplo_executable) and os.access(taplo_executable, os.X_OK):
-            log.info(f"Using cached Taplo at: {taplo_executable}")
-            return taplo_executable
+            _, executable_name = _get_taplo_download_url()
+            taplo_executable = os.path.join(taplo_dir, executable_name)
 
-        # Download and install Taplo
-        log.info(f"Taplo not found. Downloading version {TAPLO_VERSION}...")
-        cls._download_taplo(taplo_dir, taplo_executable)
+            if os.path.exists(taplo_executable) and os.access(taplo_executable, os.X_OK):
+                log.info(f"Using cached Taplo at: {taplo_executable}")
+                return taplo_executable
 
-        if not os.path.exists(taplo_executable):
-            raise FileNotFoundError(
-                f"Taplo executable not found at {taplo_executable}. "
-                "Installation may have failed. Try installing manually: cargo install taplo-cli --locked"
-            )
+            # Download and install Taplo
+            log.info(f"Taplo not found. Downloading version {TAPLO_VERSION}...")
+            self._download_taplo(taplo_dir, taplo_executable)
 
-        return taplo_executable
-
-    @classmethod
-    def _download_taplo(cls, install_dir: str, executable_path: str) -> None:
-        """Download and extract Taplo binary with SHA256 verification."""
-        # TODO: consider using existing download utilities in SolidLSP instead of the custom logic here
-        download_url, _ = _get_taplo_download_url()
-        archive_filename = os.path.basename(download_url)
-
-        try:
-            log.info(f"Downloading Taplo from: {download_url}")
-            archive_path = os.path.join(install_dir, archive_filename)
-
-            # Download the archive with timeout to prevent indefinite hangs
-            old_timeout = socket.getdefaulttimeout()
-            try:
-                socket.setdefaulttimeout(DOWNLOAD_TIMEOUT_SECONDS)
-                urllib.request.urlretrieve(download_url, archive_path)
-            finally:
-                socket.setdefaulttimeout(old_timeout)
-
-            # Verify SHA256 checksum
-            expected_hash = TAPLO_SHA256_CHECKSUMS.get(archive_filename)
-            if expected_hash:
-                if not _verify_sha256(archive_path, expected_hash):
-                    os.remove(archive_path)
-                    raise RuntimeError(
-                        f"SHA256 checksum verification failed for {archive_filename}. "
-                        "The downloaded file may be corrupted or tampered with. "
-                        "Try installing manually: cargo install taplo-cli --locked"
-                    )
-                log.info(f"SHA256 checksum verified for {archive_filename}")
-            else:
-                log.warning(
-                    f"No SHA256 checksum available for {archive_filename}. "
-                    "Skipping verification - consider installing manually: cargo install taplo-cli --locked"
+            if not os.path.exists(taplo_executable):
+                raise FileNotFoundError(
+                    f"Taplo executable not found at {taplo_executable}. "
+                    "Installation may have failed. Try installing manually: cargo install taplo-cli --locked"
                 )
 
-            # Extract based on format
-            if archive_path.endswith(".gz") and not archive_path.endswith(".tar.gz"):
-                # Single file gzip
-                with gzip.open(archive_path, "rb") as f_in:
-                    with open(executable_path, "wb") as f_out:
-                        f_out.write(f_in.read())
-            elif archive_path.endswith(".zip"):
-                import zipfile
+            return taplo_executable
 
-                with zipfile.ZipFile(archive_path, "r") as zip_ref:
-                    # Security: Validate paths to prevent zip slip vulnerability
-                    for member in zip_ref.namelist():
-                        member_path = os.path.normpath(os.path.join(install_dir, member))
-                        if not member_path.startswith(os.path.normpath(install_dir)):
-                            raise RuntimeError(f"Zip slip detected: {member} attempts to escape install directory")
-                    zip_ref.extractall(install_dir)
+        def _create_launch_command(self, core_path: str) -> list[str]:
+            return [core_path, "lsp", "stdio"]
 
-            # Make executable on Unix systems
-            if os.name != "nt":
-                os.chmod(executable_path, os.stat(executable_path).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        @classmethod
+        def _download_taplo(cls, install_dir: str, executable_path: str) -> None:
+            """Download and extract Taplo binary with SHA256 verification."""
+            # TODO: consider using existing download utilities in SolidLSP instead of the custom logic here
+            download_url, _ = _get_taplo_download_url()
+            archive_filename = os.path.basename(download_url)
 
-            # Clean up archive
-            os.remove(archive_path)
-            log.info(f"Taplo installed successfully at: {executable_path}")
+            try:
+                log.info(f"Downloading Taplo from: {download_url}")
+                archive_path = os.path.join(install_dir, archive_filename)
 
-        except Exception as e:
-            log.error(f"Failed to download Taplo: {e}")
-            raise RuntimeError(
-                f"Failed to download Taplo from {download_url}. Try installing manually: cargo install taplo-cli --locked"
-            ) from e
+                # Download the archive with timeout to prevent indefinite hangs
+                old_timeout = socket.getdefaulttimeout()
+                try:
+                    socket.setdefaulttimeout(DOWNLOAD_TIMEOUT_SECONDS)
+                    urllib.request.urlretrieve(download_url, archive_path)
+                finally:
+                    socket.setdefaulttimeout(old_timeout)
+
+                # Verify SHA256 checksum
+                expected_hash = TAPLO_SHA256_CHECKSUMS.get(archive_filename)
+                if expected_hash:
+                    if not _verify_sha256(archive_path, expected_hash):
+                        os.remove(archive_path)
+                        raise RuntimeError(
+                            f"SHA256 checksum verification failed for {archive_filename}. "
+                            "The downloaded file may be corrupted or tampered with. "
+                            "Try installing manually: cargo install taplo-cli --locked"
+                        )
+                    log.info(f"SHA256 checksum verified for {archive_filename}")
+                else:
+                    log.warning(
+                        f"No SHA256 checksum available for {archive_filename}. "
+                        "Skipping verification - consider installing manually: cargo install taplo-cli --locked"
+                    )
+
+                # Extract based on format
+                if archive_path.endswith(".gz") and not archive_path.endswith(".tar.gz"):
+                    # Single file gzip
+                    with gzip.open(archive_path, "rb") as f_in:
+                        with open(executable_path, "wb") as f_out:
+                            f_out.write(f_in.read())
+                elif archive_path.endswith(".zip"):
+                    import zipfile
+
+                    with zipfile.ZipFile(archive_path, "r") as zip_ref:
+                        # Security: Validate paths to prevent zip slip vulnerability
+                        for member in zip_ref.namelist():
+                            member_path = os.path.normpath(os.path.join(install_dir, member))
+                            if not member_path.startswith(os.path.normpath(install_dir)):
+                                raise RuntimeError(f"Zip slip detected: {member} attempts to escape install directory")
+                        zip_ref.extractall(install_dir)
+
+                # Make executable on Unix systems
+                if os.name != "nt":
+                    os.chmod(executable_path, os.stat(executable_path).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+                # Clean up archive
+                os.remove(archive_path)
+                log.info(f"Taplo installed successfully at: {executable_path}")
+
+            except Exception as e:
+                log.error(f"Failed to download Taplo: {e}")
+                raise RuntimeError(
+                    f"Failed to download Taplo from {download_url}. Try installing manually: cargo install taplo-cli --locked"
+                ) from e
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
