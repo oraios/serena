@@ -176,6 +176,8 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
     Finds symbols that reference the given symbol using the language server backend
     """
 
+    symbol_dict_grouper = LanguageServerSymbolDictGrouper(["relative_path", "kind"], ["kind"], collapse_singleton=True)
+
     # noinspection PyDefaultArgument
     def apply(
         self,
@@ -204,6 +206,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
         symbol_retriever = self.create_language_server_symbol_retriever()
+
         references_in_symbols = symbol_retriever.find_referencing_symbols(
             name_path,
             relative_file_path=relative_path,
@@ -211,6 +214,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
             include_kinds=parsed_include_kinds,
             exclude_kinds=parsed_exclude_kinds,
         )
+
         reference_dicts = []
         for ref in references_in_symbols:
             ref_dict_orig = ref.symbol.to_dict(
@@ -227,8 +231,11 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
                 )
                 ref_dict["content_around_reference"] = content_around_ref.to_display_string()
             reference_dicts.append(ref_dict)
-        result = self._to_json(reference_dicts)
-        return self._limit_length(result, max_answer_chars)
+
+        result = self.symbol_dict_grouper.group(reference_dicts)  # type: ignore
+
+        result_json = self._to_json(result)
+        return self._limit_length(result_json, max_answer_chars)
 
 
 class ReplaceSymbolBodyTool(Tool, ToolMarkerSymbolicEdit):

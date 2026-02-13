@@ -405,7 +405,7 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         kind: NotRequired[str]
         children: NotRequired[list["LanguageServerSymbol.OutputDict"]]
 
-    OutputDictKey = Literal["name", "name_path", "location", "body_location", "body", "kind", "children"]
+    OutputDictKey = Literal["name", "name_path", "relative_path", "location", "body_location", "body", "kind", "children"]
 
     def to_dict(
         self,

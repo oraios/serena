@@ -91,6 +91,8 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
     Finds symbols that reference the given symbol using the JetBrains backend
     """
 
+    symbol_dict_grouper = JetBrainsSymbolDictGrouper(["relative_path", "type"], ["type"], collapse_singleton=True)
+
     # TODO: (maybe) - add content snippets showing the references like in LS based version?
     def apply(
         self,
@@ -118,8 +120,10 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
                 relative_path=relative_path,
                 include_quick_info=include_info,
             )
-            result = self._to_json(response_dict)
-        return self._limit_length(result, max_answer_chars)
+        symbol_dicts = response_dict["symbols"]
+        result = self.symbol_dict_grouper.group(symbol_dicts)
+        result_json = self._to_json(result)
+        return self._limit_length(result_json, max_answer_chars)
 
 
 class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
