@@ -27,13 +27,20 @@ from serena.constants import (
     SERENAS_OWN_MODE_YAMLS_DIR,
     USER_CONTEXT_YAMLS_DIR,
     USER_MODE_YAMLS_DIR,
+    SERENA_MANAGED_DIR_NAME,
 )
 from serena.mcp import SerenaMCPFactory, SerenaMCPFactorySingleProcess
 from serena.project import Project
 from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsOverviewTool, SearchForPatternTool, ToolRegistry
 from serena.util.logging import MemoryLogHandler
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.util.subprocess_util import subprocess_kwargs
+from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.settings import SolidLSPSettings
+
+from solidlsp.lsp_protocol_handler.server import (
+    ProcessLaunchInfo,
+)
 
 log = logging.getLogger(__name__)
 
@@ -728,6 +735,42 @@ class ToolCommands(AutoRegisteringGroup):
         tool = agent.get_tool_by_name(tool_name)
         mcp_tool = SerenaMCPFactory.make_mcp_tool(tool)
         click.echo(mcp_tool.description)
+
+    @staticmethod
+    @click.command("download-ls", help="Download dependencies for a specific language server.")
+    @click.argument("language", type=str)
+    def download_ls(language: str) -> None:
+        try:
+            lang_enum = Language.from_name(name=language.lower())
+        except KeyError:
+            all_langs = [l.name.lower() for l in Language.iter_all(include_experimental=True)]
+            click.echo(f"Unknown language '{language}'. Supported: {', '.join(all_langs)}")
+            sys.exit(1)
+
+        ls_config = LanguageServerConfig(code_language=lang_enum)
+        ls_logger = LanguageServerLogger(log_level=logging.INFO)
+
+        # Use current directory as dummy root
+        dummy_root = os.getcwd()
+
+        ls_class = lang_enum.get_ls_class()
+        ls = ls_class(
+            config=ls_config,
+            logger=ls_logger,
+            repository_root_path=dummy_root,
+            solidlsp_settings=SolidLSPSettings(
+                solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME,
+                project_data_relative_path=SERENA_MANAGED_DIR_NAME
+            )
+        )
+
+        click.echo(f"Downloading dependencies for {lang_enum.value} language server...")
+        success, message = ls.download_dependencies()
+        if success:
+            click.echo(f"Success: {message}")
+        else:
+            click.echo(f"Error: {message}")
+            sys.exit(1)
 
 
 class PromptCommands(AutoRegisteringGroup):

@@ -324,6 +324,14 @@ class Language(str, Enum):
                 return enum_instance
         raise ValueError(f"Unhandled language server class: {ls_class}")
 
+    @classmethod
+    def from_name(cls, name: str) -> Self:
+        for enum_instance in cls:
+            if enum_instance.value == name:
+                return enum_instance
+        raise ValueError(f"Unhandled language: {name}")
+
+
 
 @dataclass
 class LanguageServerConfig:

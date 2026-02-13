@@ -189,6 +189,17 @@ class ALLanguageServer(SolidLanguageServer):
         # Prepare and return the executable command
         return cls._prepare_executable(executable_path, system, logger)
 
+    @override
+    def download_dependencies(self) -> tuple[bool, str]:
+        """
+        Download and setup dependencies for AL Language Server.
+        """
+        try:
+            self._setup_runtime_dependencies(self.logger, self._solidlsp_config, self._solidlsp_settings)
+            return True, "AL extension is ready"
+        except Exception as e:
+            return False, f"Failed to setup AL extension: {e}"
+
     @classmethod
     def _find_al_extension(cls, logger: LanguageServerLogger, solidlsp_settings: SolidLSPSettings) -> str | None:
         """
@@ -967,3 +978,4 @@ class ALLanguageServer(SolidLanguageServer):
         except Exception as e:
             self.logger.log(f"Failed to set active workspace: {e}", logging.WARNING)
             # Non-critical error, continue operation
+

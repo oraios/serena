@@ -176,6 +176,7 @@ class SolidLanguageServer(ABC):
                     as opposed to HTTP, TCP modes supported by some language servers.
         """
         self._solidlsp_settings = solidlsp_settings
+        self._solidlsp_config = config
         self._encoding = config.encoding
         self.logger = logger
         self.repository_root_path: str = repository_root_path
@@ -234,6 +235,16 @@ class SolidLanguageServer(ABC):
         self._request_timeout: float | None = None
 
         self._has_waited_for_cross_file_references = False
+
+    @abstractmethod
+    def download_dependencies(self) -> tuple[bool, str]:
+        """
+        Download and setup dependencies for the language server.
+
+        Returns:
+            tuple[bool, str]: A tuple containing a success status and a finish reason.
+        """
+        raise NotImplementedError
 
     def _get_wait_time_for_cross_file_referencing(self) -> float:
         """Meant to be overridden by subclasses for LS that don't have a reliable "finished initializing" signal.
