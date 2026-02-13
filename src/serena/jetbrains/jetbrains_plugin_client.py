@@ -12,10 +12,10 @@ import requests
 from requests import Response
 from sensai.util.string import ToStringMixin
 
-import serena.tools.jetbrains_types as jb
+import serena.jetbrains.jetbrains_types as jb
+from serena.jetbrains.jetbrains_types import PluginStatusDTO
 from serena.project import Project
 from serena.text_utils import render_html
-from serena.tools.jetbrains_types import PluginStatusDTO
 from serena.util.version import Version
 
 T = TypeVar("T")

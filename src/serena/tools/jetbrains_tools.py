@@ -2,9 +2,9 @@ import logging
 from collections import defaultdict
 from typing import Any, Literal
 
-import serena.tools.jetbrains_types as jb
+import serena.jetbrains.jetbrains_types as jb
+from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
 from serena.tools import Tool, ToolMarkerOptional, ToolMarkerSymbolicRead
-from serena.tools.jetbrains_plugin_client import JetBrainsPluginClient
 
 log = logging.getLogger(__name__)
 

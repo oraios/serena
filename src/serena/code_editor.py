@@ -6,6 +6,7 @@ from collections.abc import Iterable, Iterator, Reversible
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Generic, Optional, TypeVar, cast
 
+from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
 from serena.symbol import JetBrainsSymbol, LanguageServerSymbol, LanguageServerSymbolRetriever, PositionInFile, Symbol
 from solidlsp import SolidLanguageServer, ls_types
 from solidlsp.ls import LSPFileBuffer
@@ -13,7 +14,6 @@ from solidlsp.ls_utils import PathUtils, TextUtils
 
 from .constants import DEFAULT_SOURCE_FILE_ENCODING
 from .project import Project
-from .tools.jetbrains_plugin_client import JetBrainsPluginClient
 
 if TYPE_CHECKING:
     from .agent import SerenaAgent
