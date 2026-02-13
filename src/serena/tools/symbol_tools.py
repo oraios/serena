@@ -187,11 +187,11 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         )
         symbol_dicts = [_sanitize_symbol_dict(s.to_dict(kind=True, location=True, depth=depth, include_body=include_body)) for s in symbols]
         if not include_body and include_info:
-            # we add an info field to the symbol dicts if requested
+            info_by_symbol = symbol_retriever.request_info_for_symbol_batch(symbols)
             for s, s_dict in zip(symbols, symbol_dicts, strict=True):
-                if symbol_info := symbol_retriever.request_info_for_symbol(s):
+                if symbol_info := info_by_symbol.get(s):
                     s_dict["info"] = symbol_info
-                s_dict.pop("name", None)  # name is included in the info
+                    s_dict.pop("name", None)  # name is included in the info
         result = self._to_json(symbol_dicts)
         return self._limit_length(result, max_answer_chars)
 
@@ -236,6 +236,13 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
             include_kinds=parsed_include_kinds,
             exclude_kinds=parsed_exclude_kinds,
         )
+
+        # Batch-request hover info for referencing symbols (optional and potentially slow).
+        info_by_symbol = {}
+        if not include_body and include_info:
+            ref_symbols = [ref.symbol for ref in references_in_symbols]
+            info_by_symbol = symbol_retriever.request_info_for_symbol_batch(ref_symbols)
+
         reference_dicts = []
         for ref in references_in_symbols:
             ref_dict = ref.symbol.to_dict(kind=True, location=True, depth=0, include_body=include_body)
@@ -243,7 +250,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
             if not include_body:
                 ref_relative_path = ref.symbol.location.relative_path
                 assert ref_relative_path is not None, f"Referencing symbol {ref.symbol.name} has no relative path, this is likely a bug."
-                if include_info and (referencing_symbol_info := symbol_retriever.request_info_for_symbol(ref.symbol)):
+                if include_info and (referencing_symbol_info := info_by_symbol.get(ref.symbol)):
                     ref_dict["info"] = referencing_symbol_info
                 content_around_ref = self.project.retrieve_content_around_line(
                     relative_file_path=ref_relative_path, line=ref.line, context_lines_before=1, context_lines_after=1

@@ -109,3 +109,8 @@ default_modes:
 # initial prompt for the project. It will always be given to the LLM upon activating the project
 # (contrary to the memories, which are loaded on demand).
 initial_prompt: ""
+
+# Language server configuration for this project.
+# These settings override the corresponding global settings in serena_config.yml.
+# A missing value or "use_global" means "use the global value".
+ls_config: {}
