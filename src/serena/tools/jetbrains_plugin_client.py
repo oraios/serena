@@ -4,6 +4,7 @@ Client for the Serena JetBrains Plugin
 
 import json
 import logging
+import posixpath
 import re
 from pathlib import Path
 from typing import Any, Literal, Optional, Self, TypeVar, cast
@@ -147,13 +148,98 @@ class JetBrainsPluginClient(ToStringMixin):
             return Path(match.group(1))
         return Path(path_str)
 
+    @staticmethod
+    def _canonicalize_path(path_str: str) -> str:
+        """
+        Convert a variety of path strings to a canonical, lowercase POSIX-like path for comparison.
+        - preserves existing WSL UNC normalization
+        - converts Windows drive paths (C:/...) to /mnt/c/... form
+        - strips container/workspace prefixes like /workspaces/.../C:/... by extracting the first Windows drive occurrence
+        - normalizes '..' and duplicate slashes
+        - lowercases for case-insensitive Windows paths
+        """
+        s = str(path_str).replace("\\", "/")
+
+        # First apply existing WSL UNC normalization
+        s = str(JetBrainsPluginClient._normalize_wsl_path(s)).replace("\\", "/")
+
+        # Extract embedded Windows drive (may appear after container prefixes)
+        m = re.search(r"([A-Za-z]:/.*)", s)
+        if m:
+            drive_path = m.group(1)
+            drive_letter = drive_path[0].lower()
+            rest = drive_path[2:].lstrip("/")
+            s = f"/mnt/{drive_letter}/{rest}"
+
+        # Normalize using POSIX semantics
+        s = posixpath.normpath(s)
+
+        # Case-insensitive comparison for Windows-like paths
+        return s.lower()
+
     def matches(self, resolved_path: Path) -> bool:
         if self._project_root is None:
+            log.debug("matches(): _project_root is None -> False")
             return False
+
         try:
-            plugin_root = self._normalize_wsl_path(self._project_root)
-            return plugin_root.resolve() == resolved_path
+            plugin_raw = self._project_root
+            local_raw = resolved_path.as_posix()
+
+            # Best-effort logging of original behavior
+            original_match = False
+            try:
+                plugin_root_path = self._normalize_wsl_path(plugin_raw)
+                try:
+                    original_match = plugin_root_path.resolve() == resolved_path
+                except Exception:
+                    original_match = False
+            except Exception:
+                original_match = False
+
+            can_plugin = self._canonicalize_path(plugin_raw)
+            can_local = self._canonicalize_path(local_raw)
+
+            log.debug("Serena matches(): plugin raw: %s", plugin_raw)
+            log.debug("Serena matches(): local  raw: %s", local_raw)
+            log.debug("Serena matches(): original comparison: %s", original_match)
+            log.debug("Serena matches(): plugin canonical: %s", can_plugin)
+            log.debug("Serena matches(): local  canonical: %s", can_local)
+
+            # Exact canonical match
+            if can_plugin == can_local:
+                log.debug("Serena matches(): exact canonical match -> True")
+                return True
+
+            plugin_parts = [p for p in can_plugin.split("/") if p]
+            local_parts = [p for p in can_local.split("/") if p]
+
+            if plugin_parts and local_parts:
+                # Suffix match (container / namespace prefixes)
+                if len(plugin_parts) <= len(local_parts):
+                    if plugin_parts == local_parts[-len(plugin_parts) :]:
+                        log.debug("Serena matches(): plugin is suffix of local -> True")
+                        return True
+
+                if len(local_parts) <= len(plugin_parts):
+                    if local_parts == plugin_parts[-len(local_parts) :]:
+                        log.debug("Serena matches(): local is suffix of plugin -> True")
+                        return True
+
+                # Fallback: last N components
+                MIN_TAIL = 3
+                if len(plugin_parts) >= MIN_TAIL and len(local_parts) >= MIN_TAIL:
+                    if plugin_parts[-MIN_TAIL:] == local_parts[-MIN_TAIL:]:
+                        log.debug("Serena matches(): last %d components match -> True", MIN_TAIL)
+                        return True
+
+            log.debug("Serena matches(): no match -> False")
+            return False
+
         except ConnectionError:
+            return False
+        except Exception as e:
+            log.exception("matches(): unexpected exception -> False: %s", e)
             return False
 
     def is_version_at_least(self, *version_parts: int) -> bool:
