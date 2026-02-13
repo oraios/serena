@@ -1233,6 +1233,42 @@ body {
     gap: 8px;
 }
 
+.memory-scope-section {
+    margin-bottom: 12px;
+}
+
+.memory-scope-label {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    padding-left: 5px;
+}
+
+.memory-scope-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    vertical-align: middle;
+}
+
+.memory-scope-badge-project {
+    background: rgba(100, 149, 237, 0.15);
+    color: cornflowerblue;
+}
+
+.memory-scope-badge-global {
+    background: rgba(144, 238, 144, 0.15);
+    color: lightgreen;
+}
+
 /* Copy Logs Button */
 .copy-logs-btn {
     position: absolute;

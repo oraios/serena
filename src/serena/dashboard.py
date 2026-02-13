@@ -53,6 +53,7 @@ class ResponseConfigOverview(BaseModel):
     available_modes: list[dict[str, str | bool]]
     available_contexts: list[dict[str, str | bool]]
     available_memories: list[str] | None
+    available_global_memories: list[str] | None
     jetbrains_mode: bool
     languages: list[str]
     encoding: str | None
@@ -73,20 +74,24 @@ class RequestRemoveLanguage(BaseModel):
 
 class RequestGetMemory(BaseModel):
     memory_name: str
+    scope: str = "project"
 
 
 class ResponseGetMemory(BaseModel):
     content: str
     memory_name: str
+    scope: str = "project"
 
 
 class RequestSaveMemory(BaseModel):
     memory_name: str
     content: str
+    scope: str = "project"
 
 
 class RequestDeleteMemory(BaseModel):
     memory_name: str
+    scope: str = "project"
 
 
 class ResponseGetSerenaConfig(BaseModel):
@@ -479,8 +484,11 @@ class SerenaDashboardAPI:
 
         # Get available memories if ReadMemoryTool is active
         available_memories = None
-        if self._agent.tool_is_active("read_memory") and project is not None:
-            available_memories = project.memories_manager.list_memories()
+        available_global_memories = None
+        if self._agent.tool_is_active("read_memory"):
+            if project is not None:
+                available_memories = project.memories_manager.list_memories()
+            available_global_memories = self._agent.global_memories_manager.list_memories()
 
         # Get list of languages for the active project
         languages = []
@@ -503,6 +511,7 @@ class SerenaDashboardAPI:
             available_modes=available_modes,
             available_contexts=available_contexts,
             available_memories=available_memories,
+            available_global_memories=available_global_memories,
             jetbrains_mode=self._agent.serena_config.language_backend == LanguageBackend.JETBRAINS,
             languages=languages,
             encoding=encoding,
@@ -536,34 +545,33 @@ class SerenaDashboardAPI:
 
         return self._agent.execute_task(run, logged=False)
 
+    def _get_memories_manager_for_scope(self, scope: str):
+        if scope == "global":
+            return self._agent.global_memories_manager
+        project = self._agent.get_active_project()
+        if project is None:
+            raise ValueError("No active project. Use scope='global' for global memories, or activate a project first.")
+        return project.memories_manager
+
     def _get_memory(self, request_get_memory: RequestGetMemory) -> ResponseGetMemory:
         def run() -> ResponseGetMemory:
-            project = self._agent.get_active_project()
-            if project is None:
-                raise ValueError("No active project")
-
-            content = project.memories_manager.load_memory(request_get_memory.memory_name)
-            return ResponseGetMemory(content=content, memory_name=request_get_memory.memory_name)
+            manager = self._get_memories_manager_for_scope(request_get_memory.scope)
+            content = manager.load_memory(request_get_memory.memory_name)
+            return ResponseGetMemory(content=content, memory_name=request_get_memory.memory_name, scope=request_get_memory.scope)
 
         return self._agent.execute_task(run, logged=False)
 
     def _save_memory(self, request_save_memory: RequestSaveMemory) -> None:
         def run() -> None:
-            project = self._agent.get_active_project()
-            if project is None:
-                raise ValueError("No active project")
-
-            project.memories_manager.save_memory(request_save_memory.memory_name, request_save_memory.content)
+            manager = self._get_memories_manager_for_scope(request_save_memory.scope)
+            manager.save_memory(request_save_memory.memory_name, request_save_memory.content)
 
         self._agent.execute_task(run, logged=True, name="SaveMemory")
 
     def _delete_memory(self, request_delete_memory: RequestDeleteMemory) -> None:
         def run() -> None:
-            project = self._agent.get_active_project()
-            if project is None:
-                raise ValueError("No active project")
-
-            project.memories_manager.delete_memory(request_delete_memory.memory_name)
+            manager = self._get_memories_manager_for_scope(request_delete_memory.scope)
+            manager.delete_memory(request_delete_memory.memory_name)
 
         self._agent.execute_task(run, logged=True, name="DeleteMemory")
 

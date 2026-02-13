@@ -1,9 +1,11 @@
 import json
 import logging
 import os
+import re
+import tempfile
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pathspec
 from sensai.util.logging import LogTime
@@ -22,8 +24,11 @@ log = logging.getLogger(__name__)
 
 
 class MemoriesManager:
-    def __init__(self, project_root: str):
-        self._memory_dir = Path(get_serena_managed_in_project_dir(project_root)) / "memories"
+    def __init__(self, project_root: str, *, memory_dir: Path | None = None):
+        if memory_dir is not None:
+            self._memory_dir = memory_dir
+        else:
+            self._memory_dir = Path(get_serena_managed_in_project_dir(project_root)) / "memories"
         self._memory_dir.mkdir(parents=True, exist_ok=True)
         self._encoding = SERENA_FILE_ENCODING
 
@@ -42,8 +47,14 @@ class MemoriesManager:
 
     def save_memory(self, name: str, content: str) -> str:
         memory_file_path = self.get_memory_file_path(name)
-        with open(memory_file_path, "w", encoding=self._encoding) as f:
-            f.write(content)
+        fd, tmp_path = tempfile.mkstemp(dir=self._memory_dir, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding=self._encoding) as f:
+                f.write(content)
+            os.replace(tmp_path, memory_file_path)
+        except BaseException:
+            os.unlink(tmp_path)
+            raise
         return f"Memory {name} written."
 
     def list_memories(self) -> list[str]:
@@ -53,6 +64,24 @@ class MemoriesManager:
         memory_file_path = self.get_memory_file_path(name)
         memory_file_path.unlink()
         return f"Memory {name} deleted."
+
+    def edit_memory(self, name: str, needle: str, repl: str, mode: Literal["literal", "regex"]) -> str:
+        """Read-modify-write with regex/literal replacement, independent of any project/CodeEditor."""
+        path = self.get_memory_file_path(name)
+        if not path.exists():
+            raise FileNotFoundError(f"Memory file {name} not found.")
+        content = path.read_text(encoding=self._encoding)
+        if mode == "literal":
+            regex = re.escape(needle)
+        elif mode == "regex":
+            regex = needle
+        else:
+            raise ValueError(f"Invalid mode: '{mode}'")
+        updated, n = re.subn(regex, repl, content, flags=re.DOTALL | re.MULTILINE)
+        if n == 0:
+            raise ValueError(f"No matches found in memory '{name}'.")
+        self.save_memory(name, updated)
+        return f"Replaced {n} occurrence(s) in memory '{name}'."
 
 
 class Project(ToStringMixin):
@@ -79,7 +108,6 @@ class Project(ToStringMixin):
 
     def _gather_ignorespec(self) -> None:
         with LogTime(f"Gathering ignore spec for project {self.project_config.project_name}", logger=log):
-
             # gather ignored paths from the project configuration and gitignore files
             ignored_patterns = list(self.project_config.ignored_paths)
             if len(ignored_patterns) > 0:

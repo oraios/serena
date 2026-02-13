@@ -245,7 +245,7 @@
     <div id="edit-memory-modal" class="modal" style="display:none">
         <div class="modal-content modal-content-large">
             <span class="modal-close modal-close-edit-memory">&times;</span>
-            <h3 style="margin-bottom: 20px;">Memory: <span id="edit-memory-name"></span></h3>
+            <h3 style="margin-bottom: 20px;">Memory: <span id="edit-memory-name"></span> <span id="edit-memory-scope-badge" class="memory-scope-badge"></span></h3>
             <textarea id="edit-memory-content" class="memory-editor" rows="20"
                       style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-family: 'Courier New', monospace; font-size: 13px; resize: vertical;"></textarea>
             <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
@@ -262,7 +262,7 @@
         <div class="modal-content">
             <span class="modal-close modal-close-delete-memory">&times;</span>
             <p style="margin: 20px 0; color: var(--text-primary); line-height: 1.5; font-size: 15px;">
-                Delete memory <strong id="delete-memory-name"></strong>?
+                Delete <span id="delete-memory-scope-badge" class="memory-scope-badge"></span> memory <strong id="delete-memory-name"></strong>?
             </p>
             <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
                 <button id="delete-memory-cancel-btn" class="btn"
