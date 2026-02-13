@@ -306,7 +306,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             self._repository_root_path = repository_root_path
             self._dotnet_path, self._language_server_path = self._ensure_server_installed()
 
-        def create_launch_command(self) -> list[str] | str:
+        def create_launch_command(self) -> list[str]:
             # Find solution or project file
             solution_or_project = find_solution_or_project_file(self._repository_root_path)
 

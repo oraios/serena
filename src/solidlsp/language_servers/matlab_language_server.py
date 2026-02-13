@@ -38,7 +38,7 @@ import platform
 import shutil
 import threading
 import zipfile
-from typing import Any, Union, cast
+from typing import Any, cast
 
 import requests
 
@@ -339,7 +339,7 @@ class MatlabLanguageServer(SolidLanguageServer):
             self._matlab_path = matlab_path
             return matlab_path
 
-        def create_launch_command(self) -> Union[str, list[str]]:
+        def create_launch_command(self) -> list[str]:
             # Verify node is installed
             node_path = shutil.which("node")
             if node_path is None:

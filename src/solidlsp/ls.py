@@ -241,13 +241,12 @@ class LanguageServerDependencyProvider(ABC):
         self._ls_resources_dir = ls_resources_dir
 
     @abstractmethod
-    def create_launch_command(self) -> list[str] | str:
+    def create_launch_command(self) -> list[str]:
         """
         Creates the launch command for this language server, potentially downloading and installing dependencies
         beforehand.
 
-        :return: the launch command as a list containing the executable and its arguments (preferred for robustness)
-           or the entire command in a single string.
+        :return: the launch command as a list containing the executable and its arguments
         """
 
     def create_launch_command_env(self) -> dict[str, str]:
@@ -279,7 +278,7 @@ class LanguageServerDependencyProviderSinglePath(LanguageServerDependencyProvide
         :return: the core dependency's path (e.g. executable, jar, etc.)
         """
 
-    def create_launch_command(self) -> Union[str, list[str]]:
+    def create_launch_command(self) -> list[str]:
         path = self._custom_settings.get("ls_path", None)
         if path is not None:
             core_path = path
@@ -288,11 +287,10 @@ class LanguageServerDependencyProviderSinglePath(LanguageServerDependencyProvide
         return self._create_launch_command(core_path)
 
     @abstractmethod
-    def _create_launch_command(self, core_path: str) -> list[str] | str:
+    def _create_launch_command(self, core_path: str) -> list[str]:
         """
         :param core_path: path to the core dependency
-        :return: the launch command as a list containing the executable and its arguments (preferred for robustness)
-           or the entire command in a single string.
+        :return: the launch command as a list containing the executable and its arguments
         """
 
 

@@ -90,7 +90,7 @@ class BashLanguageServer(SolidLanguageServer):
 
             return bash_executable_path
 
-        def _create_launch_command(self, core_path: str) -> list[str] | str:
+        def _create_launch_command(self, core_path: str) -> list[str]:
             return [core_path, "start"]
 
     @staticmethod
