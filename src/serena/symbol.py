@@ -212,14 +212,17 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         return []
 
     def _tostring_additional_entries(self) -> dict[str, Any]:
-        return dict(name=self.name, kind=self.kind, num_children=len(self.symbol_root["children"]))
+        return dict(name=self.name, kind=self.symbol_kind_name, num_children=len(self.symbol_root["children"]))
 
     @property
     def name(self) -> str:
         return self.symbol_root["name"]
 
     @property
-    def kind(self) -> str:
+    def symbol_kind_name(self) -> str:
+        """
+        :return: string representation of the symbol kind (name attribute of the `SymbolKind` enum item)
+        """
         return SymbolKind(self.symbol_kind).name
 
     @property
@@ -403,6 +406,9 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         body_location: NotRequired[dict[str, Any]]
         body: NotRequired[str | None]
         kind: NotRequired[str]
+        """
+        string representation of the symbol kind (name attribute of the `SymbolKind` enum item)
+        """
         children: NotRequired[list["LanguageServerSymbol.OutputDict"]]
 
     OutputDictKey = Literal["name", "name_path", "relative_path", "location", "body_location", "body", "kind", "children"]
@@ -450,7 +456,7 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
             result["name"] = self.name
 
         if kind:
-            result["kind"] = self.kind
+            result["kind"] = self.symbol_kind_name
 
         if location:
             result["location"] = self.location.to_dict(include_relative_path=relative_path)

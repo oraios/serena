@@ -39,6 +39,7 @@ from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsO
 from serena.util.dataclass import get_dataclass_default
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
+from solidlsp.ls_types import SymbolKind
 from solidlsp.util.subprocess_util import subprocess_kwargs
 
 log = logging.getLogger(__name__)
@@ -808,9 +809,7 @@ class ProjectCommands(AutoRegisteringGroup):
                     return
 
                 # Extract suitable symbol (prefer class or function over variables)
-                # LSP symbol kinds: 5=class, 12=function, 6=method, 9=constructor
-                preferred_kinds = [5, 12, 6, 9]  # class, function, method, constructor
-
+                preferred_kinds = {SymbolKind.Class.name, SymbolKind.Function.name, SymbolKind.Method.name, SymbolKind.Constructor.name}
                 selected_symbol = None
                 for symbol in overview_data:
                     if symbol.get("kind") in preferred_kinds:
