@@ -18,6 +18,7 @@ from typing import Self, Union, cast
 
 import pathspec
 from sensai.util.pickle import getstate, load_pickle
+from sensai.util.string import ToStringMixin
 
 from serena.text_utils import MatchedConsecutiveLines
 from serena.util.file_system import match_path
@@ -130,7 +131,7 @@ class LSPFileBuffer:
         return self.contents.split("\n")
 
 
-class SymbolBody:
+class SymbolBody(ToStringMixin):
     """
     Representation of the body of a symbol, which allows the extraction of the symbol's text
     from the lines of the file it is defined in.
@@ -147,14 +148,21 @@ class SymbolBody:
         self._end_line = end_line
         self._end_col = end_col
 
+    def _tostring_excludes(self) -> list[str]:
+        return ["_lines"]
+
     def get_text(self) -> str:
         # extract relevant lines
         symbol_body = "\n".join(self._lines[self._start_line : self._end_line + 1])
 
-        # remove leading indentation
+        # remove leading content from the first line
         symbol_body = symbol_body[self._start_col :]
 
-        # TODO: handle end_col properly (this was never implemented)
+        # remove trailing content from the last line
+        last_line = self._lines[self._end_line]
+        trailing_length = len(last_line) - self._end_col
+        if trailing_length > 0:
+            symbol_body = symbol_body[: -(len(last_line) - self._end_col)]
 
         return symbol_body
 
