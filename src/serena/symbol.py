@@ -4,7 +4,7 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import asdict, dataclass
-from typing import TYPE_CHECKING, Any, Self, Union
+from typing import TYPE_CHECKING, Any, Generic, Literal, NotRequired, Self, TypedDict, TypeVar, Union
 
 from sensai.util.string import ToStringMixin
 
@@ -395,6 +395,17 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         traverse(self)
         return result
 
+    class OutputDict(TypedDict):
+        name: str
+        name_path: str
+        location: NotRequired[dict[str, Any]]
+        body_location: NotRequired[dict[str, Any]]
+        body: NotRequired[str | None]
+        kind: NotRequired[str]
+        children: NotRequired[list["LanguageServerSymbol.OutputDict"]]
+
+    OutputDictKey = Literal["name", "name_path", "location", "body_location", "body", "kind", "children"]
+
     def to_dict(
         self,
         kind: bool = False,
@@ -404,7 +415,7 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         include_children_body: bool = False,
         include_relative_path: bool = True,
         child_inclusion_predicate: Callable[[Self], bool] | None = None,
-    ) -> dict[str, Any]:
+    ) -> OutputDict:
         """
         Converts the symbol to a dictionary.
 
@@ -422,7 +433,7 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
             should be included.
         :return: a dictionary representation of the symbol
         """
-        result: dict[str, Any] = {"name": self.name, "name_path": self.get_name_path()}
+        result: LanguageServerSymbol.OutputDict = {"name": self.name, "name_path": self.get_name_path()}
 
         if kind:
             result["kind"] = self.kind
@@ -441,7 +452,7 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         if child_inclusion_predicate is None:
             child_inclusion_predicate = lambda s: True
 
-        def included_children(s: Self) -> list[dict[str, Any]]:
+        def included_children(s: Self) -> list[LanguageServerSymbol.OutputDict]:
             children = []
             for c in s.iter_children():
                 if not child_inclusion_predicate(c):
@@ -689,7 +700,7 @@ class LanguageServerSymbolRetriever:
 
         return [ReferenceInLanguageServerSymbol.from_lsp_reference(r) for r in references]
 
-    def get_symbol_overview(self, relative_path: str, depth: int = 0) -> dict[str, list[dict]]:
+    def get_symbol_overview(self, relative_path: str, depth: int = 0) -> dict[str, list[LanguageServerSymbol.OutputDict]]:
         """
         :param relative_path: the path of the file or directory for which to get the symbol overview
         :param depth: the depth up to which to include child symbols (0 = only top-level symbols)
@@ -775,3 +786,79 @@ class JetBrainsSymbol(Symbol):
     def is_neighbouring_definition_separated_by_empty_line(self) -> bool:
         # NOTE: Symbol types cannot really be differentiated, because types are not handled in a language-agnostic way.
         return False
+
+
+TSymbolDict = TypeVar("TSymbolDict")
+GroupedSymbolDict = dict[str, list[dict] | dict[str, dict]]
+
+
+class SymbolDictGrouper(Generic[TSymbolDict], ABC):
+    """
+    A utility class for grouping a list of symbol dictionaries by one or more specified keys.
+
+    If an instance is statically initialised (upon module import), then this establishes a guarantee
+    that the specified keys are defined in the symbol dictionary type, ensuring at least basic type safety.
+    The respective ValueError will immediately be apparent.
+    """
+
+    def __init__(
+        self, symbol_dict_type: type[TSymbolDict], children_key: Any, group_keys: list[Any], group_children_keys: list[Any]
+    ) -> None:
+        """
+        :param symbol_dict_type: the TypedDict type that represents the type of the symbol dictionaries to be grouped
+        :param children_key: the key in the symbol dictionaries that contains the list of child symbols. This is necessary for recursive grouping.
+        :param group_keys: keys by which to group the symbol dictionaries. Must be a subset of the keys of `symbol_dict_type`.
+        :param group_children_keys: keys by which to group the child symbol dictionaries. Must be a subset of the keys of `symbol_dict_type`.
+        """
+        # symbol_dict_type must be a TypedDict type.
+        # We check whether the type contains all the keys specified in `keys` and raise an error if not.
+        if not hasattr(symbol_dict_type, "__annotations__"):
+            raise ValueError(f"symbol_dict_type must be a TypedDict type, got {symbol_dict_type}")
+        symbol_dict_keys = set(symbol_dict_type.__annotations__.keys())
+        for key in group_keys + [children_key] + group_children_keys:
+            if key not in symbol_dict_keys:
+                raise ValueError(f"symbol_dict_type {symbol_dict_type} does not contain key '{key}'")
+        self._children_key = children_key
+        self._group_keys = group_keys
+        self._group_children_keys = group_children_keys
+
+    def _group_by(self, l: list[dict], keys: list[str], children_keys: list[str]) -> dict[str, Any]:
+        key = keys[0]
+        grouped: dict[str, Any] = {}
+        for item in l:
+            key_value = item.pop(key)
+            if key_value not in grouped:
+                grouped[key_value] = []
+            grouped[key_value].append(item)
+        if len(keys) > 1:
+            for k, group in grouped.items():
+                grouped[k] = self._group_by(group, keys[1:], children_keys)
+        else:
+            if children_keys:
+                for k, group in grouped.items():
+                    for item in group:
+                        if self._children_key in item:
+                            children = item[self._children_key]
+                            item[self._children_key] = self._group_by(children, children_keys, children_keys)
+        return grouped
+
+    def group(self, symbols: list[TSymbolDict]) -> GroupedSymbolDict:
+        """
+        :param symbols: the symbols to group
+        :return: dictionary with the symbols grouped as defined at construction
+        """
+        return self._group_by(symbols, self._group_keys, self._group_children_keys)  # type: ignore
+
+
+class LanguageServerSymbolDictGrouper(SymbolDictGrouper[LanguageServerSymbol.OutputDict]):
+    def __init__(
+        self,
+        group_keys: list[LanguageServerSymbol.OutputDictKey],
+        group_children_keys: list[LanguageServerSymbol.OutputDictKey],
+    ) -> None:
+        super().__init__(LanguageServerSymbol.OutputDict, "children", group_keys, group_children_keys)
+
+
+class JetBrainsSymbolDictGrouper(SymbolDictGrouper[jb.SymbolDTO]):
+    def __init__(self, group_keys: list[jb.SymbolDTOKey], group_children_keys: list[jb.SymbolDTOKey]) -> None:
+        super().__init__(jb.SymbolDTO, "children", group_keys, group_children_keys)

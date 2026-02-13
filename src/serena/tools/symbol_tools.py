@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from copy import copy
 from typing import Any
 
+from serena.symbol import LanguageServerSymbol, LanguageServerSymbolDictGrouper
 from serena.tools import (
     SUCCESS_RESULT,
     Tool,
@@ -18,7 +19,8 @@ from serena.tools.tools_base import ToolMarkerOptional
 from solidlsp.ls_types import SymbolKind
 
 
-def _sanitize_symbol_dict(symbol_dict: dict[str, Any]) -> dict[str, Any]:
+# TODO: We have to get rid of this.
+def _sanitize_symbol_dict(symbol_dict: LanguageServerSymbol.OutputDict) -> dict[str, Any]:
     """
     Sanitize a symbol dictionary inplace by removing unnecessary information.
     """
@@ -50,6 +52,8 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
     Gets an overview of the top-level symbols defined in a given file.
     """
 
+    symbol_dict_grouper = LanguageServerSymbolDictGrouper(["kind"], ["kind"])
+
     def apply(self, relative_path: str, depth: int = 0, max_answer_chars: int = -1) -> str:
         """
         Use this tool to get a high-level understanding of the code symbols in a file.
@@ -65,11 +69,12 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
         :return: a JSON object containing symbols grouped by kind in a compact format.
         """
         result = self.get_symbol_overview(relative_path, depth=depth)
-        compact_result = self._transform_symbols_to_compact_format(result)
+        # compact_result = self._transform_symbols_to_compact_format(result)
+        compact_result = self.symbol_dict_grouper.group(result)
         result_json_str = self._to_json(compact_result)
         return self._limit_length(result_json_str, max_answer_chars)
 
-    def get_symbol_overview(self, relative_path: str, depth: int = 0) -> list[dict]:
+    def get_symbol_overview(self, relative_path: str, depth: int = 0) -> list[LanguageServerSymbol.OutputDict]:
         """
         :param relative_path: relative path to a source file
         :param depth: the depth up to which descendants shall be retrieved
