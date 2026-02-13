@@ -145,9 +145,8 @@ class TestRegisteredProjectGlobalIgnoredPaths:
         registered = RegisteredProject(
             project_root=str(self.project_path),
             project_config=config,
-            serena_config=serena_config,
         )
-        project = registered.get_project_instance()
+        project = registered.get_project_instance(serena_config=serena_config)
         assert project.is_ignored_path(str(self.project_path / "node_modules" / "pkg.js"))
 
     def test_get_project_instance_without_global_ignored_paths(self) -> None:
@@ -162,7 +161,7 @@ class TestRegisteredProjectGlobalIgnoredPaths:
             project_root=str(self.project_path),
             project_config=config,
         )
-        project = registered.get_project_instance()
+        project = registered.get_project_instance(serena_config=None)
         assert not project.is_ignored_path(str(self.project_path / "node_modules" / "pkg.js"))
 
     def test_from_project_root_passes_global_ignored_paths(self) -> None:
@@ -173,11 +172,11 @@ class TestRegisteredProjectGlobalIgnoredPaths:
         (serena_dir / "project.yml").write_text(
             'project_name: "test_project"\nlanguages: ["python"]\nignored_paths: []\nignore_all_files_in_gitignore: false\n'
         )
+        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=["node_modules"])
         registered = RegisteredProject.from_project_root(
             str(self.project_path),
-            serena_config=SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=["node_modules"]),
         )
-        project = registered.get_project_instance()
+        project = registered.get_project_instance(serena_config=serena_config)
         assert project.is_ignored_path(str(self.project_path / "node_modules" / "pkg.js"))
 
     def test_from_project_instance_passes_global_ignored_paths(self) -> None:
@@ -194,9 +193,9 @@ class TestRegisteredProjectGlobalIgnoredPaths:
             project_config=config,
             serena_config=serena_config,
         )
-        registered = RegisteredProject.from_project_instance(project, serena_config=serena_config)
+        registered = RegisteredProject.from_project_instance(project)
         # The registered project already has a project_instance, so get_project_instance() returns it directly
-        retrieved = registered.get_project_instance()
+        retrieved = registered.get_project_instance(serena_config=serena_config)
         assert retrieved.is_ignored_path(str(self.project_path / "node_modules" / "pkg.js"))
 
 

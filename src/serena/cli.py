@@ -567,7 +567,7 @@ class ProjectCommands(AutoRegisteringGroup):
         serena_config = SerenaConfig.from_config_file()
         registered_project = serena_config.get_registered_project(str(project_root))
         if registered_project is None:
-            registered_project = RegisteredProject(str(project_root), generated_conf, serena_config=serena_config)
+            registered_project = RegisteredProject(str(project_root), generated_conf)
             serena_config.add_registered_project(registered_project)
 
         return registered_project
@@ -637,7 +637,7 @@ class ProjectCommands(AutoRegisteringGroup):
         lvl = logging.getLevelNamesMapping()[log_level.upper()]
         logging.configure(level=lvl)
         serena_config = SerenaConfig.from_config_file()
-        proj = registered_project.get_project_instance()
+        proj = registered_project.get_project_instance(serena_config=serena_config)
         click.echo(f"Indexing symbols in {proj} …")
         ls_mgr = proj.create_language_server_manager(
             log_level=lvl, ls_timeout=timeout, ls_specific_settings=serena_config.ls_specific_settings
