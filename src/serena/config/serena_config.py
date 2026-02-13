@@ -402,7 +402,7 @@ class RegisteredProject(ToStringMixin):
         project_root: str,
         project_config: "ProjectConfig",
         project_instance: Optional["Project"] = None,
-        global_ignored_paths: Sequence[str] = (),
+        serena_config: "SerenaConfig | None" = None,
     ) -> None:
         """
         Represents a registered project in the Serena configuration.
@@ -410,12 +410,12 @@ class RegisteredProject(ToStringMixin):
         :param project_root: the root directory of the project
         :param project_config: the configuration of the project
         :param project_instance: an existing project instance (if already loaded)
-        :param global_ignored_paths: global ignored paths from SerenaConfig, merged additively with project-level patterns
+        :param serena_config: the SerenaConfig instance for global settings
         """
         self.project_root = Path(project_root).resolve()
         self.project_config = project_config
         self._project_instance = project_instance
-        self._global_ignored_paths = global_ignored_paths
+        self._serena_config = serena_config
 
     def _tostring_exclude_private(self) -> bool:
         return True
@@ -425,21 +425,21 @@ class RegisteredProject(ToStringMixin):
         return self.project_config.project_name
 
     @classmethod
-    def from_project_instance(cls, project_instance: "Project", global_ignored_paths: Sequence[str] = ()) -> "RegisteredProject":
+    def from_project_instance(cls, project_instance: "Project", serena_config: "SerenaConfig | None" = None) -> "RegisteredProject":
         return RegisteredProject(
             project_root=project_instance.project_root,
             project_config=project_instance.project_config,
             project_instance=project_instance,
-            global_ignored_paths=global_ignored_paths,
+            serena_config=serena_config,
         )
 
     @classmethod
-    def from_project_root(cls, project_root: str | Path, global_ignored_paths: Sequence[str] = ()) -> "RegisteredProject":
+    def from_project_root(cls, project_root: str | Path, serena_config: "SerenaConfig | None" = None) -> "RegisteredProject":
         project_config = ProjectConfig.load(project_root)
         return RegisteredProject(
             project_root=str(project_root),
             project_config=project_config,
-            global_ignored_paths=global_ignored_paths,
+            serena_config=serena_config,
         )
 
     def matches_root_path(self, path: str | Path) -> bool:
@@ -462,7 +462,7 @@ class RegisteredProject(ToStringMixin):
                 self._project_instance = Project(
                     project_root=str(self.project_root),
                     project_config=self.project_config,
-                    global_ignored_paths=self._global_ignored_paths,
+                    serena_config=self._serena_config,
                 )
         return self._project_instance
 
@@ -629,7 +629,7 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
             project = RegisteredProject(
                 project_root=str(path),
                 project_config=project_config,
-                global_ignored_paths=instance.ignored_paths,
+                serena_config=instance,
             )
             instance.projects.append(project)
 
@@ -720,7 +720,7 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
         if autoregister:
             config_path = ProjectConfig.path_to_project_yml(project_root_or_name)
             if os.path.isfile(config_path):
-                registered_project = RegisteredProject.from_project_root(project_root_or_name, global_ignored_paths=self.ignored_paths)
+                registered_project = RegisteredProject.from_project_root(project_root_or_name, serena_config=self)
                 self.add_registered_project(registered_project)
                 return registered_project
         # nothing found
@@ -769,9 +769,9 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
             project_root=str(project_root),
             project_config=project_config,
             is_newly_created=True,
-            global_ignored_paths=self.ignored_paths,
+            serena_config=self,
         )
-        self.add_registered_project(RegisteredProject.from_project_instance(new_project, global_ignored_paths=self.ignored_paths))
+        self.add_registered_project(RegisteredProject.from_project_instance(new_project, serena_config=self))
 
         return new_project
 

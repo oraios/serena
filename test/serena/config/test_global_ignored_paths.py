@@ -20,10 +20,13 @@ def _create_test_project(
         ignored_paths=project_ignored_paths or [],
         ignore_all_files_in_gitignore=False,
     )
+    serena_config: SerenaConfig | None = None
+    if global_ignored_paths:
+        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=global_ignored_paths)
     return Project(
         project_root=str(project_root),
         project_config=config,
-        global_ignored_paths=global_ignored_paths or [],
+        serena_config=serena_config,
     )
 
 
@@ -138,10 +141,11 @@ class TestRegisteredProjectGlobalIgnoredPaths:
             ignored_paths=[],
             ignore_all_files_in_gitignore=False,
         )
+        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=["node_modules"])
         registered = RegisteredProject(
             project_root=str(self.project_path),
             project_config=config,
-            global_ignored_paths=["node_modules"],
+            serena_config=serena_config,
         )
         project = registered.get_project_instance()
         assert project.is_ignored_path(str(self.project_path / "node_modules" / "pkg.js"))
@@ -171,7 +175,7 @@ class TestRegisteredProjectGlobalIgnoredPaths:
         )
         registered = RegisteredProject.from_project_root(
             str(self.project_path),
-            global_ignored_paths=["node_modules"],
+            serena_config=SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=["node_modules"]),
         )
         project = registered.get_project_instance()
         assert project.is_ignored_path(str(self.project_path / "node_modules" / "pkg.js"))
@@ -184,12 +188,13 @@ class TestRegisteredProjectGlobalIgnoredPaths:
             ignored_paths=[],
             ignore_all_files_in_gitignore=False,
         )
+        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=["node_modules"])
         project = Project(
             project_root=str(self.project_path),
             project_config=config,
-            global_ignored_paths=["node_modules"],
+            serena_config=serena_config,
         )
-        registered = RegisteredProject.from_project_instance(project, global_ignored_paths=["node_modules"])
+        registered = RegisteredProject.from_project_instance(project, serena_config=serena_config)
         # The registered project already has a project_instance, so get_project_instance() returns it directly
         retrieved = registered.get_project_instance()
         assert retrieved.is_ignored_path(str(self.project_path / "node_modules" / "pkg.js"))
@@ -223,10 +228,11 @@ class TestGlobalIgnoredPathsWithGitignore:
             ignored_paths=["build"],
             ignore_all_files_in_gitignore=True,
         )
+        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=["node_modules"])
         project = Project(
             project_root=str(self.project_path),
             project_config=config,
-            global_ignored_paths=["node_modules"],
+            serena_config=serena_config,
         )
         # Global pattern: node_modules
         assert project.is_ignored_path(str(self.project_path / "node_modules" / "pkg.js"))

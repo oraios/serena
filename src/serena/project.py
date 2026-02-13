@@ -2,9 +2,8 @@ import json
 import logging
 import os
 import threading
-from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pathspec
 from sensai.util.logging import LogTime
@@ -18,6 +17,9 @@ from serena.util.file_system import GitignoreParser, match_path
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import FileUtils
+
+if TYPE_CHECKING:
+    from serena.config.serena_config import SerenaConfig
 
 log = logging.getLogger(__name__)
 
@@ -62,7 +64,7 @@ class Project(ToStringMixin):
         project_root: str,
         project_config: ProjectConfig,
         is_newly_created: bool = False,
-        global_ignored_paths: Sequence[str] = (),
+        serena_config: "SerenaConfig | None" = None,
     ):
         self.project_root = project_root
         self.project_config = project_config
@@ -79,7 +81,7 @@ class Project(ToStringMixin):
                 f.write(f"/{SolidLanguageServer.CACHE_FOLDER_NAME}\n")
 
         # prepare ignore spec asynchronously, ensuring immediate project activation.
-        self._global_ignored_paths = global_ignored_paths
+        self._serena_config = serena_config
         self.__ignored_patterns: list[str]
         self.__ignore_spec: pathspec.PathSpec
         self._ignore_spec_available = threading.Event()
@@ -89,10 +91,11 @@ class Project(ToStringMixin):
         with LogTime(f"Gathering ignore spec for project {self.project_config.project_name}", logger=log):
 
             # gather ignored paths from the global configuration, project configuration, and gitignore files
-            ignored_patterns = list(self._global_ignored_paths) + list(self.project_config.ignored_paths)
-            if len(self._global_ignored_paths) > 0:
-                log.info(f"Using {len(self._global_ignored_paths)} ignored paths from the global configuration.")
-                log.debug(f"Global ignored paths: {list(self._global_ignored_paths)}")
+            global_ignored_paths = self._serena_config.ignored_paths if self._serena_config else []
+            ignored_patterns = list(global_ignored_paths) + list(self.project_config.ignored_paths)
+            if len(global_ignored_paths) > 0:
+                log.info(f"Using {len(global_ignored_paths)} ignored paths from the global configuration.")
+                log.debug(f"Global ignored paths: {list(global_ignored_paths)}")
             if len(self.project_config.ignored_paths) > 0:
                 log.info(f"Using {len(self.project_config.ignored_paths)} ignored paths from the project configuration.")
                 log.debug(f"Project ignored paths: {self.project_config.ignored_paths}")
@@ -131,13 +134,13 @@ class Project(ToStringMixin):
         cls,
         project_root: str | Path,
         autogenerate: bool = True,
-        global_ignored_paths: Sequence[str] = (),
+        serena_config: "SerenaConfig | None" = None,
     ) -> "Project":
         project_root = Path(project_root).resolve()
         if not project_root.exists():
             raise FileNotFoundError(f"Project root not found: {project_root}")
         project_config = ProjectConfig.load(project_root, autogenerate=autogenerate)
-        return Project(project_root=str(project_root), project_config=project_config, global_ignored_paths=global_ignored_paths)
+        return Project(project_root=str(project_root), project_config=project_config, serena_config=serena_config)
 
     def save_config(self) -> None:
         """
