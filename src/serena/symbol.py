@@ -492,7 +492,7 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         if depth > 0:
             children = included_children(self)
             if len(children) > 0:
-                result["children"] = included_children(self)
+                result["children"] = children
 
         return result
 
