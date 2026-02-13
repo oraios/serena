@@ -133,8 +133,8 @@ class Project(ToStringMixin):
     def load(
         cls,
         project_root: str | Path,
+        serena_config: "SerenaConfig | None",
         autogenerate: bool = True,
-        serena_config: "SerenaConfig | None" = None,
     ) -> "Project":
         project_root = Path(project_root).resolve()
         if not project_root.exists():
