@@ -277,6 +277,17 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         return dotnet_path, server_dll_path
 
+    @override
+    def download_dependencies(self) -> tuple[bool, str]:
+        """
+        Download and setup dependencies for AL Language Server.
+        """
+        try:
+            self._ensure_server_installed(self.logger, self._solidlsp_config, self._solidlsp_settings)
+            return True, "csharp ls installed successfully"
+        except Exception as e:
+            return False, f"Failed to setup csharp ls dependencies: {e}"
+
     @classmethod
     def _ensure_dotnet_runtime(
         cls, logger: LanguageServerLogger, dotnet_runtime_dep: RuntimeDependency, solidlsp_settings: SolidLSPSettings

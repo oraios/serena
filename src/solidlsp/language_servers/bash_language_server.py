@@ -9,6 +9,8 @@ import pathlib
 import shutil
 import threading
 
+from overrides import override
+
 from solidlsp import ls_types
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.ls import SolidLanguageServer
@@ -86,6 +88,17 @@ class BashLanguageServer(SolidLanguageServer):
                 f"bash-language-server executable not found at {bash_executable_path}, something went wrong with the installation."
             )
         return f"{bash_executable_path} start"
+
+    @override
+    def download_dependencies(self) -> tuple[bool, str]:
+        """
+        Download and setup dependencies for AL Language Server.
+        """
+        try:
+            self._setup_runtime_dependencies(self.logger, self._solidlsp_config, self._solidlsp_settings)
+            return True, "Bash language server dependencies installed successfully"
+        except Exception as e:
+            return False, f"Failed to setup Bash: {e}"
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:

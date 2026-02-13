@@ -9,6 +9,8 @@ import shutil
 import subprocess
 import threading
 
+from overrides import override
+
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
@@ -126,6 +128,17 @@ class ClojureLSP(SolidLanguageServer):
             raise FileNotFoundError(f"Download failed? Could not find clojure-lsp executable at {clojurelsp_executable_path}")
         os.chmod(clojurelsp_executable_path, 0o755)
         return clojurelsp_executable_path
+
+    @override
+    def download_dependencies(self) -> tuple[bool, str]:
+        """
+        Download and setup dependencies for AL Language Server.
+        """
+        try:
+            self._setup_runtime_dependencies(self.logger, self._solidlsp_config, self._solidlsp_settings)
+            return True, "clojure-lsp installed successfully"
+        except Exception as e:
+            return False, f"Failed to setup clojure-lsp: {e}"
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
