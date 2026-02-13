@@ -116,7 +116,7 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
             response_dict = client.find_references(
                 name_path=name_path,
                 relative_path=relative_path,
-                include_quick_info=include_info,
+                include_quick_info=False,  # TODO: Hotfix for serena-jetbrains-plugin/issues/13; revert once fixed
             )
             result = self._to_json(response_dict)
         return self._limit_length(result, max_answer_chars)
