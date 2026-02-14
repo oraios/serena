@@ -5,18 +5,23 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.conftest import language_tests_enabled
+
+_php_servers: list[Language] = [Language.PHP]
+if language_tests_enabled(Language.PHP_PHPACTOR):
+    _php_servers.append(Language.PHP_PHPACTOR)
 
 
 @pytest.mark.php
 class TestPhpLanguageServers:
-    @pytest.mark.parametrize("language_server", [Language.PHP, Language.PHP_PHPACTOR], indirect=True)
+    @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
     def test_ls_is_running(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that the language server starts and stops successfully."""
         assert language_server.is_running()
         assert Path(language_server.language_server.repository_root_path).resolve() == repo_path.resolve()
 
-    @pytest.mark.parametrize("language_server", [Language.PHP, Language.PHP_PHPACTOR], indirect=True)
+    @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
     def test_find_definition_within_file(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
 
@@ -46,7 +51,7 @@ class TestPhpLanguageServers:
         if language_server.language_server.language != Language.PHP_PHPACTOR:
             assert definition_location["range"]["start"]["character"] == 0
 
-    @pytest.mark.parametrize("language_server", [Language.PHP, Language.PHP_PHPACTOR], indirect=True)
+    @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
     def test_find_definition_across_files(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         # Intelephense uses line 12 (0-indexed), Phpactor uses line 13 (0-indexed)
@@ -66,7 +71,7 @@ class TestPhpLanguageServers:
         if language_server.language_server.language != Language.PHP_PHPACTOR:
             assert definition_location["range"]["start"]["character"] == 0
 
-    @pytest.mark.parametrize("language_server", [Language.PHP, Language.PHP_PHPACTOR], indirect=True)
+    @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
     def test_find_definition_simple_variable(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         file_path = str(repo_path / "simple_var.php")
@@ -91,7 +96,7 @@ class TestPhpLanguageServers:
         if language_server.language_server.language != Language.PHP_PHPACTOR:
             assert definition_location["range"]["start"]["character"] == 0  # $localVar (0-indexed)
 
-    @pytest.mark.parametrize("language_server", [Language.PHP, Language.PHP_PHPACTOR], indirect=True)
+    @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
     def test_find_references_within_file(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         if language_server.language == Language.PHP_PHPACTOR and platform.system() == "Windows":
@@ -142,7 +147,7 @@ class TestPhpLanguageServers:
 
             assert actual_locations == expected_locations
 
-    @pytest.mark.parametrize("language_server", [Language.PHP, Language.PHP_PHPACTOR], indirect=True)
+    @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         if language_server.language_server.language == Language.PHP_PHPACTOR and platform.system() == "Windows":
