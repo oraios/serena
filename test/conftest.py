@@ -1,5 +1,6 @@
 import logging
 import os
+import platform
 import shutil as _sh
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -208,6 +209,8 @@ is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
 """
 Flag indicating whether the tests are running in the GitHub CI environment.
 """
+
+is_windows = platform.system() == "Windows"
 
 
 def _determine_disabled_languages() -> list[Language]:
