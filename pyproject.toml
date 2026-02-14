@@ -114,7 +114,11 @@ warn_redundant_casts = true
 warn_unreachable = true
 warn_unused_configs = true
 warn_unused_ignores = false
-exclude = "^build/|^docs/"
+exclude = "^build/|^docs/|^test/resources/"
+
+[[tool.mypy.overrides]]
+module = "test.*"
+disallow_untyped_defs = false  # untyped defs are OK in tests
 
 [tool.poe.env]
 PYDEVD_DISABLE_FILE_VALIDATION = "1"
@@ -137,8 +141,9 @@ _black_format = "black src scripts test"
 _ruff_format = "ruff check --fix src scripts test"
 lint = ["_black_check", "_ruff_check"]
 format = ["_ruff_format", "_black_format"]
-_mypy = "mypy src/serena src/solidlsp"
-type-check = ["_mypy"]
+_mypy_core = "mypy src/serena src/solidlsp"
+_mypy_test = "mypy --disable-error-code no-untyped-def test"
+type-check = ["_mypy_core", "_mypy_test"]
 # docs
 _autogen_rst = "python docs/autogen_rst.py"
 _sphinx_build = "sphinx-build -b html docs docs/_build -W --keep-going"
