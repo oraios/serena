@@ -236,6 +236,11 @@ def _determine_disabled_languages() -> list[Language]:
     if not clangd_tests_enabled:
         result.append(Language.CPP)
 
+    # Disable PHP_PHPACTOR tests if php is not available
+    php_tests_enabled = _sh.which("php") is not None
+    if not php_tests_enabled:
+        result.append(Language.PHP_PHPACTOR)
+
     al_tests_enabled = True
     if not al_tests_enabled:
         result.append(Language.AL)
