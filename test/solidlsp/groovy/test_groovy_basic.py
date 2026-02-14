@@ -12,13 +12,14 @@ from solidlsp.settings import SolidLSPSettings
 
 @pytest.mark.groovy
 class TestGroovyLanguageServer:
+    language_server: SolidLanguageServer | None = None
+    test_repo_path: Path = Path(__file__).parent.parent.parent / "resources" / "repos" / "groovy" / "test_repo"
+
     @classmethod
     def setup_class(cls):
         """
         Set up test class with Groovy test repository.
         """
-        cls.test_repo_path = Path(__file__).parent.parent.parent / "resources" / "repos" / "groovy" / "test_repo"
-
         if not cls.test_repo_path.exists():
             pytest.skip("Groovy test repository not found")
 
@@ -56,10 +57,11 @@ class TestGroovyLanguageServer:
         """
         Clean up language server.
         """
-        if hasattr(cls, "language_server"):
+        if cls.language_server is not None:
             cls.language_server.stop()
 
     def test_find_symbol(self) -> None:
+        assert self.language_server is not None
         symbols = self.language_server.request_full_symbol_tree()
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Main"), "Main class not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Utils"), "Utils class not found in symbol tree"
@@ -67,6 +69,7 @@ class TestGroovyLanguageServer:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "ModelUser"), "ModelUser class not found in symbol tree"
 
     def test_find_referencing_class_symbols(self) -> None:
+        assert self.language_server is not None
         file_path = os.path.join("src", "main", "groovy", "com", "example", "Utils.groovy")
         refs = self.language_server.request_references(file_path, 3, 6)
         assert any("Main.groovy" in ref.get("relativePath", "") for ref in refs), "Utils should be referenced from Main.groovy"
@@ -93,6 +96,7 @@ class TestGroovyLanguageServer:
         assert len(model_user_refs) >= 1, f"Model should be referenced from ModelUser.groovy at least 1 time, found {len(model_user_refs)}"
 
     def test_overview_methods(self) -> None:
+        assert self.language_server is not None
         symbols = self.language_server.request_full_symbol_tree()
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Main"), "Main missing from overview"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Utils"), "Utils missing from overview"

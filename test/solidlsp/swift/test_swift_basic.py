@@ -89,7 +89,7 @@ class TestSwiftLanguageServerBasics:
         # First, let's check if Utils is used anywhere (it might not be in this simple test)
         # We'll test goto_definition on Utils struct itself
         symbols = language_server.request_document_symbols(utils_file).get_all_symbols_and_roots()
-        utils_symbol = next((s for s in symbols[0] if s.get("name") == "Utils"), None)
+        utils_symbol = next(s for s in symbols[0] if s.get("name") == "Utils")
 
         sel_start = utils_symbol["selectionRange"]["start"]
         definitions = language_server.request_definition(utils_file, sel_start["line"], sel_start["character"])
@@ -106,7 +106,7 @@ class TestSwiftLanguageServerBasics:
         file_path = os.path.join("src", "main.swift")
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
-        calculator_symbol = next((s for s in symbols[0] if s.get("name") == "Calculator"), None)
+        calculator_symbol = next(s for s in symbols[0] if s.get("name") == "Calculator")
 
         sel_start = calculator_symbol["selectionRange"]["start"]
         references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
@@ -128,7 +128,7 @@ class TestSwiftLanguageServerBasics:
         file_path = os.path.join("src", "main.swift")
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
-        user_symbol = next((s for s in symbols[0] if s.get("name") == "User"), None)
+        user_symbol = next(s for s in symbols[0] if s.get("name") == "User")
 
         sel_start = user_symbol["selectionRange"]["start"]
         references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])

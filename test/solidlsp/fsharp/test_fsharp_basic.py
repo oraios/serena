@@ -2,6 +2,7 @@ import os
 import tempfile
 import threading
 from pathlib import Path
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
@@ -142,14 +143,14 @@ class TestFSharpLanguageServer:
         file_path = os.path.join("Program.fs")
 
         # Use threading for cross-platform timeout (signal.SIGALRM is Unix-only)
-        result = [None]
-        exception = [None]
+        result: dict[str, Any] = dict(value=None)
+        exception: dict[str, Any] = dict(value=None)
 
         def run_completion():
             try:
-                result[0] = language_server.request_completions(file_path, 15, 10)
+                result["value"] = language_server.request_completions(file_path, 15, 10)
             except Exception as e:
-                exception[0] = e
+                exception["value"] = e
 
         thread = threading.Thread(target=run_completion, daemon=True)
         thread.start()
@@ -160,10 +161,10 @@ class TestFSharpLanguageServer:
             # The important thing is that the language server doesn't crash
             return
 
-        if exception[0]:
-            raise exception[0]
+        if exception["value"]:
+            raise exception["value"]
 
-        assert isinstance(result[0], list), "Completions should be a list"
+        assert isinstance(result["value"], list), "Completions should be a list"
 
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
     def test_diagnostics(self, language_server: SolidLanguageServer) -> None:
