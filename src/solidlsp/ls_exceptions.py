@@ -50,3 +50,25 @@ class SolidLSPException(Exception):
                 s += " "
             s += f"(caused by {self.cause})"
         return s
+
+
+class MetalsStaleLockError(SolidLSPException):
+    """
+    Raised when a stale Metals H2 database lock is detected and the user
+    has configured fail-on-stale-lock behavior.
+
+    A stale lock occurs when a previous Metals process crashed without
+    cleaning up its lock file, which can prevent proper AUTO_SERVER
+    coordination with new instances.
+    """
+
+    def __init__(self, lock_path: str, message: str | None = None) -> None:
+        self.lock_path = lock_path
+        if message is None:
+            message = (
+                f"Stale Metals lock file detected at {lock_path}. "
+                "A previous Metals process may have crashed. "
+                "To resolve: remove the lock file manually, or set "
+                "on_stale_lock='auto-clean' in ls_specific_settings.scala."
+            )
+        super().__init__(message)
