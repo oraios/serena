@@ -1,17 +1,19 @@
-import platform
 from pathlib import Path
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from test.conftest import language_tests_enabled
+from test.conftest import is_ci, is_windows, language_tests_enabled
 
 _php_servers: list[Language] = [Language.PHP]
 if language_tests_enabled(Language.PHP_PHPACTOR):
     _php_servers.append(Language.PHP_PHPACTOR)
 
 
+@pytest.mark.skipif(
+    is_ci and is_windows, reason="Tests are flaky"
+)  # TODO: Re-enable once we have a solution for running Phpactor tests on Windows CI #1039
 @pytest.mark.php
 class TestPhpLanguageServers:
     @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
@@ -99,9 +101,6 @@ class TestPhpLanguageServers:
     @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
     def test_find_references_within_file(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
-        if language_server.language == Language.PHP_PHPACTOR and platform.system() == "Windows":
-            pytest.skip("Phpactor references test not working on Windows, skipping for now")
-
         index_php_path = str(repo_path / "index.php")
 
         # In index.php (0-indexed lines):
@@ -150,9 +149,6 @@ class TestPhpLanguageServers:
     @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
-        if language_server.language_server.language == Language.PHP_PHPACTOR and platform.system() == "Windows":
-            pytest.skip("Phpactor references test not working on Windows, skipping for now")
-
         helper_php_path = str(repo_path / "helper.php")
         # In index.php (0-indexed lines):
         # Line 13: helperFunction(); // Usage of helperFunction

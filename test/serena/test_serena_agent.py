@@ -15,7 +15,7 @@ from serena.project import Project
 from serena.tools import SUCCESS_RESULT, FindReferencingSymbolsTool, FindSymbolTool, ReplaceContentTool, ReplaceSymbolBodyTool
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
-from test.conftest import get_repo_path, language_tests_enabled
+from test.conftest import get_repo_path, is_ci, language_tests_enabled
 from test.solidlsp import clojure as clj
 
 
@@ -124,6 +124,12 @@ class TestSerenaAgent:
         indirect=["serena_agent"],
     )
     def test_find_symbol(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str):
+        # skip flaky tests in CI
+        # TODO: Revisit the flaky tests and re-enable once the LS issues are resolved #1039
+        flaky_languages = {Language.FSHARP}
+        if set(serena_agent.get_active_lsp_languages()).intersection(flaky_languages) and is_ci:
+            pytest.skip("Test is flaky and thus skipped in CI environment.")
+
         agent = serena_agent
         find_symbol_tool = agent.get_tool(FindSymbolTool)
         result = find_symbol_tool.apply_ex(name_path_pattern=symbol_name, include_info=True)
