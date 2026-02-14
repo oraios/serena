@@ -36,6 +36,7 @@ class TestLanguageServerCommonFunctionality:
                 if is_ci and platform.system() == "Windows":
                     now = time.time()
                     os.utime(file_path, (now, now))
+                    time.sleep(5)
 
                 # check that the file buffer has been invalidated and reloaded
                 assert fb.contents == test_string2
