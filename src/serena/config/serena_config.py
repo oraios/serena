@@ -397,12 +397,18 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
 
 
 class RegisteredProject(ToStringMixin):
-    def __init__(self, project_root: str, project_config: "ProjectConfig", project_instance: Optional["Project"] = None) -> None:
+    def __init__(
+        self,
+        project_root: str,
+        project_config: "ProjectConfig",
+        project_instance: Optional["Project"] = None,
+    ) -> None:
         """
         Represents a registered project in the Serena configuration.
 
         :param project_root: the root directory of the project
         :param project_config: the configuration of the project
+        :param project_instance: an existing project instance (if already loaded)
         """
         self.project_root = Path(project_root).resolve()
         self.project_config = project_config
@@ -440,7 +446,7 @@ class RegisteredProject(ToStringMixin):
         """
         return self.project_root.samefile(Path(path).resolve())
 
-    def get_project_instance(self) -> "Project":
+    def get_project_instance(self, serena_config: "SerenaConfig | None") -> "Project":
         """
         Returns the project instance for this registered project, loading it if necessary.
         """
@@ -448,7 +454,11 @@ class RegisteredProject(ToStringMixin):
             from ..project import Project
 
             with LogTime(f"Loading project instance for {self}", logger=log):
-                self._project_instance = Project(project_root=str(self.project_root), project_config=self.project_config)
+                self._project_instance = Project(
+                    project_root=str(self.project_root),
+                    project_config=self.project_config,
+                    serena_config=serena_config,
+                )
         return self._project_instance
 
 
@@ -492,6 +502,10 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
     """
     ls_specific_settings: dict = field(default_factory=dict)
     """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""
+
+    ignored_paths: list[str] = field(default_factory=list)
+    """List of paths to ignore across all projects. Same syntax as gitignore, so you can use * and **.
+    These patterns are merged additively with each project's own ignored_paths."""
 
     # settings with overridden defaults
     default_modes: Sequence[str] | None = ("interactive", "editing")
@@ -724,7 +738,7 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
         if registered_project is None:
             return None
         else:
-            return registered_project.get_project_instance()
+            return registered_project.get_project_instance(serena_config=self)
 
     def add_registered_project(self, registered_project: RegisteredProject) -> None:
         """
@@ -758,7 +772,12 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
 
         project_config = ProjectConfig.load(project_root, autogenerate=True)
 
-        new_project = Project(project_root=str(project_root), project_config=project_config, is_newly_created=True)
+        new_project = Project(
+            project_root=str(project_root),
+            project_config=project_config,
+            is_newly_created=True,
+            serena_config=self,
+        )
         self.add_registered_project(RegisteredProject.from_project_instance(new_project))
 
         return new_project

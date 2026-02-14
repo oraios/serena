@@ -118,7 +118,7 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
             response_dict = client.find_references(
                 name_path=name_path,
                 relative_path=relative_path,
-                include_quick_info=include_info,
+                include_quick_info=False,  # TODO: Hotfix for serena-jetbrains-plugin/issues/13; revert once fixed
             )
         symbol_dicts = response_dict["symbols"]
         result = self.symbol_dict_grouper.group(symbol_dicts)

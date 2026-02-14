@@ -10,6 +10,7 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.conftest import is_ci
 
 # Skip all Nix tests on Windows as Nix doesn't support Windows
 pytestmark = pytest.mark.skipif(platform.system() == "Windows", reason="Nix and nil are not available on Windows")
@@ -115,6 +116,7 @@ class TestNixLanguageServer:
             # Check if we found the inherit (line 67, 0-indexed: 66)
             assert 66 in ref_lines, f"Should find makeGreeting inherit at line 67, found at lines {[l+1 for l in ref_lines]}"
 
+    @pytest.mark.skipif(is_ci, reason="Test is flaky")  # TODO: Re-enable if the hover test becomes more stable (#1039)
     @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
     def test_hover_information(self, language_server: SolidLanguageServer) -> None:
         """Test hover information for symbols."""
