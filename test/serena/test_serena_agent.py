@@ -461,7 +461,6 @@ class TestSerenaAgent:
         needle = r'console.log("WebSocketManager initializing\nStatus OK");'
         repl = r'console.log("WebSocketManager initialized\nAll systems go!");'
         replace_content_tool = serena_agent.get_tool(ReplaceContentTool)
-        mode: Literal["literal", "regex"]
         with project_file_modification_context(serena_agent, relative_path):
             result = replace_content_tool.apply(
                 needle=re.escape(needle) if mode == "regex" else needle,

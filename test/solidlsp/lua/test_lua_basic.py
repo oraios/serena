@@ -137,7 +137,7 @@ class TestLuaLanguageServer:
         assert len(refs) >= 5, f"Should find at least 5 references to calculator.add, found {len(refs)}"
 
         # Verify exact reference locations
-        ref_files = {}
+        ref_files: dict[str, list[int]] = {}
         for ref in refs:
             filename = ref.get("uri", "").split("/")[-1]
             if filename not in ref_files:
@@ -193,7 +193,7 @@ class TestLuaLanguageServer:
         assert len(refs) >= 1, f"Should find at least 1 reference to utils.trim, found {len(refs)}"
 
         # Verify exact reference locations
-        ref_files = {}
+        ref_files: dict[str, list[int]] = {}
         for ref in refs:
             filename = ref.get("uri", "").split("/")[-1]
             if filename not in ref_files:
