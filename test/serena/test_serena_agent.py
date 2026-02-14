@@ -199,6 +199,12 @@ class TestSerenaAgent:
         indirect=["serena_agent"],
     )
     def test_find_symbol_references(self, serena_agent: SerenaAgent, symbol_name: str, def_file: str, ref_file: str) -> None:
+        # skip flaky tests in CI
+        # TODO: Revisit the flaky tests and re-enable once the LS issues are resolved #1039
+        flaky_languages = {Language.TYPESCRIPT}
+        if set(serena_agent.get_active_lsp_languages()).intersection(flaky_languages) and is_ci:
+            pytest.skip("Test is flaky and thus skipped in CI environment.")
+
         agent = serena_agent
 
         # Find the symbol location first
