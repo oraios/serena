@@ -637,7 +637,7 @@ class ProjectCommands(AutoRegisteringGroup):
         lvl = logging.getLevelNamesMapping()[log_level.upper()]
         logging.configure(level=lvl)
         serena_config = SerenaConfig.from_config_file()
-        proj = registered_project.get_project_instance()
+        proj = registered_project.get_project_instance(serena_config=serena_config)
         click.echo(f"Indexing symbols in {proj} …")
         ls_mgr = proj.create_language_server_manager(
             log_level=lvl, ls_timeout=timeout, ls_specific_settings=serena_config.ls_specific_settings
@@ -690,7 +690,8 @@ class ProjectCommands(AutoRegisteringGroup):
         :param path: The path to check.
         :param project: The path to the project directory, defaults to the current working directory.
         """
-        proj = Project.load(os.path.abspath(project))
+        serena_config = SerenaConfig.from_config_file()
+        proj = Project.load(os.path.abspath(project), serena_config=serena_config)
         if os.path.isabs(path):
             path = os.path.relpath(path, start=proj.project_root)
         is_ignored = proj.is_ignored_path(path)
@@ -712,7 +713,8 @@ class ProjectCommands(AutoRegisteringGroup):
         :param project: path to the project directory, defaults to the current working directory.
         :param verbose: if set, prints detailed information about the indexed symbols.
         """
-        proj = Project.load(os.path.abspath(project))
+        serena_config = SerenaConfig.from_config_file()
+        proj = Project.load(os.path.abspath(project), serena_config=serena_config)
         if os.path.isabs(file):
             file = os.path.relpath(file, start=proj.project_root)
         if proj.is_ignored_path(file, ignore_non_source_files=True):
@@ -749,7 +751,8 @@ class ProjectCommands(AutoRegisteringGroup):
         # NOTE: completely written by Claude Code, only functionality was reviewed, not implementation
         logging.configure(level=logging.INFO)
         project_path = os.path.abspath(project)
-        proj = Project.load(project_path)
+        serena_config = SerenaConfig.from_config_file()
+        proj = Project.load(project_path, serena_config=serena_config)
 
         # Create log file with timestamp
         timestamp = datetime_tag()

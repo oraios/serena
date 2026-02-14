@@ -116,7 +116,7 @@ def start_default_ls_context(language: Language) -> Iterator[SolidLanguageServer
 
 def _create_default_project(language: Language) -> Project:
     repo_path = str(get_repo_path(language))
-    return Project.load(repo_path)
+    return Project.load(repo_path, serena_config=None)
 
 
 @pytest.fixture(scope="session")
