@@ -250,9 +250,9 @@ class TestSymbolDictTypes:
         """
         dict_type_keys = dict_type.__annotations__.keys()
         assert len(dict_type_keys) == len(
-            key_type.__args__
-        ), f"Expected {len(key_type.__args__)} keys in {dict_type}, but got {len(dict_type_keys)}"
-        for expected_key in key_type.__args__:
+            key_type.__args__  # type: ignore
+        ), f"Expected {len(key_type.__args__)} keys in {dict_type}, but got {len(dict_type_keys)}"  # type: ignore
+        for expected_key in key_type.__args__:  # type: ignore
             assert expected_key in dict_type_keys, f"Expected key '{expected_key}' not found in {dict_type}"
 
     def test_ls_symbol_dict_type(self):
