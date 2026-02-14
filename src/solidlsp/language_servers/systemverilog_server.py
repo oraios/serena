@@ -55,47 +55,50 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
                 return system_verible
 
             # 2. Not found in PATH, try to download
+            verible_version = self._custom_settings.get("verible_version", "v0.0-4051-g9fdb4057")
+            base_url = f"https://github.com/chipsalliance/verible/releases/download/{verible_version}"
+
             deps = RuntimeDependencyCollection(
                 [
                     RuntimeDependency(
                         id="verible-ls",
                         description="verible-verilog-ls for Linux (x64)",
-                        url="https://github.com/chipsalliance/verible/releases/download/v0.0-4051-g9fdb4057/verible-v0.0-4051-g9fdb4057-linux-static-x86_64.tar.gz",
+                        url=f"{base_url}/verible-{verible_version}-linux-static-x86_64.tar.gz",
                         platform_id="linux-x64",
                         archive_type="gztar",
-                        binary_name="verible-v0.0-4051-g9fdb4057/bin/verible-verilog-ls",
+                        binary_name=f"verible-{verible_version}/bin/verible-verilog-ls",
                     ),
                     RuntimeDependency(
                         id="verible-ls",
                         description="verible-verilog-ls for Linux (arm64)",
-                        url="https://github.com/chipsalliance/verible/releases/download/v0.0-4051-g9fdb4057/verible-v0.0-4051-g9fdb4057-linux-static-arm64.tar.gz",
+                        url=f"{base_url}/verible-{verible_version}-linux-static-arm64.tar.gz",
                         platform_id="linux-arm64",
                         archive_type="gztar",
-                        binary_name="verible-v0.0-4051-g9fdb4057/bin/verible-verilog-ls",
+                        binary_name=f"verible-{verible_version}/bin/verible-verilog-ls",
                     ),
                     RuntimeDependency(
                         id="verible-ls",
                         description="verible-verilog-ls for macOS",
-                        url="https://github.com/chipsalliance/verible/releases/download/v0.0-4051-g9fdb4057/verible-v0.0-4051-g9fdb4057-macOS.tar.gz",
+                        url=f"{base_url}/verible-{verible_version}-macOS.tar.gz",
                         platform_id="osx-x64",
                         archive_type="gztar",
-                        binary_name="verible-v0.0-4051-g9fdb4057/bin/verible-verilog-ls",
+                        binary_name=f"verible-{verible_version}/bin/verible-verilog-ls",
                     ),
                     RuntimeDependency(
                         id="verible-ls",
                         description="verible-verilog-ls for macOS",
-                        url="https://github.com/chipsalliance/verible/releases/download/v0.0-4051-g9fdb4057/verible-v0.0-4051-g9fdb4057-macOS.tar.gz",
+                        url=f"{base_url}/verible-{verible_version}-macOS.tar.gz",
                         platform_id="osx-arm64",
                         archive_type="gztar",
-                        binary_name="verible-v0.0-4051-g9fdb4057/bin/verible-verilog-ls",
+                        binary_name=f"verible-{verible_version}/bin/verible-verilog-ls",
                     ),
                     RuntimeDependency(
                         id="verible-ls",
                         description="verible-verilog-ls for Windows (x64)",
-                        url="https://github.com/chipsalliance/verible/releases/download/v0.0-4051-g9fdb4057/verible-v0.0-4051-g9fdb4057-win64.zip",
+                        url=f"{base_url}/verible-{verible_version}-win64.zip",
                         platform_id="win-x64",
                         archive_type="zip",
-                        binary_name="verible-v0.0-4051-g9fdb4057/bin/verible-verilog-ls.exe",
+                        binary_name=f"verible-{verible_version}/bin/verible-verilog-ls.exe",
                     ),
                 ]
             )

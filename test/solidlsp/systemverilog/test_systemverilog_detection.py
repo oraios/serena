@@ -27,6 +27,8 @@ import pytest
 from solidlsp.language_servers.systemverilog_server import SystemVerilogLanguageServer
 from solidlsp.settings import SolidLSPSettings
 
+DEFAULT_VERIBLE_VERSION = "v0.0-4051-g9fdb4057"
+
 
 class TestVeribleVerilogLsDetection:
     """Unit tests for verible-verilog-ls binary detection logic."""
@@ -181,7 +183,7 @@ class TestVeribleVerilogLsDetection:
             custom_settings = SolidLSPSettings.CustomLSSettings({})
             provider = SystemVerilogLanguageServer.DependencyProvider(custom_settings, temp_dir)
 
-            expected_path = os.path.join(temp_dir, "verible-ls", "verible-v0.0-4051-g9fdb4057", "bin", "verible-verilog-ls")
+            expected_path = os.path.join(temp_dir, "verible-ls", f"verible-{DEFAULT_VERIBLE_VERSION}", "bin", "verible-verilog-ls")
 
             with patch("shutil.which", return_value=None):
                 with patch("solidlsp.language_servers.systemverilog_server.RuntimeDependencyCollection") as mock_deps_class:
@@ -245,7 +247,7 @@ class TestVeribleVerilogLsDetection:
             custom_settings = SolidLSPSettings.CustomLSSettings({})
             provider = SystemVerilogLanguageServer.DependencyProvider(custom_settings, temp_dir)
 
-            expected_path = os.path.join(temp_dir, "verible-ls", "verible-v0.0-4051-g9fdb4057", "bin", "verible-verilog-ls")
+            expected_path = os.path.join(temp_dir, "verible-ls", f"verible-{DEFAULT_VERIBLE_VERSION}", "bin", "verible-verilog-ls")
 
             with patch("shutil.which", return_value=None):
                 with patch("solidlsp.language_servers.systemverilog_server.RuntimeDependencyCollection") as mock_deps_class:
@@ -280,7 +282,7 @@ class TestVeribleVerilogLsDetection:
             custom_settings = SolidLSPSettings.CustomLSSettings({})
             provider = SystemVerilogLanguageServer.DependencyProvider(custom_settings, temp_dir)
 
-            expected_path = os.path.join(temp_dir, "verible-ls", "verible-v0.0-4051-g9fdb4057", "bin", "verible-verilog-ls")
+            expected_path = os.path.join(temp_dir, "verible-ls", f"verible-{DEFAULT_VERIBLE_VERSION}", "bin", "verible-verilog-ls")
 
             with patch("shutil.which", return_value=None):
                 with patch("solidlsp.language_servers.systemverilog_server.RuntimeDependencyCollection") as mock_deps_class:
