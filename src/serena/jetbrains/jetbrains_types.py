@@ -1,4 +1,4 @@
-from typing import NotRequired, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 
 class PluginStatusDTO(TypedDict):
@@ -28,6 +28,9 @@ class SymbolDTO(TypedDict):
     text_range: NotRequired[TextRangeDTO]
     children: NotRequired[list["SymbolDTO"]]
     num_usages: NotRequired[int]
+
+
+SymbolDTOKey = Literal["name_path", "relative_path", "type", "body", "quick_info", "documentation", "text_range", "children", "num_usages"]
 
 
 class SymbolCollectionResponse(TypedDict):

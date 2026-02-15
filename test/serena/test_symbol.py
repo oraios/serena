@@ -1,6 +1,7 @@
 import pytest
 
-from serena.symbol import LanguageServerSymbolRetriever, NamePathComponent, NamePathMatcher
+from serena.jetbrains.jetbrains_types import SymbolDTO, SymbolDTOKey
+from serena.symbol import LanguageServerSymbol, LanguageServerSymbolRetriever, NamePathComponent, NamePathMatcher
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 
@@ -238,3 +239,24 @@ class TestLanguageServerSymbolRetriever:
         create_user_method_symbol = symbol_retriever.find("UserService/create_user", within_relative_path="test_repo/services.py")[0]
         create_user_method_symbol_info = symbol_retriever.request_info_for_symbol(create_user_method_symbol)
         assert "Create a new user and store it" in create_user_method_symbol_info
+
+
+class TestSymbolDictTypes:
+    @staticmethod
+    def check_key_type(dict_type: type, key_type: type):
+        """
+        :param dict_type: a TypedDict type
+        :param key_type: the corresponding key type (Literal[...]) that the dict should have for keys
+        """
+        dict_type_keys = dict_type.__annotations__.keys()
+        assert len(dict_type_keys) == len(
+            key_type.__args__  # type: ignore
+        ), f"Expected {len(key_type.__args__)} keys in {dict_type}, but got {len(dict_type_keys)}"  # type: ignore
+        for expected_key in key_type.__args__:  # type: ignore
+            assert expected_key in dict_type_keys, f"Expected key '{expected_key}' not found in {dict_type}"
+
+    def test_ls_symbol_dict_type(self):
+        self.check_key_type(LanguageServerSymbol.OutputDict, LanguageServerSymbol.OutputDictKey)
+
+    def test_jb_symbol_dict_type(self):
+        self.check_key_type(SymbolDTO, SymbolDTOKey)

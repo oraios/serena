@@ -209,7 +209,7 @@ class TestSerenaAgent:
 
         # Find the symbol location first
         find_symbol_tool = agent.get_tool(FindSymbolTool)
-        result = find_symbol_tool.apply_ex(name_path_pattern=symbol_name, relative_path=def_file)
+        result = find_symbol_tool.apply(name_path_pattern=symbol_name, relative_path=def_file)
 
         time.sleep(1)
         symbols = json.loads(result)
@@ -218,12 +218,26 @@ class TestSerenaAgent:
 
         # Now find references
         find_refs_tool = agent.get_tool(FindReferencingSymbolsTool)
-        result = find_refs_tool.apply_ex(name_path=def_symbol["name_path"], relative_path=def_symbol["relative_path"])
+        result = find_refs_tool.apply(name_path=def_symbol["name_path"], relative_path=def_symbol["relative_path"])
+
+        def contains_ref_with_relative_path(refs, relative_path):
+            """
+            Checks for reference to relative path, regardless of output format (grouped an ungrouped)
+            """
+            if isinstance(refs, list):
+                for ref in refs:
+                    if contains_ref_with_relative_path(ref, relative_path):
+                        return True
+            elif isinstance(refs, dict):
+                if relative_path in refs:
+                    return True
+                for value in refs.values():
+                    if contains_ref_with_relative_path(value, relative_path):
+                        return True
+            return False
 
         refs = json.loads(result)
-        assert any(
-            ref["relative_path"] == ref_file for ref in refs
-        ), f"Expected to find reference to {symbol_name} in {ref_file}. refs={refs}"
+        assert contains_ref_with_relative_path(refs, ref_file), f"Expected to find reference to {symbol_name} in {ref_file}. refs={refs}"
 
     @pytest.mark.parametrize(
         "serena_agent,name_path,substring_matching,expected_symbol_name,expected_kind,expected_file",

@@ -4,11 +4,11 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import asdict, dataclass
-from typing import TYPE_CHECKING, Any, Self, Union
+from typing import TYPE_CHECKING, Any, Generic, Literal, NotRequired, Self, TypedDict, TypeVar, Union
 
 from sensai.util.string import ToStringMixin
 
-import serena.tools.jetbrains_types as jb
+import serena.jetbrains.jetbrains_types as jb
 from solidlsp import SolidLanguageServer
 from solidlsp.ls import ReferenceInSymbol as LSPReferenceInSymbol
 from solidlsp.ls_types import Position, SymbolKind, UnifiedSymbolInformation
@@ -212,14 +212,17 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         return []
 
     def _tostring_additional_entries(self) -> dict[str, Any]:
-        return dict(name=self.name, kind=self.kind, num_children=len(self.symbol_root["children"]))
+        return dict(name=self.name, kind=self.symbol_kind_name, num_children=len(self.symbol_root["children"]))
 
     @property
     def name(self) -> str:
         return self.symbol_root["name"]
 
     @property
-    def kind(self) -> str:
+    def symbol_kind_name(self) -> str:
+        """
+        :return: string representation of the symbol kind (name attribute of the `SymbolKind` enum item)
+        """
         return SymbolKind(self.symbol_kind).name
 
     @property
@@ -395,67 +398,99 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         traverse(self)
         return result
 
+    class OutputDict(TypedDict):
+        name_path: NotRequired[str]
+        name: NotRequired[str]
+        location: NotRequired[dict[str, Any]]
+        relative_path: NotRequired[str | None]
+        body_location: NotRequired[dict[str, Any]]
+        body: NotRequired[str | None]
+        kind: NotRequired[str]
+        """
+        string representation of the symbol kind (name attribute of the `SymbolKind` enum item)
+        """
+        children: NotRequired[list["LanguageServerSymbol.OutputDict"]]
+
+    OutputDictKey = Literal["name", "name_path", "relative_path", "location", "body_location", "body", "kind", "children"]
+
     def to_dict(
         self,
+        *,
+        name_path: bool = True,
+        name: bool = False,
         kind: bool = False,
         location: bool = False,
         depth: int = 0,
-        include_body: bool = False,
-        include_children_body: bool = False,
-        include_relative_path: bool = True,
+        body: bool = False,
+        body_location: bool = False,
+        children_body: bool = False,
+        relative_path: bool = False,
         child_inclusion_predicate: Callable[[Self], bool] | None = None,
-    ) -> dict[str, Any]:
+    ) -> OutputDict:
         """
         Converts the symbol to a dictionary.
 
+        :param name_path: whether to include the name path of the symbol
+        :param name: whether to include the name of the symbol
         :param kind: whether to include the kind of the symbol
         :param location: whether to include the location of the symbol
         :param depth: the depth up to which to include child symbols (0 = do not include children)
-        :param include_body: whether to include the body of the top-level symbol.
-        :param include_children_body: whether to also include the body of the children.
+        :param body: whether to include the body of the top-level symbol.
+        :param children_body: whether to also include the body of the children.
             Note that the body of the children is part of the body of the parent symbol,
             so there is usually no need to set this to True unless you want process the output
             and pass the children without passing the parent body to the LM.
-        :param include_relative_path: whether to include the relative path of the symbol in the location
-            entry. Relative paths of the symbol's children are always excluded.
+        :param relative_path: whether to include the relative path of the symbol.
+            If `location` is True, this defines whether to include the path in the location entry.
+            If `location` is False, this defines whether to include the relative path as a top-level entry.
+            Relative paths of the symbol's children are always excluded.
         :param child_inclusion_predicate: an optional predicate that decides whether a child symbol
             should be included.
         :return: a dictionary representation of the symbol
         """
-        result: dict[str, Any] = {"name": self.name, "name_path": self.get_name_path()}
+        result: LanguageServerSymbol.OutputDict = {}
+
+        if name_path:
+            result["name_path"] = self.get_name_path()
+        if name:
+            result["name"] = self.name
 
         if kind:
-            result["kind"] = self.kind
+            result["kind"] = self.symbol_kind_name
 
         if location:
-            result["location"] = self.location.to_dict(include_relative_path=include_relative_path)
+            result["location"] = self.location.to_dict(include_relative_path=relative_path)
+        elif relative_path:
+            result["relative_path"] = self.relative_path
+
+        if body_location:
             body_start_line, body_end_line = self.get_body_line_numbers()
             result["body_location"] = {"start_line": body_start_line, "end_line": body_end_line}
 
-        if include_body:
-            body = self.body
-            if body is None:
-                log.warning("Requested body for symbol, but it is not present. The symbol might have been loaded with include_body=False.")
-            result["body"] = body
+        if body:
+            result["body"] = self.body
 
         if child_inclusion_predicate is None:
             child_inclusion_predicate = lambda s: True
 
-        def included_children(s: Self) -> list[dict[str, Any]]:
+        def included_children(s: Self) -> list[LanguageServerSymbol.OutputDict]:
             children = []
             for c in s.iter_children():
                 if not child_inclusion_predicate(c):
                     continue
                 children.append(
                     c.to_dict(
+                        name_path=name_path,
+                        name=name,
                         kind=kind,
                         location=location,
+                        body_location=body_location,
                         depth=depth - 1,
                         child_inclusion_predicate=child_inclusion_predicate,
-                        include_body=include_children_body,
-                        include_children_body=include_children_body,
+                        body=children_body,
+                        children_body=children_body,
                         # all children have the same relative path as the parent
-                        include_relative_path=False,
+                        relative_path=False,
                     )
                 )
             return children
@@ -463,7 +498,7 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         if depth > 0:
             children = included_children(self)
             if len(children) > 0:
-                result["children"] = included_children(self)
+                result["children"] = children
 
         return result
 
@@ -604,8 +639,7 @@ class LanguageServerSymbolRetriever:
             include_rel_path = within_relative_path is not None
             raise ValueError(
                 f"Found multiple {len(symbol_candidates)} symbols matching '{name_path_pattern}'. "
-                "They are: \n"
-                + json.dumps([s.to_dict(kind=True, include_relative_path=include_rel_path) for s in symbol_candidates], indent=2)
+                "They are: \n" + json.dumps([s.to_dict(kind=True, relative_path=include_rel_path) for s in symbol_candidates], indent=2)
             )
 
     def find_by_location(self, location: LanguageServerSymbolLocation) -> LanguageServerSymbol | None:
@@ -689,36 +723,15 @@ class LanguageServerSymbolRetriever:
 
         return [ReferenceInLanguageServerSymbol.from_lsp_reference(r) for r in references]
 
-    def get_symbol_overview(self, relative_path: str, depth: int = 0) -> dict[str, list[dict]]:
+    def get_symbol_overview(self, relative_path: str) -> dict[str, list[LanguageServerSymbol]]:
         """
         :param relative_path: the path of the file or directory for which to get the symbol overview
-        :param depth: the depth up to which to include child symbols (0 = only top-level symbols)
-        :return: a mapping from file paths to lists of symbol dictionaries.
+        :return: a mapping from file paths to lists of symbols.
             For the case where a file is passed, the mapping will contain a single entry.
         """
         lang_server = self.get_language_server(relative_path)
         path_to_unified_symbols = lang_server.request_overview(relative_path)
-
-        def child_inclusion_predicate(s: LanguageServerSymbol) -> bool:
-            return not s.is_low_level()
-
-        result = {}
-        for file_path, unified_symbols in path_to_unified_symbols.items():
-            symbols_in_file = []
-            for us in unified_symbols:
-                symbol = LanguageServerSymbol(us)
-                symbols_in_file.append(
-                    symbol.to_dict(
-                        depth=depth,
-                        kind=True,
-                        include_relative_path=False,
-                        location=False,
-                        child_inclusion_predicate=child_inclusion_predicate,
-                    )
-                )
-            result[file_path] = symbols_in_file
-
-        return result
+        return {k: [LanguageServerSymbol(us) for us in v] for k, v in path_to_unified_symbols.items()}
 
 
 class JetBrainsSymbol(Symbol):
@@ -775,3 +788,129 @@ class JetBrainsSymbol(Symbol):
     def is_neighbouring_definition_separated_by_empty_line(self) -> bool:
         # NOTE: Symbol types cannot really be differentiated, because types are not handled in a language-agnostic way.
         return False
+
+
+TSymbolDict = TypeVar("TSymbolDict")
+GroupedSymbolDict = dict[str, list[dict] | dict[str, dict]]
+
+
+class SymbolDictGrouper(Generic[TSymbolDict], ABC):
+    """
+    A utility class for grouping a list of symbol dictionaries by one or more specified keys.
+
+    If an instance is statically initialised (upon module import), then this establishes a guarantee
+    that the specified keys are defined in the symbol dictionary type, ensuring at least basic type safety.
+    The respective ValueError will immediately be apparent.
+    """
+
+    def __init__(
+        self,
+        symbol_dict_type: type[TSymbolDict],
+        children_key: Any,
+        group_keys: list[Any],
+        group_children_keys: list[Any],
+        collapse_singleton: bool,
+    ) -> None:
+        """
+        :param symbol_dict_type: the TypedDict type that represents the type of the symbol dictionaries to be grouped
+        :param children_key: the key in the symbol dictionaries that contains the list of child symbols (for recursive grouping).
+        :param group_keys: keys by which to group the symbol dictionaries. Must be a subset of the keys of `symbol_dict_type`.
+        :param group_children_keys: keys by which to group the child symbol dictionaries. Must be a subset of the keys of `symbol_dict_type`.
+        :param collapse_singleton: whether to collapse dictionaries containing a single entry after regrouping to just the entry's value
+        """
+        # check whether the type contains all the keys specified in `keys` and raise an error if not.
+        if not hasattr(symbol_dict_type, "__annotations__"):
+            raise ValueError(f"symbol_dict_type must be a TypedDict type, got {symbol_dict_type}")
+        symbol_dict_keys = set(symbol_dict_type.__annotations__.keys())
+        for key in group_keys + [children_key] + group_children_keys:
+            if key not in symbol_dict_keys:
+                raise ValueError(f"symbol_dict_type {symbol_dict_type} does not contain key '{key}'")
+
+        self._children_key = children_key
+        self._group_keys = group_keys
+        self._group_children_keys = group_children_keys
+        self._collapse_singleton = collapse_singleton
+
+    def _group_by(self, l: list[dict], keys: list[str], children_keys: list[str]) -> dict[str, Any]:
+        assert len(keys) > 0, "keys must not be empty"
+        # group by the first key
+        grouped: dict[str, Any] = {}
+        for item in l:
+            key_value = item.pop(keys[0], "unknown")
+            if key_value not in grouped:
+                grouped[key_value] = []
+            grouped[key_value].append(item)
+        if len(keys) > 1:
+            # continue grouping by the remaining keys
+            for k, group in grouped.items():
+                grouped[k] = self._group_by(group, keys[1:], children_keys)
+        else:
+            # grouping is complete; now group the children if necessary
+            if children_keys:
+                for k, group in grouped.items():
+                    for item in group:
+                        if self._children_key in item:
+                            children = item[self._children_key]
+                            item[self._children_key] = self._group_by(children, children_keys, children_keys)
+            # post-process final group items
+            grouped = {k: [self._transform_item(i) for i in v] for k, v in grouped.items()}
+        return grouped
+
+    def _transform_item(self, item: dict) -> dict:
+        """
+        Post-processes a final group item (which has been regrouped, i.e. some keys may have been removed),
+        collapsing singleton items (and items containing only a single non-children key)
+        """
+        if self._collapse_singleton:
+            if len(item) == 1:
+                # {"name": "foo"} -> "foo"
+                # if there is only a single entry, collapse the dictionary to just the value of that entry
+                return next(iter(item.values()))
+            elif len(item) == 2 and self._children_key in item:
+                # {"name": "foo", "children": {...}} -> {"foo": {...}}
+                # if there are exactly two entries and one of them is the children key,
+                # convert to {other_value: children}
+                other_key = next(k for k in item.keys() if k != self._children_key)
+                new_item = {item[other_key]: item[self._children_key]}
+                return new_item
+        return item
+
+    def group(self, symbols: list[TSymbolDict]) -> GroupedSymbolDict:
+        """
+        :param symbols: the symbols to group
+        :return: dictionary with the symbols grouped as defined at construction
+        """
+        return self._group_by(symbols, self._group_keys, self._group_children_keys)  # type: ignore
+
+
+class LanguageServerSymbolDictGrouper(SymbolDictGrouper[LanguageServerSymbol.OutputDict]):
+    def __init__(
+        self,
+        group_keys: list[LanguageServerSymbol.OutputDictKey],
+        group_children_keys: list[LanguageServerSymbol.OutputDictKey],
+        collapse_singleton: bool = False,
+    ) -> None:
+        super().__init__(LanguageServerSymbol.OutputDict, "children", group_keys, group_children_keys, collapse_singleton)
+
+
+class JetBrainsSymbolDictGrouper(SymbolDictGrouper[jb.SymbolDTO]):
+    def __init__(
+        self,
+        group_keys: list[jb.SymbolDTOKey],
+        group_children_keys: list[jb.SymbolDTOKey],
+        collapse_singleton: bool = False,
+        map_name_path_to_name: bool = False,
+    ) -> None:
+        super().__init__(jb.SymbolDTO, "children", group_keys, group_children_keys, collapse_singleton)
+        self._map_name_path_to_name = map_name_path_to_name
+
+    def _transform_item(self, item: dict) -> dict:
+        if self._map_name_path_to_name:
+            # {"name_path: "Class/myMethod"} -> {"name: "myMethod"}
+            new_item = dict(item)
+            if "name_path" in item:
+                name_path = new_item.pop("name_path")
+                new_item["name"] = name_path.split("/")[-1]
+            return super()._transform_item(new_item)
+        else:
+            return super()._transform_item(item)

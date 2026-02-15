@@ -3,11 +3,9 @@ Language server-related tools
 """
 
 import os
-from collections import defaultdict
 from collections.abc import Sequence
-from copy import copy
-from typing import Any
 
+from serena.symbol import LanguageServerSymbol, LanguageServerSymbolDictGrouper
 from serena.tools import (
     SUCCESS_RESULT,
     Tool,
@@ -16,22 +14,6 @@ from serena.tools import (
 )
 from serena.tools.tools_base import ToolMarkerOptional
 from solidlsp.ls_types import SymbolKind
-
-
-def _sanitize_symbol_dict(symbol_dict: dict[str, Any]) -> dict[str, Any]:
-    """
-    Sanitize a symbol dictionary inplace by removing unnecessary information.
-    """
-    # We replace the location entry, which repeats line information already included in body_location
-    # and has unnecessary information on column, by just the relative path.
-    symbol_dict = copy(symbol_dict)
-    s_relative_path = symbol_dict.get("location", {}).get("relative_path")
-    if s_relative_path is not None:
-        symbol_dict["relative_path"] = s_relative_path
-    symbol_dict.pop("location", None)
-    # also remove name, name_path should be enough
-    symbol_dict.pop("name")
-    return symbol_dict
 
 
 class RestartLanguageServerTool(Tool, ToolMarkerOptional):
@@ -50,6 +32,8 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
     Gets an overview of the top-level symbols defined in a given file.
     """
 
+    symbol_dict_grouper = LanguageServerSymbolDictGrouper(["kind"], ["kind"], collapse_singleton=True)
+
     def apply(self, relative_path: str, depth: int = 0, max_answer_chars: int = -1) -> str:
         """
         Use this tool to get a high-level understanding of the code symbols in a file.
@@ -65,11 +49,11 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
         :return: a JSON object containing symbols grouped by kind in a compact format.
         """
         result = self.get_symbol_overview(relative_path, depth=depth)
-        compact_result = self._transform_symbols_to_compact_format(result)
+        compact_result = self.symbol_dict_grouper.group(result)
         result_json_str = self._to_json(compact_result)
         return self._limit_length(result_json_str, max_answer_chars)
 
-    def get_symbol_overview(self, relative_path: str, depth: int = 0) -> list[dict]:
+    def get_symbol_overview(self, relative_path: str, depth: int = 0) -> list[LanguageServerSymbol.OutputDict]:
         """
         :param relative_path: relative path to a source file
         :param depth: the depth up to which descendants shall be retrieved
@@ -85,37 +69,25 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
         if os.path.isdir(file_path):
             raise ValueError(f"Expected a file path, but got a directory path: {relative_path}. ")
 
-        return symbol_retriever.get_symbol_overview(relative_path, depth=depth)[relative_path]
+        symbols = symbol_retriever.get_symbol_overview(relative_path)[relative_path]
 
-    @staticmethod
-    def _transform_symbols_to_compact_format(symbols: list[dict[str, Any]]) -> dict[str, list]:
-        """
-        Transform symbol overview from verbose format to compact grouped format.
+        def child_inclusion_predicate(s: LanguageServerSymbol) -> bool:
+            return not s.is_low_level()
 
-        Groups symbols by kind and uses names instead of full symbol objects.
-        For symbols with children, creates nested dictionaries.
-
-        The name_path can be inferred from the hierarchical structure:
-        - Top-level symbols: name_path = name
-        - Nested symbols: name_path = parent_name + "/" + name
-        For example, "convert" under class "ProjectType" has name_path "ProjectType/convert".
-        """
-        result = defaultdict(list)
-
+        symbol_dicts = []
         for symbol in symbols:
-            kind = symbol.get("kind", "Unknown")
-            name = symbol.get("name", "unknown")
-            children = symbol.get("children", [])
-
-            if children:
-                # Symbol has children: create nested dict {name: children_dict}
-                children_dict = GetSymbolsOverviewTool._transform_symbols_to_compact_format(children)
-                result[kind].append({name: children_dict})
-            else:
-                # Symbol has no children: just add the name
-                result[kind].append(name)
-
-        return result
+            symbol_dicts.append(
+                symbol.to_dict(
+                    name_path=False,
+                    name=True,
+                    depth=depth,
+                    kind=True,
+                    relative_path=False,
+                    location=False,
+                    child_inclusion_predicate=child_inclusion_predicate,
+                )
+            )
+        return symbol_dicts
 
 
 class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
@@ -185,7 +157,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             substring_matching=substring_matching,
             within_relative_path=relative_path,
         )
-        symbol_dicts = [_sanitize_symbol_dict(s.to_dict(kind=True, location=True, depth=depth, include_body=include_body)) for s in symbols]
+        symbol_dicts = [dict(s.to_dict(kind=True, relative_path=True, body_location=True, depth=depth, body=include_body)) for s in symbols]
         if not include_body and include_info:
             # we add an info field to the symbol dicts if requested
             for s, s_dict in zip(symbols, symbol_dicts, strict=True):
@@ -200,6 +172,8 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
     """
     Finds symbols that reference the given symbol using the language server backend
     """
+
+    symbol_dict_grouper = LanguageServerSymbolDictGrouper(["relative_path", "kind"], ["kind"], collapse_singleton=True)
 
     # noinspection PyDefaultArgument
     def apply(
@@ -229,6 +203,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
         symbol_retriever = self.create_language_server_symbol_retriever()
+
         references_in_symbols = symbol_retriever.find_referencing_symbols(
             name_path,
             relative_file_path=relative_path,
@@ -236,10 +211,11 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
             include_kinds=parsed_include_kinds,
             exclude_kinds=parsed_exclude_kinds,
         )
+
         reference_dicts = []
         for ref in references_in_symbols:
-            ref_dict = ref.symbol.to_dict(kind=True, location=True, depth=0, include_body=include_body)
-            ref_dict = _sanitize_symbol_dict(ref_dict)
+            ref_dict_orig = ref.symbol.to_dict(kind=True, relative_path=True, depth=0, body=include_body, body_location=True)
+            ref_dict = dict(ref_dict_orig)
             if not include_body:
                 ref_relative_path = ref.symbol.location.relative_path
                 assert ref_relative_path is not None, f"Referencing symbol {ref.symbol.name} has no relative path, this is likely a bug."
@@ -250,8 +226,11 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
                 )
                 ref_dict["content_around_reference"] = content_around_ref.to_display_string()
             reference_dicts.append(ref_dict)
-        result = self._to_json(reference_dicts)
-        return self._limit_length(result, max_answer_chars)
+
+        result = self.symbol_dict_grouper.group(reference_dicts)  # type: ignore
+
+        result_json = self._to_json(result)
+        return self._limit_length(result_json, max_answer_chars)
 
 
 class ReplaceSymbolBodyTool(Tool, ToolMarkerSymbolicEdit):
