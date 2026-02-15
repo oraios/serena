@@ -268,6 +268,9 @@ ignore = [
   "UP037",    # can incorrectly (!) convert quoted type to unquoted type, causing an error
   "UP045",    # imposes T | None instead of Optional[T]
   "UP031",    # forbids % operator to format strings
+  "UP042",    # wants str,Enum -> StrEnum (breaking change)
+  "PLW0108",  # unnecessary lambda (style preference)
+  "PLC0207",  # split vs rsplit optimization (style preference)
 ]
 unfixable = ["F841", "F601", "F602", "B018"]
 extend-fixable = ["F401", "B905", "W291"]
@@ -322,6 +325,7 @@ markers = [
   "slow: tests that require additional Expert instances and have long startup times (~60-90s each)",
   "toml: language server running for TOML",
   "matlab: language server running for MATLAB (requires MATLAB R2021b+)",
+  "systemverilog: language server running for SystemVerilog (uses verible-verilog-ls)",
 ]
 
 [tool.codespell]

@@ -27,9 +27,11 @@ build-backend = "hatchling.build"
 [tool.ruff]
 line-length = 88
 target-version = "py311"
+
+[tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "B", "S"]
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ["test_project"]
 
 [tool.mypy]
