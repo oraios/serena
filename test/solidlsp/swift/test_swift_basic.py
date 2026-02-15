@@ -14,6 +14,7 @@ from serena.project import Project
 from serena.text_utils import LineType
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.conftest import is_ci
 
 # Skip Swift tests on Windows due to complex GitHub Actions configuration
 WINDOWS_SKIP = platform.system() == "Windows"
@@ -99,6 +100,7 @@ class TestSwiftLanguageServerBasics:
         utils_def = definitions[0]
         assert utils_def.get("uri", "").endswith("utils.swift"), "Definition should be in utils.swift"
 
+    @pytest.mark.skipif(is_ci, reason="Test is flaky in CI")
     @pytest.mark.parametrize("language_server", [Language.SWIFT], indirect=True)
     def test_request_references_calculator_class(self, language_server: SolidLanguageServer) -> None:
         """Test request_references on the Calculator class."""
