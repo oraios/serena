@@ -28,9 +28,5 @@ class TestDenoLanguageServer:
         assert helper_symbol is not None, "Could not find 'helperFunction' symbol in mod.ts"
         sel_start = helper_symbol["selectionRange"]["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
-        assert any(
-            "mod.ts" in ref.get("relativePath", "") for ref in refs
-        ), "mod.ts should reference helperFunction"
-        assert any(
-            "use_mod.ts" in ref.get("relativePath", "") for ref in refs
-        ), "use_mod.ts should reference helperFunction via import"
+        assert any("mod.ts" in ref.get("relativePath", "") for ref in refs), "mod.ts should reference helperFunction"
+        assert any("use_mod.ts" in ref.get("relativePath", "") for ref in refs), "use_mod.ts should reference helperFunction via import"

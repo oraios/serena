@@ -83,14 +83,16 @@ class DenoLanguageServer(SolidLanguageServer):
 
             deno_version = self._custom_settings.get("deno_version")
             install_spec = f"deno@{deno_version}" if deno_version else "deno"
-            deps = RuntimeDependencyCollection([
-                RuntimeDependency(
-                    id="deno",
-                    description="Deno runtime (official npm distribution)",
-                    command=["npm", "install", "--prefix", "./", install_spec],
-                    platform_id="any",
-                ),
-            ])
+            deps = RuntimeDependencyCollection(
+                [
+                    RuntimeDependency(
+                        id="deno",
+                        description="Deno runtime (official npm distribution)",
+                        command=["npm", "install", "--prefix", "./", install_spec],
+                        platform_id="any",
+                    ),
+                ]
+            )
 
             deno_ls_dir = os.path.join(self._ls_resources_dir, "deno-lsp")
             binary_name = "deno.exe" if platform.system() == "Windows" else "deno"
@@ -149,10 +151,12 @@ class DenoLanguageServer(SolidLanguageServer):
             "initializationOptions": {
                 "enable": True,
             },
-            "workspaceFolders": [{
-                "uri": root_uri,
-                "name": os.path.basename(repository_absolute_path),
-            }],
+            "workspaceFolders": [
+                {
+                    "uri": root_uri,
+                    "name": os.path.basename(repository_absolute_path),
+                }
+            ],
         }
         return initialize_params  # type: ignore
 
@@ -174,13 +178,15 @@ class DenoLanguageServer(SolidLanguageServer):
             result: list[dict | None] = []
             for item in params.get("items", []):
                 if item.get("section") == "deno":
-                    result.append({ "enable": True })
+                    result.append({"enable": True})
                 elif item.get("section") in ("typescript", "javascript"):
-                    result.append({
-                        "preferences": {
-                            "importModuleSpecifierPreference": "relative",
-                        },
-                    })
+                    result.append(
+                        {
+                            "preferences": {
+                                "importModuleSpecifierPreference": "relative",
+                            },
+                        }
+                    )
                 else:
                     result.append(None)
             return result
