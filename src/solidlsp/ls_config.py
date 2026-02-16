@@ -107,7 +107,7 @@ class Language(str, Enum):
     """
     DENO = "deno"
     """Deno language server using the built-in `deno lsp`.
-    Must be explicitly specified as the main language, not auto-detected.
+    Auto-detected when deno.json, deno.jsonc, or deno.lock is found in the project root.
     """
 
     @classmethod
@@ -135,7 +135,6 @@ class Language(str, Enum):
             self.TOML,
             self.GROOVY,
             self.CPP_CCLS,
-            self.DENO,
         }
 
     def __str__(self) -> str:
@@ -157,6 +156,18 @@ class Language(str, Enum):
             # regular languages
             case _:
                 return 2
+
+    def get_marker_override(self) -> tuple[tuple[str, ...], "Language"] | None:
+        """
+        If this language shares file extensions with another, return
+        (marker_files, language_to_override). When any marker file exists
+        in the project root, this language takes precedence over the other.
+        """
+        match self:
+            case self.DENO:
+                return ("deno.json", "deno.jsonc", "deno.lock"), self.TYPESCRIPT
+            case _:
+                return None
 
     def get_source_fn_matcher(self) -> FilenameMatcher:
         match self:

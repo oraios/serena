@@ -31,9 +31,7 @@ class DenoLanguageServer(SolidLanguageServer):
 
     If Deno is not found on the system PATH, it will be automatically installed via the official npm package.
 
-    This language server must be explicitly configured in .serena/project.yml
-    (it is not auto-detected to avoid conflicts with the TypeScript language server).
-    Do not configure both TYPESCRIPT and DENO for the same project.
+    Auto-detected when deno.json, deno.jsonc, or deno.lock is found in the project root.
 
     You can pass the following entries in ls_specific_settings["deno"]:
         - ls_path: Path to the Deno executable (default: auto-detected from PATH, falls back to npm install)
