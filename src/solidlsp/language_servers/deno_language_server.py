@@ -106,12 +106,15 @@ class DenoLanguageServer(SolidLanguageServer):
             if not os.path.exists(deno_executable):
                 log.info(f"Deno executable not found at {deno_executable}.")
                 needs_install = True
-            elif deno_version and os.path.exists(version_file):
+            elif os.path.exists(version_file):
                 with open(version_file) as f:
                     installed_version = f.read().strip()
                 if installed_version != expected_version:
                     log.info(f"Deno version mismatch: installed={installed_version}, expected={expected_version}. Reinstalling...")
                     needs_install = True
+            else:
+                log.info(f"Deno version file not found at {version_file}. Reinstalling to ensure correct setup...")
+                needs_install = True
 
             if needs_install:
                 log.info("Installing Deno via npm...")
