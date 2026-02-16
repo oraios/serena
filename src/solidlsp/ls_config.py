@@ -105,6 +105,10 @@ class Language(str, Enum):
     """TOML language server using Taplo.
     Supports TOML validation, formatting, and schema support.
     """
+    DENO = "deno"
+    """Deno language server using the built-in `deno lsp`.
+    Must be explicitly specified as the main language, not auto-detected.
+    """
 
     @classmethod
     def iter_all(cls, include_experimental: bool = False) -> Iterable[Self]:
@@ -131,6 +135,7 @@ class Language(str, Enum):
             self.TOML,
             self.GROOVY,
             self.CPP_CCLS,
+            self.DENO,
         }
 
     def __str__(self) -> str:
@@ -246,6 +251,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.groovy", "*.gvy")
             case self.MATLAB:
                 return FilenameMatcher("*.m", "*.mlx", "*.mlapp")
+            case self.DENO:
+                return FilenameMatcher("*.ts", "*.tsx", "*.js", "*.jsx")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -427,6 +434,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.matlab_language_server import MatlabLanguageServer
 
                 return MatlabLanguageServer
+            case self.DENO:
+                from solidlsp.language_servers.deno_language_server import DenoLanguageServer
+
+                return DenoLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

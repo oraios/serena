@@ -37,6 +37,7 @@ def serena_config():
         Language.FSHARP,
         Language.POWERSHELL,
         Language.CPP_CCLS,
+        Language.DENO,
     ]:
         repo_path = get_repo_path(language)
         if repo_path.exists():
@@ -120,6 +121,7 @@ class TestSerenaAgent:
             pytest.param(Language.FSHARP, "Calculator", "Module", "Calculator.fs", marks=pytest.mark.fsharp),
             pytest.param(Language.POWERSHELL, "function Greet-User ()", "Function", "main.ps1", marks=pytest.mark.powershell),
             pytest.param(Language.CPP_CCLS, "add", "Function", "b.cpp", marks=pytest.mark.cpp),
+            pytest.param(Language.DENO, "DemoClass", "Class", "mod.ts", marks=pytest.mark.deno),
         ],
         indirect=["serena_agent"],
     )
@@ -195,6 +197,7 @@ class TestSerenaAgent:
             pytest.param(Language.FSHARP, "add", "Calculator.fs", "Program.fs", marks=pytest.mark.fsharp),
             pytest.param(Language.POWERSHELL, "function Greet-User ()", "main.ps1", "main.ps1", marks=pytest.mark.powershell),
             pytest.param(Language.CPP_CCLS, "add", "b.cpp", "a.cpp", marks=pytest.mark.cpp),
+            pytest.param(Language.DENO, "helperFunction", "mod.ts", "use_mod.ts", marks=pytest.mark.deno),
         ],
         indirect=["serena_agent"],
     )
