@@ -75,6 +75,10 @@ class Language(str, Enum):
     Requires MATLAB R2021b or later and Node.js.
     Set MATLAB_PATH environment variable or configure matlab_path in ls_specific_settings.
     """
+    NIM = "nim"
+    """Nim Language Server (nimlangserver) for Nim projects.
+    Requires Nim and nimble installed. Automatically installs nimlangserver via nimble if not found.
+    """
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -253,6 +257,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.m", "*.mlx", "*.mlapp")
             case self.SYSTEMVERILOG:
                 return FilenameMatcher("*.sv", "*.svh", "*.v", "*.vh")
+            case self.NIM:
+                return FilenameMatcher("*.nim", "*.nims", "*.nimble")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -438,6 +444,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.systemverilog_server import SystemVerilogLanguageServer
 
                 return SystemVerilogLanguageServer
+            case self.NIM:
+                from solidlsp.language_servers.nim_language_server import NimLanguageServer
+
+                return NimLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
