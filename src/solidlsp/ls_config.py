@@ -165,7 +165,7 @@ class Language(str, Enum):
         """
         match self:
             case self.DENO:
-                return ("deno.json", "deno.jsonc", "deno.lock"), self.TYPESCRIPT
+                return ("deno.json", "deno.jsonc", "deno.lock"), Language.TYPESCRIPT
             case _:
                 return None
 
