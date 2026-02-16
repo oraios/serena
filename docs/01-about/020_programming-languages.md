@@ -39,7 +39,7 @@ Some languages require additional installations or setup steps, as noted.
 * **Clojure**
 * **Dart**
 * **Deno**
-  (auto-installed via npm if not found on PATH; uses the built-in `deno lsp`; must be explicitly set as language `deno` in project configuration)
+  (auto-installed via npm if not found on PATH; uses the built-in `deno lsp`; auto-detected when `deno.json`, `deno.jsonc`, or `deno.lock` is found in the project root)
 * **Elixir**  
   (requires Elixir installation; Expert language server is downloaded automatically)
 * **Elm**  
