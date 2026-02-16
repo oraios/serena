@@ -29,6 +29,42 @@ log = logging.getLogger(__name__)
 
 ENCODING = "utf-8"
 
+# Default nimsuggest.cfg content — helps nimsuggest operate reliably with the language server.
+# Only written when the project does not already have a nimsuggest.cfg.
+_NIMSUGGEST_CFG = """\
+# Auto-generated nimsuggest.cfg for language server stability
+# This supplements the project's nim.cfg without overriding it
+
+-d:nimsuggest
+-d:nimSuggestSkipStatic
+-d:nimscript
+
+--errorMax:100
+--maxLoopIterationsVM:10000000
+
+--skipProjCfg:off
+--skipUserCfg:on
+--skipParentCfg:on
+--verbosity:0
+--hints:off
+--notes:off
+"""
+
+# Template for auto-generated nim.cfg — provides path hints so nimsuggest can
+# resolve imports. Only written when no nim.cfg exists and a .nimble file is present.
+_NIM_CFG_TEMPLATE = """\
+# Auto-generated nim.cfg for nimsuggest/nimlangserver
+
+--path:"."
+{extra_paths}
+--define:ssl
+--define:useStdLib
+
+--hint:XDeclaredButNotUsed:off
+--hint:XCannotRaiseY:off
+--hint:User:off
+"""
+
 
 class NimLanguageServerProcess(LanguageServerProcess):
     """Custom process handler for nimlangserver.
@@ -56,9 +92,18 @@ class NimLanguageServerProcess(LanguageServerProcess):
 
 
 class NimLanguageServer(SolidLanguageServer):
-    """
-    Provides Nim specific instantiation of the LanguageServer class using nimlangserver.
-    Contains various configurations and settings specific to Nim language.
+    """Nim language server integration using nimlangserver.
+
+    Uses nimlangserver (installed via nimble) as the LSP backend. Key implementation notes:
+
+    - **Content-Type workaround**: nimlangserver (as of 1.12.0) cannot parse LSP messages
+      that include a Content-Type header. NimLanguageServerProcess overrides _send_payload
+      to send only the Content-Length header.
+    - **Config file generation**: On startup, creates nimsuggest.cfg and nim.cfg in the
+      project root if they don't already exist. These are required for reliable nimsuggest
+      operation (import resolution, stability). Existing config files are never overwritten.
+    - **Retry logic**: request_document_symbols retries on failure because nimsuggest
+      sometimes reports a port=0 error on the first request while still initializing.
     """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
@@ -69,7 +114,7 @@ class NimLanguageServer(SolidLanguageServer):
         nim_lsp_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
 
         # Ensure nimble bin is in PATH for nimsuggest
-        nimble_bin = os.path.expanduser("~/.nimble/bin")
+        nimble_bin = os.path.expanduser(os.path.join("~", ".nimble", "bin"))
         env: dict[str, str] = {}
         current_path = os.environ.get("PATH", "")
         if nimble_bin not in current_path.split(os.pathsep):
@@ -130,44 +175,34 @@ class NimLanguageServer(SolidLanguageServer):
         ]
 
     def _create_nim_config_if_needed(self) -> None:
-        """Create or supplement Nim configuration to help nimsuggest work better."""
+        """Create Nim config files if the project doesn't already have them.
+
+        nimsuggest (the analysis backend used by nimlangserver) needs configuration to
+        reliably resolve imports and avoid noisy diagnostics. Without a nimsuggest.cfg,
+        it may crash or produce spurious errors. Without a nim.cfg with --path hints,
+        cross-module imports often fail to resolve.
+
+        These files are only written when absent — existing project config is never overwritten.
+        """
         try:
             nim_cfg_path = os.path.join(self.repository_root_path, "nim.cfg")
             nimsuggest_cfg_path = os.path.join(self.repository_root_path, "nimsuggest.cfg")
 
             if not os.path.exists(nimsuggest_cfg_path):
                 with open(nimsuggest_cfg_path, "w") as f:
-                    f.write("# Auto-generated nimsuggest.cfg for language server stability\n")
-                    f.write("# This supplements the project's nim.cfg without overriding it\n\n")
-                    f.write("-d:nimsuggest\n")
-                    f.write("-d:nimSuggestSkipStatic\n")
-                    f.write("-d:nimscript\n\n")
-                    f.write("--errorMax:100\n")
-                    f.write("--maxLoopIterationsVM:10000000\n\n")
-                    f.write("--skipProjCfg:off\n")
-                    f.write("--skipUserCfg:on\n")
-                    f.write("--skipParentCfg:on\n")
-                    f.write("--verbosity:0\n")
-                    f.write("--hints:off\n")
-                    f.write("--notes:off\n")
+                    f.write(_NIMSUGGEST_CFG)
                 log.info("Created nimsuggest.cfg to improve stability")
 
             if not os.path.exists(nim_cfg_path):
                 nimble_files = list(pathlib.Path(self.repository_root_path).glob("*.nimble"))
                 if nimble_files:
-                    has_src = os.path.exists(os.path.join(self.repository_root_path, "src"))
-                    has_tests = os.path.exists(os.path.join(self.repository_root_path, "tests"))
+                    extra_paths = ""
+                    if os.path.exists(os.path.join(self.repository_root_path, "src")):
+                        extra_paths += '--path:"src"\n'
+                    if os.path.exists(os.path.join(self.repository_root_path, "tests")):
+                        extra_paths += '--path:"tests"\n'
                     with open(nim_cfg_path, "w") as f:
-                        f.write("# Auto-generated nim.cfg for nimsuggest/nimlangserver\n\n")
-                        f.write('--path:"."\n')
-                        if has_src:
-                            f.write('--path:"src"\n')
-                        if has_tests:
-                            f.write('--path:"tests"\n')
-                        f.write("\n--define:ssl\n--define:useStdLib\n\n")
-                        f.write("--hint:XDeclaredButNotUsed:off\n")
-                        f.write("--hint:XCannotRaiseY:off\n")
-                        f.write("--hint:User:off\n")
+                        f.write(_NIM_CFG_TEMPLATE.format(extra_paths=extra_paths))
                     log.info("Created nim.cfg with project paths")
             else:
                 log.debug("Found existing nim.cfg, respecting project configuration")
@@ -179,17 +214,23 @@ class NimLanguageServer(SolidLanguageServer):
         """
         Setup runtime dependencies for Nim Language Server and return the path to the executable.
         """
-        # Check if nimlangserver is already installed via nimble
-        nimble_bin = os.path.expanduser("~/.nimble/bin")
-        nimlangserver_path = os.path.join(nimble_bin, "nimlangserver")
+        nimble_bin = os.path.expanduser(os.path.join("~", ".nimble", "bin"))
 
+        # Check if nimlangserver is already available on PATH (works cross-platform)
+        system_nimlangserver = shutil.which("nimlangserver")
+        if system_nimlangserver:
+            log.info("Found nimlangserver at %s", system_nimlangserver)
+            return system_nimlangserver
+
+        # Also check the standard nimble bin directory (may not be on PATH)
+        nimlangserver_path = os.path.join(nimble_bin, "nimlangserver")
         if os.path.exists(nimlangserver_path):
             log.info("Found nimlangserver at %s", nimlangserver_path)
             return nimlangserver_path
 
-        # Check if nim and nimble are installed
-        is_nim_installed = shutil.which("nim") is not None
-        is_nimble_installed = shutil.which("nimble") is not None
+        # Check if nim and nimble are installed (on PATH or in nimble bin)
+        is_nim_installed = shutil.which("nim") is not None or os.path.exists(os.path.join(nimble_bin, "nim"))
+        is_nimble_installed = shutil.which("nimble") is not None or os.path.exists(os.path.join(nimble_bin, "nimble"))
 
         if not is_nim_installed or not is_nimble_installed:
             missing = []
@@ -208,12 +249,13 @@ class NimLanguageServer(SolidLanguageServer):
 
         # Install nimlangserver via nimble
         log.info("Installing nimlangserver via nimble")
+        nimble_cmd = shutil.which("nimble") or os.path.join(nimble_bin, "nimble")
         deps = RuntimeDependencyCollection(
             [
                 RuntimeDependency(
                     id="nimlangserver",
                     description="Nim Language Server",
-                    command=["nimble", "install", "nimlangserver", "-y"],
+                    command=[nimble_cmd, "install", "nimlangserver", "-y"],
                     platform_id=None,
                 )
             ]
@@ -226,15 +268,15 @@ class NimLanguageServer(SolidLanguageServer):
                 f"Failed to install nimlangserver via nimble: {e}\nPlease try installing manually with: nimble install nimlangserver"
             ) from e
 
-        nimlangserver_path = os.path.join(nimble_bin, "nimlangserver")
-        if os.path.exists(nimlangserver_path):
-            log.info("Successfully installed nimlangserver at %s", nimlangserver_path)
-            return nimlangserver_path
+        # After install, check PATH and nimble bin
+        installed_nimlangserver = shutil.which("nimlangserver")
+        if installed_nimlangserver:
+            log.info("Found nimlangserver in PATH at %s", installed_nimlangserver)
+            return installed_nimlangserver
 
-        nimlangserver_in_path = shutil.which("nimlangserver")
-        if nimlangserver_in_path:
-            log.info("Found nimlangserver in PATH at %s", nimlangserver_in_path)
-            return nimlangserver_in_path
+        if os.path.exists(nimlangserver_path):
+            log.info("Found nimlangserver at %s", nimlangserver_path)
+            return nimlangserver_path
 
         raise RuntimeError(
             "nimlangserver installation appeared to succeed but the binary was not found.\n"
