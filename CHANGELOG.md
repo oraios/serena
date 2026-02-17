@@ -15,9 +15,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     * Major extensions to the dashboard, which now serves as a central web interface for Serena
         * View current configuration
         * View news which can be marked as read
-        * View the executions, with the possibility to cancel running/scheduled executions 
+        * View the executions, with the possibility to cancel running/scheduled executions
         * View tool usage statistics
         * View and create memories and edit the serena configuration file
+        * Log page now has save, copy and clear buttons:
+            * **Save logs**: downloads all current logs as a timestamped `.txt` file
+            * **Clear logs**: clears the in-memory log buffer and resets the log view
     * New two-tier caching of language server document symbols and considerable performance improvements surrounding symbol retrieval/indexing
     * Various fixes related to indexing, special paths and determination of ignored paths
     * Decreased `TOOL_DEFAULT_MAX_ANSWER_LENGTH` to be in accordance with (below) typical max-tokens configurations

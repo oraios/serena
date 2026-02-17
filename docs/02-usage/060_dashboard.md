@@ -26,6 +26,18 @@ Both can be configured in Serena's [configuration](050_configuration) file (`ser
 If enabled, they will automatically be opened as soon as the Serena agent/MCP server is started.
 For the dashboard, this can be disabled if desired (see below).
 
+## Log Page
+
+The **Logs** page streams live log output from the running Serena session, updated every second.
+Three action buttons are available in the top-right corner of the log view:
+
+* **Save logs** (↓) — downloads all currently displayed log entries as a plain-text `.txt` file
+  with a timestamp in the filename (e.g. `serena-logs-2026-02-17T14-30-00.txt`).
+* **Copy logs** — copies all log text to the clipboard.
+* **Clear logs** — clears the in-memory log buffer on the server and resets the log view.
+  A confirmation prompt is shown before clearing. Note that cleared logs cannot be recovered
+  unless previously saved.
+
 ## Disabling Automatic Browser Opening
 
 If you prefer not to have the dashboard open automatically (e.g., to avoid focus stealing), you can disable it
