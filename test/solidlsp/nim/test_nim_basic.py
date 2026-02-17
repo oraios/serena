@@ -5,6 +5,8 @@ These tests validate the functionality of the language server APIs
 using the Nim test repository.
 """
 
+import shutil
+
 import pytest
 
 from solidlsp import SolidLanguageServer
@@ -13,6 +15,10 @@ from solidlsp.ls_utils import SymbolUtils
 
 
 @pytest.mark.nim
+@pytest.mark.skipif(
+    shutil.which("nim") is None and shutil.which("nimlangserver") is None,
+    reason="Nim toolchain not installed - nim and nimlangserver not found in PATH.",
+)
 class TestNimLanguageServerBasics:
     """Test basic functionality of the Nim language server."""
 
