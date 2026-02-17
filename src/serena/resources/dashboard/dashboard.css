@@ -1277,12 +1277,18 @@ body {
     gap: 8px;
 }
 
-/* Copy Logs Button */
-.copy-logs-btn {
+/* Log Action Buttons (Save, Copy, Clear) */
+.log-action-buttons {
     position: absolute;
     top: 15px;
-    right: 15px;
+    right: 20px;
     z-index: 10;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.log-action-btn {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -1293,25 +1299,31 @@ body {
     color: var(--text-primary);
     cursor: pointer;
     opacity: 0.8;
-    transition: opacity 0.2s ease, background-color 0.2s ease;
+    transition: opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
     font-size: 13px;
     font-weight: 500;
 }
 
-.copy-logs-btn:hover {
+.log-action-btn:hover {
     opacity: 1;
     background-color: var(--border-color);
 }
 
-.copy-logs-btn svg {
+.log-action-btn svg {
     flex-shrink: 0;
 }
 
-.copy-logs-text {
+.log-action-btn-text {
     display: none;
     white-space: nowrap;
 }
 
-.copy-logs-btn:hover .copy-logs-text {
+.log-action-btn:hover .log-action-btn-text {
     display: inline;
+}
+
+.log-action-btn-danger:hover {
+    background-color: rgba(220, 53, 53, 0.12);
+    border-color: rgba(220, 53, 53, 0.4);
+    color: var(--log-error);
 }

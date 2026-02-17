@@ -184,6 +184,11 @@ class SerenaDashboardAPI:
             self._clear_tool_stats()
             return {"status": "cleared"}
 
+        @self._app.route("/clear_logs", methods=["POST"])
+        def clear_logs() -> dict[str, str]:
+            self._memory_log_handler.clear_log_messages()
+            return {"status": "cleared"}
+
         @self._app.route("/get_token_count_estimator_name", methods=["GET"])
         def get_token_count_estimator_name() -> dict[str, str]:
             estimator_name = self._tool_usage_stats.token_estimator_name if self._tool_usage_stats else "unknown"

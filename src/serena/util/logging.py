@@ -64,6 +64,9 @@ class MemoryLogHandler(logging.Handler):
     def get_log_messages(self, from_idx: int = 0) -> LogMessages:
         return self._log_buffer.get_log_messages(from_idx=from_idx)
 
+    def clear_log_messages(self) -> None:
+        self._log_buffer.clear()
+
 
 class LogBuffer:
     """
@@ -86,6 +89,11 @@ class LogBuffer:
             if self._max_messages is not None and len(self._log_messages) > self._max_messages:
                 excess = len(self._log_messages) - self._max_messages
                 self._log_messages = self._log_messages[excess:]
+
+    def clear(self) -> None:
+        with self._lock:
+            self._log_messages = []
+            self._max_idx = -1
 
     def get_log_messages(self, from_idx: int = 0) -> LogMessages:
         """
