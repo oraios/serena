@@ -20,7 +20,9 @@ Status of the `main` branch. Changes prior to the next official version change w
         * View and create memories and edit the serena configuration file
         * Log page now has save, copy and clear buttons:
             * **Save logs**: downloads all current logs as a timestamped `.txt` file
-            * **Clear logs**: clears the in-memory log buffer and resets the log view
+            * **Clear logs**: clears the in-memory `LogBuffer` (thread-safe) and resets the
+              global message index (`_max_idx`) to `-1`, ensuring the dashboard polling cursor
+              is also reset and no stale index state remains after the clear
     * New two-tier caching of language server document symbols and considerable performance improvements surrounding symbol retrieval/indexing
     * Various fixes related to indexing, special paths and determination of ignored paths
     * Decreased `TOOL_DEFAULT_MAX_ANSWER_LENGTH` to be in accordance with (below) typical max-tokens configurations
