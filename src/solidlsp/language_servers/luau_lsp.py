@@ -17,6 +17,7 @@ import os
 import pathlib
 import platform
 import shutil
+import threading
 import zipfile
 from pathlib import Path
 
@@ -33,6 +34,10 @@ log = logging.getLogger(__name__)
 
 # Pin to a known stable release
 LUAU_LSP_VERSION = "1.57.1"
+
+# Roblox type definitions and API docs CDN
+ROBLOX_TYPES_URL = "https://luau-lsp.pages.dev/type-definitions/globalTypes.PluginSecurity.d.luau"
+ROBLOX_DOCS_URL = "https://luau-lsp.pages.dev/api-docs/en-us.json"
 
 
 class LuauLanguageServer(SolidLanguageServer):
@@ -174,10 +179,58 @@ class LuauLanguageServer(SolidLanguageServer):
         return str(binary_path)
 
     @staticmethod
-    def _setup_runtime_dependency() -> str:
+    def _download_roblox_definitions() -> tuple[str | None, str | None]:
+        """Download Roblox type definitions and API docs if not already cached.
+
+        Returns a tuple of (definitions_path, docs_path). Either may be None if download fails.
+        """
+        install_dir = Path.home() / ".serena" / "language_servers" / "luau"
+        install_dir.mkdir(parents=True, exist_ok=True)
+
+        definitions_path = install_dir / "globalTypes.d.luau"
+        docs_path = install_dir / "en-us.json"
+
+        result_definitions: str | None = None
+        result_docs: str | None = None
+
+        # Download type definitions if not cached
+        if definitions_path.exists():
+            result_definitions = str(definitions_path)
+        else:
+            try:
+                log.info(f"Downloading Roblox type definitions from {ROBLOX_TYPES_URL}...")
+                resp = requests.get(ROBLOX_TYPES_URL, timeout=30)
+                resp.raise_for_status()
+                definitions_path.write_bytes(resp.content)
+                result_definitions = str(definitions_path)
+                log.info(f"Roblox type definitions saved to {definitions_path}")
+            except Exception as e:
+                log.warning(f"Failed to download Roblox type definitions: {e}")
+
+        # Download API docs if not cached
+        if docs_path.exists():
+            result_docs = str(docs_path)
+        else:
+            try:
+                log.info(f"Downloading Roblox API docs from {ROBLOX_DOCS_URL}...")
+                resp = requests.get(ROBLOX_DOCS_URL, timeout=30)
+                resp.raise_for_status()
+                docs_path.write_bytes(resp.content)
+                result_docs = str(docs_path)
+                log.info(f"Roblox API docs saved to {docs_path}")
+            except Exception as e:
+                log.warning(f"Failed to download Roblox API docs: {e}")
+
+        return result_definitions, result_docs
+
+    @staticmethod
+    def _setup_runtime_dependency() -> tuple[str, str | None, str | None]:
         """
         Check if luau-lsp is available.
         Downloads it if not present.
+        Also downloads Roblox type definitions and API docs.
+
+        Returns a tuple of (binary_path, definitions_path, docs_path).
         """
         luau_lsp_path = LuauLanguageServer._get_luau_lsp_path()
 
@@ -186,21 +239,29 @@ class LuauLanguageServer(SolidLanguageServer):
             print("luau-lsp not found. Downloading...")
             luau_lsp_path = LuauLanguageServer._download_luau_lsp()
 
-        return luau_lsp_path
+        definitions_path, docs_path = LuauLanguageServer._download_roblox_definitions()
+
+        return luau_lsp_path, definitions_path, docs_path
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        luau_lsp_path = self._setup_runtime_dependency()
+        luau_lsp_path, definitions_path, docs_path = self._setup_runtime_dependency()
+
+        # Build CLI command with optional Roblox definitions
+        cmd = [luau_lsp_path, "lsp"]
+        if definitions_path:
+            cmd.append(f"--definitions:@roblox={definitions_path}")
+        if docs_path:
+            cmd.append(f"--docs={docs_path}")
 
         # luau-lsp uses subcommand 'lsp' to start in Language Server mode
-        # The binary itself is the command, with 'lsp' as an argument
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd=[luau_lsp_path, "lsp"], cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path),
             "luau",
             solidlsp_settings,
         )
-        self.request_id = 0
+        self.server_ready = threading.Event()
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
@@ -275,13 +336,22 @@ class LuauLanguageServer(SolidLanguageServer):
         def register_capability_handler(params: dict) -> None:
             return
 
+        def workspace_configuration_handler(params: dict) -> list:
+            items = params.get("items", [])
+            return [{} for _ in items]
+
         def window_log_message(msg: dict) -> None:
-            log.info(f"LSP: window/logMessage: {msg}")
+            message_text = msg.get("message", "")
+            log.info(f"LSP: window/logMessage: {message_text}")
+            if "workspace ready" in message_text.lower() or "initialized" in message_text.lower():
+                log.info("Luau language server signaled readiness")
+                self.server_ready.set()
 
         def do_nothing(params: dict) -> None:
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)
+        self.server.on_request("workspace/configuration", workspace_configuration_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
@@ -301,4 +371,10 @@ class LuauLanguageServer(SolidLanguageServer):
 
         self.server.notify.initialized({})
 
-        # luau-lsp is typically ready immediately after initialization
+        # Wait for luau-lsp to complete initial setup
+        log.info("Waiting for Luau language server to become ready...")
+        if self.server_ready.wait(timeout=5.0):
+            log.info("Luau language server ready")
+        else:
+            log.warning("Timeout waiting for Luau language server readiness, proceeding anyway")
+            self.server_ready.set()
