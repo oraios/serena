@@ -1322,6 +1322,11 @@ body {
     display: inline;
 }
 
+.log-action-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
 .log-action-btn-danger:hover {
     background-color: var(--border-color);
     border-color: rgba(220, 53, 53, 0.9);

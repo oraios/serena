@@ -1116,12 +1116,14 @@ class Dashboard {
         document.title = activeProject ? `${activeProject} – Serena Dashboard` : 'Serena Dashboard';
     }
 
+    updateLogButtons(hasLogs) {
+        this.$saveLogsBtn.prop('disabled', !hasLogs);
+        this.$copyLogsBtn.prop('disabled', !hasLogs);
+        this.$clearLogsBtn.prop('disabled', !hasLogs);
+    }
+
     saveLogs() {
         const logText = this.$logContainer.text();
-        if (!logText) {
-            alert('No logs to save');
-            return;
-        }
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const blob = new Blob([logText], {type: 'text/plain'});
         const url = URL.createObjectURL(blob);
@@ -1142,11 +1144,6 @@ class Dashboard {
     copyLogs() {
         const logText = this.$logContainer.text();
 
-        if (!logText) {
-            alert('No logs to copy');
-            return;
-        }
-
         // Use the Clipboard API to copy text
         navigator.clipboard.writeText(logText).then(() => {
             // Visual feedback - temporarily change icon to grey checkmark
@@ -1159,12 +1156,10 @@ class Dashboard {
             }, 1500);
         }).catch(err => {
             console.error('Failed to copy logs:', err);
-            alert('Failed to copy logs to clipboard');
         });
     }
 
     clearLogs() {
-        if (!confirm('Clear the log view?')) return;
         let self = this;
         $.ajax({
             url: '/clear_logs',
@@ -1172,14 +1167,15 @@ class Dashboard {
             success: function () {
                 self.$logContainer.empty();
                 self.currentMaxIdx = -1;
+                self.updateLogButtons(false);
 
                 const originalHtml = self.$clearLogsBtn.html();
                 const checkmarkSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><span class="log-action-btn-text">clear logs</span>';
                 self.$clearLogsBtn.html(checkmarkSvg);
                 setTimeout(() => { self.$clearLogsBtn.html(originalHtml); }, 1500);
             },
-            error: function () {
-                alert('Failed to clear logs');
+            error: function (xhr, status, error) {
+                console.error('Failed to clear logs:', error);
             }
         });
     }
@@ -1214,6 +1210,7 @@ class Dashboard {
                     $('#log-container').html('<div class="loading">No log messages found.</div>');
                 }
 
+                self.updateLogButtons(response.messages && response.messages.length > 0);
                 self.updateTitle(response.active_project);
 
                 // Start periodic polling for new logs
@@ -1253,6 +1250,8 @@ class Dashboard {
 
                     // Update max_idx
                     self.currentMaxIdx = response.max_idx || self.currentMaxIdx;
+
+                    self.updateLogButtons(true);
 
                     // Auto-scroll to bottom if user was already at bottom
                     if (wasAtBottom) {
