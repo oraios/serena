@@ -18,17 +18,7 @@ Status of the `main` branch. Changes prior to the next official version change w
         * View the executions, with the possibility to cancel running/scheduled executions
         * View tool usage statistics
         * View and create memories and edit the serena configuration file
-        * Log page now has save, copy and clear buttons:
-            * **Save logs**: downloads a snapshot of what is currently visible in the dashboard
-              as a timestamped `.txt` file. Captures the exact rolling in-memory buffer at a
-              point in time and is accessible directly from the browser — useful in remote or
-              containerised deployments where `~/.serena/logs` is not easily reachable from
-              the user's machine.
-            * **Clear logs**: clears the in-memory `LogBuffer` (thread-safe) and resets the
-              global message index (`_max_idx`) to `-1`, ensuring the dashboard polling cursor
-              is also reset and no stale index state remains after the clear. Clears only the
-              live dashboard view; disk logs in `~/.serena/logs` are not affected. Clearing
-              logs from disk or triggering a log reload may be considered in a future iteration.
+        * Log page now has save (downloads a snapshot) and clear (resets log view) buttons alongside the existing copy button
     * New two-tier caching of language server document symbols and considerable performance improvements surrounding symbol retrieval/indexing
     * Various fixes related to indexing, special paths and determination of ignored paths
     * Decreased `TOOL_DEFAULT_MAX_ANSWER_LENGTH` to be in accordance with (below) typical max-tokens configurations

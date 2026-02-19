@@ -1323,7 +1323,7 @@ body {
 }
 
 .log-action-btn-danger:hover {
-    background-color: rgba(220, 53, 53, 0.12);
-    border-color: rgba(220, 53, 53, 0.4);
+    background-color: var(--border-color);
+    border-color: rgba(220, 53, 53, 0.9);
     color: var(--log-error);
 }

@@ -1164,7 +1164,7 @@ class Dashboard {
     }
 
     clearLogs() {
-        if (!confirm('Clear all logs?')) return;
+        if (!confirm('Clear the log view?')) return;
         let self = this;
         $.ajax({
             url: '/clear_logs',
