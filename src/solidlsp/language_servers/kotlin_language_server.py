@@ -6,6 +6,7 @@ You can configure the following options in ls_specific_settings (in serena_confi
     ls_specific_settings:
       kotlin:
         ls_path: '/path/to/kotlin-lsp.sh'  # Custom path to Kotlin Language Server executable
+        kotlin_lsp_version: '261.13587.0'  # Kotlin Language Server version (default: current bundled version)
         jvm_options: '-Xmx4G'  # JVM options for Kotlin Language Server (default: -Xmx4G)
 
 Example configuration for large projects:
@@ -37,8 +38,8 @@ log = logging.getLogger(__name__)
 # -Xmx4G: Limit max heap to 4GB to prevent OOM on large projects
 DEFAULT_KOTLIN_JVM_OPTIONS = "-Xmx4G"
 
-# Kotlin Language Server version
-KOTLIN_LSP_VERSION = "261.13587.0"
+# Default Kotlin Language Server version (can be overridden via ls_specific_settings)
+DEFAULT_KOTLIN_LSP_VERSION = "261.13587.0"
 
 # Platform-specific Kotlin LSP download suffixes
 PLATFORM_KOTLIN_SUFFIX = {
@@ -151,7 +152,8 @@ class KotlinLanguageServer(SolidLanguageServer):
                 kotlin_script = os.path.join(static_dir, "kotlin-lsp.sh")
 
             if not os.path.exists(kotlin_script):
-                kotlin_url = f"https://download-cdn.jetbrains.com/kotlin-lsp/{KOTLIN_LSP_VERSION}/kotlin-lsp-{KOTLIN_LSP_VERSION}-{kotlin_suffix}.zip"
+                kotlin_lsp_version = self._custom_settings.get("kotlin_lsp_version", DEFAULT_KOTLIN_LSP_VERSION)
+                kotlin_url = f"https://download-cdn.jetbrains.com/kotlin-lsp/{kotlin_lsp_version}/kotlin-lsp-{kotlin_lsp_version}-{kotlin_suffix}.zip"
                 log.info("Downloading Kotlin Language Server...")
                 FileUtils.download_and_extract_archive(kotlin_url, static_dir, "zip")
 
@@ -178,11 +180,13 @@ class KotlinLanguageServer(SolidLanguageServer):
                 env["JAVA_HOME"] = self._java_home_path
 
             # Get JVM options from settings or use default
-            jvm_options = DEFAULT_KOTLIN_JVM_OPTIONS
-            custom_jvm_options = self._custom_settings.get("jvm_options", "")
-            if custom_jvm_options:
+            # Note: an explicit empty string means "no JVM options", which is distinct from not setting the key
+            _sentinel = object()
+            custom_jvm_options = self._custom_settings.get("jvm_options", _sentinel)
+            if custom_jvm_options is not _sentinel:
                 jvm_options = custom_jvm_options
-                log.info(f"Using custom JVM options for Kotlin Language Server: {jvm_options}")
+            else:
+                jvm_options = DEFAULT_KOTLIN_JVM_OPTIONS
 
             env["JAVA_TOOL_OPTIONS"] = jvm_options
             return env

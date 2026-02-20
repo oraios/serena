@@ -210,8 +210,27 @@ ls_specific_settings:
 ```
 
 This is supported by all language servers deriving their dependency provider from  `LanguageServerDependencyProviderSinglePath`.
-Currently, this includes the following languages: `bash`, `clojure`, `cpp`, `markdown`, `php`, `php_phpactor`, `python`, `rust`, `toml`, `typescript`, `yaml`. 
+Currently, this includes the following languages: `bash`, `clojure`, `cpp`, `kotlin`, `markdown`, `php`, `php_phpactor`, `python`, `rust`, `toml`, `typescript`, `yaml`.
 We will add support for more languages over time.
+
+#### Kotlin
+
+Serena uses [JetBrains' Kotlin Language Server](https://github.com/Kotlin/kotlin-lsp) for Kotlin support.
+
+**Runtime Requirements:**
+
+- Java 21 or higher is required. If not found, Serena automatically downloads an appropriate JRE.
+- The Kotlin Language Server is automatically downloaded from JetBrains' CDN.
+
+**Configuration:**
+
+```yaml
+ls_specific_settings:
+  kotlin:
+    ls_path: "/path/to/kotlin-lsp.sh"        # Override the Kotlin Language Server executable
+    kotlin_lsp_version: "261.13587.0"         # Override the Kotlin Language Server version
+    jvm_options: "-Xmx8G -XX:+UseG1GC"       # JVM options (default: -Xmx4G). Set to "" to disable.
+```
 
 #### C# (Roslyn Language Server)
 
