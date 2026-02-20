@@ -117,7 +117,10 @@ class LanguageServerManager:
             failure_messages = "\n".join([f"{lang.value}: {e}" for lang, e in exceptions.items()])
             raise Exception(f"Failed to start language servers:\n{failure_messages}")
 
-        return LanguageServerManager(language_servers, factory)
+        # Reorder to match the original config order (threads complete in arbitrary order,
+        # but get_language_server iterates in dict order to pick the right LS for a path)
+        ordered = {lang: language_servers[lang] for lang in languages}
+        return LanguageServerManager(ordered, factory)
 
     def get_root_path(self) -> str:
         return self._root_path
