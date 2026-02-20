@@ -55,3 +55,19 @@ class TestKotlinLanguageServer:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Main"), "Main missing from overview"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Utils"), "Utils missing from overview"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Model"), "Model missing from overview"
+
+    @pytest.mark.parametrize("language_server", [Language.KOTLIN], indirect=True)
+    def test_dir_overview(self, language_server: SolidLanguageServer) -> None:
+        result = language_server.request_dir_overview("src/main/kotlin/test_repo")
+        print(f"dir_overview keys: {list(result.keys())}")
+        for k, v in result.items():
+            print(f"  {k}: {[s.get('name') for s in v]}")
+        assert len(result) > 0, "Directory overview should return symbols for at least one file"
+        # Should find symbols from all 4 .kt files
+        all_symbol_names = set()
+        for symbols in result.values():
+            for s in symbols:
+                all_symbol_names.add(s.get("name"))
+        assert "Main" in all_symbol_names, "Main should be in directory overview"
+        assert "Utils" in all_symbol_names, "Utils should be in directory overview"
+        assert "Model" in all_symbol_names, "Model should be in directory overview"

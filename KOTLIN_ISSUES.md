@@ -119,7 +119,7 @@ gets empty/useless responses. Fixes fall into two categories:
 | **Impact** | Must know exact file path before getting an overview. Initial exploration requires `find_file` + `list_dir` first. |
 | **Status** | **Fixed** — directory support added |
 
-**Fix applied:** `GetSymbolsOverviewTool.apply()` in `src/serena/tools/symbol_tools.py` now accepts directories. When a directory is passed, it delegates to `_apply_directory()` which iterates over all source files and returns a per-file grouped overview.
+**Fix applied:** Both `GetSymbolsOverviewTool` (LSP) and `JetBrainsGetSymbolsOverviewTool` (JetBrains backend) now accept directories. The initial fix only covered the LSP tool, but the test team's backend-kotlin project uses `language_backend: JetBrains`, which swaps `get_symbols_overview` for `jet_brains_get_symbols_overview` via the internal `jetbrains.yml` mode. Both tools now delegate to a `_apply_directory()` method that iterates over source files and returns a per-file grouped overview.
 
 ### 7. `find_file` — `relative_path` Is Required (Should Default to ".")
 

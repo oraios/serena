@@ -1,10 +1,12 @@
 import logging
+import os
 from typing import Any, Literal
 
 import serena.jetbrains.jetbrains_types as jb
 from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
 from serena.symbol import JetBrainsSymbolDictGrouper
 from serena.tools import Tool, ToolMarkerOptional, ToolMarkerSymbolicRead
+from serena.util.file_system import scan_directory
 
 log = logging.getLogger(__name__)
 
@@ -141,19 +143,36 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
         include_file_documentation: bool = False,
     ) -> str:
         """
-        Gets an overview of the top-level symbols in the given file.
+        Gets an overview of the top-level symbols in the given file or directory.
         Calling this is often a good idea before more targeted reading, searching or editing operations on the code symbols.
         Before requesting a symbol overview, it is usually a good idea to narrow down the scope of the overview
         by first understanding the basic directory structure of the repository that you can get from memories
         or by using the `list_dir` and `find_file` tools (or similar).
 
-        :param relative_path: the relative path to the file to get the overview of
+        :param relative_path: the relative path to the file or directory to get the overview of.
+            If a directory is passed, returns an overview of all source files in that directory.
         :param depth: depth up to which descendants shall be retrieved (e.g., use 1 to also retrieve immediate children).
         :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
             -1 means the default value from the config will be used.
         :param include_file_documentation: whether to include the file's docstring. Default False.
         :return: a JSON object containing the symbols grouped by kind in a compact format.
         """
+        abs_path = os.path.join(self.project.project_root, relative_path)
+        if os.path.isdir(abs_path):
+            return self._apply_directory(
+                relative_path, depth=depth, max_answer_chars=max_answer_chars, include_file_documentation=include_file_documentation
+            )
+        return self._apply_file(
+            relative_path, depth=depth, max_answer_chars=max_answer_chars, include_file_documentation=include_file_documentation
+        )
+
+    def _apply_file(
+        self,
+        relative_path: str,
+        depth: int = 0,
+        max_answer_chars: int = -1,
+        include_file_documentation: bool = False,
+    ) -> str:
         with JetBrainsPluginClient.from_project(self.project) as client:
             symbol_overview = client.get_symbols_overview(
                 relative_path=relative_path, depth=depth, include_file_documentation=include_file_documentation
@@ -167,6 +186,39 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
             json_result = self._to_json(result)
         else:
             json_result = self._to_json(symbol_overview)
+        return self._limit_length(json_result, max_answer_chars)
+
+    def _apply_directory(
+        self,
+        relative_path: str,
+        depth: int = 0,
+        max_answer_chars: int = -1,
+        include_file_documentation: bool = False,
+    ) -> str:
+        abs_path = os.path.join(self.project.project_root, relative_path)
+        _dirs, files = scan_directory(
+            path=abs_path,
+            recursive=False,
+            is_ignored_dir=self.project.is_ignored_path,
+            is_ignored_file=self.project.is_ignored_path,
+            relative_to=self.project.project_root,
+        )
+        result: dict[str, Any] = {}
+        with JetBrainsPluginClient.from_project(self.project) as client:
+            for file_rel_path in sorted(files):
+                try:
+                    symbol_overview = client.get_symbols_overview(
+                        relative_path=file_rel_path, depth=depth, include_file_documentation=include_file_documentation
+                    )
+                    symbols = symbol_overview.get("symbols", [])
+                    if symbols:
+                        if self.USE_COMPACT_FORMAT:
+                            result[file_rel_path] = self.symbol_dict_grouper.group(symbols)
+                        else:
+                            result[file_rel_path] = symbol_overview
+                except Exception as e:
+                    log.warning("Failed to get symbols for %s: %s", file_rel_path, e)
+        json_result = self._to_json(result)
         return self._limit_length(json_result, max_answer_chars)
 
 
