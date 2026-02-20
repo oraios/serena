@@ -36,14 +36,6 @@ from solidlsp.util.subprocess_util import quote_arg, subprocess_kwargs
 
 log = logging.getLogger(__name__)
 
-# LSP notification methods that are safe to ignore without logging
-# These are informational notifications that don't require handlers
-IGNORABLE_NOTIFICATIONS = {
-    "$/logTrace",  # Kotlin LSP verbose logging
-    "$/progress",  # Progress notifications
-    "$/cancelRequest",  # Cancellation notifications
-}
-
 
 class LanguageServerTerminatedException(Exception):
     """
@@ -571,9 +563,7 @@ class LanguageServerProcess:
         params = response.get("params")
         handler = self.on_notification_handlers.get(method)
         if not handler:
-            # Only log unhandled methods that are not in the ignore list
-            if method not in IGNORABLE_NOTIFICATIONS:
-                log.warning("Unhandled method '%s'", method)
+            log.warning("Unhandled method '%s'", method)
             return
         try:
             handler(params)
