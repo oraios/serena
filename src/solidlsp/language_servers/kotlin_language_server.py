@@ -20,7 +20,10 @@ import logging
 import os
 import pathlib
 import stat
+import threading
 from typing import cast
+
+from overrides import override
 
 from solidlsp.ls import (
     LanguageServerDependencyProvider,
@@ -101,6 +104,9 @@ class KotlinLanguageServer(SolidLanguageServer):
             "kotlin",
             solidlsp_settings,
         )
+        self._indexing_complete = threading.Event()
+        self._active_progress_tokens: set = set()
+        self._progress_lock = threading.Lock()
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
@@ -459,11 +465,43 @@ class KotlinLanguageServer(SolidLanguageServer):
         def window_log_message(msg: dict) -> None:
             log.info(f"LSP: window/logMessage: {msg}")
 
+        def work_done_progress_create(params: dict) -> dict:
+            """Handle window/workDoneProgress/create requests from Kotlin LSP."""
+            log.debug(f"LSP: window/workDoneProgress/create: {params}")
+            return {}
+
+        def progress_handler(params: dict) -> None:
+            """Track $/progress notifications to detect when Kotlin LSP indexing completes."""
+            token = params.get("token", "")
+            value = params.get("value", {})
+            kind = value.get("kind")
+
+            if kind == "begin":
+                title = value.get("title", "")
+                log.info(f"Kotlin LSP progress [{token}]: started - {title}")
+                with self._progress_lock:
+                    self._active_progress_tokens.add(token)
+            elif kind == "report":
+                percentage = value.get("percentage")
+                message = value.get("message", "")
+                if percentage is not None:
+                    log.debug(f"Kotlin LSP progress [{token}]: {message} ({percentage}%)")
+                elif message:
+                    log.debug(f"Kotlin LSP progress [{token}]: {message}")
+            elif kind == "end":
+                message = value.get("message", "")
+                log.info(f"Kotlin LSP progress [{token}]: ended - {message}")
+                with self._progress_lock:
+                    self._active_progress_tokens.discard(token)
+                    if not self._active_progress_tokens:
+                        self._indexing_complete.set()
+
         self.server.on_request("client/registerCapability", do_nothing)
         self.server.on_notification("language/status", do_nothing)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
-        self.server.on_notification("$/progress", do_nothing)
+        self.server.on_request("window/workDoneProgress/create", work_done_progress_create)
+        self.server.on_notification("$/progress", progress_handler)
         self.server.on_notification("$/logTrace", do_nothing)
         self.server.on_notification("$/cancelRequest", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
@@ -488,3 +526,14 @@ class KotlinLanguageServer(SolidLanguageServer):
         assert "semanticTokensProvider" in capabilities, "Server must support semantic tokens"
 
         self.server.notify.initialized({})
+
+        log.info("Waiting for Kotlin LSP indexing to complete...")
+        if self._indexing_complete.wait(timeout=120.0):
+            log.info("Kotlin LSP indexing completed")
+        else:
+            log.warning("Timeout waiting for Kotlin LSP indexing (120s), proceeding anyway")
+
+    @override
+    def _get_wait_time_for_cross_file_referencing(self) -> float:
+        """Small safety buffer since we already waited for indexing to complete in _start_server."""
+        return 1.0
