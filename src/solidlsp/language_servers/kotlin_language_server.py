@@ -94,11 +94,23 @@ class KotlinLanguageServer(SolidLanguageServer):
         ), "Only Windows, Linux and macOS platforms are supported for Kotlin in multilspy at the moment"
 
         # Runtime dependency information
+        # Platform-specific Kotlin LSP downloads
+        kotlin_version = "261.13587.0"
+        platform_kotlin_suffix = {
+            "win-x64": "win-x64",
+            "linux-x64": "linux-x64",
+            "linux-arm64": "linux-aarch64",
+            "osx-x64": "mac-x64",
+            "osx-arm64": "mac-aarch64",
+        }
+        kotlin_suffix = platform_kotlin_suffix.get(platform_id.value)
+        assert kotlin_suffix, f"Unsupported platform for Kotlin LSP: {platform_id.value}"
+
         runtime_dependencies = {
             "runtimeDependency": {
                 "id": "KotlinLsp",
                 "description": "Kotlin Language Server",
-                "url": "https://download-cdn.jetbrains.com/kotlin-lsp/0.253.10629/kotlin-0.253.10629.zip",
+                "url": f"https://download-cdn.jetbrains.com/kotlin-lsp/{kotlin_version}/kotlin-lsp-{kotlin_version}-{kotlin_suffix}.zip",
                 "archiveType": "zip",
             },
             "java": {
