@@ -119,7 +119,10 @@ gets empty/useless responses. Fixes fall into two categories:
 | **Impact** | Must know exact file path before getting an overview. Initial exploration requires `find_file` + `list_dir` first. |
 | **Status** | **Fixed** — directory support added |
 
-**Fix applied:** Both `GetSymbolsOverviewTool` (LSP) and `JetBrainsGetSymbolsOverviewTool` (JetBrains backend) now accept directories. The initial fix only covered the LSP tool, but the test team's backend-kotlin project uses `language_backend: JetBrains`, which swaps `get_symbols_overview` for `jet_brains_get_symbols_overview` via the internal `jetbrains.yml` mode. Both tools now delegate to a `_apply_directory()` method that iterates over source files and returns a per-file grouped overview.
+**Fix applied (3 parts):**
+1. Added `_apply_directory()` to `GetSymbolsOverviewTool` (LSP) and `JetBrainsGetSymbolsOverviewTool` (JetBrains) — both now accept directories.
+2. **Root cause of empty `{}` results**: `LanguageServerManager.from_languages()` starts language servers in parallel threads, and the `_language_servers` dict was populated in **thread completion order** (not config order). Since Kotlin LSP takes ~7s to start vs <1s for Python/TS/Bash, the Python LS was always first in iteration order. When `get_language_server()` is called with a **directory** path, `is_ignored_path()` skips the file extension check (directories aren't files), so every LS "accepts" the directory — and the first LS (Python) was selected. The Python LS then skipped all `.kt` files as unsupported → empty tree → `{}`.
+3. **Fix**: `from_languages()` now reorders the dict to match the original config order after all threads complete (`src/serena/ls_manager.py`). This ensures the primary language (first in config) is selected for directory operations.
 
 ### 7. `find_file` — `relative_path` Is Required (Should Default to ".")
 
