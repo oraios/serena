@@ -104,7 +104,6 @@ class KotlinLanguageServer(SolidLanguageServer):
             "kotlin",
             solidlsp_settings,
         )
-
         # Indexing synchronisation: starts SET (= already done), cleared if the server
         # sends window/workDoneProgress/create (async-indexing servers like KLS v261+),
         # set again once all progress tokens have ended.
