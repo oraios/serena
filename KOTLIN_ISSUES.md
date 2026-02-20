@@ -43,13 +43,14 @@ gets empty/useless responses. Fixes fall into two categories:
 | **Where** | `src/serena/symbol.py:579` (`request_info_for_symbol`) → `src/solidlsp/ls.py:1537` (`request_hover`) → LSP returns null |
 | **Impact** | No way to get signature/type info without reading the full body (`include_body=true`), which is much more expensive |
 | **Evidence** | Tested on 5 symbol kinds (class, method, property, enum, data class) — none returned info |
-| **Status** | Open |
+| **Status** | **Mitigated** — signature fallback added |
 
-**Possible actions:**
-- [ ] Verify hover is truly non-functional (test against our test repo, not just backend-kotlin)
-- [ ] If hover returns null, consider falling back to extracting a summary from the body (first line / signature only)
-- [ ] Document the limitation
-- [ ] Check if the Kotlin LSP advertises `hoverProvider` capability (it does — see `_start_server` asserts)
+**Fix applied:** When `textDocument/hover` returns null, Serena now falls back to extracting the first 5 lines of the symbol body as a signature summary. This provides useful type/signature info without the cost of `include_body=true`.
+- Changed `request_info_for_symbol()` in `src/serena/symbol.py` to call `_extract_signature_fallback()` when hover returns null.
+
+**Remaining upstream issue:**
+- [ ] File upstream issue with JetBrains — `hoverProvider` is advertised but non-functional
+- [ ] Full hover info (KDoc, resolved types) still unavailable — only raw source signature is shown
 
 ---
 
@@ -64,15 +65,13 @@ gets empty/useless responses. Fixes fall into two categories:
 | **Where** | Kotlin LSP `textDocument/documentSymbol` response → `src/solidlsp/ls_types.py` SymbolKind |
 | **Impact** | `include_kinds=[5]` misses classes reported as Struct. `is_low_level()` (kind >= 13) incorrectly classifies data classes as low-level, hiding them from `get_symbols_overview`. |
 | **Evidence** | `data class SolverConfig` → Struct; `class Stage1Lesson` (annotated) → Struct; plain classes → Class |
-| **Status** | Open |
+| **Status** | **Fixed** — `is_low_level()` corrected; Struct no longer hidden |
 
-**Critical side-effect:** `is_low_level()` in `src/serena/symbol.py:232` returns `True` for `Struct` (23 >= 13), which means data classes and annotated classes are **hidden from `get_symbols_overview`** by the filter at `src/serena/tools/symbol_tools.py:75`.
+**Fix applied:** Adjusted `is_low_level()` in `src/serena/symbol.py` to exclude Struct (23), Event (24), Operator (25), and TypeParameter (26) from the "low level" classification. These are all structural types that should appear in `get_symbols_overview`. Also fixed the wrong comment in `test_kotlin_basic.py:33`.
 
-**Possible actions:**
-- [ ] **HIGH PRIORITY**: Add Kotlin-specific kind remapping in Serena (Struct → Class) so that `is_low_level` and `include_kinds` work correctly
-- [ ] Alternatively, adjust `is_low_level()` to exclude Struct from the "low level" threshold
-- [ ] File upstream issue — `data class` should be kind 5 (Class), not 23 (Struct)
-- [ ] Fix the wrong comment in `test_kotlin_basic.py:33`: `# 23 = Class` should be `# 23 = Struct`
+**Remaining upstream issue:**
+- [ ] Kotlin LSP still reports data classes as Struct (kind 23) instead of Class (kind 5) — `include_kinds=[5]` will still miss them
+- [ ] File upstream issue with JetBrains
 
 ### 4. Constructor Parameters vs Body Properties — Kind Inconsistency
 
@@ -118,12 +117,9 @@ gets empty/useless responses. Fixes fall into two categories:
 | **Category** | Serena |
 | **Where** | `src/serena/tools/symbol_tools.py:36` |
 | **Impact** | Must know exact file path before getting an overview. Initial exploration requires `find_file` + `list_dir` first. |
-| **Status** | Open |
+| **Status** | **Fixed** — directory support added |
 
-**Possible actions:**
-- [ ] Add directory support: when given a directory, iterate over files and return a combined overview
-- [ ] Consider adding a `limit` param to cap results when scanning directories
-- [ ] Low priority — `list_dir` + per-file overview is a reasonable workaround
+**Fix applied:** `GetSymbolsOverviewTool.apply()` in `src/serena/tools/symbol_tools.py` now accepts directories. When a directory is passed, it delegates to `_apply_directory()` which iterates over all source files and returns a per-file grouped overview.
 
 ### 7. `find_file` — `relative_path` Is Required (Should Default to ".")
 
@@ -133,11 +129,9 @@ gets empty/useless responses. Fixes fall into two categories:
 | **Category** | Serena |
 | **Where** | `src/serena/tools/file_tools.py:129` |
 | **Impact** | Minor friction — must always pass `"."` or `"src"` for project-wide searches, while `find_symbol` defaults to the whole project |
-| **Status** | Open |
+| **Status** | **Fixed** |
 
-**Possible actions:**
-- [ ] Add `relative_path: str = "."` as default parameter
-- [ ] Trivial fix, high consistency win
+**Fix applied:** Added `relative_path: str = "."` default in `FindFileTool.apply()` in `src/serena/tools/file_tools.py`.
 
 ### 8. File-Level Symbol `body_location` Uses 0-Based Start
 
@@ -162,12 +156,9 @@ gets empty/useless responses. Fixes fall into two categories:
 | **Category** | Serena |
 | **Where** | `src/serena/tools/symbol_tools.py:98` |
 | **Impact** | Searching for common names (e.g., "logger") in a directory returns all matches, potentially flooding output |
-| **Status** | Open |
+| **Status** | **Fixed** |
 
-**Possible actions:**
-- [ ] Add a `limit` parameter (default maybe 20-50)
-- [ ] `max_answer_chars` already truncates, but at the serialization level — a proper `limit` would be cleaner
-- [ ] Consider adding a note in the truncation message about how many results were found vs shown
+**Fix applied:** Added `limit: int = 0` parameter to `FindSymbolTool.apply()` in `src/serena/tools/symbol_tools.py`. When limit > 0 and results exceed it, returns `{results, total_count, limited_to}` so the caller knows results were truncated. Default 0 means no limit (backward compatible).
 
 ### 10. `search_for_pattern` — Output Spacing
 
@@ -189,26 +180,21 @@ gets empty/useless responses. Fixes fall into two categories:
 
 ## Summary
 
-| # | Issue | Priority | Category | Difficulty | Quick Win? |
-|---|-------|----------|----------|------------|------------|
-| 1 | find_referencing_symbols broken | P0 | Upstream | N/A | No |
-| 2 | include_info silent no-op | P0 | Upstream | N/A | No |
-| 3 | Class/Struct kind inconsistency | P1 | Upstream + Serena | Medium | Partial (remap) |
-| 4 | Constructor var vs body property | P1 | Upstream | Low | Document |
-| 5 | Extension fns not addressable | P1 | Upstream | N/A | Document |
-| 6 | get_symbols_overview file-only | P2 | Serena | Medium | No |
-| 7 | find_file requires relative_path | P2 | Serena | Trivial | **Yes** |
-| 8 | body_location 0-based | P2 | By design? | Low | Investigate |
-| 9 | find_symbol no limit param | P2 | Serena | Low | Yes |
-| 10 | search_for_pattern spacing | P2 | By design | N/A | Close |
+| # | Issue | Priority | Category | Status |
+|---|-------|----------|----------|--------|
+| 1 | find_referencing_symbols broken | P0 | Upstream | Open |
+| 2 | include_info silent no-op | P0 | Upstream + Serena | **Mitigated** (signature fallback) |
+| 3 | Class/Struct kind inconsistency | P1 | Upstream + Serena | **Fixed** (`is_low_level` corrected) |
+| 4 | Constructor var vs body property | P1 | Upstream | Open |
+| 5 | Extension fns not addressable | P1 | Upstream | Open |
+| 6 | get_symbols_overview file-only | P2 | Serena | **Fixed** (directory support added) |
+| 7 | find_file requires relative_path | P2 | Serena | **Fixed** (default `"."`) |
+| 8 | body_location 0-based | P2 | By design? | Open |
+| 9 | find_symbol no limit param | P2 | Serena | **Fixed** (`limit` param added) |
+| 10 | search_for_pattern spacing | P2 | By design | Open |
 
-### Recommended Fix Order
+### Remaining Work
 
-1. **#7** — Trivial default param fix (5 min)
-2. **#3** — Struct→Class remapping + `is_low_level` fix (critical for `get_symbols_overview` correctness)
-3. **#9** — Add limit param to `find_symbol`
-4. **#2** — Add fallback info extraction from body when hover fails
-5. **#1** — Investigate upstream, add fallback warning + `search_for_pattern` suggestion
-6. **#6** — Directory support for `get_symbols_overview`
-7. **#4, #5** — Document limitations
-8. **#8, #10** — Investigate / close as by-design
+- **#1** — Investigate upstream Kotlin LSP `textDocument/references`, add fallback warning + `search_for_pattern` suggestion
+- **#4, #5** — Document limitations for users
+- **#8, #10** — Investigate / close as by-design

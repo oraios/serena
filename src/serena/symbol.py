@@ -235,7 +235,13 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         :return: whether the symbol is a low-level symbol (variable, constant, etc.), which typically represents data
             rather than structure and therefore is not relevant in a high-level overview of the code.
         """
-        return self.symbol_kind >= SymbolKind.Variable.value
+        kind = self.symbol_kind
+        # Struct (23), Event (24), Operator (25), TypeParameter (26) are high-level structural types
+        # despite having numeric values >= Variable (13). In particular, some LSPs (e.g. Kotlin)
+        # report classes as Struct.
+        if kind in (SymbolKind.Struct, SymbolKind.Event, SymbolKind.Operator, SymbolKind.TypeParameter):
+            return False
+        return kind >= SymbolKind.Variable.value
 
     @property
     def overload_idx(self) -> int | None:
@@ -585,7 +591,35 @@ class LanguageServerSymbolRetriever:
     def request_info_for_symbol(self, symbol: LanguageServerSymbol) -> str | None:
         if None in [symbol.relative_path, symbol.line, symbol.column]:
             return None
-        return self._request_info(relative_file_path=symbol.relative_path, line=symbol.line, column=symbol.column)  # type: ignore[arg-type]
+        info = self._request_info(relative_file_path=symbol.relative_path, line=symbol.line, column=symbol.column)  # type: ignore[arg-type]
+        if info is not None:
+            return info
+        # Fallback: extract signature from the first few lines of the symbol body.
+        # This is useful when the LSP hover provider returns nothing (e.g. Kotlin LSP).
+        return self._extract_signature_fallback(symbol)
+
+    def _extract_signature_fallback(self, symbol: LanguageServerSymbol, max_lines: int = 5) -> str | None:
+        """Extract the signature (first few lines) of a symbol as a fallback when hover info is unavailable."""
+        start_pos = symbol.get_body_start_position()
+        end_pos = symbol.get_body_end_position()
+        if start_pos is None or end_pos is None or symbol.relative_path is None:
+            return None
+        try:
+            root_path = self.get_root_path()
+            abs_path = os.path.join(root_path, symbol.relative_path)
+            with open(abs_path, encoding="utf-8") as f:
+                lines = f.readlines()
+            end_line = min(start_pos.line + max_lines, end_pos.line + 1, len(lines))
+            signature_lines = [line.rstrip() for line in lines[start_pos.line : end_line]]
+            if not signature_lines:
+                return None
+            signature = "\n".join(signature_lines)
+            # If we truncated, indicate there's more
+            if end_line < end_pos.line + 1:
+                signature += "\n    ..."
+            return signature
+        except (OSError, IndexError):
+            return None
 
     def _get_symbol_info_budget(self, default_budget: float = 10) -> float:
         """Project -> global -> default"""

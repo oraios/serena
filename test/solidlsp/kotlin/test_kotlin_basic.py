@@ -35,7 +35,7 @@ class TestKotlinLanguageServer:
         for sym in symbols[0]:
             print(sym)
             print("\n")
-            if sym.get("name") == "Model" and sym.get("kind") == 23:  # 23 = Class
+            if sym.get("name") == "Model" and sym.get("kind") == 23:  # 23 = Struct (Kotlin LSP reports data classes as Struct)
                 model_symbol = sym
                 break
         assert model_symbol is not None, "Could not find 'Model' class symbol in Model.kt"

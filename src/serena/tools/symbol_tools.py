@@ -5,7 +5,7 @@ Language server-related tools
 import os
 from collections.abc import Sequence
 
-from serena.symbol import LanguageServerSymbol, LanguageServerSymbolDictGrouper
+from serena.symbol import GroupedSymbolDict, LanguageServerSymbol, LanguageServerSymbolDictGrouper
 from serena.tools import (
     SUCCESS_RESULT,
     Tool,
@@ -40,7 +40,8 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
         This should be the first tool to call when you want to understand a new file, unless you already know
         what you are looking for.
 
-        :param relative_path: the relative path to the file to get the overview of
+        :param relative_path: the relative path to the file or directory to get the overview of.
+            If a directory is passed, returns an overview of all source files in that directory.
         :param depth: depth up to which descendants of top-level symbols shall be retrieved
             (e.g. 1 retrieves immediate children). Default 0.
         :param max_answer_chars: if the overview is longer than this number of characters,
@@ -48,9 +49,40 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
             Don't adjust unless there is really no other way to get the content required for the task.
         :return: a JSON object containing symbols grouped by kind in a compact format.
         """
+        abs_path = os.path.join(self.project.project_root, relative_path)
+        if os.path.isdir(abs_path):
+            return self._apply_directory(relative_path, depth=depth, max_answer_chars=max_answer_chars)
         result = self.get_symbol_overview(relative_path, depth=depth)
         compact_result = self.symbol_dict_grouper.group(result)
         result_json_str = self._to_json(compact_result)
+        return self._limit_length(result_json_str, max_answer_chars)
+
+    def _apply_directory(self, relative_path: str, depth: int = 0, max_answer_chars: int = -1) -> str:
+        symbol_retriever = self.create_language_server_symbol_retriever()
+        path_to_symbols = symbol_retriever.get_symbol_overview(relative_path)
+
+        def child_inclusion_predicate(s: LanguageServerSymbol) -> bool:
+            return not s.is_low_level()
+
+        result: dict[str, GroupedSymbolDict] = {}
+        for file_path, symbols in sorted(path_to_symbols.items()):
+            file_dicts = []
+            for symbol in symbols:
+                file_dicts.append(
+                    symbol.to_dict(
+                        name_path=False,
+                        name=True,
+                        depth=depth,
+                        kind=True,
+                        relative_path=False,
+                        location=False,
+                        child_inclusion_predicate=child_inclusion_predicate,
+                    )
+                )
+            if file_dicts:
+                compact = self.symbol_dict_grouper.group(file_dicts)
+                result[file_path] = compact
+        result_json_str = self._to_json(result)
         return self._limit_length(result_json_str, max_answer_chars)
 
     def get_symbol_overview(self, relative_path: str, depth: int = 0) -> list[LanguageServerSymbol.OutputDict]:
@@ -61,8 +93,6 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
         """
         symbol_retriever = self.create_language_server_symbol_retriever()
 
-        # The symbol overview is capable of working with both files and directories,
-        # but we want to ensure that the user provides a file path.
         file_path = os.path.join(self.project.project_root, relative_path)
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File or directory {relative_path} does not exist in the project.")
@@ -107,6 +137,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         exclude_kinds: list[int] = [],  # noqa: B006
         substring_matching: bool = False,
         max_answer_chars: int = -1,
+        limit: int = 0,
     ) -> str:
         """
         Retrieves information on all symbols/code entities (classes, methods, etc.) based on the given name path pattern.
@@ -145,6 +176,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             "Foo/get" would match "Foo/getValue" and "Foo/getData".
         :param max_answer_chars: Max characters for the JSON result. If exceeded, no content is returned.
             -1 means the default value from the config will be used.
+        :param limit: Maximum number of results to return. 0 means no limit (return all matches).
         :return: a list of symbols (with locations) matching the name.
         """
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
@@ -157,6 +189,9 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             substring_matching=substring_matching,
             within_relative_path=relative_path,
         )
+        total_count = len(symbols)
+        if limit > 0 and total_count > limit:
+            symbols = symbols[:limit]
         symbol_dicts = [dict(s.to_dict(kind=True, relative_path=True, body_location=True, depth=depth, body=include_body)) for s in symbols]
         if not include_body and include_info:
             info_by_symbol = symbol_retriever.request_info_for_symbol_batch(symbols)
@@ -164,7 +199,10 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
                 if symbol_info := info_by_symbol.get(s):
                     s_dict["info"] = symbol_info
                     s_dict.pop("name", None)  # name is included in the info
-        result = self._to_json(symbol_dicts)
+        if limit > 0 and total_count > limit:
+            result = self._to_json({"results": symbol_dicts, "total_count": total_count, "limited_to": limit})
+        else:
+            result = self._to_json(symbol_dicts)
         return self._limit_length(result, max_answer_chars)
 
 
