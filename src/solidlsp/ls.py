@@ -1605,6 +1605,7 @@ class SolidLanguageServer(ABC):
         kind: ls_types.SymbolKind,
         parent_name: str | None,
         parent_kind: ls_types.SymbolKind | None,
+        detail: str | None = None,
     ) -> str | None:
         """Return a synthetic info string built from symbol metadata when hover is unavailable.
 
@@ -1615,6 +1616,7 @@ class SolidLanguageServer(ABC):
         :param kind: the LSP symbol kind
         :param parent_name: the name of the direct parent symbol, or None for top-level symbols
         :param parent_kind: the kind of the direct parent symbol, or None
+        :param detail: the DocumentSymbol.detail string from the LSP (e.g. function signature), or None
         :return: a short info string describing the symbol, or None
         """
         return None

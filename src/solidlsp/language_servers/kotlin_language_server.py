@@ -616,12 +616,15 @@ class KotlinLanguageServer(SolidLanguageServer):
         kind: ls_types.SymbolKind,
         parent_name: str | None,
         parent_kind: ls_types.SymbolKind | None,
+        detail: str | None = None,
     ) -> str | None:
         """Build a Kotlin-style synthetic info string from symbol metadata.
 
         Used as a fallback when the Kotlin LSP returns null for hover requests.
-        Produces concise descriptors like ``fun solve() [in Stage1SolverService]``
-        or ``data class Model``.
+        When the LSP provides a ``detail`` field (e.g. a function signature or type),
+        it is incorporated into the output.  Otherwise a concise descriptor is
+        synthesized from the symbol's kind and parent, e.g.
+        ``fun solve(): Unit [in Stage1SolverService]`` or ``data class Model``.
         """
         keyword = self._KOTLIN_KIND_KEYWORD.get(kind)
 
@@ -634,11 +637,20 @@ class KotlinLanguageServer(SolidLanguageServer):
         parent_context = f" [in {parent_name}]" if show_parent else ""
 
         if kind in (ls_types.SymbolKind.Method, ls_types.SymbolKind.Function):
+            # detail may contain the signature, e.g. "(param: Type): ReturnType"
+            if detail:
+                return f"fun {name}{detail}{parent_context}"
             return f"fun {name}(){parent_context}"
         elif kind == ls_types.SymbolKind.Constructor:
+            if detail:
+                return f"constructor{detail}{parent_context}"
             return f"constructor{parent_context}"
         elif keyword is not None:
+            if detail:
+                return f"{keyword} {name}: {detail}{parent_context}"
             return f"{keyword} {name}{parent_context}"
         else:
             # EnumMember and similar — just the name with context
+            if detail:
+                return f"{name}: {detail}{parent_context}"
             return f"{name}{parent_context}"

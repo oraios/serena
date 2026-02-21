@@ -716,6 +716,7 @@ class LanguageServerSymbolRetriever:
                         kind=sym.symbol_kind,
                         parent_name=parent.name if parent else None,
                         parent_kind=parent.symbol_kind if parent else None,
+                        detail=sym.symbol_root.get("detail"),
                     )
 
                 info_by_symbol[sym] = info
