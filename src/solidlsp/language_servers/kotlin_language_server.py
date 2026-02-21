@@ -111,6 +111,8 @@ class KotlinLanguageServer(SolidLanguageServer):
         self._indexing_complete.set()
         self._active_progress_tokens: set[str] = set()
         self._progress_lock = threading.Lock()
+        # Kotlin LSP (JVM + IntelliJ engine) is slow to start, especially on CI runners
+        self.set_request_timeout(120.0)
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
