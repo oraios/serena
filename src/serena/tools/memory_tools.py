@@ -12,7 +12,7 @@ class WriteMemoryTool(Tool, ToolMarkerCanEdit):
         """
         Write some information (utf-8-encoded) about this project that can be useful for future tasks to a memory in md format.
         The memory name should be meaningful and can include "/" to organize into subdirectories (e.g., "auth/login_logic").
-        
+
         :param memory_file_name: the name of the memory (can include "/" for subdirectories)
         :param content: the content to write in markdown format
         :param summary: optional summary for frontmatter (helps with memory discovery)
@@ -41,7 +41,7 @@ class ReadMemoryTool(Tool):
         is relevant to the current task. You can infer whether the information
         is relevant from the memory file name.
         You should not read the same memory file multiple times in the same conversation.
-        
+
         :param memory_file_name: the name of the memory (can include "/" for subdirectories)
         :param max_answer_chars: maximum characters to return (default from config)
         """
@@ -56,10 +56,10 @@ class ListMemoriesTool(Tool):
     def apply(self, topic: str = "") -> str:
         """
         List available memories. Any memory can be read using the `read_memory` tool.
-        
-        Organize memories into meaningful subdirectories (e.g., "auth/login_logic", 
+
+        Organize memories into meaningful subdirectories (e.g., "auth/login_logic",
         "database/schema"). Add a summary to the frontmatter for important memories.
-        
+
         :param topic: optional topic/subdirectory filter (e.g., "auth" to list only auth memories)
         """
         return self._to_json(self.memories_manager.list_memories(topic))
@@ -75,7 +75,7 @@ class DeleteMemoryTool(Tool, ToolMarkerCanEdit):
         Delete a memory file. Should only happen if a user asks for it explicitly,
         for example by saying that the information retrieved from a memory file is no longer correct
         or no longer relevant for the project.
-        
+
         :param memory_file_name: the name of the memory to delete
         """
         return self.memories_manager.delete_memory(memory_file_name)
@@ -89,11 +89,11 @@ class RenameMemoryTool(Tool, ToolMarkerCanEdit):
     def apply(self, old_name: str, new_name: str) -> str:
         """
         Rename or move a memory file. Use "/" in the name to organize memories into subdirectories.
-        
+
         Example: "auth/login" will create auth/login.md
-        
+
         This tool is useful for reorganizing existing memories into a better structure.
-        
+
         :param old_name: current memory name
         :param new_name: new memory name (can include "/" for subdirectories)
         """
