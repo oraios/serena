@@ -704,6 +704,20 @@ class LanguageServerSymbolRetriever:
                     file_hover_lookups += 1
                     total_hover_lookups += 1
 
+                # When hover returns nothing, fall back to a synthetic descriptor
+                # built from the symbol's own metadata (name, kind, parent class).
+                # This is free (no LSP round-trip) and works even when the LSP
+                # does not implement textDocument/hover for a given symbol type.
+                if info is None:
+                    parent = sym.get_parent()
+                    lang_server = self.get_language_server(file_path)
+                    info = lang_server._get_symbol_metadata_info(
+                        name=sym.name,
+                        kind=sym.symbol_kind,
+                        parent_name=parent.name if parent else None,
+                        parent_kind=parent.symbol_kind if parent else None,
+                    )
+
                 info_by_symbol[sym] = info
 
             if debug_enabled:
