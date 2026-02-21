@@ -9,6 +9,7 @@ import os
 import pathlib
 import shutil
 import threading
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from overrides import override
@@ -125,8 +126,10 @@ class NimLanguageServer(SolidLanguageServer):
         self.initialize_searcher_command_available = threading.Event()
 
         # Track nimsuggest port health to avoid marking server as ready when port=0
-        self._has_port_error = False
-        self._nimsuggest_functional = False
+        # These are threading.Events because they're written by notification handler threads
+        # and read by request threads.
+        self._has_port_error = threading.Event()
+        self._nimsuggest_functional = threading.Event()
 
         process_launch_info = ProcessLaunchInfo(cmd=nim_lsp_executable_path, cwd=repository_root_path, env=env)
 
@@ -138,14 +141,18 @@ class NimLanguageServer(SolidLanguageServer):
             solidlsp_settings,
         )
 
-        # Replace the default LanguageServerProcess with our custom one that
-        # only sends Content-Length headers (nimlangserver chokes on Content-Type)
-        self.server.stop() if self.server.is_running() else None
-        self.server = NimLanguageServerProcess(
+    @override
+    def _create_server_process(  # type: ignore[override]
+        self,
+        process_launch_info: ProcessLaunchInfo,
+        logging_fn: "Callable[[str, str, StringDict | str], None] | None",
+        config: LanguageServerConfig,
+    ) -> "NimLanguageServerProcess":
+        return NimLanguageServerProcess(
             process_launch_info,
             language=self.language,
             determine_log_level=self._determine_log_level,
-            logger=self.server._trace_log_fn,
+            logger=logging_fn,
             start_independent_lsp_process=config.start_independent_lsp_process,
         )
 
@@ -191,7 +198,7 @@ class NimLanguageServer(SolidLanguageServer):
             if not os.path.exists(nimsuggest_cfg_path):
                 with open(nimsuggest_cfg_path, "w") as f:
                     f.write(_NIMSUGGEST_CFG)
-                log.info("Created nimsuggest.cfg to improve stability")
+                log.warning("Created nimsuggest.cfg in project root for nimsuggest stability. Consider adding it to .gitignore.")
 
             if not os.path.exists(nim_cfg_path):
                 nimble_files = list(pathlib.Path(self.repository_root_path).glob("*.nimble"))
@@ -203,7 +210,7 @@ class NimLanguageServer(SolidLanguageServer):
                         extra_paths += '--path:"tests"\n'
                     with open(nim_cfg_path, "w") as f:
                         f.write(_NIM_CFG_TEMPLATE.format(extra_paths=extra_paths))
-                    log.info("Created nim.cfg with project paths")
+                    log.warning("Created nim.cfg in project root with path hints for nimsuggest. Consider adding it to .gitignore.")
             else:
                 log.debug("Found existing nim.cfg, respecting project configuration")
         except Exception as e:
@@ -385,12 +392,12 @@ class NimLanguageServer(SolidLanguageServer):
                     log.warning("Non-critical resource missing: %s", message_text)
                 elif "Failed to parse nimsuggest port" in message_text:
                     log.error("Nimsuggest port parsing failed: %s", message_text)
-                    self._has_port_error = True
+                    self._has_port_error.set()
                     return
                 else:
                     log.error("Nim server error: %s", message_text)
             elif "initialized" in message_text.lower() or "ready" in message_text.lower():
-                if self._has_port_error:
+                if self._has_port_error.is_set():
                     log.warning(
                         "Ignoring 'initialized' signal because nimsuggest has port errors. "
                         "Waiting for extension/statusUpdate with port > 0."
@@ -428,7 +435,7 @@ class NimLanguageServer(SolidLanguageServer):
                         log.error("Project error in %s: %s", project_file, error_msg)
 
                 if has_port_error_in_update:
-                    self._has_port_error = True
+                    self._has_port_error.set()
 
             if "nimsuggestInstances" in params:
                 instances = params["nimsuggestInstances"]
@@ -443,13 +450,13 @@ class NimLanguageServer(SolidLanguageServer):
                         log.warning("Nimsuggest instance for %s has port=0 (not functional)", project)
 
                 if any_functional:
-                    self._has_port_error = False
-                    self._nimsuggest_functional = True
+                    self._has_port_error.clear()
+                    self._nimsuggest_functional.set()
                     if not self.server_ready.is_set():
                         log.info("Nimsuggest has valid port, marking server as ready")
                         self.server_ready.set()
                 elif instances:
-                    self._nimsuggest_functional = False
+                    self._nimsuggest_functional.clear()
                     if self.server_ready.is_set():
                         log.warning("All nimsuggest instances have port=0, clearing server ready state")
                         self.server_ready.clear()
@@ -500,7 +507,7 @@ class NimLanguageServer(SolidLanguageServer):
         from solidlsp.ls import DocumentSymbols
 
         max_retries = 3
-        retry_delays = [5.0, 15.0, 30.0]
+        retry_delays = [2.0, 5.0, 10.0]
 
         for attempt in range(max_retries + 1):
             result = super().request_document_symbols(relative_file_path, file_buffer)
@@ -516,7 +523,7 @@ class NimLanguageServer(SolidLanguageServer):
                 return result
 
             # Empty result - check if it's likely due to nimsuggest port issues
-            if not self._has_port_error and self._nimsuggest_functional:
+            if not self._has_port_error.is_set() and self._nimsuggest_functional.is_set():
                 return result
 
             if attempt >= max_retries:
@@ -524,8 +531,8 @@ class NimLanguageServer(SolidLanguageServer):
                     "No document symbols for %s after %d retries. Nimsuggest may be non-functional (port_error=%s, functional=%s).",
                     relative_file_path,
                     max_retries,
-                    self._has_port_error,
-                    self._nimsuggest_functional,
+                    self._has_port_error.is_set(),
+                    self._nimsuggest_functional.is_set(),
                 )
                 return result
 
@@ -533,7 +540,7 @@ class NimLanguageServer(SolidLanguageServer):
             log.info(
                 "Empty document symbols for %s, nimsuggest may not be ready (port_error=%s). Retry %d/%d in %ss.",
                 relative_file_path,
-                self._has_port_error,
+                self._has_port_error.is_set(),
                 attempt + 1,
                 max_retries,
                 delay,

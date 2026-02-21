@@ -9,7 +9,7 @@ import subprocess
 import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Hashable, Iterator
+from collections.abc import Callable, Hashable, Iterator
 from contextlib import contextmanager
 from copy import copy
 from pathlib import Path, PurePath
@@ -509,13 +509,7 @@ class SolidLanguageServer(ABC):
             self._dependency_provider = self._create_dependency_provider()
             process_launch_info = self._create_process_launch_info()
         log.debug(f"Creating language server instance with {language_id=} and process launch info: {process_launch_info}")
-        self.server = LanguageServerProcess(
-            process_launch_info,
-            language=self.language,
-            determine_log_level=self._determine_log_level,
-            logger=logging_fn,
-            start_independent_lsp_process=config.start_independent_lsp_process,
-        )
+        self.server = self._create_server_process(process_launch_info, logging_fn, config)
 
         # Set up the pathspec matcher for the ignored paths
         # for all absolute paths in ignored_paths, convert them to relative paths
@@ -542,6 +536,24 @@ class SolidLanguageServer(ABC):
         """
         raise NotImplementedError(
             f"{self.__class__.__name__} must implement _create_dependency_provider() or pass process_launch_info to __init__()"
+        )
+
+    def _create_server_process(
+        self,
+        process_launch_info: ProcessLaunchInfo,
+        logging_fn: Callable[[str, str, StringDict | str], None] | None,
+        config: LanguageServerConfig,
+    ) -> LanguageServerProcess:
+        """Creates the LanguageServerProcess instance.
+
+        Subclasses can override this to provide a custom process implementation.
+        """
+        return LanguageServerProcess(
+            process_launch_info,
+            language=self.language,
+            determine_log_level=self._determine_log_level,
+            logger=logging_fn,
+            start_independent_lsp_process=config.start_independent_lsp_process,
         )
 
     def _create_process_launch_info(self) -> ProcessLaunchInfo:

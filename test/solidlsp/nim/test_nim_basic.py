@@ -165,17 +165,34 @@ class TestNimLanguageServerBasics:
     @pytest.mark.parametrize("language_server", [Language.NIM], indirect=True)
     def test_nim_goto_definition(self, language_server: SolidLanguageServer) -> None:
         """Test goto definition from main.nim to utils.nim."""
-        # Line 63 (0-indexed): `  echo formatNumber(1234567)` — col 7 is start of formatNumber
-        definition = language_server.request_definition("main.nim", 63, 7)
+        content = language_server.retrieve_full_file_content("main.nim")
+        target_line = target_col = None
+        for i, line in enumerate(content.split("\n")):
+            col = line.find("formatNumber")
+            if col >= 0:
+                target_line, target_col = i, col
+                break
+        assert target_line is not None, "Could not find formatNumber call in main.nim"
+
+        definition = language_server.request_definition("main.nim", target_line, target_col)
         assert definition, "Should find definition for formatNumber call"
         assert "utils.nim" in definition[0]["uri"], "Definition should point to utils.nim"
 
     @pytest.mark.parametrize("language_server", [Language.NIM], indirect=True)
     def test_nim_completions(self, language_server: SolidLanguageServer) -> None:
         """Test completion for Person fields after dot operator."""
-        # Line 33 (0-indexed): `  if p.email != "":` — col 7 is right after the dot in `p.`
-        # nimlangserver filters completions by prefix at cursor, so at col 7 we get 'e'-prefixed fields
-        completions = language_server.request_completions("main.nim", 33, 7)
+        content = language_server.retrieve_full_file_content("main.nim")
+        target_line = target_col = None
+        for i, line in enumerate(content.split("\n")):
+            col = line.find("p.email")
+            if col >= 0:
+                # Position cursor on the 'e' of 'email' (right after the dot)
+                target_line, target_col = i, col + 2
+                break
+        assert target_line is not None, "Could not find p.email in main.nim"
+
+        # nimlangserver filters completions by prefix at cursor, so at col of 'e' we get 'e'-prefixed fields
+        completions = language_server.request_completions("main.nim", target_line, target_col)
         assert completions, "Should return completions"
 
         completion_labels = [item["completionText"] for item in completions]
