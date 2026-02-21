@@ -126,7 +126,8 @@ class TestSerenaAgent:
     def test_find_symbol(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str):
         # skip flaky tests in CI
         # TODO: Revisit the flaky tests and re-enable once the LS issues are resolved #1039
-        flaky_languages = {Language.FSHARP, Language.RUST}
+        # Kotlin: IntelliJ-based JVM crashes on restart under CI resource constraints (2 CPUs, 7GB RAM)
+        flaky_languages = {Language.FSHARP, Language.RUST, Language.KOTLIN}
         if set(serena_agent.get_active_lsp_languages()).intersection(flaky_languages) and is_ci:
             pytest.skip("Test is flaky and thus skipped in CI environment.")
 
@@ -201,7 +202,8 @@ class TestSerenaAgent:
     def test_find_symbol_references(self, serena_agent: SerenaAgent, symbol_name: str, def_file: str, ref_file: str) -> None:
         # skip flaky tests in CI
         # TODO: Revisit the flaky tests and re-enable once the LS issues are resolved #1039
-        flaky_languages = {Language.TYPESCRIPT}
+        # Kotlin: IntelliJ-based JVM crashes on restart under CI resource constraints (2 CPUs, 7GB RAM)
+        flaky_languages = {Language.TYPESCRIPT, Language.KOTLIN}
         if set(serena_agent.get_active_lsp_languages()).intersection(flaky_languages) and is_ci:
             pytest.skip("Test is flaky and thus skipped in CI environment.")
 
