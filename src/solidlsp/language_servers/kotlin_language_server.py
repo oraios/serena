@@ -575,3 +575,69 @@ class KotlinLanguageServer(SolidLanguageServer):
             sleep(retry_delay)
             result = super()._request_hover(uri, line, column)
         return result
+
+    # Mapping from LSP SymbolKind to Kotlin keyword / descriptor
+    _KOTLIN_KIND_KEYWORD: dict[ls_types.SymbolKind, str | None] = {
+        ls_types.SymbolKind.File: None,
+        ls_types.SymbolKind.Package: None,
+        ls_types.SymbolKind.Namespace: None,
+        ls_types.SymbolKind.Module: None,
+        ls_types.SymbolKind.Class: "class",
+        ls_types.SymbolKind.Struct: "data class",  # Kotlin data classes are reported as Struct
+        ls_types.SymbolKind.Object: "object",  # Kotlin object declarations
+        ls_types.SymbolKind.Interface: "interface",
+        ls_types.SymbolKind.Enum: "enum class",
+        ls_types.SymbolKind.EnumMember: None,
+        ls_types.SymbolKind.Method: "fun",
+        ls_types.SymbolKind.Function: "fun",
+        ls_types.SymbolKind.Constructor: "constructor",
+        ls_types.SymbolKind.Property: "val",
+        ls_types.SymbolKind.Field: "val",
+        ls_types.SymbolKind.Variable: "val",
+        ls_types.SymbolKind.Constant: "val",
+        ls_types.SymbolKind.TypeParameter: "typealias",
+    }
+
+    # SymbolKinds that are not meaningful as parent context (file/package level)
+    _NON_CONTAINER_KINDS: frozenset[ls_types.SymbolKind] = frozenset(
+        {
+            ls_types.SymbolKind.File,
+            ls_types.SymbolKind.Package,
+            ls_types.SymbolKind.Namespace,
+            ls_types.SymbolKind.Module,
+        }
+    )
+
+    @override
+    def _get_symbol_metadata_info(
+        self,
+        name: str,
+        kind: ls_types.SymbolKind,
+        parent_name: str | None,
+        parent_kind: ls_types.SymbolKind | None,
+    ) -> str | None:
+        """Build a Kotlin-style synthetic info string from symbol metadata.
+
+        Used as a fallback when the Kotlin LSP returns null for hover requests.
+        Produces concise descriptors like ``fun solve() [in Stage1SolverService]``
+        or ``data class Model``.
+        """
+        keyword = self._KOTLIN_KIND_KEYWORD.get(kind)
+
+        # Skip file/package-level symbols — they carry no useful info on their own
+        if keyword is None and kind not in (ls_types.SymbolKind.EnumMember,):
+            return None
+
+        # Only show parent context when the parent is a meaningful container
+        show_parent = parent_name is not None and parent_kind is not None and parent_kind not in self._NON_CONTAINER_KINDS
+        parent_context = f" [in {parent_name}]" if show_parent else ""
+
+        if kind in (ls_types.SymbolKind.Method, ls_types.SymbolKind.Function):
+            return f"fun {name}(){parent_context}"
+        elif kind == ls_types.SymbolKind.Constructor:
+            return f"constructor{parent_context}"
+        elif keyword is not None:
+            return f"{keyword} {name}{parent_context}"
+        else:
+            # EnumMember and similar — just the name with context
+            return f"{name}{parent_context}"
