@@ -335,27 +335,34 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         # Wait for TypeScript server to finish indexing.
         # Primary signal: experimental/serverStatus.quiescent (tsserver-specific)
         # Backup signal: $/progress token completion
+        # Note: some versions of typescript-language-server do NOT emit quiescent or
+        # $/progress at all; we use a short initial probe (5s) to avoid blocking
+        # startup when no signals arrive. Cross-file referencing has its own buffer.
         log.info("Waiting for TypeScript server to become ready...")
-        if self.server_ready.wait(timeout=30.0):
+        if self.server_ready.wait(timeout=5.0):
             log.info("TypeScript server is ready (quiescent)")
         else:
             # Check if progress tokens are still active (backup signal)
             with self._progress_lock:
                 has_active = bool(self._active_progress_tokens)
             if has_active:
+                # Progress tokens registered — the LS IS reporting work, wait for it
                 log.info("TypeScript LSP indexing in progress, waiting up to 60s more...")
                 if self._indexing_complete.wait(timeout=60.0):
                     log.info("TypeScript LSP indexing completed via progress tracking")
                 else:
-                    log.warning("Timeout waiting for TypeScript LSP indexing (90s total), proceeding anyway")
+                    log.warning("Timeout waiting for TypeScript LSP indexing (65s total), proceeding anyway")
             else:
-                log.info("TypeScript server ready timeout (30s) with no active progress, proceeding")
+                log.info("No TypeScript readiness signal received (5s), proceeding")
             self.server_ready.set()
 
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
-        """Small safety buffer since we already waited for indexing to complete in _start_server."""
-        return 1.0
+        """Buffer for cross-file referencing. Applied lazily on the first cross-file
+        request (after at least one file is opened in the LS). This gives the TS
+        server extra time to finish background analysis of the workspace.
+        """
+        return 5.0
 
     @override
     def _get_preferred_definition(self, definitions: list[ls_types.Location]) -> ls_types.Location:
