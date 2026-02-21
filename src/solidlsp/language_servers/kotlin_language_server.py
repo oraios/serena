@@ -21,10 +21,12 @@ import os
 import pathlib
 import stat
 import threading
+from time import sleep
 from typing import cast
 
 from overrides import override
 
+from solidlsp import ls_types
 from solidlsp.ls import (
     LanguageServerDependencyProvider,
     LanguageServerDependencyProviderSinglePath,
@@ -554,3 +556,22 @@ class KotlinLanguageServer(SolidLanguageServer):
     def _get_wait_time_for_cross_file_referencing(self) -> float:
         """Small safety buffer since we already waited for indexing to complete in _start_server."""
         return 1.0
+
+    @override
+    def _request_hover(self, uri: str, line: int, column: int) -> ls_types.Hover | None:
+        """Override to retry hover requests for Kotlin LSP.
+
+        The Kotlin LSP (IntelliJ-based) lazily resolves hover info: the first
+        request after didOpen often returns None while the engine parses the file.
+        A retry loop with increasing patience (matching the pattern used for
+        Eclipse JDTLS) handles this lazy-loading behaviour.
+        """
+        max_retries = 10
+        retry_delay = 0.2  # 200 ms between retries → up to 2 s total wait
+        result = super()._request_hover(uri, line, column)
+        for _ in range(max_retries):
+            if result is not None:
+                break
+            sleep(retry_delay)
+            result = super()._request_hover(uri, line, column)
+        return result
