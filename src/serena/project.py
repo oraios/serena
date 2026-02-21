@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pathspec
+import yaml
 from sensai.util.logging import LogTime
 from sensai.util.string import ToStringMixin
 
@@ -74,7 +75,6 @@ class MemoriesManager:
             return None, content
         
         try:
-            import yaml
             frontmatter = yaml.safe_load(parts[1])
             body = parts[2].strip()
             return frontmatter if frontmatter else None, body
@@ -131,8 +131,6 @@ class MemoriesManager:
         Returns:
             List of memory info dicts with 'name' and optional 'summary'
         """
-        import os
-        
         memories = []
         
         if topic:
