@@ -49,6 +49,22 @@ def determine_programming_language_composition(repo_path: str) -> dict[Language,
         if count > 0:
             language_counts[language] = count
 
+    # Resolve conflicts between languages that share file extensions.
+    # Languages can declare project markers that give them precedence over another language.
+    for language in list(language_counts):
+        override = language.get_marker_override()
+        if override is None:
+            continue
+        markers, overrides = override
+        if overrides not in language_counts:
+            continue
+        if any(os.path.exists(os.path.join(repo_path, m)) for m in markers):
+            log.info("Project marker found for %s, using instead of %s", language, overrides)
+            del language_counts[overrides]
+        else:
+            log.info("No project marker for %s, keeping %s", language, overrides)
+            del language_counts[language]
+
     # Convert counts to percentages
     language_percentages: dict[Language, float] = {}
     for language, count in language_counts.items():

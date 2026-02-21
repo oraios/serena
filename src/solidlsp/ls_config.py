@@ -105,6 +105,10 @@ class Language(str, Enum):
     """TOML language server using Taplo.
     Supports TOML validation, formatting, and schema support.
     """
+    DENO = "deno"
+    """Deno language server using the built-in `deno lsp`.
+    Auto-detected when deno.json, deno.jsonc, or deno.lock is found in the project root.
+    """
 
     @classmethod
     def iter_all(cls, include_experimental: bool = False) -> Iterable[Self]:
@@ -152,6 +156,18 @@ class Language(str, Enum):
             # regular languages
             case _:
                 return 2
+
+    def get_marker_override(self) -> tuple[tuple[str, ...], "Language"] | None:
+        """
+        If this language shares file extensions with another, return
+        (marker_files, language_to_override). When any marker file exists
+        in the project root, this language takes precedence over the other.
+        """
+        match self:
+            case self.DENO:
+                return ("deno.json", "deno.jsonc", "deno.lock"), Language.TYPESCRIPT
+            case _:
+                return None
 
     def get_source_fn_matcher(self) -> FilenameMatcher:
         match self:
@@ -246,6 +262,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.groovy", "*.gvy")
             case self.MATLAB:
                 return FilenameMatcher("*.m", "*.mlx", "*.mlapp")
+            case self.DENO:
+                return FilenameMatcher("*.ts", "*.tsx", "*.js", "*.jsx")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -427,6 +445,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.matlab_language_server import MatlabLanguageServer
 
                 return MatlabLanguageServer
+            case self.DENO:
+                from solidlsp.language_servers.deno_language_server import DenoLanguageServer
+
+                return DenoLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

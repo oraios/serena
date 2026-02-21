@@ -322,6 +322,7 @@ markers = [
   "slow: tests that require additional Expert instances and have long startup times (~60-90s each)",
   "toml: language server running for TOML",
   "matlab: language server running for MATLAB (requires MATLAB R2021b+)",
+  "deno: language server running for Deno",
 ]
 
 [tool.codespell]
