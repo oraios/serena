@@ -31,3 +31,20 @@ class TestTypescriptLanguageServer:
         assert any(
             "index.ts" in ref.get("relativePath", "") for ref in refs
         ), "index.ts should reference helperFunction (tried all positions in selectionRange)"
+
+    @pytest.mark.parametrize("language_server", [Language.TYPESCRIPT], indirect=True)
+    def test_find_referencing_symbols_cross_file(self, language_server: SolidLanguageServer) -> None:
+        """Test that cross-file references are found (requires proper indexing wait)."""
+        file_path = os.path.join("index.ts")
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
+        helper_symbol = None
+        for sym in symbols[0]:
+            if sym.get("name") == "helperFunction":
+                helper_symbol = sym
+                break
+        assert helper_symbol is not None, "Could not find 'helperFunction' symbol in index.ts"
+        sel_start = helper_symbol["selectionRange"]["start"]
+        refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
+        assert any(
+            "use_helper.ts" in ref.get("relativePath", "") for ref in refs
+        ), "use_helper.ts should reference helperFunction (cross-file)"
