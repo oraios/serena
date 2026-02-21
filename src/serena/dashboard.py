@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sensai.util import logging
 
 from serena.analytics import ToolUsageStats
-from serena.config.serena_config import LanguageBackend, SerenaPaths
+from serena.config.serena_config import LanguageBackend, SerenaConfig, SerenaPaths
 from serena.constants import SERENA_DASHBOARD_DIR
 from serena.task_executor import TaskExecutor
 from serena.util.logging import MemoryLogHandler
@@ -184,6 +184,11 @@ class SerenaDashboardAPI:
             self._clear_tool_stats()
             return {"status": "cleared"}
 
+        @self._app.route("/clear_logs", methods=["POST"])
+        def clear_logs() -> dict[str, str]:
+            self._memory_log_handler.clear_log_messages()
+            return {"status": "cleared"}
+
         @self._app.route("/get_token_count_estimator_name", methods=["GET"])
         def get_token_count_estimator_name() -> dict[str, str]:
             estimator_name = self._tool_usage_stats.token_estimator_name if self._tool_usage_stats else "unknown"
@@ -324,12 +329,25 @@ class SerenaDashboardAPI:
             def _get_unread_news_ids() -> list[int]:
                 all_news_files = (Path(SERENA_DASHBOARD_DIR) / "news").glob("*.html")
                 all_news_ids = [int(f.stem) for f in all_news_files]
+                """News ids are ints of format YYYYMMDD (publication dates)"""
+
+                # Filter news items by installation date
+                serena_config_creation_date = SerenaConfig.get_config_file_creation_date()
+                if serena_config_creation_date is None:
+                    # should not normally happen, since config file should exist when the dashboard is started
+                    # We assume a fresh installation in this case
+                    log.error("Serena config file not found when starting the dashboard")
+                    return []
+                serena_config_creation_date_int = int(serena_config_creation_date.strftime("%Y%m%d"))
+                # Only include news items published on or after the installation date
+                post_installation_news_ids = [news_id for news_id in all_news_ids if news_id >= serena_config_creation_date_int]
+
                 news_snippet_id_file = SerenaPaths().news_snippet_id_file
                 if not os.path.exists(news_snippet_id_file):
-                    return all_news_ids
+                    return post_installation_news_ids
                 with open(news_snippet_id_file, encoding="utf-8") as f:
                     last_read_news_id = int(f.read().strip())
-                return [news_id for news_id in all_news_ids if news_id > last_read_news_id]
+                return [news_id for news_id in post_installation_news_ids if news_id > last_read_news_id]
 
             try:
                 unread_news_ids = _get_unread_news_ids()
@@ -350,11 +368,10 @@ class SerenaDashboardAPI:
                 return {"status": "error", "message": str(e)}
 
     def _get_log_messages(self, request_log: RequestLog) -> ResponseLog:
-        all_messages = self._memory_log_handler.get_log_messages()
-        requested_messages = all_messages[request_log.start_idx :] if request_log.start_idx <= len(all_messages) else []
+        messages = self._memory_log_handler.get_log_messages(from_idx=request_log.start_idx)
         project = self._agent.get_active_project()
         project_name = project.project_name if project else None
-        return ResponseLog(messages=requested_messages, max_idx=len(all_messages) - 1, active_project=project_name)
+        return ResponseLog(messages=messages.messages, max_idx=messages.max_idx, active_project=project_name)
 
     def _get_tool_names(self) -> ResponseToolNames:
         return ResponseToolNames(tool_names=self._tool_names)

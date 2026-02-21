@@ -8,7 +8,7 @@ import shutil
 from collections.abc import Iterator, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
@@ -134,6 +134,16 @@ class ModeSelectionDefinition:
     default_modes: Sequence[str] | None = None
 
 
+@dataclass
+class SharedConfig(ModeSelectionDefinition, ToolInclusionDefinition, ToStringMixin):
+    """Shared between SerenaConfig and ProjectConfig, the latter used to override values in the form
+    (same as in ModeSelectionDefinition).
+    The defaults here shall be none and should be set to the global default values in SerenaConfig.
+    """
+
+    symbol_info_budget: float | None = None
+
+
 class SerenaConfigError(Exception):
     pass
 
@@ -163,7 +173,7 @@ class LanguageBackend(Enum):
 
 
 @dataclass(kw_only=True)
-class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMixin):
+class ProjectConfig(SharedConfig):
     project_name: str
     languages: list[Language]
     ignored_paths: list[str] = field(default_factory=list)
@@ -323,6 +333,17 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
                     f"Invalid language: {orig_language_str}.\nValid language_strings are: {[l.value for l in Language]}"
                 ) from e
 
+        # Validate symbol_info_budget
+        symbol_info_budget_raw = data["symbol_info_budget"]
+        symbol_info_budget = symbol_info_budget_raw
+        if symbol_info_budget is not None:
+            try:
+                symbol_info_budget = float(symbol_info_budget_raw)
+            except (TypeError, ValueError) as e:
+                raise ValueError(f"symbol_info_budget must be a number or null, got: {symbol_info_budget_raw}") from e
+            if symbol_info_budget < 0:
+                raise ValueError(f"symbol_info_budget cannot be negative, got: {symbol_info_budget}")
+
         return cls(
             project_name=data["project_name"],
             languages=languages,
@@ -336,6 +357,7 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
             encoding=data["encoding"],
             base_modes=data["base_modes"],
             default_modes=data["default_modes"],
+            symbol_info_budget=symbol_info_budget,
         )
 
     def _to_yaml_dict(self) -> dict:
@@ -397,12 +419,18 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
 
 
 class RegisteredProject(ToStringMixin):
-    def __init__(self, project_root: str, project_config: "ProjectConfig", project_instance: Optional["Project"] = None) -> None:
+    def __init__(
+        self,
+        project_root: str,
+        project_config: "ProjectConfig",
+        project_instance: Optional["Project"] = None,
+    ) -> None:
         """
         Represents a registered project in the Serena configuration.
 
         :param project_root: the root directory of the project
         :param project_config: the configuration of the project
+        :param project_instance: an existing project instance (if already loaded)
         """
         self.project_root = Path(project_root).resolve()
         self.project_config = project_config
@@ -438,9 +466,9 @@ class RegisteredProject(ToStringMixin):
         :param path: the path to check
         :return: True if the path matches the project root, False otherwise
         """
-        return self.project_root == Path(path).resolve()
+        return self.project_root.samefile(Path(path).resolve())
 
-    def get_project_instance(self) -> "Project":
+    def get_project_instance(self, serena_config: "SerenaConfig | None") -> "Project":
         """
         Returns the project instance for this registered project, loading it if necessary.
         """
@@ -448,12 +476,16 @@ class RegisteredProject(ToStringMixin):
             from ..project import Project
 
             with LogTime(f"Loading project instance for {self}", logger=log):
-                self._project_instance = Project(project_root=str(self.project_root), project_config=self.project_config)
+                self._project_instance = Project(
+                    project_root=str(self.project_root),
+                    project_config=self.project_config,
+                    serena_config=serena_config,
+                )
         return self._project_instance
 
 
 @dataclass(kw_only=True)
-class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMixin):
+class SerenaConfig(SharedConfig):
     """
     Holds the Serena agent configuration, which is typically loaded from a YAML configuration file
     (when instantiated via :method:`from_config_file`), which is updated when projects are added or removed.
@@ -493,8 +525,20 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
     ls_specific_settings: dict = field(default_factory=dict)
     """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""
 
+    ignored_paths: list[str] = field(default_factory=list)
+    """List of paths to ignore across all projects. Same syntax as gitignore, so you can use * and **.
+    These patterns are merged additively with each project's own ignored_paths."""
+
     # settings with overridden defaults
     default_modes: Sequence[str] | None = ("interactive", "editing")
+    symbol_info_budget: float = 10.0
+    """
+    Time budget (seconds) for requests when tools request include_info (currently
+    only supported for LSP-based tools).
+
+    If the budget is exceeded, Serena stops issuing further requests and returns partial info results.
+    0 disables the budget (no early stopping). Negative values are invalid.
+    """
 
     # *** fields that are NOT mapped to/from the configuration file ***
 
@@ -511,6 +555,19 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
     CONFIG_FIELDS_WITH_TYPE_CONVERSION = {"projects", "language_backend"}
 
     # *** methods ***
+    @classmethod
+    def get_config_file_creation_date(cls) -> datetime | None:
+        """
+        :return: the creation date of the configuration file, or None if the configuration file does not exist
+        """
+        config_file_path = cls._determine_config_file_path()
+        if not os.path.exists(config_file_path):
+            return None
+
+        # for unix systems st_ctime is the inode change time (change of metadata),
+        # which is good enough for our purposes
+        creation_timestamp = os.stat(config_file_path).st_ctime
+        return datetime.fromtimestamp(creation_timestamp, UTC)
 
     @property
     def config_file_path(self) -> str | None:
@@ -711,7 +768,7 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
         if registered_project is None:
             return None
         else:
-            return registered_project.get_project_instance()
+            return registered_project.get_project_instance(serena_config=self)
 
     def add_registered_project(self, registered_project: RegisteredProject) -> None:
         """
@@ -745,7 +802,12 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
 
         project_config = ProjectConfig.load(project_root, autogenerate=True)
 
-        new_project = Project(project_root=str(project_root), project_config=project_config, is_newly_created=True)
+        new_project = Project(
+            project_root=str(project_root),
+            project_config=project_config,
+            is_newly_created=True,
+            serena_config=self,
+        )
         self.add_registered_project(RegisteredProject.from_project_instance(new_project))
 
         return new_project

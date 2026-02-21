@@ -53,7 +53,7 @@ class OnboardingTool(Tool):
         return self.prompt_factory.create_onboarding_prompt(system=system)
 
 
-class ThinkAboutCollectedInformationTool(Tool):
+class ThinkAboutCollectedInformationTool(Tool, ToolMarkerOptional):
     """
     Thinking tool for pondering the completeness of collected information.
     """
@@ -67,7 +67,7 @@ class ThinkAboutCollectedInformationTool(Tool):
         return self.prompt_factory.create_think_about_collected_information()
 
 
-class ThinkAboutTaskAdherenceTool(Tool):
+class ThinkAboutTaskAdherenceTool(Tool, ToolMarkerOptional):
     """
     Thinking tool for determining whether the agent is still on track with the current task.
     """
@@ -83,7 +83,7 @@ class ThinkAboutTaskAdherenceTool(Tool):
         return self.prompt_factory.create_think_about_task_adherence()
 
 
-class ThinkAboutWhetherYouAreDoneTool(Tool):
+class ThinkAboutWhetherYouAreDoneTool(Tool, ToolMarkerOptional):
     """
     Thinking tool for determining whether the task is truly completed.
     """

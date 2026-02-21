@@ -96,7 +96,7 @@ claude mcp add --scope user serena -- uvx --from git+https://github.com/oraios/s
 ```
 
 Whenever you start Claude Code, Serena will search up from the current directory for `.serena/project.yml` or `.git` markers,
-activating the current directory as the project if neither is found. 
+activating the containing directory as the project (if any). 
 This mechanism makes it suitable for a single global MCP configuration.
 
 **Maximum Token Efficiency.** To maximize token efficiency, you may want to use Claude Code's 

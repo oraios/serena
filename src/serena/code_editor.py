@@ -6,6 +6,7 @@ from collections.abc import Iterable, Iterator, Reversible
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Generic, Optional, TypeVar, cast
 
+from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
 from serena.symbol import JetBrainsSymbol, LanguageServerSymbol, LanguageServerSymbolRetriever, PositionInFile, Symbol
 from solidlsp import SolidLanguageServer, ls_types
 from solidlsp.ls import LSPFileBuffer
@@ -13,7 +14,6 @@ from solidlsp.ls_utils import PathUtils, TextUtils
 
 from .constants import DEFAULT_SOURCE_FILE_ENCODING
 from .project import Project
-from .tools.jetbrains_plugin_client import JetBrainsPluginClient
 
 if TYPE_CHECKING:
     from .agent import SerenaAgent
@@ -81,8 +81,9 @@ class CodeEditor(Generic[TSymbol], ABC):
 
     def _save_edited_file(self, edited_file: "CodeEditor.EditedFile") -> None:
         abs_path = os.path.join(self.project_root, edited_file.relative_path)
+        new_contents = edited_file.get_contents()
         with open(abs_path, "w", encoding=self.encoding) as f:
-            f.write(edited_file.get_contents())
+            f.write(new_contents)
 
     @abstractmethod
     def _find_unique_symbol(self, name_path: str, relative_file_path: str) -> TSymbol:

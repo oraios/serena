@@ -218,7 +218,7 @@ class EditingTest(ABC):
         with open(file_path, encoding="utf-8") as f:
             return f.read()
 
-    def run_test(self, content_after_ground_truth: str | SnapshotAssertion) -> None:
+    def run_test(self, content_after_ground_truth: SnapshotAssertion) -> None:
         with self._setup() as symbol_retriever:
             content_before = self._read_file(self.rel_path)
             code_editor = LanguageServerCodeEditor(symbol_retriever)

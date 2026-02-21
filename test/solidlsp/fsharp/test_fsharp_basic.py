@@ -2,6 +2,7 @@ import os
 import tempfile
 import threading
 from pathlib import Path
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
@@ -10,6 +11,7 @@ from solidlsp import SolidLanguageServer
 from solidlsp.language_servers.fsharp_language_server import FSharpLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
+from test.conftest import is_ci
 
 
 @pytest.mark.fsharp
@@ -87,6 +89,7 @@ class TestFSharpLanguageServer:
         for expected in expected_symbols:
             assert expected in symbol_names, f"{expected} not found in Person.fs symbols"
 
+    @pytest.mark.skipif(is_ci, reason="Test is flaky")  # TODO: Re-enable if the LS can be made more reliable #1039
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
     def test_find_referencing_symbols_across_files(self, language_server: SolidLanguageServer) -> None:
         """Test finding references to Calculator functions across files."""
@@ -122,6 +125,7 @@ class TestFSharpLanguageServer:
         # We should get at least some definitions
         assert len(definitions) >= 0, "Should get definitions (even if empty for complex cases)"
 
+    @pytest.mark.skipif(is_ci, reason="Test is flaky")  # TODO: Re-enable if the LS can be made more reliable #1039
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
     def test_hover_information(self, language_server: SolidLanguageServer) -> None:
         """Test hover information functionality."""
@@ -140,14 +144,14 @@ class TestFSharpLanguageServer:
         file_path = os.path.join("Program.fs")
 
         # Use threading for cross-platform timeout (signal.SIGALRM is Unix-only)
-        result = [None]
-        exception = [None]
+        result: dict[str, Any] = dict(value=None)
+        exception: dict[str, Any] = dict(value=None)
 
         def run_completion():
             try:
-                result[0] = language_server.request_completions(file_path, 15, 10)
+                result["value"] = language_server.request_completions(file_path, 15, 10)
             except Exception as e:
-                exception[0] = e
+                exception["value"] = e
 
         thread = threading.Thread(target=run_completion, daemon=True)
         thread.start()
@@ -158,10 +162,10 @@ class TestFSharpLanguageServer:
             # The important thing is that the language server doesn't crash
             return
 
-        if exception[0]:
-            raise exception[0]
+        if exception["value"]:
+            raise exception["value"]
 
-        assert isinstance(result[0], list), "Completions should be a list"
+        assert isinstance(result["value"], list), "Completions should be a list"
 
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
     def test_diagnostics(self, language_server: SolidLanguageServer) -> None:

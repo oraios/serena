@@ -28,3 +28,6 @@ PROJECT_TEMPLATE_FILE = str(_serena_pkg_path / "resources" / "project.template.y
 SERENA_CONFIG_TEMPLATE_FILE = str(_serena_pkg_path / "resources" / "serena_config.template.yml")
 
 SERENA_LOG_FORMAT = "%(levelname)-5s %(asctime)-15s [%(threadName)s] %(name)s:%(funcName)s:%(lineno)d - %(message)s"
+
+LOG_MESSAGES_BUFFER_SIZE = 2500
+"""The maximum number of log messages to keep in the buffer (for the dashboard)."""

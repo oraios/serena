@@ -1,5 +1,6 @@
 import logging
 import os
+import platform
 import shutil as _sh
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -35,10 +36,17 @@ class LanguageParamRequest:
     param: Language
 
 
+_LANGUAGE_REPO_ALIASES: dict[Language, Language] = {
+    Language.CPP_CCLS: Language.CPP,
+    Language.PHP_PHPACTOR: Language.PHP,
+    Language.PYTHON_JEDI: Language.PYTHON,
+    Language.RUBY_SOLARGRAPH: Language.RUBY,
+}
+
+
 def get_repo_path(language: Language) -> Path:
-    # Map both CPP variants to the shared cpp test repo
-    repo_dir = "cpp" if language in (Language.CPP, Language.CPP_CCLS) else str(language)
-    return Path(__file__).parent / "resources" / "repos" / repo_dir / "test_repo"
+    repo_language = _LANGUAGE_REPO_ALIASES.get(language, language)
+    return Path(__file__).parent / "resources" / "repos" / repo_language / "test_repo"
 
 
 def _create_ls(
@@ -109,7 +117,7 @@ def start_default_ls_context(language: Language) -> Iterator[SolidLanguageServer
 
 def _create_default_project(language: Language) -> Project:
     repo_path = str(get_repo_path(language))
-    return Project.load(repo_path)
+    return Project.load(repo_path, serena_config=None)
 
 
 @pytest.fixture(scope="session")
@@ -202,6 +210,8 @@ is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
 Flag indicating whether the tests are running in the GitHub CI environment.
 """
 
+is_windows = platform.system() == "Windows"
+
 
 def _determine_disabled_languages() -> list[Language]:
     """
@@ -228,6 +238,11 @@ def _determine_disabled_languages() -> list[Language]:
     clangd_tests_enabled = _sh.which("clangd") is not None
     if not clangd_tests_enabled:
         result.append(Language.CPP)
+
+    # Disable PHP_PHPACTOR tests if php is not available
+    php_tests_enabled = _sh.which("php") is not None
+    if not php_tests_enabled:
+        result.append(Language.PHP_PHPACTOR)
 
     al_tests_enabled = True
     if not al_tests_enabled:

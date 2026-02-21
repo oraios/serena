@@ -8,10 +8,10 @@ project_name: "project_name"
 #   fortran             fsharp              go                  groovy              haskell
 #   java                julia               kotlin              lua                 markdown
 #   matlab              nix                 pascal              perl                php
-#   powershell          python              python_jedi         r                   rego
-#   ruby                ruby_solargraph     rust                scala               swift
-#   terraform           toml                typescript          typescript_vts      vue
-#   yaml                zig
+#   php_phpactor        powershell          python              python_jedi         r
+#   rego                ruby                ruby_solargraph     rust                scala
+#   swift               terraform           toml                typescript          typescript_vts
+#   vue                 yaml                zig
 #   (This list may be outdated. For the current list, see values of Language enum here:
 #   https://github.com/oraios/serena/blob/main/src/solidlsp/ls_config.py
 #   For some languages, there are alternative language servers, e.g. csharp_omnisharp, ruby_solargraph.)
@@ -34,8 +34,9 @@ encoding: "utf-8"
 # whether to use project's .gitignore files to ignore files
 ignore_all_files_in_gitignore: true
 
-# list of additional paths to ignore in all projects
-# same syntax as gitignore, so you can use * and **
+# list of additional paths to ignore in this project.
+# Same syntax as gitignore, so you can use * and **.
+# Note: global ignored_paths from serena_config.yml are also applied additively.
 ignored_paths: []
 
 # whether the project is in read-only mode
@@ -109,3 +110,7 @@ default_modes:
 # initial prompt for the project. It will always be given to the LLM upon activating the project
 # (contrary to the memories, which are loaded on demand).
 initial_prompt: ""
+
+# override of the corresponding setting in serena_config.yml, see the documentation there.
+# If null or missing, the value from the global config is used.
+symbol_info_budget:

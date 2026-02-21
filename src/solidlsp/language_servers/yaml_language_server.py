@@ -10,10 +10,9 @@ import shutil
 from typing import Any
 
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -46,55 +45,61 @@ class YamlLanguageServer(SolidLanguageServer):
         Creates a YamlLanguageServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        yaml_lsp_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd=yaml_lsp_executable_path, cwd=repository_root_path),
+            None,
             "yaml",
             solidlsp_settings,
         )
 
-    @classmethod
-    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> str:
-        """
-        Setup runtime dependencies for YAML Language Server and return the command to start the server.
-        """
-        # Verify both node and npm are installed
-        is_node_installed = shutil.which("node") is not None
-        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which("npm") is not None
-        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
-        deps = RuntimeDependencyCollection(
-            [
-                RuntimeDependency(
-                    id="yaml-language-server",
-                    description="yaml-language-server package (Red Hat)",
-                    command="npm install --prefix ./ yaml-language-server@1.19.2",
-                    platform_id="any",
-                ),
-            ]
-        )
+    class DependencyProvider(LanguageServerDependencyProviderSinglePath):
+        def _get_or_install_core_dependency(self) -> str:
+            """
+            Setup runtime dependencies for YAML Language Server and return the command to start the server.
+            """
+            # Verify both node and npm are installed
+            is_node_installed = shutil.which("node") is not None
+            assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
+            is_npm_installed = shutil.which("npm") is not None
+            assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
-        # Install yaml-language-server if not already installed
-        yaml_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "yaml-lsp")
-        yaml_executable_path = os.path.join(yaml_ls_dir, "node_modules", ".bin", "yaml-language-server")
-
-        # Handle Windows executable extension
-        if os.name == "nt":
-            yaml_executable_path += ".cmd"
-
-        if not os.path.exists(yaml_executable_path):
-            log.info(f"YAML Language Server executable not found at {yaml_executable_path}. Installing...")
-            deps.install(yaml_ls_dir)
-            log.info("YAML language server dependencies installed successfully")
-
-        if not os.path.exists(yaml_executable_path):
-            raise FileNotFoundError(
-                f"yaml-language-server executable not found at {yaml_executable_path}, something went wrong with the installation."
+            deps = RuntimeDependencyCollection(
+                [
+                    RuntimeDependency(
+                        id="yaml-language-server",
+                        description="yaml-language-server package (Red Hat)",
+                        command="npm install --prefix ./ yaml-language-server@1.19.2",
+                        platform_id="any",
+                    ),
+                ]
             )
-        return f"{yaml_executable_path} --stdio"
+
+            # Install yaml-language-server if not already installed
+            yaml_ls_dir = os.path.join(self._ls_resources_dir, "yaml-lsp")
+            yaml_executable_path = os.path.join(yaml_ls_dir, "node_modules", ".bin", "yaml-language-server")
+
+            # Handle Windows executable extension
+            if os.name == "nt":
+                yaml_executable_path += ".cmd"
+
+            if not os.path.exists(yaml_executable_path):
+                log.info(f"YAML Language Server executable not found at {yaml_executable_path}. Installing...")
+                deps.install(yaml_ls_dir)
+                log.info("YAML language server dependencies installed successfully")
+
+            if not os.path.exists(yaml_executable_path):
+                raise FileNotFoundError(
+                    f"yaml-language-server executable not found at {yaml_executable_path}, something went wrong with the installation."
+                )
+
+            return yaml_executable_path
+
+        def _create_launch_command(self, core_path: str) -> list[str]:
+            return [core_path, "--stdio"]
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:

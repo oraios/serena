@@ -123,7 +123,7 @@ class ClojureLSP(SolidLanguageServer):
             os.chmod(clojurelsp_executable_path, 0o755)
             return clojurelsp_executable_path
 
-        def _create_launch_command(self, core_path: str) -> list[str] | str:
+        def _create_launch_command(self, core_path: str) -> list[str]:
             return [core_path]
 
     @staticmethod

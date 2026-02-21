@@ -14,7 +14,8 @@ Serena is configured in using a multi-layered approach:
  * **contexts and modes** for composable configuration, which can be enabled on a case-by-case basis (see below)
  * **command-line parameters** passed to the `start-mcp-server` server command (overriding/extending configured settings)  
    See [MCP Server Command-Line Arguments](mcp-args) for further information.  
-   
+
+(global-config)=
 ## Global Configuration
 
 The global configuration file allows you to change general settings and defaults that will apply to all projects unless overridden.
@@ -209,7 +210,7 @@ ls_specific_settings:
 ```
 
 This is supported by all language servers deriving their dependency provider from  `LanguageServerDependencyProviderSinglePath`.
-Currently, this includes the following languages: `clojure`, `cpp`, `php`, `python`, `rust`, `typescript`. 
+Currently, this includes the following languages: `bash`, `clojure`, `cpp`, `markdown`, `php`, `php_phpactor`, `python`, `rust`, `toml`, `typescript`, `yaml`. 
 We will add support for more languages over time.
 
 #### C# (Roslyn Language Server)

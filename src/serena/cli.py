@@ -39,6 +39,7 @@ from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsO
 from serena.util.dataclass import get_dataclass_default
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
+from solidlsp.ls_types import SymbolKind
 from solidlsp.util.subprocess_util import subprocess_kwargs
 
 log = logging.getLogger(__name__)
@@ -55,15 +56,14 @@ Overriding them means that they no longer apply, so you will need to
 re-specify them in addition to further modes if you want to keep them."""
 
 
-def find_project_root(root: str | Path | None = None) -> str:
+def find_project_root(root: str | Path | None = None) -> str | None:
     """Find project root by walking up from CWD.
 
     Checks for .serena/project.yml first (explicit Serena project), then .git (git root).
-    Falls back to CWD if no marker is found.
 
     :param root: If provided, constrains the search to this directory and below
                  (acts as a virtual filesystem root). Search stops at this boundary.
-    :return: absolute path to project root (falls back to CWD if no marker found)
+    :return: absolute path to project root or None if not suitable root is found
     """
     current = Path.cwd().resolve()
     boundary = Path(root).resolve() if root is not None else None
@@ -86,8 +86,7 @@ def find_project_root(root: str | Path | None = None) -> str:
         if (directory / ".git").exists():  # .git can be file (worktree) or dir
             return str(directory)
 
-    # Fall back to CWD
-    return str(current)
+    return None
 
 
 # --------------------- Utilities -------------------------------------
@@ -274,7 +273,10 @@ class TopLevelCommands(AutoRegisteringGroup):
             if project is not None or project_file_arg is not None:
                 raise click.UsageError("--project-from-cwd cannot be used with --project or positional project argument")
             project = find_project_root()
-            log.info("Auto-detected project root: %s", project)
+            if project is not None:
+                log.info("Auto-detected project root: %s", project)
+            else:
+                log.warning("No project root found from %s; not activating any project", os.getcwd())
 
         project_file = project_file_arg or project
         factory = SerenaMCPFactory(context=context, project=project_file, memory_log_handler=memory_log_handler)
@@ -636,7 +638,7 @@ class ProjectCommands(AutoRegisteringGroup):
         lvl = logging.getLevelNamesMapping()[log_level.upper()]
         logging.configure(level=lvl)
         serena_config = SerenaConfig.from_config_file()
-        proj = registered_project.get_project_instance()
+        proj = registered_project.get_project_instance(serena_config=serena_config)
         click.echo(f"Indexing symbols in {proj} …")
         ls_mgr = proj.create_language_server_manager(
             log_level=lvl, ls_timeout=timeout, ls_specific_settings=serena_config.ls_specific_settings
@@ -689,7 +691,8 @@ class ProjectCommands(AutoRegisteringGroup):
         :param path: The path to check.
         :param project: The path to the project directory, defaults to the current working directory.
         """
-        proj = Project.load(os.path.abspath(project))
+        serena_config = SerenaConfig.from_config_file()
+        proj = Project.load(os.path.abspath(project), serena_config=serena_config)
         if os.path.isabs(path):
             path = os.path.relpath(path, start=proj.project_root)
         is_ignored = proj.is_ignored_path(path)
@@ -711,7 +714,8 @@ class ProjectCommands(AutoRegisteringGroup):
         :param project: path to the project directory, defaults to the current working directory.
         :param verbose: if set, prints detailed information about the indexed symbols.
         """
-        proj = Project.load(os.path.abspath(project))
+        serena_config = SerenaConfig.from_config_file()
+        proj = Project.load(os.path.abspath(project), serena_config=serena_config)
         if os.path.isabs(file):
             file = os.path.relpath(file, start=proj.project_root)
         if proj.is_ignored_path(file, ignore_non_source_files=True):
@@ -748,7 +752,8 @@ class ProjectCommands(AutoRegisteringGroup):
         # NOTE: completely written by Claude Code, only functionality was reviewed, not implementation
         logging.configure(level=logging.INFO)
         project_path = os.path.abspath(project)
-        proj = Project.load(project_path)
+        serena_config = SerenaConfig.from_config_file()
+        proj = Project.load(project_path, serena_config=serena_config)
 
         # Create log file with timestamp
         timestamp = datetime_tag()
@@ -807,9 +812,7 @@ class ProjectCommands(AutoRegisteringGroup):
                     return
 
                 # Extract suitable symbol (prefer class or function over variables)
-                # LSP symbol kinds: 5=class, 12=function, 6=method, 9=constructor
-                preferred_kinds = [5, 12, 6, 9]  # class, function, method, constructor
-
+                preferred_kinds = {SymbolKind.Class.name, SymbolKind.Function.name, SymbolKind.Method.name, SymbolKind.Constructor.name}
                 selected_symbol = None
                 for symbol in overview_data:
                     if symbol.get("kind") in preferred_kinds:

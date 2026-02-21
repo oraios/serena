@@ -12,10 +12,10 @@ import requests
 from requests import Response
 from sensai.util.string import ToStringMixin
 
-import serena.tools.jetbrains_types as jb
+import serena.jetbrains.jetbrains_types as jb
+from serena.jetbrains.jetbrains_types import PluginStatusDTO
 from serena.project import Project
 from serena.text_utils import render_html
-from serena.tools.jetbrains_types import PluginStatusDTO
 from serena.util.version import Version
 
 T = TypeVar("T")
@@ -49,7 +49,7 @@ class PluginServerError(SerenaClientError):
         unrecoverable_error_prefix = (
             "The request failed due to an error on the Serena JetBrains plugin side. This may be caused "
             "by a bug or an incompatibility in the plugin. In that case, please report the error below together with "
-            "your setup (IDE + version, Serena plugin version) at https://github.com/oraios/serena/issues "
+            "your setup (IDE + version, Serena plugin version, programming language) at https://github.com/oraios/serena/issues "
             "(if you are an LLM, tell the user about this). The Oraios team will then provide support on this.\n"
         )
         super().__init__(unrecoverable_error_prefix + message)
@@ -96,7 +96,7 @@ class JetBrainsPluginClient(ToStringMixin):
         except ConnectionError:  # expected if no server is running at the port
             pass
         except Exception as e:
-            log.warning("Failed to obtain status from JetBrains plugin service at port %d: %s", e, port, exc_info=True)
+            log.warning("Failed to obtain status from JetBrains plugin service at port %d: %s", port, e, exc_info=e)
 
     @property
     def _base_url(self) -> str:
@@ -118,43 +118,75 @@ class JetBrainsPluginClient(ToStringMixin):
             if client.matches(resolved_path):
                 return client
 
+        plugin_paths_found = []
         for port in range(cls.BASE_PORT, cls.BASE_PORT + 20):
             client = JetBrainsPluginClient(port)
             if client.matches(resolved_path):
                 log.info("Found matching %s", client)
                 cls._last_port = port
                 return client
+            elif client._project_root is not None:
+                plugin_paths_found.append(client._project_root)
 
-        raise ServerNotFoundError("Found no Serena service in a JetBrains IDE instance for the project at " + str(resolved_path))
+        log.warning(
+            "Searched for Serena JetBrains plugin service for project at %s but found no matching service. "
+            "Found plugin instances for the following project paths: %s",
+            resolved_path,
+            plugin_paths_found,
+        )
+        raise ServerNotFoundError(
+            f"Found no Serena service in a JetBrains IDE instance for the project at {resolved_path}. "
+            "CRITICAL: Before you continue, ask the user to open this folder as a project in a JetBrains IDE "
+            "with the Serena plugin installed and running!"
+        )
 
     @staticmethod
-    def _normalize_wsl_path(path_str: str) -> Path:
+    def _paths_match(resolved_serena_path: str, plugin_path: str) -> bool:
         """
-        Normalize WSL UNC paths to Linux paths for comparison.
+        Checks whether the resolved Serena path matches the plugin path, accounting for possible prefixes
+        in the plugin path, different file system perspectives, and case sensitivity.
 
-        When JetBrains IDE runs on Windows with a project opened from WSL,
-        it returns paths like `//wsl.localhost/Ubuntu-24.04/home/user/project`
-        or `//wsl$/Ubuntu/home/user/project`. This method converts such paths
-        to standard Linux format `/home/user/project` for proper matching.
+        Concrete aspects considered:
+        - The plugin path may contain prefixes:
+          - The plugin path may be a WSL UNC path, e.g. `//wsl.localhost/Ubuntu-24.04/home/user/project`
+            or `//wsl$/Ubuntu/home/user/project` while Serena will just have `/home/user/project`
+          - Other prefixes like `/workspaces/serena/C:/Users/user/projects/my-app`
+        - One path may use a different file system perspective (particularly WSL vs Windows-native) but still
+          point to the same location, e.g. `/mnt/c/` vs `C:/`
+        - Case sensitivity
 
-        :param path_str: Path string that may be a WSL UNC path
-        :return: Normalized Path object
+        :param resolved_serena_path: The resolved project root path from Serena's perspective
+        :param plugin_path: The project root path reported by the plugin (which may be a WSL UNC path)
+        :return: True if the paths match, False otherwise
         """
-        path_str = str(path_str)
-        # Match //wsl.localhost/<distro>/... or //wsl$/<distro>/...
-        match = re.match(r"^//wsl(?:\.localhost|\$)/[^/]+(.*)$", path_str, re.IGNORECASE)
-        if match:
-            return Path(match.group(1))
-        return Path(path_str)
+        # try to resolve the plugin path, checking for a direct match
+        # (this is robust against symlinks as long as there are no prefixes)
+        try:
+            resolved_plugin_path = str(Path(plugin_path).resolve())
+            if resolved_plugin_path == resolved_serena_path:
+                return True
+        except:
+            pass
+
+        def normalise_wsl_mnt(path_str: str) -> str:
+            # normalise WSL /mnt/c/ to c:/ for comparison
+            return re.sub(r"/mnt/([a-z])/", r"\1:/", path_str, flags=re.IGNORECASE)
+
+        # standardise paths for comparison: normalise WSL /mnt/ to Windows paths and ignore case
+        std_serena_path = normalise_wsl_mnt(str(resolved_serena_path)).lower()
+        std_plugin_path = normalise_wsl_mnt(str(plugin_path)).lower()
+
+        # At this point, the plugin path may still contain prefixes, so we check if the Serena path is a suffix of the plugin path
+        return std_plugin_path.endswith(std_serena_path)
 
     def matches(self, resolved_path: Path) -> bool:
+        """
+        :param resolved_path: the resolved project root path from Serena's perspective
+        :return: whether this client instance matches the given project path
+        """
         if self._project_root is None:
             return False
-        try:
-            plugin_root = self._normalize_wsl_path(self._project_root)
-            return plugin_root.resolve() == resolved_path
-        except ConnectionError:
-            return False
+        return self._paths_match(str(resolved_path), self._project_root)
 
     def is_version_at_least(self, *version_parts: int) -> bool:
         if self._plugin_version is None:
@@ -252,11 +284,14 @@ class JetBrainsPluginClient(ToStringMixin):
                 else:
                     del symbol[key]
 
-        # convert documentation and quick info from HTML to plain text (if present)
-        symbols = response_dict["symbols"]
-        for s in symbols:
-            convert_html("documentation", s)
-            convert_html("quick_info", s)
+        def convert_symbol_list(l: list) -> None:
+            for s in l:
+                convert_html("documentation", s)
+                convert_html("quick_info", s)
+                if "children" in s:
+                    convert_symbol_list(s["children"])
+
+        convert_symbol_list(response_dict["symbols"])
 
     def find_symbol(
         self,

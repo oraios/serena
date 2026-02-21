@@ -13,18 +13,19 @@ from collections.abc import Hashable, Iterator
 from contextlib import contextmanager
 from copy import copy
 from pathlib import Path, PurePath
-from time import sleep
+from time import perf_counter, sleep
 from typing import Self, Union, cast
 
 import pathspec
 from sensai.util.pickle import getstate, load_pickle
+from sensai.util.string import ToStringMixin
 
 from serena.text_utils import MatchedConsecutiveLines
 from serena.util.file_system import match_path
 from solidlsp import ls_types
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
-from solidlsp.ls_handler import SolidLanguageServerHandler
+from solidlsp.ls_process import LanguageServerProcess
 from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils, PathUtils, TextUtils
 from solidlsp.lsp_protocol_handler import lsp_types
@@ -49,6 +50,9 @@ from solidlsp.util.cache import load_cache, save_cache
 GenericDocumentSymbol = Union[LSPTypes.DocumentSymbol, LSPTypes.SymbolInformation, ls_types.UnifiedSymbolInformation]
 log = logging.getLogger(__name__)
 
+_debug_enabled = log.isEnabledFor(logging.DEBUG)
+"""Serves as a flag that triggers additional computation when debug logging is enabled."""
+
 
 @dataclasses.dataclass(kw_only=True)
 class ReferenceInSymbol:
@@ -66,8 +70,8 @@ class LSPFileBuffer:
 
     def __init__(
         self,
+        abs_path: Path,
         uri: str,
-        contents: str,
         encoding: str,
         version: int,
         language_id: str,
@@ -75,9 +79,11 @@ class LSPFileBuffer:
         language_server: "SolidLanguageServer",
         open_in_ls: bool = True,
     ) -> None:
+        self.abs_path = abs_path
         self.language_server = language_server
         self.uri = uri
-        self.contents = contents
+        self._read_file_modified_date: float | None = None
+        self._contents: str | None = None
         self.version = version
         self.language_id = language_id
         self.ref_count = ref_count
@@ -120,6 +126,34 @@ class LSPFileBuffer:
         self._open_in_ls()
 
     @property
+    def contents(self) -> str:
+        file_modified_date = self.abs_path.stat().st_mtime
+
+        # if contents are cached, check if they are stale (file modification since last read) and invalidate if so
+        if self._contents is not None:
+            assert self._read_file_modified_date is not None
+            if file_modified_date > self._read_file_modified_date:
+                self._contents = None
+
+        if self._contents is None:
+            self._read_file_modified_date = file_modified_date
+            self._contents = FileUtils.read_file(str(self.abs_path), self.encoding)
+            self._content_hash = None
+
+        return self._contents
+
+    @contents.setter
+    def contents(self, new_contents: str) -> None:
+        """
+        Sets new contents for the file buffer (in-memory change only).
+        Persistence of the change to disk must be handled separately.
+
+        :param new_contents: the new contents to set
+        """
+        self._contents = new_contents
+        self._content_hash = None
+
+    @property
     def content_hash(self) -> str:
         if self._content_hash is None:
             self._content_hash = hashlib.md5(self.contents.encode(self.encoding)).hexdigest()
@@ -130,7 +164,7 @@ class LSPFileBuffer:
         return self.contents.split("\n")
 
 
-class SymbolBody:
+class SymbolBody(ToStringMixin):
     """
     Representation of the body of a symbol, which allows the extraction of the symbol's text
     from the lines of the file it is defined in.
@@ -147,14 +181,21 @@ class SymbolBody:
         self._end_line = end_line
         self._end_col = end_col
 
+    def _tostring_excludes(self) -> list[str]:
+        return ["_lines"]
+
     def get_text(self) -> str:
         # extract relevant lines
         symbol_body = "\n".join(self._lines[self._start_line : self._end_line + 1])
 
-        # remove leading indentation
+        # remove leading content from the first line
         symbol_body = symbol_body[self._start_col :]
 
-        # TODO: handle end_col properly (this was never implemented)
+        # remove trailing content from the last line
+        last_line = self._lines[self._end_line]
+        trailing_length = len(last_line) - self._end_col
+        if trailing_length > 0:
+            symbol_body = symbol_body[: -(len(last_line) - self._end_col)]
 
         return symbol_body
 
@@ -233,13 +274,12 @@ class LanguageServerDependencyProvider(ABC):
         self._ls_resources_dir = ls_resources_dir
 
     @abstractmethod
-    def create_launch_command(self) -> list[str] | str:
+    def create_launch_command(self) -> list[str]:
         """
         Creates the launch command for this language server, potentially downloading and installing dependencies
         beforehand.
 
-        :return: the launch command as a list containing the executable and its arguments (preferred for robustness)
-           or the entire command in a single string.
+        :return: the launch command as a list containing the executable and its arguments
         """
 
     def create_launch_command_env(self) -> dict[str, str]:
@@ -271,7 +311,7 @@ class LanguageServerDependencyProviderSinglePath(LanguageServerDependencyProvide
         :return: the core dependency's path (e.g. executable, jar, etc.)
         """
 
-    def create_launch_command(self) -> Union[str, list[str]]:
+    def create_launch_command(self) -> list[str]:
         path = self._custom_settings.get("ls_path", None)
         if path is not None:
             core_path = path
@@ -280,11 +320,10 @@ class LanguageServerDependencyProviderSinglePath(LanguageServerDependencyProvide
         return self._create_launch_command(core_path)
 
     @abstractmethod
-    def _create_launch_command(self, core_path: str) -> list[str] | str:
+    def _create_launch_command(self, core_path: str) -> list[str]:
         """
         :param core_path: path to the core dependency
-        :return: the launch command as a list containing the executable and its arguments (preferred for robustness)
-           or the entire command in a single string.
+        :return: the launch command as a list containing the executable and its arguments
         """
 
 
@@ -470,7 +509,7 @@ class SolidLanguageServer(ABC):
             self._dependency_provider = self._create_dependency_provider()
             process_launch_info = self._create_process_launch_info()
         log.debug(f"Creating language server instance with {language_id=} and process launch info: {process_launch_info}")
-        self.server = SolidLanguageServerHandler(
+        self.server = LanguageServerProcess(
             process_launch_info,
             language=self.language,
             determine_log_level=self._determine_log_level,
@@ -669,8 +708,8 @@ class SolidLanguageServer(ABC):
             log.error("open_file called before Language Server started")
             raise SolidLSPException("Language Server not started")
 
-        absolute_file_path = str(PurePath(self.repository_root_path, relative_file_path))
-        uri = pathlib.Path(absolute_file_path).as_uri()
+        absolute_file_path = Path(self.repository_root_path, relative_file_path)
+        uri = absolute_file_path.as_uri()
 
         if uri in self.open_file_buffers:
             fb = self.open_file_buffers[uri]
@@ -683,13 +722,11 @@ class SolidLanguageServer(ABC):
             yield fb
             fb.ref_count -= 1
         else:
-            contents = FileUtils.read_file(absolute_file_path, self._encoding)
-
             version = 0
             language_id = self._get_language_id_for_file(relative_file_path)
             fb = LSPFileBuffer(
+                abs_path=absolute_file_path,
                 uri=uri,
-                contents=contents,
                 encoding=self._encoding,
                 version=version,
                 language_id=language_id,
@@ -911,13 +948,14 @@ class SolidLanguageServer(ABC):
             log.error("request_references called before Language Server started")
             raise SolidLSPException("Language Server not started")
 
-        if not self._has_waited_for_cross_file_references:
-            # Some LS require waiting for a while before they can return cross-file references.
-            # This is a workaround for such LS that don't have a reliable "finished initializing" signal.
-            sleep(self._get_wait_time_for_cross_file_referencing())
-            self._has_waited_for_cross_file_references = True
-
         with self.open_file(relative_file_path):
+            if not self._has_waited_for_cross_file_references:
+                # Some LS require waiting for a while before they can return cross-file references.
+                # This is a workaround for such LS that don't have a reliable "finished initializing" signal.
+                # The waiting has to happen after at least one file was opened in the ls
+                sleep(self._get_wait_time_for_cross_file_referencing())
+                self._has_waited_for_cross_file_references = True
+            t0 = perf_counter() if _debug_enabled else 0.0
             try:
                 response = self._send_references_request(relative_file_path, line=line, column=column)
             except Exception as e:
@@ -929,6 +967,9 @@ class SolidLanguageServer(ABC):
                     ) from e
                 raise
         if response is None:
+            if _debug_enabled:
+                elapsed_ms = (perf_counter() - t0) * 1000
+                log.debug("perf: request_references path=%s elapsed_ms=%.2f count=0", relative_file_path, elapsed_ms)
             return []
 
         ret: list[ls_types.Location] = []
@@ -956,6 +997,17 @@ class SolidLanguageServer(ABC):
             new_item["absolutePath"] = str(abs_path)
             new_item["relativePath"] = str(rel_path)
             ret.append(ls_types.Location(**new_item))  # type: ignore
+
+        if _debug_enabled:
+            elapsed_ms = (perf_counter() - t0) * 1000
+            unique_files = len({r["relativePath"] for r in ret})
+            log.debug(
+                "perf: request_references path=%s elapsed_ms=%.2f count=%d unique_files=%d",
+                relative_file_path,
+                elapsed_ms,
+                len(ret),
+                unique_files,
+            )
 
         return ret
 
@@ -1129,15 +1181,19 @@ class SolidLanguageServer(ABC):
 
         def get_cached_raw_document_symbols(cache_key: str, fd: LSPFileBuffer) -> list[SymbolInformation] | list[DocumentSymbol] | None:
             file_hash_and_result = self._raw_document_symbols_cache.get(cache_key)
-            if file_hash_and_result is not None:
-                file_hash, result = file_hash_and_result
-                if file_hash == fd.content_hash:
-                    log.debug("Returning cached raw document symbols for %s", relative_file_path)
-                    return result
-                else:
-                    log.debug("Document content for %s has changed (raw symbol cache is not up-to-date)", relative_file_path)
-            else:
-                log.debug("No cache hit for raw document symbols symbols in %s", relative_file_path)
+            if file_hash_and_result is None:
+                log.debug("No cache hit for raw document symbols in %s", relative_file_path)
+                log.debug("perf: raw_document_symbols_cache MISS path=%s", relative_file_path)
+                return None
+
+            file_hash, result = file_hash_and_result
+            if file_hash == fd.content_hash:
+                log.debug("Returning cached raw document symbols for %s", relative_file_path)
+                log.debug("perf: raw_document_symbols_cache HIT path=%s", relative_file_path)
+                return result
+
+            log.debug("Document content for %s has changed (raw symbol cache is not up-to-date)", relative_file_path)
+            log.debug("perf: raw_document_symbols_cache STALE path=%s", relative_file_path)
             return None
 
         def get_raw_document_symbols(fd: LSPFileBuffer) -> list[SymbolInformation] | list[DocumentSymbol] | None:
@@ -1159,11 +1215,8 @@ class SolidLanguageServer(ABC):
 
             return response
 
-        if file_data is not None:
-            return get_raw_document_symbols(file_data)
-        else:
-            with self.open_file(relative_file_path) as opened_file_data:
-                return get_raw_document_symbols(opened_file_data)
+        with self._open_file_context(relative_file_path, file_buffer=file_data) as fd:
+            return get_raw_document_symbols(fd)
 
     def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
         """
@@ -1182,18 +1235,20 @@ class SolidLanguageServer(ABC):
             # check if the desired result is cached
             cache_key = relative_file_path
             file_hash_and_result = self._document_symbols_cache.get(cache_key)
-            if file_hash_and_result is not None:
+            if file_hash_and_result is None:
+                log.debug("No cache hit for document symbols in %s", relative_file_path)
+                log.debug("perf: document_symbols_cache MISS path=%s", relative_file_path)
+            else:
                 file_hash, document_symbols = file_hash_and_result
                 if file_hash == file_data.content_hash:
                     log.debug("Returning cached document symbols for %s", relative_file_path)
+                    log.debug("perf: document_symbols_cache HIT path=%s", relative_file_path)
                     return document_symbols
-                else:
-                    log.debug("Cached document symbol content for %s has changed", relative_file_path)
-            else:
-                log.debug("No cache hit for document symbols in %s", relative_file_path)
+
+                log.debug("Cached document symbol content for %s has changed", relative_file_path)
+                log.debug("perf: document_symbols_cache STALE path=%s", relative_file_path)
 
             # no cached result: request the root symbols from the language server
-            file_data.ensure_open_in_ls()
             root_symbols = self._request_document_symbols(relative_file_path, file_data)
 
             if root_symbols is None:
@@ -1372,7 +1427,7 @@ class SolidLanguageServer(ABC):
                         child["parent"] = package_symbol
 
                 elif os.path.isfile(contained_dir_or_file_abs_path):
-                    with self._open_file_context(contained_dir_or_file_rel_path) as file_data:
+                    with self._open_file_context(contained_dir_or_file_rel_path, open_in_ls=False) as file_data:
                         document_symbols = self.request_document_symbols(contained_dir_or_file_rel_path, file_data)
                         file_root_nodes = document_symbols.root_symbols
 
@@ -1624,6 +1679,8 @@ class SolidLanguageServer(ABC):
         if not references:
             return []
 
+        debug_enabled = log.isEnabledFor(logging.DEBUG)
+        t0_loop = perf_counter() if debug_enabled else 0.0
         # For each reference, find the containing symbol
         result = []
         incoming_symbol = None
@@ -1725,6 +1782,18 @@ class SolidLanguageServer(ABC):
                     continue
 
                 result.append(ReferenceInSymbol(symbol=containing_symbol, line=ref_line, character=ref_col))
+
+        if debug_enabled:
+            loop_elapsed_ms = (perf_counter() - t0_loop) * 1000
+            unique_files = len({r.symbol["location"]["relativePath"] for r in result})
+            log.debug(
+                "perf: request_referencing_symbols path=%s loop_elapsed_ms=%.2f ref_count=%d result_count=%d unique_files=%d",
+                relative_file_path,
+                loop_elapsed_ms,
+                len(references),
+                len(result),
+                unique_files,
+            )
 
         return result
 
@@ -2152,7 +2221,7 @@ class SolidLanguageServer(ABC):
         return self
 
     @property
-    def handler(self) -> SolidLanguageServerHandler:
+    def handler(self) -> LanguageServerProcess:
         """Access the underlying language server handler.
 
         Useful for advanced operations like sending custom commands

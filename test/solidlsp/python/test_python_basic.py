@@ -16,7 +16,7 @@ from solidlsp.ls_config import Language
 
 
 @pytest.mark.python
-class TestLanguageServerBasics:
+class TestPythonLanguageServerBasics:
     """Test basic functionality of the language server."""
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)

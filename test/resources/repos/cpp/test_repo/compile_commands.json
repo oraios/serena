@@ -1,12 +1,12 @@
 [
   {
     "directory": ".",
-    "command": "g++ -I . -c a.cpp",
+    "command": "g++ -std=c++17 -I . -c a.cpp",
     "file": "a.cpp"
   },
   {
     "directory": ".",
-    "command": "g++ -I . -c b.cpp",
+    "command": "g++ -std=c++17 -I . -c b.cpp",
     "file": "b.cpp"
   }
 ]
