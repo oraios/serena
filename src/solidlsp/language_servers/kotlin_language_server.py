@@ -7,13 +7,13 @@ You can configure the following options in ls_specific_settings (in serena_confi
       kotlin:
         ls_path: '/path/to/kotlin-lsp.sh'  # Custom path to Kotlin Language Server executable
         kotlin_lsp_version: '261.13587.0'  # Kotlin Language Server version (default: current bundled version)
-        jvm_options: '-Xmx4G'  # JVM options for Kotlin Language Server (default: -Xmx4G)
+        jvm_options: '-Xmx2G'  # JVM options for Kotlin Language Server (default: -Xmx2G)
 
 Example configuration for large projects:
 
     ls_specific_settings:
       kotlin:
-        jvm_options: '-Xmx8G -XX:+UseG1GC'
+        jvm_options: '-Xmx4G -XX:+UseG1GC'
 """
 
 import logging
@@ -35,8 +35,8 @@ from solidlsp.settings import SolidLSPSettings
 log = logging.getLogger(__name__)
 
 # Default JVM options for Kotlin Language Server
-# -Xmx4G: Limit max heap to 4GB to prevent OOM on large projects
-DEFAULT_KOTLIN_JVM_OPTIONS = "-Xmx4G"
+# -Xmx2G: 2GB heap is sufficient for most projects; override via ls_specific_settings for large codebases
+DEFAULT_KOTLIN_JVM_OPTIONS = "-Xmx2G"
 
 # Default Kotlin Language Server version (can be overridden via ls_specific_settings)
 DEFAULT_KOTLIN_LSP_VERSION = "261.13587.0"

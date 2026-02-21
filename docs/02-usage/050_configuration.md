@@ -297,7 +297,7 @@ ls_specific_settings:
   kotlin:
     ls_path: "/path/to/kotlin-lsp.sh"        # Override the Kotlin Language Server executable
     kotlin_lsp_version: "261.13587.0"         # Override the Kotlin Language Server version
-    jvm_options: "-Xmx8G -XX:+UseG1GC"       # JVM options (default: -Xmx4G). Set to "" to disable.
+    jvm_options: "-Xmx4G -XX:+UseG1GC"       # JVM options (default: -Xmx2G). Set to "" to disable.
 ```
 
 #### Pascal (`pasls`)
