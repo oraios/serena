@@ -486,12 +486,17 @@ class SolidLanguageServer(ABC):
         self._raw_document_symbols_cache: dict[str, tuple[str, list[DocumentSymbol] | list[SymbolInformation] | None]] = {}
         """maps relative file paths to a tuple of (file_content_hash, raw_root_symbols)"""
         self._raw_document_symbols_cache_is_modified: bool = False
-        self._load_raw_document_symbols_cache()
         # * high-level document symbols cache
         self._document_symbols_cache: dict[str, tuple[str, DocumentSymbols]] = {}
         """maps relative file paths to a tuple of (file_content_hash, document_symbols)"""
         self._document_symbols_cache_is_modified: bool = False
-        self._load_document_symbols_cache()
+        # Load caches in a background thread so that the LS process can start
+        # (in the subsequent call to start()) while caches are still loading.
+        # The thread is joined on first cache access via _ensure_caches_loaded().
+        self._cache_load_thread: threading.Thread | None = threading.Thread(
+            target=self._load_caches_background, name=f"CacheLoad:{language_id}", daemon=True
+        )
+        self._cache_load_thread.start()
 
         self.server_started = False
         if config.trace_lsp_communication:
@@ -532,6 +537,17 @@ class SolidLanguageServer(ABC):
         self._request_timeout: float | None = None
 
         self._has_waited_for_cross_file_references = False
+
+    def _load_caches_background(self) -> None:
+        """Load both symbol caches. Runs in a background thread started in __init__."""
+        self._load_raw_document_symbols_cache()
+        self._load_document_symbols_cache()
+
+    def _ensure_caches_loaded(self) -> None:
+        """Block until the background cache loading thread has completed."""
+        if self._cache_load_thread is not None:
+            self._cache_load_thread.join()
+            self._cache_load_thread = None
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         """
@@ -1231,6 +1247,7 @@ class SolidLanguageServer(ABC):
             where the parent attribute will be the file symbol which in turn may have a package symbol as parent.
             If you need a symbol tree that contains file symbols as well, you should use `request_full_symbol_tree` instead.
         """
+        self._ensure_caches_loaded()
         with self._open_file_context(relative_file_path, file_buffer, open_in_ls=False) as file_data:
             # check if the desired result is cached
             cache_key = relative_file_path
@@ -2139,6 +2156,7 @@ class SolidLanguageServer(ABC):
                 )
 
     def save_cache(self) -> None:
+        self._ensure_caches_loaded()
         self._save_raw_document_symbols_cache()
         self._save_document_symbols_cache()
 
