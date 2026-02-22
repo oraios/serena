@@ -111,7 +111,13 @@ class TestSerenaAgent:
             pytest.param(Language.PYTHON, "User", "Class", "models.py", marks=pytest.mark.python),
             pytest.param(Language.GO, "Helper", "Function", "main.go", marks=pytest.mark.go),
             pytest.param(Language.JAVA, "Model", "Class", "Model.java", marks=pytest.mark.java),
-            pytest.param(Language.KOTLIN, "Model", "Struct", "Model.kt", marks=pytest.mark.kotlin),
+            pytest.param(
+                Language.KOTLIN,
+                "Model",
+                "Struct",
+                "Model.kt",
+                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+            ),
             pytest.param(Language.RUST, "add", "Function", "lib.rs", marks=pytest.mark.rust),
             pytest.param(Language.TYPESCRIPT, "DemoClass", "Class", "index.ts", marks=pytest.mark.typescript),
             pytest.param(Language.PHP, "helperFunction", "Function", "helper.php", marks=pytest.mark.php),
@@ -126,8 +132,7 @@ class TestSerenaAgent:
     def test_find_symbol(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str):
         # skip flaky tests in CI
         # TODO: Revisit the flaky tests and re-enable once the LS issues are resolved #1039
-        # Kotlin: IntelliJ-based JVM crashes on restart under CI resource constraints (2 CPUs, 7GB RAM)
-        flaky_languages = {Language.FSHARP, Language.RUST, Language.KOTLIN}
+        flaky_languages = {Language.FSHARP, Language.RUST}
         if set(serena_agent.get_active_lsp_languages()).intersection(flaky_languages) and is_ci:
             pytest.skip("Test is flaky and thus skipped in CI environment.")
 
@@ -180,7 +185,7 @@ class TestSerenaAgent:
                 "Model",
                 os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
                 os.path.join("src", "main", "kotlin", "test_repo", "Main.kt"),
-                marks=pytest.mark.kotlin,
+                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
             ),
             pytest.param(Language.RUST, "add", os.path.join("src", "lib.rs"), os.path.join("src", "main.rs"), marks=pytest.mark.rust),
             pytest.param(Language.TYPESCRIPT, "helperFunction", "index.ts", "use_helper.ts", marks=pytest.mark.typescript),
@@ -202,8 +207,7 @@ class TestSerenaAgent:
     def test_find_symbol_references(self, serena_agent: SerenaAgent, symbol_name: str, def_file: str, ref_file: str) -> None:
         # skip flaky tests in CI
         # TODO: Revisit the flaky tests and re-enable once the LS issues are resolved #1039
-        # Kotlin: IntelliJ-based JVM crashes on restart under CI resource constraints (2 CPUs, 7GB RAM)
-        flaky_languages = {Language.TYPESCRIPT, Language.KOTLIN}
+        flaky_languages = {Language.TYPESCRIPT}
         if set(serena_agent.get_active_lsp_languages()).intersection(flaky_languages) and is_ci:
             pytest.skip("Test is flaky and thus skipped in CI environment.")
 
