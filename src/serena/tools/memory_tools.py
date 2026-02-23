@@ -8,14 +8,13 @@ class WriteMemoryTool(Tool, ToolMarkerCanEdit):
     Writes a named memory (for future reference) to Serena's project-specific memory store.
     """
 
-    def apply(self, memory_file_name: str, content: str, summary: Optional[str] = None, max_answer_chars: int = -1) -> str:
+    def apply(self, memory_file_name: str, content: str, max_answer_chars: int = -1) -> str:
         """
         Write some information (utf-8-encoded) about this project that can be useful for future tasks to a memory in md format.
         The memory name should be meaningful and can include "/" to organize into subdirectories (e.g., "auth/login_logic").
 
         :param memory_file_name: the name of the memory (can include "/" for subdirectories)
         :param content: the content to write in markdown format
-        :param summary: optional summary for frontmatter (helps with memory discovery)
         :param max_answer_chars: maximum characters allowed (default from config)
         """
         # NOTE: utf-8 encoding is configured in the MemoriesManager
@@ -27,7 +26,7 @@ class WriteMemoryTool(Tool, ToolMarkerCanEdit):
                 + "Please make the content shorter."
             )
 
-        return self.memories_manager.save_memory(memory_file_name, content, summary)
+        return self.memories_manager.save_memory(memory_file_name, content)
 
 
 class ReadMemoryTool(Tool):
@@ -58,7 +57,7 @@ class ListMemoriesTool(Tool):
         List available memories. Any memory can be read using the `read_memory` tool.
 
         Organize memories into meaningful subdirectories (e.g., "auth/login_logic",
-        "database/schema"). Add a summary to the frontmatter for important memories.
+        "database/schema").
 
         :param topic: optional topic/subdirectory filter (e.g., "auth" to list only auth memories)
         """
