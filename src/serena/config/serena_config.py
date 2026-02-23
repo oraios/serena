@@ -134,6 +134,16 @@ class ModeSelectionDefinition:
     default_modes: Sequence[str] | None = None
 
 
+@dataclass
+class SharedConfig(ModeSelectionDefinition, ToolInclusionDefinition, ToStringMixin):
+    """Shared between SerenaConfig and ProjectConfig, the latter used to override values in the form
+    (same as in ModeSelectionDefinition).
+    The defaults here shall be none and should be set to the global default values in SerenaConfig.
+    """
+
+    symbol_info_budget: float | None = None
+
+
 class SerenaConfigError(Exception):
     pass
 
@@ -163,7 +173,7 @@ class LanguageBackend(Enum):
 
 
 @dataclass(kw_only=True)
-class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMixin):
+class ProjectConfig(SharedConfig):
     project_name: str
     languages: list[Language]
     ignored_paths: list[str] = field(default_factory=list)
@@ -323,6 +333,17 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
                     f"Invalid language: {orig_language_str}.\nValid language_strings are: {[l.value for l in Language]}"
                 ) from e
 
+        # Validate symbol_info_budget
+        symbol_info_budget_raw = data["symbol_info_budget"]
+        symbol_info_budget = symbol_info_budget_raw
+        if symbol_info_budget is not None:
+            try:
+                symbol_info_budget = float(symbol_info_budget_raw)
+            except (TypeError, ValueError) as e:
+                raise ValueError(f"symbol_info_budget must be a number or null, got: {symbol_info_budget_raw}") from e
+            if symbol_info_budget < 0:
+                raise ValueError(f"symbol_info_budget cannot be negative, got: {symbol_info_budget}")
+
         return cls(
             project_name=data["project_name"],
             languages=languages,
@@ -336,6 +357,7 @@ class ProjectConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMi
             encoding=data["encoding"],
             base_modes=data["base_modes"],
             default_modes=data["default_modes"],
+            symbol_info_budget=symbol_info_budget,
         )
 
     def _to_yaml_dict(self) -> dict:
@@ -463,7 +485,7 @@ class RegisteredProject(ToStringMixin):
 
 
 @dataclass(kw_only=True)
-class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMixin):
+class SerenaConfig(SharedConfig):
     """
     Holds the Serena agent configuration, which is typically loaded from a YAML configuration file
     (when instantiated via :method:`from_config_file`), which is updated when projects are added or removed.
@@ -509,6 +531,14 @@ class SerenaConfig(ToolInclusionDefinition, ModeSelectionDefinition, ToStringMix
 
     # settings with overridden defaults
     default_modes: Sequence[str] | None = ("interactive", "editing")
+    symbol_info_budget: float = 10.0
+    """
+    Time budget (seconds) for requests when tools request include_info (currently
+    only supported for LSP-based tools).
+
+    If the budget is exceeded, Serena stops issuing further requests and returns partial info results.
+    0 disables the budget (no early stopping). Negative values are invalid.
+    """
 
     # *** fields that are NOT mapped to/from the configuration file ***
 

@@ -98,7 +98,6 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
         self,
         name_path: str,
         relative_path: str,
-        include_info: bool = False,
         max_answer_chars: int = -1,
     ) -> str:
         """
@@ -108,8 +107,6 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
         :param name_path: name path of the symbol for which to find references; matching logic as described in find symbol tool.
         :param relative_path: the relative path to the file containing the symbol for which to find references.
             Note that here you can't pass a directory but must pass a file.
-        :param include_info: whether to include info (hover-like, typically including docstring and signature)
-            about the referencing symbols. Default False.
         :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned. -1 means the
             default value from the config will be used.
         :return: a list of JSON objects with the symbols referencing the requested symbol
@@ -118,7 +115,7 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
             response_dict = client.find_references(
                 name_path=name_path,
                 relative_path=relative_path,
-                include_quick_info=False,  # TODO: Hotfix for serena-jetbrains-plugin/issues/13; revert once fixed
+                include_quick_info=False,
             )
         symbol_dicts = response_dict["symbols"]
         result = self.symbol_dict_grouper.group(symbol_dicts)

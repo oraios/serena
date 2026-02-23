@@ -1,4 +1,5 @@
 import os
+import time
 
 import pytest
 
@@ -32,6 +33,9 @@ class TestLanguageServerCommonFunctionality:
                 # apply external change to file
                 with open(file_path, "w") as f:
                     f.write(test_string2)
+
+                # give the file system some time to update the modified time
+                time.sleep(3)
 
                 # check that the file buffer has been invalidated and reloaded
                 assert fb.contents == test_string2

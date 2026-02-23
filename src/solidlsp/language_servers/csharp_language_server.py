@@ -122,23 +122,23 @@ def breadth_first_file_scan(root_dir: str) -> Iterable[str]:
 
 def find_solution_or_project_file(root_dir: str) -> str | None:
     """
-    Find the first .sln file in breadth-first order.
-    If no .sln file is found, look for a .csproj file.
+    Find the first .sln or .slnx file in breadth-first order.
+    If no solution file is found, look for a .csproj file.
     """
     sln_file = None
     csproj_file = None
 
     for filename in breadth_first_file_scan(root_dir):
-        if filename.endswith(".sln") and sln_file is None:
+        if filename.endswith((".sln", ".slnx")) and sln_file is None:
             sln_file = filename
         elif filename.endswith(".csproj") and csproj_file is None:
             csproj_file = filename
 
-        # If we found a .sln file, return it immediately
+        # If we found a solution file, return it immediately
         if sln_file:
             return sln_file
 
-    # If no .sln file was found, return the first .csproj file
+    # If no solution file was found, return the first .csproj file
     return csproj_file
 
 
@@ -321,7 +321,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             if solution_or_project:
                 log.info(f"Found solution/project file: {solution_or_project}")
             else:
-                log.warning("No .sln or .csproj file found, language server will attempt auto-discovery")
+                log.warning("No .sln/.slnx or .csproj file found, language server will attempt auto-discovery")
 
             log.debug(f"Language server command: {' '.join(cmd)}")
 
@@ -811,10 +811,10 @@ class CSharpLanguageServer(SolidLanguageServer):
         """
         Open solution and project files using notifications.
         """
-        # Find solution file
+        # Find solution file (.sln or .slnx)
         solution_file = None
         for filename in breadth_first_file_scan(self.repository_root_path):
-            if filename.endswith(".sln"):
+            if filename.endswith((".sln", ".slnx")):
                 solution_file = filename
                 break
 

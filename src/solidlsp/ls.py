@@ -13,7 +13,7 @@ from collections.abc import Hashable, Iterator
 from contextlib import contextmanager
 from copy import copy
 from pathlib import Path, PurePath
-from time import sleep
+from time import perf_counter, sleep
 from typing import Self, Union, cast
 
 import pathspec
@@ -49,6 +49,9 @@ from solidlsp.util.cache import load_cache, save_cache
 
 GenericDocumentSymbol = Union[LSPTypes.DocumentSymbol, LSPTypes.SymbolInformation, ls_types.UnifiedSymbolInformation]
 log = logging.getLogger(__name__)
+
+_debug_enabled = log.isEnabledFor(logging.DEBUG)
+"""Serves as a flag that triggers additional computation when debug logging is enabled."""
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -952,6 +955,7 @@ class SolidLanguageServer(ABC):
                 # The waiting has to happen after at least one file was opened in the ls
                 sleep(self._get_wait_time_for_cross_file_referencing())
                 self._has_waited_for_cross_file_references = True
+            t0 = perf_counter() if _debug_enabled else 0.0
             try:
                 response = self._send_references_request(relative_file_path, line=line, column=column)
             except Exception as e:
@@ -963,6 +967,9 @@ class SolidLanguageServer(ABC):
                     ) from e
                 raise
         if response is None:
+            if _debug_enabled:
+                elapsed_ms = (perf_counter() - t0) * 1000
+                log.debug("perf: request_references path=%s elapsed_ms=%.2f count=0", relative_file_path, elapsed_ms)
             return []
 
         ret: list[ls_types.Location] = []
@@ -990,6 +997,17 @@ class SolidLanguageServer(ABC):
             new_item["absolutePath"] = str(abs_path)
             new_item["relativePath"] = str(rel_path)
             ret.append(ls_types.Location(**new_item))  # type: ignore
+
+        if _debug_enabled:
+            elapsed_ms = (perf_counter() - t0) * 1000
+            unique_files = len({r["relativePath"] for r in ret})
+            log.debug(
+                "perf: request_references path=%s elapsed_ms=%.2f count=%d unique_files=%d",
+                relative_file_path,
+                elapsed_ms,
+                len(ret),
+                unique_files,
+            )
 
         return ret
 
@@ -1163,15 +1181,19 @@ class SolidLanguageServer(ABC):
 
         def get_cached_raw_document_symbols(cache_key: str, fd: LSPFileBuffer) -> list[SymbolInformation] | list[DocumentSymbol] | None:
             file_hash_and_result = self._raw_document_symbols_cache.get(cache_key)
-            if file_hash_and_result is not None:
-                file_hash, result = file_hash_and_result
-                if file_hash == fd.content_hash:
-                    log.debug("Returning cached raw document symbols for %s", relative_file_path)
-                    return result
-                else:
-                    log.debug("Document content for %s has changed (raw symbol cache is not up-to-date)", relative_file_path)
-            else:
-                log.debug("No cache hit for raw document symbols symbols in %s", relative_file_path)
+            if file_hash_and_result is None:
+                log.debug("No cache hit for raw document symbols in %s", relative_file_path)
+                log.debug("perf: raw_document_symbols_cache MISS path=%s", relative_file_path)
+                return None
+
+            file_hash, result = file_hash_and_result
+            if file_hash == fd.content_hash:
+                log.debug("Returning cached raw document symbols for %s", relative_file_path)
+                log.debug("perf: raw_document_symbols_cache HIT path=%s", relative_file_path)
+                return result
+
+            log.debug("Document content for %s has changed (raw symbol cache is not up-to-date)", relative_file_path)
+            log.debug("perf: raw_document_symbols_cache STALE path=%s", relative_file_path)
             return None
 
         def get_raw_document_symbols(fd: LSPFileBuffer) -> list[SymbolInformation] | list[DocumentSymbol] | None:
@@ -1193,11 +1215,8 @@ class SolidLanguageServer(ABC):
 
             return response
 
-        if file_data is not None:
-            return get_raw_document_symbols(file_data)
-        else:
-            with self.open_file(relative_file_path) as opened_file_data:
-                return get_raw_document_symbols(opened_file_data)
+        with self._open_file_context(relative_file_path, file_buffer=file_data) as fd:
+            return get_raw_document_symbols(fd)
 
     def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
         """
@@ -1216,18 +1235,20 @@ class SolidLanguageServer(ABC):
             # check if the desired result is cached
             cache_key = relative_file_path
             file_hash_and_result = self._document_symbols_cache.get(cache_key)
-            if file_hash_and_result is not None:
+            if file_hash_and_result is None:
+                log.debug("No cache hit for document symbols in %s", relative_file_path)
+                log.debug("perf: document_symbols_cache MISS path=%s", relative_file_path)
+            else:
                 file_hash, document_symbols = file_hash_and_result
                 if file_hash == file_data.content_hash:
                     log.debug("Returning cached document symbols for %s", relative_file_path)
+                    log.debug("perf: document_symbols_cache HIT path=%s", relative_file_path)
                     return document_symbols
-                else:
-                    log.debug("Cached document symbol content for %s has changed", relative_file_path)
-            else:
-                log.debug("No cache hit for document symbols in %s", relative_file_path)
+
+                log.debug("Cached document symbol content for %s has changed", relative_file_path)
+                log.debug("perf: document_symbols_cache STALE path=%s", relative_file_path)
 
             # no cached result: request the root symbols from the language server
-            file_data.ensure_open_in_ls()
             root_symbols = self._request_document_symbols(relative_file_path, file_data)
 
             if root_symbols is None:
@@ -1406,7 +1427,7 @@ class SolidLanguageServer(ABC):
                         child["parent"] = package_symbol
 
                 elif os.path.isfile(contained_dir_or_file_abs_path):
-                    with self._open_file_context(contained_dir_or_file_rel_path) as file_data:
+                    with self._open_file_context(contained_dir_or_file_rel_path, open_in_ls=False) as file_data:
                         document_symbols = self.request_document_symbols(contained_dir_or_file_rel_path, file_data)
                         file_root_nodes = document_symbols.root_symbols
 
@@ -1658,6 +1679,8 @@ class SolidLanguageServer(ABC):
         if not references:
             return []
 
+        debug_enabled = log.isEnabledFor(logging.DEBUG)
+        t0_loop = perf_counter() if debug_enabled else 0.0
         # For each reference, find the containing symbol
         result = []
         incoming_symbol = None
@@ -1759,6 +1782,18 @@ class SolidLanguageServer(ABC):
                     continue
 
                 result.append(ReferenceInSymbol(symbol=containing_symbol, line=ref_line, character=ref_col))
+
+        if debug_enabled:
+            loop_elapsed_ms = (perf_counter() - t0_loop) * 1000
+            unique_files = len({r.symbol["location"]["relativePath"] for r in result})
+            log.debug(
+                "perf: request_referencing_symbols path=%s loop_elapsed_ms=%.2f ref_count=%d result_count=%d unique_files=%d",
+                relative_file_path,
+                loop_elapsed_ms,
+                len(references),
+                len(result),
+                unique_files,
+            )
 
         return result
 

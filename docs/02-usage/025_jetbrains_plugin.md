@@ -90,25 +90,42 @@ you can also use symbolic links to achieve the same effect
 
 ### Using Serena with Windows Subsystem for Linux (WSL)
 
-JetBrains IDEs have built-in support for WSL, allowing you to run the IDE on Windows while working with code in the WSL environment. 
-The Serena JetBrains plugin works seamlessly in this setup as well. You have two options:
+JetBrains IDEs have built-in support for WSL, allowing you to run the IDE on Windows while working with code in the WSL environment.
+The Serena JetBrains plugin works seamlessly in this setup as well.
 
- * **Windows-centric approach** (keeping things mainly in Windows)
-   * run both Serena and the IDE on Windows
-   * keep your project in the Windows file system, access it in WSL via `/mnt/` 
-     (optionally linking the folder where you need it to be in the WSL file system)
-     
- * **WSL-centric approach** (keeping things mainly in WSL)
-   * run Serena in WSL (while the IDE runs in Windows)
-   * make sure Serena in WSL can communicate with services running on Windows. 
-     This will normally be the case when using mirrored networking; 
-     otherwise, you can configure `jetbrains_plugin_server_address` in your [serena_config.yml](050_configuration) and, 
-     if necessary, configure the listen address of the Serena plugin in the IDE (Settings / Tools / Serena).
+#### Using JetBrains Remote Development 
 
-The WSL-centric approach has the downside that the WSL file system cannot be efficiently monitored by the IDE,
-which can result in slower performance, especially for larger projects. If this is a problem, consider
-  * using the Windows-centric approach instead, or
-  * disabling the automatic synchronisation in the plugin and manually triggering synchronisation when needed (see below).
+Recommended constellation:
+* Your project is in the WSL file system
+* Serena is run in WSL (not Windows)
+* The IDE has a host component (in WSL) and a client component (on Windows).  
+  The Serena JetBrains plugin should normally be **installed in the host** (not the client) for code intelligence to be accessible.
+
+:::{admonition} Plugin Installation Location
+:class: note
+If the plugin is already installed, check the options on the button for disabling the plugin.
+Choose the respective options to ensure the correct installation location (i.e. host, removing it from the client if necessary).
+:::
+
+:::{admonition} Using mapped Windows paths in WSL is not recommended!
+:class: warning
+Keeping your project in the Windows file system and accessing it via `/mnt/` in WSL is extremely slow and not recommended.
+:::
+
+**Special Network Setup**.
+If you are using a special setup where Serena and the IDE are running on different machines,
+make sure Serena can communicate with the JetBrains plugin.
+You can configure `jetbrains_plugin_server_address` in your [serena_config.yml](050_configuration) and
+configure the listen address of the JetBrains plugin in the IDE via Settings / Tools / Serena
+(e.g. set it to 0.0.0.0 to listen on all interfaces, but be aware of the security implications of doing so).
+
+#### Other WSL Integrations (e.g. WSL interpreter) 
+
+* Your project is in the Windows file system
+* WSL is used only for running tools (e.g. using a WSL Python interpreter in the IDE)
+* Serena, the IDE and the plugin are all running on Windows
+
+In this constellation, no special setup is required.
 
 ## Serena Plugin Configuration Options
 

@@ -108,5 +108,16 @@ default_max_tool_answer_chars: 150000
 # estimate the token count using the Claude Sonnet 4 tokenizer.
 token_count_estimator: CHAR_COUNT
 
+# time budget (seconds) for requests when tools request symbol info (currently
+# only supported for LSP-based tools).
+# If the budget is exceeded, Serena stops issuing further symbol-info-related
+# requests and returns partial info results.
+# 0 disables the budget (no early stopping). Negative values are invalid.
+# This is an advanced setting that can help alleviate problems with LSP servers
+# that have a slow implementation of request_hover (clangd is one of those)
+# or with tool calls that find very many symbols.
+# Can be overridden in project.yml.
+symbol_info_budget: 10
+
 # the list of registered project paths (updated automatically).
 projects: []

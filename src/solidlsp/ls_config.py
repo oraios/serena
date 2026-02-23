@@ -105,6 +105,11 @@ class Language(str, Enum):
     """TOML language server using Taplo.
     Supports TOML validation, formatting, and schema support.
     """
+    SYSTEMVERILOG = "systemverilog"
+    """SystemVerilog language server using verible-verilog-ls.
+    Supports .sv, .svh, .v, .vh files.
+    Automatically downloads verible binary.
+    """
 
     @classmethod
     def iter_all(cls, include_experimental: bool = False) -> Iterable[Self]:
@@ -246,6 +251,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.groovy", "*.gvy")
             case self.MATLAB:
                 return FilenameMatcher("*.m", "*.mlx", "*.mlapp")
+            case self.SYSTEMVERILOG:
+                return FilenameMatcher("*.sv", "*.svh", "*.v", "*.vh")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -427,6 +434,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.matlab_language_server import MatlabLanguageServer
 
                 return MatlabLanguageServer
+            case self.SYSTEMVERILOG:
+                from solidlsp.language_servers.systemverilog_server import SystemVerilogLanguageServer
+
+                return SystemVerilogLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

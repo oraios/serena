@@ -134,7 +134,11 @@ class JetBrainsPluginClient(ToStringMixin):
             resolved_path,
             plugin_paths_found,
         )
-        raise ServerNotFoundError("Found no Serena service in a JetBrains IDE instance for the project at " + str(resolved_path))
+        raise ServerNotFoundError(
+            f"Found no Serena service in a JetBrains IDE instance for the project at {resolved_path}. "
+            "CRITICAL: Before you continue, ask the user to open this folder as a project in a JetBrains IDE "
+            "with the Serena plugin installed and running!"
+        )
 
     @staticmethod
     def _paths_match(resolved_serena_path: str, plugin_path: str) -> bool:

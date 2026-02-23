@@ -5,45 +5,87 @@ You can configure the following options in ls_specific_settings (in serena_confi
 
     ls_specific_settings:
       kotlin:
-        jvm_options: '-Xmx4G'  # JVM options for Kotlin Language Server (default: -Xmx4G)
+        ls_path: '/path/to/kotlin-lsp.sh'  # Custom path to Kotlin Language Server executable
+        kotlin_lsp_version: '261.13587.0'  # Kotlin Language Server version (default: current bundled version)
+        jvm_options: '-Xmx2G'  # JVM options for Kotlin Language Server (default: -Xmx2G)
 
 Example configuration for large projects:
 
     ls_specific_settings:
       kotlin:
-        jvm_options: '-Xmx8G -XX:+UseG1GC'
+        jvm_options: '-Xmx4G -XX:+UseG1GC'
 """
 
-import dataclasses
 import logging
 import os
 import pathlib
 import stat
+import threading
 from typing import cast
 
-from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
+from overrides import override
+
+from solidlsp.ls import (
+    LanguageServerDependencyProvider,
+    LanguageServerDependencyProviderSinglePath,
+    SolidLanguageServer,
+)
+from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_utils import FileUtils, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
 # Default JVM options for Kotlin Language Server
-# -Xmx4G: Limit max heap to 4GB to prevent OOM on large projects
-DEFAULT_KOTLIN_JVM_OPTIONS = "-Xmx4G"
+# -Xmx2G: 2GB heap is sufficient for most projects; override via ls_specific_settings for large codebases
+DEFAULT_KOTLIN_JVM_OPTIONS = "-Xmx2G"
 
+# Default Kotlin Language Server version (can be overridden via ls_specific_settings)
+DEFAULT_KOTLIN_LSP_VERSION = "261.13587.0"
 
-@dataclasses.dataclass
-class KotlinRuntimeDependencyPaths:
-    """
-    Stores the paths to the runtime dependencies of Kotlin Language Server
-    """
+# Platform-specific Kotlin LSP download suffixes
+PLATFORM_KOTLIN_SUFFIX = {
+    "win-x64": "win-x64",
+    "linux-x64": "linux-x64",
+    "linux-arm64": "linux-aarch64",
+    "osx-x64": "mac-x64",
+    "osx-arm64": "mac-aarch64",
+}
 
-    java_path: str
-    java_home_path: str
-    kotlin_executable_path: str
+# Java runtime dependency information per platform
+JAVA_DEPENDENCIES = {
+    "win-x64": {
+        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-win32-x64-1.42.0-561.vsix",
+        "archiveType": "zip",
+        "java_home_path": "extension/jre/21.0.7-win32-x86_64",
+        "java_path": "extension/jre/21.0.7-win32-x86_64/bin/java.exe",
+    },
+    "linux-x64": {
+        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-x64-1.42.0-561.vsix",
+        "archiveType": "zip",
+        "java_home_path": "extension/jre/21.0.7-linux-x86_64",
+        "java_path": "extension/jre/21.0.7-linux-x86_64/bin/java",
+    },
+    "linux-arm64": {
+        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-arm64-1.42.0-561.vsix",
+        "archiveType": "zip",
+        "java_home_path": "extension/jre/21.0.7-linux-aarch64",
+        "java_path": "extension/jre/21.0.7-linux-aarch64/bin/java",
+    },
+    "osx-x64": {
+        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-x64-1.42.0-561.vsix",
+        "archiveType": "zip",
+        "java_home_path": "extension/jre/21.0.7-macosx-x86_64",
+        "java_path": "extension/jre/21.0.7-macosx-x86_64/bin/java",
+    },
+    "osx-arm64": {
+        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-arm64-1.42.0-561.vsix",
+        "archiveType": "zip",
+        "java_home_path": "extension/jre/21.0.7-macosx-aarch64",
+        "java_path": "extension/jre/21.0.7-macosx-aarch64/bin/java",
+    },
+}
 
 
 class KotlinLanguageServer(SolidLanguageServer):
@@ -55,140 +97,110 @@ class KotlinLanguageServer(SolidLanguageServer):
         """
         Creates a Kotlin Language Server instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        runtime_dependency_paths = self._setup_runtime_dependencies(config, solidlsp_settings)
-        self.runtime_dependency_paths = runtime_dependency_paths
-
-        # Create command to execute the Kotlin Language Server script
-        cmd = [self.runtime_dependency_paths.kotlin_executable_path, "--stdio"]
-
-        # Get JVM options from settings or use default
-        jvm_options = DEFAULT_KOTLIN_JVM_OPTIONS
-        if solidlsp_settings.ls_specific_settings:
-            kotlin_settings = solidlsp_settings.get_ls_specific_settings(Language.KOTLIN)
-            custom_jvm_options = kotlin_settings.get("jvm_options", "")
-            if custom_jvm_options:
-                jvm_options = custom_jvm_options
-                log.info(f"Using custom JVM options for Kotlin Language Server: {jvm_options}")
-
-        # Set environment variables including JAVA_HOME and JVM options
-        # JAVA_TOOL_OPTIONS is automatically picked up by any Java process
-        proc_env = {
-            "JAVA_HOME": self.runtime_dependency_paths.java_home_path,
-            "JAVA_TOOL_OPTIONS": jvm_options,
-        }
-
         super().__init__(
-            config, repository_root_path, ProcessLaunchInfo(cmd=cmd, env=proc_env, cwd=repository_root_path), "kotlin", solidlsp_settings
+            config,
+            repository_root_path,
+            None,
+            "kotlin",
+            solidlsp_settings,
         )
 
-    @classmethod
-    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> KotlinRuntimeDependencyPaths:
-        """
-        Setup runtime dependencies for Kotlin Language Server and return the paths.
-        """
-        platform_id = PlatformUtils.get_platform_id()
+        # Indexing synchronisation: starts SET (= already done), cleared if the server
+        # sends window/workDoneProgress/create (async-indexing servers like KLS v261+),
+        # set again once all progress tokens have ended.
+        self._indexing_complete = threading.Event()
+        self._indexing_complete.set()
+        self._active_progress_tokens: set[str] = set()
+        self._progress_lock = threading.Lock()
 
-        # Verify platform support
-        assert (
-            platform_id.value.startswith("win-") or platform_id.value.startswith("linux-") or platform_id.value.startswith("osx-")
-        ), "Only Windows, Linux and macOS platforms are supported for Kotlin in multilspy at the moment"
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
-        # Runtime dependency information
-        runtime_dependencies = {
-            "runtimeDependency": {
-                "id": "KotlinLsp",
-                "description": "Kotlin Language Server",
-                "url": "https://download-cdn.jetbrains.com/kotlin-lsp/0.253.10629/kotlin-0.253.10629.zip",
-                "archiveType": "zip",
-            },
-            "java": {
-                "win-x64": {
-                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-win32-x64-1.42.0-561.vsix",
-                    "archiveType": "zip",
-                    "java_home_path": "extension/jre/21.0.7-win32-x86_64",
-                    "java_path": "extension/jre/21.0.7-win32-x86_64/bin/java.exe",
-                },
-                "linux-x64": {
-                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-x64-1.42.0-561.vsix",
-                    "archiveType": "zip",
-                    "java_home_path": "extension/jre/21.0.7-linux-x86_64",
-                    "java_path": "extension/jre/21.0.7-linux-x86_64/bin/java",
-                },
-                "linux-arm64": {
-                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-arm64-1.42.0-561.vsix",
-                    "archiveType": "zip",
-                    "java_home_path": "extension/jre/21.0.7-linux-aarch64",
-                    "java_path": "extension/jre/21.0.7-linux-aarch64/bin/java",
-                },
-                "osx-x64": {
-                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-x64-1.42.0-561.vsix",
-                    "archiveType": "zip",
-                    "java_home_path": "extension/jre/21.0.7-macosx-x86_64",
-                    "java_path": "extension/jre/21.0.7-macosx-x86_64/bin/java",
-                },
-                "osx-arm64": {
-                    "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-arm64-1.42.0-561.vsix",
-                    "archiveType": "zip",
-                    "java_home_path": "extension/jre/21.0.7-macosx-aarch64",
-                    "java_path": "extension/jre/21.0.7-macosx-aarch64/bin/java",
-                },
-            },
-        }
+    class DependencyProvider(LanguageServerDependencyProviderSinglePath):
+        def __init__(self, custom_settings: SolidLSPSettings.CustomLSSettings, ls_resources_dir: str):
+            super().__init__(custom_settings, ls_resources_dir)
+            self._java_home_path: str | None = None
 
-        kotlin_dependency = runtime_dependencies["runtimeDependency"]
-        java_dependency = runtime_dependencies["java"][platform_id.value]  # type: ignore
+        def _get_or_install_core_dependency(self) -> str:
+            """
+            Setup runtime dependencies for Kotlin Language Server and return the path to the executable script.
+            """
+            platform_id = PlatformUtils.get_platform_id()
 
-        # Setup paths for dependencies
-        static_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "kotlin_language_server")
-        os.makedirs(static_dir, exist_ok=True)
+            # Verify platform support
+            assert (
+                platform_id.value.startswith("win-") or platform_id.value.startswith("linux-") or platform_id.value.startswith("osx-")
+            ), "Only Windows, Linux and macOS platforms are supported for Kotlin in multilspy at the moment"
 
-        # Setup Java paths
-        java_dir = os.path.join(static_dir, "java")
-        os.makedirs(java_dir, exist_ok=True)
+            kotlin_suffix = PLATFORM_KOTLIN_SUFFIX.get(platform_id.value)
+            assert kotlin_suffix, f"Unsupported platform for Kotlin LSP: {platform_id.value}"
 
-        java_home_path = os.path.join(java_dir, java_dependency["java_home_path"])
-        java_path = os.path.join(java_dir, java_dependency["java_path"])
+            java_dependency = JAVA_DEPENDENCIES[platform_id.value]
 
-        # Download and extract Java if not exists
-        if not os.path.exists(java_path):
-            log.info(f"Downloading Java for {platform_id.value}...")
-            FileUtils.download_and_extract_archive(java_dependency["url"], java_dir, java_dependency["archiveType"])
-            # Make Java executable
-            if not platform_id.value.startswith("win-"):
-                os.chmod(java_path, 0o755)
+            # Setup paths for dependencies
+            static_dir = os.path.join(self._ls_resources_dir, "kotlin_language_server")
+            os.makedirs(static_dir, exist_ok=True)
 
-        assert os.path.exists(java_path), f"Java executable not found at {java_path}"
+            # Setup Java
+            java_dir = os.path.join(static_dir, "java")
+            os.makedirs(java_dir, exist_ok=True)
 
-        # Setup Kotlin Language Server paths
-        kotlin_ls_dir = static_dir
+            self._java_home_path = os.path.join(java_dir, java_dependency["java_home_path"])
+            java_path = os.path.join(java_dir, java_dependency["java_path"])
 
-        # Get platform-specific executable script path
-        if platform_id.value.startswith("win-"):
-            kotlin_script = os.path.join(kotlin_ls_dir, "kotlin-lsp.cmd")
-        else:
-            kotlin_script = os.path.join(kotlin_ls_dir, "kotlin-lsp.sh")
+            if not os.path.exists(java_path):
+                log.info(f"Downloading Java for {platform_id.value}...")
+                FileUtils.download_and_extract_archive(java_dependency["url"], java_dir, java_dependency["archiveType"])
+                if not platform_id.value.startswith("win-"):
+                    os.chmod(java_path, 0o755)
 
-        # Download and extract Kotlin Language Server if script doesn't exist
-        if not os.path.exists(kotlin_script):
-            log.info("Downloading Kotlin Language Server...")
-            FileUtils.download_and_extract_archive(kotlin_dependency["url"], static_dir, kotlin_dependency["archiveType"])  # type: ignore
+            assert os.path.exists(java_path), f"Java executable not found at {java_path}"
 
-            # Make script executable on Unix platforms
-            if os.path.exists(kotlin_script) and not platform_id.value.startswith("win-"):
-                os.chmod(
-                    kotlin_script, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH
-                )
+            # Setup Kotlin Language Server
+            if platform_id.value.startswith("win-"):
+                kotlin_script = os.path.join(static_dir, "kotlin-lsp.cmd")
+            else:
+                kotlin_script = os.path.join(static_dir, "kotlin-lsp.sh")
 
-        # Use script file
-        if os.path.exists(kotlin_script):
-            kotlin_executable_path = kotlin_script
+            if not os.path.exists(kotlin_script):
+                kotlin_lsp_version = self._custom_settings.get("kotlin_lsp_version", DEFAULT_KOTLIN_LSP_VERSION)
+                kotlin_url = f"https://download-cdn.jetbrains.com/kotlin-lsp/{kotlin_lsp_version}/kotlin-lsp-{kotlin_lsp_version}-{kotlin_suffix}.zip"
+                log.info("Downloading Kotlin Language Server...")
+                FileUtils.download_and_extract_archive(kotlin_url, static_dir, "zip")
+
+                if os.path.exists(kotlin_script) and not platform_id.value.startswith("win-"):
+                    os.chmod(
+                        kotlin_script,
+                        stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH,
+                    )
+
+            if not os.path.exists(kotlin_script):
+                raise FileNotFoundError(f"Kotlin Language Server script not found at {kotlin_script}")
+
             log.info(f"Using Kotlin Language Server script at {kotlin_script}")
-        else:
-            raise FileNotFoundError(f"Kotlin Language Server script not found at {kotlin_script}")
+            return kotlin_script
 
-        return KotlinRuntimeDependencyPaths(
-            java_path=java_path, java_home_path=java_home_path, kotlin_executable_path=kotlin_executable_path
-        )
+        def _create_launch_command(self, core_path: str) -> list[str]:
+            return [core_path, "--stdio"]
+
+        def create_launch_command_env(self) -> dict[str, str]:
+            """Provides JAVA_HOME and JVM options for the Kotlin Language Server process."""
+            env: dict[str, str] = {}
+
+            if self._java_home_path is not None:
+                env["JAVA_HOME"] = self._java_home_path
+
+            # Get JVM options from settings or use default
+            # Note: an explicit empty string means "no JVM options", which is distinct from not setting the key
+            _sentinel = object()
+            custom_jvm_options = self._custom_settings.get("jvm_options", _sentinel)
+            if custom_jvm_options is not _sentinel:
+                jvm_options = custom_jvm_options
+            else:
+                jvm_options = DEFAULT_KOTLIN_JVM_OPTIONS
+
+            env["JAVA_TOOL_OPTIONS"] = jvm_options
+            return env
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
@@ -433,7 +445,7 @@ class KotlinLanguageServer(SolidLanguageServer):
                     },
                 },
             },
-            "trace": "verbose",
+            "trace": "off",
             "processId": os.getpid(),
             "workspaceFolders": [
                 {
@@ -458,11 +470,51 @@ class KotlinLanguageServer(SolidLanguageServer):
         def window_log_message(msg: dict) -> None:
             log.info(f"LSP: window/logMessage: {msg}")
 
+        def work_done_progress_create(params: dict) -> dict:
+            """Handle window/workDoneProgress/create: the server is about to report async progress.
+            Clear the indexing-complete event so _start_server waits until all tokens finish.
+            This is triggered by newer KLS versions (261+) that index asynchronously after initialized.
+            Older versions (0.253.x) never send this, so _indexing_complete stays set and wait() returns instantly.
+            """
+            token = str(params.get("token", ""))
+            log.debug(f"Kotlin LSP workDoneProgress/create: token={token!r}")
+            with self._progress_lock:
+                self._active_progress_tokens.add(token)
+                self._indexing_complete.clear()
+            return {}
+
+        def progress_handler(params: dict) -> None:
+            """Track $/progress begin/end to detect when all async indexing work finishes."""
+            token = str(params.get("token", ""))
+            value = params.get("value", {})
+            kind = value.get("kind")
+            if kind == "begin":
+                title = value.get("title", "")
+                log.info(f"Kotlin LSP progress [{token}]: started - {title}")
+                with self._progress_lock:
+                    self._active_progress_tokens.add(token)
+                    self._indexing_complete.clear()
+            elif kind == "report":
+                pct = value.get("percentage")
+                msg = value.get("message", "")
+                pct_str = f" ({pct}%)" if pct is not None else ""
+                log.debug(f"Kotlin LSP progress [{token}]: {msg}{pct_str}")
+            elif kind == "end":
+                msg = value.get("message", "")
+                log.info(f"Kotlin LSP progress [{token}]: ended - {msg}")
+                with self._progress_lock:
+                    self._active_progress_tokens.discard(token)
+                    if not self._active_progress_tokens:
+                        self._indexing_complete.set()
+
         self.server.on_request("client/registerCapability", do_nothing)
         self.server.on_notification("language/status", do_nothing)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
-        self.server.on_notification("$/progress", do_nothing)
+        self.server.on_request("window/workDoneProgress/create", work_done_progress_create)
+        self.server.on_notification("$/progress", progress_handler)
+        self.server.on_notification("$/logTrace", do_nothing)
+        self.server.on_notification("$/cancelRequest", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("language/actionableNotification", do_nothing)
 
@@ -485,3 +537,20 @@ class KotlinLanguageServer(SolidLanguageServer):
         assert "semanticTokensProvider" in capabilities, "Server must support semantic tokens"
 
         self.server.notify.initialized({})
+
+        # Wait for any async indexing to complete.
+        # - Older KLS (0.253.x): indexing is synchronous inside `initialize`, no $/progress is sent,
+        #   _indexing_complete stays SET -> wait() returns immediately.
+        # - Newer KLS (261+): server sends window/workDoneProgress/create after initialized,
+        #   which clears the event; wait() blocks until all progress tokens end.
+        _INDEXING_TIMEOUT = 120.0
+        log.info("Waiting for Kotlin LSP indexing to complete (if async)...")
+        if self._indexing_complete.wait(timeout=_INDEXING_TIMEOUT):
+            log.info("Kotlin LSP ready")
+        else:
+            log.warning("Kotlin LSP did not signal indexing completion within %.0fs; proceeding anyway", _INDEXING_TIMEOUT)
+
+    @override
+    def _get_wait_time_for_cross_file_referencing(self) -> float:
+        """Small safety buffer since we already waited for indexing to complete in _start_server."""
+        return 1.0
