@@ -58,32 +58,6 @@ class MemoriesManager:
 
         return self._memory_dir / filename
 
-    def parse_frontmatter(self, content: str):
-        """
-        Parse YAML frontmatter from memory content.
-
-        Args:
-            content: Raw memory content
-
-        Returns:
-            Tuple of (frontmatter_dict or None, body_content)
-
-        """
-        if not content.startswith("---"):
-            return None, content
-
-        parts = content.split("---", 2)
-        if len(parts) < 3:
-            return None, content
-
-        try:
-            frontmatter = yaml.safe_load(parts[1])
-            body = parts[2].strip()
-            return frontmatter if frontmatter else None, body
-        except Exception:
-            # If YAML parsing fails, return content as-is
-            return None, content
-
     def load_memory(self, name: str) -> str:
         """
         Load a memory by name.
@@ -101,25 +75,19 @@ class MemoriesManager:
         with open(memory_file_path, encoding=self._encoding) as f:
             return f.read()
 
-    def save_memory(self, name: str, content: str, summary: str | None = None) -> str:
+    def save_memory(self, name: str, content: str) -> str:
         """
-        Save a memory with optional frontmatter summary.
+        Save a memory.
 
         Args:
             name: Memory name (can include subdirectories)
             content: Memory content
-            summary: Optional summary for frontmatter
 
         Returns:
             Success message
 
         """
         memory_file_path = self.get_memory_file_path(name)
-
-        # Add frontmatter if summary is provided
-        if summary:
-            frontmatter = f"---\nsummary: {summary}\n---\n\n"
-            content = frontmatter + content
 
         with open(memory_file_path, "w", encoding=self._encoding) as f:
             f.write(content)
@@ -133,7 +101,7 @@ class MemoriesManager:
             topic: Optional topic/subdirectory filter (e.g., "auth")
 
         Returns:
-            List of memory info dicts with 'name' and optional 'summary'
+            List of memory names
 
         """
         memories = []
@@ -151,19 +119,10 @@ class MemoriesManager:
             # Calculate relative path as memory name
             rel_path = md_file.relative_to(self._memory_dir)
             name = str(rel_path.with_suffix("")).replace(os.sep, "/")
-
-            # Read and parse frontmatter
-            content = md_file.read_text(encoding=self._encoding)
-            frontmatter, _ = self.parse_frontmatter(content)
-
-            memory_info = {"name": name}
-            if frontmatter and "summary" in frontmatter:
-                memory_info["summary"] = frontmatter["summary"]
-
-            memories.append(memory_info)
+            memories.append(name)
 
         # Sort alphabetically by name
-        return sorted(memories, key=lambda x: x["name"])
+        return sorted(memories)
 
     def delete_memory(self, name: str) -> str:
         """
@@ -206,8 +165,6 @@ class MemoriesManager:
         # Move/rename the file
         old_path.rename(new_path)
         return f"Memory renamed from {old_name} to {new_name}."
-
-
 class Project(ToStringMixin):
     def __init__(
         self,
