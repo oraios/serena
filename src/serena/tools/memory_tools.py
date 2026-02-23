@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import Literal
 
 from serena.tools import ReplaceContentTool, Tool, ToolMarkerCanEdit
 

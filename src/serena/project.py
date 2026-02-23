@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pathspec
-import yaml
 from sensai.util.logging import LogTime
 from sensai.util.string import ToStringMixin
 
@@ -31,9 +30,7 @@ log = logging.getLogger(__name__)
 
 class MemoriesManager:
     def __init__(self, project_root: str):
-        self._memory_dir = (
-            Path(get_serena_managed_in_project_dir(project_root)) / "memories"
-        )
+        self._memory_dir = Path(get_serena_managed_in_project_dir(project_root)) / "memories"
         self._memory_dir.mkdir(parents=True, exist_ok=True)
         self._encoding = SERENA_FILE_ENCODING
 
@@ -188,9 +185,7 @@ class Project(ToStringMixin):
         self._is_newly_created = is_newly_created
 
         # create .gitignore file in the project's Serena data folder if not yet present
-        serena_data_gitignore_path = os.path.join(
-            self.path_to_serena_data_folder(), ".gitignore"
-        )
+        serena_data_gitignore_path = os.path.join(self.path_to_serena_data_folder(), ".gitignore")
         if not os.path.exists(serena_data_gitignore_path):
             os.makedirs(os.path.dirname(serena_data_gitignore_path), exist_ok=True)
             log.info(f"Creating .gitignore file in {serena_data_gitignore_path}")
@@ -215,29 +210,19 @@ class Project(ToStringMixin):
         ):
 
             # gather ignored paths from the global configuration, project configuration, and gitignore files
-            global_ignored_paths = (
-                self._serena_config.ignored_paths if self._serena_config else []
-            )
-            ignored_patterns = list(global_ignored_paths) + list(
-                self.project_config.ignored_paths
-            )
+            global_ignored_paths = self._serena_config.ignored_paths if self._serena_config else []
+            ignored_patterns = list(global_ignored_paths) + list(self.project_config.ignored_paths)
             if len(global_ignored_paths) > 0:
-                log.info(
-                    f"Using {len(global_ignored_paths)} ignored paths from the global configuration."
-                )
+                log.info(f"Using {len(global_ignored_paths)} ignored paths from the global configuration.")
                 log.debug(f"Global ignored paths: {list(global_ignored_paths)}")
             if len(self.project_config.ignored_paths) > 0:
-                log.info(
-                    f"Using {len(self.project_config.ignored_paths)} ignored paths from the project configuration."
-                )
+                log.info(f"Using {len(self.project_config.ignored_paths)} ignored paths from the project configuration.")
                 log.debug(f"Project ignored paths: {self.project_config.ignored_paths}")
             log.debug(f"Combined ignored patterns: {ignored_patterns}")
             if self.project_config.ignore_all_files_in_gitignore:
                 gitignore_parser = GitignoreParser(self.project_root)
                 for spec in gitignore_parser.get_ignore_specs():
-                    log.debug(
-                        f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths."
-                    )
+                    log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
                     ignored_patterns.extend(spec.patterns)
             self.__ignored_patterns = ignored_patterns
 
@@ -249,9 +234,7 @@ class Project(ToStringMixin):
                 pattern = pattern.replace(os.path.sep, "/")
                 processed_patterns.append(pattern)
             log.debug(f"Processing {len(processed_patterns)} ignored paths")
-            self.__ignore_spec = pathspec.PathSpec.from_lines(
-                pathspec.patterns.GitWildMatchPattern, processed_patterns
-            )
+            self.__ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
 
         self._ignore_spec_available.set()
 
@@ -292,9 +275,7 @@ class Project(ToStringMixin):
         return os.path.join(self.project_root, SERENA_MANAGED_DIR_NAME)
 
     def path_to_project_yml(self) -> str:
-        return os.path.join(
-            self.project_root, self.project_config.rel_path_to_project_yml()
-        )
+        return os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
 
     def get_activation_message(self) -> str:
         """
@@ -304,9 +285,7 @@ class Project(ToStringMixin):
             msg = f"Created and activated a new project with name '{self.project_name}' at {self.project_root}. "
         else:
             msg = f"The project with name '{self.project_name}' at {self.project_root} is activated."
-        languages_str = ", ".join(
-            [lang.value for lang in self.project_config.languages]
-        )
+        languages_str = ", ".join([lang.value for lang in self.project_config.languages])
         msg += f"\nProgramming languages: {languages_str}; file encoding: {self.project_config.encoding}"
         memories = self.memories_manager.list_memories()
         if memories:
@@ -351,9 +330,7 @@ class Project(ToStringMixin):
             log.info("Ignore patterns are now available for project; proceeding")
         return self.__ignored_patterns
 
-    def _is_ignored_relative_path(
-        self, relative_path: str | Path, ignore_non_source_files: bool = True
-    ) -> bool:
+    def _is_ignored_relative_path(self, relative_path: str | Path, ignore_non_source_files: bool = True) -> bool:
         """
         Determine whether an existing path should be ignored based on file type and ignore patterns.
         Raises `FileNotFoundError` if the path does not exist.
@@ -372,9 +349,7 @@ class Project(ToStringMixin):
 
         abs_path = os.path.join(self.project_root, relative_path)
         if not os.path.exists(abs_path):
-            raise FileNotFoundError(
-                f"File {abs_path} not found, the ignore check cannot be performed"
-            )
+            raise FileNotFoundError(f"File {abs_path} not found, the ignore check cannot be performed")
 
         # Check file extension if it's a file
         is_file = os.path.isfile(abs_path)
@@ -395,13 +370,9 @@ class Project(ToStringMixin):
         if len(rel_path.parts) > 0 and rel_path.parts[0] == ".git":
             return True
 
-        return match_path(
-            str(relative_path), self._ignore_spec, root_path=self.project_root
-        )
+        return match_path(str(relative_path), self._ignore_spec, root_path=self.project_root)
 
-    def is_ignored_path(
-        self, path: str | Path, ignore_non_source_files: bool = False
-    ) -> bool:
+    def is_ignored_path(self, path: str | Path, ignore_non_source_files: bool = False) -> bool:
         """
         Checks whether the given path is ignored
 
@@ -416,16 +387,12 @@ class Project(ToStringMixin):
             except ValueError:
                 # If the path is not relative to the project root, we consider it as an absolute path outside the project
                 # (which we ignore)
-                log.warning(
-                    f"Path {path} is not relative to the project root {self.project_root} and was therefore ignored"
-                )
+                log.warning(f"Path {path} is not relative to the project root {self.project_root} and was therefore ignored")
                 return True
         else:
             relative_path = path
 
-        return self._is_ignored_relative_path(
-            str(relative_path), ignore_non_source_files=ignore_non_source_files
-        )
+        return self._is_ignored_relative_path(str(relative_path), ignore_non_source_files=ignore_non_source_files)
 
     def is_path_in_project(self, path: str | Path) -> bool:
         """
@@ -456,9 +423,7 @@ class Project(ToStringMixin):
         abs_path = Path(self.project_root) / relative_path
         return abs_path.exists()
 
-    def validate_relative_path(
-        self, relative_path: str, require_not_ignored: bool = False
-    ) -> None:
+    def validate_relative_path(self, relative_path: str, require_not_ignored: bool = False) -> None:
         """
         Validates that the given relative path to an existing file/dir is safe to read or edit,
         meaning it's inside the project directory.
@@ -469,15 +434,11 @@ class Project(ToStringMixin):
         :param require_not_ignored: if True, the path must not be ignored according to the project's ignore settings
         """
         if not self.is_path_in_project(relative_path):
-            raise ValueError(
-                f"{relative_path=} points to path outside of the repository root; cannot access for safety reasons"
-            )
+            raise ValueError(f"{relative_path=} points to path outside of the repository root; cannot access for safety reasons")
 
         if require_not_ignored:
             if self.is_ignored_path(relative_path):
-                raise ValueError(
-                    f"Path {relative_path} is ignored; cannot access for safety reasons"
-                )
+                raise ValueError(f"Path {relative_path} is ignored; cannot access for safety reasons")
 
     def gather_source_files(self, relative_path: str = "") -> list[str]:
         """Retrieves relative paths of all source files, optionally limited to the given path
@@ -493,21 +454,15 @@ class Project(ToStringMixin):
         else:
             for root, dirs, files in os.walk(start_path, followlinks=True):
                 # prevent recursion into ignored directories
-                dirs[:] = [
-                    d for d in dirs if not self.is_ignored_path(os.path.join(root, d))
-                ]
+                dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d))]
 
                 # collect non-ignored files
                 for file in files:
                     abs_file_path = os.path.join(root, file)
                     try:
-                        if not self.is_ignored_path(
-                            abs_file_path, ignore_non_source_files=True
-                        ):
+                        if not self.is_ignored_path(abs_file_path, ignore_non_source_files=True):
                             try:
-                                rel_file_path = os.path.relpath(
-                                    abs_file_path, start=self.project_root
-                                )
+                                rel_file_path = os.path.relpath(abs_file_path, start=self.project_root)
                             except Exception:
                                 log.warning(
                                     "Ignoring path '%s' because it appears to be outside of the project root (%s)",
@@ -612,9 +567,7 @@ class Project(ToStringMixin):
             ls_specific_settings=ls_specific_settings,
             trace_lsp_communication=trace_lsp_communication,
         )
-        self.language_server_manager = LanguageServerManager.from_languages(
-            self.project_config.languages, factory
-        )
+        self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory)
         return self.language_server_manager
 
     def add_language(self, language: Language) -> None:
@@ -626,16 +579,12 @@ class Project(ToStringMixin):
         :param language: the programming language to add
         """
         if language in self.project_config.languages:
-            log.info(
-                f"Language {language.value} is already present in the project configuration."
-            )
+            log.info(f"Language {language.value} is already present in the project configuration.")
             return
 
         # start the language server (if the LS manager is active)
         if self.language_server_manager is None:
-            log.info(
-                "Language server manager is not active; skipping language server startup for the new language."
-            )
+            log.info("Language server manager is not active; skipping language server startup for the new language.")
         else:
             log.info(
                 "Adding and starting the language server for new language %s ...",
@@ -656,9 +605,7 @@ class Project(ToStringMixin):
         :param language: the programming language to remove
         """
         if language not in self.project_config.languages:
-            log.info(
-                f"Language {language.value} is not present in the project configuration."
-            )
+            log.info(f"Language {language.value} is not present in the project configuration.")
             return
         # update the project configuration
         self.project_config.languages.remove(language)
@@ -666,9 +613,7 @@ class Project(ToStringMixin):
 
         # stop the language server (if the LS manager is active)
         if self.language_server_manager is None:
-            log.info(
-                "Language server manager is not active; skipping language server shutdown for the removed language."
-            )
+            log.info("Language server manager is not active; skipping language server shutdown for the removed language.")
         else:
             log.info(
                 "Removing and stopping the language server for language %s ...",
