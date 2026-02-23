@@ -58,6 +58,17 @@ class TestNimLanguageServerBasics:
         assert "Person" in type_names, "Should find Person type"
         assert "Animal" in type_names, "Should find Animal type"
 
+        # Verify that symbol body ranges span the full proc/type definition, not just the name.
+        # nimlangserver returns SymbolInformation with ranges covering only the symbol name;
+        # the range-fix logic should extend them to cover the full body.
+        greet_symbol = next(s for s in function_symbols if s["name"] == "greet")
+        body = greet_symbol.get("body")
+        assert body is not None, "greet should have a body"
+        body_text = body.get_text()
+        assert "proc greet" in body_text, f"Body should contain the proc signature, got: {body_text!r}"
+        assert "result =" in body_text, f"Body should contain the proc body, got: {body_text!r}"
+        assert body._end_line > body._start_line, f"greet body should span multiple lines (start={body._start_line}, end={body._end_line})"
+
     @pytest.mark.parametrize("language_server", [Language.NIM], indirect=True)
     def test_nim_utils_module(self, language_server: SolidLanguageServer) -> None:
         """Test symbol detection in utils.nim module."""
@@ -138,29 +149,36 @@ class TestNimLanguageServerBasics:
 
     @pytest.mark.parametrize("language_server", [Language.NIM], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:
-        """Test find references across multiple Nim files.
+        """Test cross-file awareness using references and goto-definition.
 
-        Note: nimlangserver does not reliably report cross-file references for all symbols.
-        This test verifies that references can be found for a symbol defined in utils.nim,
-        but does not require cross-file hits since nimlangserver may only return the definition site.
+        formatNumber is defined in utils.nim and called in main.nim.
+        nimlangserver's request_references only returns usages within the queried
+        file's nimsuggest instance, so we verify cross-file resolution via
+        goto-definition (which correctly navigates from main.nim to utils.nim)
+        combined with a reference query from the call site.
         """
-        doc_symbols = language_server.request_document_symbols("utils.nim")
-        all_symbols, _ = doc_symbols.get_all_symbols_and_roots()
+        # Ensure main.nim is indexed
+        language_server.request_document_symbols("main.nim")
 
-        format_symbol = None
-        for sym in all_symbols:
-            if sym.get("name") == "formatNumber":
-                format_symbol = sym
+        # Find the call to formatNumber in main.nim
+        content = language_server.retrieve_full_file_content("main.nim")
+        target_line = target_col = None
+        for i, line in enumerate(content.split("\n")):
+            col = line.find("formatNumber")
+            if col >= 0:
+                target_line, target_col = i, col
                 break
-        assert format_symbol is not None, "Could not find 'formatNumber' symbol in utils.nim"
+        assert target_line is not None, "Could not find formatNumber call in main.nim"
 
-        sel_start = format_symbol["selectionRange"]["start"]
-        refs = language_server.request_references("utils.nim", sel_start["line"], sel_start["character"])
-        # nimlangserver may return empty references or only the definition site for cross-file lookups
+        # Verify references finds the usage in main.nim
+        refs = language_server.request_references("main.nim", target_line, target_col)
         ref_paths = [ref.get("relativePath", "") for ref in refs]
-        assert (
-            any("utils.nim" in p for p in ref_paths) or refs == []
-        ), f"If references are returned, utils.nim (definition site) should be among them, got: {ref_paths}"
+        assert any("main.nim" in p for p in ref_paths), f"Expected main.nim in references, got: {ref_paths}"
+
+        # Verify goto-definition resolves to the definition in utils.nim (cross-file)
+        definition = language_server.request_definition("main.nim", target_line, target_col)
+        assert definition, "Should find definition for formatNumber"
+        assert "utils.nim" in definition[0]["uri"], f"Definition should point to utils.nim, got: {definition[0]['uri']}"
 
     @pytest.mark.parametrize("language_server", [Language.NIM], indirect=True)
     def test_nim_goto_definition(self, language_server: SolidLanguageServer) -> None:
@@ -197,3 +215,61 @@ class TestNimLanguageServerBasics:
 
         completion_labels = [item["completionText"] for item in completions]
         assert "email" in completion_labels, "Should suggest email field for Person type"
+
+    @pytest.mark.parametrize("language_server", [Language.NIM], indirect=True)
+    def test_nim_hover(self, language_server: SolidLanguageServer) -> None:
+        """Test that hover returns type/doc information for a symbol."""
+        # Hover over the 'greet' proc definition in main.nim
+        doc_symbols = language_server.request_document_symbols("main.nim")
+        all_symbols, _ = doc_symbols.get_all_symbols_and_roots()
+
+        greet_symbol = None
+        for sym in all_symbols:
+            if sym.get("name") == "greet":
+                greet_symbol = sym
+                break
+        assert greet_symbol is not None, "Could not find 'greet' symbol in main.nim"
+
+        sel_start = greet_symbol["selectionRange"]["start"]
+        hover_info = language_server.request_hover("main.nim", sel_start["line"], sel_start["character"])
+
+        assert hover_info is not None, "Hover should return information for greet proc"
+        assert "contents" in hover_info, "Hover should have contents"
+
+        contents = hover_info["contents"]
+        if isinstance(contents, str):
+            hover_text = contents
+        elif isinstance(contents, dict) and "value" in contents:
+            hover_text = contents["value"]
+        else:
+            hover_text = str(contents)
+
+        assert "greet" in hover_text, f"Hover should mention 'greet', got: {hover_text}"
+
+    @pytest.mark.parametrize("language_server", [Language.NIM], indirect=True)
+    def test_request_referencing_symbols_cross_file(self, language_server: SolidLanguageServer) -> None:
+        """Test request_referencing_symbols finds cross-file usages.
+
+        formatNumber is defined in utils.nim and called in main.nim.
+        request_referencing_symbols should find the usage, either via LSP
+        references or via the goto-definition fallback.
+        """
+        # Get the position of formatNumber's definition in utils.nim
+        doc_symbols = language_server.request_document_symbols("utils.nim")
+        all_symbols, _ = doc_symbols.get_all_symbols_and_roots()
+
+        fmt_symbol = None
+        for sym in all_symbols:
+            if sym.get("name") == "formatNumber":
+                fmt_symbol = sym
+                break
+        assert fmt_symbol is not None, "Could not find 'formatNumber' in utils.nim"
+
+        sel_start = fmt_symbol["selectionRange"]["start"]
+        refs = language_server.request_referencing_symbols(
+            "utils.nim", sel_start["line"], sel_start["character"], include_file_symbols=True
+        )
+
+        # Should find at least one reference in main.nim
+        ref_paths = [r.symbol["location"]["relativePath"] for r in refs]
+        assert any("main.nim" in p for p in ref_paths), f"Expected main.nim in referencing symbols for formatNumber, got: {ref_paths}"

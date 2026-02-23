@@ -1,6 +1,5 @@
 # Nim configuration file
 
-switch("path", "$projectDir/../src")
 switch("warning", "UnusedImport:off")
 
 when defined(release):
