@@ -35,17 +35,6 @@ class MemoriesManager:
         self._encoding = SERENA_FILE_ENCODING
 
     def get_memory_file_path(self, name: str) -> Path:
-        """
-        Get the file path for a memory, supporting subdirectories.
-
-        Args:
-            name: Memory name, can include "/" for subdirectories
-                  (e.g., "auth/login_logic")
-
-        Returns:
-            Path to the memory file
-
-        """
         # Strip .md extension if present
         name = name.replace(".md", "")
 
@@ -62,16 +51,6 @@ class MemoriesManager:
         return self._memory_dir / filename
 
     def load_memory(self, name: str) -> str:
-        """
-        Load a memory by name.
-
-        Args:
-            name: Memory name (can include subdirectories)
-
-        Returns:
-            Memory content
-
-        """
         memory_file_path = self.get_memory_file_path(name)
         if not memory_file_path.exists():
             return f"Memory file {name} not found, consider creating it with the `write_memory` tool if you need it."
@@ -79,33 +58,14 @@ class MemoriesManager:
             return f.read()
 
     def save_memory(self, name: str, content: str) -> str:
-        """
-        Save a memory.
-
-        Args:
-            name: Memory name (can include subdirectories)
-            content: Memory content
-
-        Returns:
-            Success message
-
-        """
         memory_file_path = self.get_memory_file_path(name)
-
         with open(memory_file_path, "w", encoding=self._encoding) as f:
             f.write(content)
         return f"Memory {name} written."
 
-    def list_memories(self, topic: str = ""):
+    def list_memories(self, topic: str = "") -> list[str]:
         """
-        List memories, optionally filtered by topic (subdirectory).
-
-        Args:
-            topic: Optional topic/subdirectory filter (e.g., "auth")
-
-        Returns:
-            List of memory names
-
+        List memories, optionally filtered by topic.
         """
         memories = []
 
@@ -128,16 +88,6 @@ class MemoriesManager:
         return sorted(memories)
 
     def delete_memory(self, name: str) -> str:
-        """
-        Delete a memory by name.
-
-        Args:
-            name: Memory name
-
-        Returns:
-            Success message
-
-        """
         memory_file_path = self.get_memory_file_path(name)
         if not memory_file_path.exists():
             return f"Memory {name} not found."
@@ -147,20 +97,14 @@ class MemoriesManager:
     def rename_memory(self, old_name: str, new_name: str) -> str:
         """
         Rename or move a memory file.
-
-        Args:
-            old_name: Current memory name
-            new_name: New memory name (can include "/" to move to subdirectory)
-
-        Returns:
-            Success message
-
         """
         old_path = self.get_memory_file_path(old_name)
         new_path = self.get_memory_file_path(new_name)
 
         if not old_path.exists():
-            return f"Memory {old_name} not found."
+            raise FileNotFoundError(f"Memory {old_name} not found.")
+        if new_path.exists():
+            raise FileExistsError(f"Memory {new_name} already exists.")
 
         # Ensure target directory exists
         new_path.parent.mkdir(parents=True, exist_ok=True)
@@ -197,17 +141,10 @@ class Project(ToStringMixin):
         self.__ignored_patterns: list[str]
         self.__ignore_spec: pathspec.PathSpec
         self._ignore_spec_available = threading.Event()
-        threading.Thread(
-            name=f"gather-ignorespec[{self.project_config.project_name}]",
-            target=self._gather_ignorespec,
-            daemon=True,
-        ).start()
+        threading.Thread(name=f"gather-ignorespec[{self.project_config.project_name}]", target=self._gather_ignorespec, daemon=True).start()
 
     def _gather_ignorespec(self) -> None:
-        with LogTime(
-            f"Gathering ignore spec for project {self.project_config.project_name}",
-            logger=log,
-        ):
+        with LogTime(f"Gathering ignore spec for project {self.project_config.project_name}", logger=log):
 
             # gather ignored paths from the global configuration, project configuration, and gitignore files
             global_ignored_paths = self._serena_config.ignored_paths if self._serena_config else []
@@ -259,11 +196,7 @@ class Project(ToStringMixin):
         if not project_root.exists():
             raise FileNotFoundError(f"Project root not found: {project_root}")
         project_config = ProjectConfig.load(project_root, autogenerate=autogenerate)
-        return Project(
-            project_root=str(project_root),
-            project_config=project_config,
-            serena_config=serena_config,
-        )
+        return Project(project_root=str(project_root), project_config=project_config, serena_config=serena_config)
 
     def save_config(self) -> None:
         """
@@ -510,11 +443,7 @@ class Project(ToStringMixin):
         )
 
     def retrieve_content_around_line(
-        self,
-        relative_file_path: str,
-        line: int,
-        context_lines_before: int = 0,
-        context_lines_after: int = 0,
+        self, relative_file_path: str, line: int, context_lines_before: int = 0, context_lines_after: int = 0
     ) -> MatchedConsecutiveLines:
         """
         Retrieve the content of the given file around the given line.
@@ -586,10 +515,7 @@ class Project(ToStringMixin):
         if self.language_server_manager is None:
             log.info("Language server manager is not active; skipping language server startup for the new language.")
         else:
-            log.info(
-                "Adding and starting the language server for new language %s ...",
-                language.value,
-            )
+            log.info("Adding and starting the language server for new language %s ...", language.value)
             self.language_server_manager.add_language_server(language)
 
         # update the project configuration
@@ -615,10 +541,7 @@ class Project(ToStringMixin):
         if self.language_server_manager is None:
             log.info("Language server manager is not active; skipping language server shutdown for the removed language.")
         else:
-            log.info(
-                "Removing and stopping the language server for language %s ...",
-                language.value,
-            )
+            log.info("Removing and stopping the language server for language %s ...", language.value)
             self.language_server_manager.remove_language_server(language)
 
     def shutdown(self, timeout: float = 2.0) -> None:
