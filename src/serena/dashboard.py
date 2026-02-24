@@ -557,6 +557,14 @@ class SerenaDashboardAPI:
             if project is None:
                 raise ValueError("No active project")
 
+            from serena.project import MemoriesManager
+
+            if (
+                request_save_memory.memory_name.startswith(MemoriesManager.GLOBAL_TOPIC + "/")
+                and not self._agent.serena_config.edit_global_memories
+            ):
+                raise ValueError("Editing global memories is disabled (edit_global_memories: false in serena_config.yml).")
+
             project.memories_manager.save_memory(request_save_memory.memory_name, request_save_memory.content)
 
         self._agent.execute_task(run, logged=True, name="SaveMemory")
@@ -566,6 +574,14 @@ class SerenaDashboardAPI:
             project = self._agent.get_active_project()
             if project is None:
                 raise ValueError("No active project")
+
+            from serena.project import MemoriesManager
+
+            if (
+                request_delete_memory.memory_name.startswith(MemoriesManager.GLOBAL_TOPIC + "/")
+                and not self._agent.serena_config.edit_global_memories
+            ):
+                raise ValueError("Editing global memories is disabled (edit_global_memories: false in serena_config.yml).")
 
             project.memories_manager.delete_memory(request_delete_memory.memory_name)
 

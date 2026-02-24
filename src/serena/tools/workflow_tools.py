@@ -18,23 +18,33 @@ class CheckOnboardingPerformedTool(Tool):
         Checks whether project onboarding was already performed.
         You should always call this tool before beginning to actually work on the project/after activating a project.
         """
+        from serena.project import MemoriesManager
+
         from .memory_tools import ListMemoriesTool
 
         list_memories_tool = self.agent.get_tool(ListMemoriesTool)
-        memories = json.loads(list_memories_tool.apply())
-        if len(memories) == 0:
-            return (
+        all_memories = json.loads(list_memories_tool.apply())
+        project_memories = [m for m in all_memories if not m.startswith(MemoriesManager.GLOBAL_TOPIC + "/")]
+        global_memories = [m for m in all_memories if m.startswith(MemoriesManager.GLOBAL_TOPIC + "/")]
+        if len(project_memories) == 0:
+            msg = (
                 "Onboarding not performed yet (no memories available). "
                 + "You should perform onboarding by calling the `onboarding` tool before proceeding with the task."
             )
+            if global_memories:
+                msg += f"\nAvailable global memories (shared across all projects): {global_memories}"
+            return msg
         else:
-            return f"""The onboarding was already performed, below is the list of available memories.
+            msg = f"""The onboarding was already performed, below is the list of available memories.
             Do not read them immediately, just remember that they exist and that you can read them later, if it is necessary
             for the current task.
             Some memories may be based on previous conversations, others may be general for the current project.
             You should be able to tell which one you need based on the name of the memory.
             
-            {memories}"""
+            Available project memories: {project_memories}"""
+            if global_memories:
+                msg += f"\nAvailable global memories (shared across all projects): {global_memories}"
+            return msg
 
 
 class OnboardingTool(Tool):

@@ -12,6 +12,7 @@ from sensai.util.string import ToStringMixin
 from serena.config.serena_config import (
     DEFAULT_TOOL_TIMEOUT,
     ProjectConfig,
+    SerenaPaths,
     get_serena_managed_in_project_dir,
 )
 from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_NAME
@@ -29,16 +30,42 @@ log = logging.getLogger(__name__)
 
 
 class MemoriesManager:
-    def __init__(self, project_root: str):
+    GLOBAL_TOPIC = "global"
+
+    def __init__(self, project_root: str, global_memory_dir: Path | None = None):
         self._memory_dir = Path(get_serena_managed_in_project_dir(project_root)) / "memories"
         self._memory_dir.mkdir(parents=True, exist_ok=True)
+        self._global_memory_dir = global_memory_dir
+        if self._global_memory_dir is not None:
+            self._global_memory_dir.mkdir(parents=True, exist_ok=True)
         self._encoding = SERENA_FILE_ENCODING
+
+    def _is_global(self, name: str) -> bool:
+        return name == self.GLOBAL_TOPIC or name.startswith(self.GLOBAL_TOPIC + "/")
 
     def get_memory_file_path(self, name: str) -> Path:
         # Strip .md extension if present
         name = name.replace(".md", "")
 
-        # Split by "/" to handle subdirectories
+        if self._is_global(name):
+            if self._global_memory_dir is None:
+                raise ValueError("Global memories are not configured (no global memory directory).")
+            if name == self.GLOBAL_TOPIC:
+                raise ValueError(
+                    f'Bare "{self.GLOBAL_TOPIC}" is not a valid memory name. '
+                    f'Use "{self.GLOBAL_TOPIC}/<name>" to address a global memory.'
+                )
+            # Strip "global/" prefix and resolve against global dir
+            sub_name = name[len(self.GLOBAL_TOPIC) + 1 :]
+            parts = sub_name.split("/")
+            filename = f"{parts[-1]}.md"
+            if len(parts) > 1:
+                subdir = self._global_memory_dir / "/".join(parts[:-1])
+                subdir.mkdir(parents=True, exist_ok=True)
+                return subdir / filename
+            return self._global_memory_dir / filename
+
+        # Project-local memory
         parts = name.split("/")
         filename = f"{parts[-1]}.md"
 
@@ -66,25 +93,49 @@ class MemoriesManager:
     def list_memories(self, topic: str = "") -> list[str]:
         """
         List memories, optionally filtered by topic.
+        When topic is empty, returns both project and global memories.
+        Global memories are prefixed with "global/".
         """
-        memories = []
+        memories: list[str] = []
+
+        include_project = True
+        include_global = self._global_memory_dir is not None
 
         if topic:
-            # Only list memories in specified subdirectory
-            search_dir = self._memory_dir / topic.replace("/", os.sep)
-            if not search_dir.exists():
-                return []
+            if self._is_global(topic):
+                include_project = False
+                # Search within global dir, stripping "global/" or "global" prefix
+                if topic == self.GLOBAL_TOPIC:
+                    global_search_dir = self._global_memory_dir
+                else:
+                    global_sub = topic[len(self.GLOBAL_TOPIC) + 1 :]
+                    global_search_dir = self._global_memory_dir / global_sub.replace("/", os.sep) if self._global_memory_dir else None
+                if global_search_dir and global_search_dir.exists():
+                    for md_file in global_search_dir.rglob("*.md"):
+                        rel_path = md_file.relative_to(self._global_memory_dir)  # type: ignore[arg-type]
+                        name = self.GLOBAL_TOPIC + "/" + str(rel_path.with_suffix("")).replace(os.sep, "/")
+                        memories.append(name)
+            else:
+                include_global = False
+                search_dir = self._memory_dir / topic.replace("/", os.sep)
+                if search_dir.exists():
+                    for md_file in search_dir.rglob("*.md"):
+                        rel_path = md_file.relative_to(self._memory_dir)
+                        name = str(rel_path.with_suffix("")).replace(os.sep, "/")
+                        memories.append(name)
         else:
-            search_dir = self._memory_dir
+            # No topic filter — list everything
+            if include_project and self._memory_dir.exists():
+                for md_file in self._memory_dir.rglob("*.md"):
+                    rel_path = md_file.relative_to(self._memory_dir)
+                    name = str(rel_path.with_suffix("")).replace(os.sep, "/")
+                    memories.append(name)
+            if include_global and self._global_memory_dir is not None and self._global_memory_dir.exists():
+                for md_file in self._global_memory_dir.rglob("*.md"):
+                    rel_path = md_file.relative_to(self._global_memory_dir)
+                    name = self.GLOBAL_TOPIC + "/" + str(rel_path.with_suffix("")).replace(os.sep, "/")
+                    memories.append(name)
 
-        # Recursively find all .md files
-        for md_file in search_dir.rglob("*.md"):
-            # Calculate relative path as memory name
-            rel_path = md_file.relative_to(self._memory_dir)
-            name = str(rel_path.with_suffix("")).replace(os.sep, "/")
-            memories.append(name)
-
-        # Sort alphabetically by name
         return sorted(memories)
 
     def delete_memory(self, name: str) -> str:
@@ -97,6 +148,7 @@ class MemoriesManager:
     def rename_memory(self, old_name: str, new_name: str) -> str:
         """
         Rename or move a memory file.
+        Moving between global and project scope (e.g. "global/foo" -> "bar") is supported.
         """
         old_path = self.get_memory_file_path(old_name)
         new_path = self.get_memory_file_path(new_name)
@@ -113,6 +165,39 @@ class MemoriesManager:
         old_path.rename(new_path)
         return f"Memory renamed from {old_name} to {new_name}."
 
+    def edit_memory(self, name: str, needle: str, repl: str, mode: str) -> str:
+        """
+        Edit a memory by replacing content matching a pattern.
+
+        :param name: the memory name
+        :param needle: the string or regex to search for
+        :param repl: the replacement string
+        :param mode: "literal" or "regex"
+        """
+        import re
+
+        memory_file_path = self.get_memory_file_path(name)
+        if not memory_file_path.exists():
+            raise FileNotFoundError(f"Memory {name} not found.")
+        with open(memory_file_path, encoding=self._encoding) as f:
+            content = f.read()
+
+        if mode == "literal":
+            if needle not in content:
+                raise ValueError(f"The needle string was not found in memory {name}.")
+            new_content = content.replace(needle, repl)
+        elif mode == "regex":
+            pattern = re.compile(needle, re.DOTALL | re.MULTILINE)
+            new_content, count = pattern.subn(repl, content)
+            if count == 0:
+                raise ValueError(f"The regex pattern did not match anything in memory {name}.")
+        else:
+            raise ValueError(f"Invalid mode: {mode}. Must be 'literal' or 'regex'.")
+
+        with open(memory_file_path, "w", encoding=self._encoding) as f:
+            f.write(new_content)
+        return f"Memory {name} edited successfully."
+
 
 class Project(ToStringMixin):
     def __init__(
@@ -124,7 +209,8 @@ class Project(ToStringMixin):
     ):
         self.project_root = project_root
         self.project_config = project_config
-        self.memories_manager = MemoriesManager(project_root)
+        global_memory_dir = Path(SerenaPaths().serena_user_home_dir) / "memories" / MemoriesManager.GLOBAL_TOPIC
+        self.memories_manager = MemoriesManager(project_root, global_memory_dir=global_memory_dir)
         self.language_server_manager: LanguageServerManager | None = None
         self._is_newly_created = is_newly_created
 
@@ -221,10 +307,17 @@ class Project(ToStringMixin):
         languages_str = ", ".join([lang.value for lang in self.project_config.languages])
         msg += f"\nProgramming languages: {languages_str}; file encoding: {self.project_config.encoding}"
         memories = self.memories_manager.list_memories()
-        if memories:
+        project_memories = [m for m in memories if not m.startswith(MemoriesManager.GLOBAL_TOPIC + "/")]
+        global_memories = [m for m in memories if m.startswith(MemoriesManager.GLOBAL_TOPIC + "/")]
+        if project_memories:
             msg += (
-                f"\nAvailable project memories: {json.dumps(memories)}\n"
+                f"\nAvailable project memories: {json.dumps(project_memories)}\n"
                 + "Use the `read_memory` tool to read these memories later if they are relevant to the task."
+            )
+        if global_memories:
+            msg += (
+                f"\nAvailable global memories (shared across all projects): {json.dumps(global_memories)}\n"
+                + "Use the `read_memory` tool to read these memories."
             )
         if self.project_config.initial_prompt:
             msg += f"\nAdditional project-specific instructions:\n {self.project_config.initial_prompt}"

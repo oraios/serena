@@ -529,6 +529,12 @@ class SerenaConfig(SharedConfig):
     """List of paths to ignore across all projects. Same syntax as gitignore, so you can use * and **.
     These patterns are merged additively with each project's own ignored_paths."""
 
+    edit_global_memories: bool = True
+    """Whether global memories (the "global" topic) can be modified (written, edited, deleted, renamed).
+    Global memories are stored in ~/.serena/memories/global/ and shared across all projects.
+    Set to false to protect global memories from accidental modification by agents.
+    Read access is always allowed regardless of this setting."""
+
     # settings with overridden defaults
     default_modes: Sequence[str] | None = ("interactive", "editing")
     symbol_info_budget: float = 10.0
