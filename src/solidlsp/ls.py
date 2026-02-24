@@ -1429,47 +1429,62 @@ class SolidLanguageServer(ABC):
                         child["parent"] = package_symbol
 
                 elif os.path.isfile(contained_dir_or_file_abs_path):
-                    with self._open_file_context(contained_dir_or_file_rel_path, open_in_ls=False) as file_data:
-                        document_symbols = self.request_document_symbols(contained_dir_or_file_rel_path, file_data)
-                        file_root_nodes = document_symbols.root_symbols
+                    try:
+                        with self._open_file_context(contained_dir_or_file_rel_path, open_in_ls=False) as file_data:
+                            document_symbols = self.request_document_symbols(contained_dir_or_file_rel_path, file_data)
+                            file_root_nodes = document_symbols.root_symbols
 
-                        # Create file symbol, link with children
-                        file_range = self._get_range_from_file_content(file_data.contents)
-                        file_symbol = ls_types.UnifiedSymbolInformation(  # type: ignore
-                            name=os.path.splitext(contained_dir_or_file_name)[0],
-                            kind=ls_types.SymbolKind.File,
-                            range=file_range,
-                            selectionRange=file_range,
-                            location=ls_types.Location(
-                                uri=str(pathlib.Path(contained_dir_or_file_abs_path).as_uri()),
+                            # Create file symbol, link with children
+                            file_range = self._get_range_from_file_content(file_data.contents)
+                            file_symbol = ls_types.UnifiedSymbolInformation(  # type: ignore
+                                name=os.path.splitext(contained_dir_or_file_name)[0],
+                                kind=ls_types.SymbolKind.File,
                                 range=file_range,
-                                absolutePath=str(contained_dir_or_file_abs_path),
-                                relativePath=str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path)),
-                            ),
-                            children=file_root_nodes,
-                            parent=package_symbol,
+                                selectionRange=file_range,
+                                location=ls_types.Location(
+                                    uri=str(pathlib.Path(contained_dir_or_file_abs_path).as_uri()),
+                                    range=file_range,
+                                    absolutePath=str(contained_dir_or_file_abs_path),
+                                    relativePath=str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path)),
+                                ),
+                                children=file_root_nodes,
+                                parent=package_symbol,
+                            )
+                            for child in file_root_nodes:
+                                child["parent"] = file_symbol
+
+                        # Link file symbol with package
+                        package_symbol["children"].append(file_symbol)
+
+                        # TODO: Not sure if this is actually still needed given recent changes to relative path handling
+                        def fix_relative_path(nodes: list[ls_types.UnifiedSymbolInformation]) -> None:
+                            for node in nodes:
+                                if "location" in node and "relativePath" in node["location"]:
+                                    path = Path(node["location"]["relativePath"])  # type: ignore
+                                    if path.is_absolute():
+                                        try:
+                                            path = path.relative_to(self.repository_root_path)
+                                            node["location"]["relativePath"] = str(path)
+                                        except Exception:
+                                            pass
+                                if "children" in node:
+                                    fix_relative_path(node["children"])
+
+                        fix_relative_path(file_root_nodes)
+                    except SolidLSPException as e:
+                        log.warning(
+                            "Failed to get document symbols for %s: %s. Skipping file.",
+                            contained_dir_or_file_rel_path,
+                            e,
                         )
-                        for child in file_root_nodes:
-                            child["parent"] = file_symbol
-
-                    # Link file symbol with package
-                    package_symbol["children"].append(file_symbol)
-
-                    # TODO: Not sure if this is actually still needed given recent changes to relative path handling
-                    def fix_relative_path(nodes: list[ls_types.UnifiedSymbolInformation]) -> None:
-                        for node in nodes:
-                            if "location" in node and "relativePath" in node["location"]:
-                                path = Path(node["location"]["relativePath"])  # type: ignore
-                                if path.is_absolute():
-                                    try:
-                                        path = path.relative_to(self.repository_root_path)
-                                        node["location"]["relativePath"] = str(path)
-                                    except Exception:
-                                        pass
-                            if "children" in node:
-                                fix_relative_path(node["children"])
-
-                    fix_relative_path(file_root_nodes)
+                        if e.is_language_server_terminated():
+                            log.warning(
+                                "Language server terminated while processing %s. "
+                                "Restarting language server to continue processing remaining files.",
+                                contained_dir_or_file_rel_path,
+                            )
+                            self.stop()
+                            self.start()
 
             return result
 
