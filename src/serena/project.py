@@ -96,45 +96,31 @@ class MemoriesManager:
         When topic is empty, returns both project and global memories.
         Global memories are prefixed with "global/".
         """
-        memories: list[str] = []
 
-        include_project = True
-        include_global = self._global_memory_dir is not None
+        def _collect(search_dir: Path, base_dir: Path, prefix: str = "") -> list[str]:
+            if not search_dir.exists():
+                return []
+            results = []
+            for md_file in search_dir.rglob("*.md"):
+                rel = str(md_file.relative_to(base_dir).with_suffix("")).replace(os.sep, "/")
+                results.append(prefix + rel)
+            return results
+
+        memories: list[str] = []
 
         if topic:
             if self._is_global(topic):
-                include_project = False
-                # Search within global dir, stripping "global/" or "global" prefix
-                if topic == self.GLOBAL_TOPIC:
-                    global_search_dir = self._global_memory_dir
-                else:
-                    global_sub = topic[len(self.GLOBAL_TOPIC) + 1 :]
-                    global_search_dir = self._global_memory_dir / global_sub.replace("/", os.sep) if self._global_memory_dir else None
-                if global_search_dir and global_search_dir.exists():
-                    for md_file in global_search_dir.rglob("*.md"):
-                        rel_path = md_file.relative_to(self._global_memory_dir)  # type: ignore[arg-type]
-                        name = self.GLOBAL_TOPIC + "/" + str(rel_path.with_suffix("")).replace(os.sep, "/")
-                        memories.append(name)
+                if self._global_memory_dir is not None:
+                    sub = topic[len(self.GLOBAL_TOPIC) + 1 :] if topic != self.GLOBAL_TOPIC else ""
+                    search_dir = self._global_memory_dir / sub.replace("/", os.sep) if sub else self._global_memory_dir
+                    memories = _collect(search_dir, self._global_memory_dir, self.GLOBAL_TOPIC + "/")
             else:
-                include_global = False
                 search_dir = self._memory_dir / topic.replace("/", os.sep)
-                if search_dir.exists():
-                    for md_file in search_dir.rglob("*.md"):
-                        rel_path = md_file.relative_to(self._memory_dir)
-                        name = str(rel_path.with_suffix("")).replace(os.sep, "/")
-                        memories.append(name)
+                memories = _collect(search_dir, self._memory_dir)
         else:
-            # No topic filter — list everything
-            if include_project and self._memory_dir.exists():
-                for md_file in self._memory_dir.rglob("*.md"):
-                    rel_path = md_file.relative_to(self._memory_dir)
-                    name = str(rel_path.with_suffix("")).replace(os.sep, "/")
-                    memories.append(name)
-            if include_global and self._global_memory_dir is not None and self._global_memory_dir.exists():
-                for md_file in self._global_memory_dir.rglob("*.md"):
-                    rel_path = md_file.relative_to(self._global_memory_dir)
-                    name = self.GLOBAL_TOPIC + "/" + str(rel_path.with_suffix("")).replace(os.sep, "/")
-                    memories.append(name)
+            memories = _collect(self._memory_dir, self._memory_dir)
+            if self._global_memory_dir is not None:
+                memories.extend(_collect(self._global_memory_dir, self._global_memory_dir, self.GLOBAL_TOPIC + "/"))
 
         return sorted(memories)
 
