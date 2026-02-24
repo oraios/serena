@@ -21,7 +21,6 @@ import os
 import pathlib
 import stat
 import threading
-from time import sleep
 from typing import cast
 
 from overrides import override
@@ -557,25 +556,6 @@ class KotlinLanguageServer(SolidLanguageServer):
         """Small safety buffer since we already waited for indexing to complete in _start_server."""
         return 1.0
 
-    @override
-    def _request_hover(self, uri: str, line: int, column: int) -> ls_types.Hover | None:
-        """Override to retry hover requests for Kotlin LSP.
-
-        The Kotlin LSP (IntelliJ-based) lazily resolves hover info: the first
-        request after didOpen often returns None while the engine parses the file.
-        A retry loop with increasing patience (matching the pattern used for
-        Eclipse JDTLS) handles this lazy-loading behaviour.
-        """
-        max_retries = 10
-        retry_delay = 0.2  # 200 ms between retries → up to 2 s total wait
-        result = super()._request_hover(uri, line, column)
-        for _ in range(max_retries):
-            if result is not None:
-                break
-            sleep(retry_delay)
-            result = super()._request_hover(uri, line, column)
-        return result
-
     # Mapping from LSP SymbolKind to Kotlin keyword / descriptor
     _KOTLIN_KIND_KEYWORD: dict[ls_types.SymbolKind, str | None] = {
         ls_types.SymbolKind.File: None,
@@ -608,35 +588,102 @@ class KotlinLanguageServer(SolidLanguageServer):
         }
     )
 
+    def _extract_source_info(self, relative_file_path: str, symbol: ls_types.UnifiedSymbolInformation) -> str | None:
+        """Extract the declaration (with optional KDoc) directly from the source file.
+
+        Uses the symbol's range to locate the declaration line, then scans backwards
+        for a KDoc comment. Returns the KDoc + declaration signature (up to the opening
+        brace), or None if the source cannot be read.
+        """
+        sym_range = symbol.get("range")
+        if not sym_range:
+            return None
+
+        abs_path = os.path.join(self.repository_root_path, relative_file_path)
+        try:
+            with open(abs_path, encoding=self._encoding) as f:
+                lines = f.readlines()
+        except OSError:
+            return None
+
+        decl_start = sym_range["start"]["line"]  # 0-based
+        decl_end = sym_range["end"]["line"]
+
+        # Extract the declaration line(s): from range start to the first line containing '{'
+        # or the end of a single-line declaration
+        decl_lines: list[str] = []
+        for i in range(decl_start, min(decl_end + 1, len(lines))):
+            line = lines[i].rstrip()
+            decl_lines.append(line)
+            if "{" in line:
+                # Trim everything after the opening brace
+                idx = line.index("{")
+                decl_lines[-1] = line[:idx].rstrip()
+                break
+
+        # Scan backwards from the declaration for a KDoc comment (/** ... */)
+        kdoc_lines: list[str] = []
+        scan_start = decl_start - 1
+        while scan_start >= 0:
+            stripped = lines[scan_start].strip()
+            if not stripped or stripped.startswith("@"):
+                # Skip blank lines and annotations between KDoc and declaration
+                scan_start -= 1
+                continue
+            if stripped.endswith("*/"):
+                # Found end of a KDoc — collect it
+                for j in range(scan_start, -1, -1):
+                    kdoc_lines.insert(0, lines[j].rstrip())
+                    if "/**" in lines[j]:
+                        break
+            break
+
+        result_parts = kdoc_lines + decl_lines
+        if not result_parts:
+            return None
+
+        result = "\n".join(result_parts).strip()
+        # Safety: cap length to avoid token bloat
+        if len(result) > 500:
+            result = result[:500] + "..."
+        return result if result else None
+
     @override
     def _get_symbol_metadata_info(
         self,
-        name: str,
-        kind: ls_types.SymbolKind,
-        parent_name: str | None,
-        parent_kind: ls_types.SymbolKind | None,
-        detail: str | None = None,
+        symbol: ls_types.UnifiedSymbolInformation,
+        parent: ls_types.UnifiedSymbolInformation | None,
+        relative_file_path: str,
     ) -> str | None:
-        """Build a Kotlin-style synthetic info string from symbol metadata.
+        """Build info for a Kotlin symbol by extracting its declaration from source.
 
-        Used as a fallback when the Kotlin LSP returns null for hover requests.
-        When the LSP provides a ``detail`` field (e.g. a function signature or type),
-        it is incorporated into the output.  Otherwise a concise descriptor is
-        synthesized from the symbol's kind and parent, e.g.
-        ``fun solve(): Unit [in Stage1SolverService]`` or ``data class Model``.
+        First attempts to read the actual source file to extract the KDoc + declaration
+        signature. Falls back to synthesizing a descriptor from symbol metadata if the
+        source cannot be read.
         """
+        name = symbol["name"]
+        kind = symbol["kind"]
+
         keyword = self._KOTLIN_KIND_KEYWORD.get(kind)
 
         # Skip file/package-level symbols — they carry no useful info on their own
         if keyword is None and kind not in (ls_types.SymbolKind.EnumMember,):
             return None
 
-        # Only show parent context when the parent is a meaningful container
+        # Try source-based extraction first
+        source_info = self._extract_source_info(relative_file_path, symbol)
+        if source_info:
+            return source_info
+
+        # Fallback: synthesize from metadata
+        detail = symbol.get("detail")
+        parent_name = parent["name"] if parent else None
+        parent_kind = parent["kind"] if parent else None
+
         show_parent = parent_name is not None and parent_kind is not None and parent_kind not in self._NON_CONTAINER_KINDS
         parent_context = f" [in {parent_name}]" if show_parent else ""
 
         if kind in (ls_types.SymbolKind.Method, ls_types.SymbolKind.Function):
-            # detail may contain the signature, e.g. "(param: Type): ReturnType"
             if detail:
                 return f"fun {name}{detail}{parent_context}"
             return f"fun {name}(){parent_context}"
@@ -649,7 +696,6 @@ class KotlinLanguageServer(SolidLanguageServer):
                 return f"{keyword} {name}: {detail}{parent_context}"
             return f"{keyword} {name}{parent_context}"
         else:
-            # EnumMember and similar — just the name with context
             if detail:
                 return f"{name}: {detail}{parent_context}"
             return f"{name}{parent_context}"

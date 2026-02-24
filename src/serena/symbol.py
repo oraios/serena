@@ -678,11 +678,9 @@ class LanguageServerSymbolRetriever:
                     parent = sym.get_parent()
                     lang_server = self.get_language_server(file_path)
                     info = lang_server._get_symbol_metadata_info(
-                        name=sym.name,
-                        kind=sym.symbol_kind,
-                        parent_name=parent.name if parent else None,
-                        parent_kind=parent.symbol_kind if parent else None,
-                        detail=sym.symbol_root.get("detail"),
+                        symbol=sym.symbol_root,
+                        parent=parent.symbol_root if parent else None,
+                        relative_file_path=file_path,
                     )
 
                 info_by_symbol[sym] = info

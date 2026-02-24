@@ -57,50 +57,6 @@ class TestKotlinLanguageServer:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Model"), "Model missing from overview"
 
     @pytest.mark.parametrize("language_server", [Language.KOTLIN], indirect=True)
-    def test_hover(self, language_server: SolidLanguageServer) -> None:
-        """Test that hover (include_info) returns information for Kotlin symbols.
-
-        Verifies the _request_hover retry logic that handles the Kotlin LSP's
-        lazy-loading behaviour (hover may return None on the first request
-        after didOpen).
-        """
-        file_path = os.path.join("src", "main", "kotlin", "test_repo", "Utils.kt")
-        doc_symbols = language_server.request_document_symbols(file_path)
-        all_symbols, _ = doc_symbols.get_all_symbols_and_roots()
-
-        # Find the Utils object symbol
-        utils_symbol = None
-        for sym in all_symbols:
-            if sym.get("name") == "Utils":
-                utils_symbol = sym
-                break
-        assert utils_symbol is not None, "Utils symbol not found in Utils.kt"
-
-        # Use selectionRange (identifier position) for hover
-        sel_start = utils_symbol.get("selectionRange", utils_symbol.get("range", {}))["start"]
-        line = sel_start["line"]
-        col = sel_start["character"]
-
-        hover = language_server.request_hover(file_path, line, col)
-        if hover is None:
-            # Kotlin LSP (IntelliJ-based, early versions like v261) may return null for hover
-            # even after our retry loop. This is a known limitation; the retry logic in
-            # KotlinLanguageServer._request_hover handles future versions that improve hover support.
-            pytest.skip("Kotlin LSP hover returned None - hover not yet supported in this LSP version")
-
-        contents = hover.get("contents")
-        assert contents, "Hover contents are empty"
-
-        # Extract text regardless of format (MarkupContent dict, MarkedString list, or plain string)
-        if isinstance(contents, dict):
-            text = contents.get("value", "")
-        elif isinstance(contents, list):
-            text = " ".join(p if isinstance(p, str) else p.get("value", "") for p in contents)
-        else:
-            text = str(contents)
-        assert text.strip(), "Hover text is empty"
-
-    @pytest.mark.parametrize("language_server", [Language.KOTLIN], indirect=True)
     def test_dir_overview(self, language_server: SolidLanguageServer) -> None:
         result = language_server.request_dir_overview("src/main/kotlin/test_repo")
         print(f"dir_overview keys: {list(result.keys())}")
