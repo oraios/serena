@@ -558,15 +558,11 @@ class KotlinLanguageServer(SolidLanguageServer):
 
     @override
     def stop(self, shutdown_timeout: float = 2.0) -> None:
-        java_home = self._get_java_home_from_dependency_provider()
+        assert isinstance(self._dependency_provider, self.DependencyProvider)
+        java_home = self._dependency_provider._java_home_path
+        assert java_home is not None
         super().stop(shutdown_timeout=shutdown_timeout)
-        if java_home:
-            self._kill_gradle_daemons(java_home)
-
-    def _get_java_home_from_dependency_provider(self) -> str | None:
-        if isinstance(self._dependency_provider, self.DependencyProvider):
-            return self._dependency_provider._java_home_path
-        return None
+        self._kill_gradle_daemons(java_home)
 
     @staticmethod
     def _kill_gradle_daemons(java_home: str) -> None:
@@ -579,11 +575,7 @@ class KotlinLanguageServer(SolidLanguageServer):
         We identify them by matching the java executable in their command line against
         the JAVA_HOME used by this KLS instance.
         """
-        java_bin = os.path.join(java_home, "bin", "java")
-        try:
-            java_bin_resolved = os.path.realpath(java_bin)
-        except OSError:
-            return
+        java_bin_resolved = os.path.realpath(os.path.join(java_home, "bin", "java"))
 
         killed: list[psutil.Process] = []
         for proc in psutil.process_iter(["pid", "cmdline"]):
@@ -594,11 +586,7 @@ class KotlinLanguageServer(SolidLanguageServer):
                 if not any("GradleDaemon" in arg for arg in cmdline):
                     continue
                 # cmdline[0] is the java binary path used to start the daemon
-                try:
-                    proc_java_resolved = os.path.realpath(cmdline[0])
-                except OSError:
-                    continue
-                if proc_java_resolved == java_bin_resolved:
+                if os.path.realpath(cmdline[0]) == java_bin_resolved:
                     log.info("Terminating Gradle daemon (PID %d) spawned by KLS", proc.pid)
                     proc.terminate()
                     killed.append(proc)
