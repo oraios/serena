@@ -1,19 +1,14 @@
 import os
-import time
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from test.conftest import is_ci, is_windows
 
 
 class TestLanguageServerCommonFunctionality:
     """Test common functionality of SolidLanguageServer base implementation (not language-specific behaviour)."""
 
-    @pytest.mark.skipif(
-        is_ci and is_windows, reason="This test is flaky in Windows CI (file system does not update modified time reliably)."
-    )
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
     def test_open_file_cache_invalidate(self, language_server: SolidLanguageServer) -> None:
         """
@@ -34,8 +29,12 @@ class TestLanguageServerCommonFunctionality:
                 with open(file_path, "w") as f:
                     f.write(test_string2)
 
-                # give the file system some time to update the modified time
-                time.sleep(3)
+                # Explicitly bump mtime into the future so the cache sees a change.
+                # Relying on natural mtime advancement is flaky because many filesystems
+                # (ext4, tmpfs) have only 1-second mtime granularity, and both writes
+                # can land in the same second.
+                stat = os.stat(file_path)
+                os.utime(file_path, (stat.st_atime, stat.st_mtime + 2))
 
                 # check that the file buffer has been invalidated and reloaded
                 assert fb.contents == test_string2
