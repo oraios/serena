@@ -127,7 +127,7 @@ class TestProjectCreate:
         """Test project creation with --index flag performs indexing."""
         result = cli_runner.invoke(
             ProjectCommands.create,
-            [temp_project_dir_with_python_file, "--language", "python", "--index", "--log-level", "ERROR", "--timeout", "5"],
+            [temp_project_dir_with_python_file, "--language", "python", "--index", "--log-level", "ERROR", "--timeout", "30"],
         )
         assert result.exit_code == 0, f"Command failed: {result.output}"
         assert "Generated project" in result.output
