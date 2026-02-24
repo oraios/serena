@@ -1599,6 +1599,24 @@ class SolidLanguageServer(ABC):
             return None
         return ls_types.Hover(**response)  # type: ignore
 
+    def _get_symbol_metadata_info(
+        self,
+        symbol: ls_types.UnifiedSymbolInformation,
+        parent: ls_types.UnifiedSymbolInformation | None,
+        relative_file_path: str,
+    ) -> str | None:
+        """Return a synthetic info string built from symbol metadata when hover is unavailable.
+
+        Returns None by default. Override in language server subclasses to provide
+        language-specific fallback info (e.g., when the LSP does not implement hover).
+
+        :param symbol: the full symbol dict from the LSP (name, kind, range, detail, etc.)
+        :param parent: the parent symbol dict, or None for top-level symbols
+        :param relative_file_path: the file path relative to the repository root
+        :return: a short info string describing the symbol, or None
+        """
+        return None
+
     def request_signature_help(self, relative_file_path: str, line: int, column: int) -> ls_types.SignatureHelp | None:
         """
         Raise a [textDocument/signatureHelp](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_signatureHelp)
