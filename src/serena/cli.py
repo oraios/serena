@@ -3,8 +3,10 @@ import glob
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
+import time
 from collections.abc import Iterator, Sequence
 from logging import Logger
 from pathlib import Path
@@ -35,6 +37,7 @@ from serena.constants import (
 )
 from serena.mcp import SerenaMCPFactory
 from serena.project import Project
+from serena.service_registry import ServiceEntry, ServiceRegistry
 from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsOverviewTool, SearchForPatternTool, ToolRegistry
 from serena.util.dataclass import get_dataclass_default
 from serena.util.logging import MemoryLogHandler
@@ -1034,6 +1037,291 @@ class PromptCommands(AutoRegisteringGroup):
         click.echo(f"Deleted override file '{prompt_yaml_name}'.")
 
 
+def _setup_service_logging(project_name: str) -> None:
+    """Configure logging for a service process.
+
+    Clears all existing root logger handlers and adds a single FileHandler
+    writing to ``~/.serena/logs/service-<project>-<datetime>.log``.
+    """
+    root = Logger.root
+    for handler in root.handlers[:]:
+        root.removeHandler(handler)
+    log_path = SerenaPaths().get_next_log_file_path(f"service-{project_name}")
+    formatter = logging.Formatter(SERENA_LOG_FORMAT)
+    file_handler = logging.FileHandler(log_path, mode="w")
+    file_handler.formatter = formatter
+    root.setLevel(logging.INFO)
+    root.addHandler(file_handler)
+    log.info("Service logging to %s", log_path)
+
+
+def _run_mcp_server(
+    project: str | None,
+    context: str,
+    modes: Sequence[str],
+    language_backend: str | None,
+    transport: Literal["stdio", "sse", "streamable-http"],
+    host: str,
+    port: int,
+) -> None:
+    """Create a SerenaMCPFactory and run the MCP server.
+
+    This is the shared server startup logic used by both ``start-mcp-server``
+    and ``service start``.
+    """
+    memory_log_handler = MemoryLogHandler()
+    Logger.root.addHandler(memory_log_handler)
+    factory = SerenaMCPFactory(context=context, project=project, memory_log_handler=memory_log_handler)
+    server = factory.create_mcp_server(
+        host=host,
+        port=port,
+        modes=modes,
+        language_backend=LanguageBackend.from_str(language_backend) if language_backend else None,
+    )
+    server.run(transport=transport)
+
+
+def _stop_service(registry: ServiceRegistry, name: str, pid: int) -> None:
+    """Send SIGTERM, wait up to 5 s, then SIGKILL if the process is still alive."""
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        click.echo(f"  {name}: process {pid} already gone.")
+        registry.unregister(name)
+        return
+
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.2)
+    else:
+        # Still alive after 5 s — force kill.
+        try:
+            os.kill(pid, signal.SIGKILL)
+            click.echo(f"  {name}: sent SIGKILL to {pid}")
+        except ProcessLookupError:
+            pass
+
+    registry.unregister(name)
+    click.echo(f"  {name}: stopped (was pid {pid})")
+
+
+class ServiceCommands(AutoRegisteringGroup):
+    """Group for ``serena service`` subcommands (start / stop / status / restart)."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            name="service",
+            help="Manage per-project Serena HTTP services. Run `service <command> --help` for details.",
+        )
+
+    @staticmethod
+    @click.command("start", help="Start a Serena HTTP service for a project.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
+    @click.argument("project", type=PROJECT_TYPE)
+    @click.option("--port", type=int, default=None, help="Port to listen on (auto-allocated from 24100-24199 if omitted).")
+    @click.option(
+        "--context", type=str, default=DEFAULT_CONTEXT, show_default=True, help="Built-in context name or path to custom context YAML."
+    )
+    @click.option(
+        "--mode",
+        "modes",
+        type=str,
+        multiple=True,
+        default=(),
+        show_default=False,
+        help=_MODES_EXPLANATION,
+    )
+    @click.option(
+        "--language-backend",
+        type=click.Choice([lb.value for lb in LanguageBackend]),
+        default=None,
+        help="Override the configured language backend.",
+    )
+    @click.option("--foreground", is_flag=True, default=False, help="Run in the foreground instead of daemonising.")
+    def start(
+        project: str,
+        port: int | None,
+        context: str,
+        modes: Sequence[str],
+        language_backend: str | None,
+        foreground: bool,
+    ) -> None:
+        registry = ServiceRegistry()
+        project_path = str(Path(project).resolve())
+        service_name = Path(project_path).name
+
+        # Check if already running
+        existing = registry.get_service(service_name)
+        if existing is not None:
+            try:
+                os.kill(existing.pid, 0)
+                click.echo(f"Service '{service_name}' is already running (pid {existing.pid}, port {existing.port}).")
+                raise SystemExit(1)
+            except ProcessLookupError:
+                # Stale entry — clean it up
+                registry.unregister(service_name)
+
+        # Allocate port if not given
+        if port is None:
+            port = registry.allocate_port()
+
+        transport: Literal["stdio", "sse", "streamable-http"] = "streamable-http"
+        host = "127.0.0.1"
+
+        if foreground:
+            entry = ServiceEntry(
+                project_path=project_path,
+                port=port,
+                pid=os.getpid(),
+                transport=transport,
+                language_backend=language_backend or "LSP",
+            )
+            registry.register(service_name, entry)
+            _setup_service_logging(service_name)
+            click.echo(f"Starting service '{service_name}' on {host}:{port} (foreground, pid {os.getpid()})")
+            try:
+                _run_mcp_server(
+                    project=project_path,
+                    context=context,
+                    modes=modes,
+                    language_backend=language_backend,
+                    transport=transport,
+                    host=host,
+                    port=port,
+                )
+            finally:
+                registry.unregister(service_name)
+        else:
+            child_pid = os.fork()
+            if child_pid == 0:
+                # --- child process ---
+                # Detach from controlling terminal
+                os.setsid()
+                _setup_service_logging(service_name)
+                try:
+                    _run_mcp_server(
+                        project=project_path,
+                        context=context,
+                        modes=modes,
+                        language_backend=language_backend,
+                        transport=transport,
+                        host=host,
+                        port=port,
+                    )
+                finally:
+                    registry.unregister(service_name)
+                    os._exit(0)
+            else:
+                # --- parent process ---
+                entry = ServiceEntry(
+                    project_path=project_path,
+                    port=port,
+                    pid=child_pid,
+                    transport=transport,
+                    language_backend=language_backend or "LSP",
+                )
+                registry.register(service_name, entry)
+                click.echo(f"Started service '{service_name}' on {host}:{port} (pid {child_pid})")
+
+    @staticmethod
+    @click.command("stop", help="Stop a running Serena service.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
+    @click.argument("project", type=PROJECT_TYPE, required=False, default=None)
+    @click.option("--all", "stop_all", is_flag=True, default=False, help="Stop all running services.")
+    def stop(project: str | None, stop_all: bool) -> None:
+        if not project and not stop_all:
+            raise click.UsageError("Provide a project name/path or use --all.")
+
+        registry = ServiceRegistry()
+
+        if stop_all:
+            services = registry.list_services(clean_stale=False)
+            if not services:
+                click.echo("No running services.")
+                return
+            for name, entry in services.items():
+                _stop_service(registry, name, entry.pid)
+        else:
+            service_name = Path(str(Path(project).resolve())).name if project else ""
+            found = registry.get_service(service_name)
+            if found is None:
+                click.echo(f"No service registered for '{service_name}'.")
+                raise SystemExit(1)
+            _stop_service(registry, service_name, found.pid)
+
+    @staticmethod
+    @click.command("status", help="Show running Serena services.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
+    def status() -> None:
+        registry = ServiceRegistry()
+        services = registry.list_services(clean_stale=True)
+        if not services:
+            click.echo("No running services.")
+            return
+        # Table header
+        header = f"{'PROJECT':<25} {'PORT':<8} {'PID':<10} {'BACKEND':<12} {'STARTED'}"
+        click.echo(header)
+        click.echo("-" * len(header))
+        for name, entry in services.items():
+            started = entry.started_at[:19] if entry.started_at else "?"
+            click.echo(f"{name:<25} {entry.port:<8} {entry.pid:<10} {entry.language_backend:<12} {started}")
+
+    @staticmethod
+    @click.command("restart", help="Restart a Serena service.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
+    @click.argument("project", type=PROJECT_TYPE)
+    @click.option("--port", type=int, default=None, help="Port to listen on (reuses previous port if omitted).")
+    @click.option(
+        "--context", type=str, default=DEFAULT_CONTEXT, show_default=True, help="Built-in context name or path to custom context YAML."
+    )
+    @click.option(
+        "--mode",
+        "modes",
+        type=str,
+        multiple=True,
+        default=(),
+        show_default=False,
+        help=_MODES_EXPLANATION,
+    )
+    @click.option(
+        "--language-backend",
+        type=click.Choice([lb.value for lb in LanguageBackend]),
+        default=None,
+        help="Override the configured language backend.",
+    )
+    @click.option("--foreground", is_flag=True, default=False, help="Run in the foreground instead of daemonising.")
+    def restart(
+        project: str,
+        port: int | None,
+        context: str,
+        modes: Sequence[str],
+        language_backend: str | None,
+        foreground: bool,
+    ) -> None:
+        registry = ServiceRegistry()
+        project_path = str(Path(project).resolve())
+        service_name = Path(project_path).name
+
+        existing = registry.get_service(service_name)
+        if existing is not None:
+            # Reuse previous port if caller didn't specify one
+            if port is None:
+                port = existing.port
+            _stop_service(registry, service_name, existing.pid)
+
+        # Invoke start through Click's context so options are forwarded
+        ctx = click.get_current_context()
+        ctx.invoke(
+            ServiceCommands.start,
+            project=project,
+            port=port,
+            context=context,
+            modes=modes,
+            language_backend=language_backend,
+            foreground=foreground,
+        )
+
+
 # Expose groups so we can reference them in pyproject.toml
 mode = ModeCommands()
 context = ContextCommands()
@@ -1041,13 +1329,14 @@ project = ProjectCommands()
 config = SerenaConfigCommands()
 tools = ToolCommands()
 prompts = PromptCommands()
+service = ServiceCommands()
 
 # Expose toplevel commands for the same reason
 top_level = TopLevelCommands()
 start_mcp_server = top_level.start_mcp_server
 
 # needed for the help script to work - register all subcommands to the top-level group
-for subgroup in (mode, context, project, config, tools, prompts):
+for subgroup in (mode, context, project, config, tools, prompts, service):
     top_level.add_command(subgroup)
 
 
