@@ -326,6 +326,7 @@ markers = [
   "toml: language server running for TOML",
   "matlab: language server running for MATLAB (requires MATLAB R2021b+)",
   "systemverilog: language server running for SystemVerilog (uses verible-verilog-ls)",
+  "service: tests that start actual Serena HTTP services (deselect with '-m \"not service\"')",
 ]
 
 [tool.codespell]

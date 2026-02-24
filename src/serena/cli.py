@@ -190,7 +190,7 @@ class TopLevelCommands(AutoRegisteringGroup):
     @click.option(
         "--host",
         type=str,
-        default="0.0.0.0",
+        default="127.0.0.1",
         show_default=True,
         help="Listen address for the MCP server (when using corresponding transport).",
     )
