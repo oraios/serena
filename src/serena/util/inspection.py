@@ -1,3 +1,4 @@
+import inspect
 import logging
 import os
 from collections.abc import Generator
@@ -11,12 +12,21 @@ T = TypeVar("T")
 log = logging.getLogger(__name__)
 
 
-def iter_subclasses(cls: type[T], recursive: bool = True) -> Generator[type[T], None, None]:
-    """Iterate over all subclasses of a class. If recursive is True, also iterate over all subclasses of all subclasses."""
+def iter_subclasses(cls: type[T], recursive: bool = True, include_abstract: bool = False) -> Generator[type[T], None, None]:
+    """Iterate over all subclasses of a class.
+
+    :param cls: The class whose subclasses to iterate over.
+    :param recursive: If True, also iterate over all subclasses of all subclasses.
+    :param include_abstract: If True, include abstract classes in the results. By default, abstract classes are skipped.
+    """
     for subclass in cls.__subclasses__():
+        if not include_abstract and inspect.isabstract(subclass):
+            if recursive:
+                yield from iter_subclasses(subclass, recursive, include_abstract)
+            continue
         yield subclass
         if recursive:
-            yield from iter_subclasses(subclass, recursive)
+            yield from iter_subclasses(subclass, recursive, include_abstract)
 
 
 def determine_programming_language_composition(repo_path: str) -> dict[Language, float]:

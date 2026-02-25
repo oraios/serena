@@ -1,18 +1,25 @@
+from abc import ABC
 from typing import Literal
 
 from serena.project import MemoriesManager
 from serena.tools import Tool, ToolMarkerCanEdit
 
-GLOBAL_TOPIC = MemoriesManager.GLOBAL_TOPIC
+
+class _MemoryTool(Tool, ABC):
+    GLOBAL_TOPIC = MemoriesManager.GLOBAL_TOPIC
+
+    @staticmethod
+    def _is_global_memory(memory_name: str) -> bool:
+        return MemoriesManager.is_global_memory(memory_name)
 
 
-def _check_global_edit_allowed(tool: Tool, memory_name: str) -> None:
-    """Raise ValueError if editing a global memory is not allowed by config."""
-    if memory_name.startswith(GLOBAL_TOPIC + "/") and not tool.agent.serena_config.edit_global_memories:
-        raise ValueError("Editing global memories is disabled (edit_global_memories: false in serena_config.yml).")
+class _MemoryEditingTool(_MemoryTool, ToolMarkerCanEdit, ABC):
+    def _raise_if_global_and_edit_not_allowed(self, memory_name: str) -> None:
+        if not self.agent.edit_global_memories_allowed() and self._is_global_memory(memory_name):
+            raise ValueError("Editing global memories is disabled (edit_global_memories: false in serena_config.yml).")
 
 
-class WriteMemoryTool(Tool, ToolMarkerCanEdit):
+class WriteMemoryTool(_MemoryEditingTool):
     """
     Write some information (utf-8-encoded) about this project that can be useful for future tasks to a memory in md format.
     The memory name should be meaningful.
@@ -22,12 +29,12 @@ class WriteMemoryTool(Tool, ToolMarkerCanEdit):
         """
         Write some information (utf-8-encoded) about this project that can be useful for future tasks to a memory in md format.
         The memory name should be meaningful and can include "/" to organize into topics (e.g., "auth/login/logic").
-        Use the "global/" prefix to write a memory shared across all projects (e.g., "global/my_memory").
+        If explicitly instructed, use the "global/" prefix for writing a memory that is shared across projects
+        (e.g., "global/java/style_guide")
 
         :param max_chars: the maximum number of characters to write. By default, determined by the config,
             change only if instructed to do so.
         """
-        _check_global_edit_allowed(self, memory_name)
         # NOTE: utf-8 encoding is configured in the MemoriesManager
         if max_chars == -1:
             max_chars = self.agent.serena_config.default_max_tool_answer_chars
@@ -39,7 +46,7 @@ class WriteMemoryTool(Tool, ToolMarkerCanEdit):
         return self.memories_manager.save_memory(memory_name, content)
 
 
-class ReadMemoryTool(Tool):
+class ReadMemoryTool(_MemoryTool):
     """
     Read the content of a memory file. This tool should only be used if the information
     is relevant to the current task. You can infer whether the information
@@ -57,20 +64,28 @@ class ReadMemoryTool(Tool):
         return self.memories_manager.load_memory(memory_name)
 
 
-class ListMemoriesTool(Tool):
+class ListMemoriesTool(_MemoryTool):
     """
     List available memories. Any memory can be read using the `read_memory` tool.
     """
 
+    def list_memories(self, topic: str = "") -> list[str]:
+        return self.memories_manager.list_memories(topic)
+
+    def list_project_memories(self) -> list[str]:
+        return [m for m in self.list_memories() if not self._is_global_memory(m)]
+
+    def list_global_memories(self) -> list[str]:
+        return self.list_memories(self.GLOBAL_TOPIC)
+
     def apply(self, topic: str = "") -> str:
         """
         List available memories, optionally filtered by topic.
-        Use topic="global" to list only global (cross-project) memories.
         """
-        return self._to_json(self.memories_manager.list_memories(topic))
+        return self._to_json(self.list_memories(topic))
 
 
-class DeleteMemoryTool(Tool, ToolMarkerCanEdit):
+class DeleteMemoryTool(_MemoryEditingTool):
     """
     Delete a memory file. Should only happen if a user asks for it explicitly,
     for example by saying that the information retrieved from a memory file is no longer correct
@@ -80,13 +95,12 @@ class DeleteMemoryTool(Tool, ToolMarkerCanEdit):
     def apply(self, memory_name: str) -> str:
         """
         Delete a memory, only call if instructed explicitly or permission was granted by the user.
-        Use the "global/" prefix to delete a memory shared across all projects.
         """
-        _check_global_edit_allowed(self, memory_name)
+        self._raise_if_global_and_edit_not_allowed(memory_name)
         return self.memories_manager.delete_memory(memory_name)
 
 
-class RenameMemoryTool(Tool, ToolMarkerCanEdit):
+class RenameMemoryTool(_MemoryEditingTool):
     """
     Renames or moves a memory. Moving between project and global scope is supported
     (e.g., renaming "global/foo" to "bar" moves it from global to project scope).
@@ -95,14 +109,12 @@ class RenameMemoryTool(Tool, ToolMarkerCanEdit):
     def apply(self, old_name: str, new_name: str) -> str:
         """
         Rename or move a memory, use "/" in the name to organize into topics.
-        Use the "global/" prefix for global (cross-project) memories.
+        The "global" topic should only be used if explicitly instructed.
         """
-        _check_global_edit_allowed(self, old_name)
-        _check_global_edit_allowed(self, new_name)
         return self.memories_manager.rename_memory(old_name, new_name)
 
 
-class EditMemoryTool(Tool, ToolMarkerCanEdit):
+class EditMemoryTool(_MemoryEditingTool):
     """
     Replaces content matching a regular expression in a memory.
     """
@@ -113,6 +125,7 @@ class EditMemoryTool(Tool, ToolMarkerCanEdit):
         needle: str,
         repl: str,
         mode: Literal["literal", "regex"],
+        allow_multiple_occurrences: bool = False,
     ) -> str:
         r"""
         Replaces content matching a regular expression in a memory.
@@ -124,6 +137,8 @@ class EditMemoryTool(Tool, ToolMarkerCanEdit):
             with flags DOTALL and MULTILINE enabled).
         :param repl: the replacement string (verbatim).
         :param mode: either "literal" or "regex", specifying how the `needle` parameter is to be interpreted.
+        :param allow_multiple_occurrences: whether to allow matching and replacing multiple occurrences.
+            If false and multiple occurrences are found, an error will be returned.
         """
-        _check_global_edit_allowed(self, memory_name)
-        return self.memories_manager.edit_memory(memory_name, needle, repl, mode)
+        self._raise_if_global_and_edit_not_allowed(memory_name)
+        return self.memories_manager.edit_memory(memory_name, needle, repl, mode, allow_multiple_occurrences)

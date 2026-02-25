@@ -386,6 +386,9 @@ class SerenaAgent:
             if self._gui_log_viewer is not None:
                 self._gui_log_viewer.set_dashboard_url(dashboard_url)
 
+    def edit_global_memories_allowed(self) -> bool:
+        return self.serena_config.edit_global_memories
+
     def get_language_backend(self) -> LanguageBackend:
         return self._language_backend
 

@@ -3,7 +3,7 @@ import logging
 import os
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import pathspec
 from sensai.util.logging import LogTime
@@ -18,7 +18,7 @@ from serena.config.serena_config import (
 from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_NAME
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.util.file_system import GitignoreParser, match_path
-from serena.util.text_utils import MatchedConsecutiveLines, search_files
+from serena.util.text_utils import ContentReplacer, MatchedConsecutiveLines, search_files
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import FileUtils
@@ -31,6 +31,10 @@ log = logging.getLogger(__name__)
 
 class MemoriesManager:
     GLOBAL_TOPIC = "global"
+
+    @classmethod
+    def is_global_memory(cls, memory_name: str) -> bool:
+        return memory_name.startswith(cls.GLOBAL_TOPIC + "/")
 
     def __init__(self, project_root: str, global_memory_dir: Path | None = None):
         self._memory_dir = Path(get_serena_managed_in_project_dir(project_root)) / "memories"
@@ -151,7 +155,7 @@ class MemoriesManager:
         old_path.rename(new_path)
         return f"Memory renamed from {old_name} to {new_name}."
 
-    def edit_memory(self, name: str, needle: str, repl: str, mode: str) -> str:
+    def edit_memory(self, name: str, needle: str, repl: str, mode: Literal["literal", "regex"], allow_multiple_occurrences: bool) -> str:
         """
         Edit a memory by replacing content matching a pattern.
 
@@ -159,29 +163,17 @@ class MemoriesManager:
         :param needle: the string or regex to search for
         :param repl: the replacement string
         :param mode: "literal" or "regex"
+        :param allow_multiple_occurrences:
         """
-        import re
-
         memory_file_path = self.get_memory_file_path(name)
         if not memory_file_path.exists():
             raise FileNotFoundError(f"Memory {name} not found.")
         with open(memory_file_path, encoding=self._encoding) as f:
-            content = f.read()
-
-        if mode == "literal":
-            if needle not in content:
-                raise ValueError(f"The needle string was not found in memory {name}.")
-            new_content = content.replace(needle, repl)
-        elif mode == "regex":
-            pattern = re.compile(needle, re.DOTALL | re.MULTILINE)
-            new_content, count = pattern.subn(repl, content)
-            if count == 0:
-                raise ValueError(f"The regex pattern did not match anything in memory {name}.")
-        else:
-            raise ValueError(f"Invalid mode: {mode}. Must be 'literal' or 'regex'.")
-
+            original_content = f.read()
+        replacer = ContentReplacer(mode=mode, allow_multiple_occurrences=allow_multiple_occurrences)
+        updated_content = replacer.replace(original_content, needle, repl)
         with open(memory_file_path, "w", encoding=self._encoding) as f:
-            f.write(new_content)
+            f.write(updated_content)
         return f"Memory {name} edited successfully."
 
 
