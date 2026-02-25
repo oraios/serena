@@ -5,7 +5,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 from bs4 import BeautifulSoup
 from joblib import Parallel, delayed
@@ -123,7 +123,7 @@ def glob_to_regex(glob_pat: str) -> str:
         if ch == "*":
             regex_parts.append(".*")
         elif ch == "?":
-            regex_parts.append(".")
+            regex_parts.append("..")
         elif ch == "\\":
             i += 1
             if i < len(glob_pat):
@@ -424,3 +424,102 @@ def render_html(html: str) -> str:
     text = text.replace("\xa0", " ")
 
     return text.strip()
+
+
+class ContentReplacer:
+    """
+    This is an LLM-optimised content replacer, which elegantly circumvents escaping and which
+    provides dual modes for maximum flexibility.
+    """
+
+    def __init__(self, mode: Literal["literal", "regex"], allow_multiple_occurrences: bool):
+        """
+
+        :param mode: the mode indicating whether to the needle in replacements corresponds to a regular expression
+            (mode "regex") or to a literal string (mode "literal")
+        :param allow_multiple_occurrences: whether it is allowed that the search expression matches multiple occurrences.
+            If False, an error will be raised if more than one match is found.
+        """
+        self.mode = mode
+        self.allow_multiple_occurrences = allow_multiple_occurrences
+
+    @staticmethod
+    def _create_replacement_function(regex_pattern: str, repl_template: str, regex_flags: int) -> Callable[[re.Match], str]:
+        """
+        Creates a replacement function that validates for ambiguity and handles backreferences.
+
+        :param regex_pattern: The regex pattern being used for matching
+        :param repl_template: The replacement template with $!1, $!2, etc. for backreferences
+        :param regex_flags: The flags to use when searching (e.g., re.DOTALL | re.MULTILINE)
+        :return: A function suitable for use with re.sub() or re.subn()
+        """
+
+        def validate_and_replace(match: re.Match) -> str:
+            matched_text = match.group(0)
+
+            # For multi-line match, check if the same pattern matches again within the already-matched text,
+            # rendering the match ambiguous. Typical pattern in the code:
+            #    <start><other-stuff><start><stuff><end>
+            # When matching
+            #    <start>.*?<end>
+            # this will match the entire span above, while only the suffix may have been intended.
+            # (See test case for a practical example.)
+            # To detect this, we check if the same pattern matches again within the matched text,
+            if "\n" in matched_text and re.search(regex_pattern, matched_text[1:], flags=regex_flags):
+                raise ValueError(
+                    "Match is ambiguous: the search pattern matches multiple overlapping occurrences. "
+                    "Please revise the search pattern to be more specific to avoid ambiguity, "
+                    "e.g. by matching specific context after the match, or try using the literal mode."
+                )
+
+            # Handle backreferences: replace $!1, $!2, etc. with actual matched groups
+            def expand_backreference(m: re.Match) -> str:
+                group_num = int(m.group(1))
+                group_value = match.group(group_num)
+                return group_value if group_value is not None else m.group(0)
+
+            result = re.sub(r"\$!(\d+)", expand_backreference, repl_template)
+            return result
+
+        return validate_and_replace
+
+    def replace(
+        self,
+        content: str,
+        needle: str,
+        repl: str,
+    ) -> str:
+        """
+        Performs the replacement.
+
+        Raises ValueError if no match is found, or if multiple matches are found while allow_multiple_occurrences is False.
+
+        :param content: the content in which to perform the replacement
+        :param needle: the search expression, which is either a literal string or a regular expression, depending on the mode
+        :param repl: the replacement string, which, in regex mode, may contain backreferences in the form of $!1, $!2, etc. to
+            refer to matched groups in the search expression
+        :return: the updated content after performing the replacement
+        """
+        if self.mode == "literal":
+            regex = re.escape(needle)
+        elif self.mode == "regex":
+            regex = needle
+        else:
+            raise ValueError(f"Invalid mode: '{self.mode}', expected 'literal' or 'regex'.")
+
+        regex_flags = re.DOTALL | re.MULTILINE
+
+        # create replacement function with validation and backreference handling
+        repl_fn = self._create_replacement_function(regex, repl, regex_flags=regex_flags)
+
+        # perform replacement
+        updated_content, n = re.subn(regex, repl_fn, content, flags=regex_flags)
+
+        if n == 0:
+            raise ValueError("Error: No matches of search expression found.")
+        if not self.allow_multiple_occurrences and n > 1:
+            raise ValueError(
+                f"Expression matches {n} occurrences. "
+                "Please revise the expression to be more specific or enable allow_multiple_occurrences if this is expected."
+            )
+        return updated_content

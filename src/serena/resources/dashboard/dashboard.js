@@ -52,8 +52,17 @@ function updateThemeAwareImage($img, theme=null) {
     }
 }
 
+/**
+ * Manages banner loading, display, and navigation.
+ *
+ * When automaticRotationEnabled is true, banners rotate on a timer and arrow
+ * buttons are hidden.  When false (the current default), a random initial
+ * banner is shown and the user navigates manually via arrow buttons.
+ */
 class BannerRotation {
     constructor() {
+        this.automaticRotationEnabled = false;
+
         this.platinumIndex = 0;
         this.goldIndex = 0;
         this.platinumTimer = null;
@@ -67,8 +76,18 @@ class BannerRotation {
     init() {
         let self = this;
         this.loadBanners(function() {
-            self.startPlatinumRotation();
-            self.startGoldRotation();
+            self.randomizeInitialBanner('platinum');
+            self.randomizeInitialBanner('gold');
+
+            if (self.automaticRotationEnabled) {
+                self.startPlatinumRotation();
+                self.startGoldRotation();
+                // Hide arrows entirely when rotation is automatic
+                $('.banner-arrow').hide();
+            } else {
+                self.hideArrowsIfSingle();
+                self.bindArrowButtons();
+            }
         });
     }
 
@@ -119,11 +138,52 @@ class BannerRotation {
         }, this.platinumInterval);
     }
 
+    randomizeInitialBanner(type) {
+        const slideClass = type === 'platinum' ? '.platinum-banner-slide' : '.gold-banner-slide';
+        const $slides = $(slideClass);
+        const total = $slides.length;
+
+        if (total === 0) return;
+
+        const randomIndex = Math.floor(Math.random() * total);
+        if (type === 'platinum') {
+            this.platinumIndex = randomIndex;
+        } else {
+            this.goldIndex = randomIndex;
+        }
+        $slides.removeClass('active');
+        $slides.eq(randomIndex).addClass('active');
+    }
+
     startGoldRotation() {
         const self = this;
         this.goldTimer = setInterval(() => {
             self.rotateGold('next');
         }, this.goldInterval);
+    }
+
+    hideArrowsIfSingle() {
+        if ($('.platinum-banner-slide').length <= 1) {
+            $('#platinum-banners .banner-arrow').hide();
+        }
+        if ($('.gold-banner-slide').length <= 1) {
+            $('#gold-banners .banner-arrow').hide();
+        }
+    }
+
+    bindArrowButtons() {
+        let self = this;
+        $('.banner-arrow').on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const target = $(this).data('target');
+            const direction = $(this).hasClass('banner-arrow-right') ? 'next' : 'prev';
+            if (target === 'platinum') {
+                self.rotatePlatinum(direction);
+            } else {
+                self.rotateGold(direction);
+            }
+        });
     }
 
     rotatePlatinum(direction) {
@@ -145,9 +205,11 @@ class BannerRotation {
         // Add active class to new slide
         $slides.eq(this.platinumIndex).addClass('active');
 
-        // Reset timer
-        clearInterval(this.platinumTimer);
-        this.startPlatinumRotation();
+        // Reset timer when in automatic rotation mode
+        if (this.automaticRotationEnabled) {
+            clearInterval(this.platinumTimer);
+            this.startPlatinumRotation();
+        }
     }
 
     rotateGold(direction) {
@@ -169,9 +231,11 @@ class BannerRotation {
         // Add active class to new group
         $groups.eq(this.goldIndex).addClass('active');
 
-        // Reset timer
-        clearInterval(this.goldTimer);
-        this.startGoldRotation();
+        // Reset timer when in automatic rotation mode
+        if (this.automaticRotationEnabled) {
+            clearInterval(this.goldTimer);
+            this.startGoldRotation();
+        }
     }
 }
 

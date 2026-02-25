@@ -20,8 +20,8 @@ import pathspec
 from sensai.util.pickle import getstate, load_pickle
 from sensai.util.string import ToStringMixin
 
-from serena.text_utils import MatchedConsecutiveLines
 from serena.util.file_system import match_path
+from serena.util.text_utils import MatchedConsecutiveLines
 from solidlsp import ls_types
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
@@ -756,6 +756,8 @@ class SolidLanguageServer(ABC):
             be opened in the LS later by calling the `ensure_open_in_ls` method on the returned LSPFileBuffer.
         """
         if file_buffer is not None:
+            expected_uri = pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()
+            assert file_buffer.uri == expected_uri, f"Inconsistency between provided {file_buffer.uri=} and {expected_uri=}"
             if open_in_ls:
                 file_buffer.ensure_open_in_ls()
             yield file_buffer
@@ -1555,7 +1557,9 @@ class SolidLanguageServer(ABC):
         else:
             return self.request_dir_overview(within_relative_path)
 
-    def request_hover(self, relative_file_path: str, line: int, column: int) -> ls_types.Hover | None:
+    def request_hover(
+        self, relative_file_path: str, line: int, column: int, file_buffer: LSPFileBuffer | None = None
+    ) -> ls_types.Hover | None:
         """
         Raise a [textDocument/hover](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_hover) request to the Language Server
         to find the hover information at the given line and column in the given file. Wait for the response and return the result.
@@ -1563,24 +1567,19 @@ class SolidLanguageServer(ABC):
         :param relative_file_path: The relative path of the file that has the hover information
         :param line: The line number of the symbol
         :param column: The column number of the symbol
+        :param file_buffer: The file buffer to use for the request. If not provided, the file will be read from disk.
+            Can be used for optimizing number of file reads in downstream code
         """
-        with self.open_file(relative_file_path):
-            uri = pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()
-            return self._request_hover(uri, line, column)
+        with self._open_file_context(relative_file_path, file_buffer=file_buffer) as fb:
+            return self._request_hover(fb, line, column)
 
-    def _request_hover(self, uri: str, line: int, column: int) -> ls_types.Hover | None:
+    def _request_hover(self, file_buffer: LSPFileBuffer, line: int, column: int) -> ls_types.Hover | None:
         """
-        Internal method that performs the actual hover request.
-        The file must already be open when calling this method.
-        Subclasses can override this to customize hover behavior (e.g., retries).
-
-        :param uri: The URI of the file
-        :param line: The line number of the symbol
-        :param column: The column number of the symbol
+        Performs the actual hover request.
         """
         response = self.server.send.hover(
             {
-                "textDocument": {"uri": uri},
+                "textDocument": {"uri": file_buffer.uri},
                 "position": {
                     "line": line,
                     "character": column,

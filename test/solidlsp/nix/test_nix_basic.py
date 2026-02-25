@@ -116,7 +116,7 @@ class TestNixLanguageServer:
             # Check if we found the inherit (line 67, 0-indexed: 66)
             assert 66 in ref_lines, f"Should find makeGreeting inherit at line 67, found at lines {[l+1 for l in ref_lines]}"
 
-    @pytest.mark.skipif(is_ci, reason="Test is flaky")  # TODO: Re-enable if the hover test becomes more stable (#1039)
+    @pytest.mark.xfail(is_ci, reason="Test is flaky")  # TODO: Re-enable if the hover test becomes more stable (#1040)
     @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
     def test_hover_information(self, language_server: SolidLanguageServer) -> None:
         """Test hover information for symbols."""

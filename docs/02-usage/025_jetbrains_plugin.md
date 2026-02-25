@@ -48,9 +48,30 @@ language_backend: JetBrains
 *Note*: you can also use the button `Edit Global Serena Config` in the Serena MCP dashboard to open the config file in your default editor.
 
 **Per-Instance Configuration**.
-The configuration setting in the global config file can be overridden on a 
-per-instance basis by providing the arguments `--language-backend JetBrains` when 
+The configuration setting in the global config file can be overridden on a
+per-instance basis by providing the arguments `--language-backend JetBrains` when
 launching the Serena MCP server.
+
+(per-project-language-backend)=
+**Per-Project Configuration**.
+You can also set the language backend on a per-project basis in the project's
+`.serena/project.yml` file:
+
+```yaml
+language_backend: JetBrains
+```
+
+If set, this overrides the global `language_backend` setting for the session when the project is
+activated at startup (via the `--project` flag).
+
+:::{important}
+The language backend is determined once at startup and cannot be changed during a running session.
+If a project with a different backend is activated after startup, Serena will return an error.
+
+If you need to work with projects that use different backends, you can either:
+1. Use the `--project` flag to activate the project at startup, which will use its configured backend.
+2. Configure separate MCP server instances (one per backend) in your client.
+:::
 
 **Verifying the Setup**.
 You can verify that Serena is using the JetBrains plugin by either checking the dashboard, where

@@ -46,12 +46,13 @@ After creation, you can adjust the project settings in the generated `.serena/pr
 within the project directory.
 
 The file allows you to configure ...
-  * the set of programming languages for which language servers are spawned (not relevant when using the JetBrains plugin)  
+  * the set of programming languages for which language servers are spawned (not relevant when using the JetBrains plugin)
     Note that you can dynamically add/remove language servers while Serena is running via the [Dashboard](060_dashboard).
+  * the [language backend](per-project-language-backend) to use for this project (overriding the global setting)
   * the encoding used in source files
   * ignore rules
   * write access
-  * an initial prompt that shall be passed to the LLM whenever the project is activated 
+  * an initial prompt that shall be passed to the LLM whenever the project is activated
   * the name by which you want to refer to the project (relevant when telling the LLM to dynamically activate the project)
   * the set of tools and modes to use by default
 

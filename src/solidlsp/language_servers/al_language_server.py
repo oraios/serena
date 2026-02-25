@@ -1055,7 +1055,9 @@ class ALLanguageServer(SolidLanguageServer):
         return document_symbols
 
     @override
-    def request_hover(self, relative_file_path: str, line: int, column: int) -> ls_types.Hover | None:
+    def request_hover(
+        self, relative_file_path: str, line: int, column: int, file_buffer: LSPFileBuffer | None = None
+    ) -> ls_types.Hover | None:
         """
         Override to inject original AL object name (with type and ID) into hover responses.
 
@@ -1065,7 +1067,7 @@ class ALLanguageServer(SolidLanguageServer):
         # Normalize path separators for cross-platform compatibility (backslash → forward slash)
         relative_file_path = self._normalize_path(relative_file_path)
 
-        hover = super().request_hover(relative_file_path, line, column)
+        hover = super().request_hover(relative_file_path, line, column, file_buffer=file_buffer)
 
         if hover is None:
             return None

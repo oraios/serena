@@ -29,7 +29,6 @@ languages:
 - python
 - typescript
 
-
 # whether to use project's .gitignore files to ignore files
 ignore_all_files_in_gitignore: true
 
@@ -93,7 +92,8 @@ included_optional_tools: []
 # (contrary to the memories, which are loaded on demand).
 initial_prompt: ""
 
-
+# the encoding used by text files in the project
+# For a list of possible encodings, see https://docs.python.org/3.11/library/codecs.html#standard-encodings
 encoding: utf-8
 
 
@@ -115,3 +115,9 @@ default_modes:
 # fixed set of tools to use as the base tool set (if non-empty), replacing Serena's default set of tools.
 # This cannot be combined with non-empty excluded_tools or included_optional_tools.
 fixed_tools: []
+
+# time budget (seconds) per tool call for the retrieval of additional symbol information
+# such as docstrings or parameter information.
+# This overrides the corresponding setting in the global configuration; see the documentation there.
+# If null or missing, use the setting from the global configuration.
+symbol_info_budget:

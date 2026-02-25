@@ -11,9 +11,9 @@ if language_tests_enabled(Language.PHP_PHPACTOR):
     _php_servers.append(Language.PHP_PHPACTOR)
 
 
-@pytest.mark.skipif(
+@pytest.mark.xfail(
     is_ci and is_windows, reason="Tests are flaky"
-)  # TODO: Re-enable once we have a solution for running Phpactor tests on Windows CI #1039
+)  # TODO: Re-enable once we have a solution for running Phpactor tests on Windows CI #1040
 @pytest.mark.php
 class TestPhpLanguageServers:
     @pytest.mark.parametrize("language_server", _php_servers, indirect=True)

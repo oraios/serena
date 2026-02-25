@@ -11,6 +11,7 @@ from sensai.util.string import ToStringMixin
 
 import serena.jetbrains.jetbrains_types as jb
 from solidlsp import SolidLanguageServer
+from solidlsp.ls import LSPFileBuffer
 from solidlsp.ls import ReferenceInSymbol as LSPReferenceInSymbol
 from solidlsp.ls_types import Position, SymbolKind, UnifiedSymbolInformation
 
@@ -549,14 +550,14 @@ class LanguageServerSymbolRetriever:
         self._ls_manager: LanguageServerManager = ls_manager
         self.agent = agent
 
-    def _request_info(self, relative_file_path: str, line: int, column: int) -> str | None:
+    def _request_info(self, relative_file_path: str, line: int, column: int, file_buffer: LSPFileBuffer | None = None) -> str | None:
         """Retrieves information (in a sanitized format) about the symbol at the desired location,
         typically containing the docstring and signature.
 
         Returns None if no information is available.
         """
         lang_server = self.get_language_server(relative_file_path)
-        hover_info = lang_server.request_hover(relative_file_path=relative_file_path, line=line, column=column)
+        hover_info = lang_server.request_hover(relative_file_path=relative_file_path, line=line, column=column, file_buffer=file_buffer)
         if hover_info is None:
             return None
 
@@ -651,26 +652,28 @@ class LanguageServerSymbolRetriever:
             t0_file = perf_counter() if debug_enabled else 0.0
             file_hover_lookups = 0
 
-            for sym in file_symbols:
-                # Check budget before starting a new hover request
-                # symbol_info_budget_seconds=0 disables the budget mechanism (the first inequality)
-                if 0 < symbol_info_budget_seconds <= hover_spent_seconds:
-                    skipped_due_to_budget += 1
-                    info = None
-                    # log once when budget exceeded
-                    if skipped_due_to_budget == 1:
-                        log.debug("Skipping further hover operations due to budget exceeded")
-                else:
-                    line = sym.line
-                    column = sym.column
-                    assert line is not None and column is not None  # for mypy, we filtered invalid symbols above
-                    t0_hover = perf_counter()
-                    info = self._request_info(file_path, line, column)
-                    hover_spent_seconds += perf_counter() - t0_hover
-                    file_hover_lookups += 1
-                    total_hover_lookups += 1
+            ls = self.get_language_server(file_path)
+            with ls.open_file(file_path) as file_buffer:
+                for sym in file_symbols:
+                    # Check budget before starting a new hover request
+                    # symbol_info_budget_seconds=0 disables the budget mechanism (the first inequality)
+                    if 0 < symbol_info_budget_seconds <= hover_spent_seconds:
+                        skipped_due_to_budget += 1
+                        info = None
+                        # log once when budget exceeded
+                        if skipped_due_to_budget == 1:
+                            log.debug("Skipping further hover operations due to budget exceeded")
+                    else:
+                        line = sym.line
+                        column = sym.column
+                        assert line is not None and column is not None  # for mypy, we filtered invalid symbols above
+                        t0_hover = perf_counter()
+                        info = self._request_info(file_path, line, column, file_buffer=file_buffer)
+                        hover_spent_seconds += perf_counter() - t0_hover
+                        file_hover_lookups += 1
+                        total_hover_lookups += 1
 
-                info_by_symbol[sym] = info
+                    info_by_symbol[sym] = info
 
             if debug_enabled:
                 file_elapsed_ms = (perf_counter() - t0_file) * 1000

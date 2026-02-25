@@ -197,6 +197,12 @@ class ScalaLanguageServer(SolidLanguageServer):
         """
         assert shutil.which("java") is not None, "JDK is not installed or not in PATH."
 
+        # Check if metals is available globally in PATH
+        global_metals = shutil.which("metals")
+        if global_metals:
+            log.info(f"Found metals in PATH: {global_metals}")
+            return [global_metals]
+
         # Get settings using the shared helper function
         settings = _get_scala_settings(solidlsp_settings)
         metals_version: str = settings["metals_version"]  # type: ignore[assignment]
@@ -205,11 +211,12 @@ class ScalaLanguageServer(SolidLanguageServer):
         metals_home = os.path.join(cls.ls_resources_dir(solidlsp_settings), "metals-lsp")
         os.makedirs(metals_home, exist_ok=True)
         metals_executable = os.path.join(metals_home, metals_version, "metals")
-        coursier_command_path = shutil.which("coursier")
-        cs_command_path = shutil.which("cs")
-        assert cs_command_path is not None or coursier_command_path is not None, "coursier is not installed or not in PATH."
 
         if not os.path.exists(metals_executable):
+            coursier_command_path = shutil.which("coursier")
+            cs_command_path = shutil.which("cs")
+            assert cs_command_path is not None or coursier_command_path is not None, "coursier is not installed or not in PATH."
+
             if not cs_command_path:
                 assert coursier_command_path is not None
                 log.info("'cs' command not found. Trying to install it using 'coursier'.")

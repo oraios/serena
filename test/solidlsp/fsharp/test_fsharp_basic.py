@@ -89,7 +89,7 @@ class TestFSharpLanguageServer:
         for expected in expected_symbols:
             assert expected in symbol_names, f"{expected} not found in Person.fs symbols"
 
-    @pytest.mark.skipif(is_ci, reason="Test is flaky")  # TODO: Re-enable if the LS can be made more reliable #1039
+    @pytest.mark.xfail(is_ci, reason="Test is flaky")  # TODO: Re-enable if the LS can be made more reliable #1040
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
     def test_find_referencing_symbols_across_files(self, language_server: SolidLanguageServer) -> None:
         """Test finding references to Calculator functions across files."""
@@ -125,7 +125,7 @@ class TestFSharpLanguageServer:
         # We should get at least some definitions
         assert len(definitions) >= 0, "Should get definitions (even if empty for complex cases)"
 
-    @pytest.mark.skipif(is_ci, reason="Test is flaky")  # TODO: Re-enable if the LS can be made more reliable #1039
+    @pytest.mark.xfail(is_ci, reason="Test is flaky")  # TODO: Re-enable if the LS can be made more reliable #1040
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
     def test_hover_information(self, language_server: SolidLanguageServer) -> None:
         """Test hover information functionality."""

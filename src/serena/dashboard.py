@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sensai.util import logging
 
 from serena.analytics import ToolUsageStats
-from serena.config.serena_config import LanguageBackend, SerenaConfig, SerenaPaths
+from serena.config.serena_config import SerenaConfig, SerenaPaths
 from serena.constants import SERENA_DASHBOARD_DIR
 from serena.task_executor import TaskExecutor
 from serena.util.logging import MemoryLogHandler
@@ -507,7 +507,7 @@ class SerenaDashboardAPI:
             available_modes=available_modes,
             available_contexts=available_contexts,
             available_memories=available_memories,
-            jetbrains_mode=self._agent.serena_config.language_backend == LanguageBackend.JETBRAINS,
+            jetbrains_mode=not self._agent.is_using_language_server(),
             languages=languages,
             encoding=encoding,
             current_client=Tool.get_last_tool_call_client_str(),

@@ -49,8 +49,9 @@ class EclipseJDTLS(SolidLanguageServer):
     You can configure the following options in ls_specific_settings (in serena_config.yml):
         - maven_user_settings: Path to Maven settings.xml file (default: ~/.m2/settings.xml)
         - gradle_user_home: Path to Gradle user home directory (default: ~/.gradle)
-
-    Note: Gradle wrapper is disabled by default. Projects will use the bundled Gradle distribution.
+        - gradle_wrapper_enabled: Whether to use the project's Gradle wrapper (default: false)
+        - gradle_java_home: Path to JDK for Gradle (default: null, uses bundled JRE)
+        - use_system_java_home: Whether to use the system's JAVA_HOME for JDTLS itself (default: false)
 
     Example configuration in ~/.serena/serena_config.yml:
     ```yaml
@@ -60,6 +61,9 @@ class EclipseJDTLS(SolidLanguageServer):
         # maven_user_settings: 'C:\\Users\\YourName\\.m2\\settings.xml'  # Windows (use single quotes!)
         gradle_user_home: "/home/user/.gradle"  # Unix/Linux/Mac
         # gradle_user_home: 'C:\\Users\\YourName\\.gradle'  # Windows (use single quotes!)
+        gradle_wrapper_enabled: true  # set to true for projects with custom plugins/repositories
+        gradle_java_home: "/path/to/jdk"  # set to override Gradle's JDK
+        use_system_java_home: true  # set to true to use system JAVA_HOME for JDTLS
     ```
     """
 
@@ -346,7 +350,17 @@ class EclipseJDTLS(SolidLanguageServer):
             return cmd
 
         def create_launch_command_env(self) -> dict[str, str]:
-            return {"syntaxserver": "false", "JAVA_HOME": self.runtime_dependency_paths.jre_home_path}
+            use_system_java_home = self._custom_settings.get("use_system_java_home", False)
+            if use_system_java_home:
+                system_java_home = os.environ.get("JAVA_HOME")
+                if system_java_home:
+                    log.info(f"Using system JAVA_HOME for JDTLS: {system_java_home}")
+                    return {"syntaxserver": "false", "JAVA_HOME": system_java_home}
+                else:
+                    log.warning("use_system_java_home is set but JAVA_HOME is not set in environment, falling back to bundled JRE")
+            java_home = self.runtime_dependency_paths.jre_home_path
+            log.info(f"Using bundled JRE for JDTLS: {java_home}")
+            return {"syntaxserver": "false", "JAVA_HOME": java_home}
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
@@ -403,6 +417,27 @@ class EclipseJDTLS(SolidLanguageServer):
         else:
             gradle_user_home = None
             log.info(f"Gradle user home not found at default location ({default_gradle_home}), will use JDTLS defaults")
+
+        # Gradle wrapper: default to False to preserve existing behaviour
+        gradle_wrapper_enabled = self._custom_settings.get("gradle_wrapper_enabled", False)
+        log.info(
+            f"Gradle wrapper {'enabled' if gradle_wrapper_enabled else 'disabled'} (configurable via ls_specific_settings -> java -> gradle_wrapper_enabled)"
+        )
+
+        # Gradle Java home: default to None, which means the bundled JRE is used
+        gradle_java_home = self._custom_settings.get("gradle_java_home")
+        if gradle_java_home is not None:
+            if not os.path.exists(gradle_java_home):
+                error_msg = (
+                    f"Gradle Java home not found: {gradle_java_home}. "
+                    f"Fix: update path in ~/.serena/serena_config.yml (ls_specific_settings -> java -> gradle_java_home), "
+                    f"or remove the setting to use the bundled JRE"
+                )
+                log.error(error_msg)
+                raise FileNotFoundError(error_msg)
+            log.info(f"Using Gradle Java home from custom location: {gradle_java_home}")
+        else:
+            log.info(f"Using bundled JRE for Gradle: {self.runtime_dependency_paths.jre_path}")
 
         initialize_params = {
             "locale": "en",
@@ -609,10 +644,9 @@ class EclipseJDTLS(SolidLanguageServer):
                             },
                             "gradle": {
                                 "enabled": True,
-                                "wrapper": {"enabled": False},
+                                "wrapper": {"enabled": gradle_wrapper_enabled},
                                 "version": None,
                                 "home": "abs(static/gradle-7.3.3)",
-                                "java": {"home": "abs(static/launch_jres/21.0.7-linux-x86_64)"},
                                 "offline": {"enabled": False},
                                 "arguments": None,
                                 "jvmArguments": None,
@@ -719,7 +753,7 @@ class EclipseJDTLS(SolidLanguageServer):
 
         gradle_settings = initialize_params["initializationOptions"]["settings"]["java"]["import"]["gradle"]  # type: ignore
         gradle_settings["home"] = self.runtime_dependency_paths.gradle_path
-        gradle_settings["java"]["home"] = self.runtime_dependency_paths.jre_path
+        gradle_settings["java"] = {"home": gradle_java_home if gradle_java_home is not None else self.runtime_dependency_paths.jre_path}
         return cast(InitializeParams, initialize_params)
 
     def _start_server(self) -> None:
@@ -815,7 +849,7 @@ class EclipseJDTLS(SolidLanguageServer):
         log.info("Startup complete")
 
     @override
-    def _request_hover(self, uri: str, line: int, column: int) -> ls_types.Hover | None:
+    def _request_hover(self, file_buffer: LSPFileBuffer, line: int, column: int) -> ls_types.Hover | None:
         # Eclipse JDTLS lazily loads javadocs on first hover request, then caches them.
         # This means the first request often returns incomplete info (just the signature),
         # while subsequent requests return the full javadoc.
@@ -845,12 +879,12 @@ class EclipseJDTLS(SolidLanguageServer):
                 return (1, len(contents))
 
         max_retries = 5
-        best_result = super()._request_hover(uri, line, column)
+        best_result = super()._request_hover(file_buffer, line, column)
         best_score = content_score(best_result)
 
         for _ in range(max_retries):
             sleep(0.05)
-            new_result = super()._request_hover(uri, line, column)
+            new_result = super()._request_hover(file_buffer, line, column)
             new_score = content_score(new_result)
             if new_score > best_score:
                 best_result = new_result

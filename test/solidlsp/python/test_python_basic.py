@@ -10,7 +10,7 @@ import os
 import pytest
 
 from serena.project import Project
-from serena.text_utils import LineType
+from serena.util.text_utils import LineType
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 

@@ -293,7 +293,7 @@ class TestHoverBudget:
         # Track _request_info calls
         call_count = 0
 
-        def counting_request_info(file_path, line, column):
+        def counting_request_info(file_path, line, column, **kwargs):
             nonlocal call_count
             call_count += 1
             return f"info:{line}:{column}"
@@ -324,7 +324,7 @@ class TestHoverBudget:
         call_count = 0
         simulated_time = [0.0]
 
-        def slow_request_info(file_path, line, column):
+        def slow_request_info(file_path, line, column, **kwargs):
             nonlocal call_count
             call_count += 1
             # Simulate each hover taking 0.05s
@@ -369,7 +369,7 @@ class TestHoverBudget:
         # Track _request_info calls
         call_count = 0
 
-        def counting_request_info(file_path, line, column):
+        def counting_request_info(file_path, line, column, **kwargs):
             nonlocal call_count
             call_count += 1
             return f"info:{line}:{column}"
@@ -402,7 +402,7 @@ class TestHoverBudget:
         call_count = 0
         simulated_time = [0.0]
 
-        def slow_request_info(file_path, line, column):
+        def slow_request_info(file_path, line, column, **kwargs):
             nonlocal call_count
             call_count += 1
             simulated_time[0] += 0.03
@@ -443,7 +443,7 @@ class TestHoverBudget:
         # Track _request_info calls
         call_count = 0
 
-        def counting_request_info(file_path, line, column):
+        def counting_request_info(file_path, line, column, **kwargs):
             nonlocal call_count
             call_count += 1
             return f"info:{line}:{column}"
@@ -468,7 +468,7 @@ class TestHoverBudget:
         # Track _request_info calls
         call_count = 0
 
-        def counting_request_info(file_path, line, column):
+        def counting_request_info(file_path, line, column, **kwargs):
             nonlocal call_count
             call_count += 1
             return f"info:{line}:{column}"

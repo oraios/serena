@@ -17,7 +17,13 @@ from interprompt.jinja_template import JinjaTemplate
 from serena import serena_version
 from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
-from serena.config.serena_config import LanguageBackend, ModeSelectionDefinition, SerenaConfig, ToolInclusionDefinition
+from serena.config.serena_config import (
+    LanguageBackend,
+    ModeSelectionDefinition,
+    RegisteredProject,
+    SerenaConfig,
+    ToolInclusionDefinition,
+)
 from serena.dashboard import SerenaDashboardAPI
 from serena.ls_manager import LanguageServerManager
 from serena.project import Project
@@ -240,6 +246,11 @@ class SerenaAgent:
         # project-specific instances, which will be initialized upon project activation
         self._active_project: Project | None = None
 
+        # determine registered project to be activated (if any)
+        registered_project_to_activate: RegisteredProject | None = (
+            self.serena_config.get_registered_project(project, autoregister=True) if project is not None else None
+        )
+
         # dashboard URL (set when dashboard is started)
         self._dashboard_url: str | None = None
 
@@ -300,6 +311,16 @@ class SerenaAgent:
 
         self._check_shell_settings()
 
+        # determine the effective language backend for this session.
+        # If a startup project is provided and has a per-project override, use it; otherwise use the global config.
+        # Since we don't want to change the toolset after startup, the language backend cannot be changed within a running Serena session
+        self._language_backend = self.serena_config.language_backend
+        if registered_project_to_activate is not None and registered_project_to_activate.project_config.language_backend is not None:
+            self._language_backend = registered_project_to_activate.project_config.language_backend
+            log.info(f"Using language backend as configured in project.yml: {self._language_backend.name}")
+        else:
+            log.info(f"Using language backend from global configuration: {self._language_backend.name}")
+
         # determine the base toolset defining the set of exposed tools (which e.g. the MCP shall see),
         # determined by the
         #   * dashboard availability/opening on launch
@@ -317,8 +338,8 @@ class SerenaAgent:
         tool_inclusion_definitions.append(self.serena_config)
         tool_inclusion_definitions.append(self._context)
         if self._context.single_project:
-            tool_inclusion_definitions.extend(self._single_project_context_tool_inclusion_definitions(project))
-        if self.serena_config.language_backend == LanguageBackend.JETBRAINS:
+            tool_inclusion_definitions.extend(self._single_project_context_tool_inclusion_definitions(registered_project_to_activate))
+        if self._language_backend == LanguageBackend.JETBRAINS:
             tool_inclusion_definitions.append(SerenaAgentMode.from_name_internal("jetbrains"))
         self._base_tool_set = ToolSet.default().apply(*tool_inclusion_definitions)
         self._exposed_tools = AvailableTools([t for t in self._all_tools.values() if self._base_tool_set.includes_name(t.get_name())])
@@ -364,6 +385,9 @@ class SerenaAgent:
             # inform the GUI window (if any)
             if self._gui_log_viewer is not None:
                 self._gui_log_viewer.set_dashboard_url(dashboard_url)
+
+    def get_language_backend(self) -> LanguageBackend:
+        return self._language_backend
 
     def get_current_tasks(self) -> list[TaskExecutor.TaskInfo]:
         """
@@ -413,7 +437,9 @@ class SerenaAgent:
                 os.environ["COMSPEC"] = ""  # force use of default shell
                 log.info("Adjusting COMSPEC environment variable to use the default shell instead of '%s'", comspec)
 
-    def _single_project_context_tool_inclusion_definitions(self, project_root_or_name: str | None) -> list[ToolInclusionDefinition]:
+    def _single_project_context_tool_inclusion_definitions(
+        self, registered_project: RegisteredProject | None
+    ) -> list[ToolInclusionDefinition]:
         """
         When in a single-project context, the agent is assumed to work on a single project, and we thus
         want to apply that project's tool exclusions/inclusions from the get-go, limiting the set
@@ -421,25 +447,24 @@ class SerenaAgent:
         Furthermore, we disable tools that are only relevant for project activation.
         So if the project exists, we apply all the aforementioned exclusions.
 
-        :param project_root_or_name: the project root path or project name
-        :return:
+        NOTE: This uses an existing registered project (instead of project auto-generation),
+              because the result must be returned instantaneously
+              (project generation could take too much time), so as not to delay MCP server startup
+              and provide responses to the client immediately.
+
+        :param registered_project: the registered project or None
+        :return: the list of tool inclusion definitions to apply for a single-project context, based on the given registered project (if any)
         """
         tool_inclusion_definitions = []
-        if project_root_or_name is not None:
-            # Note: Auto-generation is disabled, because the result must be returned instantaneously
-            #   (project generation could take too much time), so as not to delay MCP server startup
-            #   and provide responses to the client immediately.
-            project = self.load_project_from_path_or_name(project_root_or_name, autogenerate=False)
-            if project is not None:
-                log.info(
-                    "Applying tool inclusion/exclusion definitions for single-project context based on project '%s'", project.project_name
-                )
-                tool_inclusion_definitions.append(
-                    ToolInclusionDefinition(
-                        excluded_tools=[ActivateProjectTool.get_name_from_cls(), GetCurrentConfigTool.get_name_from_cls()]
-                    )
-                )
-                tool_inclusion_definitions.append(project.project_config)
+        if registered_project is not None:
+            log.info(
+                "Applying tool inclusion/exclusion definitions for single-project context based on project '%s'",
+                registered_project.project_name,
+            )
+            tool_inclusion_definitions.append(
+                ToolInclusionDefinition(excluded_tools=[ActivateProjectTool.get_name_from_cls(), GetCurrentConfigTool.get_name_from_cls()])
+            )
+            tool_inclusion_definitions.append(registered_project.project_config)
         return tool_inclusion_definitions
 
     def record_tool_usage(self, input_kwargs: dict, tool_result: str | dict, tool: Tool) -> None:
@@ -615,10 +640,21 @@ class SerenaAgent:
         """
         :return: whether this agent uses language server-based code analysis
         """
-        return self.serena_config.language_backend == LanguageBackend.LSP
+        return self._language_backend == LanguageBackend.LSP
 
     def _activate_project(self, project: Project, update_modes_and_tools: bool = True) -> None:
         log.info(f"Activating {project.project_name} at {project.project_root}")
+
+        # Check if the project requires a different language backend than the one initialized at startup
+        project_backend = project.project_config.language_backend
+        if project_backend is not None and project_backend != self._language_backend:
+            raise ValueError(
+                f"Cannot activate project '{project.project_name}': it requires the {project_backend.value} backend, "
+                f"but this session was initialized with {self._language_backend.value}. "
+                f"Workarounds: (1) Use project activation at startup via the --project flag, "
+                f"(2) Configure one MCP server per backend in your client."
+            )
+
         self._active_project = project
 
         if update_modes_and_tools:
@@ -636,23 +672,6 @@ class SerenaAgent:
         if self._project_activation_callback is not None:
             self._project_activation_callback()
 
-    def load_project_from_path_or_name(self, project_root_or_name: str, autogenerate: bool) -> Project | None:
-        """
-        Get a project instance from a path or a name.
-
-        :param project_root_or_name: the path to the project root or the name of the project
-        :param autogenerate: whether to autogenerate the project for the case where first argument is a directory
-            which does not yet contain a Serena project configuration file
-        :return: the project instance if it was found/could be created, None otherwise
-        """
-        project_instance: Project | None = self.serena_config.get_project(project_root_or_name)
-        if project_instance is not None:
-            log.info(f"Found registered project '{project_instance.project_name}' at path {project_instance.project_root}")
-        elif autogenerate and os.path.isdir(project_root_or_name):
-            project_instance = self.serena_config.add_project_from_path(project_root_or_name)
-            log.info(f"Added new project {project_instance.project_name} for path {project_instance.project_root}")
-        return project_instance
-
     def activate_project_from_path_or_name(self, project_root_or_name: str, update_modes_and_tools: bool = True) -> Project:
         """
         Activate a project from a path or a name.
@@ -660,16 +679,23 @@ class SerenaAgent:
         If the argument is a path at which no Serena project previously existed, the project will be created beforehand.
         Raises ProjectNotFoundError if the project could neither be found nor created.
 
-        :return: a tuple of the project instance and a Boolean indicating whether the project was newly
-            created
+        :return: the project instance
         """
-        project_instance: Project | None = self.load_project_from_path_or_name(project_root_or_name, autogenerate=True)
+        project_instance: Project | None = self.serena_config.get_project(project_root_or_name)
+        if project_instance is not None:
+            log.info(f"Found registered project '{project_instance.project_name}' at path {project_instance.project_root}")
+        elif os.path.isdir(project_root_or_name):
+            project_instance = self.serena_config.add_project_from_path(project_root_or_name)
+            log.info(f"Added new project {project_instance.project_name} for path {project_instance.project_root}")
+
         if project_instance is None:
             raise ProjectNotFoundError(
                 f"Project '{project_root_or_name}' not found: Not a valid project name or directory. "
                 f"Existing project names: {self.serena_config.project_names}"
             )
+
         self._activate_project(project_instance, update_modes_and_tools=update_modes_and_tools)
+
         return project_instance
 
     def get_active_tool_names(self) -> list[str]:
@@ -696,6 +722,10 @@ class SerenaAgent:
             result_str += f"Active project: {self._active_project.project_name}\n"
         else:
             result_str += "No active project\n"
+        result_str += f"Language backend: {self._language_backend.value}"
+        if self._active_project and self._active_project.project_config.language_backend is not None:
+            result_str += " (project override)"
+        result_str += f" (global default: {self.serena_config.language_backend.value})\n"
         result_str += "Available projects:\n" + "\n".join(list(self.serena_config.project_names)) + "\n"
         result_str += f"Active context: {self._context.name}\n"
 
