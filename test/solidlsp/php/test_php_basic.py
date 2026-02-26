@@ -278,3 +278,36 @@ class TestPhpLanguageServers:
                 f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
                 pytrace=False,
             )
+
+    @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
+    def test_find_symbol_class_method(self, language_server: SolidLanguageServer) -> None:
+        """Test that find_symbol works for class methods via name path pattern (Class/method).
+
+        Regression test: Intelephense can return flat SymbolInformation[] for some PHP files,
+        causing methods to appear as root-level symbols with no parent reference.
+        In that case, find_symbol("ClassName/method") must still match using containerName.
+        """
+        from serena.symbol import LanguageServerSymbol
+
+        doc_symbols = language_server.request_document_symbols("class_example.php")
+        root_symbols = doc_symbols.root_symbols
+
+        all_names = [s["name"] for s in doc_symbols.iter_symbols()]
+        assert "TestWebhookHandler" in all_names, f"TestWebhookHandler class not found. Found: {all_names}"
+        assert "handle_request" in all_names, f"handle_request method not found. Found: {all_names}"
+        assert "TestProfileManager" in all_names, f"TestProfileManager class not found. Found: {all_names}"
+        assert "get_id" in all_names, f"get_id method not found. Found: {all_names}"
+
+        found = []
+        for root in root_symbols:
+            found.extend(LanguageServerSymbol(root).find("TestWebhookHandler/handle_request"))
+        assert found, (
+            "find_symbol('TestWebhookHandler/handle_request') returned no results. "
+            "Likely cause: Intelephense returned flat SymbolInformation[] with no parent-child links "
+            "and the containerName fallback is not working."
+        )
+
+        found_profile = []
+        for root in root_symbols:
+            found_profile.extend(LanguageServerSymbol(root).find("TestProfileManager/get_id"))
+        assert found_profile, "find_symbol('TestProfileManager/get_id') returned no results."
