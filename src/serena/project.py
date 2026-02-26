@@ -36,12 +36,15 @@ class MemoriesManager:
     def is_global_memory(cls, memory_name: str) -> bool:
         return memory_name.startswith(cls.GLOBAL_TOPIC + "/")
 
-    def __init__(self, project_root: str, global_memory_dir: Path | None = None):
+    def __init__(self, project_root: str, global_memory_dir: str | None = None):
+        """
+        :param project_root: the project's root directory
+        :param global_memory_dir: the directory in which global memories are stored. If None, global memories are not supported.
+        """
         self._memory_dir = Path(get_serena_managed_in_project_dir(project_root)) / "memories"
+        self._global_memory_dir = Path(global_memory_dir) if global_memory_dir else None
         self._memory_dir.mkdir(parents=True, exist_ok=True)
-        self._global_memory_dir = global_memory_dir
-        if self._global_memory_dir is not None:
-            self._global_memory_dir.mkdir(parents=True, exist_ok=True)
+        self._global_memory_dir.mkdir(parents=True, exist_ok=True)
         self._encoding = SERENA_FILE_ENCODING
 
     def _is_global(self, name: str) -> bool:
@@ -53,7 +56,7 @@ class MemoriesManager:
 
         if self._is_global(name):
             if self._global_memory_dir is None:
-                raise ValueError("Global memories are not configured (no global memory directory).")
+                raise ValueError(f"Global memories are not enabled (cannot provide path for '{name}')")
             if name == self.GLOBAL_TOPIC:
                 raise ValueError(
                     f'Bare "{self.GLOBAL_TOPIC}" is not a valid memory name. '
@@ -110,7 +113,7 @@ class MemoriesManager:
                 results.append(prefix + rel)
             return results
 
-        memories: list[str] = []
+        memories: list[str]
 
         if topic:
             if self._is_global(topic):
@@ -118,6 +121,8 @@ class MemoriesManager:
                     sub = topic[len(self.GLOBAL_TOPIC) + 1 :] if topic != self.GLOBAL_TOPIC else ""
                     search_dir = self._global_memory_dir / sub.replace("/", os.sep) if sub else self._global_memory_dir
                     memories = _collect(search_dir, self._global_memory_dir, self.GLOBAL_TOPIC + "/")
+                else:
+                    raise Exception("Global memories are not enabled")
             else:
                 search_dir = self._memory_dir / topic.replace("/", os.sep)
                 memories = _collect(search_dir, self._memory_dir)
@@ -187,8 +192,7 @@ class Project(ToStringMixin):
     ):
         self.project_root = project_root
         self.project_config = project_config
-        global_memory_dir = Path(SerenaPaths().serena_user_home_dir) / "memories" / MemoriesManager.GLOBAL_TOPIC
-        self.memories_manager = MemoriesManager(project_root, global_memory_dir=global_memory_dir)
+        self.memories_manager = MemoriesManager(project_root, SerenaPaths().global_memories_dir)
         self.language_server_manager: LanguageServerManager | None = None
         self._is_newly_created = is_newly_created
 

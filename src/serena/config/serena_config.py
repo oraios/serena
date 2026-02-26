@@ -85,6 +85,10 @@ class SerenaPaths:
         """
         file containing the ID of the last read news snippet
         """
+        self.global_memories_dir: str = os.path.join(self.serena_user_home_dir, "memories", "global")
+        """
+        directory where global memories are stored, i.e. memories that are available across all projects
+        """
 
     def get_next_log_file_path(self, prefix: str) -> str:
         """
