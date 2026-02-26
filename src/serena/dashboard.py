@@ -89,6 +89,11 @@ class RequestDeleteMemory(BaseModel):
     memory_name: str
 
 
+class RequestRenameMemory(BaseModel):
+    old_name: str
+    new_name: str
+
+
 class ResponseGetSerenaConfig(BaseModel):
     content: str
 
@@ -266,6 +271,18 @@ class SerenaDashboardAPI:
             try:
                 self._delete_memory(request_delete_memory)
                 return {"status": "success", "message": f"Memory {request_delete_memory.memory_name} deleted successfully"}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+
+        @self._app.route("/rename_memory", methods=["POST"])
+        def rename_memory() -> dict[str, str]:
+            request_data = request.get_json()
+            if not request_data:
+                return {"status": "error", "message": "No data provided"}
+            request_rename_memory = RequestRenameMemory.model_validate(request_data)
+            try:
+                result_message = self._rename_memory(request_rename_memory)
+                return {"status": "success", "message": result_message}
             except Exception as e:
                 return {"status": "error", "message": str(e)}
 
@@ -556,15 +573,6 @@ class SerenaDashboardAPI:
             project = self._agent.get_active_project()
             if project is None:
                 raise ValueError("No active project")
-
-            from serena.project import MemoriesManager
-
-            if (
-                request_save_memory.memory_name.startswith(MemoriesManager.GLOBAL_TOPIC + "/")
-                and not self._agent.serena_config.edit_global_memories
-            ):
-                raise ValueError("Editing global memories is disabled (edit_global_memories: false in serena_config.yml).")
-
             project.memories_manager.save_memory(request_save_memory.memory_name, request_save_memory.content)
 
         self._agent.execute_task(run, logged=True, name="SaveMemory")
@@ -574,18 +582,19 @@ class SerenaDashboardAPI:
             project = self._agent.get_active_project()
             if project is None:
                 raise ValueError("No active project")
-
-            from serena.project import MemoriesManager
-
-            if (
-                request_delete_memory.memory_name.startswith(MemoriesManager.GLOBAL_TOPIC + "/")
-                and not self._agent.serena_config.edit_global_memories
-            ):
-                raise ValueError("Editing global memories is disabled (edit_global_memories: false in serena_config.yml).")
-
             project.memories_manager.delete_memory(request_delete_memory.memory_name)
 
         self._agent.execute_task(run, logged=True, name="DeleteMemory")
+
+    def _rename_memory(self, request_rename_memory: RequestRenameMemory) -> str:
+        def run() -> str:
+            project = self._agent.get_active_project()
+            if project is None:
+                raise ValueError("No active project")
+
+            return project.memories_manager.rename_memory(request_rename_memory.old_name, request_rename_memory.new_name)
+
+        return self._agent.execute_task(run, logged=True, name="RenameMemory")
 
     def _get_serena_config(self) -> ResponseGetSerenaConfig:
         config_path = self._agent.serena_config.config_file_path
