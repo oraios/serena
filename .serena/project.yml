@@ -121,3 +121,10 @@ fixed_tools: []
 # This overrides the corresponding setting in the global configuration; see the documentation there.
 # If null or missing, use the setting from the global configuration.
 symbol_info_budget:
+
+# The language backend to use for this project.
+# If not set, the global setting from serena_config.yml is used.
+# Valid values: LSP, JetBrains
+# Note: the backend is fixed at startup. If a project with a different backend
+# is activated post-init, an error will be returned.
+language_backend:
