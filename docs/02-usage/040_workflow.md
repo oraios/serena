@@ -99,9 +99,10 @@ i.e. the folder that is activated in Serena should correspond to the root folder
 
 ## Onboarding & Memories
 
-By default, Serena comes with a simple memory and onboarding system that helps
-your agent to navigate your codebase.
-For detailed information on this, including how to manage
+Serena comes with a simple memory system. By default, Serena will start with an onboarding 
+process when a project is activated for the first time, getting familiar with the codebase and
+storing memories.
+For more information on this, including how to manage
 or disable these features, see the [Memories & Onboarding](memories-onboarding-doc).
 
 

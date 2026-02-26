@@ -13,7 +13,7 @@ class MemoryToolBase(Tool, ABC):
         return MemoriesManager.is_global_memory(memory_name)
 
     def _raise_if_global_and_edit_not_allowed(self, memory_name: str) -> None:
-        if not self.agent.edit_global_memories_allowed() and self._is_global_memory(memory_name):
+        if not self.agent.serena_config.edit_global_memories and self._is_global_memory(memory_name):
             raise ValueError("Editing global memories is disabled (edit_global_memories: false in serena_config.yml).")
 
 
