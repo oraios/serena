@@ -3,16 +3,11 @@ Tools supporting the general workflow of the agent
 """
 
 import platform
-from abc import ABC
 
 from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional
 
 
-class OnboardingToolBase(Tool, ABC):
-    pass
-
-
-class CheckOnboardingPerformedTool(OnboardingToolBase):
+class CheckOnboardingPerformedTool(Tool):
     """
     Checks whether project onboarding was already performed.
     """
@@ -46,7 +41,7 @@ class CheckOnboardingPerformedTool(OnboardingToolBase):
             return msg
 
 
-class OnboardingTool(OnboardingToolBase):
+class OnboardingTool(Tool):
     """
     Performs onboarding (identifying the project structure and essential tasks, e.g. for testing or building).
     """

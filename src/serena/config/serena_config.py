@@ -535,9 +535,6 @@ class SerenaConfig(SharedConfig):
     """List of paths to ignore across all projects. Same syntax as gitignore, so you can use * and **.
     These patterns are merged additively with each project's own ignored_paths."""
 
-    enable_memory_tools: bool = True
-    """Whether to enable memory and onboarding tools."""
-
     edit_global_memories: bool = True
     """Whether global memories are allowed to be deleted or edited."""
 

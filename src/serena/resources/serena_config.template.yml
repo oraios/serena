@@ -74,9 +74,6 @@ ignored_paths: []
 # Note: we recommend tracking global memories with git.
 edit_global_memories: True
 
-# Whether to enable memory and onboarding tools. Set to false if you don't want to use Serena's memory system.
-enable_memory_tools: True
-
 # timeout, in seconds, after which tool executions are terminated
 tool_timeout: 240
 

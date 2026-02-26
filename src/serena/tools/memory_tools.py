@@ -12,14 +12,12 @@ class MemoryToolBase(Tool, ABC):
     def _is_global_memory(memory_name: str) -> bool:
         return MemoriesManager.is_global_memory(memory_name)
 
-
-class _MemoryEditingTool(MemoryToolBase, ToolMarkerCanEdit, ABC):
     def _raise_if_global_and_edit_not_allowed(self, memory_name: str) -> None:
         if not self.agent.edit_global_memories_allowed() and self._is_global_memory(memory_name):
             raise ValueError("Editing global memories is disabled (edit_global_memories: false in serena_config.yml).")
 
 
-class WriteMemoryTool(_MemoryEditingTool):
+class WriteMemoryTool(MemoryToolBase, ToolMarkerCanEdit):
     """
     Write some information (utf-8-encoded) about this project that can be useful for future tasks to a memory in md format.
     The memory name should be meaningful.
@@ -85,7 +83,7 @@ class ListMemoriesTool(MemoryToolBase):
         return self._to_json(self.list_memories(topic))
 
 
-class DeleteMemoryTool(_MemoryEditingTool):
+class DeleteMemoryTool(MemoryToolBase, ToolMarkerCanEdit):
     """
     Delete a memory file. Should only happen if a user asks for it explicitly,
     for example by saying that the information retrieved from a memory file is no longer correct
@@ -100,7 +98,7 @@ class DeleteMemoryTool(_MemoryEditingTool):
         return self.memories_manager.delete_memory(memory_name)
 
 
-class RenameMemoryTool(_MemoryEditingTool):
+class RenameMemoryTool(MemoryToolBase, ToolMarkerCanEdit):
     """
     Renames or moves a memory. Moving between project and global scope is supported
     (e.g., renaming "global/foo" to "bar" moves it from global to project scope).
@@ -114,7 +112,7 @@ class RenameMemoryTool(_MemoryEditingTool):
         return self.memories_manager.rename_memory(old_name, new_name)
 
 
-class EditMemoryTool(_MemoryEditingTool):
+class EditMemoryTool(MemoryToolBase, ToolMarkerCanEdit):
     """
     Replaces content matching a regular expression in a memory.
     """

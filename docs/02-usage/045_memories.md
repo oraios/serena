@@ -4,12 +4,12 @@
 Serena provides the functionality of a fully featured agent, and a useful aspect of this is Serena's memory system.
 Despite its simplicity, we received positive feedback from many users who tend to combine it with their
 agent's internal memory management (e.g., `AGENTS.md` files).
-If you don't need this functionality, you can disable all memory tools by setting `enable_memory_tools: False` 
-in your `serena_config.yml`.
+If you don't need this functionality, you can disable all memory related tools by adding `no-memories` to the `base_modes`
+`serena_config.yml` file. You can also disable just the onboarding process through the `no-onboarding` mode.
 
 ## How Memories Work
 
-Memories are simple, human-readable markdown files that both you and
+Memories are simple, human-readable Markdown files that both you and
 your agent can create, read, and edit. The LLM is informed about the existence
 of memories and instructed to read them when appropriate, inferring the appropriateness
 from the file name.
@@ -72,17 +72,3 @@ Since memories are plain Markdown files, you can manage them manually at any tim
 
 The [Serena Dashboard](060_dashboard) also provides a graphical interface for
 viewing, creating, editing, and deleting memories while Serena is running.
-
-(disabling-memories)=
-## Disabling Memories and Onboarding With Modes (Advanced)
-
-In addition to using the global setting for disabling memories, you can also disable
-them using [modes](modes). This allows handling the
-tool availability dynamically within a session, or on a per-project basis.
-
-- **`no-memories` mode**: Disables all memory tools *and* the onboarding workflow.
-  Use this if you want to completely opt out of Serena's memory system.
-- **`no-onboarding` mode**: Disables only the onboarding process while retaining
-  the memory tools. This is useful if you want to manage memories yourself
-  (or have created them externally) without the automatic onboarding step.
-
