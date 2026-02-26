@@ -1,7 +1,6 @@
-import inspect
 import logging
 import os
-from collections.abc import Generator
+from collections.abc import Callable, Iterator
 from typing import TypeVar
 
 from serena.util.file_system import find_all_non_ignored_files
@@ -12,21 +11,20 @@ T = TypeVar("T")
 log = logging.getLogger(__name__)
 
 
-def iter_subclasses(cls: type[T], recursive: bool = True, include_abstract: bool = False) -> Generator[type[T], None, None]:
+def iter_subclasses(
+    cls: type[T], recursive: bool = True, inclusion_predicate: Callable[[type[T]], bool] = lambda t: True
+) -> Iterator[type[T]]:
     """Iterate over all subclasses of a class.
 
     :param cls: The class whose subclasses to iterate over.
     :param recursive: If True, also iterate over all subclasses of all subclasses.
-    :param include_abstract: If True, include abstract classes in the results. By default, abstract classes are skipped.
+    :param inclusion_predicate: a predicate function to decide whether to include a subclass in the result
     """
     for subclass in cls.__subclasses__():
-        if not include_abstract and inspect.isabstract(subclass):
-            if recursive:
-                yield from iter_subclasses(subclass, recursive, include_abstract)
-            continue
-        yield subclass
+        if inclusion_predicate(subclass):
+            yield subclass
         if recursive:
-            yield from iter_subclasses(subclass, recursive, include_abstract)
+            yield from iter_subclasses(subclass, recursive, inclusion_predicate)
 
 
 def determine_programming_language_composition(repo_path: str) -> dict[Language, float]:
