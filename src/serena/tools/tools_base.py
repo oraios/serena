@@ -394,6 +394,18 @@ class ToolRegistry:
     def get_tool_class_by_name(self, tool_name: str) -> type[Tool]:
         return self._tool_dict[tool_name].tool_class
 
+    @staticmethod
+    def get_memory_tool_classes() -> list[type[Tool]]:
+        from serena.tools import MemoryToolBase
+
+        return list(iter_subclasses(MemoryToolBase))
+
+    @staticmethod
+    def get_onboarding_tool_classes() -> list[type[Tool]]:
+        from serena.tools import OnboardingToolBase
+
+        return list(iter_subclasses(OnboardingToolBase))
+
     def get_all_tool_classes(self) -> list[type[Tool]]:
         return list(t.tool_class for t in self._tool_dict.values())
 

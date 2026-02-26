@@ -5,7 +5,7 @@ from serena.project import MemoriesManager
 from serena.tools import Tool, ToolMarkerCanEdit
 
 
-class _MemoryTool(Tool, ABC):
+class MemoryToolBase(Tool, ABC):
     GLOBAL_TOPIC = MemoriesManager.GLOBAL_TOPIC
 
     @staticmethod
@@ -13,7 +13,7 @@ class _MemoryTool(Tool, ABC):
         return MemoriesManager.is_global_memory(memory_name)
 
 
-class _MemoryEditingTool(_MemoryTool, ToolMarkerCanEdit, ABC):
+class _MemoryEditingTool(MemoryToolBase, ToolMarkerCanEdit, ABC):
     def _raise_if_global_and_edit_not_allowed(self, memory_name: str) -> None:
         if not self.agent.edit_global_memories_allowed() and self._is_global_memory(memory_name):
             raise ValueError("Editing global memories is disabled (edit_global_memories: false in serena_config.yml).")
@@ -46,7 +46,7 @@ class WriteMemoryTool(_MemoryEditingTool):
         return self.memories_manager.save_memory(memory_name, content)
 
 
-class ReadMemoryTool(_MemoryTool):
+class ReadMemoryTool(MemoryToolBase):
     """
     Read the content of a memory file. This tool should only be used if the information
     is relevant to the current task. You can infer whether the information
@@ -64,7 +64,7 @@ class ReadMemoryTool(_MemoryTool):
         return self.memories_manager.load_memory(memory_name)
 
 
-class ListMemoriesTool(_MemoryTool):
+class ListMemoriesTool(MemoryToolBase):
     """
     List available memories. Any memory can be read using the `read_memory` tool.
     """

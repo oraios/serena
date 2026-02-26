@@ -341,6 +341,13 @@ class SerenaAgent:
             tool_inclusion_definitions.extend(self._single_project_context_tool_inclusion_definitions(registered_project_to_activate))
         if self._language_backend == LanguageBackend.JETBRAINS:
             tool_inclusion_definitions.append(SerenaAgentMode.from_name_internal("jetbrains"))
+        if not serena_config.enable_memory_tools:
+            memory_tools = ToolRegistry.get_memory_tool_classes()
+            onboarding_tools = ToolRegistry.get_onboarding_tool_classes()
+            memory_system_exclusion = ToolInclusionDefinition(
+                excluded_tools=[t.get_name_from_cls() for t in memory_tools + onboarding_tools],
+            )
+            tool_inclusion_definitions.append(memory_system_exclusion)
         self._base_tool_set = ToolSet.default().apply(*tool_inclusion_definitions)
         self._exposed_tools = AvailableTools([t for t in self._all_tools.values() if self._base_tool_set.includes_name(t.get_name())])
         log.info(f"Number of exposed tools: {len(self._exposed_tools)}")

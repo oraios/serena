@@ -68,11 +68,14 @@ ls_specific_settings: {}
 # These patterns are merged additively with each project's own ignored_paths.
 ignored_paths: []
 
-# Whether global memories (the "global" topic) can be modified (written, edited, deleted, renamed).
+# Whether global memories (the "global" topic) are allowed to be deleted or edited by the agent.
 # Global memories are stored in ~/.serena/memories/global/ and shared across all projects.
 # Set to false to protect global memories from accidental modification by agents.
-# Read access is always allowed regardless of this setting.
+# Note: we recommend tracking global memories with git.
 edit_global_memories: True
+
+# Whether to enable memory and onboarding tools. Set to false if you don't want to use Serena's memory system.
+enable_memory_tools: True
 
 # timeout, in seconds, after which tool executions are terminated
 tool_timeout: 240

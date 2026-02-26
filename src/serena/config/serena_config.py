@@ -535,11 +535,11 @@ class SerenaConfig(SharedConfig):
     """List of paths to ignore across all projects. Same syntax as gitignore, so you can use * and **.
     These patterns are merged additively with each project's own ignored_paths."""
 
+    enable_memory_tools: bool = True
+    """Whether to enable memory and onboarding tools."""
+
     edit_global_memories: bool = True
-    """Whether global memories (the "global" topic) can be modified (written, edited, deleted, renamed).
-    Global memories are stored in ~/.serena/memories/global/ and shared across all projects.
-    Set to false to protect global memories from accidental modification by agents.
-    Read access is always allowed regardless of this setting."""
+    """Whether global memories are allowed to be deleted or edited."""
 
     # settings with overridden defaults
     default_modes: Sequence[str] | None = ("interactive", "editing")
@@ -551,7 +551,6 @@ class SerenaConfig(SharedConfig):
     If the budget is exceeded, Serena stops issuing further requests and returns partial info results.
     0 disables the budget (no early stopping). Negative values are invalid.
     """
-
     # *** fields that are NOT mapped to/from the configuration file ***
 
     _loaded_commented_yaml: CommentedMap | None = None
