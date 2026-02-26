@@ -504,7 +504,7 @@ class TestLanguageServerSymbolFlatContainerName:
         found = []
         for sym_dict in flat_symbols:
             found.extend(LanguageServerSymbol(sym_dict).find("MyHandler/handle_request"))
-        assert len(found) == 1, "find('MyHandler/handle_request') should match via containerName. " f"Got {[s.name for s in found]!r}"
+        assert len(found) == 1, f"find('MyHandler/handle_request') should match via containerName. Got {[s.name for s in found]!r}"
         assert found[0].name == "handle_request"
 
     def test_find_by_class_method_does_not_match_wrong_container(self) -> None:
