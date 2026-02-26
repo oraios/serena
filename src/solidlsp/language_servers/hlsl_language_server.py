@@ -9,6 +9,8 @@ import pathlib
 import shutil
 from typing import Any, cast
 
+from overrides import override
+
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
@@ -32,6 +34,7 @@ class HlslLanguageServer(SolidLanguageServer):
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings) -> None:
         super().__init__(config, repository_root_path, None, "hlsl", solidlsp_settings)
 
+    @override
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
@@ -151,6 +154,7 @@ class HlslLanguageServer(SolidLanguageServer):
         }
         return cast(InitializeParams, initialize_params)
 
+    @override
     def _start_server(self) -> None:
         def do_nothing(params: Any) -> None:
             return
@@ -191,6 +195,7 @@ class HlslLanguageServer(SolidLanguageServer):
 
         self.server.notify.initialized({})
 
+    @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         """Ignore Unity-specific directories that contain no user-authored shaders."""
         return super().is_ignored_dirname(dirname) or dirname in {"Library", "Temp", "Logs", "obj", "Packages"}
