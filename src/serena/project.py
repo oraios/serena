@@ -662,6 +662,7 @@ class Project(ToStringMixin):
                 ls_specific_settings=ls_specific_settings,
                 additional_workspace_folders=self.project_config.additional_workspace_folders,
                 trace_lsp_communication=self.serena_config.trace_lsp_communication,
+                ignore_all_dot_files=self.project_config.ignore_all_dot_files,
             )
             self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory)
             return self.language_server_manager
