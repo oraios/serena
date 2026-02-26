@@ -105,6 +105,11 @@ class Language(str, Enum):
     """TOML language server using Taplo.
     Supports TOML validation, formatting, and schema support.
     """
+    HLSL = "hlsl"
+    """HLSL language server using shader-language-server (antaalt/shader-sense).
+    Supports .hlsl, .hlsli, .fx, .fxh, .cginc, .compute, .shader files.
+    Automatically downloads shader-language-server binary.
+    """
     SYSTEMVERILOG = "systemverilog"
     """SystemVerilog language server using verible-verilog-ls.
     Supports .sv, .svh, .v, .vh files.
@@ -251,6 +256,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.groovy", "*.gvy")
             case self.MATLAB:
                 return FilenameMatcher("*.m", "*.mlx", "*.mlapp")
+            case self.HLSL:
+                return FilenameMatcher("*.hlsl", "*.hlsli", "*.fx", "*.fxh", "*.cginc", "*.compute", "*.shader")
             case self.SYSTEMVERILOG:
                 return FilenameMatcher("*.sv", "*.svh", "*.v", "*.vh")
             case _:
@@ -434,6 +441,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.matlab_language_server import MatlabLanguageServer
 
                 return MatlabLanguageServer
+            case self.HLSL:
+                from solidlsp.language_servers.hlsl_language_server import HlslLanguageServer
+
+                return HlslLanguageServer
             case self.SYSTEMVERILOG:
                 from solidlsp.language_servers.systemverilog_server import SystemVerilogLanguageServer
 
