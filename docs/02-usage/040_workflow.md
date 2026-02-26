@@ -99,11 +99,16 @@ i.e. the folder that is activated in Serena should correspond to the root folder
 
 ## Onboarding & Memories
 
-Serena comes with a simple memory system. By default, Serena will start with an onboarding 
-process when a project is activated for the first time, getting familiar with the codebase and
-storing memories.
+By default, Serena will perform an **onboarding process** when
+it is started for the first time for a project.
+The goal of the onboarding is for Serena to get familiar with the project
+and to store memories, which it can then draw upon in future interactions.
+
+In general, **memories** provide a way for Serena to store and retrieve 
+information about the project, relevant conventions, and other relevant aspects.
+
 For more information on this, including how to manage
-or disable these features, see the [Memories & Onboarding](memories-onboarding-doc).
+or disable these features, see [Memories & Onboarding](045-memories).
 
 
 ## Preparing Your Project
