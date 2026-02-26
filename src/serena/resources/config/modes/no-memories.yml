@@ -6,6 +6,7 @@ excluded_tools:
   - read_memory
   - delete_memory
   - edit_memory
+  - rename_memory
   - list_memories
   - onboarding
   - check_onboarding_performed
