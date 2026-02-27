@@ -11,7 +11,7 @@ class WriteMemoryTool(Tool, ToolMarkerCanEdit):
 
     def apply(self, memory_name: str, content: str, max_chars: int = -1) -> str:
         """
-        Write some information (utf-8-encoded) about this project that can be useful for future tasks to a memory in md format.
+        Write information (utf-8-encoded) about this project that can be useful for future tasks to a memory in md format.
         The memory name should be meaningful and can include "/" to organize into topics (e.g., "auth/login/logic").
         If explicitly instructed, use the "global/" prefix for writing a memory that is shared across projects
         (e.g., "global/java/style_guide")
@@ -40,10 +40,8 @@ class ReadMemoryTool(Tool):
 
     def apply(self, memory_name: str) -> str:
         """
-        Read the content of a memory. Should only be used if the information
-        is relevant to the current task, with relevance inferred from the memory name.
-        You should not read the same memory file multiple times in the same conversation.
-        Use the "global/" prefix to read a memory shared across all projects (e.g., "global/my_memory").
+        Reads the contents of a memory. Should only be used if the information
+        is likely to be relevant to the current task, inferring relevance from the memory name.
         """
         return self.memories_manager.load_memory(memory_name)
 

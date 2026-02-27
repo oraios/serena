@@ -97,7 +97,6 @@ exclude = '''
 max-line-length = 1000
 
 [tool.mypy]
-disable_error_code = "type-abstract"
 allow_redefinition = true
 check_untyped_defs = true
 disallow_incomplete_defs = true
