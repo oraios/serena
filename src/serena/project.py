@@ -304,14 +304,11 @@ class Project(ToStringMixin):
         languages_str = ", ".join([lang.value for lang in self.project_config.languages])
         msg += f"\nProgramming languages: {languages_str}; file encoding: {self.project_config.encoding}"
         project_memories = self.memories_manager.list_project_memories()
-        global_memories = self.memories_manager.list_global_memories()
         if project_memories:
             msg += (
                 f"\nAvailable project memories: {json.dumps(project_memories)}\n"
                 + "Use the `read_memory` tool to read these memories later if they are relevant to the task."
             )
-        if global_memories:
-            msg += f"\nAvailable global memories (shared across all projects): {json.dumps(global_memories)}\n"
         if self.project_config.initial_prompt:
             msg += f"\nAdditional project-specific instructions:\n {self.project_config.initial_prompt}"
         return msg
