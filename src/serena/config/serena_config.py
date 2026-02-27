@@ -161,6 +161,12 @@ class LanguageBackend(Enum):
                 return backend
         raise ValueError(f"Unknown language backend '{backend_str}': valid values are {[b.value for b in LanguageBackend]}")
 
+    def is_lsp(self) -> bool:
+        return self == LanguageBackend.LSP
+
+    def is_jetbrains(self) -> bool:
+        return self == LanguageBackend.JETBRAINS
+
 
 @dataclass
 class SharedConfig(ModeSelectionDefinition, ToolInclusionDefinition, ToStringMixin):

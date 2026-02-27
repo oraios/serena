@@ -1,7 +1,8 @@
 import inspect
 import json
 from abc import ABC
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Protocol, Self, TypeVar, cast
@@ -12,6 +13,7 @@ from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metada
 from sensai.util import logging
 from sensai.util.string import dict_string
 
+from serena.config.serena_config import LanguageBackend
 from serena.project import MemoriesManager, Project
 from serena.prompt_factory import PromptFactory
 from serena.util.class_decorators import singleton
@@ -31,12 +33,33 @@ SUCCESS_RESULT = "OK"
 class Component(ABC):
     def __init__(self, agent: "SerenaAgent"):
         self.agent = agent
+        self._project_override: Project | None = None
+
+    @contextmanager
+    def project_override_context(self, project: Project) -> Iterator[None]:
+        """
+        Context manager for temporarily overriding the active project in a component,
+        allowing tool executions to use the overridden project instead of the active project.
+
+        :param project: the project to override with
+        """
+        if self._project_override is not None:
+            raise RuntimeError("Nested project overrides are not supported.")
+        self._project_override = project
+        try:
+            yield
+        finally:
+            self._project_override = None
+
+    def _assert_is_not_project_override(self) -> None:
+        if self._project_override is not None:
+            raise RuntimeError("This method is only supported for the active project.")
 
     def get_project_root(self) -> str:
         """
         :return: the root directory of the active project, raises a ValueError if no active project configuration is set
         """
-        return self.agent.get_project_root()
+        return self.project.project_root
 
     @property
     def prompt_factory(self) -> PromptFactory:
@@ -49,22 +72,28 @@ class Component(ABC):
     def create_language_server_symbol_retriever(self) -> "LanguageServerSymbolRetriever":
         from serena.symbol import LanguageServerSymbolRetriever
 
-        if not self.agent.is_using_language_server():
-            raise Exception("Cannot create LanguageServerSymbolRetriever; agent is not in language server mode.")
+        self._assert_is_not_project_override()
+        assert self.agent.get_language_backend().is_lsp(), "Language server symbol retriever can only be created for LSP language backend"
         language_server_manager = self.agent.get_language_server_manager_or_raise()
         return LanguageServerSymbolRetriever(language_server_manager, agent=self.agent)
 
     @property
     def project(self) -> Project:
-        return self.agent.get_active_project_or_raise()
+        if self._project_override is not None:
+            return self._project_override
+        else:
+            return self.agent.get_active_project_or_raise()
 
     def create_code_editor(self) -> "CodeEditor":
         from ..code_editor import JetBrainsCodeEditor, LanguageServerCodeEditor
 
-        if self.agent.is_using_language_server():
-            return LanguageServerCodeEditor(self.create_language_server_symbol_retriever(), agent=self.agent)
-        else:
-            return JetBrainsCodeEditor(project=self.project, agent=self.agent)
+        match self.agent.get_language_backend():
+            case LanguageBackend.LSP:
+                return LanguageServerCodeEditor(self.create_language_server_symbol_retriever(), project_config=self.project.project_config)
+            case LanguageBackend.JETBRAINS:
+                return JetBrainsCodeEditor(project=self.project)
+            case _:
+                raise ValueError
 
 
 class ToolMarker:
@@ -234,6 +263,9 @@ class Tool(Component):
     def is_active(self) -> bool:
         return self.agent.tool_is_active(self.get_name())
 
+    def is_readonly(self) -> bool:
+        return not self.can_edit()
+
     def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, mcp_ctx: Context | None = None, **kwargs) -> str:  # type: ignore
         """
         Applies the tool with logging and exception handling, using the given keyword arguments
@@ -392,6 +424,8 @@ class ToolRegistry:
             self._tool_dict[name] = RegisteredTool(tool_class=cls, is_optional=is_optional, tool_name=name)
 
     def get_tool_class_by_name(self, tool_name: str) -> type[Tool]:
+        if tool_name not in self._tool_dict:
+            raise ValueError(f"Tool named '{tool_name}' not found.")
         return self._tool_dict[tool_name].tool_class
 
     def get_all_tool_classes(self) -> list[type[Tool]]:
