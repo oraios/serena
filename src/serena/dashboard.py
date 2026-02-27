@@ -592,7 +592,7 @@ class SerenaDashboardAPI:
             if project is None:
                 raise ValueError("No active project")
 
-            return project.memories_manager.rename_memory(request_rename_memory.old_name, request_rename_memory.new_name)
+            return project.memories_manager.move_memory(request_rename_memory.old_name, request_rename_memory.new_name)
 
         return self._agent.execute_task(run, logged=True, name="RenameMemory")
 

@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import shutil
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -140,7 +141,7 @@ class MemoriesManager:
         memory_file_path.unlink()
         return f"Memory {name} deleted."
 
-    def rename_memory(self, old_name: str, new_name: str) -> str:
+    def move_memory(self, old_name: str, new_name: str) -> str:
         """
         Rename or move a memory file.
         Moving between global and project scope (e.g. "global/foo" -> "bar") is supported.
@@ -153,11 +154,9 @@ class MemoriesManager:
         if new_path.exists():
             raise FileExistsError(f"Memory {new_name} already exists.")
 
-        # Ensure target directory exists
         new_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(old_path, new_path)
 
-        # Move/rename the file
-        old_path.rename(new_path)
         return f"Memory renamed from {old_name} to {new_name}."
 
     def edit_memory(self, name: str, needle: str, repl: str, mode: Literal["literal", "regex"], allow_multiple_occurrences: bool) -> str:

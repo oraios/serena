@@ -109,7 +109,7 @@ class RenameMemoryTool(MemoryToolBase, ToolMarkerCanEdit):
         Rename or move a memory, use "/" in the name to organize into topics.
         The "global" topic should only be used if explicitly instructed.
         """
-        return self.memories_manager.rename_memory(old_name, new_name)
+        return self.memories_manager.move_memory(old_name, new_name)
 
 
 class EditMemoryTool(MemoryToolBase, ToolMarkerCanEdit):
