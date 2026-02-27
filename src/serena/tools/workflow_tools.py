@@ -19,23 +19,19 @@ class CheckOnboardingPerformedTool(Tool):
         """
         project_memories = self.memories_manager.list_project_memories()
         if len(project_memories) == 0:
-            global_memories = self.memories_manager.list_global_memories()
             msg = (
                 "Onboarding not performed yet (no memories available). "
-                + "You should perform onboarding by calling the `onboarding` tool before proceeding with the task. "
-                f"You have access to the following global memories: {global_memories}. "
-                "Do not read them immediately, just remember that they exist and that you can read them if needed."
+                "You should perform onboarding by calling the `onboarding` tool before proceeding with the task. "
             )
-            return msg
         else:
-            msg = f"""The onboarding was already performed, below is the list of available memories.
-            Do not read them immediately, just remember that they exist and that you can read them later, if it is necessary
-            for the current task.
-            Some memories may be based on previous conversations, others may be general for the current project.
-            The memory names are representative for their content.
-            
-            Available memories: {self.memories_manager.list_memories()}"""
-            return msg
+            # Not reporting the list of memories here, as they were already reported at project activation
+            # (with the system prompt if the project was activated at startup)
+            msg = (
+                f"Onboarding was already performed: {len(project_memories)} project memories are available. "
+                "Consider reading memories if they appear relevant to the task at hand."
+            )
+        msg += " If you have not read the 'Serena Instructions Manual', do so now."
+        return msg
 
 
 class OnboardingTool(Tool):
