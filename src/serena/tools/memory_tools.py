@@ -1,23 +1,9 @@
-from abc import ABC
 from typing import Literal
 
-from serena.project import MemoriesManager
 from serena.tools import Tool, ToolMarkerCanEdit
 
 
-class MemoryToolBase(Tool, ABC):
-    GLOBAL_TOPIC = MemoriesManager.GLOBAL_TOPIC
-
-    @staticmethod
-    def _is_global_memory(memory_name: str) -> bool:
-        return MemoriesManager.is_global_memory(memory_name)
-
-    def _raise_if_global_and_edit_not_allowed(self, memory_name: str) -> None:
-        if not self.agent.serena_config.edit_global_memories and self._is_global_memory(memory_name):
-            raise ValueError("Editing global memories is disabled (edit_global_memories: false in serena_config.yml).")
-
-
-class WriteMemoryTool(MemoryToolBase, ToolMarkerCanEdit):
+class WriteMemoryTool(Tool, ToolMarkerCanEdit):
     """
     Write some information (utf-8-encoded) about this project that can be useful for future tasks to a memory in md format.
     The memory name should be meaningful.
@@ -41,10 +27,10 @@ class WriteMemoryTool(MemoryToolBase, ToolMarkerCanEdit):
                 f"Content for {memory_name} is too long. Max length is {max_chars} characters. " + "Please make the content shorter."
             )
 
-        return self.memories_manager.save_memory(memory_name, content)
+        return self.memories_manager.save_memory(memory_name, content, is_tool_context=True)
 
 
-class ReadMemoryTool(MemoryToolBase):
+class ReadMemoryTool(Tool):
     """
     Read the content of a memory file. This tool should only be used if the information
     is relevant to the current task. You can infer whether the information
@@ -62,7 +48,7 @@ class ReadMemoryTool(MemoryToolBase):
         return self.memories_manager.load_memory(memory_name)
 
 
-class ListMemoriesTool(MemoryToolBase):
+class ListMemoriesTool(Tool):
     """
     List available memories. Any memory can be read using the `read_memory` tool.
     """
@@ -70,20 +56,14 @@ class ListMemoriesTool(MemoryToolBase):
     def list_memories(self, topic: str = "") -> list[str]:
         return self.memories_manager.list_memories(topic)
 
-    def list_project_memories(self) -> list[str]:
-        return [m for m in self.list_memories() if not self._is_global_memory(m)]
-
-    def list_global_memories(self) -> list[str]:
-        return self.list_memories(self.GLOBAL_TOPIC)
-
     def apply(self, topic: str = "") -> str:
         """
         List available memories, optionally filtered by topic.
         """
-        return self._to_json(self.list_memories(topic))
+        return self._to_json(self.memories_manager.list_memories(topic))
 
 
-class DeleteMemoryTool(MemoryToolBase, ToolMarkerCanEdit):
+class DeleteMemoryTool(Tool, ToolMarkerCanEdit):
     """
     Delete a memory file. Should only happen if a user asks for it explicitly,
     for example by saying that the information retrieved from a memory file is no longer correct
@@ -94,11 +74,10 @@ class DeleteMemoryTool(MemoryToolBase, ToolMarkerCanEdit):
         """
         Delete a memory, only call if instructed explicitly or permission was granted by the user.
         """
-        self._raise_if_global_and_edit_not_allowed(memory_name)
-        return self.memories_manager.delete_memory(memory_name)
+        return self.memories_manager.delete_memory(memory_name, is_tool_context=True)
 
 
-class RenameMemoryTool(MemoryToolBase, ToolMarkerCanEdit):
+class RenameMemoryTool(Tool, ToolMarkerCanEdit):
     """
     Renames or moves a memory. Moving between project and global scope is supported
     (e.g., renaming "global/foo" to "bar" moves it from global to project scope).
@@ -109,10 +88,10 @@ class RenameMemoryTool(MemoryToolBase, ToolMarkerCanEdit):
         Rename or move a memory, use "/" in the name to organize into topics.
         The "global" topic should only be used if explicitly instructed.
         """
-        return self.memories_manager.move_memory(old_name, new_name)
+        return self.memories_manager.move_memory(old_name, new_name, is_tool_context=True)
 
 
-class EditMemoryTool(MemoryToolBase, ToolMarkerCanEdit):
+class EditMemoryTool(Tool, ToolMarkerCanEdit):
     """
     Replaces content matching a regular expression in a memory.
     """
@@ -138,5 +117,4 @@ class EditMemoryTool(MemoryToolBase, ToolMarkerCanEdit):
         :param allow_multiple_occurrences: whether to allow matching and replacing multiple occurrences.
             If false and multiple occurrences are found, an error will be returned.
         """
-        self._raise_if_global_and_edit_not_allowed(memory_name)
-        return self.memories_manager.edit_memory(memory_name, needle, repl, mode, allow_multiple_occurrences)
+        return self.memories_manager.edit_memory(memory_name, needle, repl, mode, allow_multiple_occurrences, is_tool_context=True)

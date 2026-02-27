@@ -573,7 +573,7 @@ class SerenaDashboardAPI:
             project = self._agent.get_active_project()
             if project is None:
                 raise ValueError("No active project")
-            project.memories_manager.save_memory(request_save_memory.memory_name, request_save_memory.content)
+            project.memories_manager.save_memory(request_save_memory.memory_name, request_save_memory.content, is_tool_context=False)
 
         self._agent.execute_task(run, logged=True, name="SaveMemory")
 
@@ -582,7 +582,7 @@ class SerenaDashboardAPI:
             project = self._agent.get_active_project()
             if project is None:
                 raise ValueError("No active project")
-            project.memories_manager.delete_memory(request_delete_memory.memory_name)
+            project.memories_manager.delete_memory(request_delete_memory.memory_name, is_tool_context=False)
 
         self._agent.execute_task(run, logged=True, name="DeleteMemory")
 
@@ -592,7 +592,9 @@ class SerenaDashboardAPI:
             if project is None:
                 raise ValueError("No active project")
 
-            return project.memories_manager.move_memory(request_rename_memory.old_name, request_rename_memory.new_name)
+            return project.memories_manager.move_memory(
+                request_rename_memory.old_name, request_rename_memory.new_name, is_tool_context=False
+            )
 
         return self._agent.execute_task(run, logged=True, name="RenameMemory")
 

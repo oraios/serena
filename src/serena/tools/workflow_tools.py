@@ -17,12 +17,9 @@ class CheckOnboardingPerformedTool(Tool):
         Checks whether project onboarding was already performed.
         You should always call this tool before beginning to actually work on the project/after activating a project.
         """
-        from .memory_tools import ListMemoriesTool
-
-        list_memories_tool = self.agent.get_tool(ListMemoriesTool)
-        project_memories = list_memories_tool.list_project_memories()
+        project_memories = self.memories_manager.list_project_memories()
         if len(project_memories) == 0:
-            global_memories = list_memories_tool.list_global_memories()
+            global_memories = self.memories_manager.list_global_memories()
             msg = (
                 "Onboarding not performed yet (no memories available). "
                 + "You should perform onboarding by calling the `onboarding` tool before proceeding with the task. "
@@ -37,7 +34,7 @@ class CheckOnboardingPerformedTool(Tool):
             Some memories may be based on previous conversations, others may be general for the current project.
             The memory names are representative for their content.
             
-            Available memories: {list_memories_tool.list_memories()}"""
+            Available memories: {self.memories_manager.list_memories()}"""
             return msg
 
 
