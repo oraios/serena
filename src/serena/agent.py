@@ -551,15 +551,6 @@ class SerenaAgent:
         )
         return True
 
-    def get_project_root(self) -> str:
-        """
-        :return: the root directory of the active project (if any); raises a ValueError if there is no active project
-        """
-        project = self.get_active_project()
-        if project is None:
-            raise ValueError("Cannot get project root if no project is active.")
-        return project.project_root
-
     def get_exposed_tool_instances(self) -> list["Tool"]:
         """
         :return: the tool instances which are exposed (e.g. to the MCP client).
@@ -729,7 +720,7 @@ class SerenaAgent:
                 self.reset_language_server_manager()
 
         # initialize the language server in the background (if in language server mode)
-        if self.is_using_language_server():
+        if self.get_language_backend().is_lsp():
             self.issue_task(init_language_server_manager)
 
         if self._project_activation_callback is not None:

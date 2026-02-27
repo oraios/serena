@@ -4,8 +4,9 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Reversible
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Generic, Optional, TypeVar, cast
+from typing import Generic, TypeVar, cast
 
+from serena.config.serena_config import ProjectConfig
 from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
 from serena.symbol import JetBrainsSymbol, LanguageServerSymbol, LanguageServerSymbolRetriever, PositionInFile, Symbol
 from solidlsp import SolidLanguageServer, ls_types
@@ -15,26 +16,16 @@ from solidlsp.ls_utils import PathUtils, TextUtils
 from .constants import DEFAULT_SOURCE_FILE_ENCODING
 from .project import Project
 
-if TYPE_CHECKING:
-    from .agent import SerenaAgent
-
-
 log = logging.getLogger(__name__)
 TSymbol = TypeVar("TSymbol", bound=Symbol)
 
 
 class CodeEditor(Generic[TSymbol], ABC):
-    def __init__(self, project_root: str, agent: Optional["SerenaAgent"] = None) -> None:
+    def __init__(self, project_root: str, project_config: ProjectConfig | None = None) -> None:
         self.project_root = project_root
-        self.agent = agent
 
-        # set encoding based on active project, if available
-        encoding = DEFAULT_SOURCE_FILE_ENCODING
-        if agent is not None:
-            project = agent.get_active_project()
-            if project is not None:
-                encoding = project.project_config.encoding
-        self.encoding = encoding
+        # set encoding based on project configuration, if available
+        self.encoding = project_config.encoding if project_config is not None else DEFAULT_SOURCE_FILE_ENCODING
 
     class EditedFile(ABC):
         def __init__(self, relative_path: str) -> None:
@@ -244,8 +235,8 @@ class CodeEditor(Generic[TSymbol], ABC):
 
 
 class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
-    def __init__(self, symbol_retriever: LanguageServerSymbolRetriever, agent: Optional["SerenaAgent"] = None):
-        super().__init__(project_root=symbol_retriever.get_root_path(), agent=agent)
+    def __init__(self, symbol_retriever: LanguageServerSymbolRetriever, project_config: ProjectConfig | None = None):
+        super().__init__(project_root=symbol_retriever.get_root_path(), project_config=project_config)
         self._symbol_retriever = symbol_retriever
 
     def _get_language_server(self, relative_path: str) -> SolidLanguageServer:
@@ -379,9 +370,9 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
 
 
 class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
-    def __init__(self, project: Project, agent: Optional["SerenaAgent"] = None) -> None:
+    def __init__(self, project: Project) -> None:
         self._project = project
-        super().__init__(project_root=project.project_root, agent=agent)
+        super().__init__(project_root=project.project_root, project_config=project.project_config)
 
     class EditedFile(CodeEditor.EditedFile):
         def __init__(self, relative_path: str, project: Project):

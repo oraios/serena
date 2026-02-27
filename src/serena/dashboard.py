@@ -524,7 +524,7 @@ class SerenaDashboardAPI:
             available_modes=available_modes,
             available_contexts=available_contexts,
             available_memories=available_memories,
-            jetbrains_mode=not self._agent.is_using_language_server(),
+            jetbrains_mode=self._agent.get_language_backend().is_jetbrains(),
             languages=languages,
             encoding=encoding,
             current_client=Tool.get_last_tool_call_client_str(),
