@@ -32,6 +32,7 @@ log = logging.getLogger(__name__)
 
 class MemoriesManager:
     GLOBAL_TOPIC = "global"
+    _global_memory_dir = SerenaPaths().global_memories_path
 
     def __init__(self, project_root: str, global_memory_tool_write_access: bool = False):
         """
@@ -39,10 +40,8 @@ class MemoriesManager:
         :param global_memory_tool_write_access: whether to allow writing global memories in tool execution contexts
         """
         self._project_memory_dir = Path(get_serena_managed_in_project_dir(project_root)) / "memories"
-        self._global_memory_dir = Path(SerenaPaths().global_memories_dir)
-        self._global_memory_tool_write_access = global_memory_tool_write_access
         self._project_memory_dir.mkdir(parents=True, exist_ok=True)
-        self._global_memory_dir.mkdir(parents=True, exist_ok=True)
+        self._global_memory_tool_write_access = global_memory_tool_write_access
         self._encoding = SERENA_FILE_ENCODING
 
     def _is_global(self, name: str) -> bool:
@@ -53,8 +52,6 @@ class MemoriesManager:
         name = name.replace(".md", "")
 
         if self._is_global(name):
-            if self._global_memory_dir is None:
-                raise ValueError(f"Global memories are not enabled (cannot provide path for '{name}')")
             if name == self.GLOBAL_TOPIC:
                 raise ValueError(
                     f'Bare "{self.GLOBAL_TOPIC}" is not a valid memory name. '
@@ -112,11 +109,12 @@ class MemoriesManager:
             results.append(prefix + rel)
         return results
 
-    def list_global_memories(self, subtopic: str = "") -> list[str]:
-        dir_path = self._global_memory_dir
+    @classmethod
+    def list_global_memories(cls, subtopic: str = "") -> list[str]:
+        dir_path = cls._global_memory_dir
         if subtopic:
             dir_path = dir_path / subtopic.replace("/", os.sep)
-        return self._list_memories(dir_path, self._global_memory_dir, self.GLOBAL_TOPIC + "/")
+        return cls._list_memories(dir_path, cls._global_memory_dir, cls.GLOBAL_TOPIC + "/")
 
     def list_project_memories(self, topic: str = "") -> list[str]:
         dir_path = self._project_memory_dir

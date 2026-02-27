@@ -85,7 +85,9 @@ class SerenaPaths:
         """
         file containing the ID of the last read news snippet
         """
-        self.global_memories_dir: str = os.path.join(self.serena_user_home_dir, "memories", "global")
+        global_memories_path = Path(os.path.join(self.serena_user_home_dir, "memories", "global"))
+        global_memories_path.mkdir(parents=True, exist_ok=True)
+        self.global_memories_path = global_memories_path
         """
         directory where global memories are stored, i.e. memories that are available across all projects
         """
