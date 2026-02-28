@@ -7,6 +7,10 @@ Status of the `main` branch. Changes prior to the next official version change w
         * Project configuration files (`project.yml`) can now define multiple languages.
           Auto-detection adds only the most prominent language by default.
         * Additional languages can be conveniently added via the Dashboard while a project is already activated.
+    * Add support for querying projects other than the currently active one via new tools `QueryProjectTool` and `ListQueryableProjectsTool`.
+      The `QueryProjectTool` allows Serena tools to be called on other projects.
+        * For the LSP backend, calling symbolic tools require a project server to be spawned that will launch the respective language servers
+        * For the JetBrains backend, all projects for which IDE instances are open can directly be queried
     * The current project can be activated automatically even when the MCP configuration is global (through the --project-from-cwd flag)
     * Support overloaded symbols in `FindSymbolTool` and related tools
         * Name paths of overloaded symbols now include an index (e.g., `myOverloadedFunction[2]`)
