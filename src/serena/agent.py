@@ -6,7 +6,8 @@ import os
 import platform
 import subprocess
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from logging import Logger
 from typing import TYPE_CHECKING, Optional, TypeVar
 
@@ -853,3 +854,17 @@ class SerenaAgent:
         if ls_manager is None:
             return []
         return ls_manager.get_active_languages()
+
+    @contextmanager
+    def active_project_context(self, project: Project) -> Iterator[None]:
+        """
+        Context manager for temporarily setting/overriding the active project
+
+        :param project: the project to be active
+        """
+        original_project = self._active_project
+        self._active_project = project
+        try:
+            yield
+        finally:
+            self._active_project = original_project
