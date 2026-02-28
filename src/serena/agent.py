@@ -817,23 +817,9 @@ class SerenaAgent:
         """
         Starts/resets the language server manager for the current project
         """
-        tool_timeout = self.serena_config.tool_timeout
-        if tool_timeout is None or tool_timeout < 0:
-            ls_timeout = None
-        else:
-            if tool_timeout < 10:
-                raise ValueError(f"Tool timeout must be at least 10 seconds, but is {tool_timeout} seconds")
-            ls_timeout = tool_timeout - 5  # the LS timeout is for a single call, it should be smaller than the tool timeout
-
-        # instantiate and start the necessary language servers
         try:
             self._lsp_init_error = None
-            self.get_active_project_or_raise().create_language_server_manager(
-                log_level=self.serena_config.log_level,
-                ls_timeout=ls_timeout,
-                trace_lsp_communication=self.serena_config.trace_lsp_communication,
-                ls_specific_settings=self.serena_config.ls_specific_settings,
-            )
+            self.get_active_project_or_raise().create_language_server_manager()
         except LanguageServerManagerInitialisationError as e:
             self._lsp_init_error = e
             raise
