@@ -1,8 +1,7 @@
 import inspect
 import json
 from abc import ABC
-from collections.abc import Iterable, Iterator
-from contextlib import contextmanager
+from collections.abc import Iterable
 from dataclasses import dataclass
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Protocol, Self, TypeVar, cast
@@ -33,27 +32,6 @@ SUCCESS_RESULT = "OK"
 class Component(ABC):
     def __init__(self, agent: "SerenaAgent"):
         self.agent = agent
-        self._project_override: Project | None = None
-
-    @contextmanager
-    def project_override_context(self, project: Project) -> Iterator[None]:
-        """
-        Context manager for temporarily overriding the active project in a component,
-        allowing tool executions to use the overridden project instead of the active project.
-
-        :param project: the project to override with
-        """
-        if self._project_override is not None:
-            raise RuntimeError("Nested project overrides are not supported.")
-        self._project_override = project
-        try:
-            yield
-        finally:
-            self._project_override = None
-
-    def _assert_is_not_project_override(self) -> None:
-        if self._project_override is not None:
-            raise RuntimeError("This method is only supported for the active project.")
 
     def get_project_root(self) -> str:
         """
@@ -72,17 +50,13 @@ class Component(ABC):
     def create_language_server_symbol_retriever(self) -> "LanguageServerSymbolRetriever":
         from serena.symbol import LanguageServerSymbolRetriever
 
-        self._assert_is_not_project_override()
         assert self.agent.get_language_backend().is_lsp(), "Language server symbol retriever can only be created for LSP language backend"
         language_server_manager = self.agent.get_language_server_manager_or_raise()
         return LanguageServerSymbolRetriever(language_server_manager, agent=self.agent)
 
     @property
     def project(self) -> Project:
-        if self._project_override is not None:
-            return self._project_override
-        else:
-            return self.agent.get_active_project_or_raise()
+        return self.agent.get_active_project_or_raise()
 
     def create_code_editor(self) -> "CodeEditor":
         from ..code_editor import JetBrainsCodeEditor, LanguageServerCodeEditor
@@ -265,6 +239,9 @@ class Tool(Component):
 
     def is_readonly(self) -> bool:
         return not self.can_edit()
+
+    def is_symbolic(self) -> bool:
+        return issubclass(self.__class__, ToolMarkerSymbolicRead) or issubclass(self.__class__, ToolMarkerSymbolicEdit)
 
     def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, mcp_ctx: Context | None = None, **kwargs) -> str:  # type: ignore
         """
