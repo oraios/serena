@@ -21,7 +21,8 @@ from test.solidlsp import clojure as clj
 
 @pytest.fixture
 def serena_config():
-    """Create an in-memory configuration for tests with test repositories pre-registered."""
+    config = SerenaConfig(gui_log_window=False, web_dashboard=False, log_level=logging.ERROR)
+
     # Create test projects for all supported languages
     test_projects = []
     for language in [
@@ -47,16 +48,16 @@ def serena_config():
                     project_name=project_name,
                     languages=[language],
                     ignored_paths=[],
-                    excluded_tools=set(),
+                    excluded_tools=[],
                     read_only=False,
                     ignore_all_files_in_gitignore=True,
                     initial_prompt="",
                     encoding="utf-8",
                 ),
+                serena_config=config,
             )
             test_projects.append(RegisteredProject.from_project_instance(project))
 
-    config = SerenaConfig(gui_log_window=False, web_dashboard=False, log_level=logging.ERROR)
     config.projects = test_projects
     return config
 

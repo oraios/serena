@@ -488,7 +488,7 @@ class RegisteredProject(ToStringMixin):
         """
         return self.project_root.samefile(Path(path).resolve())
 
-    def get_project_instance(self, serena_config: "SerenaConfig | None") -> "Project":
+    def get_project_instance(self, serena_config: "SerenaConfig") -> "Project":
         """
         Returns the project instance for this registered project, loading it if necessary.
         """

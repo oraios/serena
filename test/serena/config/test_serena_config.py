@@ -191,6 +191,12 @@ def _make_config_with_project(
     global_backend: LanguageBackend = LanguageBackend.LSP,
 ) -> tuple[SerenaConfig, str]:
     """Create a SerenaConfig with a single registered project and return (config, project_name)."""
+    config = SerenaConfig(
+        gui_log_window=False,
+        web_dashboard=False,
+        log_level=logging.ERROR,
+        language_backend=global_backend,
+    )
     project = Project(
         project_root=str(Path(__file__).parent.parent / "resources" / "repos" / "python" / "test_repo"),
         project_config=ProjectConfig(
@@ -198,12 +204,7 @@ def _make_config_with_project(
             languages=[Language.PYTHON],
             language_backend=language_backend,
         ),
-    )
-    config = SerenaConfig(
-        gui_log_window=False,
-        web_dashboard=False,
-        log_level=logging.ERROR,
-        language_backend=global_backend,
+        serena_config=config,
     )
     config.projects = [RegisteredProject.from_project_instance(project)]
     return config, project_name
@@ -259,6 +260,7 @@ class TestEffectiveLanguageBackend:
                 languages=[Language.PYTHON],
                 language_backend=LanguageBackend.JETBRAINS,
             ),
+            serena_config=config,
         )
         config.projects.append(RegisteredProject.from_project_instance(jb_project))
 
@@ -281,6 +283,7 @@ class TestEffectiveLanguageBackend:
                 languages=[Language.PYTHON],
                 language_backend=LanguageBackend.LSP,
             ),
+            serena_config=config,
         )
         config.projects.append(RegisteredProject.from_project_instance(lsp_project2))
 
@@ -303,6 +306,7 @@ class TestEffectiveLanguageBackend:
                 languages=[Language.PYTHON],
                 language_backend=None,
             ),
+            serena_config=config,
         )
         config.projects.append(RegisteredProject.from_project_instance(proj2))
 

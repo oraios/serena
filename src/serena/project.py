@@ -10,7 +10,6 @@ from sensai.util.logging import LogTime
 from sensai.util.string import ToStringMixin
 
 from serena.config.serena_config import (
-    DEFAULT_TOOL_TIMEOUT,
     ProjectConfig,
     get_serena_managed_in_project_dir,
 )
@@ -117,13 +116,16 @@ class MemoriesManager:
 class Project(ToStringMixin):
     def __init__(
         self,
+        *,
         project_root: str,
         project_config: ProjectConfig,
+        serena_config: "SerenaConfig",
         is_newly_created: bool = False,
-        serena_config: "SerenaConfig | None" = None,
     ):
+        assert serena_config is not None
         self.project_root = project_root
         self.project_config = project_config
+        self._serena_config = serena_config
         self.memories_manager = MemoriesManager(project_root)
         self.language_server_manager: LanguageServerManager | None = None
         self._is_newly_created = is_newly_created
@@ -137,7 +139,6 @@ class Project(ToStringMixin):
                 f.write(f"/{SolidLanguageServer.CACHE_FOLDER_NAME}\n")
 
         # prepare ignore spec asynchronously, ensuring immediate project activation.
-        self._serena_config = serena_config
         self.__ignored_patterns: list[str]
         self.__ignore_spec: pathspec.PathSpec
         self._ignore_spec_available = threading.Event()
@@ -147,7 +148,7 @@ class Project(ToStringMixin):
         with LogTime(f"Gathering ignore spec for project {self.project_config.project_name}", logger=log):
 
             # gather ignored paths from the global configuration, project configuration, and gitignore files
-            global_ignored_paths = self._serena_config.ignored_paths if self._serena_config else []
+            global_ignored_paths = self._serena_config.ignored_paths
             ignored_patterns = list(global_ignored_paths) + list(self.project_config.ignored_paths)
             if len(global_ignored_paths) > 0:
                 log.info(f"Using {len(global_ignored_paths)} ignored paths from the global configuration.")
@@ -189,7 +190,7 @@ class Project(ToStringMixin):
     def load(
         cls,
         project_root: str | Path,
-        serena_config: "SerenaConfig | None",
+        serena_config: "SerenaConfig",
         autogenerate: bool = True,
     ) -> "Project":
         project_root = Path(project_root).resolve()
@@ -464,23 +465,21 @@ class Project(ToStringMixin):
             source_file_path=relative_file_path,
         )
 
-    def create_language_server_manager(
-        self,
-        log_level: int = logging.INFO,
-        ls_timeout: float | None = DEFAULT_TOOL_TIMEOUT - 5,
-        trace_lsp_communication: bool = False,
-        ls_specific_settings: dict[Language, Any] | None = None,
-    ) -> LanguageServerManager:
+    def create_language_server_manager(self) -> LanguageServerManager:
         """
         Creates the language server manager for the project, starting one language server per configured programming language.
 
-        :param log_level: the log level for the language server
-        :param ls_timeout: the timeout for the language server
-        :param trace_lsp_communication: whether to trace LSP communication
-        :param ls_specific_settings: optional LS specific configuration of the language server,
-            see docstrings in the inits of subclasses of SolidLanguageServer to see what values may be passed.
         :return: the language server manager, which is also stored in the project instance
         """
+        # determine timeout to use for LS calls
+        tool_timeout = self._serena_config.tool_timeout
+        if tool_timeout is None or tool_timeout < 0:
+            ls_timeout = None
+        else:
+            if tool_timeout < 10:
+                raise ValueError(f"Tool timeout must be at least 10 seconds, but is {tool_timeout} seconds")
+            ls_timeout = tool_timeout - 5  # the LS timeout is for a single call, it should be smaller than the tool timeout
+
         # if there is an existing instance, stop its language servers first
         if self.language_server_manager is not None:
             log.info("Stopping existing language server manager ...")
@@ -493,8 +492,8 @@ class Project(ToStringMixin):
             encoding=self.project_config.encoding,
             ignored_patterns=self._ignored_patterns,
             ls_timeout=ls_timeout,
-            ls_specific_settings=ls_specific_settings,
-            trace_lsp_communication=trace_lsp_communication,
+            ls_specific_settings=self._serena_config.ls_specific_settings,
+            trace_lsp_communication=self._serena_config.trace_lsp_communication,
         )
         self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory)
         return self.language_server_manager
