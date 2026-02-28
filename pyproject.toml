@@ -326,6 +326,7 @@ markers = [
   "toml: language server running for TOML",
   "matlab: language server running for MATLAB (requires MATLAB R2021b+)",
   "systemverilog: language server running for SystemVerilog (uses verible-verilog-ls)",
+  "wolfram: language server running for Wolfram Language (requires Mathematica 13.0+ or Wolfram Engine 12.1+)",
 ]
 
 [tool.codespell]

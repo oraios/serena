@@ -15,8 +15,8 @@ def subprocess_kwargs() -> dict:
 
 def quote_arg(arg: str) -> str:
     """
-    Adds quotes around an argument if it contains spaces.
+    Quotes an argument for use in a shell statement.
     """
-    if " " not in arg:
-        return arg
-    return f'"{arg}"'
+    import shlex
+
+    return shlex.quote(arg)
