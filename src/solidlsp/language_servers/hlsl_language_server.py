@@ -51,6 +51,9 @@ class HlslLanguageServer(SolidLanguageServer):
             tag = f"v{version}"
             base_url = f"{_GITHUB_RELEASE_BASE}/{tag}"
 
+            # macOS has no pre-built binaries; build from source via cargo install
+            cargo_install_cmd = f"cargo install shader_language_server --version {version} --root ."
+
             deps = RuntimeDependencyCollection(
                 [
                     RuntimeDependency(
@@ -77,6 +80,20 @@ class HlslLanguageServer(SolidLanguageServer):
                         archive_type="zip",
                         binary_name="shader-language-server.exe",
                     ),
+                    RuntimeDependency(
+                        id="shader-language-server",
+                        description="shader-language-server for macOS (x64) - built from source",
+                        command=cargo_install_cmd,
+                        platform_id="osx-x64",
+                        binary_name="bin/shader-language-server",
+                    ),
+                    RuntimeDependency(
+                        id="shader-language-server",
+                        description="shader-language-server for macOS (ARM64) - built from source",
+                        command=cargo_install_cmd,
+                        platform_id="osx-arm64",
+                        binary_name="bin/shader-language-server",
+                    ),
                 ]
             )
 
@@ -87,10 +104,11 @@ class HlslLanguageServer(SolidLanguageServer):
 
             if dep is None:
                 raise FileNotFoundError(
-                    "shader-language-server is not installed on your system.\n"
+                    "shader-language-server is not installed and no auto-install is available for your platform.\n"
                     "Please install it using one of the following methods:\n"
                     "  cargo:   cargo install shader_language_server\n"
                     "  GitHub:  Download from https://github.com/antaalt/shader-sense/releases\n"
+                    "On macOS, install the Rust toolchain (https://rustup.rs) and Serena will build from source automatically.\n"
                     "See https://github.com/antaalt/shader-sense for more details."
                 )
 
