@@ -2,9 +2,14 @@ import pytest
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.conftest import language_tests_enabled
+
+pytestmark = [
+    pytest.mark.wolfram,
+    pytest.mark.skipif(not language_tests_enabled(Language.WOLFRAM), reason="Wolfram tests disabled (WolframKernel not available)"),
+]
 
 
-@pytest.mark.wolfram
 class TestWolframLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.WOLFRAM], indirect=True)
     def test_wolfram_symbols(self, language_server: SolidLanguageServer):

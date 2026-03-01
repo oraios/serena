@@ -248,6 +248,25 @@ def _determine_disabled_languages() -> list[Language]:
     if not al_tests_enabled:
         result.append(Language.AL)
 
+    wolfram_tests_enabled = _sh.which("WolframKernel") is not None
+    if not wolfram_tests_enabled:
+        # Also check common installation paths (WolframKernel is often not on PATH)
+        import glob
+
+        wolfram_candidates = [
+            "/Applications/Mathematica.app/Contents/MacOS/WolframKernel",
+            "/Applications/Wolfram.app/Contents/MacOS/WolframKernel",
+            "/Applications/Wolfram Engine.app/Contents/MacOS/WolframKernel",
+        ]
+        wolfram_candidates.extend(sorted(glob.glob("/Applications/Mathematica*.app/Contents/MacOS/WolframKernel"), reverse=True))
+        wolfram_candidates.extend(sorted(glob.glob("/Applications/Wolfram*.app/Contents/MacOS/WolframKernel"), reverse=True))
+        for p in wolfram_candidates:
+            if os.path.isfile(p) and os.access(p, os.X_OK):
+                wolfram_tests_enabled = True
+                break
+    if not wolfram_tests_enabled:
+        result.append(Language.WOLFRAM)
+
     return result
 
 
