@@ -11,6 +11,7 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_utils import SymbolUtils
 
 
@@ -93,6 +94,28 @@ class TestHlslDefinition:
         assert len(definitions) >= 1, f"Expected at least 1 definition, got {len(definitions)}"
         def_paths = [d.get("relativePath", d.get("uri", "")) for d in definitions]
         assert any("common.hlsl" in p for p in def_paths), f"Expected definition in common.hlsl, got: {def_paths}"
+
+
+# ── References ────────────────────────────────────────────────────
+
+
+@pytest.mark.hlsl
+class TestHlslReferences:
+    """Tests for find-references capability.
+
+    shader-language-server does not advertise referencesProvider, so
+    request_references is expected to return an empty list.
+    """
+
+    @pytest.mark.parametrize("language_server", [Language.HLSL], indirect=True)
+    def test_references_not_supported(self, language_server: SolidLanguageServer) -> None:
+        """References request should raise because shader-language-server does not support it.
+
+        common.hlsl line 17 (0-indexed): "float3 SafeNormalize(float3 v)"
+        SafeNormalize starts at column 7.
+        """
+        with pytest.raises(SolidLSPException, match="Method not found"):
+            language_server.request_references("common.hlsl", 17, 7)
 
 
 # ── Hover ─────────────────────────────────────────────────────────
