@@ -820,7 +820,6 @@ class SerenaAgent:
             log_level=self.serena_config.log_level,
             ls_timeout=ls_timeout,
             trace_lsp_communication=self.serena_config.trace_lsp_communication,
-            ls_specific_settings=self.serena_config.ls_specific_settings,
         )
 
     def add_language(self, language: Language) -> None:

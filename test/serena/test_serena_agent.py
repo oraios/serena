@@ -24,6 +24,7 @@ def serena_config():
     """Create an in-memory configuration for tests with test repositories pre-registered."""
     # Create test projects for all supported languages
     test_projects = []
+    dummy_config = SerenaConfig(gui_log_window=False, web_dashboard=False, log_level=logging.ERROR)
     for language in [
         Language.PYTHON,
         Language.GO,
@@ -53,10 +54,11 @@ def serena_config():
                     initial_prompt="",
                     encoding="utf-8",
                 ),
+                serena_config=dummy_config,
             )
             test_projects.append(RegisteredProject.from_project_instance(project))
 
-    config = SerenaConfig(gui_log_window=False, web_dashboard=False, log_level=logging.ERROR)
+    config = dummy_config
     config.projects = test_projects
     return config
 

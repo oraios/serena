@@ -640,9 +640,7 @@ class ProjectCommands(AutoRegisteringGroup):
         serena_config = SerenaConfig.from_config_file()
         proj = registered_project.get_project_instance(serena_config=serena_config)
         click.echo(f"Indexing symbols in {proj} …")
-        ls_mgr = proj.create_language_server_manager(
-            log_level=lvl, ls_timeout=timeout, ls_specific_settings=serena_config.ls_specific_settings
-        )
+        ls_mgr = proj.create_language_server_manager(log_level=lvl, ls_timeout=timeout)
         try:
             log_file = os.path.join(proj.project_root, ".serena", "logs", "indexing.txt")
 

@@ -180,8 +180,9 @@ You can change this location by setting the `SERENA_HOME` environment variable t
 Most users will not need to adjust these settings.
 :::
 
-Under the key `ls_specific_settings` in `serena_config.yml`, you can you pass per-language, 
-language server-specific configuration.
+Under the key `ls_specific_settings` in `serena_config.yml` (globally) or `project.yml` (per-project), 
+you can you pass per-language, language server-specific configuration. 
+**Project-specific settings override global settings.**
 
 Structure:
 

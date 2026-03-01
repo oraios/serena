@@ -190,6 +190,10 @@ class ProjectConfig(SharedConfig):
     ignore_all_files_in_gitignore: bool = True
     initial_prompt: str = ""
     encoding: str = DEFAULT_SOURCE_FILE_ENCODING
+    ls_specific_settings: dict = field(default_factory=dict)
+    """
+    Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info.
+    """
 
     SERENA_DEFAULT_PROJECT_FILE = "project.yml"
     FIELDS_WITHOUT_DEFAULTS = {"project_name", "languages"}
@@ -371,6 +375,7 @@ class ProjectConfig(SharedConfig):
             base_modes=data["base_modes"],
             default_modes=data["default_modes"],
             symbol_info_budget=symbol_info_budget,
+            ls_specific_settings=data.get("ls_specific_settings", {}),
         )
 
     def _to_yaml_dict(self) -> dict:
@@ -482,7 +487,7 @@ class RegisteredProject(ToStringMixin):
         """
         return self.project_root.samefile(Path(path).resolve())
 
-    def get_project_instance(self, serena_config: "SerenaConfig | None") -> "Project":
+    def get_project_instance(self, serena_config: "SerenaConfig") -> "Project":
         """
         Returns the project instance for this registered project, loading it if necessary.
         """

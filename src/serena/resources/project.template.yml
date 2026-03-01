@@ -123,3 +123,9 @@ initial_prompt: ""
 # This overrides the corresponding setting in the global configuration; see the documentation there.
 # If null or missing, use the setting from the global configuration.
 symbol_info_budget:
+
+# Advanced configuration option allowing to configure language server implementation specific options.
+# See SolidLSPSettings for more info.
+# Project-specific settings override global settings (from serena_config.yml) on a per-language basis.
+# For example, if you define 'python' settings here, they will completely replace any global 'python' settings.
+ls_specific_settings: {}
