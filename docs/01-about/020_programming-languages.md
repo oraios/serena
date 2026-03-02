@@ -30,7 +30,7 @@ Some languages require additional installations or setup steps, as noted.
 * **AL**
 * **Bash**
 * **C#**  
-  (by default, uses the Roslyn language server (language `csharp`), requires `pwsh` ([PowerShell 7+](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows?view=powershell-7.5)) on Windows;
+  (by default, uses the Roslyn language server (language `csharp`), requiring [.NET v10+](https://dotnet.microsoft.com/en-us/download/dotnet) and, on Windows, `pwsh` ([PowerShell 7+](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows?view=powershell-7.5));
   set language to `csharp_omnisharp` to use OmiSharp instead)
 * **C/C++**  
   (by default, uses the clangd language server (language `cpp`) but we also support ccls (language `cpp_ccls`);
@@ -45,7 +45,7 @@ Some languages require additional installations or setup steps, as noted.
 * **Erlang**  
   (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls); experimental, might be slow or hang)
 * **F#**  
-  (requires .NET SDK 8.0+; uses FsAutoComplete/Ionide, which is auto-installed; for Homebrew .NET on macOS, set DOTNET_ROOT in your environment)
+  (requires [.NET v8.0+](https://dotnet.microsoft.com/en-us/download/dotnet); uses FsAutoComplete/Ionide, which is auto-installed; for Homebrew .NET on macOS, set DOTNET_ROOT in your environment)
 * **Fortran**   
   (requires installation of fortls: `pip install fortls`)
 * **Go**  

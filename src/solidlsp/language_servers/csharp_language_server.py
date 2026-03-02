@@ -6,7 +6,6 @@ import logging
 import os
 import platform
 import shutil
-import subprocess
 import threading
 import urllib.request
 from collections.abc import Iterable
@@ -15,6 +14,7 @@ from typing import Any, cast
 
 from overrides import override
 
+from serena.util.dotnet import DotNETUtil
 from solidlsp.ls import DocumentSymbols, LanguageServerDependencyProvider, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
@@ -366,21 +366,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         def _ensure_dotnet_runtime(self) -> str:
             """Ensure .NET runtime is available and return the dotnet executable path."""
-            # Check if dotnet is already available on the system
-            system_dotnet = shutil.which("dotnet")
-            if system_dotnet:
-                # Check if it's .NET 10 or compatible
-                try:
-                    result = subprocess.run([system_dotnet, "--list-runtimes"], capture_output=True, text=True, check=True)
-                    # Accept .NET 10 or higher (10.x, 11.x, etc.)
-                    if any(f"Microsoft.NETCore.App {v}." in result.stdout for v in range(10, 20)):
-                        log.info("Found system .NET 10+ runtime")
-                        return system_dotnet
-                except subprocess.CalledProcessError:
-                    pass
-
-            # Install .NET 10 runtime using Microsoft's install script
-            return self._install_dotnet_with_script()
+            return DotNETUtil("10.0", allow_higher_version=True).get_dotnet_path_or_raise()
 
         def _ensure_language_server(self, lang_server_dep: RuntimeDependency) -> str:
             """Ensure language server is available and return the DLL path."""
@@ -474,89 +460,6 @@ class CSharpLanguageServer(SolidLanguageServer):
 
             except Exception as e:
                 raise SolidLSPException(f"Failed to download package {package_name} version {package_version} from NuGet.org: {e}") from e
-
-        def _install_dotnet_with_script(self, version: str = "10.0") -> str:
-            """
-            Install .NET runtime using Microsoft's official install script.
-            Returns the path to the dotnet executable.
-            """
-            dotnet_dir = Path(self._ls_resources_dir) / f"dotnet-runtime-{version}"
-
-            # Determine binary name based on platform
-            is_windows = platform.system().lower() == "windows"
-            dotnet_exe = dotnet_dir / ("dotnet.exe" if is_windows else "dotnet")
-
-            if dotnet_exe.exists():
-                log.info(f"Using cached .NET {version} runtime from {dotnet_exe}")
-                return str(dotnet_exe)
-
-            # Download and run install script
-            log.info(f"Installing .NET {version} runtime using official Microsoft install script...")
-            dotnet_dir.mkdir(parents=True, exist_ok=True)
-
-            try:
-                if is_windows:
-                    # PowerShell script for Windows
-                    script_url = "https://dot.net/v1/dotnet-install.ps1"
-                    script_path = dotnet_dir / "dotnet-install.ps1"
-                    urllib.request.urlretrieve(script_url, script_path)
-
-                    cmd = [
-                        "pwsh",
-                        "-NoProfile",
-                        "-ExecutionPolicy",
-                        "Bypass",
-                        "-File",
-                        str(script_path),
-                        "-Version",
-                        version,
-                        "-InstallDir",
-                        str(dotnet_dir),
-                        "-Runtime",
-                        "dotnet",
-                        "-NoPath",
-                    ]
-                else:
-                    # Bash script for Linux/macOS
-                    script_url = "https://dot.net/v1/dotnet-install.sh"
-                    script_path = dotnet_dir / "dotnet-install.sh"
-                    urllib.request.urlretrieve(script_url, script_path)
-                    script_path.chmod(0o755)
-
-                    cmd = [
-                        "bash",
-                        str(script_path),
-                        "--version",
-                        version,
-                        "--install-dir",
-                        str(dotnet_dir),
-                        "--runtime",
-                        "dotnet",
-                        "--no-path",
-                    ]
-
-                # Run the install script
-                log.info("Running .NET install script: %s", cmd)
-                result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-                log.debug(f"Install script output: {result.stdout}")
-
-                if not dotnet_exe.exists():
-                    raise SolidLSPException(f"dotnet executable not found at {dotnet_exe} after installation")
-
-                log.info(f"Successfully installed .NET {version} runtime to {dotnet_exe}")
-                return str(dotnet_exe)
-
-            except subprocess.CalledProcessError as e:
-                raise SolidLSPException(
-                    f"Failed to install .NET {version} runtime using install script: {e.stderr if e.stderr else e}"
-                ) from e
-            except Exception as e:
-                message = f"Failed to install .NET {version} runtime: {e}"
-                if is_windows and isinstance(e, FileNotFoundError):
-                    message += (
-                        "; pwsh, i.e. PowerShell 7+, is required to install .NET runtime. Make sure pwsh is available on your system."
-                    )
-                raise SolidLSPException(message) from e
 
     def _get_initialize_params(self) -> InitializeParams:
         """
