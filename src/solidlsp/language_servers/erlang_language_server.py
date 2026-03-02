@@ -155,7 +155,6 @@ class ErlangLanguageServer(SolidLanguageServer):
             log.info(f"Erlang LS capabilities: {list(init_response['capabilities'].keys())}")
 
         self.server.notify.initialized({})
-        self.completions_available.set()
 
         # Wait for Erlang LS to be ready - adjust timeout based on environment
         is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"

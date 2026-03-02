@@ -2,14 +2,20 @@
 
 Serena is a command-line tool with a variety of sub-commands.
 This section describes
- * varies ways of running Serena
+ * various ways of running Serena
  * how to run and configure the most important command, i.e. starting the MCP server
  * other useful commands.
 
 ## Ways of Running Serena
 
 In the following, we will refer to the command used to run Serena as `<serena>`,
-which you should replace with the appropriate command based on your chosen method.
+which you should replace with the appropriate command based on your chosen method,
+as detailed below.
+
+In general, to get help, append `--help` to the command, i.e.
+
+    <serena> --help
+    <serena> <command> --help
 
 ### Using uvx
 
@@ -92,6 +98,12 @@ Given your preferred method of running Serena, you can start the MCP server usin
 Note that no matter how you run the MCP server, Serena will, by default, start a web-based dashboard on localhost that will allow you to inspect
 the server's operations, logs, and configuration.
 
+:::{tip}
+By default, Serena will use language servers for code understanding and analysis.    
+With the [Serena JetBrains Plugin](025_jetbrains_plugin), we recently introduced a powerful alternative,
+which has several advantages over the language server-based approach.
+:::
+
 ### Standard I/O Mode
 
 The typical usage involves the client (e.g. Claude Code, Codex or Cursor) running
@@ -150,10 +162,14 @@ to get a list of all available options.
 Some useful options include:
 
   * `--project <path|name>`: specify the project to work on by name or path.
-  * `--project-from-cwd`: auto-detect project from current working directory (searches up for `.serena/project.yml` or `.git`, falls back to CWD). Intended only for CLI-based agents like Claude Code, Gemini and Codex.
+  * `--project-from-cwd`: auto-detect the project from current working directory     
+    (looking for a directory containing `.serena/project.yml` or `.git` in parent directories and activating the containing directory as the project root, if any).
+    This option is intended for CLI-based agents like Claude Code, Gemini and Codex, which are typically started from within the project directory
+    and which do not change directories during their operation.
+  * `--language-backend JetBrains`: use the Serena JetBrains Plugin as the language backend (overriding the default backend configured in the central configuration)
   * `--context <context>`: specify the operation [context](contexts) in which Serena shall operate
   * `--mode <mode>`: specify one or more [modes](modes) to enable (can be passed several times)
-  * `--enable-web-dashboard <true|false>`: enable or disable the web dashboard (enabled by default)
+  * `--open-web-dashboard <true|false>`: whether to open the web dashboard on startup (enabled by default)
 
 ## Other Commands
 

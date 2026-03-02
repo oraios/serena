@@ -25,7 +25,7 @@ if __name__ == "__main__":
 
     serena_config = SerenaConfig.from_config_file()
     serena_config.log_level = logging.INFO
-    serena_config.gui_log_window_enabled = False
+    serena_config.gui_log_window = False
     serena_config.web_dashboard = False
 
     agent = SerenaAgent(str(project_path), serena_config=serena_config)

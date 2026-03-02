@@ -14,9 +14,11 @@ Status of the `main` branch. Changes prior to the next official version change w
           solving several issues related to retrieval problems in Java projects
     * Major extensions to the dashboard, which now serves as a central web interface for Serena
         * View current configuration
-        * View the executions, with the possibility to cancel running/scheduled executions 
+        * View news which can be marked as read
+        * View the executions, with the possibility to cancel running/scheduled executions
         * View tool usage statistics
         * View and create memories and edit the serena configuration file
+        * Log page now has save (downloads a snapshot) and clear (resets log view) buttons alongside the existing copy button
     * New two-tier caching of language server document symbols and considerable performance improvements surrounding symbol retrieval/indexing
     * Various fixes related to indexing, special paths and determination of ignored paths
     * Decreased `TOOL_DEFAULT_MAX_ANSWER_LENGTH` to be in accordance with (below) typical max-tokens configurations
@@ -29,6 +31,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     * New mode `oaicompat-agent` and extensions enhancing OpenAI tool compatibility, permitting Serena to work with llama.cpp
 
 * Tools:
+  * *New tool*: `jet_brains_type_hierarchy`
+  * Symbol information (hover, docstring, quick-info) is now provided as part of `find_symbol` and related tool responses.
   * Added `RenameSymbolTool` for renaming symbols across the codebase (if LS supports this operation).
   * Replaced `ReplaceRegexTool` with `ReplaceContentTool`, which supports both plain text and regex-based replacements
     (and which requires no escaping in the replacement text, making it more robust) 
@@ -36,6 +40,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Language support:
 
   * **Add support for OCaml** via ocaml-lsp-server with cross-file reference support on OCaml 5.2+ (requires opam; see [setup guide](docs/03-special-guides/ocaml_setup_guide_for_serena.md))
+  * **Add Phpactor as alternative PHP language server** (specify `php_phpactor` as language; requires PHP 8.1+)
   * **Add support for Fortran** via fortls language server (requires `pip install fortls`)
   * **Add partial support for Groovy** requires user-provided Groovy language server JAR (see [setup guide](docs/03-special-guides/groovy_setup_guide_for_serena.md))
   * **Add support for Julia** via LanguageServer.jl
@@ -57,6 +62,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   * **Add support for Erlang** experimental, may hang or be slow, uses the recently archived [erlang_ls](https://github.com/erlang-ls/erlang_ls)
   * **Ruby dual language server support**: Added ruby-lsp as the modern primary Ruby language server. Solargraph remains available as an experimental legacy option. ruby-lsp supports both .rb and .erb files, while Solargraph supports .rb files only.
   * **Add support for PowerShell** via PowerShell Editor Services (PSES). Requires `pwsh` (PowerShell Core) to be installed and available in PATH. Supports symbol navigation, go-to-definition, and within-file references for .ps1 files.
+  * **Add support for MATLAB** via the official MathWorks MATLAB Language Server. Requires MATLAB R2021b or later and Node.js. Set `MATLAB_PATH` environment variable or configure `matlab_path` in `ls_specific_settings`. Supports .m, .mlx, and .mlapp files with code completion, diagnostics, go-to-definition, find references, document symbols, formatting, and rename.
+  * **Add support for Pascal** via the official Pascal Language Server.
+  * **C/C++ alternate LS (ccls)**: Add experimental, opt-in support for ccls as an alternative backend to clangd. Enable via `cpp_ccls` in project configuration. Requires `ccls` installed and ideally a `compile_commands.json` at repo root.
 
 
 # 0.1.4

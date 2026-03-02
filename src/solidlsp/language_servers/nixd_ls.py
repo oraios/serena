@@ -11,7 +11,6 @@ import pathlib
 import platform
 import shutil
 import subprocess
-import threading
 from pathlib import Path
 
 from overrides import override
@@ -249,7 +248,6 @@ class NixLanguageServer(SolidLanguageServer):
         nixd_path = self._setup_runtime_dependency()
 
         super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=nixd_path, cwd=repository_root_path), "nix", solidlsp_settings)
-        self.server_ready = threading.Event()
         self.request_id = 0
 
     @staticmethod
@@ -374,8 +372,5 @@ class NixLanguageServer(SolidLanguageServer):
         assert "referencesProvider" in init_response["capabilities"]
 
         self.server.notify.initialized({})
-        self.completions_available.set()
 
         # nixd server is typically ready immediately after initialization
-        self.server_ready.set()
-        self.server_ready.wait()

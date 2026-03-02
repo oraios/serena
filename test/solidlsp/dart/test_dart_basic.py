@@ -212,7 +212,8 @@ class TestDartLanguageServer:
             assert containing_symbol["name"] == "add"
             assert containing_symbol["kind"] == SymbolKind.Method
             if "body" in containing_symbol:
-                assert "add" in containing_symbol["body"] or "final result" in containing_symbol["body"]
+                body = containing_symbol["body"].get_text()
+                assert "add" in body or "final result" in body
 
     @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
     def test_request_containing_symbol_class(self, language_server: SolidLanguageServer) -> None:

@@ -41,6 +41,7 @@ class Language(str, Enum):
     RUBY = "ruby"
     DART = "dart"
     CPP = "cpp"
+    CPP_CCLS = "cpp_ccls"
     PHP = "php"
     R = "r"
     PERL = "perl"
@@ -65,6 +66,16 @@ class Language(str, Enum):
     GROOVY = "groovy"
     VUE = "vue"
     POWERSHELL = "powershell"
+    PASCAL = "pascal"
+    """Pascal Language Server (pasls) for Free Pascal and Lazarus projects.
+    Automatically downloads pasls binary. Requires FPC for full functionality.
+    Set PP and FPCDIR environment variables for source navigation.
+    """
+    MATLAB = "matlab"
+    """MATLAB language server using the official MathWorks MATLAB Language Server.
+    Requires MATLAB R2021b or later and Node.js.
+    Set MATLAB_PATH environment variable or configure matlab_path in ls_specific_settings.
+    """
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -78,6 +89,10 @@ class Language(str, Enum):
     """Solargraph language server for Ruby (legacy, experimental).
     Use Language.RUBY (ruby-lsp) for better performance and modern LSP features.
     """
+    PHP_PHPACTOR = "php_phpactor"
+    """Phpactor language server for PHP (instead of Intelephense, which is the default).
+    Requires PHP 8.1+ on the system. Fully open-source (MIT license).
+    """
     MARKDOWN = "markdown"
     """Marksman language server for Markdown (experimental).
     Must be explicitly specified as the main language, not auto-detected.
@@ -90,6 +105,11 @@ class Language(str, Enum):
     TOML = "toml"
     """TOML language server using Taplo.
     Supports TOML validation, formatting, and schema support.
+    """
+    SYSTEMVERILOG = "systemverilog"
+    """SystemVerilog language server using verible-verilog-ls.
+    Supports .sv, .svh, .v, .vh files.
+    Automatically downloads verible binary.
     """
 
     @classmethod
@@ -111,10 +131,12 @@ class Language(str, Enum):
             self.PYTHON_JEDI,
             self.CSHARP_OMNISHARP,
             self.RUBY_SOLARGRAPH,
+            self.PHP_PHPACTOR,
             self.MARKDOWN,
             self.YAML,
             self.TOML,
             self.GROOVY,
+            self.CPP_CCLS,
         }
 
     def __str__(self) -> str:
@@ -161,13 +183,13 @@ class Language(str, Enum):
                 return FilenameMatcher("*.rb", "*.erb")
             case self.RUBY_SOLARGRAPH:
                 return FilenameMatcher("*.rb")
-            case self.CPP:
+            case self.CPP | self.CPP_CCLS:
                 return FilenameMatcher("*.cpp", "*.h", "*.hpp", "*.c", "*.hxx", "*.cc", "*.cxx")
             case self.KOTLIN:
                 return FilenameMatcher("*.kt", "*.kts")
             case self.DART:
                 return FilenameMatcher("*.dart")
-            case self.PHP:
+            case self.PHP | self.PHP_PHPACTOR:
                 return FilenameMatcher("*.php")
             case self.R:
                 return FilenameMatcher("*.R", "*.r", "*.Rmd", "*.Rnw")
@@ -226,8 +248,14 @@ class Language(str, Enum):
                 return FilenameMatcher(*path_patterns)
             case self.POWERSHELL:
                 return FilenameMatcher("*.ps1", "*.psm1", "*.psd1")
+            case self.PASCAL:
+                return FilenameMatcher("*.pas", "*.pp", "*.lpr", "*.dpr", "*.dpk", "*.inc")
             case self.GROOVY:
                 return FilenameMatcher("*.groovy", "*.gvy")
+            case self.MATLAB:
+                return FilenameMatcher("*.m", "*.mlx", "*.mlapp")
+            case self.SYSTEMVERILOG:
+                return FilenameMatcher("*.sv", "*.svh", "*.v", "*.vh")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -293,10 +321,18 @@ class Language(str, Enum):
                 from solidlsp.language_servers.clangd_language_server import ClangdLanguageServer
 
                 return ClangdLanguageServer
+            case self.CPP_CCLS:
+                from solidlsp.language_servers.ccls_language_server import CCLS
+
+                return CCLS
             case self.PHP:
                 from solidlsp.language_servers.intelephense import Intelephense
 
                 return Intelephense
+            case self.PHP_PHPACTOR:
+                from solidlsp.language_servers.phpactor import PhpactorServer
+
+                return PhpactorServer
             case self.PERL:
                 from solidlsp.language_servers.perl_language_server import PerlLanguageServer
 
@@ -393,10 +429,22 @@ class Language(str, Enum):
                 from solidlsp.language_servers.powershell_language_server import PowerShellLanguageServer
 
                 return PowerShellLanguageServer
+            case self.PASCAL:
+                from solidlsp.language_servers.pascal_server import PascalLanguageServer
+
+                return PascalLanguageServer
             case self.GROOVY:
                 from solidlsp.language_servers.groovy_language_server import GroovyLanguageServer
 
                 return GroovyLanguageServer
+            case self.MATLAB:
+                from solidlsp.language_servers.matlab_language_server import MatlabLanguageServer
+
+                return MatlabLanguageServer
+            case self.SYSTEMVERILOG:
+                from solidlsp.language_servers.systemverilog_server import SystemVerilogLanguageServer
+
+                return SystemVerilogLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

@@ -53,7 +53,7 @@ class TestRubyLanguageServerSymbols:
 
         # Verify body content if available
         if "body" in containing_symbol:
-            body = containing_symbol["body"]
+            body = containing_symbol["body"].get_text()
             assert "def create_user" in body, "Method body should contain method definition"
             assert len(body.strip()) > 0, "Method body should not be empty"
 

@@ -7,7 +7,6 @@ import os
 import pathlib
 import re
 import shutil
-import threading
 
 from overrides import override
 
@@ -190,7 +189,6 @@ class FortranLanguageServer(SolidLanguageServer):
         super().__init__(
             config, repository_root_path, ProcessLaunchInfo(cmd=fortls_cmd, cwd=repository_root_path), "fortran", solidlsp_settings
         )
-        self.server_ready = threading.Event()
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
@@ -283,8 +281,6 @@ class FortranLanguageServer(SolidLanguageServer):
             log.info("Fortran LSP document symbol provider available")
 
         self.server.notify.initialized({})
-        self.completions_available.set()
 
         # Fortran Language Server is ready after initialization
-        self.server_ready.set()
         log.info("Fortran Language Server initialization complete")

@@ -1,19 +1,19 @@
 import inspect
 import json
-import os
 from abc import ABC
 from collections.abc import Iterable
 from dataclasses import dataclass
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Protocol, Self, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, Self, TypeVar, cast
 
+from mcp import Implementation
+from mcp.server.fastmcp import Context
 from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metadata
 from sensai.util import logging
 from sensai.util.string import dict_string
 
 from serena.project import MemoriesManager, Project
 from serena.prompt_factory import PromptFactory
-from serena.symbol import LanguageServerSymbolRetriever
 from serena.util.class_decorators import singleton
 from serena.util.inspection import iter_subclasses
 from solidlsp.ls_exceptions import SolidLSPException
@@ -21,6 +21,7 @@ from solidlsp.ls_exceptions import SolidLSPException
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
     from serena.code_editor import CodeEditor
+    from serena.symbol import LanguageServerSymbolRetriever
 
 log = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -45,7 +46,9 @@ class Component(ABC):
     def memories_manager(self) -> "MemoriesManager":
         return self.project.memories_manager
 
-    def create_language_server_symbol_retriever(self) -> LanguageServerSymbolRetriever:
+    def create_language_server_symbol_retriever(self) -> "LanguageServerSymbolRetriever":
+        from serena.symbol import LanguageServerSymbolRetriever
+
         if not self.agent.is_using_language_server():
             raise Exception("Cannot create LanguageServerSymbolRetriever; agent is not in language server mode.")
         language_server_manager = self.agent.get_language_server_manager_or_raise()
@@ -115,6 +118,17 @@ class Tool(Component):
     # The docstring and types of the apply method are used to generate the tool description
     # (which is use by the LLM, so a good description is important)
     # and to validate the tool call arguments.
+
+    _last_tool_call_client_str: str | None = None
+    """We can only get the client info from within a tool call. Each tool call will update this variable."""
+
+    @classmethod
+    def set_last_tool_call_client_str(cls, client_str: str | None) -> None:
+        cls._last_tool_call_client_str = client_str
+
+    @classmethod
+    def get_last_tool_call_client_str(cls) -> str | None:
+        return cls._last_tool_call_client_str
 
     @classmethod
     def get_name_from_cls(cls) -> str:
@@ -218,12 +232,23 @@ class Tool(Component):
         return result
 
     def is_active(self) -> bool:
-        return self.agent.tool_is_active(self.__class__)
+        return self.agent.tool_is_active(self.get_name())
 
-    def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, **kwargs) -> str:  # type: ignore
+    def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, mcp_ctx: Context | None = None, **kwargs) -> str:  # type: ignore
         """
         Applies the tool with logging and exception handling, using the given keyword arguments
         """
+        if mcp_ctx is not None:
+            try:
+                client_params = mcp_ctx.session.client_params
+                if client_params is not None:
+                    client_info = cast(Implementation, client_params.clientInfo)
+                    client_str = client_info.title if client_info.title else client_info.name + " " + client_info.version
+                    if client_str != self.get_last_tool_call_client_str():
+                        log.debug(f"Updating client info: {client_info}")
+                        self.set_last_tool_call_client_str(client_str)
+            except BaseException as e:
+                log.info(f"Failed to get client info: {e}.")
 
         def task() -> str:
             apply_fn = self.get_apply_fn()
@@ -310,24 +335,23 @@ class EditedFileContext:
     When exiting the context without an exception, the updated content will be written back to the file.
     """
 
-    def __init__(self, relative_path: str, agent: "SerenaAgent"):
-        self._project = agent.get_active_project()
-        assert self._project is not None
-        self._abs_path = os.path.join(self._project.project_root, relative_path)
-        if not os.path.isfile(self._abs_path):
-            raise FileNotFoundError(f"File {self._abs_path} does not exist.")
-        with open(self._abs_path, encoding=self._project.project_config.encoding) as f:
-            self._original_content = f.read()
-        self._updated_content: str | None = None
+    def __init__(self, relative_path: str, code_editor: "CodeEditor"):
+        self._relative_path = relative_path
+        self._code_editor = code_editor
+        self._edited_file: CodeEditor.EditedFile | None = None
+        self._edited_file_context: Any = None
 
     def __enter__(self) -> Self:
+        self._edited_file_context = self._code_editor.edited_file_context(self._relative_path)
+        self._edited_file = self._edited_file_context.__enter__()
         return self
 
     def get_original_content(self) -> str:
         """
         :return: the original content of the file before any modifications.
         """
-        return self._original_content
+        assert self._edited_file is not None
+        return self._edited_file.get_contents()
 
     def set_updated_content(self, content: str) -> None:
         """
@@ -336,16 +360,12 @@ class EditedFileContext:
 
         :param content: the updated content of the file
         """
-        self._updated_content = content
+        assert self._edited_file is not None
+        self._edited_file.set_contents(content)
 
     def __exit__(self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None) -> None:
-        if self._updated_content is not None and exc_type is None:
-            assert self._project is not None
-            with open(self._abs_path, "w", encoding=self._project.project_config.encoding) as f:
-                f.write(self._updated_content)
-            log.info(f"Updated content written to {self._abs_path}")
-            # Language servers should automatically detect the change and update its state accordingly.
-            # If they do not, we may have to add a call to notify it.
+        assert self._edited_file_context is not None
+        self._edited_file_context.__exit__(exc_type, exc_value, traceback)
 
 
 @dataclass(kw_only=True)
@@ -355,12 +375,15 @@ class RegisteredTool:
     tool_name: str
 
 
+tool_packages = ["serena.tools"]
+
+
 @singleton
 class ToolRegistry:
     def __init__(self) -> None:
         self._tool_dict: dict[str, RegisteredTool] = {}
         for cls in iter_subclasses(Tool):
-            if not cls.__module__.startswith("serena.tools"):
+            if not any(cls.__module__.startswith(pkg) for pkg in tool_packages):
                 continue
             is_optional = issubclass(cls, ToolMarkerOptional)
             name = cls.get_name_from_cls()

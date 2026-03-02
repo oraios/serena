@@ -75,7 +75,8 @@ object, e.g.
 
 Serena is a great way to make Claude Code both cheaper and more powerful!
 
-From your project directory, add serena with a command like this,
+**Per-Project Configuration.** To add the Serena MCP server to the current project in the current directory, 
+use this command:
 
 ```shell
 claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context claude-code --project "$(pwd)"
@@ -88,18 +89,31 @@ Note:
     that Serena is configured to work on the current project from the get-go, following 
     Claude Code's mode of operation.
 
-Alternatively, use `--project-from-cwd` for user-level configuration that works across all projects:
+**Global Configuration**. Alternatively, use `--project-from-cwd` for user-level configuration that works across all projects:
 
 ```shell
-claude mcp add --scope user serena -- <serena> start-mcp-server --context=claude-code --project-from-cwd
+claude mcp add --scope user serena -- uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context=claude-code --project-from-cwd
 ```
 
-This searches up from the current directory for `.serena/project.yml` or `.git` markers,
-falling back to the current directory if neither is found. This makes it suitable for a
-single global MCP configuration. The `--project-from-cwd` option is intended for CLI-based agents
-(like Claude Code, Gemina or Codex) that invoke Serena from within project directories.
+Whenever you start Claude Code, Serena will search up from the current directory for `.serena/project.yml` or `.git` markers,
+activating the containing directory as the project (if any). 
+This mechanism makes it suitable for a single global MCP configuration.
 
-Be sure to use at least `v1.0.52` of Claude Code (as earlier versions do not read MCP server system prompts upon startup). 
+**Maximum Token Efficiency.** To maximize token efficiency, you may want to use Claude Code's 
+*on-demand tool loading* feature, which is supported since at least v2.0.74 of Claude Code.
+This feature avoids sending all tool descriptions to Claude upon startup, thus saving tokens.
+Instead, Claude will search for tools as needed (but there are no guarantees that it will 
+search optimally, of course).
+To enable this feature, set the environment variable `ENABLE_TOOL_SEARCH=true`.  
+Depending on your shell, you can also set this on a per-session basis, e.g. using
+```shell
+ENABLE_TOOL_SEARCH=true claude
+```
+in bash/zsh, or using
+```shell
+set ENABLE_TOOL_SEARCH=true && claude
+```
+in Windows CMD to launch Claude Code.
 
 ## VSCode
 
@@ -145,9 +159,11 @@ args = ["--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-s
 
 After codex has started, you need to activate the project, which you can do by saying:
 
-"Activate the current dir as project using serena"
+> Call serena.activate_project, serena.check_onboarding_performed and serena.initial_instructions
 
-> If you don't activate the project, you will not be able to use Serena's tools!
+**If you don't activate the project, you will not be able to use Serena's tools!**
+
+It is recommend to set this prompt as a [custom prompt](https://developers.openai.com/codex/custom-prompts), so you don't need to type this every time.
 
 That's it! Have a look at `~/.codex/log/codex-tui.log` to see if any errors occurred.
 
@@ -255,13 +271,6 @@ Then make sure to configure the working directory to be the project root.
 
 ## Antigravity
 
-:::{warning}
-At the time of writing (12/2025), Antigravity does not seem to work with Serena due to schema validation issues
-which are beyond our control.
-The client starts Serena but then crashes with `[internal] marshal message: string field contains invalid UTF-8`.  
-Nevertheless, we provide a configuration that should work once the issue is resolved.
-:::
-
 Add this configuration:
 
 ```json
@@ -281,6 +290,12 @@ Add this configuration:
   }
 }
 ```
+
+You will have to prompt Antigravity's agent to "Activate the current project using serena's activation tool" after starting Antigravity in the project directory (once in the first chat enough, all other chat sessions will continue using the same Serena session).
+
+
+Unlike VSCode, Antigravity does not currently support including the working directory in the MCP configuration.
+Also, the current client will be shown as `none` in Serena's dashboard (Antigravity currently does not fully support the MCP specifications). This is not a problem, all tools will work as expected.
 
 ## Other Clients
 

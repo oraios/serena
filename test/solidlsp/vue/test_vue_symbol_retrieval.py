@@ -43,7 +43,7 @@ class TestVueSymbolRetrieval:
 
         # Verify the body is included if available
         if "body" in containing_symbol:
-            assert "handleDigit" in containing_symbol["body"], "Function body should contain function name"
+            assert "handleDigit" in containing_symbol["body"].get_text(), "Function body should contain function name"
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_request_containing_symbol_computed_property(self, language_server: SolidLanguageServer) -> None:

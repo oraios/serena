@@ -1,22 +1,41 @@
 # Language Support
 
-Serena's semantic code analysis capabilities build on **language servers** using the widely implemented
-language server protocol (LSP). The LSP provides a set of versatile code querying
-and editing functionalities based on symbolic understanding of the code.
+Serena provides a set of versatile code querying and editing functionalities
+based on symbolic understanding of the code.
 Equipped with these capabilities, Serena discovers and edits code just like a seasoned developer
 making use of an IDE's capabilities would.
 Serena can efficiently find the right context and do the right thing even in very large and
-complex projects! So not only is it free and open-source, it frequently achieves better results
-than existing solutions that charge a premium.
+complex projects!
 
-Language servers provide support for a wide range of programming languages.
-With Serena, we provide direct, out-of-the-box support for:
+There are two alternative technologies powering these capabilities:
+
+* **Language servers** implementing the language server Protocol (LSP) — the free/open-source alternative.
+* **The Serena JetBrains Plugin**, which leverages the powerful code analysis and editing
+  capabilities of your JetBrains IDE.
+
+You can choose either of these backends depending on your preferences and requirements.
+
+## Language Servers
+
+Serena incorporates a powerful abstraction layer for the integration of language servers 
+that implement the language server protocol (LSP).
+It even supports multiple language servers in parallel to support polyglot projects.
+
+The language servers themselves are typically open-source projects (like Serena)
+or at least freely available for use.
+
+We currently provide direct, out-of-the-box support for the programming languages listed below.
+Some languages require additional installations or setup steps, as noted.
 
 * **AL**
 * **Bash**
-* **C#**
+* **C#**  
+  (by default, uses the Roslyn language server (language `csharp`), requires `pwsh` ([PowerShell 7+](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows?view=powershell-7.5)) on Windows;
+  set language to `csharp_omnisharp` to use OmiSharp instead)
 * **C/C++**  
-  (you may experience issues with finding references, we are working on it)
+  (by default, uses the clangd language server (language `cpp`) but we also support ccls (language `cpp_ccls`);
+  for best results, provide a `compile_commands.json` at the repository root;
+  see the [C/C++ Setup Guide](../03-special-guides/cpp_setup) for details.)
 * **Clojure**
 * **Dart**
 * **Elixir**  
@@ -32,7 +51,7 @@ With Serena, we provide direct, out-of-the-box support for:
 * **Go**  
   (requires installation of `gopls`)
 * **Groovy**  
-  (requires local groovy-language-server.jar setup via GROOVY_LS_JAR_PATH or configuration)
+  (requires local groovy-language-server.jar setup via `GROOVY_LS_JAR_PATH` or configuration)
 * **Haskell**  
   (automatically locates HLS via ghcup, stack, or system PATH; supports Stack and Cabal projects)
 * **Java**  
@@ -42,18 +61,21 @@ With Serena, we provide direct, out-of-the-box support for:
   (uses the pre-alpha [official kotlin LS](https://github.com/Kotlin/kotlin-lsp), some issues may appear)
 * **Lua**
 * **Markdown**  
-  (must be explicitly specified via `--language markdown` when generating project config, primarily useful for documentation-heavy projects)
+  (must explicitly enable language `markdown`, primarily useful for documentation-heavy projects)
 * **Nix**  
   (requires nixd installation)
+* **Pascal**  
+  (uses Pascal/Lazarus, which is automatically downloaded; set `PP` and `FPCDIR` environment variables for source navigation)
 * **Perl**  
   (requires installation of Perl::LanguageServer)
 * **PHP**  
-  (uses Intelephense LSP; set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features)
+  (by default, uses the Intelephense language server (language `php`), set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features;
+  we also support [Phpactor](https://github.com/phpactor/phpactor) (language `php_phpactor`), which requires PHP 8.1+)
 * **Python**
 * **R**  
   (requires installation of the `languageserver` R package)
 * **Ruby**  
-  (by default, uses [ruby-lsp](https://github.com/Shopify/ruby-lsp), specify ruby_solargraph as your language to use the previous solargraph based implementation)
+  (by default, uses [ruby-lsp](https://github.com/Shopify/ruby-lsp) (language `ruby`); use language `ruby_solargraph` to use Solargraph instead.)
 * **Rust**  
   (requires [rustup](https://rustup.rs/) - uses rust-analyzer from your toolchain)
 * **Scala**  
@@ -68,3 +90,34 @@ With Serena, we provide direct, out-of-the-box support for:
 
 Support for further languages can easily be added by providing a shallow adapter for a new language server implementation,
 see Serena's [memory on that](https://github.com/oraios/serena/blob/main/.serena/memories/adding_new_language_support_guide.md).
+
+## The Serena JetBrains Plugin
+
+As an alternative to language servers, the [Serena JetBrains Plugin](https://plugins.jetbrains.com/plugin/28946-serena/)
+leverages the powerful code analysis capabilities of JetBrains IDEs. 
+The plugin naturally supports all programming languages and frameworks that are supported by JetBrains IDEs, 
+including IntelliJ IDEA, PyCharm, Android Studio, AppCode, WebStorm, PhpStorm, RubyMine, GoLand, AppCode, CLion, and others.
+
+When using the plugin, Serena connects to an instance of your JetBrains IDE via the plugin. For users who already
+work in a JetBrains IDE, this means Serena seamlessly integrates with the IDE instance you typically have open anyway,
+requiring no additional setup or configuration beyond the plugin itself. This approach offers several key advantages:
+
+* **External library indexing**: Dependencies and libraries are fully indexed and accessible to Serena
+* **No additional setup**: No need to download or configure separate language servers
+* **Enhanced performance**: Faster tool execution thanks to optimized IDE integration
+* **Multi-language excellence**: First-class support for polyglot projects with multiple languages and frameworks
+
+Even if you prefer to work in a different code editor, you can still benefit from the JetBrains plugin by running 
+a JetBrains IDE instance (most have free community editions) alongside your preferred editor with your project 
+opened and indexed. Serena will connect to the IDE for code analysis while you continue working in your editor 
+of choice.
+
+```{raw} html
+<p>
+<a href="https://plugins.jetbrains.com/plugin/28946-serena/">
+<img style="background-color:transparent;" src="../_static/images/jetbrains-marketplace-button.png">
+</a>
+</p>
+```
+
+See the [JetBrains Plugin documentation](../02-usage/025_jetbrains_plugin) for usage details.

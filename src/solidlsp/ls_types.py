@@ -5,11 +5,15 @@ Defines wrapper objects around the types returned by LSP to ensure decoupling be
 from __future__ import annotations
 
 from enum import Enum, IntEnum
-from typing import NotRequired, Union
+from typing import TYPE_CHECKING, NotRequired, Union
 
 from typing_extensions import TypedDict
 
 from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticSeverity
+
+if TYPE_CHECKING:
+    from .ls import SymbolBody
+
 
 URI = str
 DocumentUri = str
@@ -187,8 +191,12 @@ class SymbolTag(IntEnum):
 
 
 class UnifiedSymbolInformation(TypedDict):
-    """Represents information about programming constructs like variables, classes,
+    """
+    Represents information about programming constructs like variables, classes,
     interfaces etc.
+
+    This is a unifying extension of `lsp_types.SymbolInformation` and `lsp_types.DocumentSymbol`,
+    with added fields for SolidLSP/Serena use.
     """
 
     deprecated: NotRequired[bool]
@@ -234,7 +242,7 @@ class UnifiedSymbolInformation(TypedDict):
     """ The range that should be selected and revealed when this symbol is being picked, e.g the name of a function.
     Must be contained by the `range`. """
 
-    body: NotRequired[str]
+    body: NotRequired["SymbolBody"]
     """ The body of the symbol. """
 
     children: list[UnifiedSymbolInformation]
@@ -373,26 +381,73 @@ class Diagnostic(TypedDict):
     """ The source of the diagnostic, e.g. the name of the tool that produced it. """
 
 
-def extract_text_edits(workspace_edit: WorkspaceEdit) -> dict[str, list[TextEdit]]:
+class SignatureHelp(TypedDict):
     """
-    Extracts the text changes from a WorkspaceEdit object.
+    Signature help represents the signature of something
+    callable. There can be multiple signature but only one
+    active and only one active parameter.
 
-    Args:
-        workspace_edit (WorkspaceEdit): The WorkspaceEdit object to extract text changes from.
-
-    Returns:
-        dict[str, list[TextEdit]]: A dictionary mapping document URIs to lists of TextEdit objects.
-
+    See https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#signatureHelp
     """
-    if "changes" in workspace_edit:
-        return workspace_edit["changes"]
-    elif "documentChanges" in workspace_edit:
-        changes = {}
-        for change in workspace_edit["documentChanges"]:
-            if "textDocument" in change and "edits" in change:
-                uri = change["textDocument"]["uri"]
-                edits = change["edits"]
-                changes[uri] = edits
-        return changes
-    else:
-        raise Exception(f"Invalid WorkspaceEdit (expected 'changes' or 'documentChanges' key):\n{workspace_edit}")
+
+    signatures: list[SignatureInformation]
+    """ One or more signatures. """
+    activeSignature: NotRequired[int]
+    """ The active signature. If omitted or the value lies outside the
+    range of `signatures` the value defaults to zero or is ignored if
+    the `SignatureHelp` has no signatures.
+
+    Whenever possible implementers should make an active decision about
+    the active signature and shouldn't rely on a default value.
+
+    In future version of the protocol this property might become
+    mandatory to better express this. """
+    activeParameter: NotRequired[int]
+    """ The active parameter of the active signature. If omitted or the value
+    lies outside the range of `signatures[activeSignature].parameters`
+    defaults to 0 if the active signature has parameters. If
+    the active signature has no parameters it is ignored.
+    In future version of the protocol this property might become
+    mandatory to better express the active parameter if the
+    active signature does have any. """
+
+
+class SignatureInformation(TypedDict):
+    """Represents the signature of something callable. A signature
+    can have a label, like a function-name, a doc-comment, and
+    a set of parameters.
+    """
+
+    label: str
+    """ The label of this signature. Will be shown in
+    the UI. """
+    documentation: NotRequired[MarkupContent | str]
+    """ The human-readable doc-comment of this signature. Will be shown
+    in the UI but can be omitted. """
+    parameters: NotRequired[list[ParameterInformation]]
+    """ The parameters of this signature. """
+    activeParameter: NotRequired[int]
+    """ The index of the active parameter.
+
+    If provided, this is used in place of `SignatureHelp.activeParameter`.
+
+    @since 3.16.0 """
+
+
+class ParameterInformation(TypedDict):
+    """Represents a parameter of a callable-signature. A parameter can
+    have a label and a doc-comment.
+    """
+
+    label: str | list[int]
+    """ The label of this parameter information.
+
+    Either a string or an inclusive start and exclusive end offsets within its containing
+    signature label. (see SignatureInformation.label). The offsets are based on a UTF-16
+    string representation as `Position` and `Range` does.
+
+    *Note*: a label of type string should be a substring of its containing signature label.
+    Its intended use case is to highlight the parameter label part in the `SignatureInformation.label`. """
+    documentation: NotRequired[MarkupContent | str]
+    """ The human-readable doc-comment of this parameter. Will be shown
+    in the UI but can be omitted. """

@@ -10,72 +10,48 @@ Adding a new language involves:
 2. **Language Registration** - Adding the language to enums and configurations  
 3. **Test Repository** - Creating a minimal test project
 4. **Test Suite** - Writing comprehensive tests
-5. **Runtime Dependencies** - Configuring automatic language server downloads
 
 ## Step 1: Language Server Implementation
 
 ### 1.1 Create Language Server Class
 
 Create a new file in `src/solidlsp/language_servers/` (e.g., `new_language_server.py`).
-Have a look at `intelephense.py` for a reference implementation of a language server which downloads all its dependencies, at `gopls.py` for an LS that needs some preinstalled
-dependencies, and on `pyright_server.py` that does not need any additional dependencies
-because the language server can be installed directly as python package.
 
-```python
-from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+#### Providing the Launch Command via a DependencyProvider
 
+All language servers use the `DependencyProvider` pattern to handle 
+  * runtime dependency installation/discovery
+  * launch command creation (and, optionally, environment setup)
 
-class NewLanguageServer(SolidLanguageServer):
-    """
-    Language server implementation for NewLanguage.
-    """
+To implement a new language server using the DependencyProvider pattern:
+  * Pass `None` for `process_launch_info` in `super().__init__()` - the base class creates it via `_create_dependency_provider()`
+  * Implement `_create_dependency_provider()` to return an inner `DependencyProvider` class instance.
+    In simple cases, it can be instantiated with only two parameters: 
+    ```python
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
+    ```
+    The resource dir that is passed is the directory in which installed dependencies should be stored!
 
-    def __init__(self, config: LanguageServerConfig, repository_root_path: str):
-        # Determine language server command
-        cmd = self._get_language_server_command()
+**Base Classes:**
 
-        super().__init__(config,
-            ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path),
-            "new_language",,
+- **`LanguageServerDependencyProviderSinglePath`** - For language servers with a single core dependency (e.g., an executable or JAR file)
+  - Provides automatic support for the `ls_path` custom setting, allowing users to override the core dependency path (if they have it installed it themselves)
+  - Implement `_get_or_install_core_dependency()` to return the path to the core dependency, downloading/installing it automatically if necessary
+  - Implement `_create_launch_command(core_path)` to build the full command from the core path
+  - Reference implementations: `TypeScriptLanguageServer`, `Intelephense`, `ClojureLSP`, `ClangdLanguageServer`, `PyrightServer`
 
-    def _get_language_server_command(self) -> list[str]:
-        """Get the command to start the language server."""
-        # Example: return ["new-language-server", "--stdio"]
-        pass
+- **`LanguageServerDependencyProvider`** - The base class, which can be directly inherited from for complex cases with multiple dependencies or custom setup
+  - Implement `create_launch_command()` directly
+  - Reference implementations: `EclipseJDTLS`, `CSharpLanguageServer`, `MatlabLanguageServer`
 
-    @override
-    def is_ignored_dirname(self, dirname: str) -> bool:
-        """Define language-specific directories to ignore."""
-        return super().is_ignored_dirname(dirname) or dirname in ["build",
-            "dist", "target"]
-```
+**Implementation Pointers::**
+  - When returning the command, prefer the list-based representation for robustness
+  - Override `create_launch_command_env` if the launch command needs environment variables to be set (defaults to `{}` in the base implementation)
 
-### 1.2 Language Server Discovery and Installation
+You should look at at least one existing implementation of each base class to understand how they work.
 
-For languages requiring automatic installation, implement download logic similar to C#:
-
-```python
-@classmethod
-def _ensure_server_installed(cls) -> str:
-    """Ensure language server is installed and return path."""
-    # Check system installation first
-    system_server = shutil.which("new-language-server")
-    if system_server:
-        return system_server
-    
-    # Download and install if needed
-    server_path = cls._download_and_install_server()
-    return server_path
-
-def _download_and_install_server(cls) -> str:
-    """Download and install the language server."""
-    # Implementation specific to your language server
-    pass
-```
-
-### 1.3 LSP Initialization
+### 1.2 LSP Initialization
 
 Override initialization methods if needed:
 
@@ -98,8 +74,13 @@ def _start_server(self):
     # Start server and initialize
     self.server.start()
     init_response = self.server.send.initialize(self._get_initialize_params())
+    
     self.server.notify.initialized({})
 ```
+
+After `_start_server` returns, the language server should be fully operational.
+If the server requires that one waits for certain notifications or responses before being ready, implement that logic here.
+For an example, see `EclipseJDTLS._start_server`.
 
 ## Step 2: Language Registration
 
@@ -215,6 +196,6 @@ Consider adding new cases to the parametrized tests in `test_serena_agent.py` fo
 
 Update:
 
-- **README.md** - Add language to supported languages list
+- **README.md** - Add language to the list of languages
+- **docs/01-about/020_programming-languages.md** - Add language to the list and mention any special notes, compatibility or requirements (e.g. installations the user is required to do)
 - **CHANGELOG.md** - Document the new language support
-- **Language-specific docs** - Installation requirements, known issues

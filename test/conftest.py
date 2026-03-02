@@ -1,10 +1,13 @@
 import logging
 import os
+import platform
+import shutil as _sh
 from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 import pytest
-from blib2to3.pgen2.parse import contextmanager
 from sensai.util.logging import configure
 
 from serena.config.serena_config import SerenaPaths
@@ -33,12 +36,26 @@ class LanguageParamRequest:
     param: Language
 
 
+_LANGUAGE_REPO_ALIASES: dict[Language, Language] = {
+    Language.CPP_CCLS: Language.CPP,
+    Language.PHP_PHPACTOR: Language.PHP,
+    Language.PYTHON_JEDI: Language.PYTHON,
+    Language.RUBY_SOLARGRAPH: Language.RUBY,
+}
+
+
 def get_repo_path(language: Language) -> Path:
-    return Path(__file__).parent / "resources" / "repos" / language / "test_repo"
+    repo_language = _LANGUAGE_REPO_ALIASES.get(language, language)
+    return Path(__file__).parent / "resources" / "repos" / repo_language / "test_repo"
 
 
 def _create_ls(
-    language: Language, repo_path: str | None = None, ignored_paths: list[str] | None = None, trace_lsp_communication: bool = False
+    language: Language,
+    repo_path: str | None = None,
+    ignored_paths: list[str] | None = None,
+    trace_lsp_communication: bool = False,
+    ls_specific_settings: dict[Language, dict[str, Any]] | None = None,
+    solidlsp_dir: Path | None = None,
 ) -> SolidLanguageServer:
     ignored_paths = ignored_paths or []
     if repo_path is None:
@@ -46,21 +63,33 @@ def _create_ls(
     gitignore_parser = GitignoreParser(str(repo_path))
     for spec in gitignore_parser.get_ignore_specs():
         ignored_paths.extend(spec.patterns)
-    config = LanguageServerConfig(code_language=language, ignored_paths=ignored_paths, trace_lsp_communication=trace_lsp_communication)
+    config = LanguageServerConfig(
+        code_language=language,
+        ignored_paths=ignored_paths,
+        trace_lsp_communication=trace_lsp_communication,
+    )
+    effective_solidlsp_dir = solidlsp_dir if solidlsp_dir is not None else SerenaPaths().serena_user_home_dir
     return SolidLanguageServer.create(
         config,
         repo_path,
         solidlsp_settings=SolidLSPSettings(
-            solidlsp_dir=SerenaPaths().serena_user_home_dir, project_data_relative_path=SERENA_MANAGED_DIR_NAME
+            solidlsp_dir=effective_solidlsp_dir,
+            project_data_relative_path=SERENA_MANAGED_DIR_NAME,
+            ls_specific_settings=ls_specific_settings or {},
         ),
     )
 
 
 @contextmanager
 def start_ls_context(
-    language: Language, repo_path: str | None = None, ignored_paths: list[str] | None = None, trace_lsp_communication: bool = False
+    language: Language,
+    repo_path: str | None = None,
+    ignored_paths: list[str] | None = None,
+    trace_lsp_communication: bool = False,
+    ls_specific_settings: dict[Language, dict[str, Any]] | None = None,
+    solidlsp_dir: Path | None = None,
 ) -> Iterator[SolidLanguageServer]:
-    ls = _create_ls(language, repo_path, ignored_paths, trace_lsp_communication)
+    ls = _create_ls(language, repo_path, ignored_paths, trace_lsp_communication, ls_specific_settings, solidlsp_dir)
     log.info(f"Starting language server for {language} {repo_path}")
     ls.start()
     try:
@@ -88,7 +117,7 @@ def start_default_ls_context(language: Language) -> Iterator[SolidLanguageServer
 
 def _create_default_project(language: Language) -> Project:
     repo_path = str(get_repo_path(language))
-    return Project.load(repo_path)
+    return Project.load(repo_path, serena_config=None)
 
 
 @pytest.fixture(scope="session")
@@ -181,6 +210,8 @@ is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
 Flag indicating whether the tests are running in the GitHub CI environment.
 """
 
+is_windows = platform.system() == "Windows"
+
 
 def _determine_disabled_languages() -> list[Language]:
     """
@@ -197,6 +228,21 @@ def _determine_disabled_languages() -> list[Language]:
     clojure_tests_enabled = is_clojure_cli_available()
     if not clojure_tests_enabled:
         result.append(Language.CLOJURE)
+
+    # Disable CPP_CCLS tests if ccls is not available
+    ccls_tests_enabled = _sh.which("ccls") is not None
+    if not ccls_tests_enabled:
+        result.append(Language.CPP_CCLS)
+
+    # Disable CPP (clangd) tests if clangd is not available
+    clangd_tests_enabled = _sh.which("clangd") is not None
+    if not clangd_tests_enabled:
+        result.append(Language.CPP)
+
+    # Disable PHP_PHPACTOR tests if php is not available
+    php_tests_enabled = _sh.which("php") is not None
+    if not php_tests_enabled:
+        result.append(Language.PHP_PHPACTOR)
 
     al_tests_enabled = True
     if not al_tests_enabled:

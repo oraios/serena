@@ -186,7 +186,6 @@ class VtsLanguageServer(SolidLanguageServer):
             """
             if params.get("quiescent") is True:
                 self.server_ready.set()
-                self.completions_available.set()
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
@@ -222,7 +221,6 @@ class VtsLanguageServer(SolidLanguageServer):
             log.info("Timeout waiting for VTS server to become ready, proceeding anyway")
             # Fallback: assume server is ready after timeout
             self.server_ready.set()
-        self.completions_available.set()
 
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:

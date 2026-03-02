@@ -1,21 +1,29 @@
 import json
 import logging
 import os
+import threading
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pathspec
+from sensai.util.logging import LogTime
 from sensai.util.string import ToStringMixin
 
-from serena.config.serena_config import DEFAULT_TOOL_TIMEOUT, ProjectConfig, get_serena_managed_in_project_dir
+from serena.config.serena_config import (
+    DEFAULT_TOOL_TIMEOUT,
+    ProjectConfig,
+    get_serena_managed_in_project_dir,
+)
 from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_NAME
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
-from serena.text_utils import MatchedConsecutiveLines, search_files
 from serena.util.file_system import GitignoreParser, match_path
-from serena.util.general import save_yaml
+from serena.util.text_utils import MatchedConsecutiveLines, search_files
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import FileUtils
+
+if TYPE_CHECKING:
+    from serena.config.serena_config import SerenaConfig
 
 log = logging.getLogger(__name__)
 
@@ -27,9 +35,19 @@ class MemoriesManager:
         self._encoding = SERENA_FILE_ENCODING
 
     def get_memory_file_path(self, name: str) -> Path:
-        # strip all .md from the name. Models tend to get confused, sometimes passing the .md extension and sometimes not.
+        # Strip .md extension if present
         name = name.replace(".md", "")
-        filename = f"{name}.md"
+
+        # Split by "/" to handle subdirectories
+        parts = name.split("/")
+        filename = f"{parts[-1]}.md"
+
+        if len(parts) > 1:
+            # Create subdirectory path
+            subdir = self._memory_dir / "/".join(parts[:-1])
+            subdir.mkdir(parents=True, exist_ok=True)
+            return subdir / filename
+
         return self._memory_dir / filename
 
     def load_memory(self, name: str) -> str:
@@ -45,17 +63,65 @@ class MemoriesManager:
             f.write(content)
         return f"Memory {name} written."
 
-    def list_memories(self) -> list[str]:
-        return [f.name.replace(".md", "") for f in self._memory_dir.iterdir() if f.is_file()]
+    def list_memories(self, topic: str = "") -> list[str]:
+        """
+        List memories, optionally filtered by topic.
+        """
+        memories = []
+
+        if topic:
+            # Only list memories in specified subdirectory
+            search_dir = self._memory_dir / topic.replace("/", os.sep)
+            if not search_dir.exists():
+                return []
+        else:
+            search_dir = self._memory_dir
+
+        # Recursively find all .md files
+        for md_file in search_dir.rglob("*.md"):
+            # Calculate relative path as memory name
+            rel_path = md_file.relative_to(self._memory_dir)
+            name = str(rel_path.with_suffix("")).replace(os.sep, "/")
+            memories.append(name)
+
+        # Sort alphabetically by name
+        return sorted(memories)
 
     def delete_memory(self, name: str) -> str:
         memory_file_path = self.get_memory_file_path(name)
+        if not memory_file_path.exists():
+            return f"Memory {name} not found."
         memory_file_path.unlink()
         return f"Memory {name} deleted."
 
+    def rename_memory(self, old_name: str, new_name: str) -> str:
+        """
+        Rename or move a memory file.
+        """
+        old_path = self.get_memory_file_path(old_name)
+        new_path = self.get_memory_file_path(new_name)
+
+        if not old_path.exists():
+            raise FileNotFoundError(f"Memory {old_name} not found.")
+        if new_path.exists():
+            raise FileExistsError(f"Memory {new_name} already exists.")
+
+        # Ensure target directory exists
+        new_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Move/rename the file
+        old_path.rename(new_path)
+        return f"Memory renamed from {old_name} to {new_name}."
+
 
 class Project(ToStringMixin):
-    def __init__(self, project_root: str, project_config: ProjectConfig, is_newly_created: bool = False):
+    def __init__(
+        self,
+        project_root: str,
+        project_config: ProjectConfig,
+        is_newly_created: bool = False,
+        serena_config: "SerenaConfig | None" = None,
+    ):
         self.project_root = project_root
         self.project_config = project_config
         self.memories_manager = MemoriesManager(project_root)
@@ -70,27 +136,44 @@ class Project(ToStringMixin):
             with open(serena_data_gitignore_path, "w", encoding="utf-8") as f:
                 f.write(f"/{SolidLanguageServer.CACHE_FOLDER_NAME}\n")
 
-        # gather ignored paths from the project configuration and gitignore files
-        ignored_patterns = list(project_config.ignored_paths)
-        if len(ignored_patterns) > 0:
-            log.info(f"Using {len(ignored_patterns)} ignored paths from the explicit project configuration.")
-            log.debug(f"Ignored paths: {ignored_patterns}")
-        if project_config.ignore_all_files_in_gitignore:
-            gitignore_parser = GitignoreParser(self.project_root)
-            for spec in gitignore_parser.get_ignore_specs():
-                log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
-                ignored_patterns.extend(spec.patterns)
-        self._ignored_patterns = ignored_patterns
+        # prepare ignore spec asynchronously, ensuring immediate project activation.
+        self._serena_config = serena_config
+        self.__ignored_patterns: list[str]
+        self.__ignore_spec: pathspec.PathSpec
+        self._ignore_spec_available = threading.Event()
+        threading.Thread(name=f"gather-ignorespec[{self.project_config.project_name}]", target=self._gather_ignorespec, daemon=True).start()
 
-        # Set up the pathspec matcher for the ignored paths
-        # for all absolute paths in ignored_paths, convert them to relative paths
-        processed_patterns = []
-        for pattern in set(ignored_patterns):
-            # Normalize separators (pathspec expects forward slashes)
-            pattern = pattern.replace(os.path.sep, "/")
-            processed_patterns.append(pattern)
-        log.debug(f"Processing {len(processed_patterns)} ignored paths")
-        self._ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
+    def _gather_ignorespec(self) -> None:
+        with LogTime(f"Gathering ignore spec for project {self.project_config.project_name}", logger=log):
+
+            # gather ignored paths from the global configuration, project configuration, and gitignore files
+            global_ignored_paths = self._serena_config.ignored_paths if self._serena_config else []
+            ignored_patterns = list(global_ignored_paths) + list(self.project_config.ignored_paths)
+            if len(global_ignored_paths) > 0:
+                log.info(f"Using {len(global_ignored_paths)} ignored paths from the global configuration.")
+                log.debug(f"Global ignored paths: {list(global_ignored_paths)}")
+            if len(self.project_config.ignored_paths) > 0:
+                log.info(f"Using {len(self.project_config.ignored_paths)} ignored paths from the project configuration.")
+                log.debug(f"Project ignored paths: {self.project_config.ignored_paths}")
+            log.debug(f"Combined ignored patterns: {ignored_patterns}")
+            if self.project_config.ignore_all_files_in_gitignore:
+                gitignore_parser = GitignoreParser(self.project_root)
+                for spec in gitignore_parser.get_ignore_specs():
+                    log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
+                    ignored_patterns.extend(spec.patterns)
+            self.__ignored_patterns = ignored_patterns
+
+            # Set up the pathspec matcher for the ignored paths
+            # for all absolute paths in ignored_paths, convert them to relative paths
+            processed_patterns = []
+            for pattern in set(ignored_patterns):
+                # Normalize separators (pathspec expects forward slashes)
+                pattern = pattern.replace(os.path.sep, "/")
+                processed_patterns.append(pattern)
+            log.debug(f"Processing {len(processed_patterns)} ignored paths")
+            self.__ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
+
+        self._ignore_spec_available.set()
 
     def _tostring_includes(self) -> list[str]:
         return []
@@ -103,22 +186,23 @@ class Project(ToStringMixin):
         return self.project_config.project_name
 
     @classmethod
-    def load(cls, project_root: str | Path, autogenerate: bool = True) -> "Project":
+    def load(
+        cls,
+        project_root: str | Path,
+        serena_config: "SerenaConfig | None",
+        autogenerate: bool = True,
+    ) -> "Project":
         project_root = Path(project_root).resolve()
         if not project_root.exists():
             raise FileNotFoundError(f"Project root not found: {project_root}")
         project_config = ProjectConfig.load(project_root, autogenerate=autogenerate)
-        return Project(project_root=str(project_root), project_config=project_config)
+        return Project(project_root=str(project_root), project_config=project_config, serena_config=serena_config)
 
     def save_config(self) -> None:
         """
         Saves the current project configuration to disk.
         """
-        config_path = os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
-        log.info("Saving updated project configuration to %s", config_path)
-        config_with_comments = ProjectConfig.load_commented_map(config_path)
-        config_with_comments.update(self.project_config.to_yaml_dict())
-        save_yaml(config_path, config_with_comments, preserve_comments=True)
+        self.project_config.save(self.project_root)
 
     def path_to_serena_data_folder(self) -> str:
         return os.path.join(self.project_root, SERENA_MANAGED_DIR_NAME)
@@ -156,12 +240,28 @@ class Project(ToStringMixin):
         abs_path = Path(self.project_root) / relative_path
         return FileUtils.read_file(str(abs_path), self.project_config.encoding)
 
-    def get_ignore_spec(self) -> pathspec.PathSpec:
+    @property
+    def _ignore_spec(self) -> pathspec.PathSpec:
         """
         :return: the pathspec matcher for the paths that were configured to be ignored,
             either explicitly or implicitly through .gitignore files.
         """
-        return self._ignore_spec
+        if not self._ignore_spec_available.is_set():
+            log.info("Waiting for ignore spec to become available ...")
+            self._ignore_spec_available.wait()
+            log.info("Ignore spec is now available for project; proceeding")
+        return self.__ignore_spec
+
+    @property
+    def _ignored_patterns(self) -> list[str]:
+        """
+        :return: the list of ignored path patterns
+        """
+        if not self._ignore_spec_available.is_set():
+            log.info("Waiting for ignored patterns to become available ...")
+            self._ignore_spec_available.wait()
+            log.info("Ignore patterns are now available for project; proceeding")
+        return self.__ignored_patterns
 
     def _is_ignored_relative_path(self, relative_path: str | Path, ignore_non_source_files: bool = True) -> bool:
         """
@@ -203,7 +303,7 @@ class Project(ToStringMixin):
         if len(rel_path.parts) > 0 and rel_path.parts[0] == ".git":
             return True
 
-        return match_path(str(relative_path), self.get_ignore_spec(), root_path=self.project_root)
+        return match_path(str(relative_path), self._ignore_spec, root_path=self.project_root)
 
     def is_ignored_path(self, path: str | Path, ignore_non_source_files: bool = False) -> bool:
         """
@@ -230,15 +330,21 @@ class Project(ToStringMixin):
     def is_path_in_project(self, path: str | Path) -> bool:
         """
         Checks if the given (absolute or relative) path is inside the project directory.
-        Note that even relative paths may be outside if they contain ".." or point to symlinks.
-        """
-        path = Path(path)
-        _proj_root = Path(self.project_root)
-        if not path.is_absolute():
-            path = _proj_root / path
 
-        path = path.resolve()
-        return path.is_relative_to(_proj_root)
+        Note: This is intended to catch cases where ".." segments would lead outside of the project directory,
+        but we intentionally allow symlinks, as the assumption is that they point to relevant project files.
+        """
+        if not os.path.isabs(path):
+            path = os.path.join(self.project_root, path)
+
+        # collapse any ".." or "." segments (purely lexically)
+        path = os.path.normpath(path)
+
+        try:
+            return os.path.commonpath([self.project_root, path]) == self.project_root
+        except ValueError:
+            # occurs, in particular, if paths are on different drives on Windows
+            return False
 
     def relative_path_exists(self, relative_path: str) -> bool:
         """

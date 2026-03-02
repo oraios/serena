@@ -5,6 +5,7 @@ Provides Python specific instantiation of the LanguageServer class. Contains var
 import logging
 import os
 import pathlib
+import threading
 from typing import cast
 
 from overrides import override
@@ -155,6 +156,7 @@ class JediServer(SolidLanguageServer):
         """
         Starts the JEDI Language Server
         """
+        completions_available = threading.Event()
 
         def execute_client_command_handler(params: dict) -> list:
             return []
@@ -164,7 +166,7 @@ class JediServer(SolidLanguageServer):
 
         def check_experimental_status(params: dict) -> None:
             if params["quiescent"] == True:
-                self.completions_available.set()
+                completions_available.set()
 
         def window_log_message(msg: dict) -> None:
             log.info(f"LSP: window/logMessage: {msg}")

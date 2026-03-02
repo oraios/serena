@@ -271,4 +271,3 @@ class GroovyLanguageServer(SolidLanguageServer):
         assert "workspaceSymbolProvider" in capabilities, "Server must support workspace symbols"
 
         self.server.notify.initialized({})
-        self.completions_available.set()

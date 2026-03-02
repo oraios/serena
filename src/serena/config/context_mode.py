@@ -14,7 +14,6 @@ from sensai.util.string import ToStringMixin
 from serena.config.serena_config import SerenaPaths, ToolInclusionDefinition
 from serena.constants import (
     DEFAULT_CONTEXT,
-    DEFAULT_MODES,
     INTERNAL_MODE_YAMLS_DIR,
     SERENA_FILE_ENCODING,
     SERENAS_OWN_CONTEXT_YAMLS_DIR,
@@ -41,6 +40,11 @@ class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
     It is formatted by the agent (see SerenaAgent._format_prompt()).
     """
     description: str = ""
+    _yaml_path: Path | None = field(default=None, repr=False, compare=False)
+    """
+    Internal field storing the path to the YAML file this mode was loaded from.
+    Used to support loading modes from arbitrary file paths.
+    """
 
     def _tostring_includes(self) -> list[str]:
         return ["name"]
@@ -54,14 +58,24 @@ class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
     @classmethod
     def from_yaml(cls, yaml_path: str | Path) -> Self:
         """Load a mode from a YAML file."""
-        with open(yaml_path, encoding=SERENA_FILE_ENCODING) as f:
+        yaml_as_path = Path(yaml_path).resolve()
+        with Path(yaml_as_path).open(encoding=SERENA_FILE_ENCODING) as f:
             data = yaml.safe_load(f)
-        name = data.pop("name", Path(yaml_path).stem)
-        return cls(name=name, **data)
+        name = data.pop("name", yaml_as_path.stem)
+        return cls(name=name, _yaml_path=yaml_as_path, **data)
 
     @classmethod
-    def get_path(cls, name: str) -> str:
-        """Get the path to the YAML file for a mode."""
+    def get_path(cls, name: str, instance: Self | None = None) -> str:
+        """Get the path to the YAML file for a mode.
+
+        :param name: The name of the mode
+        :param instance: Optional mode instance. If provided and it has a stored path, that path is returned.
+        :return: The path to the mode's YAML file
+        """
+        # If we have an instance with a stored path, use that
+        if instance is not None and instance._yaml_path is not None:
+            return str(instance._yaml_path)
+
         fname = f"{name}.yml"
         custom_mode_path = os.path.join(SerenaPaths().user_modes_dir, fname)
         if os.path.exists(custom_mode_path):
@@ -103,14 +117,17 @@ class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
         return [f.stem for f in Path(SerenaPaths().user_modes_dir).glob("*.yml")]
 
     @classmethod
-    def load_default_modes(cls) -> list[Self]:
-        """Load the default modes (interactive and editing)."""
-        return [cls.from_name(mode) for mode in DEFAULT_MODES]
-
-    @classmethod
     def load(cls, name_or_path: str | Path) -> Self:
-        if str(name_or_path).endswith(".yml"):
+        # Check if it's a file path that exists
+        path = Path(name_or_path)
+        if path.exists() and path.is_file():
             return cls.from_yaml(name_or_path)
+
+        # If it looks like a file path but doesn't exist, raise FileNotFoundError
+        name_or_path_str = str(name_or_path)
+        if os.sep in name_or_path_str or (os.altsep and os.altsep in name_or_path_str) or name_or_path_str.endswith((".yml", ".yaml")):
+            raise FileNotFoundError(f"Mode file not found: {path.resolve()}")
+
         return cls.from_name(str(name_or_path))
 
 
@@ -137,6 +154,12 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
     maps tool names to custom descriptions, default descriptions are extracted from the tool docstrings.
     """
 
+    _yaml_path: Path | None = field(default=None, repr=False, compare=False)
+    """
+    Internal field storing the path to the YAML file this context was loaded from.
+    Used to support loading contexts from arbitrary file paths.
+    """
+
     single_project: bool = False
     """
     whether to assume that Serena shall only work on a single project in this context (provided that a project is given
@@ -152,17 +175,27 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
     @classmethod
     def from_yaml(cls, yaml_path: str | Path) -> Self:
         """Load a context from a YAML file."""
-        with open(yaml_path, encoding=SERENA_FILE_ENCODING) as f:
+        yaml_as_path = Path(yaml_path).resolve()
+        with yaml_as_path.open(encoding=SERENA_FILE_ENCODING) as f:
             data = yaml.safe_load(f)
-        name = data.pop("name", Path(yaml_path).stem)
+        name = data.pop("name", yaml_as_path.stem)
         # Ensure backwards compatibility for tool_description_overrides
         if "tool_description_overrides" not in data:
             data["tool_description_overrides"] = {}
-        return cls(name=name, **data)
+        return cls(name=name, _yaml_path=yaml_as_path, **data)
 
     @classmethod
-    def get_path(cls, name: str) -> str:
-        """Get the path to the YAML file for a context."""
+    def get_path(cls, name: str, instance: Self | None = None) -> str:
+        """Get the path to the YAML file for a context.
+
+        :param name: The name of the context
+        :param instance: Optional context instance. If provided and it has a stored path, that path is returned.
+        :return: The path to the context's YAML file
+        """
+        # If we have an instance with a stored path, use that
+        if instance is not None and instance._yaml_path is not None:
+            return str(instance._yaml_path)
+
         fname = f"{name}.yml"
         custom_context_path = os.path.join(SerenaPaths().user_contexts_dir, fname)
         if os.path.exists(custom_context_path):
@@ -194,8 +227,16 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
 
     @classmethod
     def load(cls, name_or_path: str | Path) -> Self:
-        if str(name_or_path).endswith(".yml"):
+        # Check if it's a file path that exists
+        path = Path(name_or_path)
+        if path.exists() and path.is_file():
             return cls.from_yaml(name_or_path)
+
+        # If it looks like a file path but doesn't exist, raise FileNotFoundError
+        name_or_path_str = str(name_or_path)
+        if os.sep in name_or_path_str or (os.altsep and os.altsep in name_or_path_str) or name_or_path_str.endswith((".yml", ".yaml")):
+            raise FileNotFoundError(f"Context file not found: {path.resolve()}")
+
         return cls.from_name(str(name_or_path))
 
     @classmethod

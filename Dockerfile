@@ -64,6 +64,7 @@ ENV SERENA_HOME=/workspaces/serena/config
 RUN mkdir -p $SERENA_HOME
 RUN cp src/serena/resources/serena_config.template.yml $SERENA_HOME/serena_config.yml
 RUN sed -i 's/^gui_log_window: .*/gui_log_window: False/' $SERENA_HOME/serena_config.yml
+RUN sed -i 's/^web_dashboard_listen_address: .*/web_dashboard_listen_address: 0.0.0.0/' $SERENA_HOME/serena_config.yml
 RUN sed -i 's/^web_dashboard_open_on_launch: .*/web_dashboard_open_on_launch: False/' $SERENA_HOME/serena_config.yml
 
 # Create virtual environment and install dependencies

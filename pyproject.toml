@@ -25,7 +25,7 @@ dependencies = [
   "pydantic>=2.10.6",
   "types-pyyaml>=6.0.12.20241230",
   "pyyaml>=6.0.2",
-  "ruamel.yaml>=0.18.0",
+  "ruamel.yaml==0.18.14",
   "jinja2>=3.1.6",
   "dotenv>=0.9.9",
   "pathspec>=0.12.1",
@@ -35,6 +35,7 @@ dependencies = [
   "tqdm>=4.67.1",
   "tiktoken>=0.9.0",
   "anthropic>=0.54.0",
+  "beautifulsoup4>=4.14.2",
 ]
 
 [[tool.uv.index]]
@@ -53,7 +54,7 @@ text = "MIT"
 
 [project.optional-dependencies]
 dev = [
-  "black[jupyter]>=23.7.0",
+  "black[jupyter]>=23.7.0, <26",  # black 26 is incompatible with our pathspec version
   "jinja2",
   # In version 1.0.4 we get a NoneType error related to some config conversion (yml_analytics is None and should be a list)
   "mypy>=1.16.1",
@@ -72,6 +73,7 @@ dev = [
   "jupyter-book>=1,<2",
   "nbsphinx",
   "pyinstrument",
+  "pytest-timeout>=2.4.0",
 ]
 agno = ["agno>=2.2.1", "sqlalchemy>=2.0.40"]
 google = ["google-genai>=1.8.0"]
@@ -112,10 +114,21 @@ warn_redundant_casts = true
 warn_unreachable = true
 warn_unused_configs = true
 warn_unused_ignores = false
-exclude = "^build/|^docs/"
+exclude = "^build/|^docs/|^test/resources/"
+
+[[tool.mypy.overrides]]
+module = "test.*"
+disallow_untyped_defs = false  # untyped defs are OK in tests
 
 [tool.poe.env]
 PYDEVD_DISABLE_FILE_VALIDATION = "1"
+
+[tool.poe.executor]
+# This is important when using poe with uv, because otherwise poe will try to run commands through
+# uv, which in turn will try to recreate the environment, which in turn will fail if any process
+# using the environment is already running! Naturally, processes using the env are running all the
+# time (e.g. a Serena MCP server), so using the default executor (uv) is not an option!
+type = "simple"
 
 [tool.poe.tasks]
 # Uses PYTEST_MARKERS env var for default markers
@@ -128,8 +141,9 @@ _black_format = "black src scripts test"
 _ruff_format = "ruff check --fix src scripts test"
 lint = ["_black_check", "_ruff_check"]
 format = ["_ruff_format", "_black_format"]
-_mypy = "mypy src/serena src/solidlsp"
-type-check = ["_mypy"]
+_mypy_core = "mypy src/serena src/solidlsp"
+_mypy_test = "mypy --disable-error-code no-untyped-def test"
+type-check = ["_mypy_core", "_mypy_test"]
 # docs
 _autogen_rst = "python docs/autogen_rst.py"
 _sphinx_build = "sphinx-build -b html docs docs/_build -W --keep-going"
@@ -254,6 +268,9 @@ ignore = [
   "UP037",    # can incorrectly (!) convert quoted type to unquoted type, causing an error
   "UP045",    # imposes T | None instead of Optional[T]
   "UP031",    # forbids % operator to format strings
+  "UP042",    # wants str,Enum -> StrEnum (breaking change)
+  "PLW0108",  # unnecessary lambda (style preference)
+  "PLC0207",  # split vs rsplit optimization (style preference)
 ]
 unfixable = ["F841", "F601", "F602", "B018"]
 extend-fixable = ["F401", "B905", "W291"]
@@ -304,8 +321,12 @@ markers = [
   "haskell: Haskell language server tests",
   "yaml: language server running for YAML",
   "powershell: language server running for PowerShell",
+  "pascal: language server running for Pascal (Free Pascal/Lazarus)",
+  "cpp: language server running for C/C++",
   "slow: tests that require additional Expert instances and have long startup times (~60-90s each)",
   "toml: language server running for TOML",
+  "matlab: language server running for MATLAB (requires MATLAB R2021b+)",
+  "systemverilog: language server running for SystemVerilog (uses verible-verilog-ls)",
 ]
 
 [tool.codespell]

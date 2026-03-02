@@ -6,14 +6,20 @@ Contains various configurations and settings specific to Markdown.
 import logging
 import os
 import pathlib
-import threading
+from collections.abc import Hashable
 
 from overrides import override
 
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import (
+    DocumentSymbols,
+    LanguageServerDependencyProvider,
+    LanguageServerDependencyProviderSinglePath,
+    LSPFileBuffer,
+    SolidLanguageServer,
+)
 from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
@@ -26,84 +32,116 @@ class Marksman(SolidLanguageServer):
     Provides Markdown specific instantiation of the LanguageServer class using marksman.
     """
 
-    marksman_releases = "https://github.com/artempyanykh/marksman/releases/download/2024-12-18"
-    runtime_dependencies = RuntimeDependencyCollection(
-        [
-            RuntimeDependency(
-                id="marksman",
-                url=f"{marksman_releases}/marksman-linux-x64",
-                platform_id="linux-x64",
-                archive_type="binary",
-                binary_name="marksman",
-            ),
-            RuntimeDependency(
-                id="marksman",
-                url=f"{marksman_releases}/marksman-linux-arm64",
-                platform_id="linux-arm64",
-                archive_type="binary",
-                binary_name="marksman",
-            ),
-            RuntimeDependency(
-                id="marksman",
-                url=f"{marksman_releases}/marksman-macos",
-                platform_id="osx-x64",
-                archive_type="binary",
-                binary_name="marksman",
-            ),
-            RuntimeDependency(
-                id="marksman",
-                url=f"{marksman_releases}/marksman-macos",
-                platform_id="osx-arm64",
-                archive_type="binary",
-                binary_name="marksman",
-            ),
-            RuntimeDependency(
-                id="marksman",
-                url=f"{marksman_releases}/marksman.exe",
-                platform_id="win-x64",
-                archive_type="binary",
-                binary_name="marksman.exe",
-            ),
-        ]
-    )
+    class DependencyProvider(LanguageServerDependencyProviderSinglePath):
+        marksman_releases = "https://github.com/artempyanykh/marksman/releases/download/2024-12-18"
+        runtime_dependencies = RuntimeDependencyCollection(
+            [
+                RuntimeDependency(
+                    id="marksman",
+                    url=f"{marksman_releases}/marksman-linux-x64",
+                    platform_id="linux-x64",
+                    archive_type="binary",
+                    binary_name="marksman",
+                ),
+                RuntimeDependency(
+                    id="marksman",
+                    url=f"{marksman_releases}/marksman-linux-arm64",
+                    platform_id="linux-arm64",
+                    archive_type="binary",
+                    binary_name="marksman",
+                ),
+                RuntimeDependency(
+                    id="marksman",
+                    url=f"{marksman_releases}/marksman-macos",
+                    platform_id="osx-x64",
+                    archive_type="binary",
+                    binary_name="marksman",
+                ),
+                RuntimeDependency(
+                    id="marksman",
+                    url=f"{marksman_releases}/marksman-macos",
+                    platform_id="osx-arm64",
+                    archive_type="binary",
+                    binary_name="marksman",
+                ),
+                RuntimeDependency(
+                    id="marksman",
+                    url=f"{marksman_releases}/marksman.exe",
+                    platform_id="win-x64",
+                    archive_type="binary",
+                    binary_name="marksman.exe",
+                ),
+            ]
+        )
 
-    @classmethod
-    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> str:
-        """Setup runtime dependencies for marksman and return the command to start the server."""
-        deps = cls.runtime_dependencies
-        dependency = deps.get_single_dep_for_current_platform()
+        def _get_or_install_core_dependency(self) -> str:
+            """Setup runtime dependencies for marksman and return the command to start the server."""
+            deps = self.runtime_dependencies
+            dependency = deps.get_single_dep_for_current_platform()
 
-        marksman_ls_dir = cls.ls_resources_dir(solidlsp_settings)
-        marksman_executable_path = deps.binary_path(marksman_ls_dir)
-        if not os.path.exists(marksman_executable_path):
-            log.info(
-                f"Downloading marksman from {dependency.url} to {marksman_ls_dir}",
-            )
-            deps.install(marksman_ls_dir)
-        if not os.path.exists(marksman_executable_path):
-            raise FileNotFoundError(f"Download failed? Could not find marksman executable at {marksman_executable_path}")
-        os.chmod(marksman_executable_path, 0o755)
-        return marksman_executable_path
+            marksman_ls_dir = self._ls_resources_dir
+            marksman_executable_path = deps.binary_path(marksman_ls_dir)
+            if not os.path.exists(marksman_executable_path):
+                log.info(
+                    f"Downloading marksman from {dependency.url} to {marksman_ls_dir}",
+                )
+                deps.install(marksman_ls_dir)
+            if not os.path.exists(marksman_executable_path):
+                raise FileNotFoundError(f"Download failed? Could not find marksman executable at {marksman_executable_path}")
+            os.chmod(marksman_executable_path, 0o755)
+            return marksman_executable_path
+
+        def _create_launch_command(self, core_path: str) -> list[str]:
+            return [core_path, "server"]
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a Marksman instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        marksman_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
-
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd=f"{marksman_executable_path} server", cwd=repository_root_path),
+            None,
             "markdown",
             solidlsp_settings,
         )
-        self.server_ready = threading.Event()
+
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["node_modules", ".obsidian", ".vitepress", ".vuepress"]
+
+    def _document_symbols_cache_fingerprint(self) -> Hashable | None:
+        request_document_symbols_override_version = 1
+        return request_document_symbols_override_version
+
+    @override
+    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
+        """Override to remap Marksman's heading symbol kinds from String to Namespace.
+
+        Marksman LSP returns all markdown headings (h1-h6) with SymbolKind.String (15).
+        This is problematic because String (15) >= Variable (13), so headings are
+        classified as "low-level" and filtered out of symbol overviews.
+        Remapping to Namespace (3) fixes this and is semantically appropriate
+        (headings are named sections containing other content).
+        """
+        document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
+
+        # NOTE: When changing this method, also update the cache fingerprint method above
+
+        def remap_heading_kinds(symbol: UnifiedSymbolInformation) -> None:
+            if symbol["kind"] == SymbolKind.String:
+                symbol["kind"] = SymbolKind.Namespace
+            for child in symbol.get("children", []):
+                remap_heading_kinds(child)
+
+        for sym in document_symbols.root_symbols:
+            remap_heading_kinds(sym)
+
+        return document_symbols
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
@@ -181,5 +219,3 @@ class Marksman(SolidLanguageServer):
 
         # marksman is typically ready immediately after initialization
         log.info("Marksman server initialization complete")
-        self.server_ready.set()
-        self.completions_available.set()

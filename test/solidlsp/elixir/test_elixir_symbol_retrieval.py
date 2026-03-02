@@ -53,7 +53,7 @@ class TestElixirLanguageServerSymbols:
             assert containing_symbol["name"] == "def create_user(pid, id, name, email, roles \\\\ [])"
             assert containing_symbol["kind"] == SymbolKind.Method or containing_symbol["kind"] == SymbolKind.Function
             if "body" in containing_symbol:
-                assert "def create_user" in containing_symbol["body"]
+                assert "def create_user" in containing_symbol["body"].get_text()
 
     @pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)
     def test_request_containing_symbol_module(self, language_server: SolidLanguageServer) -> None:
@@ -257,6 +257,7 @@ class TestElixirLanguageServerSymbols:
                 # We should find some references or none (both are valid outcomes)
                 assert isinstance(refs, list)
 
+    @pytest.mark.xfail(reason="Flaky test, sometimes fails with an Expert-internal error")
     @pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)
     def test_symbol_tree_structure(self, language_server: SolidLanguageServer) -> None:
         """Test that symbol tree structure is correctly built."""

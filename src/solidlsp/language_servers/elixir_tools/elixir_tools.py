@@ -328,7 +328,6 @@ class ElixirTools(SolidLanguageServer):
         assert "textDocumentSync" in init_response["capabilities"], f"Missing textDocumentSync in {init_response['capabilities']}"
 
         self.server.notify.initialized({})
-        self.completions_available.set()
 
         # Expert needs time to compile the project and build indexes on first run.
         # This can take 2-3+ minutes for mid-sized codebases.
