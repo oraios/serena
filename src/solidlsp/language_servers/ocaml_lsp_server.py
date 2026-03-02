@@ -142,7 +142,7 @@ class OcamlLanguageServer(SolidLanguageServer):
                 "  opam install ocaml-lsp-server"
             ) from e
         except FileNotFoundError as e:
-            raise RuntimeError("opam not found. Please install opam:\n" "  https://opam.ocaml.org/doc/Install.html") from e
+            raise RuntimeError("opam not found. Please install opam:\n  https://opam.ocaml.org/doc/Install.html") from e
 
     @staticmethod
     def _ensure_ocaml_lsp_installed(repository_root_path: str) -> str:
