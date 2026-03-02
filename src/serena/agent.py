@@ -532,6 +532,13 @@ class SerenaAgent:
         """
         Opens the Serena web dashboard in the default web browser.
 
+        On Linux, prefers Chromium/Chrome in ``--app`` mode so the dashboard
+        opens as a standalone window.  This allows the heartbeat-based
+        ``window.close()`` in *dashboard.js* to work, because browsers only
+        permit ``window.close()`` for windows that were not opened as regular
+        tabs.  Falls back to the default browser via ``webbrowser.open()`` if
+        no supported Chromium-based browser is found.
+
         :return: a message indicating success or failure
         """
         if self._dashboard_url is None:
@@ -541,7 +548,25 @@ class SerenaAgent:
             log.warning("Not opening the Serena web dashboard because no usable display was detected.")
             return False
 
-        # Use a subprocess to avoid any output from webbrowser.open being written to stdout
+        # On Linux, try Chromium/Chrome in app-mode so that window.close()
+        # works when the server shuts down (heartbeat-based auto-close).
+        if platform.system() == "Linux":
+            import shutil
+
+            for browser_cmd in ("chromium-browser", "chromium", "google-chrome", "google-chrome-stable"):
+                browser_path = shutil.which(browser_cmd)
+                if browser_path:
+                    subprocess.Popen(
+                        [browser_path, f"--app={self._dashboard_url}"],
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        start_new_session=True,
+                    )
+                    return True
+
+        # Fallback: use the default browser via webbrowser.open.
+        # Use a subprocess to avoid any output from webbrowser.open being written to stdout.
         subprocess.Popen(
             [sys.executable, "-c", f"import webbrowser; webbrowser.open({self._dashboard_url!r})"],
             stdin=subprocess.DEVNULL,

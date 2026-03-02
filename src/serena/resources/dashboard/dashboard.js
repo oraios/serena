@@ -491,9 +491,15 @@ class Dashboard {
             error: function (xhr, status, error) {
                 self.heartbeatFailureCount++;
                 console.error('Heartbeat failure; count = ', self.heartbeatFailureCount);
-                if (self.heartbeatFailureCount >= 1) {
+                if (self.heartbeatFailureCount >= 3) {
                     console.log('Server appears to be down, closing tab');
                     window.close();
+                    // Fallback: window.close() is blocked by most browsers for
+                    // tabs that were not opened via window.open().  Navigate to
+                    // about:blank so the tab is visually cleared.
+                    setTimeout(function () {
+                        window.location.replace('about:blank');
+                    }, 500);
                 }
             },
         });
@@ -2180,6 +2186,10 @@ class Dashboard {
             self.$errorContainer.html('<div class="error-message">Shutting down ...</div>')
             setTimeout(function () {
                 window.close();
+                // Fallback if window.close() was blocked by the browser
+                setTimeout(function () {
+                    window.location.replace('about:blank');
+                }, 500);
             }, 1000);
         }
 
