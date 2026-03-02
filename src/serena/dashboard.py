@@ -681,7 +681,7 @@ class SerenaDashboardViewer:
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("oraios.serena")
 
         dashboard_path = Path(SERENA_DASHBOARD_DIR)
-        icon_path = str(dashboard_path / "serena-icon-48.png")
+        icon_path = str(dashboard_path / "serena-icon.ico")
 
         # Create hidden to avoid flash; show/restore/minimize in start callback.
         self.window = webview.create_window(
