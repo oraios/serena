@@ -2,6 +2,7 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
+import multiprocessing
 import os
 import platform
 import subprocess
@@ -27,7 +28,7 @@ from serena.config.serena_config import (
     SerenaPaths,
     ToolInclusionDefinition,
 )
-from serena.dashboard import SerenaDashboardAPI
+from serena.dashboard import SerenaDashboardAPI, SerenaDashboardViewer
 from serena.ls_manager import LanguageServerManager, LanguageServerManagerInitialisationError
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
@@ -375,8 +376,7 @@ class SerenaAgent:
             dashboard_url = f"http://{dashboard_host}:{port}/dashboard/index.html"
             self._dashboard_url = dashboard_url
             log.info("Serena web dashboard started at %s", dashboard_url)
-            if self.serena_config.web_dashboard_open_on_launch:
-                self.open_dashboard()
+            self._start_dashboard_viewer(minimized=not self.serena_config.web_dashboard_open_on_launch)
             # inform the GUI window (if any)
             if self._gui_log_viewer is not None:
                 self._gui_log_viewer.set_dashboard_url(dashboard_url)
@@ -528,11 +528,19 @@ class SerenaAgent:
         """
         return self._dashboard_url
 
+    @staticmethod
+    def _start_dashboard_viewer_process_function(url: str, minimized: bool) -> None:
+        SerenaDashboardViewer(url, start_minimized=minimized).run()
+
+    def _start_dashboard_viewer(self, minimized: bool) -> None:
+        url = self.get_dashboard_url()
+        assert url is not None
+        process = multiprocessing.Process(target=self._start_dashboard_viewer_process_function, args=(url, minimized), daemon=True)
+        process.start()
+
     def open_dashboard(self) -> bool:
         """
-        Opens the Serena web dashboard in the default web browser.
-
-        :return: a message indicating success or failure
+        Opens the viewer for the Serena dashboard
         """
         if self._dashboard_url is None:
             raise Exception("Dashboard is not running.")

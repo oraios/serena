@@ -1,12 +1,17 @@
 import os
 import socket
+import sys
 import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
+import pystray
+import webview
 from flask import Flask, Response, request, send_from_directory
+from PIL import Image
 from pydantic import BaseModel
+from pystray import MenuItem as Item
 from sensai.util import logging
 
 from serena.analytics import ToolUsageStats
@@ -643,3 +648,90 @@ class SerenaDashboardAPI:
         thread = threading.Thread(target=lambda: self.run(host=host, port=port), daemon=True)
         thread.start()
         return thread, port
+
+
+class SerenaDashboardViewer:
+    """
+    Minimal pywebview wrapper with optional system tray.
+    """
+
+    def __init__(
+        self,
+        url: str,
+        *,
+        start_minimized: bool = False,
+        width: int = 1400,
+        height: int = 900,
+    ):
+        self.url = url
+        self.tray = True
+        self.title = "Serena Dashboard"
+        self.width = width
+        self.height = height
+        self.start_minimized = start_minimized
+
+        self.window: webview.Window | None = None
+        self._tray_icon = None
+
+    def run(self) -> None:
+        # Set app id (avoid app being lumped together with other Python-based apps in Windows taskbar)
+        if sys.platform == "win32":
+            import ctypes
+
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("oraios.serena")
+
+        dashboard_path = Path(SERENA_DASHBOARD_DIR)
+        icon_path = str(dashboard_path / "serena-icon-48.png")
+
+        # Create hidden to avoid flash; show/restore/minimize in start callback.
+        self.window = webview.create_window(
+            self.title,
+            self.url,
+            width=self.width,
+            height=self.height,
+            hidden=self.start_minimized,
+            confirm_close=False,
+        )
+
+        def _start_callback():
+            if self.start_minimized:
+                self.window.minimize()
+            else:
+                self.window.show()
+                self.window.restore()
+
+            if self.tray:
+                threading.Thread(target=self._run_tray, daemon=True).start()
+
+        webview.start(_start_callback, icon=icon_path)
+
+    def _run_tray(self) -> None:
+        dashboard_path = Path(SERENA_DASHBOARD_DIR)
+
+        icon_path = dashboard_path / "serena-icon-48.png"
+        icon_img = Image.open(icon_path)
+
+        def show(_icon, _item):
+            if self.window:
+                self.window.show()
+                self.window.restore()
+
+        def hide(_icon, _item):
+            if self.window:
+                self.window.hide()
+
+        def quit_app(_icon, _item):
+            try:
+                _icon.stop()
+            finally:
+                if self.window:
+                    self.window.destroy()
+
+        menu = pystray.Menu(
+            Item("Open", show, default=True),
+            Item("Hide", hide),
+            Item("Quit", quit_app),
+        )
+
+        self._tray_icon = pystray.Icon("dashboard_viewer", icon_img, self.title, menu)
+        self._tray_icon.run()
