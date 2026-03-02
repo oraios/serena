@@ -263,9 +263,18 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         def window_log_message(msg: dict) -> None:
             log.info(f"LSP: window/logMessage: {msg}")
 
+        def handle_typescript_version(params: dict) -> None:
+            """
+            The $/typescriptVersion notification is sent by typescript-language-server
+            once tsserver has loaded and reported its version. This is the most reliable
+            readiness signal.
+            """
+            log.info(f"TypeScript server ready signal detected via $/typescriptVersion: {params}")
+            self.server_ready.set()
+
         def check_experimental_status(params: dict) -> None:
             """
-            Also listen for experimental/serverStatus as a backup signal
+            Also listen for experimental/serverStatus as a backup readiness signal.
             """
             if params.get("quiescent") == True:
                 self.server_ready.set()
@@ -274,6 +283,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
         self.server.on_notification("$/progress", do_nothing)
+        self.server.on_notification("$/typescriptVersion", handle_typescript_version)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
@@ -295,7 +305,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         }
 
         self.server.notify.initialized({})
-        if self.server_ready.wait(timeout=1.0):
+        if self.server_ready.wait(timeout=10.0):
             log.info("TypeScript server is ready")
         else:
             log.info("Timeout waiting for TypeScript server to become ready, proceeding anyway")
