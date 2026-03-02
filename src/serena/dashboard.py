@@ -672,6 +672,7 @@ class SerenaDashboardViewer:
 
         self.window: webview.Window | None = None
         self._tray_icon = None
+        self._quitting = False
 
     def run(self) -> None:
         # Set app id (avoid app being lumped together with other Python-based apps in Windows taskbar)
@@ -684,6 +685,7 @@ class SerenaDashboardViewer:
         icon_path = str(dashboard_path / "serena-icon.ico")
 
         # Create hidden to avoid flash; show/restore/minimize in start callback.
+        # When tray is enabled, confirm_close allows us to intercept the X button.
         self.window = webview.create_window(
             self.title,
             self.url,
@@ -692,6 +694,11 @@ class SerenaDashboardViewer:
             hidden=self.start_minimized,
             confirm_close=False,
         )
+
+        if self.tray:
+            self.window.events.closing += self._on_closing
+            if sys.platform == "win32":
+                self.window.events.shown += self._hide_from_taskbar
 
         def _start_callback():
             if self.start_minimized:
@@ -704,6 +711,31 @@ class SerenaDashboardViewer:
                 threading.Thread(target=self._run_tray, daemon=True).start()
 
         webview.start(_start_callback, icon=icon_path)
+
+    def _on_closing(self) -> bool:
+        """Intercept window close: hide to tray instead of quitting."""
+        if self._quitting:
+            return True
+        if self.window:
+            self.window.hide()
+        return False  # Prevent the window from actually closing  # Prevent the window from actually closing
+
+    def _hide_from_taskbar(self) -> None:
+        """On Windows, set WS_EX_TOOLWINDOW on the native window to hide it from the taskbar."""
+        import ctypes
+
+        user32 = ctypes.windll.user32
+        GWL_EXSTYLE = -20
+        WS_EX_TOOLWINDOW = 0x00000080
+        WS_EX_APPWINDOW = 0x00040000
+
+        hwnd = user32.FindWindowW(None, self.title)
+        if not hwnd:
+            return
+
+        style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+        style = (style | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW
+        user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
 
     def _run_tray(self) -> None:
         dashboard_path = Path(SERENA_DASHBOARD_DIR)
@@ -721,6 +753,7 @@ class SerenaDashboardViewer:
                 self.window.hide()
 
         def quit_app(_icon, _item):
+            self._quitting = True
             try:
                 _icon.stop()
             finally:
