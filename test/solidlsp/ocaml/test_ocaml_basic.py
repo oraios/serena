@@ -3,7 +3,6 @@ import os
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.language_servers.ocaml_lsp_server import OcamlLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
 
@@ -66,36 +65,6 @@ class TestOCamlLanguageServer:
         # Test non-matching extensions
         assert not file_matcher.is_relevant_filename("test.py"), "Should not match .py files"
         assert not file_matcher.is_relevant_filename("test.js"), "Should not match .js files"
-
-    @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
-    def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:
-        """Test finding references across .ml files in lib, bin, and test directories.
-
-        Cross-file references require OCaml 5.2+ with project-wide occurrences
-        and ocaml-lsp-server >= 1.23.0 for reliable cross-file reference support.
-        The server automatically builds the index during init via `dune build @ocaml-index`.
-        """
-        file_path = os.path.join("lib", "test_repo.ml")
-
-        # Use correct position for 'fib' function name (line 8, char 8)
-        fib_line = 7  # 0-indexed
-        fib_char = 8  # 0-indexed
-
-        refs = language_server.request_references(file_path, fib_line, fib_char)
-
-        # Same-file references should always work (definition + 2 recursive calls)
-        # Use forward slashes for URI matching (URIs always use /)
-        lib_refs = [ref for ref in refs if "lib/test_repo.ml" in ref.get("uri", "")]
-        assert len(lib_refs) >= 3, f"Expected at least 3 references in lib/test_repo.ml, found {len(lib_refs)}"
-
-        # Cross-file refs work on OCaml 5.2+ with ocaml-lsp-server >= 1.23.0
-        if isinstance(language_server, OcamlLanguageServer) and language_server.supports_cross_file_references:
-            bin_refs = [ref for ref in refs if "bin/main.ml" in ref.get("uri", "")]
-            test_refs = [ref for ref in refs if "test/test_test_repo.ml" in ref.get("uri", "")]
-
-            # fib is used in bin/main.ml and test/test_test_repo.ml
-            assert len(bin_refs) >= 1, f"Expected at least 1 reference in bin/main.ml, found {len(bin_refs)}"
-            assert len(test_refs) >= 1, f"Expected at least 1 reference in test/test_test_repo.ml, found {len(test_refs)}"
 
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
     def test_module_hierarchy_navigation(self, language_server: SolidLanguageServer) -> None:

@@ -60,7 +60,7 @@ class OcamlLanguageServer(SolidLanguageServer):
         """
         Detect and return the OCaml version as a tuple (major, minor, patch).
         Also checks for version compatibility with ocaml-lsp-server.
-        Returns (0, 0, 0) if version cannot be determined.
+        Raises RuntimeError if version cannot be determined.
         """
         try:
             result = subprocess.run(
@@ -88,17 +88,29 @@ class OcamlLanguageServer(SolidLanguageServer):
                         "  opam switch create <name> ocaml-base-compiler.4.14.2"
                     )
                 return version_tuple
+            raise RuntimeError(
+                f"Could not parse OCaml version from output: {result.stdout.strip()}\n"
+                "Please ensure OCaml is properly installed: opam exec -- ocaml -version"
+            )
         except subprocess.CalledProcessError as e:
-            log.warning(f"Could not check OCaml version: {e.stderr}")
-        except FileNotFoundError:
-            log.warning("OCaml not found in PATH, version check skipped")
-        return (0, 0, 0)
+            raise RuntimeError(
+                f"Failed to detect OCaml version: {e.stderr}\n"
+                "Please ensure OCaml is installed and opam is configured:\n"
+                "  opam switch show\n"
+                "  opam exec -- ocaml -version"
+            ) from e
+        except FileNotFoundError as e:
+            raise RuntimeError(
+                "OCaml not found. Please install OCaml via opam:\n"
+                "  opam switch create <name> ocaml-base-compiler.4.14.2\n"
+                "  eval $(opam env)"
+            ) from e
 
     @staticmethod
     def _detect_lsp_version(repository_root_path: str) -> tuple[int, int, int]:
         """
         Detect and return the ocaml-lsp-server version as a tuple (major, minor, patch).
-        Returns (0, 0, 0) if version cannot be determined.
+        Raises RuntimeError if version cannot be determined.
         """
         try:
             result = subprocess.run(
@@ -118,11 +130,19 @@ class OcamlLanguageServer(SolidLanguageServer):
                 version_tuple = (major, minor, patch)
                 log.info(f"ocaml-lsp-server version: {major}.{minor}.{patch}")
                 return version_tuple
+            raise RuntimeError(
+                f"Could not parse ocaml-lsp-server version from output: {version_str}\n"
+                "Please ensure ocaml-lsp-server is properly installed:\n"
+                "  opam list -i ocaml-lsp-server"
+            )
         except subprocess.CalledProcessError as e:
-            log.warning(f"Could not detect ocaml-lsp-server version: {e.stderr}")
-        except FileNotFoundError:
-            log.warning("opam not found in PATH, LSP version check skipped")
-        return (0, 0, 0)
+            raise RuntimeError(
+                f"Failed to detect ocaml-lsp-server version: {e.stderr}\n"
+                "Please install ocaml-lsp-server:\n"
+                "  opam install ocaml-lsp-server"
+            ) from e
+        except FileNotFoundError as e:
+            raise RuntimeError("opam not found. Please install opam:\n" "  https://opam.ocaml.org/doc/Install.html") from e
 
     @staticmethod
     def _ensure_ocaml_lsp_installed(repository_root_path: str) -> str:
