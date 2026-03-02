@@ -105,6 +105,18 @@ def serena_agent(request: pytest.FixtureRequest, serena_config) -> Iterator[Sere
 
 
 class TestSerenaAgent:
+    @pytest.mark.parametrize("project", [None, str(get_repo_path(Language.PYTHON)), "non_existent_path"])
+    def test_agent_instantiation(self, project: str | None):
+        """
+        Tests agent instantiation for cases where
+          * no project is specified at startup
+          * a valid project path is specified at startup
+          * an invalid project path is specified at startup
+        All cases must not raise an exception.
+        """
+        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False)
+        SerenaAgent(project=project, serena_config=serena_config)
+
     @pytest.mark.parametrize(
         "serena_agent,symbol_name,expected_kind,expected_file",
         [

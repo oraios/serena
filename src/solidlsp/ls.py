@@ -1987,14 +1987,22 @@ class SolidLanguageServer(ABC):
 
         return defining_symbol
 
-    def _cache_context_fingerprint(self) -> Hashable | None:
+    def _document_symbols_cache_fingerprint(self) -> Hashable | None:
         """
-        Return a fingerprint of any language-server-specific context that affects cached results.
+        Returns a fingerprint of any language server-specific aspects that result in changes
+        to the high-level document symbol information.
 
-        Subclasses may override to provide a deterministic value that changes when cached results
-        would be invalidated (e.g., build flags, environment variables).
+        Language servers must implement this method/change the return value
+          * whenever they change the `request_document_symbols` implementation to modify the returned content
+          * are reconfigured in a way that affects the returned contents (e.g. context-specific configuration
+            such as build flags or environment variables); configuration options can, in such cases, be
+            hashed together to produce a single fingerprint value.
+
+        Whenever the value changes, the document symbols cache will be invalidated and re-populated.
 
         The value must be hashable and safe for inclusion in cache version tuples.
+        E.g. use an integer, a string or a tuple of integers/strings.
+
         Returns None if no context-specific fingerprint is needed.
         """
         return None
@@ -2005,7 +2013,7 @@ class SolidLanguageServer(ABC):
 
         Incorporates cache context fingerprint if provided by the language server.
         """
-        fingerprint = self._cache_context_fingerprint()
+        fingerprint = self._document_symbols_cache_fingerprint()
         if fingerprint is not None:
             return (self.DOCUMENT_SYMBOL_CACHE_VERSION, fingerprint)
         return self.DOCUMENT_SYMBOL_CACHE_VERSION
@@ -2030,7 +2038,7 @@ class SolidLanguageServer(ABC):
 
     def _raw_document_symbols_cache_version(self) -> tuple[Hashable, ...]:
         base_version: tuple[Hashable, ...] = (self.RAW_DOCUMENT_SYMBOLS_CACHE_VERSION, self._ls_specific_raw_document_symbols_cache_version)
-        fingerprint = self._cache_context_fingerprint()
+        fingerprint = self._document_symbols_cache_fingerprint()
         if fingerprint is not None:
             return (*base_version, fingerprint)
         return base_version
