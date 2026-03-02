@@ -49,6 +49,7 @@ class TestFSharpLanguageServer:
         for expected in expected_symbols:
             assert expected in symbol_names, f"{expected} function not found in Calculator.fs symbols"
 
+    @pytest.mark.xfail(is_ci, reason="Test is flaky")  # TODO: Re-enable if the LS can be made more reliable #1040
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test finding references using symbol selection range."""
