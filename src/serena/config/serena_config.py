@@ -222,6 +222,7 @@ class ProjectConfig(SharedConfig):
         languages: list[Language] | None = None,
         save_to_disk: bool = True,
         interactive: bool = False,
+        auto_detect_all_languages: bool = True,
     ) -> Self:
         """
         Autogenerate a project configuration for a given project root.
@@ -232,6 +233,11 @@ class ProjectConfig(SharedConfig):
         :param languages: the languages of the project; if None, they will be determined automatically
         :param save_to_disk: whether to save the project configuration to disk
         :param interactive: whether to run in interactive CLI mode, asking the user for input where appropriate
+        :param auto_detect_all_languages: when True (default) and running non-interactively, all detected languages
+            are automatically enabled rather than just the dominant one. This is important for autonomous/agent
+            invocations (e.g. via MCP) where there is no opportunity to manually configure a project.yml, and
+            the project may be a polyglot repo (e.g. a Python backend + TypeScript/React frontend).
+            In interactive mode, the user is always asked which additional languages to enable, regardless of this flag.
         :return: the project configuration
         """
         project_root = Path(project_root).resolve()
@@ -260,26 +266,37 @@ class ProjectConfig(SharedConfig):
                 languages_and_percentages = sorted(
                     language_composition.items(), key=lambda item: (item[1], item[0].get_priority()), reverse=True
                 )
-                # find the language with the highest percentage and enable it
-                top_language_pair = languages_and_percentages[0]
-                other_language_pairs = languages_and_percentages[1:]
-                languages_to_use: list[str] = [top_language_pair[0].value]
-                # if in interactive mode, ask the user which other languages to enable
-                if len(other_language_pairs) > 0 and interactive:
-                    print(
-                        "Detected and enabled main language '%s' (%.2f%% of source files)."
-                        % (top_language_pair[0].value, top_language_pair[1])
+                languages_to_use: list[str]
+                if not interactive and auto_detect_all_languages:
+                    # In autonomous/agent mode (e.g. invoked via MCP without a pre-existing project.yml),
+                    # automatically enable all detected languages so polyglot repos (e.g. Python backend +
+                    # TypeScript/React frontend) work without any manual configuration.
+                    languages_to_use = [lang.value for lang, _ in languages_and_percentages]
+                    log.info(
+                        "Non-interactive mode: automatically enabling all detected languages: %s",
+                        languages_to_use,
                     )
-                    print(f"Additionally detected {len(other_language_pairs)} other language(s).\n")
-                    print("Note: Enable only languages you need symbolic retrieval/editing capabilities for.")
-                    print("      Additional language servers use resources and some languages may require additional")
-                    print("      system-level installations/configuration (see Serena documentation).")
-                    print("\nWhich additional languages do you want to enable?")
-                    for lang, perc in other_language_pairs:
-                        enable = ask_yes_no("Enable %s (%.2f%% of source files)?" % (lang.value, perc), default=False)
-                        if enable:
-                            languages_to_use.append(lang.value)
-                    print()
+                else:
+                    # find the language with the highest percentage and enable it
+                    top_language_pair = languages_and_percentages[0]
+                    other_language_pairs = languages_and_percentages[1:]
+                    languages_to_use = [top_language_pair[0].value]
+                    # if in interactive mode, ask the user which other languages to enable
+                    if len(other_language_pairs) > 0 and interactive:
+                        print(
+                            "Detected and enabled main language '%s' (%.2f%% of source files)."
+                            % (top_language_pair[0].value, top_language_pair[1])
+                        )
+                        print(f"Additionally detected {len(other_language_pairs)} other language(s).\n")
+                        print("Note: Enable only languages you need symbolic retrieval/editing capabilities for.")
+                        print("      Additional language servers use resources and some languages may require additional")
+                        print("      system-level installations/configuration (see Serena documentation).")
+                        print("\nWhich additional languages do you want to enable?")
+                        for lang, perc in other_language_pairs:
+                            enable = ask_yes_no("Enable %s (%.2f%% of source files)?" % (lang.value, perc), default=False)
+                            if enable:
+                                languages_to_use.append(lang.value)
+                        print()
                 log.info("Using languages: %s", languages_to_use)
             else:
                 languages_to_use = [lang.value for lang in languages]
