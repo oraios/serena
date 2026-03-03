@@ -57,10 +57,10 @@ def determine_programming_language_composition(repo_path: str) -> dict[Language,
         if count > 0:
             language_counts[language] = count
 
-    # Convert counts to percentages
+    # Convert counts to percentages (unrounded, so sorting by percentage is equivalent to sorting by count)
     language_percentages: dict[Language, float] = {}
     for language, count in language_counts.items():
         percentage = (count / total_files) * 100
-        language_percentages[language] = round(percentage, 2)
+        language_percentages[language] = percentage
 
     return language_percentages

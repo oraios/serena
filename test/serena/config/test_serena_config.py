@@ -52,20 +52,35 @@ class TestProjectConfigAutogenerate:
         # Create files for multiple languages
         (self.project_path / "small.js").write_text("console.log('JS');")
 
-        # Run autogenerate - should pick Python as dominant
+        # Run autogenerate - TypeScript should always be detected for JS files
         config = ProjectConfig.autogenerate(self.project_path, save_to_disk=False)
 
-        assert config.languages == [Language.TYPESCRIPT]
+        assert Language.TYPESCRIPT in config.languages
 
     def test_autogenerate_with_multiple_languages(self):
-        """Test autogeneration picks dominant language when multiple are present."""
-        # Create files for multiple languages
+        """Test autogeneration enables all detected languages by default in non-interactive mode."""
+        # Create files for multiple languages (2 Python, 1 JS/TS)
         (self.project_path / "main.py").write_text("print('Python')")
         (self.project_path / "util.py").write_text("def util(): pass")
         (self.project_path / "small.js").write_text("console.log('JS');")
 
-        # Run autogenerate - should pick Python as dominant
+        # Default: auto_detect_all_languages=True — all detected languages should be enabled
         config = ProjectConfig.autogenerate(self.project_path, save_to_disk=False)
+
+        assert Language.PYTHON in config.languages
+        assert Language.TYPESCRIPT in config.languages
+        # Python has more files so it should come first
+        assert config.languages[0] == Language.PYTHON
+
+    def test_autogenerate_with_multiple_languages_dominant_only(self):
+        """Test autogeneration picks only the dominant language when auto_detect_all_languages=False."""
+        # Create files for multiple languages (2 Python, 1 JS/TS)
+        (self.project_path / "main.py").write_text("print('Python')")
+        (self.project_path / "util.py").write_text("def util(): pass")
+        (self.project_path / "small.js").write_text("console.log('JS');")
+
+        # Explicit opt-out: only the dominant language should be enabled
+        config = ProjectConfig.autogenerate(self.project_path, save_to_disk=False, auto_detect_all_languages=False)
 
         assert config.languages == [Language.PYTHON]
 
@@ -120,7 +135,7 @@ class TestProjectConfigAutogenerate:
         config = ProjectConfig.autogenerate(self.project_path, project_name=custom_name, save_to_disk=False)
 
         assert config.project_name == custom_name
-        assert config.languages == [Language.TYPESCRIPT]
+        assert Language.TYPESCRIPT in config.languages
 
 
 class TestProjectConfig:

@@ -274,7 +274,7 @@ class ProjectConfig(SharedConfig):
                     languages_to_use = [lang.value for lang, _ in languages_and_percentages]
                     log.info(
                         "Non-interactive mode: automatically enabling all detected languages: %s",
-                        languages_to_use,
+                        [(lang, f"{pct:.2f}%") for lang, pct in languages_and_percentages],
                     )
                 else:
                     # find the language with the highest percentage and enable it
