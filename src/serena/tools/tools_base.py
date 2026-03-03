@@ -382,7 +382,8 @@ tool_packages = ["serena.tools"]
 class ToolRegistry:
     def __init__(self) -> None:
         self._tool_dict: dict[str, RegisteredTool] = {}
-        for cls in iter_subclasses(Tool):
+        inclusion_predicate = lambda c: "apply" in c.__dict__  # include only concrete tool classes that implement apply
+        for cls in iter_subclasses(Tool, inclusion_predicate=inclusion_predicate):
             if not any(cls.__module__.startswith(pkg) for pkg in tool_packages):
                 continue
             is_optional = issubclass(cls, ToolMarkerOptional)
