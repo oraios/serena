@@ -307,6 +307,8 @@ class Dashboard {
         this.$modalCloseRemove = $('.modal-close-remove');
         this.$editMemoryModal = $('#edit-memory-modal');
         this.$editMemoryName = $('#edit-memory-name');
+        this.$editMemoryRenameBtn = $('#edit-memory-rename-btn');
+        this.$editMemoryRenameInput = $('#edit-memory-rename-input');
         this.$editMemoryContent = $('#edit-memory-content');
         this.$editMemorySaveBtn = $('#edit-memory-save-btn');
         this.$editMemoryCancelBtn = $('#edit-memory-cancel-btn');
@@ -365,6 +367,19 @@ class Dashboard {
         this.$editMemoryCancelBtn.click(this.closeEditMemoryModal.bind(this));
         this.$modalCloseEditMemory.click(this.closeEditMemoryModal.bind(this));
         this.$editMemoryContent.on('input', this.trackMemoryChanges.bind(this));
+        this.$editMemoryRenameBtn.click(this.startMemoryRename.bind(this));
+        this.$editMemoryRenameInput.keydown(function (e) {
+            if (e.which === 13) { // Enter key
+                e.preventDefault();
+                self.commitMemoryRename();
+            } else if (e.which === 27) { // Escape key
+                e.preventDefault();
+                self.cancelMemoryRename();
+            }
+        });
+        this.$editMemoryRenameInput.on('blur', function () {
+            self.cancelMemoryRename();
+        });
         this.$deleteMemoryOkBtn.click(this.confirmDeleteMemoryOk.bind(this));
         this.$deleteMemoryCancelBtn.click(this.closeDeleteMemoryModal.bind(this));
         this.$modalCloseDeleteMemory.click(this.closeDeleteMemoryModal.bind(this));
@@ -1887,6 +1902,62 @@ class Dashboard {
         });
     }
 
+    startMemoryRename() {
+        this.$editMemoryName.hide();
+        this.$editMemoryRenameBtn.hide();
+        this.$editMemoryRenameInput.val(this.currentMemoryName).show().focus().select();
+    }
+
+    cancelMemoryRename() {
+        this.$editMemoryRenameInput.hide();
+        this.$editMemoryName.show();
+        this.$editMemoryRenameBtn.show();
+    }
+
+    commitMemoryRename() {
+        const newName = this.$editMemoryRenameInput.val().trim();
+        const oldName = this.currentMemoryName;
+
+        // If name unchanged, just cancel
+        if (!newName || newName === oldName) {
+            this.cancelMemoryRename();
+            return;
+        }
+
+        // Validate memory name (alphanumeric, underscores, and slashes for subdirectories)
+        if (!/^[a-zA-Z0-9_]+(?:\/[a-zA-Z0-9_]+)*$/.test(newName)) {
+            alert('Memory name can only contain letters, numbers, underscores, and "/" for subdirectories (e.g., "topic/memory_name")');
+            this.$editMemoryRenameInput.focus();
+            return;
+        }
+
+        const self = this;
+        this.$editMemoryRenameInput.prop('disabled', true);
+
+        $.ajax({
+            url: '/rename_memory', type: 'POST', contentType: 'application/json', data: JSON.stringify({
+                old_name: oldName, new_name: newName
+            }), success: function (response) {
+                if (response.status === 'success') {
+                    self.currentMemoryName = newName;
+                    self.$editMemoryName.text(newName);
+                    self.cancelMemoryRename();
+                    // Reload config to reflect the rename in the memory list
+                    self.loadConfigOverview();
+                } else {
+                    alert('Error: ' + response.message);
+                    self.$editMemoryRenameInput.focus();
+                }
+            }, error: function (xhr, status, error) {
+                console.error('Error renaming memory:', error);
+                alert('Error renaming memory: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
+                self.$editMemoryRenameInput.focus();
+            }, complete: function () {
+                self.$editMemoryRenameInput.prop('disabled', false);
+            }
+        });
+    }
+
     confirmDeleteMemory(memoryName) {
         // Set memory name to delete
         this.memoryToDelete = memoryName;
@@ -1960,9 +2031,9 @@ class Dashboard {
             return;
         }
 
-        // Validate memory name (alphanumeric and underscores only)
-        if (!/^[a-zA-Z0-9_]+$/.test(memoryName)) {
-            alert('Memory name can only contain letters, numbers, and underscores');
+        // Validate memory name (alphanumeric, underscores, and slashes for subdirectories)
+        if (!/^[a-zA-Z0-9_]+(?:\/[a-zA-Z0-9_]+)*$/.test(memoryName)) {
+            alert('Memory name can only contain letters, numbers, underscores, and "/" for subdirectories (e.g., "topic/memory_name")');
             return;
         }
 

@@ -11,6 +11,7 @@ from pathlib import Path
 
 from overrides import override
 
+from serena.util.dotnet import DotNETUtil
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
@@ -61,21 +62,7 @@ class FSharpLanguageServer(SolidLanguageServer):
         """
         Setup runtime dependencies for F# Language Server and return the command to start the server.
         """
-        # First check if .NET SDK is installed
-        dotnet_exe = shutil.which("dotnet")
-        if not dotnet_exe:
-            raise RuntimeError(
-                ".NET SDK is not installed or not in PATH. Please install .NET SDK 8.0 or later and ensure 'dotnet' is in your PATH."
-            )
-
-        # Verify dotnet version
-        import subprocess
-
-        try:
-            result = subprocess.run([dotnet_exe, "--version"], capture_output=True, text=True, check=True)
-            log.info(f"Found .NET SDK version: {result.stdout.strip()}")
-        except subprocess.CalledProcessError:
-            raise RuntimeError("Failed to get .NET SDK version. Please ensure .NET SDK is properly installed.")
+        dotnet_exe = DotNETUtil("8.0", allow_higher_version=True).get_dotnet_path_or_raise()
 
         RuntimeDependencyCollection(
             [

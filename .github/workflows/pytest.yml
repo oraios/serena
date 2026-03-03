@@ -139,7 +139,10 @@ jobs:
       - name: Setup .NET SDK (for F# and C# languages)
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
+      - name: List .NET runtimes
+        shell: bash
+        run: dotnet --list-runtimes
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
         with:
