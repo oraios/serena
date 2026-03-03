@@ -297,7 +297,10 @@ class Tool(Component):
                 if not catch_exceptions:
                     raise
                 msg = f"Error executing tool: {e.__class__.__name__} - {e}"
-                log.error(f"Error executing tool: {e}", exc_info=e)
+                if isinstance(e, (ValueError, FileNotFoundError)):
+                    log.warning(f"Error executing tool (likely invalid input from AI): {e}")
+                else:
+                    log.error(f"Error executing tool: {e}", exc_info=e)
                 result = msg
 
             if log_call:

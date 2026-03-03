@@ -189,6 +189,7 @@ class TerraformLS(SolidLanguageServer):
             solidlsp_settings,
         )
         self.server_ready = threading.Event()
+        self.completions_available = threading.Event()
         self.request_id = 0
 
     @staticmethod

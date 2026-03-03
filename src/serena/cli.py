@@ -267,6 +267,32 @@ class TopLevelCommands(AutoRegisteringGroup):
 
         log.info("Initializing Serena MCP server")
         log.info("Storing logs in %s", log_path)
+        
+        # Suppress verbose asyncio ConnectionResetError warnings on Windows Proactor Event Loop
+        import asyncio
+        def custom_exception_handler(loop: asyncio.AbstractEventLoop, context: dict) -> None:
+            exc = context.get("exception")
+            if isinstance(exc, ConnectionResetError) and getattr(exc, "winerror", None) == 10054:
+                # Safe to ignore on Windows: "An existing connection was forcibly closed by the remote host"
+                return
+                
+            msg = context.get("message", "")
+            if "Exception in callback _ProactorBasePipeTransport" in msg:
+                return
+                
+            loop.default_exception_handler(context)
+
+        try:
+            loop = asyncio.get_running_loop()
+            loop.set_exception_handler(custom_exception_handler)
+        except RuntimeError:
+            # If no loop is running yet, we can set the policy to apply the handler to all new loops
+            class CustomEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
+                def get_event_loop(self):
+                    loop = super().get_event_loop()
+                    loop.set_exception_handler(custom_exception_handler)
+                    return loop
+            asyncio.set_event_loop_policy(CustomEventLoopPolicy())
 
         # Handle --project-from-cwd flag
         if project_from_cwd:
