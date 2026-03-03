@@ -277,7 +277,7 @@ class TestSerenaAgent:
         ],
         indirect=["serena_agent"],
     )
-    @pytest.mark.xfail(reason="TypeScript language server is unreliable")  # See issue #1040
+    @pytest.mark.xfail(False, reason="TypeScript language server is unreliable")  # NOTE: Testing; may be resolved by #1120; See issue #1040
     def test_find_symbol_references_typescript(self, serena_agent: SerenaAgent, symbol_name: str, def_file: str, ref_file: str) -> None:
         self._assert_find_symbol_references(serena_agent, symbol_name, def_file, ref_file)
 
