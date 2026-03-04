@@ -316,6 +316,7 @@ class OcamlLanguageServer(SolidLanguageServer):
             solidlsp_settings,
         )
         self.server_ready = threading.Event()
+        self.completions_available = threading.Event()
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
