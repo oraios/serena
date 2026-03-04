@@ -108,7 +108,7 @@ In general, **memories** provide a way for Serena to store and retrieve
 information about the project, relevant conventions, and other relevant aspects.
 
 For more information on this, including how to manage
-or disable these features, see [Memories & Onboarding](045-memories).
+or disable these features, see [Memories & Onboarding](045_memories).
 
 
 ## Preparing Your Project

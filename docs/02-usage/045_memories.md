@@ -32,7 +32,7 @@ it is stored in the global memories directory and is shared across all projects.
 
 By default, deletion and editing of global memories is allowed.
 If you want to primarily manage such memories yourself and protect them from accidental modification by the agent,
-set `edit_global_memories: False` in Serena's [global configuration](050-configuration).
+set `edit_global_memories: False` in Serena's [global configuration](050_configuration).
 
 Since global memories are not versioned alongside your project files,
 it can be helpful to track global memories with git (i.e. to make `~/.serena/memories/` a git repository)
@@ -80,5 +80,5 @@ process if memories are found.
 If you do not require the functionality described in this section, you can selectively disable it.
 
  * To disable all memory related tools (including onboarding), adding `no-memories` to the `base_modes`
-   in Serena's [global configuration](050-configuration).
+   in Serena's [global configuration](050_configuration).
  * Similarly, to disable only onboarding, add `no-onboarding` to the `base_modes`.
