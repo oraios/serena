@@ -1,10 +1,17 @@
 """
 Minimal frontmatter parsing utilities for memory files.
 
-Currently supports a very small subset of YAML-like syntax:
+Supports a simple YAML-like frontmatter block at the top of a file.
+
+Example:
+
 ---
-summary: "Some short text"
+summary: Some short text
+author: Mehdi
+priority: high
 ---
+
+Body content...
 """
 
 from typing import Tuple, Dict
@@ -17,7 +24,8 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, str], str]:
     Expected format:
 
     ---
-    summary: "Some text"
+    key: value
+    another_key: value
     ---
     Body content...
 
@@ -31,6 +39,7 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, str], str]:
         return frontmatter, content
 
     lines = content.splitlines()
+
     if len(lines) < 3:
         return frontmatter, content
 
@@ -48,7 +57,7 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, str], str]:
     if closing_index is None:
         return frontmatter, content
 
-    # Parse lines between the two ---
+    # Parse key/value lines between the two ---
     for line in lines[1:closing_index]:
         if ":" not in line:
             continue
@@ -57,9 +66,8 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, str], str]:
         key = key.strip()
         value = value.strip().strip('"')
 
-        # Only support "summary" for now
-        if key == "summary":
-            frontmatter[key] = value
+        # Accept any key (no restriction to "summary")
+        frontmatter[key] = value
 
     body = "\n".join(lines[closing_index + 1 :])
 
