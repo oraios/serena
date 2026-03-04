@@ -104,7 +104,7 @@ class SerenaPaths:
         """
         log_dir = os.path.join(self.serena_user_home_dir, "logs", datetime.now().strftime("%Y-%m-%d"))
         os.makedirs(log_dir, exist_ok=True)
-        self.last_returned_log_file_path = os.path.join(log_dir, prefix + "_" + datetime_tag() + ".txt")
+        self.last_returned_log_file_path = os.path.join(log_dir, prefix + "_" + datetime_tag() + f"_{os.getpid()}" + ".txt")
         return self.last_returned_log_file_path
 
     # TODO: Paths from constants.py should be moved here
