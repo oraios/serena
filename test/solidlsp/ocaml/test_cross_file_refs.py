@@ -1,5 +1,9 @@
 """
-Test to prove cross-file references work.
+Test cross-file references for OCaml.
+
+Cross-file references require OCaml >= 5.2 and ocaml-lsp-server >= 1.23.0.
+On environments without these (e.g. Windows CI with OCaml 4.14), only
+same-file references are asserted.
 """
 
 import logging
@@ -8,6 +12,7 @@ import os
 import pytest
 
 from solidlsp import SolidLanguageServer
+from solidlsp.language_servers.ocaml_lsp_server import OcamlLanguageServer
 from solidlsp.ls_config import Language
 
 log = logging.getLogger(__name__)
@@ -49,19 +54,22 @@ class TestCrossFileReferences:
             line = ref.get("range", {}).get("start", {}).get("line", -1)
             log.info(f"    {filename}:{line}")
 
-        assert len(refs) >= 9, (
-            f"Expected at least 9 total references (3 in lib + 1 in bin + 5 in test), "
-            f"but got {len(refs)}. Cross-file references are NOT working!"
-        )
-
+        # Same-file references always work
         assert len(lib_refs) >= 3, f"Expected at least 3 references in lib/test_repo.ml (definition + 2 recursive), but got {len(lib_refs)}"
 
-        assert len(bin_refs) >= 1, (
-            f"Expected at least 1 reference in bin/main.ml, but got {len(bin_refs)}. "
-            "Cross-file references are NOT working - bin/main.ml not found!"
-        )
+        # Cross-file references require OCaml >= 5.2 and ocaml-lsp-server >= 1.23.0
+        if isinstance(language_server, OcamlLanguageServer) and language_server.supports_cross_file_references:
+            assert len(refs) >= 9, (
+                f"Expected at least 9 total references (3 in lib + 1 in bin + 5 in test), "
+                f"but got {len(refs)}. Cross-file references are NOT working!"
+            )
 
-        assert len(test_refs) >= 1, (
-            f"Expected at least 1 reference in test/test_test_repo.ml, but got {len(test_refs)}. "
-            "Cross-file references are NOT working - test file not found!"
-        )
+            assert len(bin_refs) >= 1, (
+                f"Expected at least 1 reference in bin/main.ml, but got {len(bin_refs)}. "
+                "Cross-file references are NOT working - bin/main.ml not found!"
+            )
+
+            assert len(test_refs) >= 1, (
+                f"Expected at least 1 reference in test/test_test_repo.ml, but got {len(test_refs)}. "
+                "Cross-file references are NOT working - test file not found!"
+            )
