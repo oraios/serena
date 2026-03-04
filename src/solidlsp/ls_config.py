@@ -75,6 +75,11 @@ class Language(str, Enum):
     Requires MATLAB R2021b or later and Node.js.
     Set MATLAB_PATH environment variable or configure matlab_path in ls_specific_settings.
     """
+    WOLFRAM = "wolfram"
+    """Wolfram Language server using the official WolframResearch LSPServer paclet.
+    Requires Wolfram Mathematica 13.0+ or Wolfram Engine 12.1+.
+    Set WOLFRAM_PATH environment variable or configure wolfram_kernel_path in ls_specific_settings.
+    """
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -251,6 +256,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.groovy", "*.gvy")
             case self.MATLAB:
                 return FilenameMatcher("*.m", "*.mlx", "*.mlapp")
+            case self.WOLFRAM:
+                return FilenameMatcher("*.wl", "*.wls")
             case self.SYSTEMVERILOG:
                 return FilenameMatcher("*.sv", "*.svh", "*.v", "*.vh")
             case _:
@@ -434,6 +441,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.matlab_language_server import MatlabLanguageServer
 
                 return MatlabLanguageServer
+            case self.WOLFRAM:
+                from solidlsp.language_servers.wolfram_language_server import WolframLanguageServer
+
+                return WolframLanguageServer
             case self.SYSTEMVERILOG:
                 from solidlsp.language_servers.systemverilog_server import SystemVerilogLanguageServer
 

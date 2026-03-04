@@ -82,8 +82,10 @@ Some languages require additional installations or setup steps, as noted.
   (requires some [manual setup](../03-special-guides/scala_setup_guide_for_serena); uses Metals LSP)
 * **Swift**
 * **TypeScript**
-* **Vue**    
+* **Vue**
   (3.x with TypeScript; requires Node.js v18+ and npm; supports .vue Single File Components with monorepo detection)
+* **Wolfram Language**
+  (requires Wolfram Mathematica 13.0+ or Wolfram Engine 12.1+; uses the official [WolframResearch LSPServer](https://github.com/WolframResearch/LSPServer) paclet; supports .wl and .wls files)
 * **YAML**
 * **Zig**  
   (requires installation of ZLS - Zig Language Server)
