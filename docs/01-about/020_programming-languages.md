@@ -52,8 +52,12 @@ Some languages require additional installations or setup steps, as noted.
   (requires installation of `gopls`)
 * **Groovy**  
   (requires local groovy-language-server.jar setup via `GROOVY_LS_JAR_PATH` or configuration)
-* **Haskell**  
+* **Haskell**
   (automatically locates HLS via ghcup, stack, or system PATH; supports Stack and Cabal projects)
+* **HLSL / GLSL / WGSL**
+  (uses [shader-language-server](https://github.com/antaalt/shader-sense) (language `hlsl`); automatically downloaded;
+  on macOS, requires Rust toolchain for building from source;
+  note: reference search is not supported by this language server)
 * **Java**  
 * **JavaScript**
 * **Julia**

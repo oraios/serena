@@ -1,6 +1,6 @@
 """
-HLSL language server using shader-language-server (antaalt/shader-sense).
-Supports HLSL, Unity compute shaders, and related shader file formats.
+Shader language server using shader-language-server (antaalt/shader-sense).
+Supports HLSL, GLSL, and WGSL shader file formats.
 """
 
 import logging
@@ -27,8 +27,8 @@ _GITHUB_RELEASE_BASE = "https://github.com/antaalt/shader-sense/releases/downloa
 
 class HlslLanguageServer(SolidLanguageServer):
     """
-    HLSL language server using shader-language-server.
-    Supports .hlsl, .hlsli, .fx, .fxh, .cginc, .compute, .shader files.
+    Shader language server using shader-language-server.
+    Supports .hlsl, .hlsli, .fx, .fxh, .cginc, .compute, .shader, .glsl, .vert, .frag, .geom, .tesc, .tese, .comp, .wgsl files.
     """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings) -> None:
@@ -126,7 +126,7 @@ class HlslLanguageServer(SolidLanguageServer):
             return executable_path
 
         def _create_launch_command(self, core_path: str) -> list[str]:
-            return [core_path, "--hlsl", "--stdio"]
+            return [core_path, "--stdio"]
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:

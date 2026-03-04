@@ -106,8 +106,8 @@ class Language(str, Enum):
     Supports TOML validation, formatting, and schema support.
     """
     HLSL = "hlsl"
-    """HLSL language server using shader-language-server (antaalt/shader-sense).
-    Supports .hlsl, .hlsli, .fx, .fxh, .cginc, .compute, .shader files.
+    """Shader language server using shader-language-server (antaalt/shader-sense).
+    Supports .hlsl, .hlsli, .fx, .fxh, .cginc, .compute, .shader, .glsl, .vert, .frag, .geom, .tesc, .tese, .comp, .wgsl files.
     Automatically downloads shader-language-server binary.
     """
     SYSTEMVERILOG = "systemverilog"
@@ -257,7 +257,23 @@ class Language(str, Enum):
             case self.MATLAB:
                 return FilenameMatcher("*.m", "*.mlx", "*.mlapp")
             case self.HLSL:
-                return FilenameMatcher("*.hlsl", "*.hlsli", "*.fx", "*.fxh", "*.cginc", "*.compute", "*.shader")
+                return FilenameMatcher(
+                    "*.hlsl",
+                    "*.hlsli",
+                    "*.fx",
+                    "*.fxh",
+                    "*.cginc",
+                    "*.compute",
+                    "*.shader",
+                    "*.glsl",
+                    "*.vert",
+                    "*.frag",
+                    "*.geom",
+                    "*.tesc",
+                    "*.tese",
+                    "*.comp",
+                    "*.wgsl",
+                )
             case self.SYSTEMVERILOG:
                 return FilenameMatcher("*.sv", "*.svh", "*.v", "*.vh")
             case _:
