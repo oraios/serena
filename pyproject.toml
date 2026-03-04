@@ -333,5 +333,5 @@ markers = [
 # Ref: https://github.com/codespell-project/codespell#using-a-config-file
 skip = '.git*,*.svg,*.lock,*.min.*'
 check-hidden = true
-# ignore-regex = ''
+ignore-regex = '\.\w+'
 ignore-words-list = 'paket'
