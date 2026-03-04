@@ -86,15 +86,13 @@ AL, Bash, C#, C/C++, Clojure, Dart, Elixir, Elm, Erlang, Fortran, GLSL, Go, Groo
 
 > [!IMPORTANT]
 > Some language servers require additional dependencies to be installed; see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
-> OCaml requires opam and ocaml-lsp-server to be installed manually; see the [OCaml Setup Guide](docs/03-special-guides/ocaml_setup_guide_for_serena.md).
 
 ### The Serena JetBrains Plugin
 
 As an alternative to language servers, the [Serena JetBrains Plugin](https://plugins.jetbrains.com/plugin/28946-serena/)
 leverages the powerful code analysis capabilities of your JetBrains IDE.
 The plugin naturally supports all programming languages and frameworks that are supported by JetBrains IDEs,
-including IntelliJ IDEA, PyCharm, Android Studio, WebStorm, PhpStorm, RubyMine, GoLand, CLion, and others.
-Only Rider is not supported.
+including IntelliJ IDEA, PyCharm, Android Studio, WebStorm, PhpStorm, RubyMine, GoLand, and potentially others (Rider and CLion are unsupported though).
 
 <a href="https://plugins.jetbrains.com/plugin/28946-serena/"><img src="docs/_static/images/jetbrains-marketplace-button.png"></a>
 

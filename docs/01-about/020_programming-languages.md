@@ -68,6 +68,8 @@ Some languages require additional installations or setup steps, as noted.
   (must explicitly enable language `markdown`, primarily useful for documentation-heavy projects)
 * **Nix**  
   (requires nixd installation)
+* **OCaml**
+  (requires opam and ocaml-lsp-server to be installed manually; see the [OCaml Setup Guide](../03-special-guides/ocaml_setup_guide_for_serena.md))
 * **Pascal**  
   (uses Pascal/Lazarus, which is automatically downloaded; set `PP` and `FPCDIR` environment variables for source navigation)
 * **Perl**  
