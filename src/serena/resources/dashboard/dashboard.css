@@ -1308,6 +1308,42 @@ body {
     gap: 8px;
 }
 
+/* Memory Rename Styles */
+.memory-rename-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-muted);
+    opacity: 0.5;
+    transition: opacity 0.2s ease, background-color 0.2s ease;
+}
+
+.memory-rename-btn:hover {
+    opacity: 1;
+    background-color: var(--border-color);
+}
+
+.memory-rename-input {
+    font-size: inherit;
+    font-weight: inherit;
+    font-family: inherit;
+    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--btn-primary);
+    outline: none;
+    padding: 0;
+    flex: 1;
+    min-width: 200px;
+    max-width: 80%;
+}
+
 /* Log Action Buttons (Save, Copy, Clear) */
 .log-action-buttons {
     position: absolute;

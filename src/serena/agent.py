@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Optional, TypeVar
 
 from sensai.util import logging
 from sensai.util.logging import LogTime
-from sensai.util.string import TextBuilder
+from sensai.util.string import TextBuilder, list_string
 
 from interprompt.jinja_template import JinjaTemplate
 from serena import serena_version
@@ -29,7 +29,7 @@ from serena.config.serena_config import (
 )
 from serena.dashboard import SerenaDashboardAPI
 from serena.ls_manager import LanguageServerManager, LanguageServerManagerInitialisationError
-from serena.project import Project
+from serena.project import MemoriesManager, Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.task_executor import TaskExecutor
 from serena.tools import ActivateProjectTool, GetCurrentConfigTool, OpenDashboardTool, ReplaceContentTool, Tool, ToolMarker, ToolRegistry
@@ -611,12 +611,15 @@ class SerenaAgent:
     def create_system_prompt(self) -> str:
         available_tools = self._active_tools
         available_markers = available_tools.tool_marker_names
+        global_memory_names = MemoriesManager.list_global_memories()
+        global_memories_list = list_string(global_memory_names) if global_memory_names else ""
         log.info("Generating system prompt with available_tools=(see active tools), available_markers=%s", available_markers)
         system_prompt = self.prompt_factory.create_system_prompt(
             context_system_prompt=self._format_prompt(self._context.prompt),
             mode_system_prompts=[self._format_prompt(mode.prompt) for mode in self.get_active_modes()],
             available_tools=available_tools.tool_names,
             available_markers=available_markers,
+            global_memories_list=global_memories_list,
         )
 
         # If a project is active at startup, append its activation message

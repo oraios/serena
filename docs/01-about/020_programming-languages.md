@@ -30,7 +30,7 @@ Some languages require additional installations or setup steps, as noted.
 * **AL**
 * **Bash**
 * **C#**  
-  (by default, uses the Roslyn language server (language `csharp`), requires `pwsh` ([PowerShell 7+](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows?view=powershell-7.5)) on Windows;
+  (by default, uses the Roslyn language server (language `csharp`), requiring [.NET v10+](https://dotnet.microsoft.com/en-us/download/dotnet) and, on Windows, `pwsh` ([PowerShell 7+](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows?view=powershell-7.5));
   set language to `csharp_omnisharp` to use OmiSharp instead)
 * **C/C++**  
   (by default, uses the clangd language server (language `cpp`) but we also support ccls (language `cpp_ccls`);
@@ -45,15 +45,19 @@ Some languages require additional installations or setup steps, as noted.
 * **Erlang**  
   (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls); experimental, might be slow or hang)
 * **F#**  
-  (requires .NET SDK 8.0+; uses FsAutoComplete/Ionide, which is auto-installed; for Homebrew .NET on macOS, set DOTNET_ROOT in your environment)
+  (requires [.NET v8.0+](https://dotnet.microsoft.com/en-us/download/dotnet); uses FsAutoComplete/Ionide, which is auto-installed; for Homebrew .NET on macOS, set DOTNET_ROOT in your environment)
 * **Fortran**   
   (requires installation of fortls: `pip install fortls`)
 * **Go**  
   (requires installation of `gopls`)
 * **Groovy**  
   (requires local groovy-language-server.jar setup via `GROOVY_LS_JAR_PATH` or configuration)
-* **Haskell**  
+* **Haskell**
   (automatically locates HLS via ghcup, stack, or system PATH; supports Stack and Cabal projects)
+* **HLSL / GLSL / WGSL**
+  (uses [shader-language-server](https://github.com/antaalt/shader-sense) (language `hlsl`); automatically downloaded;
+  on macOS, requires Rust toolchain for building from source;
+  note: reference search is not supported by this language server)
 * **Java**  
 * **JavaScript**
 * **Julia**
@@ -96,7 +100,8 @@ see Serena's [memory on that](https://github.com/oraios/serena/blob/main/.serena
 As an alternative to language servers, the [Serena JetBrains Plugin](https://plugins.jetbrains.com/plugin/28946-serena/)
 leverages the powerful code analysis capabilities of JetBrains IDEs. 
 The plugin naturally supports all programming languages and frameworks that are supported by JetBrains IDEs, 
-including IntelliJ IDEA, PyCharm, Android Studio, AppCode, WebStorm, PhpStorm, RubyMine, GoLand, AppCode, CLion, and others.
+including IntelliJ IDEA, PyCharm, Android Studio, WebStorm, PhpStorm, RubyMine, GoLand, and potentially others 
+(Rider and CLion are unsupported though).
 
 When using the plugin, Serena connects to an instance of your JetBrains IDE via the plugin. For users who already
 work in a JetBrains IDE, this means Serena seamlessly integrates with the IDE instance you typically have open anyway,
