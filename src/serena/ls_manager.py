@@ -147,16 +147,20 @@ class LanguageServerManager:
             ls = self.restart_language_server(ls.language)
         return ls
 
+    def _get_suitable_language_server(self, relative_path: str) -> SolidLanguageServer | None:
+        """:param relative_path: relative path to a file"""
+        for candidate in self._language_servers.values():
+            if not candidate.is_ignored_path(relative_path, ignore_unsupported_files=True):
+                return candidate
+        return None
+
     def get_language_server(self, relative_path: str) -> SolidLanguageServer:
         """:param relative_path: relative path to a file"""
         ls: SolidLanguageServer | None = None
         if len(self._language_servers) > 1:
             if os.path.isdir(relative_path):
                 raise ValueError(f"Expected a file path, but got a directory: {relative_path}")
-            for candidate in self._language_servers.values():
-                if not candidate.is_ignored_path(relative_path, ignore_unsupported_files=True):
-                    ls = candidate
-                    break
+            ls = self._get_suitable_language_server(relative_path)
         if ls is None:
             ls = self._default_language_server
         return self._ensure_functional_ls(ls)
@@ -241,3 +245,6 @@ class LanguageServerManager:
         for ls in self.iter_language_servers():
             if ls.is_running():
                 ls.save_cache()
+
+    def has_suitable_ls_for_file(self, relative_file_path: str) -> bool:
+        return self._get_suitable_language_server(relative_file_path) is not None
