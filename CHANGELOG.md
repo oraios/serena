@@ -30,6 +30,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     * Add notion of a "single-project context" (flag `single_project`), allowing user-defined contexts to behave 
       like the built-in `ide-assistant` context (where the available tools are restricted to ones required by the active 
       project and project changes are disabled)
+    * Improve management of the Serena projects
+        * The location of Serena's project-specific data folder can now be flexibly configured, allowing, in particular,
+          locations outside of the project folder, thus improving support for read-only projects.
+        * Add support for `project.local.yml` for local overrides that should not be versioned 
 
 * Client support:
     * New mode `oaicompat-agent` and extensions enhancing OpenAI tool compatibility, permitting Serena to work with llama.cpp
