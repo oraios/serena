@@ -219,6 +219,7 @@ class Project(ToStringMixin):
             log.info(f"Creating .gitignore file in {serena_data_gitignore_path}")
             with open(serena_data_gitignore_path, "w", encoding="utf-8") as f:
                 f.write(f"/{SolidLanguageServer.CACHE_FOLDER_NAME}\n")
+                f.write(f"/{ProjectConfig.SERENA_LOCAL_PROJECT_FILE}\n")
 
         # prepare ignore spec asynchronously, ensuring immediate project activation.
         self.__ignored_patterns: list[str]
