@@ -33,12 +33,12 @@ class MemoriesManager:
     GLOBAL_TOPIC = "global"
     _global_memory_dir = SerenaPaths().global_memories_path
 
-    def __init__(self, project_memories_path: str | Path, global_memory_tool_write_access: bool = False):
+    def __init__(self, serena_data_folder: str | Path, global_memory_tool_write_access: bool = False):
         """
-        :param project_memories_path: the absolute path to the directory where project memories are stored
+        :param serena_data_folder: the absolute path to the project's .serena data folder
         :param global_memory_tool_write_access: whether to allow writing global memories in tool execution contexts
         """
-        self._project_memory_dir = Path(project_memories_path)
+        self._project_memory_dir = Path(serena_data_folder) / "memories"
         self._project_memory_dir.mkdir(parents=True, exist_ok=True)
         self._global_memory_tool_write_access = global_memory_tool_write_access
         self._encoding = SERENA_FILE_ENCODING
@@ -207,8 +207,7 @@ class Project(ToStringMixin):
         self._serena_data_folder = self._resolve_serena_data_folder(serena_config)
 
         global_memory_write_access = serena_config.edit_global_memories if serena_config else False
-        project_memories_path = os.path.join(self._serena_data_folder, "memories")
-        self.memories_manager = MemoriesManager(project_memories_path, global_memory_write_access)
+        self.memories_manager = MemoriesManager(self._serena_data_folder, global_memory_write_access)
 
         self.language_server_manager: LanguageServerManager | None = None
         self._is_newly_created = is_newly_created

@@ -494,28 +494,28 @@ class TestProjectSerenaDataFolder:
 
 
 class TestMemoriesManagerCustomPath:
-    """Tests for MemoriesManager with custom project memories path."""
+    """Tests for MemoriesManager with a custom serena data folder."""
 
     def setup_method(self):
         self.test_dir = tempfile.mkdtemp()
-        self.memories_path = Path(self.test_dir) / "custom_memories"
+        self.data_folder = Path(self.test_dir) / "custom_serena"
 
     def teardown_method(self):
         shutil.rmtree(self.test_dir)
 
-    def test_custom_memories_path_is_created(self):
-        assert not self.memories_path.exists()
-        MemoriesManager(str(self.memories_path))
-        assert self.memories_path.exists()
+    def test_memories_subdir_is_created(self):
+        assert not self.data_folder.exists()
+        MemoriesManager(str(self.data_folder))
+        assert (self.data_folder / "memories").exists()
 
     def test_save_and_load_memory(self):
-        manager = MemoriesManager(str(self.memories_path))
+        manager = MemoriesManager(str(self.data_folder))
         manager.save_memory("test_topic", "test content", is_tool_context=False)
         content = manager.load_memory("test_topic")
         assert content == "test content"
 
     def test_list_memories(self):
-        manager = MemoriesManager(str(self.memories_path))
+        manager = MemoriesManager(str(self.data_folder))
         manager.save_memory("topic_a", "content a", is_tool_context=False)
         manager.save_memory("topic_b", "content b", is_tool_context=False)
         memories = manager.list_project_memories()
