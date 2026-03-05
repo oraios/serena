@@ -279,50 +279,35 @@ class Project(ToStringMixin):
         project_root = Path(project_root).resolve()
         if not project_root.exists():
             raise FileNotFoundError(f"Project root not found: {project_root}")
-        project_config = ProjectConfig.load(project_root, autogenerate=autogenerate)
+        yml_path: str | None = None
+        if serena_config is not None:
+            yml_path = serena_config.get_project_yml_location(project_root.name, str(project_root))
+        project_config = ProjectConfig.load(project_root, autogenerate=autogenerate, project_yml_path=yml_path)
         return Project(project_root=str(project_root), project_config=project_config, serena_config=serena_config)
 
     def save_config(self) -> None:
         """
         Saves the current project configuration to disk.
         """
-        self.project_config.save(self.project_root)
+        self.project_config.save(self.path_to_project_yml())
 
     def _resolve_serena_data_folder(self, serena_config: "SerenaConfig | None") -> str:
         """
-        Resolves the location of the project's .serena data folder using fallback logic:
-        1. Check if the folder exists at the path specified by the config (project_serena_folder_location).
-        2. If not, check if it exists in the project root (default/legacy location).
-        3. If neither exists, create at the config-specified path.
+        Resolves the location of the project's .serena data folder,
+        delegating to ``SerenaConfig.get_project_serena_folder`` when a config is available.
 
         :param serena_config: the global Serena configuration (may be None, in which case the default is used)
         :return: the absolute path to the .serena data folder
         """
         if serena_config is not None:
-            configured_path = serena_config.get_project_serena_folder(self.project_name, self.project_root)
-        else:
-            configured_path = os.path.join(self.project_root, SERENA_MANAGED_DIR_NAME)
-
-        default_path = os.path.join(self.project_root, SERENA_MANAGED_DIR_NAME)
-
-        if os.path.isdir(configured_path):
-            log.info("Using existing Serena data folder at configured path: %s", configured_path)
-            return configured_path
-        if configured_path != default_path and os.path.isdir(default_path):
-            log.info(
-                "Serena data folder not found at configured path %s; using existing folder at %s",
-                configured_path,
-                default_path,
-            )
-            return default_path
-        log.info("Serena data folder will be created at: %s", configured_path)
-        return configured_path
+            return serena_config.get_project_serena_folder(self.project_name, self.project_root)
+        return os.path.join(self.project_root, SERENA_MANAGED_DIR_NAME)
 
     def path_to_serena_data_folder(self) -> str:
         return self._serena_data_folder
 
     def path_to_project_yml(self) -> str:
-        return os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
+        return os.path.join(self._serena_data_folder, ProjectConfig.SERENA_DEFAULT_PROJECT_FILE)
 
     def get_activation_message(self) -> str:
         """

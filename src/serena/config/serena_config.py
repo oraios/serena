@@ -226,6 +226,7 @@ class ProjectConfig(SharedConfig):
         languages: list[Language] | None = None,
         save_to_disk: bool = True,
         interactive: bool = False,
+        project_yml_path: str | None = None,
     ) -> Self:
         """
         Autogenerate a project configuration for a given project root.
@@ -291,18 +292,20 @@ class ProjectConfig(SharedConfig):
             config_with_comments["project_name"] = project_name
             config_with_comments["languages"] = languages_to_use
             if save_to_disk:
-                project_yml_path = cls.path_to_project_yml(project_root)
+                if project_yml_path is None:
+                    project_yml_path = cls.default_project_yml_path(project_root)
                 log.info("Saving project configuration to %s", project_yml_path)
                 save_yaml(project_yml_path, config_with_comments)
             return cls._from_dict(config_with_comments)
 
     @classmethod
-    def path_to_project_yml(cls, project_root: str | Path) -> str:
-        return os.path.join(project_root, cls.rel_path_to_project_yml())
-
-    @classmethod
-    def rel_path_to_project_yml(cls) -> str:
-        return os.path.join(SERENA_MANAGED_DIR_NAME, cls.SERENA_DEFAULT_PROJECT_FILE)
+    def default_project_yml_path(cls, project_root: str | Path) -> str:
+        """
+        :return: the default path to the project.yml file (inside ``$projectDir/.serena/``).
+            This is suitable as a fallback when no ``SerenaConfig`` is available to resolve
+            a potentially customised location.
+        """
+        return os.path.join(str(project_root), SERENA_MANAGED_DIR_NAME, cls.SERENA_DEFAULT_PROJECT_FILE)
 
     @classmethod
     def _load_yaml(
@@ -399,17 +402,25 @@ class ProjectConfig(SharedConfig):
         return d
 
     @classmethod
-    def load(cls, project_root: Path | str, autogenerate: bool = False) -> Self:
+    def load(cls, project_root: Path | str, autogenerate: bool = False, project_yml_path: str | None = None) -> Self:
         """
         Load a ProjectConfig instance from the path to the project root.
+
+        :param project_root: the path to the project root
+        :param autogenerate: whether to auto-generate the configuration if it does not exist
+        :param project_yml_path: explicit path to the project.yml file; if None, the default
+            location (``$projectDir/.serena/project.yml``) is used
         """
         project_root = Path(project_root)
-        yaml_path = project_root / cls.rel_path_to_project_yml()
+        if project_yml_path is not None:
+            yaml_path = Path(project_yml_path)
+        else:
+            yaml_path = Path(cls.default_project_yml_path(project_root))
 
         # auto-generate if necessary
         if not yaml_path.exists():
             if autogenerate:
-                return cls.autogenerate(project_root)
+                return cls.autogenerate(project_root, project_yml_path=str(yaml_path))
             else:
                 raise FileNotFoundError(f"Project configuration file not found: {yaml_path}")
 
@@ -424,17 +435,17 @@ class ProjectConfig(SharedConfig):
         # if the configuration was incomplete, re-save it to disk
         if not was_complete:
             log.info("Project configuration in %s was incomplete, re-saving with default values for missing fields", yaml_path)
-            project_config.save(project_root)
+            project_config.save(str(yaml_path))
 
         return project_config
 
-    def save(self, project_root: Path | str) -> None:
+    def save(self, project_yml_path: str) -> None:
         """
         Saves the project configuration to disk.
 
-        :param project_root: the root directory of the project
+        :param project_yml_path: the path to the project.yml file
         """
-        config_path = self.path_to_project_yml(project_root)
+        config_path = project_yml_path
         log.info("Saving updated project configuration to %s", config_path)
 
         # load original commented map and update it with current values
@@ -482,8 +493,11 @@ class RegisteredProject(ToStringMixin):
         )
 
     @classmethod
-    def from_project_root(cls, project_root: str | Path) -> "RegisteredProject":
-        project_config = ProjectConfig.load(project_root)
+    def from_project_root(cls, project_root: str | Path, serena_config: "SerenaConfig | None" = None) -> "RegisteredProject":
+        yml_path: str | None = None
+        if serena_config is not None:
+            yml_path = serena_config.get_project_yml_location(Path(project_root).name, str(project_root))
+        project_config = ProjectConfig.load(project_root, project_yml_path=yml_path)
         return RegisteredProject(
             project_root=str(project_root),
             project_config=project_config,
@@ -698,7 +712,7 @@ class SerenaConfig(SharedConfig):
         instance.projects = []
         for path in loaded_commented_yaml["projects"]:
             path = Path(path).resolve()
-            if not path.exists() or (path.is_dir() and not (path / ProjectConfig.rel_path_to_project_yml()).exists()):
+            if not path.exists() or (path.is_dir() and not os.path.isfile(instance.get_project_yml_location(path.name, str(path)))):
                 log.warning(f"Project path {path} does not exist or does not contain a project configuration file, skipping.")
                 continue
             if path.is_file():
@@ -706,7 +720,8 @@ class SerenaConfig(SharedConfig):
                 if path is None:
                     continue
                 num_migrations += 1
-            project_config = ProjectConfig.load(path)
+            yml_path = instance.get_project_yml_location(path.name, str(path))
+            project_config = ProjectConfig.load(path, project_yml_path=yml_path)
             project = RegisteredProject(
                 project_root=str(path),
                 project_config=project_config,
@@ -759,7 +774,7 @@ class SerenaConfig(SharedConfig):
                 with open(path, "a", encoding=SERENA_FILE_ENCODING) as f:
                     f.write(f"\nproject_name: {project_name}")
             project_root = project_config_data["project_root"]
-            shutil.move(str(path), str(Path(project_root) / ProjectConfig.rel_path_to_project_yml()))
+            shutil.move(str(path), ProjectConfig.default_project_yml_path(project_root))
             return Path(project_root).resolve()
         except Exception as e:
             log.error(f"Error migrating configuration file: {e}")
@@ -798,9 +813,10 @@ class SerenaConfig(SharedConfig):
                     return project
         # no registered project found; auto-register if project configuration exists
         if autoregister:
-            config_path = ProjectConfig.path_to_project_yml(project_root_or_name)
+            project_name_guess = Path(project_root_or_name).name
+            config_path = self.get_project_yml_location(project_name_guess, project_root_or_name)
             if os.path.isfile(config_path):
-                registered_project = RegisteredProject.from_project_root(project_root_or_name)
+                registered_project = RegisteredProject.from_project_root(project_root_or_name, serena_config=self)
                 self.add_registered_project(registered_project)
                 return registered_project
         # nothing found
@@ -843,7 +859,8 @@ class SerenaConfig(SharedConfig):
                     f"Project with path {project_root} was already added with name '{already_registered_project.project_name}'."
                 )
 
-        project_config = ProjectConfig.load(project_root, autogenerate=True)
+        yml_path = self.get_project_yml_location(project_root.name, str(project_root))
+        project_config = ProjectConfig.load(project_root, autogenerate=True, project_yml_path=yml_path)
 
         new_project = Project(
             project_root=str(project_root),
@@ -920,10 +937,11 @@ class SerenaConfig(SharedConfig):
         result = re.sub(r"\$([A-Za-z_]\w*)", _replace, template)
         return os.path.abspath(result)
 
-    def get_project_serena_folder(self, project_name: str, project_root: str | Path) -> str:
+    def get_configured_project_serena_folder(self, project_name: str, project_root: str | Path) -> str:
         """
         Returns the resolved absolute path to the .serena data folder for a project,
-        applying placeholder substitution to ``project_serena_folder_location``.
+        applying placeholder substitution to ``project_serena_folder_location``
+        without any fallback logic.
 
         :param project_name: the name of the project
         :param project_root: the absolute path to the project root directory
@@ -935,6 +953,47 @@ class SerenaConfig(SharedConfig):
             "projectName": project_name,
         }
         return self._resolve_serena_folder_location(self.project_serena_folder_location, placeholders)
+
+    def get_project_serena_folder(self, project_name: str, project_root: str | Path) -> str:
+        """
+        Resolves the location of the project's .serena data folder using fallback logic:
+
+        1. If the folder exists at the configured path (``project_serena_folder_location``), use it.
+        2. Otherwise, if it exists at the default/legacy location inside the project root, use that.
+        3. If neither exists, return the configured path (for creation).
+
+        :param project_name: the name of the project
+        :param project_root: the absolute path to the project root directory
+        :return: the resolved absolute path to the .serena data folder
+        :raises SerenaConfigError: if the configured template contains an unknown placeholder
+        """
+        configured_path = self.get_configured_project_serena_folder(project_name, project_root)
+        default_path = os.path.join(str(project_root), SERENA_MANAGED_DIR_NAME)
+
+        if os.path.isdir(configured_path):
+            log.info("Using existing Serena data folder at configured path: %s", configured_path)
+            return configured_path
+        if configured_path != default_path and os.path.isdir(default_path):
+            log.info(
+                "Serena data folder not found at configured path %s; using existing folder at %s",
+                configured_path,
+                default_path,
+            )
+            return default_path
+        log.info("Serena data folder will be created at: %s", configured_path)
+        return configured_path
+
+    def get_project_yml_location(self, project_name: str, project_root: str | Path) -> str:
+        """
+        Returns the resolved absolute path to the project.yml configuration file,
+        based on the resolved .serena data folder (with fallback logic).
+
+        :param project_name: the name of the project
+        :param project_root: the absolute path to the project root directory
+        :return: the resolved absolute path to the project's project.yml file
+        """
+        serena_folder = self.get_project_serena_folder(project_name, project_root)
+        return os.path.join(serena_folder, ProjectConfig.SERENA_DEFAULT_PROJECT_FILE)
 
     def propagate_settings(self) -> None:
         """

@@ -324,15 +324,15 @@ class TestEffectiveLanguageBackend:
             agent.shutdown(timeout=5)
 
 
-class TestGetProjectSerenaFolder:
-    """Tests for SerenaConfig.get_project_serena_folder and the project_serena_folder_location setting."""
+class TestGetConfiguredProjectSerenaFolder:
+    """Tests for SerenaConfig.get_configured_project_serena_folder (pure template resolution)."""
 
     def test_default_location(self):
         config = SerenaConfig(
             gui_log_window=False,
             web_dashboard=False,
         )
-        result = config.get_project_serena_folder("myproject", "/home/user/myproject")
+        result = config.get_configured_project_serena_folder("myproject", "/home/user/myproject")
         assert result == os.path.abspath("/home/user/myproject/.serena")
 
     def test_custom_location_with_project_name(self):
@@ -341,7 +341,7 @@ class TestGetProjectSerenaFolder:
             web_dashboard=False,
             project_serena_folder_location="/projects-metadata/$projectName/.serena",
         )
-        result = config.get_project_serena_folder("myproject", "/home/user/myproject")
+        result = config.get_configured_project_serena_folder("myproject", "/home/user/myproject")
         assert result == os.path.abspath("/projects-metadata/myproject/.serena")
 
     def test_custom_location_with_project_dir(self):
@@ -350,7 +350,7 @@ class TestGetProjectSerenaFolder:
             web_dashboard=False,
             project_serena_folder_location="$projectDir/.custom-serena",
         )
-        result = config.get_project_serena_folder("myproject", "/home/user/myproject")
+        result = config.get_configured_project_serena_folder("myproject", "/home/user/myproject")
         assert result == os.path.abspath("/home/user/myproject/.custom-serena")
 
     def test_custom_location_with_both_placeholders(self):
@@ -359,7 +359,7 @@ class TestGetProjectSerenaFolder:
             web_dashboard=False,
             project_serena_folder_location="/data/$projectName/$projectDir/.serena",
         )
-        result = config.get_project_serena_folder("myproject", "/home/user/proj")
+        result = config.get_configured_project_serena_folder("myproject", "/home/user/proj")
         assert result == os.path.abspath("/data/myproject/home/user/proj/.serena")
 
     def test_default_field_value(self):
@@ -376,7 +376,7 @@ class TestGetProjectSerenaFolder:
             project_serena_folder_location="$projectDir/$unknownVar/.serena",
         )
         with pytest.raises(SerenaConfigError, match=r"Unknown placeholder '\$unknownVar'"):
-            config.get_project_serena_folder("myproject", "/home/user/myproject")
+            config.get_configured_project_serena_folder("myproject", "/home/user/myproject")
 
     def test_rejects_typo_projectDirs(self):
         """$projectDirs should not be silently treated as $projectDir + 's'."""
@@ -386,7 +386,7 @@ class TestGetProjectSerenaFolder:
             project_serena_folder_location="$projectDirs/.serena",
         )
         with pytest.raises(SerenaConfigError, match=r"Unknown placeholder '\$projectDirs'"):
-            config.get_project_serena_folder("myproject", "/home/user/myproject")
+            config.get_configured_project_serena_folder("myproject", "/home/user/myproject")
 
     def test_rejects_typo_projectname_lowercase(self):
         config = SerenaConfig(
@@ -395,7 +395,7 @@ class TestGetProjectSerenaFolder:
             project_serena_folder_location="/data/$projectname/.serena",
         )
         with pytest.raises(SerenaConfigError, match=r"Unknown placeholder '\$projectname'"):
-            config.get_project_serena_folder("myproject", "/home/user/myproject")
+            config.get_configured_project_serena_folder("myproject", "/home/user/myproject")
 
     def test_no_placeholders_is_valid(self):
         config = SerenaConfig(
@@ -403,7 +403,7 @@ class TestGetProjectSerenaFolder:
             web_dashboard=False,
             project_serena_folder_location="/fixed/path/.serena",
         )
-        result = config.get_project_serena_folder("myproject", "/home/user/myproject")
+        result = config.get_configured_project_serena_folder("myproject", "/home/user/myproject")
         assert result == os.path.abspath("/fixed/path/.serena")
 
     def test_error_message_lists_supported_placeholders(self):
@@ -413,11 +413,11 @@ class TestGetProjectSerenaFolder:
             project_serena_folder_location="$bogus/.serena",
         )
         with pytest.raises(SerenaConfigError, match=r"\$projectDir.*\$projectName|\$projectName.*\$projectDir"):
-            config.get_project_serena_folder("myproject", "/home/user/myproject")
+            config.get_configured_project_serena_folder("myproject", "/home/user/myproject")
 
 
 class TestProjectSerenaDataFolder:
-    """Tests for Project._resolve_serena_data_folder with fallback logic."""
+    """Tests for SerenaConfig.get_project_serena_folder fallback logic (via Project)."""
 
     def setup_method(self):
         self.test_dir = tempfile.mkdtemp()
