@@ -191,7 +191,7 @@ The setting supports two placeholders:
 project_serena_folder_location: "$projectDir/.serena"
 
 # Central location: all project data under a shared directory
-project_serena_folder_location: "/projects-metadata/$projectName/.serena"
+project_serena_folder_location: "/projects-metadata/$projectFolderName/.serena"
 ```
 
 When a project is loaded, Serena uses the following fallback logic:

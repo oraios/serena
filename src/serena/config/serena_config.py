@@ -193,7 +193,7 @@ class SerenaConfigError(Exception):
 DEFAULT_PROJECT_SERENA_FOLDER_LOCATION = "$projectDir/" + SERENA_MANAGED_DIR_NAME
 """
 The default template for the project Serena folder location.
-Uses $projectDir and $projectName as placeholders.
+Uses $projectDir and $projectFolderName as placeholders.
 """
 
 
@@ -576,10 +576,10 @@ class SerenaConfig(SharedConfig):
     Template for the location of the per-project .serena data folder (memories, caches, etc.).
     Supports the following placeholders:
       - $projectDir: the absolute path to the project root directory
-      - $projectName: the name of the project (as defined in project.yml)
+      - $projectFolderName: the name of the project folder
     Examples:
       - "$projectDir/.serena" (default, stores data inside the project)
-      - "/projects-metadata/$projectName/.serena" (stores data in a central location)
+      - "/projects-metadata/$projectFolderName/.serena" (stores data in a central location)
     """
 
     # settings with overridden defaults
