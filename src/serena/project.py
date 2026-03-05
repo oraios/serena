@@ -1,9 +1,10 @@
 import json
 import logging
 import os
+import shutil
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import pathspec
 from sensai.util.logging import LogTime
@@ -12,12 +13,13 @@ from sensai.util.string import ToStringMixin
 from serena.config.serena_config import (
     DEFAULT_TOOL_TIMEOUT,
     ProjectConfig,
+    SerenaPaths,
     get_serena_managed_in_project_dir,
 )
 from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_NAME
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.util.file_system import GitignoreParser, match_path
-from serena.util.text_utils import MatchedConsecutiveLines, search_files
+from serena.util.text_utils import ContentReplacer, MatchedConsecutiveLines, search_files
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import FileUtils
@@ -29,26 +31,59 @@ log = logging.getLogger(__name__)
 
 
 class MemoriesManager:
-    def __init__(self, project_root: str):
-        self._memory_dir = Path(get_serena_managed_in_project_dir(project_root)) / "memories"
-        self._memory_dir.mkdir(parents=True, exist_ok=True)
+    GLOBAL_TOPIC = "global"
+    _global_memory_dir = SerenaPaths().global_memories_path
+
+    def __init__(self, project_root: str, global_memory_tool_write_access: bool = False):
+        """
+        :param project_root: the project's root directory
+        :param global_memory_tool_write_access: whether to allow writing global memories in tool execution contexts
+        """
+        self._project_memory_dir = Path(get_serena_managed_in_project_dir(project_root)) / "memories"
+        self._project_memory_dir.mkdir(parents=True, exist_ok=True)
+        self._global_memory_tool_write_access = global_memory_tool_write_access
         self._encoding = SERENA_FILE_ENCODING
+
+    def _is_global(self, name: str) -> bool:
+        return name == self.GLOBAL_TOPIC or name.startswith(self.GLOBAL_TOPIC + "/")
 
     def get_memory_file_path(self, name: str) -> Path:
         # Strip .md extension if present
         name = name.replace(".md", "")
 
-        # Split by "/" to handle subdirectories
+        if self._is_global(name):
+            if name == self.GLOBAL_TOPIC:
+                raise ValueError(
+                    f'Bare "{self.GLOBAL_TOPIC}" is not a valid memory name. '
+                    f'Use "{self.GLOBAL_TOPIC}/<name>" to address a global memory.'
+                )
+            # Strip "global/" prefix and resolve against global dir
+            sub_name = name[len(self.GLOBAL_TOPIC) + 1 :]
+            parts = sub_name.split("/")
+            filename = f"{parts[-1]}.md"
+            if len(parts) > 1:
+                subdir = self._global_memory_dir / "/".join(parts[:-1])
+                subdir.mkdir(parents=True, exist_ok=True)
+                return subdir / filename
+            return self._global_memory_dir / filename
+
+        # Project-local memory
         parts = name.split("/")
         filename = f"{parts[-1]}.md"
 
         if len(parts) > 1:
             # Create subdirectory path
-            subdir = self._memory_dir / "/".join(parts[:-1])
+            subdir = self._project_memory_dir / "/".join(parts[:-1])
             subdir.mkdir(parents=True, exist_ok=True)
             return subdir / filename
 
-        return self._memory_dir / filename
+        return self._project_memory_dir / filename
+
+    def _check_write_access(self, name: str, is_tool_context: bool) -> None:
+        # in tool context, global memory write access can be disabled
+        if is_tool_context:
+            if self._is_global(name) and not self._global_memory_tool_write_access:
+                raise PermissionError(f"Writing to global memories is not allowed (attempted to write to '{name}')")
 
     def load_memory(self, name: str) -> str:
         memory_file_path = self.get_memory_file_path(name)
@@ -57,47 +92,70 @@ class MemoriesManager:
         with open(memory_file_path, encoding=self._encoding) as f:
             return f.read()
 
-    def save_memory(self, name: str, content: str) -> str:
+    def save_memory(self, name: str, content: str, is_tool_context: bool) -> str:
+        self._check_write_access(name, is_tool_context)
         memory_file_path = self.get_memory_file_path(name)
         with open(memory_file_path, "w", encoding=self._encoding) as f:
             f.write(content)
         return f"Memory {name} written."
 
+    @staticmethod
+    def _list_memories(search_dir: Path, base_dir: Path, prefix: str = "") -> list[str]:
+        if not search_dir.exists():
+            return []
+        results = []
+        for md_file in search_dir.rglob("*.md"):
+            rel = str(md_file.relative_to(base_dir).with_suffix("")).replace(os.sep, "/")
+            results.append(prefix + rel)
+        return results
+
+    @classmethod
+    def list_global_memories(cls, subtopic: str = "") -> list[str]:
+        dir_path = cls._global_memory_dir
+        if subtopic:
+            dir_path = dir_path / subtopic.replace("/", os.sep)
+        return cls._list_memories(dir_path, cls._global_memory_dir, cls.GLOBAL_TOPIC + "/")
+
+    def list_project_memories(self, topic: str = "") -> list[str]:
+        dir_path = self._project_memory_dir
+        if topic:
+            dir_path = dir_path / topic.replace("/", os.sep)
+        return self._list_memories(dir_path, self._project_memory_dir)
+
     def list_memories(self, topic: str = "") -> list[str]:
         """
-        List memories, optionally filtered by topic.
+        Lists all memories, optionally filtered by topic.
+        If the topic is omitted, both global and project-specific memories are returned.
         """
-        memories = []
+        memories: list[str]
 
         if topic:
-            # Only list memories in specified subdirectory
-            search_dir = self._memory_dir / topic.replace("/", os.sep)
-            if not search_dir.exists():
-                return []
+            if self._is_global(topic):
+                topic_parts = topic.split("/")
+                subtopic = "/".join(topic_parts[1:])
+                memories = self.list_global_memories(subtopic=subtopic)
+            else:
+                memories = self.list_project_memories(topic=topic)
         else:
-            search_dir = self._memory_dir
+            memories = self.list_project_memories() + self.list_global_memories()
 
-        # Recursively find all .md files
-        for md_file in search_dir.rglob("*.md"):
-            # Calculate relative path as memory name
-            rel_path = md_file.relative_to(self._memory_dir)
-            name = str(rel_path.with_suffix("")).replace(os.sep, "/")
-            memories.append(name)
-
-        # Sort alphabetically by name
         return sorted(memories)
 
-    def delete_memory(self, name: str) -> str:
+    def delete_memory(self, name: str, is_tool_context: bool) -> str:
+        self._check_write_access(name, is_tool_context)
         memory_file_path = self.get_memory_file_path(name)
         if not memory_file_path.exists():
             return f"Memory {name} not found."
         memory_file_path.unlink()
         return f"Memory {name} deleted."
 
-    def rename_memory(self, old_name: str, new_name: str) -> str:
+    def move_memory(self, old_name: str, new_name: str, is_tool_context: bool) -> str:
         """
         Rename or move a memory file.
+        Moving between global and project scope (e.g. "global/foo" -> "bar") is supported.
         """
+        self._check_write_access(new_name, is_tool_context)
+
         old_path = self.get_memory_file_path(old_name)
         new_path = self.get_memory_file_path(new_name)
 
@@ -106,12 +164,34 @@ class MemoriesManager:
         if new_path.exists():
             raise FileExistsError(f"Memory {new_name} already exists.")
 
-        # Ensure target directory exists
         new_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(old_path, new_path)
 
-        # Move/rename the file
-        old_path.rename(new_path)
         return f"Memory renamed from {old_name} to {new_name}."
+
+    def edit_memory(
+        self, name: str, needle: str, repl: str, mode: Literal["literal", "regex"], allow_multiple_occurrences: bool, is_tool_context: bool
+    ) -> str:
+        """
+        Edit a memory by replacing content matching a pattern.
+
+        :param name: the memory name
+        :param needle: the string or regex to search for
+        :param repl: the replacement string
+        :param mode: "literal" or "regex"
+        :param allow_multiple_occurrences:
+        """
+        self._check_write_access(name, is_tool_context)
+        memory_file_path = self.get_memory_file_path(name)
+        if not memory_file_path.exists():
+            raise FileNotFoundError(f"Memory {name} not found.")
+        with open(memory_file_path, encoding=self._encoding) as f:
+            original_content = f.read()
+        replacer = ContentReplacer(mode=mode, allow_multiple_occurrences=allow_multiple_occurrences)
+        updated_content = replacer.replace(original_content, needle, repl)
+        with open(memory_file_path, "w", encoding=self._encoding) as f:
+            f.write(updated_content)
+        return f"Memory {name} edited successfully."
 
 
 class Project(ToStringMixin):
@@ -124,7 +204,10 @@ class Project(ToStringMixin):
     ):
         self.project_root = project_root
         self.project_config = project_config
-        self.memories_manager = MemoriesManager(project_root)
+
+        global_memory_write_access = serena_config.edit_global_memories if serena_config else False
+        self.memories_manager = MemoriesManager(project_root, global_memory_write_access)
+
         self.language_server_manager: LanguageServerManager | None = None
         self._is_newly_created = is_newly_created
 
@@ -220,10 +303,10 @@ class Project(ToStringMixin):
             msg = f"The project with name '{self.project_name}' at {self.project_root} is activated."
         languages_str = ", ".join([lang.value for lang in self.project_config.languages])
         msg += f"\nProgramming languages: {languages_str}; file encoding: {self.project_config.encoding}"
-        memories = self.memories_manager.list_memories()
-        if memories:
+        project_memories = self.memories_manager.list_project_memories()
+        if project_memories:
             msg += (
-                f"\nAvailable project memories: {json.dumps(memories)}\n"
+                f"\nAvailable project memories: {json.dumps(project_memories)}\n"
                 + "Use the `read_memory` tool to read these memories later if they are relevant to the task."
             )
         if self.project_config.initial_prompt:

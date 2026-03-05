@@ -53,40 +53,6 @@ PLATFORM_KOTLIN_SUFFIX = {
     "osx-arm64": "mac-aarch64",
 }
 
-# Java runtime dependency information per platform
-JAVA_DEPENDENCIES = {
-    "win-x64": {
-        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-win32-x64-1.42.0-561.vsix",
-        "archiveType": "zip",
-        "java_home_path": "extension/jre/21.0.7-win32-x86_64",
-        "java_path": "extension/jre/21.0.7-win32-x86_64/bin/java.exe",
-    },
-    "linux-x64": {
-        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-x64-1.42.0-561.vsix",
-        "archiveType": "zip",
-        "java_home_path": "extension/jre/21.0.7-linux-x86_64",
-        "java_path": "extension/jre/21.0.7-linux-x86_64/bin/java",
-    },
-    "linux-arm64": {
-        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-arm64-1.42.0-561.vsix",
-        "archiveType": "zip",
-        "java_home_path": "extension/jre/21.0.7-linux-aarch64",
-        "java_path": "extension/jre/21.0.7-linux-aarch64/bin/java",
-    },
-    "osx-x64": {
-        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-x64-1.42.0-561.vsix",
-        "archiveType": "zip",
-        "java_home_path": "extension/jre/21.0.7-macosx-x86_64",
-        "java_path": "extension/jre/21.0.7-macosx-x86_64/bin/java",
-    },
-    "osx-arm64": {
-        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-arm64-1.42.0-561.vsix",
-        "archiveType": "zip",
-        "java_home_path": "extension/jre/21.0.7-macosx-aarch64",
-        "java_path": "extension/jre/21.0.7-macosx-aarch64/bin/java",
-    },
-}
-
 
 class KotlinLanguageServer(SolidLanguageServer):
     """
@@ -135,32 +101,13 @@ class KotlinLanguageServer(SolidLanguageServer):
             kotlin_suffix = PLATFORM_KOTLIN_SUFFIX.get(platform_id.value)
             assert kotlin_suffix, f"Unsupported platform for Kotlin LSP: {platform_id.value}"
 
-            java_dependency = JAVA_DEPENDENCIES[platform_id.value]
-
             # Setup paths for dependencies
             static_dir = os.path.join(self._ls_resources_dir, "kotlin_language_server")
             os.makedirs(static_dir, exist_ok=True)
 
-            # Setup Java
-            java_dir = os.path.join(static_dir, "java")
-            os.makedirs(java_dir, exist_ok=True)
-
-            self._java_home_path = os.path.join(java_dir, java_dependency["java_home_path"])
-            java_path = os.path.join(java_dir, java_dependency["java_path"])
-
-            if not os.path.exists(java_path):
-                log.info(f"Downloading Java for {platform_id.value}...")
-                FileUtils.download_and_extract_archive(java_dependency["url"], java_dir, java_dependency["archiveType"])
-                if not platform_id.value.startswith("win-"):
-                    os.chmod(java_path, 0o755)
-
-            assert os.path.exists(java_path), f"Java executable not found at {java_path}"
-
             # Setup Kotlin Language Server
-            if platform_id.value.startswith("win-"):
-                kotlin_script = os.path.join(static_dir, "kotlin-lsp.cmd")
-            else:
-                kotlin_script = os.path.join(static_dir, "kotlin-lsp.sh")
+            kotlin_script_name = "kotlin-lsp.cmd" if platform_id.value.startswith("win-") else "kotlin-lsp.sh"
+            kotlin_script = os.path.join(static_dir, kotlin_script_name)
 
             if not os.path.exists(kotlin_script):
                 kotlin_lsp_version = self._custom_settings.get("kotlin_lsp_version", DEFAULT_KOTLIN_LSP_VERSION)

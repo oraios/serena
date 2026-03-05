@@ -310,6 +310,7 @@ markers = [
   "nix: language server running for Nix",
   "dart: language server running for Dart",
   "erlang: language server running for Erlang",
+  "ocaml: language server running for OCaml and Reason",
   "scala: language server running for Scala",
   "al: language server running for AL (Microsoft Dynamics 365 Business Central)",
   "fsharp: language server running for F#",
@@ -326,11 +327,12 @@ markers = [
   "toml: language server running for TOML",
   "matlab: language server running for MATLAB (requires MATLAB R2021b+)",
   "systemverilog: language server running for SystemVerilog (uses verible-verilog-ls)",
+  "hlsl: language server running for HLSL shaders (uses shader-language-server)",
 ]
 
 [tool.codespell]
 # Ref: https://github.com/codespell-project/codespell#using-a-config-file
 skip = '.git*,*.svg,*.lock,*.min.*'
 check-hidden = true
-# ignore-regex = ''
+ignore-regex = '\.\w+'
 ignore-words-list = 'paket'

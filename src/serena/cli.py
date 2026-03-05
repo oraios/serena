@@ -753,6 +753,9 @@ class ProjectCommands(AutoRegisteringGroup):
         logging.configure(level=logging.INFO)
         project_path = os.path.abspath(project)
         serena_config = SerenaConfig.from_config_file()
+        serena_config.language_backend = LanguageBackend.LSP
+        serena_config.gui_log_window = False
+        serena_config.web_dashboard = False
         proj = Project.load(project_path, serena_config=serena_config)
 
         # Create log file with timestamp
@@ -767,9 +770,7 @@ class ProjectCommands(AutoRegisteringGroup):
             try:
                 # Create SerenaAgent with dashboard disabled
                 log.info("Creating SerenaAgent with disabled dashboard...")
-                serena_config = SerenaConfig.from_config_file()
-                serena_config.gui_log_window = False
-                serena_config.web_dashboard = False
+
                 agent = SerenaAgent(project=project_path, serena_config=serena_config)
                 log.info("SerenaAgent created successfully")
 
@@ -803,7 +804,7 @@ class ProjectCommands(AutoRegisteringGroup):
                 # Test 1: Get symbols overview
                 log.info("Testing GetSymbolsOverviewTool on file: %s", target_file)
                 overview_data = agent.execute_task(lambda: overview_tool.get_symbol_overview(target_file))
-                log.info("GetSymbolsOverviewTool returned %d symbols", len(overview_data))
+                log.info(f"GetSymbolsOverviewTool returned: {overview_data}")
 
                 if not overview_data:
                     log.error("No symbols found in file %s", target_file)
@@ -824,8 +825,8 @@ class ProjectCommands(AutoRegisteringGroup):
                     selected_symbol = overview_data[0]
                     log.info("No class or function found, using first available symbol")
 
-                symbol_name = selected_symbol.get("name_path", "unknown")
-                symbol_kind = selected_symbol.get("kind", "unknown")
+                symbol_name = selected_symbol["name"]
+                symbol_kind = selected_symbol["kind"]
                 log.info("Using symbol for testing: %s (kind: %s)", symbol_name, symbol_kind)
 
                 # Test 2: FindSymbolTool

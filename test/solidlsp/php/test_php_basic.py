@@ -8,12 +8,10 @@ from test.conftest import is_ci, is_windows, language_tests_enabled
 
 _php_servers: list[Language] = [Language.PHP]
 if language_tests_enabled(Language.PHP_PHPACTOR):
-    _php_servers.append(Language.PHP_PHPACTOR)
+    if not (is_windows and is_ci):  # TODO: Phpactor tests are flaky in Windows CI and can even cause hangs #1040
+        _php_servers.append(Language.PHP_PHPACTOR)
 
 
-@pytest.mark.xfail(
-    is_ci and is_windows, reason="Tests are flaky"
-)  # TODO: Re-enable once we have a solution for running Phpactor tests on Windows CI #1040
 @pytest.mark.php
 class TestPhpLanguageServers:
     @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
@@ -26,7 +24,6 @@ class TestPhpLanguageServers:
     @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
     def test_find_definition_within_file(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
-
         # In index.php:
         # Line 9 (1-indexed): $greeting = greet($userName);
         # Line 11 (1-indexed): echo $greeting;
