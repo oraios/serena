@@ -174,6 +174,12 @@ class LanguageBackend(Enum):
                 return backend
         raise ValueError(f"Unknown language backend '{backend_str}': valid values are {[b.value for b in LanguageBackend]}")
 
+    def is_lsp(self) -> bool:
+        return self == LanguageBackend.LSP
+
+    def is_jetbrains(self) -> bool:
+        return self == LanguageBackend.JETBRAINS
+
 
 @dataclass
 class SharedConfig(ModeSelectionDefinition, ToolInclusionDefinition, ToStringMixin):
@@ -507,7 +513,7 @@ class RegisteredProject(ToStringMixin):
         """
         return self.project_root.samefile(Path(path).resolve())
 
-    def get_project_instance(self, serena_config: "SerenaConfig | None") -> "Project":
+    def get_project_instance(self, serena_config: "SerenaConfig") -> "Project":
         """
         Returns the project instance for this registered project, loading it if necessary.
         """
@@ -797,7 +803,7 @@ class SerenaConfig(SharedConfig):
             return project_candidates[0]
         elif len(project_candidates) > 1:
             raise ValueError(
-                f"Multiple projects found with name '{project_root_or_name}'. Please activate it by location instead. "
+                f"Multiple projects found with name '{project_root_or_name}'. Please reference it by location instead. "
                 f"Locations: {[p.project_root for p in project_candidates]}"
             )
         # no project found by name; check if it's a path
