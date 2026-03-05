@@ -228,9 +228,9 @@ class TestPhpLanguageServers:
         assert dog_symbol is not None, "Dog class not found in root symbols"
         dog_children = dog_symbol.get("children", [])
         dog_child_names = [c.get("name") for c in dog_children]
-        assert len(dog_child_names) > 0, (
-            f"Dog class has no children — hierarchicalDocumentSymbolSupport is not working. " f"All root symbols: {root_names}"
-        )
+        assert (
+            len(dog_child_names) > 0
+        ), f"Dog class has no children — hierarchicalDocumentSymbolSupport is not working. All root symbols: {root_names}"
         expected_methods = {"greet", "fetch", "getBreed", "describe"}
         missing = expected_methods - set(dog_child_names)
         assert not missing, f"Dog class missing expected methods: {missing}. Children found: {dog_child_names}"
