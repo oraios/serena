@@ -895,6 +895,31 @@ class SerenaConfig(SharedConfig):
 
         save_yaml(self.config_file_path, commented_yaml)
 
+    @staticmethod
+    def _resolve_serena_folder_location(template: str, placeholders: dict[str, str]) -> str:
+        """
+        Resolves a folder location template by replacing known ``$placeholder`` tokens
+        and raising on any unrecognised ones.
+
+        :param template: the template string (e.g. ``"$projectDir/.serena"``)
+        :param placeholders: mapping from placeholder name (without ``$``) to replacement value
+        :return: the resolved absolute path
+        :raises SerenaConfigError: if the template contains an unknown ``$placeholder``
+        """
+        import re
+
+        def _replace(match: re.Match[str]) -> str:
+            name = match.group(1)
+            if name not in placeholders:
+                raise SerenaConfigError(
+                    f"Unknown placeholder '${name}' in project_serena_folder_location. "
+                    f"Supported placeholders: {', '.join('$' + k for k in placeholders)}"
+                )
+            return placeholders[name]
+
+        result = re.sub(r"\$([A-Za-z_]\w*)", _replace, template)
+        return os.path.abspath(result)
+
     def get_project_serena_folder(self, project_name: str, project_root: str | Path) -> str:
         """
         Returns the resolved absolute path to the .serena data folder for a project,
@@ -903,11 +928,13 @@ class SerenaConfig(SharedConfig):
         :param project_name: the name of the project
         :param project_root: the absolute path to the project root directory
         :return: the resolved absolute path to the project's .serena folder
+        :raises SerenaConfigError: if the template contains an unknown placeholder
         """
-        result = self.project_serena_folder_location
-        result = result.replace("$projectDir", str(project_root))
-        result = result.replace("$projectName", project_name)
-        return os.path.abspath(result)
+        placeholders = {
+            "projectDir": str(project_root),
+            "projectName": project_name,
+        }
+        return self._resolve_serena_folder_location(self.project_serena_folder_location, placeholders)
 
     def propagate_settings(self) -> None:
         """

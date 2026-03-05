@@ -13,6 +13,7 @@ from serena.config.serena_config import (
     ProjectConfig,
     RegisteredProject,
     SerenaConfig,
+    SerenaConfigError,
 )
 from serena.constants import PROJECT_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
 from serena.project import MemoriesManager, Project
@@ -367,6 +368,52 @@ class TestGetProjectSerenaFolder:
             web_dashboard=False,
         )
         assert config.project_serena_folder_location == DEFAULT_PROJECT_SERENA_FOLDER_LOCATION
+
+    def test_rejects_unknown_placeholder(self):
+        config = SerenaConfig(
+            gui_log_window=False,
+            web_dashboard=False,
+            project_serena_folder_location="$projectDir/$unknownVar/.serena",
+        )
+        with pytest.raises(SerenaConfigError, match=r"Unknown placeholder '\$unknownVar'"):
+            config.get_project_serena_folder("myproject", "/home/user/myproject")
+
+    def test_rejects_typo_projectDirs(self):
+        """$projectDirs should not be silently treated as $projectDir + 's'."""
+        config = SerenaConfig(
+            gui_log_window=False,
+            web_dashboard=False,
+            project_serena_folder_location="$projectDirs/.serena",
+        )
+        with pytest.raises(SerenaConfigError, match=r"Unknown placeholder '\$projectDirs'"):
+            config.get_project_serena_folder("myproject", "/home/user/myproject")
+
+    def test_rejects_typo_projectname_lowercase(self):
+        config = SerenaConfig(
+            gui_log_window=False,
+            web_dashboard=False,
+            project_serena_folder_location="/data/$projectname/.serena",
+        )
+        with pytest.raises(SerenaConfigError, match=r"Unknown placeholder '\$projectname'"):
+            config.get_project_serena_folder("myproject", "/home/user/myproject")
+
+    def test_no_placeholders_is_valid(self):
+        config = SerenaConfig(
+            gui_log_window=False,
+            web_dashboard=False,
+            project_serena_folder_location="/fixed/path/.serena",
+        )
+        result = config.get_project_serena_folder("myproject", "/home/user/myproject")
+        assert result == os.path.abspath("/fixed/path/.serena")
+
+    def test_error_message_lists_supported_placeholders(self):
+        config = SerenaConfig(
+            gui_log_window=False,
+            web_dashboard=False,
+            project_serena_folder_location="$bogus/.serena",
+        )
+        with pytest.raises(SerenaConfigError, match=r"\$projectDir.*\$projectName|\$projectName.*\$projectDir"):
+            config.get_project_serena_folder("myproject", "/home/user/myproject")
 
 
 class TestProjectSerenaDataFolder:
