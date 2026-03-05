@@ -63,6 +63,9 @@ Some languages require additional installations or setup steps, as noted.
 * **Julia**
 * **Kotlin**  
   (uses the pre-alpha [official kotlin LS](https://github.com/Kotlin/kotlin-lsp), some issues may appear)
+* **Lean 4**  
+  (requires `lean` and `lake` installed via [elan](https://github.com/leanprover/elan); uses the built-in Lean 4 LSP;
+  the project must be a Lake project with `lake build` run before use)
 * **Lua**
 * **Markdown**  
   (must explicitly enable language `markdown`, primarily useful for documentation-heavy projects)

@@ -259,5 +259,8 @@ dist-newstyle/
 cabal.project.local*
 .ghc.environment.*
 
+# Lean 4
+.lake/
+
 zz-misc/
 vue-implementation/
