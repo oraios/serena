@@ -6,7 +6,6 @@ from serena.jetbrains.jetbrains_types import SymbolDTO, SymbolDTOKey
 from serena.symbol import LanguageServerSymbol, LanguageServerSymbolRetriever, NamePathComponent, NamePathMatcher
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from solidlsp.ls_types import SymbolKind
 
 
 class TestSymbolNameMatching:
@@ -484,84 +483,3 @@ class TestHoverBudget:
         # Default budget is 5s, all 3 should succeed
         assert call_count == 3
         assert all(info is not None for info in result.values())
-
-
-def _make_flat_symbol(
-    name: str,
-    kind: SymbolKind,
-    container_name: str | None = None,
-) -> dict:
-    """Build a minimal UnifiedSymbolInformation dict as Intelephense returns for flat SymbolInformation[]."""
-    sym: dict = {
-        "name": name,
-        "kind": kind,
-        "location": {
-            "uri": "file:///dummy.php",
-            "range": {"start": {"line": 0, "character": 0}, "end": {"line": 10, "character": 0}},
-            "absolutePath": "/dummy.php",
-            "relativePath": "dummy.php",
-        },
-        "children": [],
-        "parent": None,
-    }
-    if container_name is not None:
-        sym["containerName"] = container_name
-    return sym
-
-
-class TestLanguageServerSymbolFlatContainerName:
-    """Unit tests for containerName fallback in LanguageServerSymbol.
-
-    Intelephense (and potentially other language servers) can return flat SymbolInformation[]
-    instead of hierarchical DocumentSymbol[] for some PHP files.  In that case, class methods
-    appear as root-level symbols with no parent reference but carry a containerName field.
-    These tests verify that find_symbol("ClassName/method") still works in that scenario.
-    """
-
-    def _make_flat_symbols(self) -> list[dict]:
-        return [
-            _make_flat_symbol("MyHandler", SymbolKind.Class),
-            _make_flat_symbol("handle_request", SymbolKind.Method, container_name="MyHandler"),
-            _make_flat_symbol("parse_data", SymbolKind.Method, container_name="MyHandler"),
-            _make_flat_symbol("MyManager", SymbolKind.Class),
-            _make_flat_symbol("get_id", SymbolKind.Method, container_name="MyManager"),
-        ]
-
-    def test_find_by_simple_name_finds_method(self) -> None:
-        flat_symbols = self._make_flat_symbols()
-        found = []
-        for sym_dict in flat_symbols:
-            found.extend(LanguageServerSymbol(sym_dict).find("handle_request"))
-        assert len(found) == 1
-        assert found[0].name == "handle_request"
-
-    def test_find_by_class_method_pattern_finds_method(self) -> None:
-        flat_symbols = self._make_flat_symbols()
-        found = []
-        for sym_dict in flat_symbols:
-            found.extend(LanguageServerSymbol(sym_dict).find("MyHandler/handle_request"))
-        assert len(found) == 1, f"find('MyHandler/handle_request') should match via containerName. Got {[s.name for s in found]!r}"
-        assert found[0].name == "handle_request"
-
-    def test_find_by_class_method_does_not_match_wrong_container(self) -> None:
-        flat_symbols = self._make_flat_symbols()
-        found = []
-        for sym_dict in flat_symbols:
-            found.extend(LanguageServerSymbol(sym_dict).find("MyHandler/get_id"))
-        assert len(found) == 0
-
-    def test_find_private_method_by_class_method_pattern(self) -> None:
-        flat_symbols = self._make_flat_symbols()
-        found = []
-        for sym_dict in flat_symbols:
-            found.extend(LanguageServerSymbol(sym_dict).find("MyHandler/parse_data"))
-        assert len(found) == 1
-        assert found[0].name == "parse_data"
-
-    def test_find_in_second_class(self) -> None:
-        flat_symbols = self._make_flat_symbols()
-        found = []
-        for sym_dict in flat_symbols:
-            found.extend(LanguageServerSymbol(sym_dict).find("MyManager/get_id"))
-        assert len(found) == 1
-        assert found[0].name == "get_id"

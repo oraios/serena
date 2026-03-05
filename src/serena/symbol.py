@@ -337,19 +337,8 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
 
     def iter_name_path_components_reversed(self) -> Iterator[NamePathComponent]:
         yield NamePathComponent(self.name, self.overload_idx)
-        has_yielded_ancestor = False
         for ancestor in self.iter_ancestors(up_to_symbol_kind=SymbolKind.File):
             yield NamePathComponent(ancestor.name, ancestor.overload_idx)
-            has_yielded_ancestor = True
-        if not has_yielded_ancestor:
-            # Fallback for flat SymbolInformation (e.g. Intelephense returns SymbolInformation[]
-            # instead of DocumentSymbol[] for some PHP files). In that case symbols have no
-            # parent-child links, but may carry a containerName that identifies the enclosing
-            # class or function.  Yield it so that name-path patterns like "ClassName/method"
-            # still match correctly.
-            container_name = self.symbol_root.get("containerName")
-            if container_name:
-                yield NamePathComponent(container_name, None)
 
     def iter_children(self) -> Iterator[Self]:
         for c in self.symbol_root["children"]:
