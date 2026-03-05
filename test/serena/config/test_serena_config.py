@@ -334,7 +334,7 @@ class TestGetConfiguredProjectSerenaFolder:
             gui_log_window=False,
             web_dashboard=False,
         )
-        result = config.get_configured_project_serena_folder("myproject", "/home/user/myproject")
+        result = config.get_configured_project_serena_folder("/home/user/myproject")
         assert result == os.path.abspath("/home/user/myproject/.serena")
 
     def test_custom_location_with_project_name(self):
@@ -343,7 +343,7 @@ class TestGetConfiguredProjectSerenaFolder:
             web_dashboard=False,
             project_serena_folder_location="/projects-metadata/$projectName/.serena",
         )
-        result = config.get_configured_project_serena_folder("myproject", "/home/user/myproject")
+        result = config.get_configured_project_serena_folder("/home/user/myproject")
         assert result == os.path.abspath("/projects-metadata/myproject/.serena")
 
     def test_custom_location_with_project_dir(self):
@@ -352,7 +352,7 @@ class TestGetConfiguredProjectSerenaFolder:
             web_dashboard=False,
             project_serena_folder_location="$projectDir/.custom-serena",
         )
-        result = config.get_configured_project_serena_folder("myproject", "/home/user/myproject")
+        result = config.get_configured_project_serena_folder("/home/user/myproject")
         assert result == os.path.abspath("/home/user/myproject/.custom-serena")
 
     def test_custom_location_with_both_placeholders(self):
@@ -361,7 +361,7 @@ class TestGetConfiguredProjectSerenaFolder:
             web_dashboard=False,
             project_serena_folder_location="/data/$projectName/$projectDir/.serena",
         )
-        result = config.get_configured_project_serena_folder("myproject", "/home/user/proj")
+        result = config.get_configured_project_serena_folder("/home/user/proj")
         assert result == os.path.abspath("/data/myproject/home/user/proj/.serena")
 
     def test_default_field_value(self):
@@ -378,7 +378,7 @@ class TestGetConfiguredProjectSerenaFolder:
             project_serena_folder_location="$projectDir/$unknownVar/.serena",
         )
         with pytest.raises(SerenaConfigError, match=r"Unknown placeholder '\$unknownVar'"):
-            config.get_configured_project_serena_folder("myproject", "/home/user/myproject")
+            config.get_configured_project_serena_folder("/home/user/myproject")
 
     def test_rejects_typo_projectDirs(self):
         """$projectDirs should not be silently treated as $projectDir + 's'."""
@@ -388,7 +388,7 @@ class TestGetConfiguredProjectSerenaFolder:
             project_serena_folder_location="$projectDirs/.serena",
         )
         with pytest.raises(SerenaConfigError, match=r"Unknown placeholder '\$projectDirs'"):
-            config.get_configured_project_serena_folder("myproject", "/home/user/myproject")
+            config.get_configured_project_serena_folder("/home/user/myproject")
 
     def test_rejects_typo_projectname_lowercase(self):
         config = SerenaConfig(
@@ -397,7 +397,7 @@ class TestGetConfiguredProjectSerenaFolder:
             project_serena_folder_location="/data/$projectname/.serena",
         )
         with pytest.raises(SerenaConfigError, match=r"Unknown placeholder '\$projectname'"):
-            config.get_configured_project_serena_folder("myproject", "/home/user/myproject")
+            config.get_configured_project_serena_folder("/home/user/myproject")
 
     def test_no_placeholders_is_valid(self):
         config = SerenaConfig(
@@ -405,7 +405,7 @@ class TestGetConfiguredProjectSerenaFolder:
             web_dashboard=False,
             project_serena_folder_location="/fixed/path/.serena",
         )
-        result = config.get_configured_project_serena_folder("myproject", "/home/user/myproject")
+        result = config.get_configured_project_serena_folder("/home/user/myproject")
         assert result == os.path.abspath("/fixed/path/.serena")
 
     def test_error_message_lists_supported_placeholders(self):
@@ -415,7 +415,7 @@ class TestGetConfiguredProjectSerenaFolder:
             project_serena_folder_location="$bogus/.serena",
         )
         with pytest.raises(SerenaConfigError, match=r"\$projectDir.*\$projectName|\$projectName.*\$projectDir"):
-            config.get_configured_project_serena_folder("myproject", "/home/user/myproject")
+            config.get_configured_project_serena_folder("/home/user/myproject")
 
 
 class TestProjectSerenaDataFolder:

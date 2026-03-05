@@ -294,7 +294,7 @@ class ProjectConfig(SharedConfig):
             config_with_comments["project_name"] = project_name
             config_with_comments["languages"] = languages_to_use
             if save_to_disk:
-                project_yml_path = serena_config.get_project_yml_location(project_folder_name, str(project_root))
+                project_yml_path = serena_config.get_project_yml_location(str(project_root))
                 log.info("Saving project configuration to %s", project_yml_path)
                 save_yaml(project_yml_path, config_with_comments)
             return cls._from_dict(config_with_comments)
@@ -413,7 +413,7 @@ class ProjectConfig(SharedConfig):
         """
         project_root = Path(project_root)
         project_folder_name = project_root.name
-        yaml_path = serena_config.get_project_yml_location(project_folder_name, str(project_root))
+        yaml_path = serena_config.get_project_yml_location(project_root)
 
         # auto-generate if necessary
         if not os.path.exists(yaml_path):
@@ -707,7 +707,7 @@ class SerenaConfig(SharedConfig):
         instance.projects = []
         for path in loaded_commented_yaml["projects"]:
             path = Path(path).resolve()
-            if not path.exists() or (path.is_dir() and not os.path.isfile(instance.get_project_yml_location(path.name, str(path)))):
+            if not path.exists() or (path.is_dir() and not os.path.isfile(instance.get_project_yml_location(str(path)))):
                 log.warning(f"Project path {path} does not exist or does not contain a project configuration file, skipping.")
                 continue
             if path.is_file():
@@ -807,8 +807,7 @@ class SerenaConfig(SharedConfig):
                     return project
         # no registered project found; auto-register if project configuration exists
         if autoregister:
-            project_name_guess = Path(project_root_or_name).name
-            config_path = self.get_project_yml_location(project_name_guess, project_root_or_name)
+            config_path = self.get_project_yml_location(project_root_or_name)
             if os.path.isfile(config_path):
                 registered_project = RegisteredProject.from_project_root(project_root_or_name, serena_config=self)
                 self.add_registered_project(registered_project)
@@ -930,37 +929,36 @@ class SerenaConfig(SharedConfig):
         result = re.sub(r"\$([A-Za-z_]\w*)", _replace, template)
         return os.path.abspath(result)
 
-    def get_configured_project_serena_folder(self, project_name: str, project_root: str | Path) -> str:
+    def get_configured_project_serena_folder(self, project_root: str | Path) -> str:
         """
         Returns the resolved absolute path to the .serena data folder for a project,
         applying placeholder substitution to ``project_serena_folder_location``
         without any fallback logic.
 
-        :param project_name: the name of the project
         :param project_root: the absolute path to the project root directory
         :return: the resolved absolute path to the project's .serena folder
         :raises SerenaConfigError: if the template contains an unknown placeholder
         """
+        project_folder_name = Path(project_root).name
         placeholders = {
             "projectDir": str(project_root),
-            "projectName": project_name,
+            "projectFolderName": project_folder_name,
         }
         return self._resolve_serena_folder_location(self.project_serena_folder_location, placeholders)
 
-    def get_project_serena_folder(self, project_name: str, project_root: str | Path) -> str:
+    def get_project_serena_folder(self, project_root: str | Path) -> str:
         """
         Resolves the location of the project's .serena data folder using fallback logic:
 
         1. If the folder exists at the configured path (``project_serena_folder_location``), use it.
-        2. Otherwise, if it exists at the default/legacy location inside the project root, use that.
+        2. Otherwise, if it exists at the default location inside the project root, use that.
         3. If neither exists, return the configured path (for creation).
 
-        :param project_name: the name of the project
         :param project_root: the absolute path to the project root directory
         :return: the resolved absolute path to the .serena data folder
         :raises SerenaConfigError: if the configured template contains an unknown placeholder
         """
-        configured_path = self.get_configured_project_serena_folder(project_name, project_root)
+        configured_path = self.get_configured_project_serena_folder(project_root)
         default_path = os.path.join(str(project_root), SERENA_MANAGED_DIR_NAME)
 
         if os.path.isdir(configured_path):
@@ -973,19 +971,18 @@ class SerenaConfig(SharedConfig):
                 default_path,
             )
             return default_path
-        log.info("Serena data folder will be created at: %s", configured_path)
+        log.info("Using Serena data folder: %s", configured_path)
         return configured_path
 
-    def get_project_yml_location(self, project_name: str, project_root: str | Path) -> str:
+    def get_project_yml_location(self, project_root: str | Path) -> str:
         """
         Returns the resolved absolute path to the project.yml configuration file,
         based on the resolved .serena data folder (with fallback logic).
 
-        :param project_name: the name of the project
         :param project_root: the absolute path to the project root directory
         :return: the resolved absolute path to the project's project.yml file
         """
-        serena_folder = self.get_project_serena_folder(project_name, project_root)
+        serena_folder = self.get_project_serena_folder(project_root)
         return os.path.join(serena_folder, ProjectConfig.SERENA_DEFAULT_PROJECT_FILE)
 
     def propagate_settings(self) -> None:

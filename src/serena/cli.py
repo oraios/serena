@@ -545,8 +545,7 @@ class ProjectCommands(AutoRegisteringGroup):
         """
         project_root = Path(project_path).resolve()
         serena_config = SerenaConfig.from_config_file()
-        project_name_guess = name or project_root.name
-        yml_path = serena_config.get_project_yml_location(project_name_guess, str(project_root))
+        yml_path = serena_config.get_project_yml_location(str(project_root))
         if os.path.exists(yml_path):
             raise FileExistsError(f"Project file {yml_path} already exists.")
 

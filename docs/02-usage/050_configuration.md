@@ -179,10 +179,10 @@ You can customize this location globally via the `project_serena_folder_location
 
 The setting supports two placeholders:
 
-| Placeholder    | Description                                                         |
-|----------------|---------------------------------------------------------------------|
-| `$projectDir`  | The absolute path to the project root directory                     |
-| `$projectName` | The name of the project (i.e. the project's folder name by default) |
+| Placeholder          | Description                                     |
+|----------------------|-------------------------------------------------|
+| `$projectDir`        | The absolute path to the project root directory |
+| `$projectFolderName` | The name of the project folder                  |
 
 **Examples:**
 

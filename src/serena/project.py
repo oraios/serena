@@ -298,7 +298,7 @@ class Project(ToStringMixin):
         :return: the absolute path to the .serena data folder
         """
         if serena_config is not None:
-            return serena_config.get_project_serena_folder(self.project_name, self.project_root)
+            return serena_config.get_project_serena_folder(self.project_root)
         return os.path.join(self.project_root, SERENA_MANAGED_DIR_NAME)
 
     def path_to_serena_data_folder(self) -> str:
