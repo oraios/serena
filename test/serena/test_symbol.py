@@ -449,6 +449,7 @@ class TestHoverBudget:
         assert call_count == 3
         assert all(info is not None for info in result.values())
 
+<<<<<<< HEAD
 
 def _make_flat_symbol(
     name: str,
