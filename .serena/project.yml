@@ -128,3 +128,8 @@ symbol_info_budget:
 # Note: the backend is fixed at startup. If a project with a different backend
 # is activated post-init, an error will be returned.
 language_backend:
+
+# whether to ignore all directories whose name starts with a dot (e.g. .git, .venv, .config).
+# Set to false if you need symbol retrieval in dot-prefixed directories (e.g. .github workflows).
+# Note: .git is always ignored via .gitignore regardless of this setting.
+ignore_all_dot_files: true
