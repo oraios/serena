@@ -23,7 +23,7 @@ class Version:
         self.version_string = version_string
         self.components = self._get_version_components(version_string)
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         return self.version_string
 
     @staticmethod

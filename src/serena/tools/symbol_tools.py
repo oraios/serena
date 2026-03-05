@@ -68,6 +68,10 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
             raise FileNotFoundError(f"File or directory {relative_path} does not exist in the project.")
         if os.path.isdir(file_path):
             raise ValueError(f"Expected a file path, but got a directory path: {relative_path}. ")
+        if not symbol_retriever.can_analyze_file(relative_path):
+            raise ValueError(
+                f"Cannot extract symbols from file {relative_path}. Active languages: {[l.value for l in self.agent.get_active_lsp_languages()]}"
+            )
 
         symbols = symbol_retriever.get_symbol_overview(relative_path)[relative_path]
 

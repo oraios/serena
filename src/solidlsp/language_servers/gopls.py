@@ -165,7 +165,7 @@ class Gopls(SolidLanguageServer):
     _CACHE_CONTEXT_ENV_KEYS = ("GOFLAGS", "GOOS", "GOARCH", "CGO_ENABLED")
 
     @override
-    def _cache_context_fingerprint(self) -> str | None:
+    def _document_symbols_cache_fingerprint(self) -> str | None:
         """
         Compute a deterministic fingerprint of the Go build context.
 

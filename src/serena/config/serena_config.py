@@ -85,6 +85,17 @@ class SerenaPaths:
         """
         file containing the ID of the last read news snippet
         """
+        global_memories_path = Path(os.path.join(self.serena_user_home_dir, "memories", "global"))
+        global_memories_path.mkdir(parents=True, exist_ok=True)
+        self.global_memories_path = global_memories_path
+        """
+        directory where global memories are stored, i.e. memories that are available across all projects
+        """
+        self.last_returned_log_file_path: str | None = None
+        """
+        the path to the last log file returned by `get_next_log_file_path`. If this is not None, the logs
+        are currently being written to this file
+        """
 
     def get_next_log_file_path(self, prefix: str) -> str:
         """
@@ -93,7 +104,8 @@ class SerenaPaths:
         """
         log_dir = os.path.join(self.serena_user_home_dir, "logs", datetime.now().strftime("%Y-%m-%d"))
         os.makedirs(log_dir, exist_ok=True)
-        return os.path.join(log_dir, prefix + "_" + datetime_tag() + ".txt")
+        self.last_returned_log_file_path = os.path.join(log_dir, prefix + "_" + datetime_tag() + f"_{os.getpid()}" + ".txt")
+        return self.last_returned_log_file_path
 
     # TODO: Paths from constants.py should be moved here
 
@@ -549,6 +561,9 @@ class SerenaConfig(SharedConfig):
     """List of paths to ignore across all projects. Same syntax as gitignore, so you can use * and **.
     These patterns are merged additively with each project's own ignored_paths."""
 
+    edit_global_memories: bool = True
+    """Whether global memories are allowed to be deleted or edited."""
+
     # settings with overridden defaults
     default_modes: Sequence[str] | None = ("interactive", "editing")
     symbol_info_budget: float = 10.0
@@ -559,7 +574,6 @@ class SerenaConfig(SharedConfig):
     If the budget is exceeded, Serena stops issuing further requests and returns partial info results.
     0 disables the budget (no early stopping). Negative values are invalid.
     """
-
     # *** fields that are NOT mapped to/from the configuration file ***
 
     _loaded_commented_yaml: CommentedMap | None = None

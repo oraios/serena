@@ -14,6 +14,11 @@ from solidlsp.settings import SolidLSPSettings
 log = logging.getLogger(__name__)
 
 
+class LanguageServerManagerInitialisationError(Exception):
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
 class LanguageServerFactory:
     def __init__(
         self,
@@ -122,14 +127,14 @@ class LanguageServerManager:
 
         # If any server failed to start up, raise an exception and stop all started language servers.
         # We intentionally fail fast here. The user's intention is to work with all the specified languages,
-        # so if any of them is not available, it is better to fail immediately and bring the failure to the
+        # so if any of them is not available, it is better to make symbolic tool calls fail, bringing the issue to the
         # user's attention instead of silently continuing with a subset of the language servers and potentially
         # causing suboptimal agent behaviour.
         if exceptions:
             for ls in language_servers.values():
                 ls.stop()
             failure_messages = "\n".join([f"{lang.value}: {e}" for lang, e in exceptions.items()])
-            raise Exception(f"Failed to start language servers:\n{failure_messages}")
+            raise LanguageServerManagerInitialisationError(f"Failed to start {len(exceptions)} language server(s):\n{failure_messages}")
 
         return LanguageServerManager(language_servers, factory)
 
@@ -142,16 +147,20 @@ class LanguageServerManager:
             ls = self.restart_language_server(ls.language)
         return ls
 
+    def _get_suitable_language_server(self, relative_path: str) -> SolidLanguageServer | None:
+        """:param relative_path: relative path to a file"""
+        for candidate in self._language_servers.values():
+            if not candidate.is_ignored_path(relative_path, ignore_unsupported_files=True):
+                return candidate
+        return None
+
     def get_language_server(self, relative_path: str) -> SolidLanguageServer:
         """:param relative_path: relative path to a file"""
         ls: SolidLanguageServer | None = None
         if len(self._language_servers) > 1:
             if os.path.isdir(relative_path):
                 raise ValueError(f"Expected a file path, but got a directory: {relative_path}")
-            for candidate in self._language_servers.values():
-                if not candidate.is_ignored_path(relative_path, ignore_unsupported_files=True):
-                    ls = candidate
-                    break
+            ls = self._get_suitable_language_server(relative_path)
         if ls is None:
             ls = self._default_language_server
         return self._ensure_functional_ls(ls)
@@ -236,3 +245,6 @@ class LanguageServerManager:
         for ls in self.iter_language_servers():
             if ls.is_running():
                 ls.save_cache()
+
+    def has_suitable_ls_for_file(self, relative_file_path: str) -> bool:
+        return self._get_suitable_language_server(relative_file_path) is not None
