@@ -350,6 +350,61 @@ class TopLevelCommands(AutoRegisteringGroup):
         else:
             print(f"{prefix}\n{instr}\n{postfix}")
 
+    @staticmethod
+    @click.command(
+        "start-project-server",
+        help="Starts the Serena project server, which exposes project querying capabilities via HTTP.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.option(
+        "--host",
+        type=str,
+        default="127.0.0.1",
+        show_default=True,
+        help="Listen address for the project server.",
+    )
+    @click.option(
+        "--port",
+        type=int,
+        default=None,
+        help="Listen port for the project server (default: ProjectServer.PORT).",
+    )
+    @click.option(
+        "--log-level",
+        type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+        default=None,
+        help="Override log level in config.",
+    )
+    def start_project_server(
+        host: str,
+        port: int | None,
+        log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None,
+    ) -> None:
+        from serena.project_server import ProjectServer
+
+        # initialize logging
+        Logger.root.setLevel(logging.INFO)
+        formatter = logging.Formatter(SERENA_LOG_FORMAT)
+        stderr_handler = logging.StreamHandler(stream=sys.stderr)
+        stderr_handler.formatter = formatter
+        Logger.root.addHandler(stderr_handler)
+        log_path = SerenaPaths().get_next_log_file_path("project-server")
+        file_handler = logging.FileHandler(log_path, mode="w")
+        file_handler.formatter = formatter
+        Logger.root.addHandler(file_handler)
+
+        if log_level is not None:
+            Logger.root.setLevel(logging.getLevelNamesMapping()[log_level])
+
+        log.info("Starting Serena project server")
+        log.info("Storing logs in %s", log_path)
+
+        server = ProjectServer()
+        run_kwargs: dict[str, Any] = {"host": host}
+        if port is not None:
+            run_kwargs["port"] = port
+        server.run(**run_kwargs)
+
 
 class ModeCommands(AutoRegisteringGroup):
     """Group for 'mode' subcommands."""
@@ -640,9 +695,7 @@ class ProjectCommands(AutoRegisteringGroup):
         serena_config = SerenaConfig.from_config_file()
         proj = registered_project.get_project_instance(serena_config=serena_config)
         click.echo(f"Indexing symbols in {proj} …")
-        ls_mgr = proj.create_language_server_manager(
-            log_level=lvl, ls_timeout=timeout, ls_specific_settings=serena_config.ls_specific_settings
-        )
+        ls_mgr = proj.create_language_server_manager()
         try:
             log_file = os.path.join(proj.project_root, ".serena", "logs", "indexing.txt")
 

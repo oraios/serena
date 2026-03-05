@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 from sensai.util.logging import configure
 
-from serena.config.serena_config import SerenaPaths
+from serena.config.serena_config import SerenaConfig, SerenaPaths
 from serena.constants import SERENA_MANAGED_DIR_NAME
 from serena.project import Project
 from serena.util.file_system import GitignoreParser
@@ -117,7 +117,8 @@ def start_default_ls_context(language: Language) -> Iterator[SolidLanguageServer
 
 def _create_default_project(language: Language) -> Project:
     repo_path = str(get_repo_path(language))
-    return Project.load(repo_path, serena_config=None)
+    serena_config = SerenaConfig()
+    return Project.load(repo_path, serena_config=serena_config)
 
 
 @pytest.fixture(scope="session")
