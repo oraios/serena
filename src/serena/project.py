@@ -307,6 +307,7 @@ class Project(ToStringMixin):
         default_path = os.path.join(self.project_root, SERENA_MANAGED_DIR_NAME)
 
         if os.path.isdir(configured_path):
+            log.info("Using existing Serena data folder at configured path: %s", configured_path)
             return configured_path
         if configured_path != default_path and os.path.isdir(default_path):
             log.info(
@@ -315,6 +316,7 @@ class Project(ToStringMixin):
                 default_path,
             )
             return default_path
+        log.info("Serena data folder will be created at: %s", configured_path)
         return configured_path
 
     def path_to_serena_data_folder(self) -> str:
