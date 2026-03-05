@@ -159,6 +159,7 @@ class TestRegisteredProjectGlobalIgnoredPaths:
         serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=["node_modules"])
         registered = RegisteredProject.from_project_root(
             str(self.project_path),
+            serena_config=serena_config,
         )
         project = registered.get_project_instance(serena_config=serena_config)
         assert project.is_ignored_path(str(self.project_path / "node_modules" / "pkg.js"))

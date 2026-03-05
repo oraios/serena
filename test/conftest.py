@@ -69,12 +69,13 @@ def _create_ls(
         trace_lsp_communication=trace_lsp_communication,
     )
     effective_solidlsp_dir = solidlsp_dir if solidlsp_dir is not None else SerenaPaths().serena_user_home_dir
+    project_data_path = os.path.join(repo_path, SERENA_MANAGED_DIR_NAME)
     return SolidLanguageServer.create(
         config,
         repo_path,
         solidlsp_settings=SolidLSPSettings(
             solidlsp_dir=effective_solidlsp_dir,
-            project_data_relative_path=SERENA_MANAGED_DIR_NAME,
+            project_data_path=project_data_path,
             ls_specific_settings=ls_specific_settings or {},
         ),
     )
@@ -115,10 +116,13 @@ def start_default_ls_context(language: Language) -> Iterator[SolidLanguageServer
         yield ls
 
 
+def create_default_serena_config():
+    return SerenaConfig(gui_log_window=False, web_dashboard=False)
+
+
 def _create_default_project(language: Language) -> Project:
     repo_path = str(get_repo_path(language))
-    serena_config = SerenaConfig()
-    return Project.load(repo_path, serena_config=serena_config)
+    return Project.load(repo_path, serena_config=create_default_serena_config())
 
 
 @pytest.fixture(scope="session")

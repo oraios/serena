@@ -599,7 +599,8 @@ class ProjectCommands(AutoRegisteringGroup):
         :return: the RegisteredProject instance
         """
         project_root = Path(project_path).resolve()
-        yml_path = ProjectConfig.path_to_project_yml(project_root)
+        serena_config = SerenaConfig.from_config_file()
+        yml_path = serena_config.get_project_yml_location(str(project_root))
         if os.path.exists(yml_path):
             raise FileExistsError(f"Project file {yml_path} already exists.")
 
@@ -613,14 +614,14 @@ class ProjectCommands(AutoRegisteringGroup):
                     raise ValueError(f"Unknown language '{lang}'. Supported: {all_langs}")
 
         generated_conf = ProjectConfig.autogenerate(
-            project_root=project_path, project_name=name, languages=languages if languages else None, interactive=True
+            project_root=project_path,
+            serena_config=serena_config,
+            project_name=name,
+            languages=languages if languages else None,
+            interactive=True,
         )
-        yml_path = ProjectConfig.path_to_project_yml(project_path)
         languages_str = ", ".join([lang.value for lang in generated_conf.languages]) if generated_conf.languages else "N/A"
         click.echo(f"Generated project with languages {{{languages_str}}} at {yml_path}.")
-
-        # add to SerenaConfig's list of registered projects
-        serena_config = SerenaConfig.from_config_file()
         registered_project = serena_config.get_registered_project(str(project_root))
         if registered_project is None:
             registered_project = RegisteredProject(str(project_root), generated_conf)

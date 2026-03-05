@@ -126,5 +126,13 @@ token_count_estimator: CHAR_COUNT
 # Can be overridden in project.yml.
 symbol_info_budget: 10
 
+# template for the location of the per-project .serena data folder (memories, caches, etc.).
+# Supports the following placeholders:
+#   $projectDir         - the absolute path to the project root directory
+#   $projectFolderName  - the name of the project directory
+# Default: "$projectDir/.serena" (data stored inside the project directory)
+# Example for a central location: "/projects-metadata/$projectFolderName/.serena"
+project_serena_folder_location: "$projectDir/.serena"
+
 # the list of registered project paths (updated automatically).
 projects: []
