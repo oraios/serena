@@ -162,6 +162,30 @@ class TestSerenaAgent:
             if s["kind"] == SymbolKind.Class.name and serena_agent.get_active_lsp_languages() == [Language.JAVA]:
                 assert "A simple model class" in symbol_info, f"Java class docstring not found in symbol info: {s}"
 
+    @pytest.mark.php
+    @pytest.mark.parametrize("serena_agent", [Language.PHP], indirect=True)
+    def test_find_symbol_within_php_file(self, serena_agent: SerenaAgent) -> None:
+        """Verify find_symbol with a PHP file path routes to the PHP language server.
+
+        This validates the fix in symbol.py (LanguageServerSymbolRetriever.find_symbols):
+        when within_relative_path points to a PHP file, the retriever must use
+        get_language_server() rather than iterating all language servers. Without this
+        fix, non-PHP servers reject the PHP file and no symbols are returned.
+        """
+        find_symbol_tool = serena_agent.get_tool(FindSymbolTool)
+        sample_php = "sample.php"
+
+        result = find_symbol_tool.apply(name_path_pattern="Dog/greet", relative_path=sample_php)
+        symbols = json.loads(result)
+
+        assert len(symbols) > 0, (
+            f"Expected to find Dog/greet in {sample_php} but got empty result. "
+            "This may indicate that find_symbol is not routing to the PHP language server for PHP files."
+        )
+        assert any(
+            "greet" in s["name_path"] and sample_php in s["relative_path"] for s in symbols
+        ), f"Dog/greet not found in {sample_php}. Symbols: {symbols}"
+
     @pytest.mark.parametrize(
         "serena_agent,symbol_name,def_file,ref_file",
         [
