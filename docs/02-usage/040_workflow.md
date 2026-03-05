@@ -59,6 +59,11 @@ The file allows you to configure ...
 For detailed information on the parameters and possible settings, see the 
 [template file](https://github.com/oraios/serena/blob/main/src/serena/resources/project.template.yml). 
 
+**Local Overrides**. The project.yml file is intended to be versioned together with the project.
+You can specify local overrides for the settings in a `project.local.yml` file in the same directory
+(which, by default, is ignored by git). 
+Any keys defined therein will override the respective key in `project.yml`.
+
 (indexing)=
 ### Indexing
 

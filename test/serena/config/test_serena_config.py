@@ -135,7 +135,7 @@ class TestProjectConfigAutogenerate:
 
 class TestProjectConfig:
     def test_template_is_complete(self):
-        _, is_complete = ProjectConfig._load_yaml(PROJECT_TEMPLATE_FILE)
+        _, is_complete = ProjectConfig._load_yaml_dict(PROJECT_TEMPLATE_FILE)
         assert is_complete, "Project template YAML is incomplete; all fields must be present (with descriptions)."
 
 
@@ -177,7 +177,7 @@ class TestProjectConfigLanguageBackend:
     def test_language_backend_parsed_from_dict(self):
         """Test that _from_dict parses language_backend correctly."""
         template_path = PROJECT_TEMPLATE_FILE
-        data, _ = ProjectConfig._load_yaml(template_path)
+        data, _ = ProjectConfig._load_yaml_dict(template_path)
         data["project_name"] = "test"
         data["languages"] = ["python"]
         data["language_backend"] = "JetBrains"
@@ -187,7 +187,7 @@ class TestProjectConfigLanguageBackend:
     def test_language_backend_none_when_missing_from_dict(self):
         """Test that _from_dict handles missing language_backend gracefully."""
         template_path = PROJECT_TEMPLATE_FILE
-        data, _ = ProjectConfig._load_yaml(template_path)
+        data, _ = ProjectConfig._load_yaml_dict(template_path)
         data["project_name"] = "test"
         data["languages"] = ["python"]
         data.pop("language_backend", None)
