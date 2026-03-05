@@ -708,7 +708,7 @@ class SerenaConfig(SharedConfig):
         for path in loaded_commented_yaml["projects"]:
             path = Path(path).resolve()
             if not path.exists() or (path.is_dir() and not os.path.isfile(instance.get_project_yml_location(str(path)))):
-                log.warning(f"Project path {path} does not exist or does not contain a project configuration file, skipping.")
+                log.warning(f"Project path {path} does not exist or no associated project configuration file found, skipping.")
                 continue
             if path.is_file():
                 path = cls._migrate_out_of_project_config_file(path)
@@ -959,19 +959,11 @@ class SerenaConfig(SharedConfig):
         :raises SerenaConfigError: if the configured template contains an unknown placeholder
         """
         configured_path = self.get_configured_project_serena_folder(project_root)
-        default_path = os.path.join(str(project_root), SERENA_MANAGED_DIR_NAME)
-
         if os.path.isdir(configured_path):
-            log.info("Using existing Serena data folder at configured path: %s", configured_path)
             return configured_path
+        default_path = os.path.join(str(project_root), SERENA_MANAGED_DIR_NAME)
         if configured_path != default_path and os.path.isdir(default_path):
-            log.info(
-                "Serena data folder not found at configured path %s; using existing folder at %s",
-                configured_path,
-                default_path,
-            )
             return default_path
-        log.info("Using Serena data folder: %s", configured_path)
         return configured_path
 
     def get_project_yml_location(self, project_root: str | Path) -> str:

@@ -203,8 +203,8 @@ class Project(ToStringMixin):
     ):
         self.project_root = project_root
         self.project_config = project_config
-
         self._serena_data_folder = self._resolve_serena_data_folder(serena_config)
+        log.info("Serena project data folder: %s", self._serena_data_folder)
 
         global_memory_write_access = serena_config.edit_global_memories if serena_config else False
         self.memories_manager = MemoriesManager(self._serena_data_folder, global_memory_write_access)
