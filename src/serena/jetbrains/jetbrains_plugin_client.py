@@ -335,6 +335,21 @@ class JetBrainsPluginClient(ToStringMixin):
         self._postprocess_symbol_collection_response(symbol_collection)
         return symbol_collection
 
+    def move_symbol(
+        self,
+        name_path: str | None,
+        relative_path: str | None,
+        target_parent_name_path: str | None,
+        target_relative_path: str | None,
+    ) -> dict[str, Any]:
+        request_data = {
+            "namePath": name_path,
+            "relativePath": relative_path,
+            "targetParentNamePath": target_parent_name_path,
+            "targetRelativePath": target_relative_path,
+        }
+        return self._make_request("POST", "/moveSymbol", request_data)
+
     def find_references(self, name_path: str, relative_path: str, include_quick_info: bool) -> jb.SymbolCollectionResponse:
         """
         Finds references to a symbol.
