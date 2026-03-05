@@ -183,6 +183,7 @@ class SharedConfig(ModeSelectionDefinition, ToolInclusionDefinition, ToStringMix
 
     symbol_info_budget: float | None = None
     language_backend: LanguageBackend | None = None
+    read_only_memory_patterns: list[str] = field(default_factory=list)
 
 
 class SerenaConfigError(Exception):
@@ -376,6 +377,7 @@ class ProjectConfig(SharedConfig):
             fixed_tools=data["fixed_tools"],
             included_optional_tools=data["included_optional_tools"],
             read_only=data["read_only"],
+            read_only_memory_patterns=data.get("read_only_memory_patterns", []),
             ignore_all_files_in_gitignore=data["ignore_all_files_in_gitignore"],
             initial_prompt=data["initial_prompt"],
             encoding=data["encoding"],
@@ -554,9 +556,6 @@ class SerenaConfig(SharedConfig):
     ignored_paths: list[str] = field(default_factory=list)
     """List of paths to ignore across all projects. Same syntax as gitignore, so you can use * and **.
     These patterns are merged additively with each project's own ignored_paths."""
-
-    edit_global_memories: bool = True
-    """Whether global memories are allowed to be deleted or edited."""
 
     # settings with overridden defaults
     default_modes: Sequence[str] | None = ("interactive", "editing")

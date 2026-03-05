@@ -56,7 +56,8 @@ class ListMemoriesTool(Tool):
 
     def apply(self, topic: str = "") -> str:
         """
-        List available memories, optionally filtered by topic.
+        List available memories, optionally filtered by topic. Memories marked as read-only cannot be
+        edited or deleted.
         """
         return self._to_json(self.memories_manager.list_memories(topic))
 
