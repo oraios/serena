@@ -4,7 +4,7 @@ from typing import Any, Literal
 import serena.jetbrains.jetbrains_types as jb
 from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
 from serena.symbol import JetBrainsSymbolDictGrouper
-from serena.tools import Tool, ToolMarkerOptional, ToolMarkerSymbolicRead
+from serena.tools import Tool, ToolMarkerOptional, ToolMarkerSymbolicEdit, ToolMarkerSymbolicRead
 
 log = logging.getLogger(__name__)
 
@@ -86,6 +86,36 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
             )
             result = self._to_json(response_dict)
         return self._limit_length(result, max_answer_chars)
+
+
+class JetBrainsMoveSymbolTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
+    def apply(
+        self,
+        name_path: str | None = None,
+        relative_path: str | None = None,
+        target_parent_name_path: str | None = None,
+        target_relative_path: str | None = None,
+    ) -> str:
+        """
+        Moves a symbol to a different location (file or parent symbol) using the JetBrains refactoring engine.
+        References to the symbol are automatically updated.
+
+        :param name_path: the name path of the symbol to move (e.g. "MyClass/my_method").
+        :param relative_path: the relative path to the file containing the symbol to move.
+        :param target_parent_name_path: the name path of the target parent symbol (e.g. "TargetClass").
+            If None, the symbol is moved to the top level of the target file.
+        :param target_relative_path: the relative path to the target file. If None, the symbol
+            is moved within the same file.
+        :return: JSON string with the result of the operation.
+        """
+        with JetBrainsPluginClient.from_project(self.project) as client:
+            response_dict = client.move_symbol(
+                name_path=name_path,
+                relative_path=relative_path,
+                target_parent_name_path=target_parent_name_path,
+                target_relative_path=target_relative_path,
+            )
+        return self._to_json(response_dict)
 
 
 class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
