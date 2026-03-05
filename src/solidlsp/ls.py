@@ -352,7 +352,11 @@ class SolidLanguageServer(ABC):
         A language-specific condition for directories that should always be ignored. For example, venv
         in Python and node_modules in JS/TS should be ignored always.
         """
-        return dirname.startswith(".")
+        if dirname == ".git":
+            return True
+        if self._ignore_all_dot_files and dirname.startswith("."):
+            return True
+        return False
 
     @staticmethod
     def _determine_log_level(line: str) -> int:
@@ -466,6 +470,7 @@ class SolidLanguageServer(ABC):
         self._ls_resources_dir = self.ls_resources_dir(solidlsp_settings)
         log.debug(f"Custom config (LS-specific settings) for {lang}: {self._custom_settings}")
         self._encoding = config.encoding
+        self._ignore_all_dot_files = config.ignore_all_dot_files
         self.repository_root_path: str = repository_root_path
 
         log.debug(

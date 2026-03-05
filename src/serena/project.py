@@ -578,6 +578,7 @@ class Project(ToStringMixin):
             ls_timeout=ls_timeout,
             ls_specific_settings=ls_specific_settings,
             trace_lsp_communication=trace_lsp_communication,
+            ignore_all_dot_files=self.project_config.ignore_all_dot_files,
         )
         self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory)
         return self.language_server_manager

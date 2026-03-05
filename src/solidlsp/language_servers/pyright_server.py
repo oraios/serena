@@ -57,27 +57,37 @@ class PyrightServer(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["venv", "__pycache__"]
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the Pyright Language Server.
         """
+        # Build exclude list based on ignore_all_dot_files setting.
+        # Pyright's default behavior excludes all dot-prefixed directories (**/.*).
+        # When ignore_all_dot_files=False, we only exclude specific known directories
+        # and explicitly include "." to override pyright's internal dot-directory exclusion.
+        exclude = [
+            "**/.git",
+            "**/__pycache__",
+            "**/build",
+            "**/dist",
+        ]
+        if self._ignore_all_dot_files:
+            exclude.extend(["**/.venv", "**/.env", "**/.pixi"])
+
+        init_options: dict = {
+            "exclude": exclude,
+            "reportMissingImports": "error",
+        }
+
+        if not self._ignore_all_dot_files:
+            init_options["include"] = ["."]
+
         # Create basic initialization parameters
         initialize_params = {  # type: ignore
             "processId": os.getpid(),
             "rootPath": repository_absolute_path,
             "rootUri": pathlib.Path(repository_absolute_path).as_uri(),
-            "initializationOptions": {
-                "exclude": [
-                    "**/__pycache__",
-                    "**/.venv",
-                    "**/.env",
-                    "**/build",
-                    "**/dist",
-                    "**/.pixi",
-                ],
-                "reportMissingImports": "error",
-            },
+            "initializationOptions": init_options,
             "capabilities": {
                 "workspace": {
                     "workspaceEdit": {"documentChanges": True},
@@ -164,8 +174,28 @@ class PyrightServer(SolidLanguageServer):
                 if not self.found_source_files:
                     self.analysis_complete.set()
 
+        def workspace_configuration_handler(params: dict) -> list:
+            """Handle workspace/configuration requests from pyright.
+
+            Pyright requests python.analysis settings through this mechanism.
+            We use it to control include/exclude paths, particularly to allow
+            dot-prefixed directories when ignore_all_dot_files is False.
+            """
+            log.info(f"Received workspace/configuration request: {params}")
+            items = params.get("items", [])
+            results = []
+            for item in items:
+                section = item.get("section", "")
+                if section == "python.analysis" and not self._ignore_all_dot_files:
+                    exclude = ["**/.git", "**/__pycache__", "**/build", "**/dist"]
+                    results.append({"include": ["."], "exclude": exclude})
+                else:
+                    results.append({})
+            return results
+
         # Set up notification handlers
         self.server.on_request("client/registerCapability", do_nothing)
+        self.server.on_request("workspace/configuration", workspace_configuration_handler)
         self.server.on_notification("language/status", do_nothing)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
