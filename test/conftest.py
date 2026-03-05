@@ -69,12 +69,13 @@ def _create_ls(
         trace_lsp_communication=trace_lsp_communication,
     )
     effective_solidlsp_dir = solidlsp_dir if solidlsp_dir is not None else SerenaPaths().serena_user_home_dir
+    project_data_path = os.path.join(repo_path, SERENA_MANAGED_DIR_NAME)
     return SolidLanguageServer.create(
         config,
         repo_path,
         solidlsp_settings=SolidLSPSettings(
             solidlsp_dir=effective_solidlsp_dir,
-            project_data_relative_path=SERENA_MANAGED_DIR_NAME,
+            project_data_path=project_data_path,
             ls_specific_settings=ls_specific_settings or {},
         ),
     )

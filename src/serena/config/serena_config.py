@@ -189,8 +189,11 @@ class SerenaConfigError(Exception):
     pass
 
 
-def get_serena_managed_in_project_dir(project_root: str | Path) -> str:
-    return os.path.join(project_root, SERENA_MANAGED_DIR_NAME)
+DEFAULT_PROJECT_SERENA_FOLDER_LOCATION = "$projectDir/" + SERENA_MANAGED_DIR_NAME
+"""
+The default template for the project Serena folder location.
+Uses $projectDir and $projectName as placeholders.
+"""
 
 
 @dataclass(kw_only=True)
@@ -558,6 +561,17 @@ class SerenaConfig(SharedConfig):
     edit_global_memories: bool = True
     """Whether global memories are allowed to be deleted or edited."""
 
+    project_serena_folder_location: str = DEFAULT_PROJECT_SERENA_FOLDER_LOCATION
+    """
+    Template for the location of the per-project .serena data folder (memories, caches, etc.).
+    Supports the following placeholders:
+      - $projectDir: the absolute path to the project root directory
+      - $projectName: the name of the project (as defined in project.yml)
+    Examples:
+      - "$projectDir/.serena" (default, stores data inside the project)
+      - "/projects-metadata/$projectName/.serena" (stores data in a central location)
+    """
+
     # settings with overridden defaults
     default_modes: Sequence[str] | None = ("interactive", "editing")
     symbol_info_budget: float = 10.0
@@ -880,6 +894,20 @@ class SerenaConfig(SharedConfig):
         transfer_missing_yaml_comments(template_yaml, commented_yaml, YamlCommentNormalisation.LEADING, forced_update_keys=["projects"])
 
         save_yaml(self.config_file_path, commented_yaml)
+
+    def get_project_serena_folder(self, project_name: str, project_root: str | Path) -> str:
+        """
+        Returns the resolved absolute path to the .serena data folder for a project,
+        applying placeholder substitution to ``project_serena_folder_location``.
+
+        :param project_name: the name of the project
+        :param project_root: the absolute path to the project root directory
+        :return: the resolved absolute path to the project's .serena folder
+        """
+        result = self.project_serena_folder_location
+        result = result.replace("$projectDir", str(project_root))
+        result = result.replace("$projectName", project_name)
+        return os.path.abspath(result)
 
     def propagate_settings(self) -> None:
         """

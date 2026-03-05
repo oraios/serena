@@ -1,4 +1,5 @@
 import logging
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -6,9 +7,15 @@ from pathlib import Path
 import pytest
 
 from serena.agent import SerenaAgent
-from serena.config.serena_config import LanguageBackend, ProjectConfig, RegisteredProject, SerenaConfig
-from serena.constants import PROJECT_TEMPLATE_FILE
-from serena.project import Project
+from serena.config.serena_config import (
+    DEFAULT_PROJECT_SERENA_FOLDER_LOCATION,
+    LanguageBackend,
+    ProjectConfig,
+    RegisteredProject,
+    SerenaConfig,
+)
+from serena.constants import PROJECT_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
+from serena.project import MemoriesManager, Project
 from solidlsp.ls_config import Language
 
 
@@ -314,3 +321,155 @@ class TestEffectiveLanguageBackend:
             agent.activate_project_from_path_or_name("proj2")
         finally:
             agent.shutdown(timeout=5)
+
+
+class TestGetProjectSerenaFolder:
+    """Tests for SerenaConfig.get_project_serena_folder and the project_serena_folder_location setting."""
+
+    def test_default_location(self):
+        config = SerenaConfig(
+            gui_log_window=False,
+            web_dashboard=False,
+        )
+        result = config.get_project_serena_folder("myproject", "/home/user/myproject")
+        assert result == os.path.abspath("/home/user/myproject/.serena")
+
+    def test_custom_location_with_project_name(self):
+        config = SerenaConfig(
+            gui_log_window=False,
+            web_dashboard=False,
+            project_serena_folder_location="/projects-metadata/$projectName/.serena",
+        )
+        result = config.get_project_serena_folder("myproject", "/home/user/myproject")
+        assert result == os.path.abspath("/projects-metadata/myproject/.serena")
+
+    def test_custom_location_with_project_dir(self):
+        config = SerenaConfig(
+            gui_log_window=False,
+            web_dashboard=False,
+            project_serena_folder_location="$projectDir/.custom-serena",
+        )
+        result = config.get_project_serena_folder("myproject", "/home/user/myproject")
+        assert result == os.path.abspath("/home/user/myproject/.custom-serena")
+
+    def test_custom_location_with_both_placeholders(self):
+        config = SerenaConfig(
+            gui_log_window=False,
+            web_dashboard=False,
+            project_serena_folder_location="/data/$projectName/$projectDir/.serena",
+        )
+        result = config.get_project_serena_folder("myproject", "/home/user/proj")
+        assert result == os.path.abspath("/data/myproject/home/user/proj/.serena")
+
+    def test_default_field_value(self):
+        config = SerenaConfig(
+            gui_log_window=False,
+            web_dashboard=False,
+        )
+        assert config.project_serena_folder_location == DEFAULT_PROJECT_SERENA_FOLDER_LOCATION
+
+
+class TestProjectSerenaDataFolder:
+    """Tests for Project._resolve_serena_data_folder with fallback logic."""
+
+    def setup_method(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.project_path = Path(self.test_dir) / "myproject"
+        self.project_path.mkdir()
+        (self.project_path / "main.py").write_text("print('hello')\n")
+
+    def teardown_method(self):
+        shutil.rmtree(self.test_dir)
+
+    def _make_project(self, serena_config: "SerenaConfig | None" = None) -> Project:
+        project_config = ProjectConfig(
+            project_name="myproject",
+            languages=[Language.PYTHON],
+        )
+        return Project(
+            project_root=str(self.project_path),
+            project_config=project_config,
+            serena_config=serena_config,
+        )
+
+    def test_default_config_creates_in_project_dir(self):
+        config = SerenaConfig(gui_log_window=False, web_dashboard=False)
+        project = self._make_project(config)
+        expected = os.path.abspath(str(self.project_path / SERENA_MANAGED_DIR_NAME))
+        assert project.path_to_serena_data_folder() == expected
+
+    def test_custom_location_creates_outside_project(self):
+        custom_base = Path(self.test_dir) / "metadata"
+        custom_base.mkdir()
+        config = SerenaConfig(
+            gui_log_window=False,
+            web_dashboard=False,
+            project_serena_folder_location=str(custom_base) + "/$projectName/.serena",
+        )
+        project = self._make_project(config)
+        expected = os.path.abspath(str(custom_base / "myproject" / ".serena"))
+        assert project.path_to_serena_data_folder() == expected
+
+    def test_fallback_to_existing_project_dir(self):
+        """If config points to a non-existent path but .serena exists in the project root, use the existing one."""
+        existing_serena = self.project_path / SERENA_MANAGED_DIR_NAME
+        existing_serena.mkdir()
+        config = SerenaConfig(
+            gui_log_window=False,
+            web_dashboard=False,
+            project_serena_folder_location="/nonexistent/path/$projectName/.serena",
+        )
+        project = self._make_project(config)
+        assert project.path_to_serena_data_folder() == str(existing_serena)
+
+    def test_configured_path_takes_precedence_when_exists(self):
+        """If both config path and project root path exist, use the config path."""
+        existing_serena = self.project_path / SERENA_MANAGED_DIR_NAME
+        existing_serena.mkdir()
+
+        custom_base = Path(self.test_dir) / "metadata"
+        custom_serena = custom_base / "myproject" / ".serena"
+        custom_serena.mkdir(parents=True)
+
+        config = SerenaConfig(
+            gui_log_window=False,
+            web_dashboard=False,
+            project_serena_folder_location=str(custom_base) + "/$projectName/.serena",
+        )
+        project = self._make_project(config)
+        assert project.path_to_serena_data_folder() == str(custom_serena)
+
+    def test_no_config_uses_project_root(self):
+        """When serena_config is None, fall back to the default project root location."""
+        project = self._make_project(serena_config=None)
+        expected = os.path.abspath(str(self.project_path / SERENA_MANAGED_DIR_NAME))
+        assert project.path_to_serena_data_folder() == expected
+
+
+class TestMemoriesManagerCustomPath:
+    """Tests for MemoriesManager with custom project memories path."""
+
+    def setup_method(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.memories_path = Path(self.test_dir) / "custom_memories"
+
+    def teardown_method(self):
+        shutil.rmtree(self.test_dir)
+
+    def test_custom_memories_path_is_created(self):
+        assert not self.memories_path.exists()
+        MemoriesManager(str(self.memories_path))
+        assert self.memories_path.exists()
+
+    def test_save_and_load_memory(self):
+        manager = MemoriesManager(str(self.memories_path))
+        manager.save_memory("test_topic", "test content", is_tool_context=False)
+        content = manager.load_memory("test_topic")
+        assert content == "test content"
+
+    def test_list_memories(self):
+        manager = MemoriesManager(str(self.memories_path))
+        manager.save_memory("topic_a", "content a", is_tool_context=False)
+        manager.save_memory("topic_b", "content b", is_tool_context=False)
+        memories = manager.list_project_memories()
+        assert sorted(memories) == ["topic_a", "topic_b"]

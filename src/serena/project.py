@@ -14,7 +14,6 @@ from serena.config.serena_config import (
     DEFAULT_TOOL_TIMEOUT,
     ProjectConfig,
     SerenaPaths,
-    get_serena_managed_in_project_dir,
 )
 from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_NAME
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
@@ -34,12 +33,12 @@ class MemoriesManager:
     GLOBAL_TOPIC = "global"
     _global_memory_dir = SerenaPaths().global_memories_path
 
-    def __init__(self, project_root: str, global_memory_tool_write_access: bool = False):
+    def __init__(self, project_memories_path: str | Path, global_memory_tool_write_access: bool = False):
         """
-        :param project_root: the project's root directory
+        :param project_memories_path: the absolute path to the directory where project memories are stored
         :param global_memory_tool_write_access: whether to allow writing global memories in tool execution contexts
         """
-        self._project_memory_dir = Path(get_serena_managed_in_project_dir(project_root)) / "memories"
+        self._project_memory_dir = Path(project_memories_path)
         self._project_memory_dir.mkdir(parents=True, exist_ok=True)
         self._global_memory_tool_write_access = global_memory_tool_write_access
         self._encoding = SERENA_FILE_ENCODING
@@ -205,14 +204,17 @@ class Project(ToStringMixin):
         self.project_root = project_root
         self.project_config = project_config
 
+        self._serena_data_folder = self._resolve_serena_data_folder(serena_config)
+
         global_memory_write_access = serena_config.edit_global_memories if serena_config else False
-        self.memories_manager = MemoriesManager(project_root, global_memory_write_access)
+        project_memories_path = os.path.join(self._serena_data_folder, "memories")
+        self.memories_manager = MemoriesManager(project_memories_path, global_memory_write_access)
 
         self.language_server_manager: LanguageServerManager | None = None
         self._is_newly_created = is_newly_created
 
         # create .gitignore file in the project's Serena data folder if not yet present
-        serena_data_gitignore_path = os.path.join(self.path_to_serena_data_folder(), ".gitignore")
+        serena_data_gitignore_path = os.path.join(self._serena_data_folder, ".gitignore")
         if not os.path.exists(serena_data_gitignore_path):
             os.makedirs(os.path.dirname(serena_data_gitignore_path), exist_ok=True)
             log.info(f"Creating .gitignore file in {serena_data_gitignore_path}")
@@ -287,8 +289,36 @@ class Project(ToStringMixin):
         """
         self.project_config.save(self.project_root)
 
+    def _resolve_serena_data_folder(self, serena_config: "SerenaConfig | None") -> str:
+        """
+        Resolves the location of the project's .serena data folder using fallback logic:
+        1. Check if the folder exists at the path specified by the config (project_serena_folder_location).
+        2. If not, check if it exists in the project root (default/legacy location).
+        3. If neither exists, create at the config-specified path.
+
+        :param serena_config: the global Serena configuration (may be None, in which case the default is used)
+        :return: the absolute path to the .serena data folder
+        """
+        if serena_config is not None:
+            configured_path = serena_config.get_project_serena_folder(self.project_name, self.project_root)
+        else:
+            configured_path = os.path.join(self.project_root, SERENA_MANAGED_DIR_NAME)
+
+        default_path = os.path.join(self.project_root, SERENA_MANAGED_DIR_NAME)
+
+        if os.path.isdir(configured_path):
+            return configured_path
+        if configured_path != default_path and os.path.isdir(default_path):
+            log.info(
+                "Serena data folder not found at configured path %s; using existing folder at %s",
+                configured_path,
+                default_path,
+            )
+            return default_path
+        return configured_path
+
     def path_to_serena_data_folder(self) -> str:
-        return os.path.join(self.project_root, SERENA_MANAGED_DIR_NAME)
+        return self._serena_data_folder
 
     def path_to_project_yml(self) -> str:
         return os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
@@ -573,6 +603,7 @@ class Project(ToStringMixin):
         log.info(f"Creating language server manager for {self.project_root}")
         factory = LanguageServerFactory(
             project_root=self.project_root,
+            project_data_path=self._serena_data_folder,
             encoding=self.project_config.encoding,
             ignored_patterns=self._ignored_patterns,
             ls_timeout=ls_timeout,
