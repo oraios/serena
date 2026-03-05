@@ -4,7 +4,7 @@ import os
 import shutil
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 import pathspec
 from sensai.util.logging import LogTime
@@ -12,18 +12,16 @@ from sensai.util.string import ToStringMixin
 
 from serena.config.serena_config import (
     ProjectConfig,
+    SerenaConfig,
     SerenaPaths,
 )
-from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_NAME
+from serena.constants import SERENA_FILE_ENCODING
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.util.file_system import GitignoreParser, match_path
 from serena.util.text_utils import ContentReplacer, MatchedConsecutiveLines, search_files
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import FileUtils
-
-if TYPE_CHECKING:
-    from serena.config.serena_config import SerenaConfig
 
 log = logging.getLogger(__name__)
 
@@ -198,14 +196,14 @@ class Project(ToStringMixin):
         *,
         project_root: str,
         project_config: ProjectConfig,
-        serena_config: "SerenaConfig",
+        serena_config: SerenaConfig,
         is_newly_created: bool = False,
     ):
         assert serena_config is not None
         self.project_root = project_root
         self.project_config = project_config
         self._serena_config = serena_config
-        self._serena_data_folder = self._resolve_serena_data_folder(serena_config)
+        self._serena_data_folder = serena_config.get_project_serena_folder(self.project_root)
         log.info("Serena project data folder: %s", self._serena_data_folder)
 
         global_memory_write_access = serena_config.edit_global_memories if serena_config else False
@@ -289,18 +287,6 @@ class Project(ToStringMixin):
         Saves the current project configuration to disk.
         """
         self.project_config.save(self.path_to_project_yml())
-
-    def _resolve_serena_data_folder(self, serena_config: "SerenaConfig | None") -> str:
-        """
-        Resolves the location of the project's .serena data folder,
-        delegating to ``SerenaConfig.get_project_serena_folder`` when a config is available.
-
-        :param serena_config: the global Serena configuration (may be None, in which case the default is used)
-        :return: the absolute path to the .serena data folder
-        """
-        if serena_config is not None:
-            return serena_config.get_project_serena_folder(self.project_root)
-        return os.path.join(self.project_root, SERENA_MANAGED_DIR_NAME)
 
     def path_to_serena_data_folder(self) -> str:
         return self._serena_data_folder
