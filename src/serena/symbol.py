@@ -2,7 +2,7 @@ import json
 import logging
 import os
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import asdict, dataclass
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, Generic, Literal, NotRequired, Self, TypedDict, TypeVar, Union
@@ -716,7 +716,16 @@ class LanguageServerSymbolRetriever:
         optionally limited to a specific file and filtered by kind.
         """
         symbols: list[LanguageServerSymbol] = []
-        for lang_server in self._ls_manager.iter_language_servers():
+        if within_relative_path and os.path.isfile(os.path.join(self._ls_manager.get_root_path(), within_relative_path)):
+            """
+            For a specific file, use get_language_server to select the best LS for the file type
+            (consistent with get_symbol_overview). This ensures e.g. PHP files are served by the
+            PHP language server rather than being rejected by all LSes via is_ignored_path.
+            """
+            lang_servers: Iterable[SolidLanguageServer] = [self._ls_manager.get_language_server(within_relative_path)]
+        else:
+            lang_servers = self._ls_manager.iter_language_servers()
+        for lang_server in lang_servers:
             symbol_roots = lang_server.request_full_symbol_tree(within_relative_path=within_relative_path)
             for root in symbol_roots:
                 symbols.extend(

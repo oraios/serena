@@ -187,3 +187,20 @@ class TestPhpLanguageServers:
 
             usage_in_index_php = {"uri_suffix": "index.php", "line": 13, "character": 0}
             assert usage_in_index_php in actual_locations_comparable, "Usage of helperFunction in index.php not found"
+
+    @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
+    def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
+        """Test that document symbols are properly retrieved after Intelephense capability fix."""
+        from solidlsp.ls_utils import SymbolUtils
+
+        symbols = language_server.request_full_symbol_tree()
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "helperFunction"), "helperFunction not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "greet"), "greet function not found in symbol tree"
+
+    @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
+    def test_document_symbols(self, language_server: SolidLanguageServer) -> None:
+        """Test that document symbols are properly retrieved for a specific file."""
+        doc_symbols = language_server.request_document_symbols("helper.php")
+        all_symbols = doc_symbols.get_all_symbols_and_roots()
+        symbol_names = [sym.get("name") for sym in all_symbols[0] if sym.get("name")]
+        assert "helperFunction" in symbol_names, f"helperFunction not found in document symbols. Found: {symbol_names}"
