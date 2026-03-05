@@ -10,10 +10,17 @@ from time import sleep
 
 from overrides import override
 
-from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
+from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_utils import PlatformId, PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, InitializeParams, LocationLink
+from solidlsp.lsp_protocol_handler.lsp_types import (
+    Definition,
+    DefinitionParams,
+    DocumentSymbol,
+    InitializeParams,
+    LocationLink,
+    SymbolInformation,
+)
 from solidlsp.settings import SolidLSPSettings
 
 from ..lsp_protocol_handler import lsp_types
@@ -192,3 +199,59 @@ class Intelephense(SolidLanguageServer):
         # TODO: same as above, also only a problem if the definition is in another file
         sleep(1)
         return super()._send_definition_request(definition_params)
+
+    @override
+    def _request_document_symbols(
+        self, relative_file_path: str, file_data: LSPFileBuffer | None
+    ) -> list[SymbolInformation] | list[DocumentSymbol] | None:
+        result = super()._request_document_symbols(relative_file_path, file_data)
+        if not result:
+            return result
+        # Intelephense can return flat SymbolInformation[] (no parent-child links) instead of
+        # DocumentSymbol[] for some PHP files.  SymbolInformation items carry a top-level
+        # "location" key (with "uri"), whereas DocumentSymbol items have "range" at the top level.
+        if "location" in result[0]:
+            return self._reconstruct_document_symbols(result)  # type: ignore
+        return result
+
+    @staticmethod
+    def _reconstruct_document_symbols(flat: list[SymbolInformation]) -> list[DocumentSymbol]:
+        """Convert flat SymbolInformation[] to DocumentSymbol[] using containerName.
+
+        Intelephense sometimes returns the older SymbolInformation format for PHP files.
+        These symbols have no parent-child links, but carry a containerName that names
+        the enclosing class or function.  This method reconstructs the proper hierarchy
+        so the rest of the codebase can treat the result as standard DocumentSymbol[].
+        """
+        by_name: dict[str, DocumentSymbol] = {}
+        roots: list[DocumentSymbol] = []
+        converted: list[tuple[SymbolInformation, DocumentSymbol]] = []
+
+        for sym in flat:
+            rng = sym["location"]["range"]
+            doc_sym: DocumentSymbol = {
+                "name": sym["name"],
+                "kind": sym["kind"],
+                "range": rng,
+                "selectionRange": rng,
+                "children": [],  # type: ignore[typeddict-unknown-key]
+            }
+            converted.append((sym, doc_sym))
+
+        # First pass: root symbols (no containerName)
+        for sym, doc_sym in converted:
+            if not sym.get("containerName"):
+                roots.append(doc_sym)
+                by_name[sym["name"]] = doc_sym
+
+        # Second pass: attach children to their container
+        for sym, doc_sym in converted:
+            container = sym.get("containerName")
+            if container:
+                if container in by_name:
+                    by_name[container]["children"].append(doc_sym)  # type: ignore[typeddict-item]
+                else:
+                    # Container not found in this file; treat as root
+                    roots.append(doc_sym)
+
+        return roots

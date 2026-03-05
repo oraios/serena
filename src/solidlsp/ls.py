@@ -1365,11 +1365,12 @@ class SolidLanguageServer(ABC):
                 raise FileNotFoundError(f"File or directory not found: {within_abs_path}")
             if os.path.isfile(within_abs_path):
                 if self.is_ignored_path(within_relative_path):
-                    log.error("You passed a file explicitly, but it is ignored. This is probably an error. File: %s", within_relative_path)
-                    return []
-                else:
-                    root_nodes = self.request_document_symbols(within_relative_path).root_symbols
-                    return root_nodes
+                    log.warning(
+                        "File %s is ignored by ignore patterns but was explicitly requested; proceeding anyway.",
+                        within_relative_path,
+                    )
+                root_nodes = self.request_document_symbols(within_relative_path).root_symbols
+                return root_nodes
 
         # Helper function to recursively process directories
         def process_directory(rel_dir_path: str) -> list[ls_types.UnifiedSymbolInformation]:
