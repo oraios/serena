@@ -4,6 +4,7 @@ The Serena Model Context Protocol (MCP) Server
 
 import dataclasses
 import os
+import re
 import shutil
 from collections.abc import Iterator, Sequence
 from copy import deepcopy
@@ -906,7 +907,6 @@ class SerenaConfig(SharedConfig):
         :return: the resolved absolute path
         :raises SerenaConfigError: if the template contains an unknown ``$placeholder``
         """
-        import re
 
         def _replace(match: re.Match[str]) -> str:
             name = match.group(1)
