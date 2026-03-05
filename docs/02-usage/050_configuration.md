@@ -179,9 +179,9 @@ You can customize this location globally via the `project_serena_folder_location
 
 The setting supports two placeholders:
 
-| Placeholder    | Description                                      |
-|----------------|--------------------------------------------------|
-| `$projectDir`  | The absolute path to the project root directory  |
+| Placeholder    | Description                                           |
+|----------------|-------------------------------------------------------|
+| `$projectDir`  | The absolute path to the project root directory       |
 | `$projectName` | The name of the project (as defined in `project.yml`) |
 
 **Examples:**
