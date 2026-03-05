@@ -4,7 +4,7 @@ import os
 import shutil
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 import pathspec
 from sensai.util.logging import LogTime
@@ -12,19 +12,16 @@ from sensai.util.string import ToStringMixin
 
 from serena.config.serena_config import (
     ProjectConfig,
+    SerenaConfig,
     SerenaPaths,
-    get_serena_managed_in_project_dir,
 )
-from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_NAME
+from serena.constants import SERENA_FILE_ENCODING
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.util.file_system import GitignoreParser, match_path
 from serena.util.text_utils import ContentReplacer, MatchedConsecutiveLines, search_files
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import FileUtils
-
-if TYPE_CHECKING:
-    from serena.config.serena_config import SerenaConfig
 
 log = logging.getLogger(__name__)
 
@@ -33,12 +30,12 @@ class MemoriesManager:
     GLOBAL_TOPIC = "global"
     _global_memory_dir = SerenaPaths().global_memories_path
 
-    def __init__(self, project_root: str, global_memory_tool_write_access: bool = False):
+    def __init__(self, serena_data_folder: str | Path, global_memory_tool_write_access: bool = False):
         """
-        :param project_root: the project's root directory
+        :param serena_data_folder: the absolute path to the project's .serena data folder
         :param global_memory_tool_write_access: whether to allow writing global memories in tool execution contexts
         """
-        self._project_memory_dir = Path(get_serena_managed_in_project_dir(project_root)) / "memories"
+        self._project_memory_dir = Path(serena_data_folder) / "memories"
         self._project_memory_dir.mkdir(parents=True, exist_ok=True)
         self._global_memory_tool_write_access = global_memory_tool_write_access
         self._encoding = SERENA_FILE_ENCODING
@@ -199,22 +196,24 @@ class Project(ToStringMixin):
         *,
         project_root: str,
         project_config: ProjectConfig,
-        serena_config: "SerenaConfig",
+        serena_config: SerenaConfig,
         is_newly_created: bool = False,
     ):
         assert serena_config is not None
         self.project_root = project_root
         self.project_config = project_config
         self._serena_config = serena_config
+        self._serena_data_folder = serena_config.get_project_serena_folder(self.project_root)
+        log.info("Serena project data folder: %s", self._serena_data_folder)
 
         global_memory_write_access = serena_config.edit_global_memories if serena_config else False
-        self.memories_manager = MemoriesManager(project_root, global_memory_write_access)
+        self.memories_manager = MemoriesManager(self._serena_data_folder, global_memory_write_access)
 
         self.language_server_manager: LanguageServerManager | None = None
         self._is_newly_created = is_newly_created
 
         # create .gitignore file in the project's Serena data folder if not yet present
-        serena_data_gitignore_path = os.path.join(self.path_to_serena_data_folder(), ".gitignore")
+        serena_data_gitignore_path = os.path.join(self._serena_data_folder, ".gitignore")
         if not os.path.exists(serena_data_gitignore_path):
             os.makedirs(os.path.dirname(serena_data_gitignore_path), exist_ok=True)
             log.info(f"Creating .gitignore file in {serena_data_gitignore_path}")
@@ -276,23 +275,24 @@ class Project(ToStringMixin):
         serena_config: "SerenaConfig",
         autogenerate: bool = True,
     ) -> "Project":
+        assert serena_config is not None
         project_root = Path(project_root).resolve()
         if not project_root.exists():
             raise FileNotFoundError(f"Project root not found: {project_root}")
-        project_config = ProjectConfig.load(project_root, autogenerate=autogenerate)
+        project_config = ProjectConfig.load(project_root, serena_config=serena_config, autogenerate=autogenerate)
         return Project(project_root=str(project_root), project_config=project_config, serena_config=serena_config)
 
     def save_config(self) -> None:
         """
         Saves the current project configuration to disk.
         """
-        self.project_config.save(self.project_root)
+        self.project_config.save(self.path_to_project_yml())
 
     def path_to_serena_data_folder(self) -> str:
-        return os.path.join(self.project_root, SERENA_MANAGED_DIR_NAME)
+        return self._serena_data_folder
 
     def path_to_project_yml(self) -> str:
-        return os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
+        return os.path.join(self._serena_data_folder, ProjectConfig.SERENA_DEFAULT_PROJECT_FILE)
 
     def get_activation_message(self) -> str:
         """
@@ -572,6 +572,7 @@ class Project(ToStringMixin):
         log.info(f"Creating language server manager for {self.project_root}")
         factory = LanguageServerFactory(
             project_root=self.project_root,
+            project_data_path=self._serena_data_folder,
             encoding=self.project_config.encoding,
             ignored_patterns=self._ignored_patterns,
             ls_timeout=ls_timeout,
