@@ -23,6 +23,7 @@ from sensai.util.string import ToStringMixin
 
 from serena.constants import (
     DEFAULT_SOURCE_FILE_ENCODING,
+    PROJECT_LOCAL_TEMPLATE_FILE,
     PROJECT_TEMPLATE_FILE,
     REPO_ROOT,
     SERENA_CONFIG_TEMPLATE_FILE,
@@ -300,10 +301,13 @@ class ProjectConfig(SharedConfig):
             config_with_comments, _ = cls._load_yaml_dict(PROJECT_TEMPLATE_FILE)
             config_with_comments["project_name"] = project_name
             config_with_comments["languages"] = languages_to_use
+
             if save_to_disk:
                 project_yml_path = serena_config.get_project_yml_location(str(project_root))
                 log.info("Saving project configuration to %s", project_yml_path)
                 save_yaml(project_yml_path, config_with_comments)
+                project_local_yml_path = os.path.join(os.path.dirname(project_yml_path), cls.SERENA_LOCAL_PROJECT_FILE)
+                shutil.copy(PROJECT_LOCAL_TEMPLATE_FILE, project_local_yml_path)
             return cls._from_dict(config_with_comments)
 
     @classmethod
