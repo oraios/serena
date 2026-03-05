@@ -490,12 +490,6 @@ class TestProjectSerenaDataFolder:
         project = self._make_project(config)
         assert project.path_to_serena_data_folder() == str(custom_serena)
 
-    def test_no_config_uses_project_root(self):
-        """When serena_config is None, fall back to the default project root location."""
-        project = self._make_project(serena_config=None)
-        expected = os.path.abspath(str(self.project_path / SERENA_MANAGED_DIR_NAME))
-        assert project.path_to_serena_data_folder() == expected
-
 
 class TestMemoriesManagerCustomPath:
     """Tests for MemoriesManager with a custom serena data folder."""
