@@ -222,16 +222,17 @@ class ProjectConfig(SharedConfig):
     def autogenerate(
         cls,
         project_root: str | Path,
+        serena_config: "SerenaConfig",
         project_name: str | None = None,
         languages: list[Language] | None = None,
         save_to_disk: bool = True,
         interactive: bool = False,
-        project_yml_path: str | None = None,
     ) -> Self:
         """
         Autogenerate a project configuration for a given project root.
 
         :param project_root: the path to the project root
+        :param serena_config: the global Serena configuration
         :param project_name: the name of the project; if None, the name of the project will be the name of the directory
             containing the project
         :param languages: the languages of the project; if None, they will be determined automatically
@@ -244,7 +245,8 @@ class ProjectConfig(SharedConfig):
             raise FileNotFoundError(f"Project root not found: {project_root}")
         with LogTime("Project configuration auto-generation", logger=log):
             log.info("Project root: %s", project_root)
-            project_name = project_name or project_root.name
+            project_folder_name = project_root.name
+            project_name = project_name or project_folder_name
             if languages is None:
                 # determine languages automatically
                 log.info("Determining programming languages used in the project")
@@ -292,8 +294,7 @@ class ProjectConfig(SharedConfig):
             config_with_comments["project_name"] = project_name
             config_with_comments["languages"] = languages_to_use
             if save_to_disk:
-                if project_yml_path is None:
-                    project_yml_path = cls.default_project_yml_path(project_root)
+                project_yml_path = serena_config.get_project_yml_location(project_folder_name, str(project_root))
                 log.info("Saving project configuration to %s", project_yml_path)
                 save_yaml(project_yml_path, config_with_comments)
             return cls._from_dict(config_with_comments)
@@ -402,32 +403,29 @@ class ProjectConfig(SharedConfig):
         return d
 
     @classmethod
-    def load(cls, project_root: Path | str, autogenerate: bool = False, project_yml_path: str | None = None) -> Self:
+    def load(cls, project_root: Path | str, serena_config: "SerenaConfig", autogenerate: bool = False) -> Self:
         """
         Load a ProjectConfig instance from the path to the project root.
 
         :param project_root: the path to the project root
+        :param serena_config: the global Serena configuration
         :param autogenerate: whether to auto-generate the configuration if it does not exist
-        :param project_yml_path: explicit path to the project.yml file; if None, the default
-            location (``$projectDir/.serena/project.yml``) is used
         """
         project_root = Path(project_root)
-        if project_yml_path is not None:
-            yaml_path = Path(project_yml_path)
-        else:
-            yaml_path = Path(cls.default_project_yml_path(project_root))
+        project_folder_name = project_root.name
+        yaml_path = serena_config.get_project_yml_location(project_folder_name, str(project_root))
 
         # auto-generate if necessary
-        if not yaml_path.exists():
+        if not os.path.exists(yaml_path):
             if autogenerate:
-                return cls.autogenerate(project_root, project_yml_path=str(yaml_path))
+                return cls.autogenerate(project_root, serena_config)
             else:
                 raise FileNotFoundError(f"Project configuration file not found: {yaml_path}")
 
         # load the configuration dictionary
         yaml_data, was_complete = cls._load_yaml(str(yaml_path))
         if "project_name" not in yaml_data:
-            yaml_data["project_name"] = project_root.name
+            yaml_data["project_name"] = project_folder_name
 
         # instantiate the ProjectConfig
         project_config = cls._from_dict(yaml_data)
@@ -493,11 +491,8 @@ class RegisteredProject(ToStringMixin):
         )
 
     @classmethod
-    def from_project_root(cls, project_root: str | Path, serena_config: "SerenaConfig | None" = None) -> "RegisteredProject":
-        yml_path: str | None = None
-        if serena_config is not None:
-            yml_path = serena_config.get_project_yml_location(Path(project_root).name, str(project_root))
-        project_config = ProjectConfig.load(project_root, project_yml_path=yml_path)
+    def from_project_root(cls, project_root: str | Path, serena_config: "SerenaConfig") -> "RegisteredProject":
+        project_config = ProjectConfig.load(project_root, serena_config=serena_config)
         return RegisteredProject(
             project_root=str(project_root),
             project_config=project_config,
@@ -720,8 +715,7 @@ class SerenaConfig(SharedConfig):
                 if path is None:
                     continue
                 num_migrations += 1
-            yml_path = instance.get_project_yml_location(path.name, str(path))
-            project_config = ProjectConfig.load(path, project_yml_path=yml_path)
+            project_config = ProjectConfig.load(path, serena_config=instance)  # instance is sufficiently populated
             project = RegisteredProject(
                 project_root=str(path),
                 project_config=project_config,
@@ -859,8 +853,7 @@ class SerenaConfig(SharedConfig):
                     f"Project with path {project_root} was already added with name '{already_registered_project.project_name}'."
                 )
 
-        yml_path = self.get_project_yml_location(project_root.name, str(project_root))
-        project_config = ProjectConfig.load(project_root, autogenerate=True, project_yml_path=yml_path)
+        project_config = ProjectConfig.load(project_root, serena_config=self, autogenerate=True)
 
         new_project = Project(
             project_root=str(project_root),

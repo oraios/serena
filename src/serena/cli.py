@@ -561,10 +561,10 @@ class ProjectCommands(AutoRegisteringGroup):
 
         generated_conf = ProjectConfig.autogenerate(
             project_root=project_path,
+            serena_config=serena_config,
             project_name=name,
             languages=languages if languages else None,
             interactive=True,
-            project_yml_path=yml_path,
         )
         languages_str = ", ".join([lang.value for lang in generated_conf.languages]) if generated_conf.languages else "N/A"
         click.echo(f"Generated project with languages {{{languages_str}}} at {yml_path}.")

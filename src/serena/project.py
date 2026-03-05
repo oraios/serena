@@ -273,16 +273,14 @@ class Project(ToStringMixin):
     def load(
         cls,
         project_root: str | Path,
-        serena_config: "SerenaConfig | None",
+        serena_config: "SerenaConfig",
         autogenerate: bool = True,
     ) -> "Project":
+        assert serena_config is not None
         project_root = Path(project_root).resolve()
         if not project_root.exists():
             raise FileNotFoundError(f"Project root not found: {project_root}")
-        yml_path: str | None = None
-        if serena_config is not None:
-            yml_path = serena_config.get_project_yml_location(project_root.name, str(project_root))
-        project_config = ProjectConfig.load(project_root, autogenerate=autogenerate, project_yml_path=yml_path)
+        project_config = ProjectConfig.load(project_root, serena_config=serena_config, autogenerate=autogenerate)
         return Project(project_root=str(project_root), project_config=project_config, serena_config=serena_config)
 
     def save_config(self) -> None:

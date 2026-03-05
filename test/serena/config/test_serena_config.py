@@ -18,6 +18,7 @@ from serena.config.serena_config import (
 from serena.constants import PROJECT_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
 from serena.project import MemoriesManager, Project
 from solidlsp.ls_config import Language
+from test.conftest import create_default_serena_config
 
 
 class TestProjectConfigAutogenerate:
@@ -27,6 +28,7 @@ class TestProjectConfigAutogenerate:
         """Set up test environment before each test method."""
         # Create a temporary directory for testing
         self.test_dir = tempfile.mkdtemp()
+        self.serena_config = create_default_serena_config()
         self.project_path = Path(self.test_dir)
 
     def teardown_method(self):
@@ -37,7 +39,7 @@ class TestProjectConfigAutogenerate:
     def test_autogenerate_empty_directory(self):
         """Test that autogenerate raises ValueError with helpful message for empty directory."""
         with pytest.raises(ValueError) as exc_info:
-            ProjectConfig.autogenerate(self.project_path, save_to_disk=False)
+            ProjectConfig.autogenerate(self.project_path, self.serena_config, save_to_disk=False)
 
         error_message = str(exc_info.value)
         assert "No source files found" in error_message
@@ -49,7 +51,7 @@ class TestProjectConfigAutogenerate:
         python_file.write_text("def hello():\n    print('Hello, world!')\n")
 
         # Run autogenerate
-        config = ProjectConfig.autogenerate(self.project_path, save_to_disk=False)
+        config = ProjectConfig.autogenerate(self.project_path, self.serena_config, save_to_disk=False)
 
         # Verify the configuration
         assert config.project_name == self.project_path.name
@@ -61,7 +63,7 @@ class TestProjectConfigAutogenerate:
         (self.project_path / "small.js").write_text("console.log('JS');")
 
         # Run autogenerate - should pick Python as dominant
-        config = ProjectConfig.autogenerate(self.project_path, save_to_disk=False)
+        config = ProjectConfig.autogenerate(self.project_path, self.serena_config, save_to_disk=False)
 
         assert config.languages == [Language.TYPESCRIPT]
 
@@ -73,7 +75,7 @@ class TestProjectConfigAutogenerate:
         (self.project_path / "small.js").write_text("console.log('JS');")
 
         # Run autogenerate - should pick Python as dominant
-        config = ProjectConfig.autogenerate(self.project_path, save_to_disk=False)
+        config = ProjectConfig.autogenerate(self.project_path, self.serena_config, save_to_disk=False)
 
         assert config.languages == [Language.PYTHON]
 
@@ -84,7 +86,7 @@ class TestProjectConfigAutogenerate:
         go_file.write_text("package main\n\nfunc main() {}\n")
 
         # Run autogenerate with save_to_disk=True
-        config = ProjectConfig.autogenerate(self.project_path, save_to_disk=True)
+        config = ProjectConfig.autogenerate(self.project_path, self.serena_config, save_to_disk=True)
 
         # Verify the configuration file was created
         config_path = self.project_path / ".serena" / "project.yml"
@@ -98,7 +100,7 @@ class TestProjectConfigAutogenerate:
         non_existent = self.project_path / "does_not_exist"
 
         with pytest.raises(FileNotFoundError) as exc_info:
-            ProjectConfig.autogenerate(non_existent, save_to_disk=False)
+            ProjectConfig.autogenerate(non_existent, self.serena_config, save_to_disk=False)
 
         assert "Project root not found" in str(exc_info.value)
 
@@ -113,7 +115,7 @@ class TestProjectConfigAutogenerate:
 
         # Should still raise ValueError as no source files are detected
         with pytest.raises(ValueError) as exc_info:
-            ProjectConfig.autogenerate(self.project_path, save_to_disk=False)
+            ProjectConfig.autogenerate(self.project_path, self.serena_config, save_to_disk=False)
 
         assert "No source files found" in str(exc_info.value)
 
@@ -125,7 +127,7 @@ class TestProjectConfigAutogenerate:
 
         # Run autogenerate with custom name
         custom_name = "my-custom-project"
-        config = ProjectConfig.autogenerate(self.project_path, project_name=custom_name, save_to_disk=False)
+        config = ProjectConfig.autogenerate(self.project_path, self.serena_config, project_name=custom_name, save_to_disk=False)
 
         assert config.project_name == custom_name
         assert config.languages == [Language.TYPESCRIPT]
