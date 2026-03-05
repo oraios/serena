@@ -213,7 +213,8 @@ class ProjectConfig(SharedConfig):
     initial_prompt: str = ""
     encoding: str = DEFAULT_SOURCE_FILE_ENCODING
 
-    SERENA_DEFAULT_PROJECT_FILE = "project.yml"
+    SERENA_PROJECT_FILE = "project.yml"
+    SERENA_LOCAL_PROJECT_FILE = "project.local.yml"
     FIELDS_WITHOUT_DEFAULTS = {"project_name", "languages"}
     YAML_COMMENT_NORMALISATION = YamlCommentNormalisation.LEADING
     """
@@ -296,7 +297,7 @@ class ProjectConfig(SharedConfig):
                 log.info("Using languages: %s", languages_to_use)
             else:
                 languages_to_use = [lang.value for lang in languages]
-            config_with_comments, _ = cls._load_yaml(PROJECT_TEMPLATE_FILE)
+            config_with_comments, _ = cls._load_yaml_dict(PROJECT_TEMPLATE_FILE)
             config_with_comments["project_name"] = project_name
             config_with_comments["languages"] = languages_to_use
             if save_to_disk:
@@ -312,10 +313,10 @@ class ProjectConfig(SharedConfig):
             This is suitable as a fallback when no ``SerenaConfig`` is available to resolve
             a potentially customised location.
         """
-        return os.path.join(str(project_root), SERENA_MANAGED_DIR_NAME, cls.SERENA_DEFAULT_PROJECT_FILE)
+        return os.path.join(str(project_root), SERENA_MANAGED_DIR_NAME, cls.SERENA_PROJECT_FILE)
 
     @classmethod
-    def _load_yaml(
+    def _load_yaml_dict(
         cls, yml_path: str, comment_normalisation: YamlCommentNormalisation = YamlCommentNormalisation.NONE
     ) -> tuple[CommentedMap, bool]:
         """
@@ -429,7 +430,7 @@ class ProjectConfig(SharedConfig):
                 raise FileNotFoundError(f"Project configuration file not found: {yaml_path}")
 
         # load the configuration dictionary
-        yaml_data, was_complete = cls._load_yaml(str(yaml_path))
+        yaml_data, was_complete = cls._load_yaml_dict(str(yaml_path))
         if "project_name" not in yaml_data:
             yaml_data["project_name"] = project_folder_name
 
@@ -453,11 +454,11 @@ class ProjectConfig(SharedConfig):
         log.info("Saving updated project configuration to %s", config_path)
 
         # load original commented map and update it with current values
-        config_with_comments, _ = self._load_yaml(config_path, self.YAML_COMMENT_NORMALISATION)
+        config_with_comments, _ = self._load_yaml_dict(config_path, self.YAML_COMMENT_NORMALISATION)
         config_with_comments.update(self._to_yaml_dict())
 
         # transfer missing comments from the template file
-        template_config, _ = self._load_yaml(PROJECT_TEMPLATE_FILE, self.YAML_COMMENT_NORMALISATION)
+        template_config, _ = self._load_yaml_dict(PROJECT_TEMPLATE_FILE, self.YAML_COMMENT_NORMALISATION)
         transfer_missing_yaml_comments(template_config, config_with_comments, self.YAML_COMMENT_NORMALISATION)
 
         save_yaml(config_path, config_with_comments)
@@ -981,7 +982,7 @@ class SerenaConfig(SharedConfig):
         :return: the resolved absolute path to the project's project.yml file
         """
         serena_folder = self.get_project_serena_folder(project_root)
-        return os.path.join(serena_folder, ProjectConfig.SERENA_DEFAULT_PROJECT_FILE)
+        return os.path.join(serena_folder, ProjectConfig.SERENA_PROJECT_FILE)
 
     def propagate_settings(self) -> None:
         """
