@@ -779,7 +779,7 @@ class SerenaConfig(SharedConfig):
             return project_candidates[0]
         elif len(project_candidates) > 1:
             raise ValueError(
-                f"Multiple projects found with name '{project_root_or_name}'. Please activate it by location instead. "
+                f"Multiple projects found with name '{project_root_or_name}'. Please reference it by location instead. "
                 f"Locations: {[p.project_root for p in project_candidates]}"
             )
         # no project found by name; check if it's a path
