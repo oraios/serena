@@ -68,11 +68,10 @@ ls_specific_settings: {}
 # These patterns are merged additively with each project's own ignored_paths.
 ignored_paths: []
 
-# whether global memories (the "global" topic) are allowed to be deleted or edited by the agent.
-# Global memories are stored in ~/.serena/memories/global/ and shared across all projects.
-# Set to false to protect global memories from accidental modification by agents.
-# Note: We recommend tracking global memories with git.
-edit_global_memories: True
+# Mark memories as read-only through regex patterns.
+# For example, "global/.*" will mark global memories as read-only.
+# You can extend the list on a per-project basis in the project.yml configuration file.
+read_only_memory_patterns: []
 
 # timeout, in seconds, after which tool executions are terminated
 tool_timeout: 240
