@@ -6,7 +6,6 @@ from collections.abc import Iterator
 from sensai.util.logging import LogTime
 
 from serena.config.serena_config import SerenaPaths
-from serena.constants import SERENA_MANAGED_DIR_NAME
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
@@ -23,6 +22,7 @@ class LanguageServerFactory:
     def __init__(
         self,
         project_root: str,
+        project_data_path: str,
         encoding: str,
         ignored_patterns: list[str],
         ls_timeout: float | None = None,
@@ -30,6 +30,7 @@ class LanguageServerFactory:
         trace_lsp_communication: bool = False,
     ):
         self.project_root = project_root
+        self.project_data_path = project_data_path
         self.encoding = encoding
         self.ignored_patterns = ignored_patterns
         self.ls_timeout = ls_timeout
@@ -51,7 +52,7 @@ class LanguageServerFactory:
             timeout=self.ls_timeout,
             solidlsp_settings=SolidLSPSettings(
                 solidlsp_dir=SerenaPaths().serena_user_home_dir,
-                project_data_relative_path=SERENA_MANAGED_DIR_NAME,
+                project_data_path=self.project_data_path,
                 ls_specific_settings=self.ls_specific_settings or {},
             ),
         )

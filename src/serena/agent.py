@@ -6,7 +6,8 @@ import os
 import platform
 import subprocess
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from logging import Logger
 from typing import TYPE_CHECKING, Optional, TypeVar
 
@@ -551,15 +552,6 @@ class SerenaAgent:
         )
         return True
 
-    def get_project_root(self) -> str:
-        """
-        :return: the root directory of the active project (if any); raises a ValueError if there is no active project
-        """
-        project = self.get_active_project()
-        if project is None:
-            raise ValueError("Cannot get project root if no project is active.")
-        return project.project_root
-
     def get_exposed_tool_instances(self) -> list["Tool"]:
         """
         :return: the tool instances which are exposed (e.g. to the MCP client).
@@ -612,7 +604,7 @@ class SerenaAgent:
         available_tools = self._active_tools
         available_markers = available_tools.tool_marker_names
         global_memory_names = MemoriesManager(
-            project_root=None, read_only_memory_patterns=self.serena_config.read_only_memory_patterns
+            serena_data_folder=None, read_only_memory_patterns=self.serena_config.read_only_memory_patterns
         ).list_global_memories()
         global_memories_list = list_string(global_memory_names) if global_memory_names else ""
         log.info("Generating system prompt with available_tools=(see active tools), available_markers=%s", available_markers)
@@ -731,7 +723,7 @@ class SerenaAgent:
                 self.reset_language_server_manager()
 
         # initialize the language server in the background (if in language server mode)
-        if self.is_using_language_server():
+        if self.get_language_backend().is_lsp():
             self.issue_task(init_language_server_manager)
 
         if self._project_activation_callback is not None:
@@ -828,23 +820,9 @@ class SerenaAgent:
         """
         Starts/resets the language server manager for the current project
         """
-        tool_timeout = self.serena_config.tool_timeout
-        if tool_timeout is None or tool_timeout < 0:
-            ls_timeout = None
-        else:
-            if tool_timeout < 10:
-                raise ValueError(f"Tool timeout must be at least 10 seconds, but is {tool_timeout} seconds")
-            ls_timeout = tool_timeout - 5  # the LS timeout is for a single call, it should be smaller than the tool timeout
-
-        # instantiate and start the necessary language servers
         try:
             self._lsp_init_error = None
-            self.get_active_project_or_raise().create_language_server_manager(
-                log_level=self.serena_config.log_level,
-                ls_timeout=ls_timeout,
-                trace_lsp_communication=self.serena_config.trace_lsp_communication,
-                ls_specific_settings=self.serena_config.ls_specific_settings,
-            )
+            self.get_active_project_or_raise().create_language_server_manager()
         except LanguageServerManagerInitialisationError as e:
             self._lsp_init_error = e
             raise
@@ -901,3 +879,17 @@ class SerenaAgent:
         if ls_manager is None:
             return []
         return ls_manager.get_active_languages()
+
+    @contextmanager
+    def active_project_context(self, project: Project) -> Iterator[None]:
+        """
+        Context manager for temporarily setting/overriding the active project
+
+        :param project: the project to be active
+        """
+        original_project = self._active_project
+        self._active_project = project
+        try:
+            yield
+        finally:
+            self._active_project = original_project
