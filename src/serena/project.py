@@ -250,7 +250,7 @@ class Project(ToStringMixin):
             # Set up the pathspec matcher for the ignored paths
             # for all absolute paths in ignored_paths, convert them to relative paths
             processed_patterns = []
-            for pattern in set(ignored_patterns):
+            for pattern in ignored_patterns:
                 # Normalize separators (pathspec expects forward slashes)
                 pattern = pattern.replace(os.path.sep, "/")
                 processed_patterns.append(pattern)
