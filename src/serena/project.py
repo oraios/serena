@@ -1,8 +1,10 @@
 import json
 import logging
 import os
+import re
 import shutil
 import threading
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal
 
@@ -30,15 +32,23 @@ class MemoriesManager:
     GLOBAL_TOPIC = "global"
     _global_memory_dir = SerenaPaths().global_memories_path
 
-    def __init__(self, serena_data_folder: str | Path, global_memory_tool_write_access: bool = False):
+    def __init__(self, serena_data_folder: str | Path | None, read_only_memory_patterns: Sequence[str] = ()):
         """
         :param serena_data_folder: the absolute path to the project's .serena data folder
-        :param global_memory_tool_write_access: whether to allow writing global memories in tool execution contexts
+        :param read_only_memory_patterns: whether to allow writing global memories in tool execution contexts
         """
-        self._project_memory_dir = Path(serena_data_folder) / "memories"
-        self._project_memory_dir.mkdir(parents=True, exist_ok=True)
-        self._global_memory_tool_write_access = global_memory_tool_write_access
+        self._project_memory_dir: Path | None = None
+        if serena_data_folder is not None:
+            self._project_memory_dir = Path(serena_data_folder) / "memories"
+            self._project_memory_dir.mkdir(parents=True, exist_ok=True)
         self._encoding = SERENA_FILE_ENCODING
+        self._read_only_memory_patterns = [re.compile(pattern) for pattern in set(read_only_memory_patterns)]
+
+    def _is_read_only_memory(self, name: str) -> bool:
+        for pattern in self._read_only_memory_patterns:
+            if pattern.fullmatch(name):
+                return True
+        return False
 
     def _is_global(self, name: str) -> bool:
         return name == self.GLOBAL_TOPIC or name.startswith(self.GLOBAL_TOPIC + "/")
@@ -64,6 +74,7 @@ class MemoriesManager:
             return self._global_memory_dir / filename
 
         # Project-local memory
+        assert self._project_memory_dir is not None, "Project dir was not passed at initialization"
         parts = name.split("/")
         filename = f"{parts[-1]}.md"
 
@@ -76,10 +87,9 @@ class MemoriesManager:
         return self._project_memory_dir / filename
 
     def _check_write_access(self, name: str, is_tool_context: bool) -> None:
-        # in tool context, global memory write access can be disabled
-        if is_tool_context:
-            if self._is_global(name) and not self._global_memory_tool_write_access:
-                raise PermissionError(f"Writing to global memories is not allowed (attempted to write to '{name}')")
+        # in tool context, memories can be read-only
+        if is_tool_context and self._is_read_only_memory(name):
+            raise PermissionError(f"Attempted to write to read_only memory: '{name}')")
 
     def load_memory(self, name: str) -> str:
         memory_file_path = self.get_memory_file_path(name)
@@ -95,35 +105,64 @@ class MemoriesManager:
             f.write(content)
         return f"Memory {name} written."
 
-    @staticmethod
-    def _list_memories(search_dir: Path, base_dir: Path, prefix: str = "") -> list[str]:
+    class MemoriesList:
+        def __init__(self) -> None:
+            self.memories: list[str] = []
+            self.read_only_memories: list[str] = []
+
+        def __len__(self) -> int:
+            return len(self.memories) + len(self.read_only_memories)
+
+        def add(self, memory_name: str, is_read_only: bool) -> None:
+            if is_read_only:
+                self.read_only_memories.append(memory_name)
+            else:
+                self.memories.append(memory_name)
+
+        def extend(self, other: "MemoriesManager.MemoriesList") -> None:
+            self.memories.extend(other.memories)
+            self.read_only_memories.extend(other.read_only_memories)
+
+        def to_dict(self) -> dict[str, list[str]]:
+            result = {}
+            if self.memories:
+                result["memories"] = sorted(self.memories)
+            if self.read_only_memories:
+                result["read_only_memories"] = sorted(self.read_only_memories)
+            return result
+
+        def get_full_list(self) -> list[str]:
+            return sorted(self.memories + self.read_only_memories)
+
+    def _list_memories(self, search_dir: Path, base_dir: Path, prefix: str = "") -> MemoriesList:
+        result = self.MemoriesList()
         if not search_dir.exists():
-            return []
-        results = []
+            return result
         for md_file in search_dir.rglob("*.md"):
             rel = str(md_file.relative_to(base_dir).with_suffix("")).replace(os.sep, "/")
-            results.append(prefix + rel)
-        return results
+            memory_name = prefix + rel
+            result.add(memory_name, is_read_only=self._is_read_only_memory(memory_name))
+        return result
 
-    @classmethod
-    def list_global_memories(cls, subtopic: str = "") -> list[str]:
-        dir_path = cls._global_memory_dir
+    def list_global_memories(self, subtopic: str = "") -> MemoriesList:
+        dir_path = self._global_memory_dir
         if subtopic:
             dir_path = dir_path / subtopic.replace("/", os.sep)
-        return cls._list_memories(dir_path, cls._global_memory_dir, cls.GLOBAL_TOPIC + "/")
+        return self._list_memories(dir_path, self._global_memory_dir, self.GLOBAL_TOPIC + "/")
 
-    def list_project_memories(self, topic: str = "") -> list[str]:
+    def list_project_memories(self, topic: str = "") -> MemoriesList:
+        assert self._project_memory_dir is not None, "Project dir was not passed at initialization"
         dir_path = self._project_memory_dir
         if topic:
             dir_path = dir_path / topic.replace("/", os.sep)
         return self._list_memories(dir_path, self._project_memory_dir)
 
-    def list_memories(self, topic: str = "") -> list[str]:
+    def list_memories(self, topic: str = "") -> MemoriesList:
         """
         Lists all memories, optionally filtered by topic.
         If the topic is omitted, both global and project-specific memories are returned.
         """
-        memories: list[str]
+        memories: MemoriesManager.MemoriesList
 
         if topic:
             if self._is_global(topic):
@@ -133,9 +172,10 @@ class MemoriesManager:
             else:
                 memories = self.list_project_memories(topic=topic)
         else:
-            memories = self.list_project_memories() + self.list_global_memories()
+            memories = self.list_project_memories()
+            memories.extend(self.list_global_memories())
 
-        return sorted(memories)
+        return memories
 
     def delete_memory(self, name: str, is_tool_context: bool) -> str:
         self._check_write_access(name, is_tool_context)
@@ -206,8 +246,8 @@ class Project(ToStringMixin):
         self._serena_data_folder = serena_config.get_project_serena_folder(self.project_root)
         log.info("Serena project data folder: %s", self._serena_data_folder)
 
-        global_memory_write_access = serena_config.edit_global_memories if serena_config else False
-        self.memories_manager = MemoriesManager(self._serena_data_folder, global_memory_write_access)
+        read_only_memory_patterns = serena_config.read_only_memory_patterns + project_config.read_only_memory_patterns
+        self.memories_manager = MemoriesManager(self._serena_data_folder, read_only_memory_patterns=read_only_memory_patterns)
 
         self.language_server_manager: LanguageServerManager | None = None
         self._is_newly_created = is_newly_created
@@ -308,7 +348,7 @@ class Project(ToStringMixin):
         project_memories = self.memories_manager.list_project_memories()
         if project_memories:
             msg += (
-                f"\nAvailable project memories: {json.dumps(project_memories)}\n"
+                f"\nAvailable project memories: {json.dumps(project_memories.to_dict())}\n"
                 + "Use the `read_memory` tool to read these memories later if they are relevant to the task."
             )
         if self.project_config.initial_prompt:
