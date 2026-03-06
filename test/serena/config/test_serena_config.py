@@ -519,4 +519,4 @@ class TestMemoriesManagerCustomPath:
         manager.save_memory("topic_a", "content a", is_tool_context=False)
         manager.save_memory("topic_b", "content b", is_tool_context=False)
         memories = manager.list_project_memories()
-        assert sorted(memories) == ["topic_a", "topic_b"]
+        assert sorted(memories.get_full_list()) == ["topic_a", "topic_b"]

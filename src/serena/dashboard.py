@@ -501,7 +501,7 @@ class SerenaDashboardAPI:
         # Get available memories if ReadMemoryTool is active
         available_memories = None
         if self._agent.tool_is_active("read_memory") and project is not None:
-            available_memories = project.memories_manager.list_memories()
+            available_memories = project.memories_manager.list_memories().get_full_list()
 
         # Get list of languages for the active project
         languages = []

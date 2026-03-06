@@ -51,15 +51,11 @@ class ListMemoriesTool(Tool):
     List available memories. Any memory can be read using the `read_memory` tool.
     """
 
-    def list_memories(self, topic: str = "") -> list[str]:
-        return self.memories_manager.list_memories(topic)
-
     def apply(self, topic: str = "") -> str:
         """
-        List available memories, optionally filtered by topic. Memories marked as read-only cannot be
-        edited or deleted.
+        Lists available memories, optionally filtered by topic.
         """
-        return self._to_json(self.memories_manager.list_memories(topic))
+        return self._to_json(self.memories_manager.list_memories(topic).to_dict())
 
 
 class DeleteMemoryTool(Tool, ToolMarkerCanEdit):

@@ -68,8 +68,8 @@ ls_specific_settings: {}
 # These patterns are merged additively with each project's own ignored_paths.
 ignored_paths: []
 
-# Mark memories as read-only through regex patterns.
-# For example, "global/.*" will mark global memories as read-only.
+# list of regex patterns which, when matched, mark a memory entry as read‑only.
+# For example, "global/.*" will mark all global memories as read-only.
 # You can extend the list on a per-project basis in the project.yml configuration file.
 read_only_memory_patterns: []
 
