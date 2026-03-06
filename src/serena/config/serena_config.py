@@ -748,6 +748,14 @@ class SerenaConfig(SharedConfig):
                 instance.log_level = loaded_commented_yaml["gui_log_level"]
             del loaded_commented_yaml["gui_log_level"]
 
+        # migrate "edit_global_memories"
+        if "edit_global_memories" in loaded_commented_yaml:
+            num_migrations += 1
+            edit_global_memories = loaded_commented_yaml["edit_global_memories"]
+            if not edit_global_memories:
+                instance.read_only_memory_patterns.append("global/.*")
+            del loaded_commented_yaml["edit_global_memories"]
+
         # re-save the configuration file if any migrations were performed
         if num_migrations > 0:
             log.info("Legacy configuration was migrated; re-saving configuration file")
