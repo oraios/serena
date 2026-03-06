@@ -437,11 +437,13 @@ class TestProjectSerenaDataFolder:
             project_name="myproject",
             languages=[Language.PYTHON],
         )
-        return Project(
+        project = Project(
             project_root=str(self.project_path),
             project_config=project_config,
             serena_config=serena_config,
         )
+        project._ignore_spec_available.wait()
+        return project
 
     def test_default_config_creates_in_project_dir(self):
         config = SerenaConfig(gui_log_window=False, web_dashboard=False)
