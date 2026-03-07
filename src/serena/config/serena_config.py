@@ -569,7 +569,7 @@ class SerenaConfig(SharedConfig):
     on the first run, which can take some time and require internet access. Others, like the Anthropic ones, may require an API key
     and rate limits may apply.
     """
-    default_max_tool_answer_chars: int = 150_000
+    default_max_tool_answer_chars: int = 50_000
     """Used as default for tools where the apply method has a default maximal answer length.
     Even though the value of the max_answer_chars can be changed when calling the tool, it may make sense to adjust this default 
     through the global configuration.

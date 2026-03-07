@@ -276,6 +276,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
+        self.server.on_notification("$/typescriptVersion", do_nothing)
 
         log.info("Starting TypeScript server process")
         self.server.start()
