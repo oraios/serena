@@ -665,6 +665,9 @@ class SerenaDashboardViewer:
     ):
         self.url = url
         self.tray = True
+        """
+        whether we use the system tray to allow minimizing to tray and intercepting the close event to hide to tray instead of quitting.
+        """
         self.title = "Serena Dashboard"
         self.width = width
         self.height = height
@@ -672,6 +675,7 @@ class SerenaDashboardViewer:
 
         self.window: webview.Window | None = None
         self._tray_icon = None
+        self._quitting = False
 
     def run(self) -> None:
         # Set app id (avoid app being lumped together with other Python-based apps in Windows taskbar)
@@ -684,6 +688,7 @@ class SerenaDashboardViewer:
         icon_path = str(dashboard_path / "serena.ico")
 
         # Create hidden to avoid flash; show/restore/minimize in start callback.
+        # When tray is enabled, confirm_close allows us to intercept the X button.
         self.window = webview.create_window(
             self.title,
             self.url,
@@ -692,6 +697,9 @@ class SerenaDashboardViewer:
             hidden=self.start_minimized,
             confirm_close=False,
         )
+
+        if self.tray:
+            self.window.events.closing += self._on_closing
 
         def _start_callback():
             if self.start_minimized:
@@ -704,6 +712,14 @@ class SerenaDashboardViewer:
                 threading.Thread(target=self._run_tray, daemon=True).start()
 
         webview.start(_start_callback, icon=icon_path)
+
+    def _on_closing(self) -> bool:
+        """Intercept window close: hide to tray instead of quitting."""
+        if self._quitting:
+            return True
+        if self.window:
+            self.window.hide()
+        return False  # Prevent the window from actually closing
 
     def _run_tray(self) -> None:
         dashboard_path = Path(SERENA_DASHBOARD_DIR)
@@ -721,6 +737,7 @@ class SerenaDashboardViewer:
                 self.window.hide()
 
         def quit_app(_icon, _item):
+            self._quitting = True
             try:
                 _icon.stop()
             finally:
