@@ -1853,8 +1853,8 @@ wheels = [
 
 [[package]]
 name = "pywebview"
-version = "6.1"
-source = { registry = "https://pypi.org/simple" }
+version = "6.2.dev50+g345596c1f"
+source = { git = "https://github.com/r0x0r/pywebview?rev=345596c1f4fd59fd26c7aa02d4176c5362bcbabe#345596c1f4fd59fd26c7aa02d4176c5362bcbabe" }
 dependencies = [
     { name = "bottle" },
     { name = "proxy-tools" },
@@ -1867,10 +1867,6 @@ dependencies = [
     { name = "pythonnet", marker = "sys_platform == 'win32'" },
     { name = "qtpy", marker = "sys_platform == 'openbsd6'" },
     { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/64/09/75cf92c4db19350ddb084d841e352ce30e89668815d0494d1dd595c85469/pywebview-6.1.tar.gz", hash = "sha256:f0b95047860caf3d921581f9e16b4edb1a125b23e2ce691c4da2968f8b160ff2", size = 496270, upload-time = "2025-10-21T18:02:44.323Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/74/12/ce9006cdcc1834378826b5c0d4b554d899cd25ac9c665569d060f220b0e1/pywebview-6.1-py3-none-any.whl", hash = "sha256:2b552a340557e76a740b045a25937f72dae751e0985d5f5d9556f697ba622ec5", size = 511255, upload-time = "2025-10-21T18:02:42.377Z" },
 ]
 
 [[package]]
@@ -2214,7 +2210,7 @@ requires-dist = [
     { name = "pytest-timeout", marker = "extra == 'dev'", specifier = ">=2.4.0" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.5.0" },
     { name = "python-dotenv", specifier = ">=1.0.0,<2" },
-    { name = "pywebview", specifier = ">=6.1" },
+    { name = "pywebview", git = "https://github.com/r0x0r/pywebview?rev=345596c1f4fd59fd26c7aa02d4176c5362bcbabe" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "requests", specifier = ">=2.32.3,<3" },
     { name = "ruamel-yaml", specifier = "==0.18.14" },
