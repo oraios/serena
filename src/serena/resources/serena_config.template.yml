@@ -7,6 +7,11 @@
 #      in your IDE).
 language_backend: LSP
 
+# line ending convention for file writes across all projects.
+# Possible values: "lf" (Unix), "crlf" (Windows), "native" (platform default).
+# Can be overridden per project in project.yml.
+line_ending: native
+
 # whether to open a graphical window with Serena's logs.
 # This is mainly supported on Windows and (partly) on Linux; not available on macOS.
 # If you prefer a browser-based tool, use the `web_dashboard` option instead.

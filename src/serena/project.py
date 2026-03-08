@@ -249,6 +249,9 @@ class Project(ToStringMixin):
         read_only_memory_patterns = serena_config.read_only_memory_patterns + project_config.read_only_memory_patterns
         self.memories_manager = MemoriesManager(self._serena_data_folder, read_only_memory_patterns=read_only_memory_patterns)
 
+        # resolve line ending (project -> global)
+        self.line_ending = project_config.line_ending or serena_config.line_ending
+
         self.language_server_manager: LanguageServerManager | None = None
         self._is_newly_created = is_newly_created
 
