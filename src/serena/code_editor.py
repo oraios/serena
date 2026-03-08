@@ -21,11 +21,12 @@ TSymbol = TypeVar("TSymbol", bound=Symbol)
 
 
 class CodeEditor(Generic[TSymbol], ABC):
-    def __init__(self, project_root: str, project_config: ProjectConfig | None = None) -> None:
+    def __init__(self, project_root: str, project_config: ProjectConfig | None = None, newline: str | None = None) -> None:
         self.project_root = project_root
 
         # set encoding based on project configuration, if available
         self.encoding = project_config.encoding if project_config is not None else DEFAULT_SOURCE_FILE_ENCODING
+        self.newline = newline
 
     class EditedFile(ABC):
         def __init__(self, relative_path: str) -> None:
@@ -73,7 +74,7 @@ class CodeEditor(Generic[TSymbol], ABC):
     def _save_edited_file(self, edited_file: "CodeEditor.EditedFile") -> None:
         abs_path = os.path.join(self.project_root, edited_file.relative_path)
         new_contents = edited_file.get_contents()
-        with open(abs_path, "w", encoding=self.encoding) as f:
+        with open(abs_path, "w", encoding=self.encoding, newline=self.newline) as f:
             f.write(new_contents)
 
     @abstractmethod
@@ -235,8 +236,10 @@ class CodeEditor(Generic[TSymbol], ABC):
 
 
 class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
-    def __init__(self, symbol_retriever: LanguageServerSymbolRetriever, project_config: ProjectConfig | None = None):
-        super().__init__(project_root=symbol_retriever.get_root_path(), project_config=project_config)
+    def __init__(
+        self, symbol_retriever: LanguageServerSymbolRetriever, project_config: ProjectConfig | None = None, newline: str | None = None
+    ):
+        super().__init__(project_root=symbol_retriever.get_root_path(), project_config=project_config, newline=newline)
         self._symbol_retriever = symbol_retriever
 
     def _get_language_server(self, relative_path: str) -> SolidLanguageServer:
@@ -372,7 +375,7 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
 class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
     def __init__(self, project: Project) -> None:
         self._project = project
-        super().__init__(project_root=project.project_root, project_config=project.project_config)
+        super().__init__(project_root=project.project_root, project_config=project.project_config, newline=project.line_ending.newline_str)
 
     class EditedFile(CodeEditor.EditedFile):
         def __init__(self, relative_path: str, project: Project):

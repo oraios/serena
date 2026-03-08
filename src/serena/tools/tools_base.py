@@ -63,7 +63,11 @@ class Component(ABC):
 
         match self.agent.get_language_backend():
             case LanguageBackend.LSP:
-                return LanguageServerCodeEditor(self.create_language_server_symbol_retriever(), project_config=self.project.project_config)
+                return LanguageServerCodeEditor(
+                    self.create_language_server_symbol_retriever(),
+                    project_config=self.project.project_config,
+                    newline=self.project.line_ending.newline_str,
+                )
             case LanguageBackend.JETBRAINS:
                 return JetBrainsCodeEditor(project=self.project)
             case _:
