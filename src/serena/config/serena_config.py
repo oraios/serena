@@ -591,11 +591,6 @@ class SerenaConfig(SharedConfig):
     jetbrains_plugin_server_address: str = "127.0.0.1"
     tool_timeout: float = DEFAULT_TOOL_TIMEOUT
 
-    language_backend: LanguageBackend = LanguageBackend.LSP
-    """
-    the language backend to use for code understanding features
-    """
-
     token_count_estimator: str = RegisteredTokenCountEstimator.CHAR_COUNT.name
     """Only relevant if `record_tool_usage` is True; the name of the token count estimator to use for tool usage statistics.
     See the `RegisteredTokenCountEstimator` enum for available options.
@@ -628,9 +623,13 @@ class SerenaConfig(SharedConfig):
     """
 
     # settings with overridden defaults
+    language_backend: LanguageBackend = LanguageBackend.LSP
+    """
+    the language backend to use for code understanding features
+    """
     default_modes: Sequence[str] | None = ("interactive", "editing")
-    symbol_info_budget: float = 10.0
     line_ending: LineEnding = LineEnding.NATIVE
+    symbol_info_budget: float = 10.0
     """
     Time budget (seconds) for requests when tools request include_info (currently
     only supported for LSP-based tools).
@@ -783,11 +782,12 @@ class SerenaConfig(SharedConfig):
         instance.language_backend = language_backend
 
         # determine line ending
-        line_ending = get_dataclass_default(SerenaConfig, "line_ending")
         line_ending_value = loaded_commented_yaml.get("line_ending")
         if line_ending_value:
-            line_ending = LineEnding.from_str(line_ending_value)
-        instance.line_ending = line_ending
+            instance.line_ending = LineEnding.from_str(line_ending_value)
+        else:
+            num_migrations += 1
+            instance.line_ending = get_dataclass_default(SerenaConfig, "line_ending")
 
         # migrate deprecated "gui_log_level" field if necessary
         if "gui_log_level" in loaded_commented_yaml:

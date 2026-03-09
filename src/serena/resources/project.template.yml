@@ -31,8 +31,10 @@ languages: ["python"]
 # For a list of possible encodings, see https://docs.python.org/3.11/library/codecs.html#standard-encodings
 encoding: "utf-8"
 
-# line ending convention for file writes: "lf", "crlf", or "native" (platform default)
-line_ending: "native"
+# line ending convention to use when writing source files.
+# Possible values: unset (use global setting), "lf", "crlf", or "native" (platform default)
+# This does not affect Serena's own files (e.g. memories and configuration files), which always use native line endings.
+line_ending:
 
 # The language backend to use for this project.
 # If not set, the global setting from serena_config.yml is used.

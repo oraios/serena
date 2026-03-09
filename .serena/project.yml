@@ -146,3 +146,7 @@ language_backend:
 # list of regex patterns which, when matched, mark a memory entry as read‑only.
 # Extends the list from the global configuration, merging the two lists.
 read_only_memory_patterns: []
+
+# line ending convention for file writes: unset (use global setting, "lf", "crlf", or "native" (platform default)
+# If not undefined, overrides the global setting in serena_config.yml
+line_ending:
