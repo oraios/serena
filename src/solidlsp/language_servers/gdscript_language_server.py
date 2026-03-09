@@ -116,4 +116,3 @@ class GDScriptLanguageServer(SolidLanguageServer):
         if "textDocumentSync" not in capabilities:
             log.warning("GDScript server did not advertise textDocumentSync capability.")
         self.server.notify.initialized({})
-

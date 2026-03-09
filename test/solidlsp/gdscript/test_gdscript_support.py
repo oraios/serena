@@ -95,4 +95,3 @@ def test_gdscript_tcp_proxy_roundtrip() -> None:
     assert proc.returncode == 0, stderr.decode("utf-8", errors="replace")
     assert recv_data == [client_payload]
     assert stdout == server_payload
-
