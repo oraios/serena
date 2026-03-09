@@ -6,14 +6,12 @@ from collections.abc import Iterable, Iterator, Reversible
 from contextlib import contextmanager
 from typing import Generic, TypeVar, cast
 
-from serena.config.serena_config import ProjectConfig
 from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
 from serena.symbol import JetBrainsSymbol, LanguageServerSymbol, LanguageServerSymbolRetriever, PositionInFile, Symbol
 from solidlsp import SolidLanguageServer, ls_types
 from solidlsp.ls import LSPFileBuffer
 from solidlsp.ls_utils import PathUtils, TextUtils
 
-from .constants import DEFAULT_SOURCE_FILE_ENCODING
 from .project import Project
 
 log = logging.getLogger(__name__)
@@ -21,12 +19,10 @@ TSymbol = TypeVar("TSymbol", bound=Symbol)
 
 
 class CodeEditor(Generic[TSymbol], ABC):
-    def __init__(self, project_root: str, project_config: ProjectConfig | None = None, newline: str | None = None) -> None:
-        self.project_root = project_root
-
-        # set encoding based on project configuration, if available
-        self.encoding = project_config.encoding if project_config is not None else DEFAULT_SOURCE_FILE_ENCODING
-        self.newline = newline
+    def __init__(self, project: Project) -> None:
+        self.project_root = project.project_root
+        self.encoding = project.project_config.encoding
+        self.newline = project.line_ending.newline_str
 
     class EditedFile(ABC):
         def __init__(self, relative_path: str) -> None:
@@ -236,10 +232,8 @@ class CodeEditor(Generic[TSymbol], ABC):
 
 
 class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
-    def __init__(
-        self, symbol_retriever: LanguageServerSymbolRetriever, project_config: ProjectConfig | None = None, newline: str | None = None
-    ):
-        super().__init__(project_root=symbol_retriever.get_root_path(), project_config=project_config, newline=newline)
+    def __init__(self, symbol_retriever: LanguageServerSymbolRetriever):
+        super().__init__(project=symbol_retriever.project)
         self._symbol_retriever = symbol_retriever
 
     def _get_language_server(self, relative_path: str) -> SolidLanguageServer:
@@ -375,7 +369,7 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
 class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
     def __init__(self, project: Project) -> None:
         self._project = project
-        super().__init__(project_root=project.project_root, project_config=project.project_config, newline=project.line_ending.newline_str)
+        super().__init__(project)
 
     class EditedFile(CodeEditor.EditedFile):
         def __init__(self, relative_path: str, project: Project):

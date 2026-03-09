@@ -10,7 +10,7 @@ from typing import Any, Literal
 
 import pathspec
 from sensai.util.logging import LogTime
-from sensai.util.string import ToStringMixin
+from sensai.util.string import TextBuilder, ToStringMixin
 
 from serena.config.serena_config import (
     ProjectConfig,
@@ -242,7 +242,7 @@ class Project(ToStringMixin):
         assert serena_config is not None
         self.project_root = project_root
         self.project_config = project_config
-        self._serena_config = serena_config
+        self.serena_config = serena_config
         self._serena_data_folder = serena_config.get_project_serena_folder(self.project_root)
         log.info("Serena project data folder: %s", self._serena_data_folder)
 
@@ -253,6 +253,7 @@ class Project(ToStringMixin):
         self.line_ending = project_config.line_ending or serena_config.line_ending
 
         self.language_server_manager: LanguageServerManager | None = None
+        self._language_server_manager_init_error: Exception | None = None
         self._is_newly_created = is_newly_created
 
         # create .gitignore file in the project's Serena data folder if not yet present
@@ -274,7 +275,7 @@ class Project(ToStringMixin):
         with LogTime(f"Gathering ignore spec for project {self.project_config.project_name}", logger=log):
 
             # gather ignored paths from the global configuration, project configuration, and gitignore files
-            global_ignored_paths = self._serena_config.ignored_paths
+            global_ignored_paths = self.serena_config.ignored_paths
             ignored_patterns = list(global_ignored_paths) + list(self.project_config.ignored_paths)
             if len(global_ignored_paths) > 0:
                 log.info(f"Using {len(global_ignored_paths)} ignored paths from the global configuration.")
@@ -598,32 +599,49 @@ class Project(ToStringMixin):
 
         :return: the language server manager, which is also stored in the project instance
         """
-        # determine timeout to use for LS calls
-        tool_timeout = self._serena_config.tool_timeout
-        if tool_timeout is None or tool_timeout < 0:
-            ls_timeout = None
-        else:
-            if tool_timeout < 10:
-                raise ValueError(f"Tool timeout must be at least 10 seconds, but is {tool_timeout} seconds")
-            ls_timeout = tool_timeout - 5  # the LS timeout is for a single call, it should be smaller than the tool timeout
+        try:
+            # determine timeout to use for LS calls
+            tool_timeout = self.serena_config.tool_timeout
+            if tool_timeout is None or tool_timeout < 0:
+                ls_timeout = None
+            else:
+                if tool_timeout < 10:
+                    raise ValueError(f"Tool timeout must be at least 10 seconds, but is {tool_timeout} seconds")
+                ls_timeout = tool_timeout - 5  # the LS timeout is for a single call, it should be smaller than the tool timeout
 
-        # if there is an existing instance, stop its language servers first
-        if self.language_server_manager is not None:
-            log.info("Stopping existing language server manager ...")
-            self.language_server_manager.stop_all()
-            self.language_server_manager = None
+            # if there is an existing instance, stop its language servers first
+            if self.language_server_manager is not None:
+                log.info("Stopping existing language server manager ...")
+                self.language_server_manager.stop_all()
+                self.language_server_manager = None
 
-        log.info(f"Creating language server manager for {self.project_root}")
-        factory = LanguageServerFactory(
-            project_root=self.project_root,
-            project_data_path=self._serena_data_folder,
-            encoding=self.project_config.encoding,
-            ignored_patterns=self._ignored_patterns,
-            ls_timeout=ls_timeout,
-            ls_specific_settings=self._serena_config.ls_specific_settings,
-            trace_lsp_communication=self._serena_config.trace_lsp_communication,
-        )
-        self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory)
+            log.info(f"Creating language server manager for {self.project_root}")
+            self._language_server_manager_init_error = None
+            factory = LanguageServerFactory(
+                project_root=self.project_root,
+                project_data_path=self._serena_data_folder,
+                encoding=self.project_config.encoding,
+                ignored_patterns=self._ignored_patterns,
+                ls_timeout=ls_timeout,
+                ls_specific_settings=self.serena_config.ls_specific_settings,
+                trace_lsp_communication=self.serena_config.trace_lsp_communication,
+            )
+            self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory)
+            return self.language_server_manager
+        except Exception as e:
+            self._language_server_manager_init_error = e
+            raise
+
+    def get_language_server_manager_or_raise(self) -> LanguageServerManager:
+        if self.language_server_manager is None:
+            msg = TextBuilder("The language server manager is not initialized, indicating a problem during project initialisation.")
+            if self._language_server_manager_init_error is not None:
+                msg.with_text(str(self._lsp_init_error))
+            msg.with_text("For details, please check the logs. " + self.get_log_inspection_instructions())
+            msg.with_text(
+                "IMPORTANT: Stop, do not attempt workarounds. Inform the user and wait for further instructions before you continue!"
+            )
+            raise Exception(msg.build())
         return self.language_server_manager
 
     def add_language(self, language: Language) -> None:

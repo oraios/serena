@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Optional, TypeVar
 
 from sensai.util import logging
 from sensai.util.logging import LogTime
-from sensai.util.string import TextBuilder, dict_string
+from sensai.util.string import dict_string
 
 from interprompt.jinja_template import JinjaTemplate
 from serena import serena_version
@@ -29,7 +29,7 @@ from serena.config.serena_config import (
     ToolInclusionDefinition,
 )
 from serena.dashboard import SerenaDashboardAPI
-from serena.ls_manager import LanguageServerManager, LanguageServerManagerInitialisationError
+from serena.ls_manager import LanguageServerManager
 from serena.project import MemoriesManager, Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.task_executor import TaskExecutor
@@ -255,7 +255,6 @@ class SerenaAgent:
 
         # project-specific instances, which will be initialized upon project activation
         self._active_project: Project | None = None
-        self._lsp_init_error: LanguageServerManagerInitialisationError | None = None
 
         # determine registered project to be activated (if any)
         registered_project_to_activate: RegisteredProject | None = (
@@ -475,17 +474,8 @@ class SerenaAgent:
         return None
 
     def get_language_server_manager_or_raise(self) -> LanguageServerManager:
-        language_server_manager = self.get_language_server_manager()
-        if language_server_manager is None:
-            msg = TextBuilder("The language server manager is not initialized, indicating a problem during project initialisation.")
-            if self._lsp_init_error is not None:
-                msg.with_text(str(self._lsp_init_error))
-            msg.with_text("For details, please check the logs. " + self.get_log_inspection_instructions())
-            msg.with_text(
-                "IMPORTANT: Stop, do not attempt workarounds. Inform the user and wait for further instructions before you continue!"
-            )
-            raise Exception(msg.build())
-        return language_server_manager
+        active_project = self.get_active_project_or_raise()
+        return active_project.get_language_server_manager_or_raise()
 
     def get_log_inspection_instructions(self) -> str:
         if self.serena_config.web_dashboard:
@@ -820,12 +810,7 @@ class SerenaAgent:
         """
         Starts/resets the language server manager for the current project
         """
-        try:
-            self._lsp_init_error = None
-            self.get_active_project_or_raise().create_language_server_manager()
-        except LanguageServerManagerInitialisationError as e:
-            self._lsp_init_error = e
-            raise
+        self.get_active_project_or_raise().create_language_server_manager()
 
     def add_language(self, language: Language) -> None:
         """
