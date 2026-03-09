@@ -132,3 +132,9 @@ symbol_info_budget:
 # list of regex patterns which, when matched, mark a memory entry as read‑only.
 # Extends the list from the global configuration, merging the two lists.
 read_only_memory_patterns: []
+
+# list of top-level directory names under the memories folder to exclude from memory listing.
+# Files inside these directories can still be read directly via read_memory.
+# Extends the list from the global configuration, merging the two lists.
+# Example: ["_archive", "_episodes"]
+excluded_memory_listing_dirs: []

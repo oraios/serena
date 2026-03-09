@@ -32,10 +32,18 @@ class MemoriesManager:
     GLOBAL_TOPIC = "global"
     _global_memory_dir = SerenaPaths().global_memories_path
 
-    def __init__(self, serena_data_folder: str | Path | None, read_only_memory_patterns: Sequence[str] = ()):
+    def __init__(
+        self,
+        serena_data_folder: str | Path | None,
+        read_only_memory_patterns: Sequence[str] = (),
+        excluded_memory_listing_dirs: Sequence[str] = (),
+    ):
         """
         :param serena_data_folder: the absolute path to the project's .serena data folder
         :param read_only_memory_patterns: whether to allow writing global memories in tool execution contexts
+        :param excluded_memory_listing_dirs: directory names to exclude from memory listing (e.g. ["_archive", "_episodes"]).
+            Files inside these directories can still be read directly via read_memory, but they will not appear in
+            list_memories output. This is useful for projects with large numbers of archived memory files.
         """
         self._project_memory_dir: Path | None = None
         if serena_data_folder is not None:
@@ -43,6 +51,7 @@ class MemoriesManager:
             self._project_memory_dir.mkdir(parents=True, exist_ok=True)
         self._encoding = SERENA_FILE_ENCODING
         self._read_only_memory_patterns = [re.compile(pattern) for pattern in set(read_only_memory_patterns)]
+        self._excluded_memory_listing_dirs = frozenset(excluded_memory_listing_dirs)
 
     def _is_read_only_memory(self, name: str) -> bool:
         for pattern in self._read_only_memory_patterns:
@@ -60,8 +69,7 @@ class MemoriesManager:
         if self._is_global(name):
             if name == self.GLOBAL_TOPIC:
                 raise ValueError(
-                    f'Bare "{self.GLOBAL_TOPIC}" is not a valid memory name. '
-                    f'Use "{self.GLOBAL_TOPIC}/<name>" to address a global memory.'
+                    f'Bare "{self.GLOBAL_TOPIC}" is not a valid memory name. Use "{self.GLOBAL_TOPIC}/<name>" to address a global memory.'
                 )
             # Strip "global/" prefix and resolve against global dir
             sub_name = name[len(self.GLOBAL_TOPIC) + 1 :]
@@ -139,6 +147,9 @@ class MemoriesManager:
         if not search_dir.exists():
             return result
         for md_file in search_dir.rglob("*.md"):
+            rel_parts = md_file.relative_to(base_dir).parts
+            if rel_parts and rel_parts[0] in self._excluded_memory_listing_dirs:
+                continue
             rel = str(md_file.relative_to(base_dir).with_suffix("")).replace(os.sep, "/")
             memory_name = prefix + rel
             result.add(memory_name, is_read_only=self._is_read_only_memory(memory_name))
@@ -247,7 +258,12 @@ class Project(ToStringMixin):
         log.info("Serena project data folder: %s", self._serena_data_folder)
 
         read_only_memory_patterns = serena_config.read_only_memory_patterns + project_config.read_only_memory_patterns
-        self.memories_manager = MemoriesManager(self._serena_data_folder, read_only_memory_patterns=read_only_memory_patterns)
+        excluded_memory_listing_dirs = serena_config.excluded_memory_listing_dirs + project_config.excluded_memory_listing_dirs
+        self.memories_manager = MemoriesManager(
+            self._serena_data_folder,
+            read_only_memory_patterns=read_only_memory_patterns,
+            excluded_memory_listing_dirs=excluded_memory_listing_dirs,
+        )
 
         # resolve line ending (project -> global)
         self.line_ending = project_config.line_ending or serena_config.line_ending
@@ -273,7 +289,6 @@ class Project(ToStringMixin):
 
     def _gather_ignorespec(self) -> None:
         with LogTime(f"Gathering ignore spec for project {self.project_config.project_name}", logger=log):
-
             # gather ignored paths from the global configuration, project configuration, and gitignore files
             global_ignored_paths = self.serena_config.ignored_paths
             ignored_patterns = list(global_ignored_paths) + list(self.project_config.ignored_paths)
