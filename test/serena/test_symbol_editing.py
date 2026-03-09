@@ -24,7 +24,7 @@ from syrupy import SnapshotAssertion
 from serena.code_editor import CodeEditor, LanguageServerCodeEditor
 from solidlsp.ls_config import Language
 from src.serena.symbol import LanguageServerSymbolRetriever
-from test.conftest import get_repo_path, start_ls_context
+from test.conftest import get_repo_path, project_with_ls_context
 
 pytestmark = pytest.mark.snapshot
 
@@ -192,7 +192,6 @@ class EditingTest(ABC):
         """Context manager for setup/teardown with a temporary directory, providing the symbol manager."""
         temp_dir = Path(tempfile.mkdtemp())
         self.repo_path = temp_dir / self.original_repo_path.name
-        language_server = None  # Initialize language_server
         try:
             print(f"Copying repo from {self.original_repo_path} to {self.repo_path}")
             shutil.copytree(self.original_repo_path, self.repo_path)
@@ -201,8 +200,8 @@ class EditingTest(ABC):
             if os.name == "nt":
                 time.sleep(0.1)
             log.info(f"Creating language server for {self.language} {self.rel_path}")
-            with start_ls_context(self.language, str(self.repo_path)) as language_server:
-                yield LanguageServerSymbolRetriever(ls=language_server)
+            with project_with_ls_context(self.language, str(self.repo_path)) as project:
+                yield LanguageServerSymbolRetriever(project)
         finally:
             # prevent deadlock on Windows due to lingering file locks
             if os.name == "nt":
