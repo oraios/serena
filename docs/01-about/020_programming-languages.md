@@ -59,7 +59,8 @@ Some languages require additional installations or setup steps, as noted.
   on macOS, requires Rust toolchain for building from source;
   note: reference search is not supported by this language server)
 * **Java**  
-* **JavaScript**
+* **JavaScript**  
+  (supported via the TypeScript language server, i.e. use language `typescript` for both JavaScript and TypeScript)
 * **Julia**
 * **Kotlin**  
   (uses the pre-alpha [official kotlin LS](https://github.com/Kotlin/kotlin-lsp), some issues may appear)
