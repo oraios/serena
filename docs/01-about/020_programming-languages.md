@@ -59,7 +59,8 @@ Some languages require additional installations or setup steps, as noted.
   on macOS, requires Rust toolchain for building from source;
   note: reference search is not supported by this language server)
 * **Java**  
-* **JavaScript**
+* **JavaScript**  
+  (handled via the TypeScript language server; projects will appear as TypeScript in the dashboard and the Add Language menu does not show JavaScript separately — this is expected and all JavaScript features work normally)
 * **Julia**
 * **Kotlin**  
   (uses the pre-alpha [official kotlin LS](https://github.com/Kotlin/kotlin-lsp), some issues may appear)
@@ -87,7 +88,7 @@ Some languages require additional installations or setup steps, as noted.
 * **Scala**  
   (requires some [manual setup](../03-special-guides/scala_setup_guide_for_serena); uses Metals LSP)
 * **Swift**
-* **TypeScript**
+* **TypeScript** (also handles JavaScript — see JavaScript entry above)
 * **Vue**    
   (3.x with TypeScript; requires Node.js v18+ and npm; supports .vue Single File Components with monorepo detection)
 * **YAML**
