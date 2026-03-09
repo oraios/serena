@@ -48,6 +48,8 @@ Some languages require additional installations or setup steps, as noted.
   (requires [.NET v8.0+](https://dotnet.microsoft.com/en-us/download/dotnet); uses FsAutoComplete/Ionide, which is auto-installed; for Homebrew .NET on macOS, set DOTNET_ROOT in your environment)
 * **Fortran**   
   (requires installation of fortls: `pip install fortls`)
+* **GDScript (Godot)**
+  (connects to a running Godot editor LSP endpoint; defaults to `127.0.0.1:6005`; configurable via `ls_specific_settings.gdscript`)
 * **Go**  
   (requires installation of `gopls`)
 * **Groovy**  

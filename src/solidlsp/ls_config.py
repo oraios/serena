@@ -62,6 +62,11 @@ class Language(str, Enum):
     SCALA = "scala"
     JULIA = "julia"
     FORTRAN = "fortran"
+    GDSCRIPT = "gdscript"
+    """GDScript language server support for Godot projects.
+    Uses Serena's built-in TCP transport adapter to connect to a running Godot editor
+    (default host/port: 127.0.0.1:6005).
+    """
     HASKELL = "haskell"
     GROOVY = "groovy"
     VUE = "vue"
@@ -242,6 +247,8 @@ class Language(str, Enum):
                 return FilenameMatcher(
                     "*.f90", "*.F90", "*.f95", "*.F95", "*.f03", "*.F03", "*.f08", "*.F08", "*.f", "*.F", "*.for", "*.FOR", "*.fpp", "*.FPP"
                 )
+            case self.GDSCRIPT:
+                return FilenameMatcher("*.gd")
             case self.HASKELL:
                 return FilenameMatcher("*.hs", "*.lhs")
             case self.VUE:
@@ -440,6 +447,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.fortran_language_server import FortranLanguageServer
 
                 return FortranLanguageServer
+            case self.GDSCRIPT:
+                from solidlsp.language_servers.gdscript_language_server import GDScriptLanguageServer
+
+                return GDScriptLanguageServer
             case self.HASKELL:
                 from solidlsp.language_servers.haskell_language_server import HaskellLanguageServer
 

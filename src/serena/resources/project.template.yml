@@ -5,7 +5,8 @@ project_name: "project_name"
 # list of languages for which language servers are started; choose from:
 #   al                  bash                clojure             cpp                 csharp
 #   csharp_omnisharp    dart                elixir              elm                 erlang
-#   fortran             fsharp              go                  groovy              haskell
+#   fortran             fsharp              gdscript            go                  groovy
+#   haskell
 #   java                julia               kotlin              lua                 markdown
 #   matlab              nix                 pascal              perl                php
 #   php_phpactor        powershell          python              python_jedi         r
@@ -18,6 +19,7 @@ project_name: "project_name"
 # Note:
 #   - For C, use cpp
 #   - For JavaScript, use typescript
+#   - For Godot GDScript, use gdscript
 #   - For Free Pascal/Lazarus, use pascal
 # Special requirements:
 #   Some languages require additional setup/installations.

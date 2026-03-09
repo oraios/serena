@@ -312,6 +312,34 @@ Notes:
 - `GOFLAGS` (from the environment you start Serena in) may also affect the Go build context. Prefer `buildFlags` for tags.
 - Build context changes are only picked up when `gopls` starts. After changing `gopls_settings` (or relevant env vars like `GOFLAGS`), restart the Serena process (or server) that hosts the Go language server, or use your client's "Restart language server" action if it causes `gopls` to restart.
 
+#### GDScript (Godot)
+
+Serena's GDScript support connects to Godot's built-in LSP endpoint (TCP).
+By default, Serena connects to `127.0.0.1:6005`.
+
+Configure via `ls_specific_settings.gdscript` in `serena_config.yml`:
+
+| Setting | Default | Description |
+|---|---|---|
+| `host` | `127.0.0.1` | Hostname/IP of the Godot editor LSP endpoint |
+| `port` | `6005` | TCP port of the Godot editor LSP endpoint |
+| `connect_timeout` | `10.0` | TCP connection timeout in seconds |
+| `python_path` | current Python | Python executable used to run Serena's built-in GDScript transport adapter |
+
+Example:
+
+```yaml
+ls_specific_settings:
+  gdscript:
+    host: "127.0.0.1"
+    port: 6005
+    connect_timeout: 10.0
+```
+
+Notes:
+- Ensure a Godot editor instance for the project is running with LSP enabled.
+- If you change host/port settings, restart Serena (or restart the language server).
+
 #### Java (`eclipse.jdt.ls`)
 
 The following settings are supported for the Java language server:
