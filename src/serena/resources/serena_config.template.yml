@@ -7,6 +7,12 @@
 #      in your IDE).
 language_backend: LSP
 
+# line ending convention to use when writing source files.
+# Possible values: "lf" (Unix), "crlf" (Windows), "native" (platform default).
+# Note that Serena's own files (e.g. memories and configuration files) always use native line endings.
+# This setting can be overridden on a per-project basis in project.yml files.
+line_ending: native
+
 # whether to open a graphical window with Serena's logs.
 # This is mainly supported on Windows and (partly) on Linux; not available on macOS.
 # If you prefer a browser-based tool, use the `web_dashboard` option instead.

@@ -73,7 +73,7 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
             ), f"Cannot create file outside of the project directory, got {relative_path=}"
 
         abs_path.parent.mkdir(parents=True, exist_ok=True)
-        abs_path.write_text(content, encoding=self.project.project_config.encoding)
+        abs_path.write_text(content, encoding=self.project.project_config.encoding, newline=self.project.line_ending.newline_str)
         answer = f"File created: {relative_path}."
         if will_overwrite_existing:
             answer += " Overwrote existing file."

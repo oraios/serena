@@ -182,6 +182,35 @@ class LanguageBackend(Enum):
         return self == LanguageBackend.JETBRAINS
 
 
+class LineEnding(Enum):
+    """Line ending convention for file writes."""
+
+    LF = "lf"
+    CRLF = "crlf"
+    NATIVE = "native"
+
+    @property
+    def newline_str(self) -> str | None:
+        """The newline parameter value for :func:`open` and :meth:`Path.write_text`.
+
+        Returns ``None`` for native mode (platform default).
+        """
+        if self is LineEnding.LF:
+            return "\n"
+        elif self is LineEnding.CRLF:
+            return "\r\n"
+        return None
+
+    @classmethod
+    def from_str(cls, value: str) -> "LineEnding":
+        """Parse a string value into a :class:`LineEnding`."""
+        try:
+            return cls(value.lower())
+        except ValueError as e:
+            valid = [le.value for le in cls]
+            raise ValueError(f"Invalid line_ending: {value!r}. Valid values are: {valid}") from e
+
+
 @dataclass
 class SharedConfig(ModeSelectionDefinition, ToolInclusionDefinition, ToStringMixin):
     """Shared between SerenaConfig and ProjectConfig, the latter used to override values in the form
@@ -191,6 +220,7 @@ class SharedConfig(ModeSelectionDefinition, ToolInclusionDefinition, ToStringMix
 
     symbol_info_budget: float | None = None
     language_backend: LanguageBackend | None = None
+    line_ending: LineEnding | None = None
     read_only_memory_patterns: list[str] = field(default_factory=list)
 
 
@@ -388,6 +418,9 @@ class ProjectConfig(SharedConfig):
         language_backend_value = data.get("language_backend")
         language_backend = LanguageBackend.from_str(language_backend_value) if language_backend_value else None
 
+        line_ending_value = data.get("line_ending")
+        line_ending = LineEnding.from_str(line_ending_value) if line_ending_value else None
+
         return cls(
             project_name=data["project_name"],
             languages=languages,
@@ -400,6 +433,7 @@ class ProjectConfig(SharedConfig):
             ignore_all_files_in_gitignore=data["ignore_all_files_in_gitignore"],
             initial_prompt=data["initial_prompt"],
             encoding=data["encoding"],
+            line_ending=line_ending,
             language_backend=language_backend,
             base_modes=data["base_modes"],
             default_modes=data["default_modes"],
@@ -413,6 +447,7 @@ class ProjectConfig(SharedConfig):
         d = dataclasses.asdict(self)
         d["languages"] = [lang.value for lang in self.languages]
         d["language_backend"] = self.language_backend.value if self.language_backend is not None else None
+        d["line_ending"] = self.line_ending.value if self.line_ending is not None else None
         return d
 
     @classmethod
@@ -556,11 +591,6 @@ class SerenaConfig(SharedConfig):
     jetbrains_plugin_server_address: str = "127.0.0.1"
     tool_timeout: float = DEFAULT_TOOL_TIMEOUT
 
-    language_backend: LanguageBackend = LanguageBackend.LSP
-    """
-    the language backend to use for code understanding features
-    """
-
     token_count_estimator: str = RegisteredTokenCountEstimator.CHAR_COUNT.name
     """Only relevant if `record_tool_usage` is True; the name of the token count estimator to use for tool usage statistics.
     See the `RegisteredTokenCountEstimator` enum for available options.
@@ -593,7 +623,12 @@ class SerenaConfig(SharedConfig):
     """
 
     # settings with overridden defaults
+    language_backend: LanguageBackend = LanguageBackend.LSP
+    """
+    the language backend to use for code understanding features
+    """
     default_modes: Sequence[str] | None = ("interactive", "editing")
+    line_ending: LineEnding = LineEnding.NATIVE
     symbol_info_budget: float = 10.0
     """
     Time budget (seconds) for requests when tools request include_info (currently
@@ -614,7 +649,7 @@ class SerenaConfig(SharedConfig):
     # *** static members ***
 
     CONFIG_FILE = "serena_config.yml"
-    CONFIG_FIELDS_WITH_TYPE_CONVERSION = {"projects", "language_backend"}
+    CONFIG_FIELDS_WITH_TYPE_CONVERSION = {"projects", "language_backend", "line_ending"}
 
     # *** methods ***
     @classmethod
@@ -745,6 +780,14 @@ class SerenaConfig(SharedConfig):
                     language_backend = LanguageBackend.JETBRAINS
                 del loaded_commented_yaml["jetbrains"]
         instance.language_backend = language_backend
+
+        # determine line ending
+        line_ending_value = loaded_commented_yaml.get("line_ending")
+        if line_ending_value:
+            instance.line_ending = LineEnding.from_str(line_ending_value)
+        else:
+            num_migrations += 1
+            instance.line_ending = get_dataclass_default(SerenaConfig, "line_ending")
 
         # migrate deprecated "gui_log_level" field if necessary
         if "gui_log_level" in loaded_commented_yaml:
@@ -912,6 +955,9 @@ class SerenaConfig(SharedConfig):
 
         # convert language backend to string
         commented_yaml["language_backend"] = self.language_backend.value
+
+        # convert line ending to string
+        commented_yaml["line_ending"] = self.line_ending.value
 
         # transfer comments from the template file
         # NOTE: The template file now uses leading comments, but we previously used trailing comments,

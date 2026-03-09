@@ -51,8 +51,7 @@ class Component(ABC):
         from serena.symbol import LanguageServerSymbolRetriever
 
         assert self.agent.get_language_backend().is_lsp(), "Language server symbol retriever can only be created for LSP language backend"
-        language_server_manager = self.agent.get_language_server_manager_or_raise()
-        return LanguageServerSymbolRetriever(language_server_manager, agent=self.agent)
+        return LanguageServerSymbolRetriever(self.project)
 
     @property
     def project(self) -> Project:
@@ -63,7 +62,7 @@ class Component(ABC):
 
         match self.agent.get_language_backend():
             case LanguageBackend.LSP:
-                return LanguageServerCodeEditor(self.create_language_server_symbol_retriever(), project_config=self.project.project_config)
+                return LanguageServerCodeEditor(self.create_language_server_symbol_retriever())
             case LanguageBackend.JETBRAINS:
                 return JetBrainsCodeEditor(project=self.project)
             case _:
