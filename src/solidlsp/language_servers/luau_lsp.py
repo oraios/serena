@@ -172,17 +172,17 @@ class LuauLanguageServer(SolidLanguageServer):
                 log.warning("Failed to download %s: %s", description, exc)
                 return None
 
-        @staticmethod
-        def _find_existing_binary(install_dir: Path) -> str | None:
-            binary_name = LuauLanguageServer.DependencyProvider._get_binary_name()
+        @classmethod
+        def _find_existing_binary(cls, install_dir: Path) -> str | None:
+            binary_name = cls._get_binary_name()
             direct_path = install_dir / binary_name
             if direct_path.exists():
-                LuauLanguageServer.DependencyProvider._ensure_executable_bit(direct_path)
+                cls._ensure_executable_bit(direct_path)
                 return str(direct_path)
 
             for candidate in install_dir.rglob(binary_name):
                 if candidate.is_file():
-                    LuauLanguageServer.DependencyProvider._ensure_executable_bit(candidate)
+                    cls._ensure_executable_bit(candidate)
                     return str(candidate)
 
             return None
@@ -328,7 +328,7 @@ class LuauLanguageServer(SolidLanguageServer):
 
         def window_log_message(msg: dict) -> None:
             message_text = msg.get("message", "")
-            log.info(f"LSP: window/logMessage: {message_text}")
+            log.info("LSP: window/logMessage: %s", message_text)
             if "workspace ready" in message_text.lower() or "initialized" in message_text.lower():
                 log.info("Luau language server signaled readiness")
                 self.server_ready.set()
