@@ -37,12 +37,18 @@ class TestProjectConfigAutogenerate:
         shutil.rmtree(self.test_dir)
 
     def test_autogenerate_empty_directory(self):
-        """Test that autogenerate raises ValueError with helpful message for empty directory."""
-        with pytest.raises(ValueError) as exc_info:
+        """Test that autogenerate succeeds with empty languages list for an empty directory."""
+        config = ProjectConfig.autogenerate(self.project_path, self.serena_config, save_to_disk=False)
+
+        assert config.project_name == self.project_path.name
+        assert config.languages == []
+
+    def test_autogenerate_empty_directory_logs_warning(self, caplog):
+        """Test that autogenerate logs a warning when no language files are found."""
+        with caplog.at_level(logging.WARNING):
             ProjectConfig.autogenerate(self.project_path, self.serena_config, save_to_disk=False)
 
-        error_message = str(exc_info.value)
-        assert "No source files found" in error_message
+        assert any("No source files for supported language servers were found" in msg for msg in caplog.messages)
 
     def test_autogenerate_with_python_files(self):
         """Test successful autogeneration with Python source files."""
@@ -105,7 +111,7 @@ class TestProjectConfigAutogenerate:
         assert "Project root not found" in str(exc_info.value)
 
     def test_autogenerate_with_gitignored_files_only(self):
-        """Test autogenerate behavior when only gitignored files exist."""
+        """Test autogenerate creates a project with empty languages when only gitignored files exist."""
         # Create a .gitignore that ignores all Python files
         gitignore = self.project_path / ".gitignore"
         gitignore.write_text("*.py\n")
@@ -113,11 +119,11 @@ class TestProjectConfigAutogenerate:
         # Create Python files that will be ignored
         (self.project_path / "ignored.py").write_text("print('ignored')")
 
-        # Should still raise ValueError as no source files are detected
-        with pytest.raises(ValueError) as exc_info:
-            ProjectConfig.autogenerate(self.project_path, self.serena_config, save_to_disk=False)
+        # Should succeed with empty languages (gitignored files are not counted)
+        config = ProjectConfig.autogenerate(self.project_path, self.serena_config, save_to_disk=False)
 
-        assert "No source files found" in str(exc_info.value)
+        assert config.project_name == self.project_path.name
+        assert config.languages == []
 
     def test_autogenerate_custom_project_name(self):
         """Test autogenerate with custom project name."""
