@@ -9,6 +9,11 @@ Requirements:
     - luau-lsp binary must be installed and available in PATH,
       or it will be automatically downloaded from GitHub releases.
 
+Advanced settings via ls_specific_settings["luau"]:
+    - platform: "roblox" (default) or "standard"
+    - roblox_security_level: "None", "PluginSecurity" (default),
+      "LocalUserSecurity", or "RobloxScriptSecurity"
+
 See: https://github.com/JohnnyMorganz/luau-lsp
 """
 
@@ -34,9 +39,18 @@ log = logging.getLogger(__name__)
 # Pin to a known stable release
 LUAU_LSP_VERSION = "1.63.0"
 
+# Luau built-in docs CDN
+LUAU_DOCS_URL = "https://luau-lsp.pages.dev/api-docs/luau-en-us.json"
+
 # Roblox type definitions and API docs CDN
-ROBLOX_TYPES_URL = "https://luau-lsp.pages.dev/type-definitions/globalTypes.PluginSecurity.d.luau"
 ROBLOX_DOCS_URL = "https://luau-lsp.pages.dev/api-docs/en-us.json"
+SUPPORTED_PLATFORMS = {"roblox", "standard"}
+SUPPORTED_ROBLOX_SECURITY_LEVELS = {
+    "None",
+    "PluginSecurity",
+    "LocalUserSecurity",
+    "RobloxScriptSecurity",
+}
 
 
 class LuauLanguageServer(SolidLanguageServer):
@@ -65,7 +79,7 @@ class LuauLanguageServer(SolidLanguageServer):
             return self._download_luau_lsp()
 
         def _create_launch_command(self, core_path: str) -> list[str]:
-            definitions_path, docs_path = self._download_roblox_definitions()
+            definitions_path, docs_path = self._resolve_support_files()
 
             cmd = [core_path, "lsp"]
             if definitions_path is not None:
@@ -107,13 +121,32 @@ class LuauLanguageServer(SolidLanguageServer):
 
             return binary_path
 
-        def _download_roblox_definitions(self) -> tuple[str | None, str | None]:
+        def _resolve_support_files(self) -> tuple[str | None, str | None]:
+            platform_type = LuauLanguageServer._get_platform_type(self._custom_settings)
+            if platform_type == "standard":
+                return None, self._download_standard_docs()
+
+            security_level = LuauLanguageServer._get_roblox_security_level(self._custom_settings)
+            return self._download_roblox_support_files(security_level)
+
+        def _download_standard_docs(self) -> str | None:
             install_dir = Path(self._ls_resources_dir)
             install_dir.mkdir(parents=True, exist_ok=True)
 
+            return self._download_auxiliary_file(
+                install_dir / "luau-en-us.json",
+                LUAU_DOCS_URL,
+                "Luau API docs",
+            )
+
+        def _download_roblox_support_files(self, security_level: str) -> tuple[str | None, str | None]:
+            install_dir = Path(self._ls_resources_dir)
+            install_dir.mkdir(parents=True, exist_ok=True)
+
+            definitions_filename = f"globalTypes.{security_level}.d.luau"
             definitions_path = self._download_auxiliary_file(
-                install_dir / "globalTypes.d.luau",
-                ROBLOX_TYPES_URL,
+                install_dir / definitions_filename,
+                f"https://luau-lsp.pages.dev/type-definitions/{definitions_filename}",
                 "Roblox type definitions",
             )
             docs_path = self._download_auxiliary_file(
@@ -183,6 +216,30 @@ class LuauLanguageServer(SolidLanguageServer):
             if system == "Windows":
                 return "luau-lsp-win64.zip"
             raise RuntimeError(f"Unsupported operating system: {system}")
+
+    @staticmethod
+    def _get_platform_type(custom_settings: SolidLSPSettings.CustomLSSettings) -> str:
+        platform_type = custom_settings.get("platform", "roblox")
+        if platform_type not in SUPPORTED_PLATFORMS:
+            raise ValueError(
+                f"Unsupported Luau platform: {platform_type}. "
+                f"Expected one of: {', '.join(sorted(SUPPORTED_PLATFORMS))}"
+            )
+        return platform_type
+
+    @staticmethod
+    def _get_roblox_security_level(custom_settings: SolidLSPSettings.CustomLSSettings) -> str:
+        security_level = custom_settings.get("roblox_security_level", "PluginSecurity")
+        if security_level not in SUPPORTED_ROBLOX_SECURITY_LEVELS:
+            raise ValueError(
+                f"Unsupported Luau Roblox security level: {security_level}. "
+                f"Expected one of: {', '.join(sorted(SUPPORTED_ROBLOX_SECURITY_LEVELS))}"
+            )
+        return security_level
+
+    @classmethod
+    def _get_workspace_configuration(cls, custom_settings: SolidLSPSettings.CustomLSSettings) -> dict[str, dict[str, str]]:
+        return {"platform": {"type": cls._get_platform_type(custom_settings)}}
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
@@ -266,7 +323,8 @@ class LuauLanguageServer(SolidLanguageServer):
 
         def workspace_configuration_handler(params: dict) -> list:
             items = params.get("items", [])
-            return [{} for _ in items]
+            config = self._get_workspace_configuration(self._custom_settings)
+            return [config for _ in items]
 
         def window_log_message(msg: dict) -> None:
             message_text = msg.get("message", "")
