@@ -31,8 +31,9 @@ Global memories use the top-level topic `global`, i.e. whenever a memory name st
 it is stored in the global memories directory and is shared across all projects.
 
 By default, deletion and editing of global memories is allowed.
-If you want to primarily manage such memories yourself and protect them from accidental modification by the agent,
-set `edit_global_memories: False` in Serena's [global configuration](050_configuration).
+If you want to protect them from accidental modification by the agent,
+you can add regex patterns to `read_only_memory_patterns` in your global or
+project-level [configuration](050_configuration). For example, setting "global/.*" will mark all global memories as read-only. The agent will be informed which memories are read-only.
 
 Since global memories are not versioned alongside your project files,
 it can be helpful to track global memories with git (i.e. to make `~/.serena/memories/` a git repository)
