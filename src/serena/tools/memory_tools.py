@@ -1,9 +1,9 @@
 from typing import Literal
 
-from typing import Literal
 
 from serena.tools import Tool, ToolMarkerCanEdit, ToolMarkerOptional
 from serena.util.frontmatter import parse_frontmatter
+
 
 class WriteMemoryTool(Tool, ToolMarkerCanEdit):
     """
@@ -74,24 +74,25 @@ class MemoryGetFrontmatterTool(Tool, ToolMarkerOptional):
 
     Use this tool only when the metadata is useful for the current task.
     Avoid storing long summaries in frontmatter, as it can waste tokens.
-    """ 
-    def apply(self, memory_name: str) -> str: 
+    """
+
+    def apply(self, memory_name: str) -> str:
         """
         Returns the frontmatter as JSON (a dict). If the memory has no frontmatter,
         returns an empty dict.
 
         :param memory_name: memory name (may include "/")
-        """ 
+        """
         memory_file_path = self.memories_manager.get_memory_file_path(memory_name)
         if not memory_file_path.exists():
             return self._to_json({"error": f"Memory {memory_name} not found"})
-        
+
         with open(memory_file_path, encoding=self.memories_manager._encoding) as f:
             raw = f.read()
 
-        frontmatter, _  = parse_frontmatter(raw)
+        frontmatter, _ = parse_frontmatter(raw)
         return self._to_json(frontmatter)
-        
+
 
 class DeleteMemoryTool(Tool, ToolMarkerCanEdit):
     """
