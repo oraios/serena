@@ -32,7 +32,7 @@ from solidlsp.settings import SolidLSPSettings
 log = logging.getLogger(__name__)
 
 # Pin to a known stable release
-LUAU_LSP_VERSION = "1.57.1"
+LUAU_LSP_VERSION = "1.63.0"
 
 # Roblox type definitions and API docs CDN
 ROBLOX_TYPES_URL = "https://luau-lsp.pages.dev/type-definitions/globalTypes.PluginSecurity.d.luau"
