@@ -24,10 +24,9 @@ from pathlib import Path
 import requests
 from overrides import override
 
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -58,209 +57,138 @@ class LuauLanguageServer(SolidLanguageServer):
             ".cache",
         ]
 
-    @staticmethod
-    def _get_luau_lsp_path() -> str | None:
-        """Get the path to luau-lsp executable."""
-        # First check if it's in PATH
-        luau_lsp = shutil.which("luau-lsp")
-        if luau_lsp:
-            return luau_lsp
+    class DependencyProvider(LanguageServerDependencyProviderSinglePath):
+        def _get_or_install_core_dependency(self) -> str:
+            luau_lsp_path = shutil.which("luau-lsp")
+            if luau_lsp_path is not None:
+                return luau_lsp_path
+            return self._download_luau_lsp()
 
-        # Check common installation locations
-        home = Path.home()
-        possible_paths = [
-            home / ".serena" / "language_servers" / "luau" / "luau-lsp",
-            home / ".local" / "bin" / "luau-lsp",
-            Path("/usr/local/bin/luau-lsp"),
-        ]
+        def _create_launch_command(self, core_path: str) -> list[str]:
+            definitions_path, docs_path = self._download_roblox_definitions()
 
-        # Add platform-specific paths
-        system = platform.system()
-        if system == "Windows":
-            possible_paths.extend(
-                [
-                    home / ".serena" / "language_servers" / "luau" / "luau-lsp.exe",
-                    home / "AppData" / "Local" / "luau-lsp" / "luau-lsp.exe",
-                ]
+            cmd = [core_path, "lsp"]
+            if definitions_path is not None:
+                cmd.append(f"--definitions:@roblox={definitions_path}")
+            if docs_path is not None:
+                cmd.append(f"--docs={docs_path}")
+            return cmd
+
+        def _download_luau_lsp(self) -> str:
+            install_dir = Path(self._ls_resources_dir)
+            install_dir.mkdir(parents=True, exist_ok=True)
+
+            binary_path = self._find_existing_binary(install_dir)
+            if binary_path is not None:
+                return binary_path
+
+            asset_name = self._get_luau_lsp_asset_name()
+            download_url = f"https://github.com/JohnnyMorganz/luau-lsp/releases/download/{LUAU_LSP_VERSION}/{asset_name}"
+            download_path = install_dir / asset_name
+
+            log.info("Downloading luau-lsp %s from %s", LUAU_LSP_VERSION, download_url)
+            with requests.get(download_url, stream=True, timeout=60) as response:
+                response.raise_for_status()
+                with open(download_path, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+
+            log.info("Extracting luau-lsp to %s", install_dir)
+            with zipfile.ZipFile(download_path, "r") as zip_ref:
+                zip_ref.extractall(install_dir)
+
+            if download_path.exists():
+                download_path.unlink()
+
+            binary_path = self._find_existing_binary(install_dir)
+            if binary_path is None:
+                raise RuntimeError("Failed to find luau-lsp executable after extraction")
+
+            return binary_path
+
+        def _download_roblox_definitions(self) -> tuple[str | None, str | None]:
+            install_dir = Path(self._ls_resources_dir)
+            install_dir.mkdir(parents=True, exist_ok=True)
+
+            definitions_path = self._download_auxiliary_file(
+                install_dir / "globalTypes.d.luau",
+                ROBLOX_TYPES_URL,
+                "Roblox type definitions",
             )
-        elif system == "Darwin":
-            # Homebrew or aftman
-            possible_paths.extend(
-                [
-                    Path("/opt/homebrew/bin/luau-lsp"),
-                    home / ".aftman" / "bin" / "luau-lsp",
-                ]
+            docs_path = self._download_auxiliary_file(
+                install_dir / "en-us.json",
+                ROBLOX_DOCS_URL,
+                "Roblox API docs",
             )
-        else:
-            # Linux - aftman
-            possible_paths.append(home / ".aftman" / "bin" / "luau-lsp")
 
-        for path in possible_paths:
+            return definitions_path, docs_path
+
+        @staticmethod
+        def _download_auxiliary_file(path: Path, url: str, description: str) -> str | None:
             if path.exists():
                 return str(path)
 
-        return None
+            try:
+                log.info("Downloading %s from %s", description, url)
+                response = requests.get(url, timeout=30)
+                response.raise_for_status()
+                path.write_bytes(response.content)
+                return str(path)
+            except Exception as exc:
+                log.warning("Failed to download %s: %s", description, exc)
+                return None
 
-    @staticmethod
-    def _download_luau_lsp() -> str:
-        """Download and install luau-lsp if not present."""
-        system = platform.system()
-        machine = platform.machine().lower()
-        version = LUAU_LSP_VERSION
+        @staticmethod
+        def _find_existing_binary(install_dir: Path) -> str | None:
+            binary_name = LuauLanguageServer.DependencyProvider._get_binary_name()
+            direct_path = install_dir / binary_name
+            if direct_path.exists():
+                LuauLanguageServer.DependencyProvider._ensure_executable_bit(direct_path)
+                return str(direct_path)
 
-        # Map platform to download filename
-        # Asset names: luau-lsp-win64.zip, luau-lsp-linux-x86_64.zip, luau-lsp-macos.zip
-        if system == "Linux":
-            if machine in ["x86_64", "amd64"]:
-                asset_name = "luau-lsp-linux-x86_64.zip"
-            else:
+            for candidate in install_dir.rglob(binary_name):
+                if candidate.is_file():
+                    LuauLanguageServer.DependencyProvider._ensure_executable_bit(candidate)
+                    return str(candidate)
+
+            return None
+
+        @staticmethod
+        def _ensure_executable_bit(binary_path: Path) -> None:
+            if platform.system() != "Windows":
+                binary_path.chmod(0o755)
+
+        @staticmethod
+        def _get_binary_name() -> str:
+            return "luau-lsp.exe" if platform.system() == "Windows" else "luau-lsp"
+
+        @staticmethod
+        def _get_luau_lsp_asset_name() -> str:
+            system = platform.system()
+            machine = platform.machine().lower()
+
+            if system == "Linux":
+                if machine in ["x86_64", "amd64"]:
+                    return "luau-lsp-linux-x86_64.zip"
+                if machine in ["aarch64", "arm64"]:
+                    return "luau-lsp-linux-arm64.zip"
                 raise RuntimeError(
                     f"Unsupported Linux architecture: {machine}. "
-                    "luau-lsp only provides linux-x86_64 binaries. "
+                    "luau-lsp only provides linux-x86_64 and linux-arm64 binaries. "
                     "Please build from source: https://github.com/JohnnyMorganz/luau-lsp"
                 )
-        elif system == "Darwin":
-            # macOS uses a single universal binary
-            asset_name = "luau-lsp-macos.zip"
-        elif system == "Windows":
-            asset_name = "luau-lsp-win64.zip"
-        else:
+            if system == "Darwin":
+                return "luau-lsp-macos.zip"
+            if system == "Windows":
+                return "luau-lsp-win64.zip"
             raise RuntimeError(f"Unsupported operating system: {system}")
 
-        download_url = f"https://github.com/JohnnyMorganz/luau-lsp/releases/download/{version}/{asset_name}"
-
-        # Create installation directory
-        install_dir = Path.home() / ".serena" / "language_servers" / "luau"
-        install_dir.mkdir(parents=True, exist_ok=True)
-
-        # Download the file
-        log.info(f"Downloading luau-lsp from {download_url}...")
-        print(f"Downloading luau-lsp {version} from {download_url}...")
-        response = requests.get(download_url, stream=True)
-        response.raise_for_status()
-
-        # Save the zip
-        download_path = install_dir / asset_name
-        with open(download_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-
-        # Extract
-        log.info(f"Extracting luau-lsp to {install_dir}...")
-        print(f"Extracting luau-lsp to {install_dir}...")
-        with zipfile.ZipFile(download_path, "r") as zip_ref:
-            zip_ref.extractall(install_dir)
-
-        # Clean up download file
-        download_path.unlink()
-
-        # Find the binary
-        if system == "Windows":
-            binary_name = "luau-lsp.exe"
-        else:
-            binary_name = "luau-lsp"
-
-        binary_path = install_dir / binary_name
-        if not binary_path.exists():
-            # Some releases may extract into a subdirectory
-            for candidate in install_dir.rglob(binary_name):
-                binary_path = candidate
-                break
-
-        if not binary_path.exists():
-            raise RuntimeError("Failed to find luau-lsp executable after extraction")
-
-        # Make executable on Unix systems
-        if system != "Windows":
-            binary_path.chmod(0o755)
-
-        log.info(f"luau-lsp installed at: {binary_path}")
-        print(f"luau-lsp installed at: {binary_path}")
-        return str(binary_path)
-
-    @staticmethod
-    def _download_roblox_definitions() -> tuple[str | None, str | None]:
-        """Download Roblox type definitions and API docs if not already cached.
-
-        Returns a tuple of (definitions_path, docs_path). Either may be None if download fails.
-        """
-        install_dir = Path.home() / ".serena" / "language_servers" / "luau"
-        install_dir.mkdir(parents=True, exist_ok=True)
-
-        definitions_path = install_dir / "globalTypes.d.luau"
-        docs_path = install_dir / "en-us.json"
-
-        result_definitions: str | None = None
-        result_docs: str | None = None
-
-        # Download type definitions if not cached
-        if definitions_path.exists():
-            result_definitions = str(definitions_path)
-        else:
-            try:
-                log.info(f"Downloading Roblox type definitions from {ROBLOX_TYPES_URL}...")
-                resp = requests.get(ROBLOX_TYPES_URL, timeout=30)
-                resp.raise_for_status()
-                definitions_path.write_bytes(resp.content)
-                result_definitions = str(definitions_path)
-                log.info(f"Roblox type definitions saved to {definitions_path}")
-            except Exception as e:
-                log.warning(f"Failed to download Roblox type definitions: {e}")
-
-        # Download API docs if not cached
-        if docs_path.exists():
-            result_docs = str(docs_path)
-        else:
-            try:
-                log.info(f"Downloading Roblox API docs from {ROBLOX_DOCS_URL}...")
-                resp = requests.get(ROBLOX_DOCS_URL, timeout=30)
-                resp.raise_for_status()
-                docs_path.write_bytes(resp.content)
-                result_docs = str(docs_path)
-                log.info(f"Roblox API docs saved to {docs_path}")
-            except Exception as e:
-                log.warning(f"Failed to download Roblox API docs: {e}")
-
-        return result_definitions, result_docs
-
-    @staticmethod
-    def _setup_runtime_dependency() -> tuple[str, str | None, str | None]:
-        """
-        Check if luau-lsp is available.
-        Downloads it if not present.
-        Also downloads Roblox type definitions and API docs.
-
-        Returns a tuple of (binary_path, definitions_path, docs_path).
-        """
-        luau_lsp_path = LuauLanguageServer._get_luau_lsp_path()
-
-        if not luau_lsp_path:
-            log.info("luau-lsp not found. Downloading...")
-            print("luau-lsp not found. Downloading...")
-            luau_lsp_path = LuauLanguageServer._download_luau_lsp()
-
-        definitions_path, docs_path = LuauLanguageServer._download_roblox_definitions()
-
-        return luau_lsp_path, definitions_path, docs_path
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        luau_lsp_path, definitions_path, docs_path = self._setup_runtime_dependency()
-
-        # Build CLI command with optional Roblox definitions
-        cmd = [luau_lsp_path, "lsp"]
-        if definitions_path:
-            cmd.append(f"--definitions:@roblox={definitions_path}")
-        if docs_path:
-            cmd.append(f"--docs={docs_path}")
-
-        # luau-lsp uses subcommand 'lsp' to start in Language Server mode
-        super().__init__(
-            config,
-            repository_root_path,
-            ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path),
-            "luau",
-            solidlsp_settings,
-        )
+        super().__init__(config, repository_root_path, None, "luau", solidlsp_settings)
         self.server_ready = threading.Event()
 
     @staticmethod
