@@ -77,8 +77,9 @@ class LanguageServerManager:
         """
         self._language_servers = language_servers
         self._language_server_factory = language_server_factory
-        self._default_language_server = next(iter(language_servers.values()))
-        self._root_path = self._default_language_server.repository_root_path
+        self._default_language_server: SolidLanguageServer | None = None
+        self._root_path: str | None = None
+        self._sync_default_ls()
 
     @staticmethod
     def from_languages(languages: list[Language], factory: LanguageServerFactory) -> "LanguageServerManager":
@@ -139,6 +140,17 @@ class LanguageServerManager:
 
         return LanguageServerManager(language_servers, factory)
 
+    def _sync_default_ls(self) -> None:
+        """Synchronize _default_language_server and _root_path after any change to _language_servers."""
+        if self._language_servers:
+            # Keep the current default if it is still in the managed set; otherwise pick the first available one
+            if self._default_language_server not in self._language_servers.values():
+                self._default_language_server = next(iter(self._language_servers.values()))
+            self._root_path = self._default_language_server.repository_root_path
+        else:
+            self._default_language_server = None
+            self._root_path = None
+
     def get_root_path(self) -> str:
         return self._root_path
 
@@ -172,6 +184,7 @@ class LanguageServerManager:
         language_server = self._language_server_factory.create_language_server(language)
         language_server.start()
         self._language_servers[language] = language_server
+        self._sync_default_ls()
         return language_server
 
     def restart_language_server(self, language: Language) -> SolidLanguageServer:
@@ -207,6 +220,7 @@ class LanguageServerManager:
         if language not in self._language_servers:
             raise ValueError(f"No language server for language {language.value} present; cannot remove")
         ls = self._language_servers.pop(language)
+        self._sync_default_ls()
         self._stop_language_server(ls, save_cache=save_cache)
 
     def get_active_languages(self) -> list[Language]:
