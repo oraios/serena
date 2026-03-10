@@ -337,7 +337,7 @@ class Project(ToStringMixin):
         return self._serena_data_folder
 
     def path_to_project_yml(self) -> str:
-        return self._serena_config.get_project_yml_location(self.project_root)
+        return self.serena_config.get_project_yml_location(self.project_root)
 
     def get_activation_message(self) -> str:
         """
