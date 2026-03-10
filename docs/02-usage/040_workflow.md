@@ -197,3 +197,40 @@ Depending on the language backend being used, the management of resources for th
   where `<serena>` is your way of running Serena. For example, when using `uvx`, run
 
       uvx --from git+https://github.com/oraios/serena serena start-project-server
+
+(http-mode-workflow)=
+## Running a Persistent Server in HTTP Mode
+
+By default, Serena operates in stdio mode, where the MCP client (e.g. Claude Code) starts and
+stops the Serena server process automatically. For most single-client, single-project workflows,
+this is the simplest option.
+
+However, there are scenarios where starting Serena in [Streamable HTTP mode](streamable-http) is
+more appropriate:
+
+**Multiple simultaneous clients**. HTTP mode allows several clients or agent instances to share a
+single, running Serena server — and thus share its state, such as loaded language servers and
+project memories. In stdio mode, each client connection launches its own isolated server process.
+
+**Persistent state between conversations**. In stdio mode, the Serena server starts fresh with
+each client invocation, which may incur delays (e.g. for language server initialization and
+project indexing). In HTTP mode, the server and its active language servers remain running
+between conversations, so subsequent interactions start without those delays.
+
+**Docker or remote deployments**. When Serena runs inside a Docker container or on a remote host,
+HTTP mode is often the natural choice: the container or remote host can expose Serena's port while
+running the server as a persistent background process, and any compliant MCP client can connect to
+it via the server's URL.
+
+**Explicit lifecycle control**. In HTTP mode, you decide when to start and stop Serena, independent
+of any client connection. This is useful in automated or scripted workflows where you want fine-grained
+control over the server lifecycle.
+
+:::{warning}
+HTTP mode exposes Serena's API over a network port. By default, the server binds to `localhost` only,
+so it is not reachable from other machines. If you choose to expose Serena on a network-accessible
+address, be aware of the security implications: Serena has access to your filesystem and can execute
+shell commands. See [Security Considerations](070_security) for details.
+:::
+
+To start Serena in HTTP mode, see the [Streamable HTTP Mode](streamable-http) section.
