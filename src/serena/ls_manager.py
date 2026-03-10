@@ -77,9 +77,8 @@ class LanguageServerManager:
         """
         self._language_servers = language_servers
         self._language_server_factory = language_server_factory
-        self._default_language_server: SolidLanguageServer | None = None
-        self._root_path: str | None = None
-        self._sync_default_ls()
+        self._default_language_server = next(iter(language_servers.values()))
+        self._root_path = self._default_language_server.repository_root_path
 
     @staticmethod
     def from_languages(languages: list[Language], factory: LanguageServerFactory) -> "LanguageServerManager":
