@@ -681,9 +681,6 @@ class LanguageServerSymbolRetriever:
 
         return info_by_symbol
 
-    def get_root_path(self) -> str:
-        return self._ls_manager.get_root_path()
-
     def can_analyze_file(self, relative_file_path: str) -> bool:
         return self._ls_manager.has_suitable_ls_for_file(relative_file_path)
 
