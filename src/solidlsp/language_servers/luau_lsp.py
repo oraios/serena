@@ -221,10 +221,7 @@ class LuauLanguageServer(SolidLanguageServer):
     def _get_platform_type(custom_settings: SolidLSPSettings.CustomLSSettings) -> str:
         platform_type = custom_settings.get("platform", "roblox")
         if platform_type not in SUPPORTED_PLATFORMS:
-            raise ValueError(
-                f"Unsupported Luau platform: {platform_type}. "
-                f"Expected one of: {', '.join(sorted(SUPPORTED_PLATFORMS))}"
-            )
+            raise ValueError(f"Unsupported Luau platform: {platform_type}. Expected one of: {', '.join(sorted(SUPPORTED_PLATFORMS))}")
         return platform_type
 
     @staticmethod

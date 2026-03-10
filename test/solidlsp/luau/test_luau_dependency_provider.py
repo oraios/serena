@@ -148,9 +148,7 @@ class TestLuauDependencyProvider:
         assert (tmp_path / "luau-en-us.json").read_bytes() == b"docs"
 
     def test_workspace_configuration_uses_configured_platform(self) -> None:
-        config = LuauLanguageServer._get_workspace_configuration(
-            SolidLSPSettings.CustomLSSettings({"platform": "standard"})
-        )
+        config = LuauLanguageServer._get_workspace_configuration(SolidLSPSettings.CustomLSSettings({"platform": "standard"}))
         assert config == {"platform": {"type": "standard"}}
 
     def test_invalid_platform_raises(self, tmp_path: Path) -> None:
