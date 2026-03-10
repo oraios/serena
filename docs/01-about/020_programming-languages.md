@@ -65,6 +65,7 @@ Some languages require additional installations or setup steps, as noted.
 * **Kotlin**  
   (uses the pre-alpha [official kotlin LS](https://github.com/Kotlin/kotlin-lsp), some issues may appear)
 * **Lua**
+* **Luau**
 * **Markdown**  
   (must explicitly enable language `markdown`, primarily useful for documentation-heavy projects)
 * **Nix**  
