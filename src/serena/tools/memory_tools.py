@@ -58,8 +58,8 @@ class ListMemoriesTool(Tool):
         Lists available memories, optionally filtered by topic.
         """
         return self._to_json(self.memories_manager.list_memories(topic).to_dict())
-    
-    
+
+
 class MemoryGetFrontmatterTool(Tool, ToolMarkerOptional):
     """
     OPTIONAL. Reads and returns the frontmatter of a memory file (if present).
