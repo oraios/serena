@@ -16,12 +16,12 @@ class WriteMemoryTool(Tool, ToolMarkerCanEdit):
         If explicitly instructed, use the "global/" prefix for writing a memory that is shared across projects
         (e.g., "global/java/style_guide")
 
-        :param max_chars: the maximum number of characters to write. By default, determined by the config,
-            change only if instructed to do so.
+        :param max_chars: the maximum number of characters to write. By default, determined by the
+            max_memory_length config setting. Change only if instructed to do so.
         """
         # NOTE: utf-8 encoding is configured in the MemoriesManager
         if max_chars == -1:
-            max_chars = self.agent.serena_config.default_max_tool_answer_chars
+            max_chars = self.agent.serena_config.max_memory_length
         if len(content) > max_chars:
             raise ValueError(
                 f"Content for {memory_name} is too long. Max length is {max_chars} characters. " + "Please make the content shorter."

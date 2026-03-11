@@ -110,6 +110,11 @@ default_modes:
 # through the global configuration.
 default_max_tool_answer_chars: 150000
 
+# Maximum number of characters that can be written to a memory file via the write_memory tool.
+# This limit is independent of default_max_tool_answer_chars, which controls tool response sizes.
+# Increase this if you need to store larger memory files.
+max_memory_length: 50000
+
 # the name of the token count estimator to use for tool usage statistics.
 # See the `RegisteredTokenCountEstimator` enum for available options.
 #

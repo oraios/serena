@@ -604,6 +604,12 @@ class SerenaConfig(SharedConfig):
     Even though the value of the max_answer_chars can be changed when calling the tool, it may make sense to adjust this default 
     through the global configuration.
     """
+    max_memory_length: int = 50_000
+    """Maximum number of characters that can be written to a memory file via the write_memory tool.
+    This limit is independent of default_max_tool_answer_chars, which controls the size of tool responses
+    sent back to the LLM. Memory files are stored on disk, so they can be larger than typical tool responses,
+    but should still be kept concise to remain useful.
+    """
     ls_specific_settings: dict = field(default_factory=dict)
     """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""
 
