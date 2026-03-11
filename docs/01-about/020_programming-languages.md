@@ -67,6 +67,8 @@ Some languages require additional installations or setup steps, as noted.
 * **Lua**
 * **Markdown**  
   (must explicitly enable language `markdown`, primarily useful for documentation-heavy projects)
+* **Nim**  
+  (requires installation of [nimlangserver](https://github.com/nim-lang/langserver): `nimble install nimlangserver`)
 * **Nix**  
   (requires nixd installation)
 * **OCaml**
