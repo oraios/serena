@@ -122,6 +122,13 @@ class Language(str, Enum):
     Supports .sv, .svh, .v, .vh files.
     Automatically downloads verible binary.
     """
+    SOLIDITY = "solidity"
+    """Solidity language server using the Nomic Foundation Solidity Language Server
+    (@nomicfoundation/solidity-language-server).
+    Supports .sol files. Provides go-to-definition, find references, document symbols,
+    hover, and diagnostics. Requires Node.js and npm.
+    Works best with a foundry.toml or hardhat.config.js in the project root.
+    """
 
     @classmethod
     def iter_all(cls, include_experimental: bool = False) -> Iterable[Self]:
@@ -148,6 +155,7 @@ class Language(str, Enum):
             self.TOML,
             self.GROOVY,
             self.CPP_CCLS,
+            self.SOLIDITY,
         }
 
     def __str__(self) -> str:
@@ -289,6 +297,8 @@ class Language(str, Enum):
                 )
             case self.SYSTEMVERILOG:
                 return FilenameMatcher("*.sv", "*.svh", "*.v", "*.vh")
+            case self.SOLIDITY:
+                return FilenameMatcher("*.sol")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -492,6 +502,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.systemverilog_server import SystemVerilogLanguageServer
 
                 return SystemVerilogLanguageServer
+            case self.SOLIDITY:
+                from solidlsp.language_servers.solidity_language_server import SolidityLanguageServer
+
+                return SolidityLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

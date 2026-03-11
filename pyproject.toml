@@ -330,6 +330,7 @@ markers = [
   "systemverilog: language server running for SystemVerilog (uses verible-verilog-ls)",
   "hlsl: language server running for HLSL shaders (uses shader-language-server)",
   "lean4: language server running for Lean 4",
+  "solidity: language server running for Solidity (uses @nomicfoundation/solidity-language-server)",
 ]
 
 [tool.codespell]
