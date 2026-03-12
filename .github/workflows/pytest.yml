@@ -503,6 +503,24 @@ jobs:
             FPC_BIN_DIR=$(dirname "$FPC_EXE")
             echo "$FPC_BIN_DIR" >> $GITHUB_PATH
           fi
+      - name: Install COBOL Compiler (GnuCOBOL)
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y gnucobol
+            # Verify installation
+            cobc --version || echo "WARNING: GnuCOBOL installation may have failed"
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            brew install gnucobol
+            # Verify installation
+            cobc --version || echo "WARNING: GnuCOBOL installation may have failed"
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            # On Windows, we'll skip COBOL tests as GnuCOBOL installation is complex
+            # and enterprise COBOL LSPs (IBM Z Open Editor) require VSCode extensions
+            echo "Skipping COBOL installation on Windows"
+            echo "SKIP_COBOL_TESTS=true" >> $GITHUB_ENV
+          fi
       - name: Verify FPC installation
         shell: bash
         run: |

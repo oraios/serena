@@ -1,0 +1,19 @@
+# COBOL build artifacts
+*.exe
+*.o
+*.so
+*.dll
+*.cbl.lst
+*.cob.lst
+*.idy
+*.err
+*.cpy
+*.lst
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
