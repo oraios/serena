@@ -184,3 +184,99 @@ class TestPhpLanguageServers:
 
             usage_in_index_php = {"uri_suffix": "index.php", "line": 13, "character": 0}
             assert usage_in_index_php in actual_locations_comparable, "Usage of helperFunction in index.php not found"
+
+    @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
+    def test_find_symbol_class_method(self, language_server: SolidLanguageServer) -> None:
+        """Test that find_symbol works for class methods via name path pattern (Class/method).
+
+        Regression test: Intelephense can return flat SymbolInformation[] for some PHP files,
+        causing methods to appear as root-level symbols with no parent reference.
+        In that case, find_symbol("ClassName/method") must still match using containerName.
+        """
+        from serena.symbol import LanguageServerSymbol
+
+        doc_symbols = language_server.request_document_symbols("class_example.php")
+        root_symbols = doc_symbols.root_symbols
+
+        all_names = [s["name"] for s in doc_symbols.iter_symbols()]
+        assert "TestWebhookHandler" in all_names, f"TestWebhookHandler class not found. Found: {all_names}"
+        assert "handle_request" in all_names, f"handle_request method not found. Found: {all_names}"
+        assert "TestProfileManager" in all_names, f"TestProfileManager class not found. Found: {all_names}"
+        assert "get_id" in all_names, f"get_id method not found. Found: {all_names}"
+
+        found = []
+        for root in root_symbols:
+            found.extend(LanguageServerSymbol(root).find("TestWebhookHandler/handle_request"))
+        assert found, (
+            "find_symbol('TestWebhookHandler/handle_request') returned no results. "
+            "Likely cause: Intelephense returned flat SymbolInformation[] with no parent-child links "
+            "and the containerName fallback is not working."
+        )
+
+        found_profile = []
+        for root in root_symbols:
+            found_profile.extend(LanguageServerSymbol(root).find("TestProfileManager/get_id"))
+        assert found_profile, "find_symbol('TestProfileManager/get_id') returned no results."
+
+
+@pytest.mark.php
+class TestIntelephenseReconstructDocumentSymbols:
+    """Unit tests for Intelephense._reconstruct_document_symbols (no live LS required)."""
+
+    def _make_sym(self, name: str, kind: int, container_name: str | None = None) -> dict:
+        sym: dict = {
+            "name": name,
+            "kind": kind,
+            "location": {
+                "uri": "file:///dummy.php",
+                "range": {"start": {"line": 0, "character": 0}, "end": {"line": 5, "character": 0}},
+            },
+        }
+        if container_name is not None:
+            sym["containerName"] = container_name
+        return sym
+
+    def test_root_symbols_have_no_container(self) -> None:
+        from solidlsp.language_servers.intelephense import Intelephense
+
+        flat = [self._make_sym("MyClass", 5)]
+        result = Intelephense._reconstruct_document_symbols(flat)  # type: ignore[arg-type]
+        assert len(result) == 1
+        assert result[0]["name"] == "MyClass"
+        assert result[0]["children"] == []  # type: ignore[typeddict-item]
+
+    def test_method_attached_to_class(self) -> None:
+        from solidlsp.language_servers.intelephense import Intelephense
+
+        flat = [
+            self._make_sym("MyClass", 5),
+            self._make_sym("my_method", 6, container_name="MyClass"),
+        ]
+        result = Intelephense._reconstruct_document_symbols(flat)  # type: ignore[arg-type]
+        assert len(result) == 1
+        children = result[0]["children"]  # type: ignore[typeddict-item]
+        assert len(children) == 1
+        assert children[0]["name"] == "my_method"
+
+    def test_orphan_method_becomes_root(self) -> None:
+        from solidlsp.language_servers.intelephense import Intelephense
+
+        flat = [self._make_sym("orphan_method", 6, container_name="MissingClass")]
+        result = Intelephense._reconstruct_document_symbols(flat)  # type: ignore[arg-type]
+        assert len(result) == 1
+        assert result[0]["name"] == "orphan_method"
+
+    def test_two_classes_separate_children(self) -> None:
+        from solidlsp.language_servers.intelephense import Intelephense
+
+        flat = [
+            self._make_sym("ClassA", 5),
+            self._make_sym("method_a", 6, container_name="ClassA"),
+            self._make_sym("ClassB", 5),
+            self._make_sym("method_b", 6, container_name="ClassB"),
+        ]
+        result = Intelephense._reconstruct_document_symbols(flat)  # type: ignore[arg-type]
+        assert len(result) == 2
+        by_name = {r["name"]: r for r in result}
+        assert by_name["ClassA"]["children"][0]["name"] == "method_a"  # type: ignore[typeddict-item]
+        assert by_name["ClassB"]["children"][0]["name"] == "method_b"  # type: ignore[typeddict-item]
