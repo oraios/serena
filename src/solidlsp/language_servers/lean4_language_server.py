@@ -3,14 +3,11 @@ Provides Lean 4 specific instantiation of the LanguageServer class.
 Uses the built-in Lean 4 language server (lean --server).
 """
 
-import glob
 import logging
 import os
 import pathlib
 import shutil
 import subprocess
-import threading
-import time
 from typing import cast
 
 from overrides import override
@@ -144,8 +141,6 @@ class Lean4LanguageServer(SolidLanguageServer):
 
     def _start_server(self) -> None:
         """Start the Lean 4 language server process."""
-        file_progress_status: dict[str, bool] = {}
-        file_progress_lock = threading.Lock()
 
         def register_capability_handler(_params: dict) -> None:
             return
@@ -156,19 +151,11 @@ class Lean4LanguageServer(SolidLanguageServer):
         def do_nothing(_params: dict) -> None:
             return
 
-        def file_progress_handler(params: dict) -> None:
-            """Track file processing progress from Lean 4 LSP."""
-            uri = params.get("textDocument", {}).get("uri", "")
-            processing = params.get("processing", [])
-            with file_progress_lock:
-                file_progress_status[uri] = len(processing) == 0
-            log.info(f"LSP: $/lean/fileProgress: {uri} done={len(processing) == 0}")
-
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
-        self.server.on_notification("$/lean/fileProgress", file_progress_handler)
+        self.server.on_notification("$/lean/fileProgress", do_nothing)
 
         log.info("Starting Lean 4 language server process")
         self.server.start()
@@ -182,40 +169,7 @@ class Lean4LanguageServer(SolidLanguageServer):
 
         self.server.notify.initialized({})
 
-        # Open all .lean files so the LSP can build cross-file references
-        lean_files = glob.glob(os.path.join(self.repository_root_path, "**", "*.lean"), recursive=True)
-        for fpath in lean_files:
-            # Skip files in .lake and build directories
-            rel = os.path.relpath(fpath, self.repository_root_path)
-            parts = pathlib.PurePath(rel).parts
-            if any(self.is_ignored_dirname(p) for p in parts):
-                continue
-            uri = pathlib.Path(fpath).as_uri()
-            try:
-                with open(fpath) as f:
-                    text = f.read()
-                self.server.notify.did_open_text_document(
-                    {
-                        "textDocument": {
-                            "uri": uri,
-                            "languageId": "lean4",
-                            "version": 0,
-                            "text": text,
-                        }
-                    }
-                )
-                log.info(f"Opened {rel} in Lean 4 LSP")
-            except Exception as e:
-                log.warning(f"Failed to open {rel}: {e}")
-
-        # Wait for all opened files to finish processing
-        timeout = 60
-        start = time.monotonic()
-        while time.monotonic() - start < timeout:
-            time.sleep(0.5)
-            with file_progress_lock:
-                if file_progress_status and all(file_progress_status.values()):
-                    log.info("All Lean 4 files finished processing")
-                    break
-        else:
-            log.warning("Timed out waiting for Lean 4 file processing")
+    @override
+    def _get_wait_time_for_cross_file_referencing(self) -> float:
+        """Lean 4 projects need time to compile and build cross-file references."""
+        return 10.0
