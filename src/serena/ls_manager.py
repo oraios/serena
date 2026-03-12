@@ -77,8 +77,12 @@ class LanguageServerManager:
         """
         self._language_servers = language_servers
         self._language_server_factory = language_server_factory
-        self._default_language_server = next(iter(language_servers.values()))
-        self._root_path = self._default_language_server.repository_root_path
+
+    @property
+    def _default_language_server(self) -> SolidLanguageServer:
+        if len(self._language_servers) == 0:
+            raise ValueError("No language servers available in the manager")
+        return next(iter(self._language_servers.values()))
 
     @staticmethod
     def from_languages(languages: list[Language], factory: LanguageServerFactory) -> "LanguageServerManager":
@@ -138,9 +142,6 @@ class LanguageServerManager:
             raise LanguageServerManagerInitialisationError(f"Failed to start {len(exceptions)} language server(s):\n{failure_messages}")
 
         return LanguageServerManager(language_servers, factory)
-
-    def get_root_path(self) -> str:
-        return self._root_path
 
     def _ensure_functional_ls(self, ls: SolidLanguageServer) -> SolidLanguageServer:
         if not ls.is_running():

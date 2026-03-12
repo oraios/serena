@@ -544,6 +544,10 @@ jobs:
             echo "ERROR: FPCDIR does not exist: $FPCDIR"
             exit 1
           fi
+      - name: Build Lean 4 test project
+        uses: leanprover/lean-action@v1
+        with:
+          lake-package-directory: test/resources/repos/lean4/test_repo
       - name: Cache language servers
         id: cache-language-servers
         uses: actions/cache@v3

@@ -292,40 +292,40 @@ class ProjectConfig(SharedConfig):
                 language_composition = determine_programming_language_composition(str(project_root))
                 log.info("Language composition: %s", language_composition)
                 if len(language_composition) == 0:
-                    language_values = ", ".join([lang.value for lang in Language])
-                    raise ValueError(
-                        f"No source files found in {project_root}\n\n"
-                        f"To use Serena with this project, you need to either\n"
-                        f"  1. specify a programming language by adding parameters --language <language>\n"
-                        f"     when creating the project via the Serena CLI command OR\n"
-                        f"  2. add source files in one of the supported languages first.\n\n"
-                        f"Supported languages are: {language_values}\n"
-                        f"Read the documentation for more information."
+                    log.warning(
+                        "No source files for supported language servers were found in %s. "
+                        "Creating project with no configured languages. "
+                        "Symbol-related tools (e.g. find_symbol, get_symbols_overview) will not work "
+                        "when using the LSP backend. You can add languages later via the Serena dashboard "
+                        "or by manually editing the project configuration.",
+                        project_root,
                     )
-                # sort languages by number of files found
-                languages_and_percentages = sorted(
-                    language_composition.items(), key=lambda item: (item[1], item[0].get_priority()), reverse=True
-                )
-                # find the language with the highest percentage and enable it
-                top_language_pair = languages_and_percentages[0]
-                other_language_pairs = languages_and_percentages[1:]
-                languages_to_use: list[str] = [top_language_pair[0].value]
-                # if in interactive mode, ask the user which other languages to enable
-                if len(other_language_pairs) > 0 and interactive:
-                    print(
-                        "Detected and enabled main language '%s' (%.2f%% of source files)."
-                        % (top_language_pair[0].value, top_language_pair[1])
+                    languages_to_use: list[str] = []
+                else:
+                    # sort languages by number of files found
+                    languages_and_percentages = sorted(
+                        language_composition.items(), key=lambda item: (item[1], item[0].get_priority()), reverse=True
                     )
-                    print(f"Additionally detected {len(other_language_pairs)} other language(s).\n")
-                    print("Note: Enable only languages you need symbolic retrieval/editing capabilities for.")
-                    print("      Additional language servers use resources and some languages may require additional")
-                    print("      system-level installations/configuration (see Serena documentation).")
-                    print("\nWhich additional languages do you want to enable?")
-                    for lang, perc in other_language_pairs:
-                        enable = ask_yes_no("Enable %s (%.2f%% of source files)?" % (lang.value, perc), default=False)
-                        if enable:
-                            languages_to_use.append(lang.value)
-                    print()
+                    # find the language with the highest percentage and enable it
+                    top_language_pair = languages_and_percentages[0]
+                    other_language_pairs = languages_and_percentages[1:]
+                    languages_to_use = [top_language_pair[0].value]
+                    # if in interactive mode, ask the user which other languages to enable
+                    if len(other_language_pairs) > 0 and interactive:
+                        print(
+                            "Detected and enabled main language '%s' (%.2f%% of source files)."
+                            % (top_language_pair[0].value, top_language_pair[1])
+                        )
+                        print(f"Additionally detected {len(other_language_pairs)} other language(s).\n")
+                        print("Note: Enable only languages you need symbolic retrieval/editing capabilities for.")
+                        print("      Additional language servers use resources and some languages may require additional")
+                        print("      system-level installations/configuration (see Serena documentation).")
+                        print("\nWhich additional languages do you want to enable?")
+                        for lang, perc in other_language_pairs:
+                            enable = ask_yes_no("Enable %s (%.2f%% of source files)?" % (lang.value, perc), default=False)
+                            if enable:
+                                languages_to_use.append(lang.value)
+                        print()
                 log.info("Using languages: %s", languages_to_use)
             else:
                 languages_to_use = [lang.value for lang in languages]

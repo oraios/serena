@@ -68,6 +68,7 @@ class Language(str, Enum):
     JULIA = "julia"
     FORTRAN = "fortran"
     HASKELL = "haskell"
+    LEAN4 = "lean4"
     GROOVY = "groovy"
     VUE = "vue"
     POWERSHELL = "powershell"
@@ -251,6 +252,8 @@ class Language(str, Enum):
                 )
             case self.HASKELL:
                 return FilenameMatcher("*.hs", "*.lhs")
+            case self.LEAN4:
+                return FilenameMatcher("*.lean")
             case self.VUE:
                 path_patterns = ["*.vue"]
                 for prefix in ["c", "m", ""]:
@@ -457,6 +460,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.haskell_language_server import HaskellLanguageServer
 
                 return HaskellLanguageServer
+            case self.LEAN4:
+                from solidlsp.language_servers.lean4_language_server import Lean4LanguageServer
+
+                return Lean4LanguageServer
             case self.FSHARP:
                 from solidlsp.language_servers.fsharp_language_server import FSharpLanguageServer
 
