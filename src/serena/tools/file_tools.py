@@ -415,4 +415,26 @@ class SearchForPatternTool(Tool):
             assert match.source_file_path is not None
             file_to_matches[match.source_file_path].append(match.to_display_string())
         result = self._to_json(file_to_matches)
+        
+        # Smart limit checking: if the result is too long, we provide a summary of the top 10 files instead of a generic failure message
+        limit = max_answer_chars if max_answer_chars != -1 else self.agent.serena_config.default_max_tool_answer_chars
+        if len(result) > limit:
+            num_files = len(file_to_matches)
+            total_matches = sum(len(m) for m in file_to_matches.values())
+            
+            # Sort files by number of matches (descending)
+            sorted_files = sorted(file_to_matches.items(), key=lambda item: len(item[1]), reverse=True)
+            
+            summary = [
+                f"The exact result is too long ({len(result)} characters, limit is {limit}).",
+                f"Found {total_matches} matches across {num_files} files.",
+                "Here are the top 10 files with the most matches:",
+            ]
+            
+            for file_path, file_matches in sorted_files[:10]:
+                summary.append(f" - {file_path}: {len(file_matches)} matches")
+                
+            summary.append("\nPlease refine your search query or specify a `relative_path` or `paths_include_glob` to narrow down the results.")
+            return "\n".join(summary)
+            
         return self._limit_length(result, max_answer_chars)

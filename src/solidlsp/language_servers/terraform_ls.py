@@ -1,6 +1,8 @@
 import logging
 import os
 import shutil
+import threading
+import glob
 from typing import cast
 
 from overrides import override
@@ -63,6 +65,27 @@ class TerraformLS(SolidLanguageServer):
         if terraform_cmd is not None:
             log.debug(f"Found terraform via shutil.which: {terraform_cmd}")
             return
+
+        # 1.5. Try to find terraform in typical Windows install locations (Winget)
+        if os.name == "nt":
+            local_app_data = os.environ.get("LOCALAPPDATA")
+            if local_app_data:
+                winget_packages = os.path.join(local_app_data, "Microsoft", "WinGet", "Packages")
+                if os.path.exists(winget_packages):
+                    # Search for Hashicorp.Terraform* folders
+                    patterns = [
+                        os.path.join(winget_packages, "Hashicorp.Terraform*", "terraform.exe"),
+                    ]
+                    for pattern in patterns:
+                        matches = glob.glob(pattern)
+                        if matches:
+                            terraform_cmd = matches[0]
+                            log.debug(f"Found terraform via Winget path search: {terraform_cmd}")
+                            # Update PATH so subprocess calls might find it too
+                            terraform_dir = os.path.dirname(terraform_cmd)
+                            if terraform_dir not in os.environ["PATH"]:
+                                os.environ["PATH"] += os.pathsep + terraform_dir
+                            return
 
         # TODO: is this needed?
         # 2. Fallback to TERRAFORM_CLI_PATH (set by hashicorp/setup-terraform action)
@@ -165,6 +188,8 @@ class TerraformLS(SolidLanguageServer):
             "terraform",
             solidlsp_settings,
         )
+        self.server_ready = threading.Event()
+        self.completions_available = threading.Event()
         self.request_id = 0
 
     @staticmethod
@@ -230,5 +255,8 @@ class TerraformLS(SolidLanguageServer):
         assert "definitionProvider" in init_response["capabilities"]
 
         self.server.notify.initialized({})
+        self.completions_available.set()
 
         # terraform-ls server is typically ready immediately after initialization
+        self.server_ready.set()
+        self.server_ready.wait()

@@ -267,6 +267,32 @@ class TopLevelCommands(AutoRegisteringGroup):
 
         log.info("Initializing Serena MCP server")
         log.info("Storing logs in %s", log_path)
+        
+        # Suppress verbose asyncio ConnectionResetError warnings on Windows Proactor Event Loop
+        import asyncio
+        def custom_exception_handler(loop: asyncio.AbstractEventLoop, context: dict) -> None:
+            exc = context.get("exception")
+            if isinstance(exc, ConnectionResetError) and getattr(exc, "winerror", None) == 10054:
+                # Safe to ignore on Windows: "An existing connection was forcibly closed by the remote host"
+                return
+                
+            msg = context.get("message", "")
+            if "Exception in callback _ProactorBasePipeTransport" in msg:
+                return
+                
+            loop.default_exception_handler(context)
+
+        try:
+            loop = asyncio.get_running_loop()
+            loop.set_exception_handler(custom_exception_handler)
+        except RuntimeError:
+            # If no loop is running yet, we can set the policy to apply the handler to all new loops
+            class CustomEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
+                def get_event_loop(self):
+                    loop = super().get_event_loop()
+                    loop.set_exception_handler(custom_exception_handler)
+                    return loop
+            asyncio.set_event_loop_policy(CustomEventLoopPolicy())
 
         # Handle --project-from-cwd flag
         if project_from_cwd:
@@ -845,7 +871,7 @@ class ProjectCommands(AutoRegisteringGroup):
 
                 if not target_file:
                     log.error("No analyzable files found in project")
-                    click.echo("❌ Health check failed: No analyzable files found")
+                    click.echo("Health check failed: No analyzable files found", err=True, color="red")
                     click.echo(f"Log saved to: {log_file}")
                     return
 
@@ -862,7 +888,7 @@ class ProjectCommands(AutoRegisteringGroup):
 
                 if not overview_data:
                     log.error("No symbols found in file %s", target_file)
-                    click.echo("❌ Health check failed: No symbols found in target file")
+                    click.echo("Health check failed: No symbols found in target file", err=True, color="red")
                     click.echo(f"Log saved to: {log_file}")
                     return
 
@@ -907,9 +933,13 @@ class ProjectCommands(AutoRegisteringGroup):
                     search_result = agent.execute_task(
                         lambda: search_pattern_tool.apply(substring_pattern=symbol_name, restrict_search_to_code_files=True)
                     )
-                    search_data = json.loads(search_result)
-                    pattern_matches = sum(len(matches) for matches in search_data.values())
-                    log.info("SearchForPatternTool found %d pattern matches for %s", pattern_matches, symbol_name)
+                    if search_result:
+                        search_data = json.loads(search_result)
+                        pattern_matches = sum(len(matches) for matches in search_data.values())
+                        log.info("SearchForPatternTool found %d pattern matches for %s", pattern_matches, symbol_name)
+                    else:
+                        log.warning("SearchForPatternTool returned empty result (possibly due to length limits)")
+                        pattern_matches = 0
                 except Exception as e:
                     log.warning("SearchForPatternTool failed for pattern %s: %s", symbol_name, str(e))
                     pattern_matches = 0
@@ -926,13 +956,13 @@ class ProjectCommands(AutoRegisteringGroup):
                 log.info("Health check completed successfully")
 
                 if tools_working:
-                    click.echo("✅ Health check passed - All tools working correctly")
+                    click.echo("Health check passed - All tools working correctly", color="green")
                 else:
-                    click.echo("⚠️  Health check completed with warnings - Check log for details")
+                    click.echo("Health check completed with warnings - Check log for details", color="yellow")
 
             except Exception as e:
                 log.exception("Health check failed with exception: %s", str(e))
-                click.echo(f"❌ Health check failed: {e!s}")
+                click.echo(f"Health check failed: {e!s}", color="red")
 
             finally:
                 click.echo(f"Log saved to: {log_file}")
