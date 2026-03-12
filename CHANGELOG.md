@@ -49,6 +49,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Language support:
 
+  * **Add support for COBOL** via COBOL language servers (requires GnuCOBOL compiler or enterprise language servers like IBM Z Open Editor or Eclipse Che4z; some setups may need `ls_path` configuration)
   * **Add support for OCaml** via ocaml-lsp-server with cross-file reference support on OCaml 5.2+ (requires opam; see [setup guide](docs/03-special-guides/ocaml_setup_guide_for_serena.md))
   * **Add Phpactor as alternative PHP language server** (specify `php_phpactor` as language; requires PHP 8.1+)
   * **Add support for Fortran** via fortls language server (requires `pip install fortls`)

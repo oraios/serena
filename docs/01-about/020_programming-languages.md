@@ -37,6 +37,9 @@ Some languages require additional installations or setup steps, as noted.
   for best results, provide a `compile_commands.json` at the repository root;
   see the [C/C++ Setup Guide](../03-special-guides/cpp_setup) for details.)
 * **Clojure**
+* **COBOL**  
+  (requires installation of a COBOL language server such as GnuCOBOL compiler or enterprise language servers like IBM Z Open Editor or Eclipse Che4z COBOL Language Support;
+  some language servers may require additional setup via `ls_path` configuration)
 * **Dart**
 * **Elixir**  
   (requires Elixir installation; Expert language server is downloaded automatically)
