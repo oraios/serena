@@ -21,7 +21,8 @@ from test.solidlsp import clojure as clj
 
 @pytest.fixture
 def serena_config():
-    """Create an in-memory configuration for tests with test repositories pre-registered."""
+    config = SerenaConfig(gui_log_window=False, web_dashboard=False, log_level=logging.ERROR)
+
     # Create test projects for all supported languages
     test_projects = []
     for language in [
@@ -47,16 +48,16 @@ def serena_config():
                     project_name=project_name,
                     languages=[language],
                     ignored_paths=[],
-                    excluded_tools=set(),
+                    excluded_tools=[],
                     read_only=False,
                     ignore_all_files_in_gitignore=True,
                     initial_prompt="",
                     encoding="utf-8",
                 ),
+                serena_config=config,
             )
             test_projects.append(RegisteredProject.from_project_instance(project))
 
-    config = SerenaConfig(gui_log_window=False, web_dashboard=False, log_level=logging.ERROR)
     config.projects = test_projects
     return config
 
@@ -105,37 +106,19 @@ def serena_agent(request: pytest.FixtureRequest, serena_config) -> Iterator[Sere
 
 
 class TestSerenaAgent:
-    @pytest.mark.parametrize(
-        "serena_agent,symbol_name,expected_kind,expected_file",
-        [
-            pytest.param(Language.PYTHON, "User", "Class", "models.py", marks=pytest.mark.python),
-            pytest.param(Language.GO, "Helper", "Function", "main.go", marks=pytest.mark.go),
-            pytest.param(Language.JAVA, "Model", "Class", "Model.java", marks=pytest.mark.java),
-            pytest.param(
-                Language.KOTLIN,
-                "Model",
-                "Struct",
-                "Model.kt",
-                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
-            ),
-            pytest.param(Language.RUST, "add", "Function", "lib.rs", marks=pytest.mark.rust),
-            pytest.param(Language.TYPESCRIPT, "DemoClass", "Class", "index.ts", marks=pytest.mark.typescript),
-            pytest.param(Language.PHP, "helperFunction", "Function", "helper.php", marks=pytest.mark.php),
-            pytest.param(Language.CLOJURE, "greet", "Function", clj.CORE_PATH, marks=pytest.mark.clojure),
-            pytest.param(Language.CSHARP, "Calculator", "Class", "Program.cs", marks=pytest.mark.csharp),
-            pytest.param(Language.FSHARP, "Calculator", "Module", "Calculator.fs", marks=pytest.mark.fsharp),
-            pytest.param(Language.POWERSHELL, "function Greet-User ()", "Function", "main.ps1", marks=pytest.mark.powershell),
-            pytest.param(Language.CPP_CCLS, "add", "Function", "b.cpp", marks=pytest.mark.cpp),
-        ],
-        indirect=["serena_agent"],
-    )
-    def test_find_symbol(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str):
-        # skip flaky tests in CI
-        # TODO: Revisit the flaky tests and re-enable once the LS issues are resolved #1040
-        flaky_languages = {Language.FSHARP, Language.RUST}
-        if set(serena_agent.get_active_lsp_languages()).intersection(flaky_languages) and is_ci:
-            pytest.skip("Test is flaky and thus skipped in CI environment.")
+    @pytest.mark.parametrize("project", [None, str(get_repo_path(Language.PYTHON)), "non_existent_path"])
+    def test_agent_instantiation(self, project: str | None):
+        """
+        Tests agent instantiation for cases where
+          * no project is specified at startup
+          * a valid project path is specified at startup
+          * an invalid project path is specified at startup
+        All cases must not raise an exception.
+        """
+        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False)
+        SerenaAgent(project=project, serena_config=serena_config)
 
+    def _assert_find_symbol(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str) -> None:
         agent = serena_agent
         find_symbol_tool = agent.get_tool(FindSymbolTool)
         result = find_symbol_tool.apply(name_path_pattern=symbol_name, include_info=True)
@@ -187,54 +170,53 @@ class TestSerenaAgent:
         ), f"Dog/greet not found in {sample_php}. Symbols: {symbols}"
 
     @pytest.mark.parametrize(
-        "serena_agent,symbol_name,def_file,ref_file",
+        "serena_agent,symbol_name,expected_kind,expected_file",
         [
-            pytest.param(
-                Language.PYTHON,
-                "User",
-                os.path.join("test_repo", "models.py"),
-                os.path.join("test_repo", "services.py"),
-                marks=pytest.mark.python,
-            ),
-            pytest.param(Language.GO, "Helper", "main.go", "main.go", marks=pytest.mark.go),
-            pytest.param(
-                Language.JAVA,
-                "Model",
-                os.path.join("src", "main", "java", "test_repo", "Model.java"),
-                os.path.join("src", "main", "java", "test_repo", "Main.java"),
-                marks=pytest.mark.java,
-            ),
+            pytest.param(Language.PYTHON, "User", "Class", "models.py", marks=pytest.mark.python),
+            pytest.param(Language.GO, "Helper", "Function", "main.go", marks=pytest.mark.go),
+            pytest.param(Language.JAVA, "Model", "Class", "Model.java", marks=pytest.mark.java),
             pytest.param(
                 Language.KOTLIN,
                 "Model",
-                os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
-                os.path.join("src", "main", "kotlin", "test_repo", "Main.kt"),
+                "Struct",
+                "Model.kt",
                 marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
             ),
-            pytest.param(Language.RUST, "add", os.path.join("src", "lib.rs"), os.path.join("src", "main.rs"), marks=pytest.mark.rust),
-            pytest.param(Language.TYPESCRIPT, "helperFunction", "index.ts", "use_helper.ts", marks=pytest.mark.typescript),
-            pytest.param(Language.PHP, "helperFunction", "helper.php", "index.php", marks=pytest.mark.php),
-            pytest.param(
-                Language.CLOJURE,
-                "multiply",
-                clj.CORE_PATH,
-                clj.UTILS_PATH,
-                marks=pytest.mark.clojure,
-            ),
-            pytest.param(Language.CSHARP, "Calculator", "Program.cs", "Program.cs", marks=pytest.mark.csharp),
-            pytest.param(Language.FSHARP, "add", "Calculator.fs", "Program.fs", marks=pytest.mark.fsharp),
-            pytest.param(Language.POWERSHELL, "function Greet-User ()", "main.ps1", "main.ps1", marks=pytest.mark.powershell),
-            pytest.param(Language.CPP_CCLS, "add", "b.cpp", "a.cpp", marks=pytest.mark.cpp),
+            pytest.param(Language.TYPESCRIPT, "DemoClass", "Class", "index.ts", marks=pytest.mark.typescript),
+            pytest.param(Language.PHP, "helperFunction", "Function", "helper.php", marks=pytest.mark.php),
+            pytest.param(Language.CLOJURE, "greet", "Function", clj.CORE_PATH, marks=pytest.mark.clojure),
+            pytest.param(Language.CSHARP, "Calculator", "Class", "Program.cs", marks=pytest.mark.csharp),
+            pytest.param(Language.POWERSHELL, "function Greet-User ()", "Function", "main.ps1", marks=pytest.mark.powershell),
+            pytest.param(Language.CPP_CCLS, "add", "Function", "b.cpp", marks=pytest.mark.cpp),
         ],
         indirect=["serena_agent"],
     )
-    def test_find_symbol_references(self, serena_agent: SerenaAgent, symbol_name: str, def_file: str, ref_file: str) -> None:
-        # skip flaky tests in CI
-        # TODO: Revisit the flaky tests and re-enable once the LS issues are resolved #1040
-        flaky_languages = {Language.TYPESCRIPT}
-        if set(serena_agent.get_active_lsp_languages()).intersection(flaky_languages) and is_ci:
-            pytest.skip("Test is flaky and thus skipped in CI environment.")
+    def test_find_symbol_stable(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str) -> None:
+        self._assert_find_symbol(serena_agent, symbol_name, expected_kind, expected_file)
 
+    @pytest.mark.parametrize(
+        "serena_agent,symbol_name,expected_kind,expected_file",
+        [
+            pytest.param(Language.FSHARP, "Calculator", "Module", "Calculator.fs", marks=pytest.mark.fsharp),
+        ],
+        indirect=["serena_agent"],
+    )
+    @pytest.mark.xfail(reason="F# language server is unreliable")  # See issue #1040
+    def test_find_symbol_fsharp(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str) -> None:
+        self._assert_find_symbol(serena_agent, symbol_name, expected_kind, expected_file)
+
+    @pytest.mark.parametrize(
+        "serena_agent,symbol_name,expected_kind,expected_file",
+        [
+            pytest.param(Language.RUST, "add", "Function", "lib.rs", marks=pytest.mark.rust),
+        ],
+        indirect=["serena_agent"],
+    )
+    @pytest.mark.xfail(reason="Rust language server is unreliable")  # See issue #1040
+    def test_find_symbol_rust(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str) -> None:
+        self._assert_find_symbol(serena_agent, symbol_name, expected_kind, expected_file)
+
+    def _assert_find_symbol_references(self, serena_agent: SerenaAgent, symbol_name: str, def_file: str, ref_file: str) -> None:
         agent = serena_agent
 
         # Find the symbol location first
@@ -268,6 +250,71 @@ class TestSerenaAgent:
 
         refs = json.loads(result)
         assert contains_ref_with_relative_path(refs, ref_file), f"Expected to find reference to {symbol_name} in {ref_file}. refs={refs}"
+
+    @pytest.mark.parametrize(
+        "serena_agent,symbol_name,def_file,ref_file",
+        [
+            pytest.param(
+                Language.PYTHON,
+                "User",
+                os.path.join("test_repo", "models.py"),
+                os.path.join("test_repo", "services.py"),
+                marks=pytest.mark.python,
+            ),
+            pytest.param(Language.GO, "Helper", "main.go", "main.go", marks=pytest.mark.go),
+            pytest.param(
+                Language.JAVA,
+                "Model",
+                os.path.join("src", "main", "java", "test_repo", "Model.java"),
+                os.path.join("src", "main", "java", "test_repo", "Main.java"),
+                marks=pytest.mark.java,
+            ),
+            pytest.param(
+                Language.KOTLIN,
+                "Model",
+                os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
+                os.path.join("src", "main", "kotlin", "test_repo", "Main.kt"),
+                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+            ),
+            pytest.param(Language.RUST, "add", os.path.join("src", "lib.rs"), os.path.join("src", "main.rs"), marks=pytest.mark.rust),
+            pytest.param(Language.PHP, "helperFunction", "helper.php", "index.php", marks=pytest.mark.php),
+            pytest.param(
+                Language.CLOJURE,
+                "multiply",
+                clj.CORE_PATH,
+                clj.UTILS_PATH,
+                marks=pytest.mark.clojure,
+            ),
+            pytest.param(Language.CSHARP, "Calculator", "Program.cs", "Program.cs", marks=pytest.mark.csharp),
+            pytest.param(Language.POWERSHELL, "function Greet-User ()", "main.ps1", "main.ps1", marks=pytest.mark.powershell),
+            pytest.param(Language.CPP_CCLS, "add", "b.cpp", "a.cpp", marks=pytest.mark.cpp),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_find_symbol_references_stable(self, serena_agent: SerenaAgent, symbol_name: str, def_file: str, ref_file: str) -> None:
+        self._assert_find_symbol_references(serena_agent, symbol_name, def_file, ref_file)
+
+    @pytest.mark.parametrize(
+        "serena_agent,symbol_name,def_file,ref_file",
+        [
+            pytest.param(Language.TYPESCRIPT, "helperFunction", "index.ts", "use_helper.ts", marks=pytest.mark.typescript),
+        ],
+        indirect=["serena_agent"],
+    )
+    @pytest.mark.xfail(reason="TypeScript language server is unreliable")  # See issue #1040
+    def test_find_symbol_references_typescript(self, serena_agent: SerenaAgent, symbol_name: str, def_file: str, ref_file: str) -> None:
+        self._assert_find_symbol_references(serena_agent, symbol_name, def_file, ref_file)
+
+    @pytest.mark.parametrize(
+        "serena_agent,symbol_name,def_file,ref_file",
+        [
+            pytest.param(Language.FSHARP, "add", "Calculator.fs", "Program.fs", marks=pytest.mark.fsharp),
+        ],
+        indirect=["serena_agent"],
+    )
+    @pytest.mark.xfail(reason="F# language server is unreliable")  # See issue #1040
+    def test_find_symbol_references_fsharp(self, serena_agent: SerenaAgent, symbol_name: str, def_file: str, ref_file: str) -> None:
+        self._assert_find_symbol_references(serena_agent, symbol_name, def_file, ref_file)
 
     @pytest.mark.parametrize(
         "serena_agent,name_path,substring_matching,expected_symbol_name,expected_kind,expected_file",

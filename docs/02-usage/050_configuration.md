@@ -113,7 +113,8 @@ Examples of built-in modes include:
 * `one-shot`: Configures Serena for tasks that should be completed in a single response, often used with `planning` for generating reports or initial plans.
 * `no-onboarding`: Skips the initial onboarding process if it's not needed for a particular session but retains the memory tools (assuming initial memories were created externally).
 * `onboarding`: Focuses on the project onboarding process.
-* `no-memories`: Disables all memory tools (and tools building on memories such as onboarding tools)  
+* `no-memories`: Disables all memory tools (and tools building on memories such as onboarding tools)
+* `query-projects`: Enables tools for querying other Serena projects (without activating them); see section [Reading from External Projects](query-projects) 
 
 Find the concrete definitions of these modes [here](https://github.com/oraios/serena/tree/main/src/serena/resources/config/modes).
 
@@ -171,6 +172,35 @@ For advanced users, Serena's configuration can be further customized.
 
 The Serena user data directory (where configuration, language server files, logs, etc. are stored) defaults to `~/.serena`.
 You can change this location by setting the `SERENA_HOME` environment variable to your desired path.
+
+### Per-Project Serena Folder Location
+
+By default, each project stores its Serena data (memories, caches, etc.) in a `.serena` folder inside the project root.
+You can customize this location globally via the `project_serena_folder_location` setting in `serena_config.yml`.
+
+The setting supports two placeholders:
+
+| Placeholder          | Description                                     |
+|----------------------|-------------------------------------------------|
+| `$projectDir`        | The absolute path to the project root directory |
+| `$projectFolderName` | The name of the project folder                  |
+
+**Examples:**
+
+```yaml
+# Default: data stored inside the project directory
+project_serena_folder_location: "$projectDir/.serena"
+
+# Central location: all project data under a shared directory
+project_serena_folder_location: "/projects-metadata/$projectFolderName/.serena"
+```
+
+When a project is loaded, Serena uses the following fallback logic:
+1. Check if a `.serena` folder exists at the configured path.
+2. If not, check if one exists in the project root (default/legacy location).
+3. If neither exists, create the folder at the configured path.
+
+This ensures backward compatibility: existing projects that already have a `.serena` folder in the project root will continue to work, even after changing the `project_serena_folder_location` setting.
 
 (ls-specific-settings)=
 ### Language Server-Specific Settings

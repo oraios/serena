@@ -302,7 +302,7 @@ class TestCSharpSolutionProjectOpening:
             # Create CSharpLanguageServer instance
             mock_settings = Mock(spec=SolidLSPSettings)
             mock_settings.ls_resources_dir = "/tmp/test_ls_resources"
-            mock_settings.project_data_relative_path = "project_data"
+            mock_settings.project_data_path = str(temp_path / "project_data")
 
             with SuspendedLoggersContext():
                 logging.getLogger().setLevel(logging.DEBUG)
@@ -330,7 +330,7 @@ class TestCSharpSolutionProjectOpening:
 
             mock_settings = Mock(spec=SolidLSPSettings)
             mock_settings.ls_resources_dir = "/tmp/test_ls_resources"
-            mock_settings.project_data_relative_path = "project_data"
+            mock_settings.project_data_path = str(temp_path / "project_data")
 
             # Create CSharpLanguageServer instance
             with SuspendedLoggersContext():

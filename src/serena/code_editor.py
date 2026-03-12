@@ -4,7 +4,7 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Reversible
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Generic, Optional, TypeVar, cast
+from typing import Generic, TypeVar, cast
 
 from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
 from serena.symbol import JetBrainsSymbol, LanguageServerSymbol, LanguageServerSymbolRetriever, PositionInFile, Symbol
@@ -12,29 +12,17 @@ from solidlsp import SolidLanguageServer, ls_types
 from solidlsp.ls import LSPFileBuffer
 from solidlsp.ls_utils import PathUtils, TextUtils
 
-from .constants import DEFAULT_SOURCE_FILE_ENCODING
 from .project import Project
-
-if TYPE_CHECKING:
-    from .agent import SerenaAgent
-
 
 log = logging.getLogger(__name__)
 TSymbol = TypeVar("TSymbol", bound=Symbol)
 
 
 class CodeEditor(Generic[TSymbol], ABC):
-    def __init__(self, project_root: str, agent: Optional["SerenaAgent"] = None) -> None:
-        self.project_root = project_root
-        self.agent = agent
-
-        # set encoding based on active project, if available
-        encoding = DEFAULT_SOURCE_FILE_ENCODING
-        if agent is not None:
-            project = agent.get_active_project()
-            if project is not None:
-                encoding = project.project_config.encoding
-        self.encoding = encoding
+    def __init__(self, project: Project) -> None:
+        self.project_root = project.project_root
+        self.encoding = project.project_config.encoding
+        self.newline = project.line_ending.newline_str
 
     class EditedFile(ABC):
         def __init__(self, relative_path: str) -> None:
@@ -82,7 +70,7 @@ class CodeEditor(Generic[TSymbol], ABC):
     def _save_edited_file(self, edited_file: "CodeEditor.EditedFile") -> None:
         abs_path = os.path.join(self.project_root, edited_file.relative_path)
         new_contents = edited_file.get_contents()
-        with open(abs_path, "w", encoding=self.encoding) as f:
+        with open(abs_path, "w", encoding=self.encoding, newline=self.newline) as f:
             f.write(new_contents)
 
     @abstractmethod
@@ -244,8 +232,8 @@ class CodeEditor(Generic[TSymbol], ABC):
 
 
 class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
-    def __init__(self, symbol_retriever: LanguageServerSymbolRetriever, agent: Optional["SerenaAgent"] = None):
-        super().__init__(project_root=symbol_retriever.get_root_path(), agent=agent)
+    def __init__(self, symbol_retriever: LanguageServerSymbolRetriever):
+        super().__init__(project=symbol_retriever.project)
         self._symbol_retriever = symbol_retriever
 
     def _get_language_server(self, relative_path: str) -> SolidLanguageServer:
@@ -379,9 +367,9 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
 
 
 class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
-    def __init__(self, project: Project, agent: Optional["SerenaAgent"] = None) -> None:
+    def __init__(self, project: Project) -> None:
         self._project = project
-        super().__init__(project_root=project.project_root, agent=agent)
+        super().__init__(project)
 
     class EditedFile(CodeEditor.EditedFile):
         def __init__(self, relative_path: str, project: Project):

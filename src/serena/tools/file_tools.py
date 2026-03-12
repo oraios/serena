@@ -73,7 +73,7 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
             ), f"Cannot create file outside of the project directory, got {relative_path=}"
 
         abs_path.parent.mkdir(parents=True, exist_ok=True)
-        abs_path.write_text(content, encoding=self.project.project_config.encoding)
+        abs_path.write_text(content, encoding=self.project.project_config.encoding, newline=self.project.line_ending.newline_str)
         answer = f"File created: {relative_path}."
         if will_overwrite_existing:
             answer += " Overwrote existing file."
@@ -192,10 +192,8 @@ class ReplaceContentTool(Tool, ToolMarkerCanEdit):
             If mode is "regex", the string can contain backreferences to matched groups in the needle regex,
             specified using the syntax $!1, $!2, etc. for groups 1, 2, etc.
         :param mode: either "literal" or "regex", specifying how the `needle` parameter is to be interpreted.
-        :param allow_multiple_occurrences: if True, the regex may match multiple occurrences in the file
-            and all of them will be replaced.
-            If this is set to False and the regex matches multiple occurrences, an error will be returned
-            (and you may retry with a revised, more specific regex).
+        :param allow_multiple_occurrences: whether to allow matching and replacing multiple occurrences.
+            If false and multiple occurrences are found, an error will be returned
         """
         return self.replace_content(
             relative_path, needle, repl, mode=mode, allow_multiple_occurrences=allow_multiple_occurrences, require_not_ignored=True

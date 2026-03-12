@@ -36,7 +36,7 @@ For instance, when using `uvx`, run
  * For an existing project, the main programming language will be detected automatically,
    but you can choose to explicitly specify multiple languages by passing the `--language` parameter
    multiple times (e.g. `--language python --language typescript`).
- * You can optionally specify a custom project name with `--name "My Project"`.
+ * You can optionally specify a custom project name with `--name my-name`.
  * You can immediately index the project after creation with `--index`.
 
 (project-config)=
@@ -58,6 +58,11 @@ The file allows you to configure ...
 
 For detailed information on the parameters and possible settings, see the 
 [template file](https://github.com/oraios/serena/blob/main/src/serena/resources/project.template.yml). 
+
+**Local Overrides**. The project.yml file is intended to be versioned together with the project.
+You can specify local overrides for the settings in a `project.local.yml` file in the same directory
+(which, by default, is ignored by git). 
+Any keys defined therein will override the respective key in `project.yml`.
 
 (indexing)=
 ### Indexing
@@ -103,22 +108,12 @@ By default, Serena will perform an **onboarding process** when
 it is started for the first time for a project.
 The goal of the onboarding is for Serena to get familiar with the project
 and to store memories, which it can then draw upon in future interactions.
-If an LLM should fail to complete the onboarding and does not actually write the
-respective memories to disk, you may need to ask it to do so explicitly.
 
-The onboarding will usually read a lot of content from the project, thus filling
-up the context. It can therefore be advisable to switch to another conversation
-once the onboarding is complete.
-After the onboarding, we recommend that you have a quick look at the memories and,
-if necessary, edit them or add additional ones.
+In general, **memories** provide a way for Serena to store and retrieve 
+information about the project, relevant conventions, and other relevant aspects.
 
-**Memories** are files stored in `.serena/memories/` in the project directory,
-which the agent can choose to read in subsequent interactions.
-Feel free to read and adjust them as needed; you can also add new ones manually.
-Every file in the `.serena/memories/` directory is a memory file.
-Whenever Serena starts working on a project, the list of memories is
-provided, and the agent can decide to read them.
-We found that memories can significantly improve the user experience with Serena.
+For more information on this, including how to manage
+or disable these features, see [Memories & Onboarding](045_memories).
 
 
 ## Preparing Your Project
@@ -164,3 +159,41 @@ Therefore, software that is designed to meaningful interpretable outputs (e.g. l
 and that has a good test coverage is much easier to work with for Serena.
 
 We generally recommend to start an editing task from a state where all linting checks and tests pass.
+
+## Working with Multiple Projects Simultaneously
+
+There are several ways in which you might want to work with multiple projects simultaneously.
+
+### Simultaneously Editing in Multiple Projects
+
+If fulfilling a task requires the agent to edit code in multiple projects, the recommended approach is to create a **monorepo folder**,
+i.e. a folder that contains all the projects as sub-folders, and open that monorepo folder as a project in Serena.
+You may also use symbolic links to create a monorepo folder if the projects are located in different places on your filesystem.
+
+If several languages are used across the projects, specify all of them as needed when using the LSP backend;
+For JetBrains mode, make sure that your IDE is configured to work with all the languages used across the projects (e.g. by installing the respective language plugins).
+
+(query-projects)=
+### Reading from External Projects
+
+If, while working on a project, you want Serena to be able to read code or other information from another project (e.g. a library or otherwise related project), 
+this can be enabled via the `query_project` tool.
+Provided that the project you want to query is known to Serena (i.e. you have created it as described above),
+the `query_project` tool allows the agent to query files and symbolic information from that project.
+
+To enable this tool, [activate the mode](modes) `query-projects`.
+This also enables a second tool for listing projects that can be queried.
+
+Depending on the language backend being used, the management of resources for the external projects varies:
+
+* When using the JetBrains backend, make sure that every project for which you want symbolic queries to work is open in an IDE instance. 
+* When using the LSP backend, executing symbolic tools via the query tool requires that Serena's **Project Server** be started,
+  which will automatically spawn the necessary language servers for the projects that are queried.
+
+  To start the server, run
+
+      <serena> start-project-server
+
+  where `<serena>` is your way of running Serena. For example, when using `uvx`, run
+
+      uvx --from git+https://github.com/oraios/serena serena start-project-server

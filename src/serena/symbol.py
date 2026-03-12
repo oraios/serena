@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import asdict, dataclass
 from time import perf_counter
-from typing import TYPE_CHECKING, Any, Generic, Literal, NotRequired, Self, TypedDict, TypeVar, Union
+from typing import Any, Generic, Literal, NotRequired, Self, TypedDict, TypeVar
 
 from sensai.util.string import ToStringMixin
 
@@ -17,9 +17,6 @@ from solidlsp.ls_types import Position, SymbolKind, UnifiedSymbolInformation
 
 from .ls_manager import LanguageServerManager
 from .project import Project
-
-if TYPE_CHECKING:
-    from .agent import SerenaAgent
 
 log = logging.getLogger(__name__)
 NAME_PATH_SEP = "/"
@@ -536,19 +533,12 @@ class ReferenceInLanguageServerSymbol(ToStringMixin):
 
 
 class LanguageServerSymbolRetriever:
-    def __init__(self, ls: SolidLanguageServer | LanguageServerManager, agent: Union["SerenaAgent", None] = None) -> None:
+    def __init__(self, project: Project) -> None:
         """
-        :param ls: the language server or language server manager to use for symbol retrieval and editing operations.
-        :param agent: the agent to use (only needed for marking files as modified). You can pass None if you don't
-            need an agent to be aware of file modifications performed by the symbol manager.
+        :param project: the project instance
         """
-        if isinstance(ls, SolidLanguageServer):
-            ls_manager = LanguageServerManager({ls.language: ls})
-        else:
-            ls_manager = ls
-        assert isinstance(ls_manager, LanguageServerManager)
-        self._ls_manager: LanguageServerManager = ls_manager
-        self.agent = agent
+        self._ls_manager: LanguageServerManager = project.get_language_server_manager_or_raise()
+        self.project = project
 
     def _request_info(self, relative_file_path: str, line: int, column: int, file_buffer: LSPFileBuffer | None = None) -> str | None:
         """Retrieves information (in a sanitized format) about the symbol at the desired location,
@@ -588,16 +578,11 @@ class LanguageServerSymbolRetriever:
             return None
         return self._request_info(relative_file_path=symbol.relative_path, line=symbol.line, column=symbol.column)  # type: ignore[arg-type]
 
-    def _get_symbol_info_budget(self, default_budget: float = 10) -> float:
-        """Project -> global -> default"""
-        symbol_info_budget = default_budget
-        if self.agent is not None:
-            symbol_info_budget = self.agent.serena_config.symbol_info_budget
-            active_project = self.agent.get_active_project()
-            if active_project is not None:
-                project_symbol_info_budget = active_project.project_config.symbol_info_budget
-                if project_symbol_info_budget is not None:
-                    symbol_info_budget = project_symbol_info_budget
+    def _get_symbol_info_budget(self) -> float:
+        symbol_info_budget = self.project.serena_config.symbol_info_budget
+        project_symbol_info_budget = self.project.project_config.symbol_info_budget
+        if project_symbol_info_budget is not None:
+            symbol_info_budget = project_symbol_info_budget
         return symbol_info_budget
 
     def request_info_for_symbol_batch(
@@ -696,8 +681,8 @@ class LanguageServerSymbolRetriever:
 
         return info_by_symbol
 
-    def get_root_path(self) -> str:
-        return self._ls_manager.get_root_path()
+    def can_analyze_file(self, relative_file_path: str) -> bool:
+        return self._ls_manager.has_suitable_ls_for_file(relative_file_path)
 
     def get_language_server(self, relative_path: str) -> SolidLanguageServer:
         """:param relative_path: relative path to a file"""

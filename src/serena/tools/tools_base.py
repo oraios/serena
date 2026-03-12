@@ -12,6 +12,7 @@ from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metada
 from sensai.util import logging
 from sensai.util.string import dict_string
 
+from serena.config.serena_config import LanguageBackend
 from serena.project import MemoriesManager, Project
 from serena.prompt_factory import PromptFactory
 from serena.util.class_decorators import singleton
@@ -36,7 +37,7 @@ class Component(ABC):
         """
         :return: the root directory of the active project, raises a ValueError if no active project configuration is set
         """
-        return self.agent.get_project_root()
+        return self.project.project_root
 
     @property
     def prompt_factory(self) -> PromptFactory:
@@ -49,10 +50,8 @@ class Component(ABC):
     def create_language_server_symbol_retriever(self) -> "LanguageServerSymbolRetriever":
         from serena.symbol import LanguageServerSymbolRetriever
 
-        if not self.agent.is_using_language_server():
-            raise Exception("Cannot create LanguageServerSymbolRetriever; agent is not in language server mode.")
-        language_server_manager = self.agent.get_language_server_manager_or_raise()
-        return LanguageServerSymbolRetriever(language_server_manager, agent=self.agent)
+        assert self.agent.get_language_backend().is_lsp(), "Language server symbol retriever can only be created for LSP language backend"
+        return LanguageServerSymbolRetriever(self.project)
 
     @property
     def project(self) -> Project:
@@ -61,10 +60,13 @@ class Component(ABC):
     def create_code_editor(self) -> "CodeEditor":
         from ..code_editor import JetBrainsCodeEditor, LanguageServerCodeEditor
 
-        if self.agent.is_using_language_server():
-            return LanguageServerCodeEditor(self.create_language_server_symbol_retriever(), agent=self.agent)
-        else:
-            return JetBrainsCodeEditor(project=self.project, agent=self.agent)
+        match self.agent.get_language_backend():
+            case LanguageBackend.LSP:
+                return LanguageServerCodeEditor(self.create_language_server_symbol_retriever())
+            case LanguageBackend.JETBRAINS:
+                return JetBrainsCodeEditor(project=self.project)
+            case _:
+                raise ValueError
 
 
 class ToolMarker:
@@ -234,6 +236,12 @@ class Tool(Component):
     def is_active(self) -> bool:
         return self.agent.tool_is_active(self.get_name())
 
+    def is_readonly(self) -> bool:
+        return not self.can_edit()
+
+    def is_symbolic(self) -> bool:
+        return issubclass(self.__class__, ToolMarkerSymbolicRead) or issubclass(self.__class__, ToolMarkerSymbolicEdit)
+
     def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, mcp_ctx: Context | None = None, **kwargs) -> str:  # type: ignore
         """
         Applies the tool with logging and exception handling, using the given keyword arguments
@@ -382,7 +390,8 @@ tool_packages = ["serena.tools"]
 class ToolRegistry:
     def __init__(self) -> None:
         self._tool_dict: dict[str, RegisteredTool] = {}
-        for cls in iter_subclasses(Tool):
+        inclusion_predicate = lambda c: "apply" in c.__dict__  # include only concrete tool classes that implement apply
+        for cls in iter_subclasses(Tool, inclusion_predicate=inclusion_predicate):
             if not any(cls.__module__.startswith(pkg) for pkg in tool_packages):
                 continue
             is_optional = issubclass(cls, ToolMarkerOptional)
@@ -392,6 +401,8 @@ class ToolRegistry:
             self._tool_dict[name] = RegisteredTool(tool_class=cls, is_optional=is_optional, tool_name=name)
 
     def get_tool_class_by_name(self, tool_name: str) -> type[Tool]:
+        if tool_name not in self._tool_dict:
+            raise ValueError(f"Tool named '{tool_name}' not found.")
         return self._tool_dict[tool_name].tool_class
 
     def get_all_tool_classes(self) -> list[type[Tool]]:

@@ -11,6 +11,9 @@ The following types of contributions can be submitted directly via pull requests
 
 For other changes, please open an issue first to discuss your ideas with the maintainers.
 
+When submitting a PR, ensure a well-defined scope.
+Every PR should cover a single logical change or a set of closely related changes.
+
 ### Adding Support for a New Language Server
 
 See the corresponding [memory](.serena/memories/adding_new_language_support_guide.md).
