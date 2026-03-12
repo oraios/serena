@@ -352,6 +352,29 @@ ls_specific_settings:
     jvm_options: "-Xmx4G -XX:+UseG1GC"       # JVM options (default: -Xmx2G). Set to "" to disable.
 ```
 
+#### Luau
+
+Serena uses [`luau-lsp`](https://github.com/JohnnyMorganz/luau-lsp) for Luau support.
+
+**Runtime Requirements:**
+
+- `luau-lsp` is used from PATH if available.
+- Otherwise, Serena downloads the pinned `luau-lsp` release for the current platform.
+
+**Configuration:**
+
+```yaml
+ls_specific_settings:
+  luau:
+    ls_path: "/path/to/luau-lsp"            # Optional: override the language server executable
+    platform: "roblox"                      # "roblox" (default) or "standard"
+    roblox_security_level: "PluginSecurity" # Roblox only: None, PluginSecurity, LocalUserSecurity, RobloxScriptSecurity
+```
+
+Notes:
+- In `roblox` mode, Serena downloads Roblox definitions and Roblox API docs and passes them to `luau-lsp`.
+- In `standard` mode, Serena skips Roblox definitions and only downloads the standard Luau docs bundle.
+
 #### Pascal (`pasls`)
 
 Serena uses [pasls](https://github.com/genericptr/pascal-language-server) (Pascal Language Server) for Pascal/Free Pascal support.

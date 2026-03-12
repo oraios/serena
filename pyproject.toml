@@ -307,6 +307,7 @@ markers = [
   "ruby: language server running for Ruby (uses ruby-lsp)",
   "zig: language server running for Zig",
   "lua: language server running for Lua",
+  "luau: language server running for Luau",
   "nix: language server running for Nix",
   "dart: language server running for Dart",
   "erlang: language server running for Erlang",
