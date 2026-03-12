@@ -5,12 +5,30 @@ Tests validate symbol detection and reference finding using the Solidity test re
 which contains a simple ERC-20 Token contract, a SafeMath library, and an IERC20 interface.
 """
 
+import re
 from pathlib import Path
+from typing import Optional
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+
+
+def _find_identifier_position(file_path: Path, symbol_name: str) -> Optional[tuple[int, int]]:
+    """Return the (line, column) of the first occurrence of *symbol_name* as an identifier.
+
+    Scans the file for a word-boundary match of *symbol_name* so that the position
+    returned is the exact location of the identifier, regardless of what range the
+    language server reports for the surrounding symbol.  Returns None if not found.
+    """
+    pattern = re.compile(r"\b" + re.escape(symbol_name) + r"\b")
+    with file_path.open(encoding="utf-8") as fh:
+        for line_idx, line in enumerate(fh):
+            m = pattern.search(line)
+            if m:
+                return line_idx, m.start()
+    return None
 
 
 @pytest.mark.solidity
@@ -111,23 +129,19 @@ class TestSolidityLanguageServerBasics:
     @pytest.mark.parametrize("repo_path", [Language.SOLIDITY], indirect=True)
     def test_within_file_references(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test finding within-file references to the _transfer helper in Token.sol."""
-        all_symbols, _ = language_server.request_document_symbols("contracts/Token.sol").get_all_symbols_and_roots()
+        # Use the file to find the exact identifier position: the Solidity LSP reports
+        # the symbol range starting at the preceding whitespace/comment block, not the
+        # function keyword, so we locate '_transfer' directly in the source.
+        pos = _find_identifier_position(repo_path / "contracts/Token.sol", "_transfer")
+        assert pos is not None, "Should find '_transfer' identifier in Token.sol"
+        definition_line, definition_char = pos
 
-        # Find the line where _transfer is defined
-        transfer_symbol = next((s for s in all_symbols if s.get("name") == "_transfer"), None)
-        assert transfer_symbol is not None, "Should find the '_transfer' internal function symbol"
-
-        definition_line = transfer_symbol["range"]["start"]["line"]
-        references = language_server.request_references(
-            "contracts/Token.sol", definition_line, transfer_symbol["range"]["start"]["character"]
-        )
+        references = language_server.request_references("contracts/Token.sol", definition_line, definition_char)
 
         assert references is not None, "Should return references for '_transfer'"
         assert (
             len(references) >= 2
-        ), (  # defined once, called in transfer() and transferFrom()
-            f"'_transfer' should have at least 2 references (definition + callers), found {len(references)}"
-        )
+        ), f"'_transfer' should have at least 2 references (callers), found {len(references)}"  # called in transfer() and transferFrom()
 
         ref_files = {ref.get("uri", "") for ref in references}
         assert any("Token.sol" in uri for uri in ref_files), "References should include Token.sol"
@@ -135,19 +149,17 @@ class TestSolidityLanguageServerBasics:
     @pytest.mark.parametrize("language_server", [Language.SOLIDITY], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.SOLIDITY], indirect=True)
     def test_cross_file_references(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
-        """Test finding cross-file references to SafeMath.add used in Token.sol."""
-        all_symbols, _ = language_server.request_document_symbols("contracts/lib/SafeMath.sol").get_all_symbols_and_roots()
+        """Test finding cross-file references: IERC20.transfer implemented in Token.sol."""
+        # Use 'transfer' in the interface — Token.sol inherits IERC20 and overrides it,
+        # so the LSP resolves the implementation site in Token.sol as a cross-file reference.
+        pos = _find_identifier_position(repo_path / "contracts/interfaces/IERC20.sol", "transfer")
+        assert pos is not None, "Should find 'transfer' identifier in IERC20.sol"
+        definition_line, definition_char = pos
 
-        add_symbol = next((s for s in all_symbols if s.get("name") == "add"), None)
-        assert add_symbol is not None, "Should find the 'add' function in SafeMath.sol"
+        references = language_server.request_references("contracts/interfaces/IERC20.sol", definition_line, definition_char)
 
-        definition_line = add_symbol["range"]["start"]["line"]
-        references = language_server.request_references(
-            "contracts/lib/SafeMath.sol", definition_line, add_symbol["range"]["start"]["character"]
-        )
-
-        assert references is not None, "Should return cross-file references for SafeMath.add"
-        assert len(references) >= 1, f"SafeMath.add should be referenced at least once (in Token.sol), found {len(references)}"
+        assert references is not None, "Should return cross-file references for IERC20.transfer"
+        assert len(references) >= 1, f"IERC20.transfer should be referenced at least once (in Token.sol), found {len(references)}"
 
         ref_files = {ref.get("uri", "") for ref in references}
-        assert any("Token.sol" in uri for uri in ref_files), "SafeMath.add references should include Token.sol"
+        assert any("Token.sol" in uri for uri in ref_files), "IERC20.transfer references should include Token.sol"

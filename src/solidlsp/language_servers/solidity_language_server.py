@@ -3,10 +3,12 @@ Provides Solidity-specific instantiation of the LanguageServer class using
 the Nomic Foundation Solidity Language Server (@nomicfoundation/solidity-language-server).
 """
 
+import glob
 import logging
 import os
 import pathlib
 import shutil
+import threading
 from typing import Any
 
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
@@ -149,8 +151,13 @@ class SolidityLanguageServer(SolidLanguageServer):
             "initializationOptions": {},
         }
 
+    def _get_wait_time_for_cross_file_referencing(self) -> float:
+        # Indexing is done synchronously in _start_server via custom/file-indexed events,
+        # so no additional wait is needed.
+        return 0
+
     def _start_server(self) -> None:
-        """Start the Solidity language server and wait for it to be ready."""
+        """Start the Solidity language server and wait for project indexing to finish."""
 
         def do_nothing(params: Any) -> None:
             return
@@ -161,10 +168,23 @@ class SolidityLanguageServer(SolidLanguageServer):
         def window_log_message(msg: dict) -> None:
             log.info(f"LSP: window/logMessage: {msg}")
 
+        # Count .sol files in the project to know when indexing is complete.
+        sol_files = glob.glob(os.path.join(self.repository_root_path, "**", "*.sol"), recursive=True)
+        expected_count = len(sol_files)
+        indexed_count = [0]
+        all_indexed = threading.Event()
+
+        def on_file_indexed(params: Any) -> None:
+            indexed_count[0] += 1
+            log.info(f"Solidity LSP: file indexed ({indexed_count[0]}/{expected_count}): {params.get('uri', '')}")
+            if indexed_count[0] >= expected_count:
+                all_indexed.set()
+
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
+        self.server.on_notification("custom/file-indexed", on_file_indexed)
 
         log.info("Starting Solidity language server process")
         self.server.start()
@@ -180,4 +200,12 @@ class SolidityLanguageServer(SolidLanguageServer):
             log.warning("Solidity server does not report document symbol support")
 
         self.server.notify.initialized({})
+
+        if expected_count > 0:
+            log.info(f"Waiting for Solidity LSP to index {expected_count} .sol file(s)…")
+            all_indexed.wait(timeout=60)
+            log.info(f"Solidity LSP indexing complete ({indexed_count[0]}/{expected_count} files indexed)")
+        else:
+            log.info("No .sol files found; skipping indexing wait")
+
         log.info("Solidity language server initialization complete")
