@@ -21,6 +21,7 @@ from serena.constants import SERENA_FILE_ENCODING
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.util.file_system import GitignoreParser, match_path
 from serena.util.text_utils import ContentReplacer, MatchedConsecutiveLines, search_files
+from serena.util.frontmatter import parse_frontmatter
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import FileUtils
@@ -96,7 +97,11 @@ class MemoriesManager:
         if not memory_file_path.exists():
             return f"Memory file {name} not found, consider creating it with the `write_memory` tool if you need it."
         with open(memory_file_path, encoding=self._encoding) as f:
-            return f.read()
+            raw = f.read()
+
+        # Strip optional frontmatter block if present (used by frontmatter tools)
+        _frontmatter, body = parse_frontmatter(raw)
+        return body
 
     def save_memory(self, name: str, content: str, is_tool_context: bool) -> str:
         self._check_write_access(name, is_tool_context)
