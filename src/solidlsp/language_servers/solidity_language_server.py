@@ -9,6 +9,7 @@ import os
 import pathlib
 import shutil
 import threading
+from time import sleep
 from typing import Any
 
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
@@ -152,9 +153,8 @@ class SolidityLanguageServer(SolidLanguageServer):
         }
 
     def _get_wait_time_for_cross_file_referencing(self) -> float:
-        # Indexing is done synchronously in _start_server via custom/file-indexed events,
-        # so no additional wait is needed.
-        return 0
+        # Small buffer for any post-indexing analysis the LSP performs after file-indexed events.
+        return 3.0
 
     def _start_server(self) -> None:
         """Start the Solidity language server and wait for project indexing to finish."""
@@ -176,7 +176,8 @@ class SolidityLanguageServer(SolidLanguageServer):
 
         def on_file_indexed(params: Any) -> None:
             indexed_count[0] += 1
-            log.info(f"Solidity LSP: file indexed ({indexed_count[0]}/{expected_count}): {params.get('uri', '')}")
+            uri = (params or {}).get("uri", "")
+            log.info(f"Solidity LSP: file indexed ({indexed_count[0]}/{expected_count}): {uri}")
             if indexed_count[0] >= expected_count:
                 all_indexed.set()
 
@@ -203,8 +204,16 @@ class SolidityLanguageServer(SolidLanguageServer):
 
         if expected_count > 0:
             log.info(f"Waiting for Solidity LSP to index {expected_count} .sol file(s)…")
-            all_indexed.wait(timeout=60)
-            log.info(f"Solidity LSP indexing complete ({indexed_count[0]}/{expected_count} files indexed)")
+            completed = all_indexed.wait(timeout=60)
+            if completed:
+                log.info(f"Solidity LSP indexing complete ({indexed_count[0]}/{expected_count} files indexed)")
+            else:
+                log.warning(
+                    f"Solidity LSP indexing timed out ({indexed_count[0]}/{expected_count} files indexed). "
+                    "Waiting additional 30s for slow environments (e.g., CI)."
+                )
+                sleep(30)
+                log.info(f"Additional wait complete ({indexed_count[0]}/{expected_count} files indexed)")
         else:
             log.info("No .sol files found; skipping indexing wait")
 
