@@ -177,7 +177,7 @@ class SolidityLanguageServer(SolidLanguageServer):
         def on_file_indexed(params: Any) -> None:
             indexed_count[0] += 1
             uri = (params or {}).get("uri", "")
-            log.info(f"Solidity LSP: file indexed ({indexed_count[0]}/{expected_count}): {uri}")
+            log.debug(f"Solidity LSP: file indexed ({indexed_count[0]}/{expected_count}): {uri}")
             if indexed_count[0] >= expected_count:
                 all_indexed.set()
 
@@ -191,12 +191,12 @@ class SolidityLanguageServer(SolidLanguageServer):
         self.server.start()
 
         initialize_params = self._get_initialize_params(self.repository_root_path)
-        log.info("Sending initialize request to Solidity language server")
+        log.debug("Sending initialize request to Solidity language server")
         init_response = self.server.send.initialize(initialize_params)
         log.debug(f"Received initialize response from Solidity server: {init_response}")
 
         if "documentSymbolProvider" in init_response.get("capabilities", {}):
-            log.info("Solidity server supports document symbols")
+            log.debug("Solidity server supports document symbols")
         else:
             log.warning("Solidity server does not report document symbol support")
 
