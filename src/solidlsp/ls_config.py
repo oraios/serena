@@ -60,6 +60,10 @@ class Language(str, Enum):
     """
     NIX = "nix"
     ERLANG = "erlang"
+    """Erlang language server using ELP (Erlang Language Platform) by WhatsApp.
+    Replaces the archived erlang_ls project. Requires 'elp' binary in PATH.
+    See https://whatsapp.github.io/erlang-language-platform/docs/get-started/
+    """
     OCAML = "ocaml"
     AL = "al"
     FSHARP = "fsharp"
@@ -122,6 +126,11 @@ class Language(str, Enum):
     Supports .sv, .svh, .v, .vh files.
     Automatically downloads verible binary.
     """
+    ERLANG_LS = "erlang_ls"
+    """Legacy erlang_ls language server for Erlang (deprecated, archived upstream).
+    The erlang_ls project was archived on 2025-08-15. Use Language.ERLANG (ELP) instead.
+    Requires 'erlang_ls' binary in PATH. See https://github.com/erlang-ls/erlang_ls
+    """
 
     @classmethod
     def iter_all(cls, include_experimental: bool = False) -> Iterable[Self]:
@@ -148,6 +157,7 @@ class Language(str, Enum):
             self.TOML,
             self.GROOVY,
             self.CPP_CCLS,
+            self.ERLANG_LS,
         }
 
     def __str__(self) -> str:
@@ -230,7 +240,7 @@ class Language(str, Enum):
                 return FilenameMatcher("*.luau")
             case self.NIX:
                 return FilenameMatcher("*.nix")
-            case self.ERLANG:
+            case self.ERLANG | self.ERLANG_LS:
                 return FilenameMatcher("*.erl", "*.hrl", "*.escript", "*.config", "*.app", "*.app.src")
             case self.OCAML:
                 return FilenameMatcher("*.ml", "*.mli", "*.re", "*.rei")
@@ -421,6 +431,10 @@ class Language(str, Enum):
                 return LuauLanguageServer
 
             case self.ERLANG:
+                from solidlsp.language_servers.elp_language_server import ErlangLanguagePlatform
+
+                return ErlangLanguagePlatform
+            case self.ERLANG_LS:
                 from solidlsp.language_servers.erlang_language_server import ErlangLanguageServer
 
                 return ErlangLanguageServer

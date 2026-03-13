@@ -43,7 +43,7 @@ Some languages require additional installations or setup steps, as noted.
 * **Elm**  
   (requires Elm compiler)
 * **Erlang**  
-  (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls); experimental, might be slow or hang)
+  (requires Erlang/OTP and [ELP](https://whatsapp.github.io/erlang-language-platform/docs/get-started/) (`elp` binary in PATH); the legacy `erlang_ls` server is still supported via `language: erlang_ls` in `project.yml`)
 * **F#**  
   (requires [.NET v8.0+](https://dotnet.microsoft.com/en-us/download/dotnet); uses FsAutoComplete/Ionide, which is auto-installed; for Homebrew .NET on macOS, set DOTNET_ROOT in your environment)
 * **Fortran**   
