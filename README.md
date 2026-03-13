@@ -82,7 +82,7 @@ that implement the language server protocol (LSP).
 The underlying language servers are typically open-source projects (like Serena) or at least freely available for use.
 
 With Serena's LSP library, we provide **support for over 30 programming languages**, including
-AL, Bash, C#, C/C++, Clojure, Dart, Elixir, Elm, Erlang, Fortran, GLSL, Go, Groovy (partial support), Haskell, HLSL, Java, Javascript, Julia, Kotlin, Lean 4, Lua, Luau, Markdown, MATLAB, Nix, OCaml, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Scala, Swift, TOML, TypeScript, WGSL, YAML, and Zig.
+AL, Bash, C#, C/C++, Clojure, Dart, Elixir, Elm, Erlang, Fortran, GLSL, Go, Groovy (partial support), Haskell, HLSL, Java, Javascript, Julia, Kotlin, Lean 4, Lua, Luau, Markdown, MATLAB, Nix, OCaml, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Scala, Solidity, Swift, TOML, TypeScript, WGSL, YAML, and Zig.
 
 > [!IMPORTANT]
 > Some language servers require additional dependencies to be installed; see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.

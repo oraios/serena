@@ -91,6 +91,9 @@ Some languages require additional installations or setup steps, as noted.
   (requires [rustup](https://rustup.rs/) - uses rust-analyzer from your toolchain)
 * **Scala**  
   (requires some [manual setup](../03-special-guides/scala_setup_guide_for_serena); uses Metals LSP)
+* **Solidity**
+  (experimental; requires Node.js and npm; automatically installs `@nomicfoundation/solidity-language-server`;
+  works best with a `foundry.toml` or `hardhat.config.js` in the project root)
 * **Swift**
 * **TypeScript**
 * **Vue**    

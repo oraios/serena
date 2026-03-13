@@ -2,6 +2,13 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* New language support:
+    * Add Solidity language server support (`Language.SOLIDITY`) using the
+      Nomic Foundation `@nomicfoundation/solidity-language-server`. Automatically
+      installed via npm. Supports `.sol` files with go-to-definition, find references,
+      document symbols, hover, and diagnostics. Works best with a `foundry.toml` or
+      `hardhat.config.js` in the project root.
+
 * General:
     * Add monorepo/multi-language support
         * Project configuration files (`project.yml`) can now define multiple languages.
