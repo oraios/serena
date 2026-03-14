@@ -31,6 +31,36 @@ class SourceKitLSP(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in [".build", ".swiftpm", "node_modules", "dist", "build"]
 
     @staticmethod
+    def _resolve_sourcekit_lsp_path() -> str:
+        """Resolve the path to sourcekit-lsp, preferring Xcode's version over Command Line Tools.
+
+        On macOS, bare `sourcekit-lsp` may resolve to the Command Line Tools version which
+        has limited capabilities. Using `xcrun --find sourcekit-lsp` resolves to Xcode's
+        full-featured version when Xcode is installed.
+        """
+        # Try xcrun with DEVELOPER_DIR pointing to Xcode (not Command Line Tools)
+        xcode_path = "/Applications/Xcode.app/Contents/Developer"
+        for env_override in [{"DEVELOPER_DIR": xcode_path}, {}]:
+            try:
+                run_env = {**os.environ, **env_override} if env_override else None
+                result = subprocess.run(
+                    ["xcrun", "--find", "sourcekit-lsp"],
+                    capture_output=True, text=True, check=False, timeout=10,
+                    env=run_env,
+                )
+                if result.returncode == 0:
+                    resolved = result.stdout.strip()
+                    if resolved and os.path.isfile(resolved):
+                        log.info(f"Resolved sourcekit-lsp via xcrun: {resolved}")
+                        return resolved
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                pass
+
+        # Fall back to bare command (Linux, or macOS without Xcode)
+        log.info("xcrun not available or failed, falling back to bare sourcekit-lsp")
+        return "sourcekit-lsp"
+
+    @staticmethod
     def _get_sourcekit_lsp_version() -> str:
         """Get the installed sourcekit-lsp version or raise error if sourcekit was not found."""
         try:
@@ -49,12 +79,15 @@ class SourceKitLSP(SolidLanguageServer):
         sourcekit_version = self._get_sourcekit_lsp_version()
         log.info(f"Starting sourcekit lsp with version: {sourcekit_version}")
 
+        # Resolve sourcekit-lsp path — prefer Xcode's version over Command Line Tools
+        sourcekit_path = self._resolve_sourcekit_lsp_path()
+
         # sourcekit-lsp needs --scratch-path for background indexing and cross-file references.
         # Without it, textDocument/references returns empty because there's no index store.
         scratch_path = os.path.join(repository_root_path, ".build", "sourcekit-lsp")
         os.makedirs(scratch_path, exist_ok=True)
-        cmd = ["sourcekit-lsp", "--scratch-path", scratch_path]
-        log.info(f"sourcekit-lsp scratch path: {scratch_path}")
+        cmd = [sourcekit_path, "--scratch-path", scratch_path]
+        log.info(f"sourcekit-lsp path: {sourcekit_path}, scratch path: {scratch_path}")
 
         super().__init__(
             config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "swift", solidlsp_settings
