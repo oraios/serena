@@ -203,13 +203,14 @@ def yaml_comment_entry_is_empty(comment_entry: Any) -> bool:
 
 
 def transfer_missing_yaml_comments_by_index(
-    source: CommentedMap, target: CommentedMap, indices: list[int], forced_update_keys: Sequence[str] = ()
+    source: CommentedMap, target: CommentedMap, indices: list[int], forced_update_keys: Sequence[str] = (), force_update_all: bool = False
 ) -> None:
     """
     :param source: the source, from which to transfer missing comments
     :param target: the target map, whose comments will be updated
     :param indices: list of comment indices to transfer
     :param forced_update_keys: keys for which comments are always transferred, even if present in target
+    :param force_update_all: if True, comments are transferred for all keys, even if present in target
     """
     for key in target.keys():
         if key in source:
@@ -222,14 +223,18 @@ def transfer_missing_yaml_comments_by_index(
                 target_comment = [None] * 4
                 target.ca.items[key] = target_comment
             # transfer comments at specified indices
+            is_forced_update = force_update_all or key in forced_update_keys
             for index in indices:
-                is_forced_update = key in forced_update_keys
                 if is_forced_update or yaml_comment_entry_is_empty(target_comment[index]):
                     target_comment[index] = source_comment[index]
 
 
 def transfer_missing_yaml_comments(
-    source: CommentedMap, target: CommentedMap, comment_normalisation: YamlCommentNormalisation, forced_update_keys: Sequence[str] = ()
+    source: CommentedMap,
+    target: CommentedMap,
+    comment_normalisation: YamlCommentNormalisation,
+    forced_update_keys: Sequence[str] = (),
+    force_update_all: bool = False,
 ) -> None:
     """
     Transfers missing comments from source to target YAML.
@@ -238,11 +243,14 @@ def transfer_missing_yaml_comments(
     :param target: the target map, whose comments will be updated.
     :param comment_normalisation: the comment normalisation to assume; if NONE, no comments are transferred
     :param forced_update_keys: keys for which comments are always transferred, even if present in target
+    :param force_update_all: if True, comments are transferred for all keys, even if present in target
     """
     match comment_normalisation:
         case YamlCommentNormalisation.NONE:
             pass
         case YamlCommentNormalisation.LEADING | YamlCommentNormalisation.LEADING_WITH_CONVERSION_FROM_TRAILING:
-            transfer_missing_yaml_comments_by_index(source, target, [ITEM_COMMENT_INDEX_BEFORE], forced_update_keys=forced_update_keys)
+            transfer_missing_yaml_comments_by_index(
+                source, target, [ITEM_COMMENT_INDEX_BEFORE], forced_update_keys=forced_update_keys, force_update_all=force_update_all
+            )
         case _:
             raise ValueError(f"Unhandled comment normalisation: {comment_normalisation}")
