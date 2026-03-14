@@ -9,6 +9,7 @@ import pathlib
 import shutil
 from typing import Any, cast
 
+import psutil
 from overrides import override
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
@@ -212,6 +213,38 @@ class HlslLanguageServer(SolidLanguageServer):
             log.warning("shader-language-server does not advertise definitionProvider")
 
         self.server.notify.initialized({})
+
+    @override
+    def stop(self, shutdown_timeout: float = 2.0) -> None:
+        """Kill the shader-language-server process tree before the standard shutdown.
+
+        The base _shutdown() calls process.terminate() directly on the subprocess,
+        which on Windows with shell=True only kills the cmd.exe wrapper, leaving
+        the actual shader-language-server binary running as an orphan. We use psutil
+        to terminate the full process tree first.
+        """
+        process = self.server.process if self.server else None
+        if process and process.pid and process.returncode is None:
+            try:
+                parent = psutil.Process(process.pid)
+                children = parent.children(recursive=True)
+                for child in children:
+                    try:
+                        child.terminate()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+                psutil.wait_procs(children, timeout=2)
+                for child in children:
+                    try:
+                        if child.is_running():
+                            child.kill()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+            except Exception as e:
+                log.debug(f"Error cleaning up shader-language-server process tree: {e}")
+        super().stop(shutdown_timeout)
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
