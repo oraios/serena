@@ -51,8 +51,15 @@ class SourceKitLSP(SolidLanguageServer):
         sourcekit_version = self._get_sourcekit_lsp_version()
         log.info(f"Starting sourcekit lsp with version: {sourcekit_version}")
 
+        # sourcekit-lsp needs --scratch-path for background indexing and cross-file references.
+        # Without it, textDocument/references returns empty because there's no index store.
+        scratch_path = os.path.join(repository_root_path, ".build", "sourcekit-lsp")
+        os.makedirs(scratch_path, exist_ok=True)
+        cmd = ["sourcekit-lsp", "--scratch-path", scratch_path]
+        log.info(f"sourcekit-lsp scratch path: {scratch_path}")
+
         super().__init__(
-            config, repository_root_path, ProcessLaunchInfo(cmd="sourcekit-lsp", cwd=repository_root_path), "swift", solidlsp_settings
+            config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "swift", solidlsp_settings
         )
         self.request_id = 0
         self._did_sleep_before_requesting_references = False
@@ -363,24 +370,26 @@ class SourceKitLSP(SolidLanguageServer):
             # Calculate minimum delay based on how much time has passed since initialization
             if self._initialization_timestamp:
                 elapsed = time.time() - self._initialization_timestamp
-                # Increased CI delay for project indexing: 15s CI, 5s local
-                base_delay = 15 if os.getenv("CI") else 5
+                # Increased delay for project indexing: 15s CI, 10s local
+                # 5s was insufficient for real projects — sourcekit-lsp needs time to index
+                base_delay = 15 if os.getenv("CI") else 10
                 remaining_delay = max(2, base_delay - elapsed)
             else:
                 # Fallback if initialization timestamp is missing
-                remaining_delay = 15 if os.getenv("CI") else 5
+                remaining_delay = 15 if os.getenv("CI") else 10
 
             log.info(f"Sleeping {remaining_delay:.1f}s before requesting references for the first time (CI needs extra indexing time)")
             time.sleep(remaining_delay)
             self._did_sleep_before_requesting_references = True
 
-        # Get references with retry logic for CI stability
+        # Get references with retry logic — indexing may not be complete on first request
         references = super().request_references(relative_file_path, line, column)
 
-        # In CI, if no references found, retry once after additional delay
-        if os.getenv("CI") and not references:
-            log.info("No references found in CI - retrying after additional 5s delay")
-            time.sleep(5)
+        # If no references found, retry once after additional delay (indexing may still be in progress)
+        if not references:
+            retry_delay = 5 if os.getenv("CI") else 3
+            log.info(f"No references found - retrying after additional {retry_delay}s delay (index may still be building)")
+            time.sleep(retry_delay)
             references = super().request_references(relative_file_path, line, column)
 
         return references
