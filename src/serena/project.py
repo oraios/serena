@@ -6,7 +6,7 @@ import shutil
 import threading
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 import pathspec
 from sensai.util.logging import LogTime
@@ -24,6 +24,9 @@ from serena.util.text_utils import ContentReplacer, MatchedConsecutiveLines, sea
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import FileUtils
+
+if TYPE_CHECKING:
+    from serena.agent import SerenaAgent
 
 log = logging.getLogger(__name__)
 
@@ -255,6 +258,7 @@ class Project(ToStringMixin):
         self.language_server_manager: LanguageServerManager | None = None
         self._language_server_manager_init_error: Exception | None = None
         self._is_newly_created = is_newly_created
+        self._agent: Optional["SerenaAgent"] = None
 
         # create .gitignore file in the project's Serena data folder if not yet present
         serena_data_gitignore_path = os.path.join(self._serena_data_folder, ".gitignore")
@@ -308,6 +312,9 @@ class Project(ToStringMixin):
 
     def _tostring_additional_entries(self) -> dict[str, Any]:
         return {"root": self.project_root, "name": self.project_name}
+
+    def set_agent(self, agent: "SerenaAgent") -> None:
+        self._agent = agent
 
     @property
     def project_name(self) -> str:
@@ -636,8 +643,9 @@ class Project(ToStringMixin):
         if self.language_server_manager is None:
             msg = TextBuilder("The language server manager is not initialized, indicating a problem during project initialisation.")
             if self._language_server_manager_init_error is not None:
-                msg.with_text(str(self._lsp_init_error))
-            msg.with_text("For details, please check the logs. " + self.get_log_inspection_instructions())
+                msg.with_text(str(self._language_server_manager_init_error))
+            if self._agent is not None:
+                msg.with_text("For details, please check the logs. " + self._agent.get_log_inspection_instructions())
             msg.with_text(
                 "IMPORTANT: Stop, do not attempt workarounds. Inform the user and wait for further instructions before you continue!"
             )

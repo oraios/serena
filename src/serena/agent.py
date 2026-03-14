@@ -700,6 +700,7 @@ class SerenaAgent:
             )
 
         self._active_project = project
+        project.set_agent(self)
 
         if update_active_modes:
             self._update_active_modes()
