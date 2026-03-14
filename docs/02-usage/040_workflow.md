@@ -57,7 +57,12 @@ The file allows you to configure ...
   * the set of tools and modes to use by default
 
 For detailed information on the parameters and possible settings, see the 
-[template file](https://github.com/oraios/serena/blob/main/src/serena/resources/project.template.yml). 
+[template file](https://github.com/oraios/serena/blob/main/src/serena/resources/project.template.yml).
+
+:::{note}
+Many settings in project.yml *extend* or *override* settings in the global configuration file `serena_config.yml`.
+So use the project configuration specifically for aspects that apply only to the particular project.
+:::
 
 **Local Overrides**. The project.yml file is intended to be versioned together with the project.
 You can specify local overrides for the settings in a `project.local.yml` file in the same directory
