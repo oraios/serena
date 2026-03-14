@@ -160,13 +160,13 @@ and that has a good test coverage is much easier to work with for Serena.
 
 We generally recommend to start an editing task from a state where all linting checks and tests pass.
 
-## Working with Multiple Projects Simultaneously
+## Multiple Projects, Multiple Agents
 
 There are several ways in which you might want to work with multiple projects simultaneously.
 
-### Simultaneously Editing in Multiple Projects
+### A Single Agent Editing Multiple Projects Simultaneously
 
-If fulfilling a task requires the agent to edit code in multiple projects, the recommended approach is to create a **monorepo folder**,
+If fulfilling a task requires a single agent to edit code in multiple projects, the recommended approach is to create a **monorepo folder**,
 i.e. a folder that contains all the projects as sub-folders, and open that monorepo folder as a project in Serena.
 You may also use symbolic links to create a monorepo folder if the projects are located in different places on your filesystem.
 
@@ -197,3 +197,16 @@ Depending on the language backend being used, the management of resources for th
   where `<serena>` is your way of running Serena. For example, when using `uvx`, run
 
       uvx --from git+https://github.com/oraios/serena serena start-project-server
+
+### Multiple Agents Accessing a Single Serena Instance
+
+If you want multiple agents to access the same project via a single Serena instance,
+i.e. you do not want several instances of Serena (including its language servers) to be running,
+you can achieve this by [starting the Serena MCP server in HTTP mode](streamable-http)
+and connecting all client agents to the same HTTP endpoint.
+The agents will then share the resources of the single Serena instance.
+
+### Multiple Agents Working on Different Projects
+
+For this use case, simply run a separate instance of Serena for each project, which naturally
+occurs when Serena is started by the MCP client in stdio mode.
