@@ -33,6 +33,9 @@ Some of the configurable settings include:
   * logging settings
   * advanced settings specific to individual language servers (see [below](ls-specific-settings))
 
+The global configuration settings apply to all projects.
+Some of the settings it contains can, however, be *extended* or *overridden* in project-specific settings, contexts and modes.
+
 For detailed information on the parameters and possible settings, see the
 [template file](https://github.com/oraios/serena/blob/main/src/serena/resources/serena_config.template.yml).
 
