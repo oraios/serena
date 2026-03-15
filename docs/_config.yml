@@ -12,7 +12,7 @@ title                       : Serena Documentation  # The title of the book. Wil
 author                      : Oraios AI & Oraios Software  # The author of the book
 copyright                   : "2025 by Serena contributors"  # Copyright year to be placed in the footer
 # Patterns to skip when building the book. Can be glob-style (e.g. "*skip.ipynb")
-exclude_patterns            : ['**.ipynb_checkpoints', '.DS_Store', 'Thumbs.db', '_build', 'jupyter_execute', '.jupyter_cache', '.pytest_cache', 'docs/autogen_rst.py', 'docs/create_toc.py']
+exclude_patterns            : ['**.ipynb_checkpoints', '.DS_Store', 'Thumbs.db', '_build', 'jupyter_execute', '.jupyter_cache', '.pytest_cache', 'docs/autogen_docs.py', 'docs/create_toc.py']
 # Auto-exclude files not in the toc
 only_build_toc_files        : true
 

@@ -145,12 +145,12 @@ _mypy_core = "mypy src/serena src/solidlsp"
 _mypy_test = "mypy --disable-error-code no-untyped-def test"
 type-check = ["_mypy_core", "_mypy_test"]
 # docs
-_autogen_rst = "python docs/autogen_rst.py"
+_autogen_docs = "python docs/autogen_docs.py"
 _sphinx_build = "sphinx-build -b html docs docs/_build -W --keep-going"
 _jb_generate_toc = "python docs/create_toc.py"
 _jb_generate_config = "jupyter-book config sphinx docs/"
 doc-clean = "rm -rf docs/_build docs/03_api"
-doc-generate-files = ["_autogen_rst", "_jb_generate_toc", "_jb_generate_config"]
+doc-generate-files = ["_autogen_docs", "_jb_generate_toc", "_jb_generate_config"]
 doc-build = ["doc-clean", "doc-generate-files", "_sphinx_build"]
 
 [tool.ruff]

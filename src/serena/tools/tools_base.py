@@ -382,6 +382,13 @@ class RegisteredTool:
     is_optional: bool
     tool_name: str
 
+    @property
+    def class_docstring(self) -> str:
+        """
+        :return: the tool description (high-level class docstring)
+        """
+        return self.tool_class.get_tool_description()
+
 
 tool_packages = ["serena.tools"]
 
@@ -399,6 +406,21 @@ class ToolRegistry:
             if name in self._tool_dict:
                 raise ValueError(f"Duplicate tool name found: {name}. Tool classes must have unique names.")
             self._tool_dict[name] = RegisteredTool(tool_class=cls, is_optional=is_optional, tool_name=name)
+
+    def get_registered_tools_by_module(self) -> dict[str, list[RegisteredTool]]:
+        """
+        :return: the registered tools grouped by their module (ordered alphabetically by module and tool name)
+        """
+        module_dict: dict[str, list[RegisteredTool]] = {}
+        for tool in self._tool_dict.values():
+            module = tool.tool_class.__module__
+            if module not in module_dict:
+                module_dict[module] = []
+            module_dict[module].append(tool)
+        sorted_module_dict = {}
+        for module in sorted(module_dict.keys()):
+            sorted_module_dict[module] = sorted(module_dict[module], key=lambda t: t.tool_name)
+        return sorted_module_dict
 
     def get_tool_class_by_name(self, tool_name: str) -> type[Tool]:
         if tool_name not in self._tool_dict:
