@@ -42,7 +42,7 @@ class TestAnsibleDocumentSymbols:
         ls_path = os.environ.get(ANSIBLE_LS_PATH_ENV)
         if not ls_path or not os.path.exists(ls_path):
             pytest.skip(
-                f"Custom ansible-language-server not found. " f"Set {ANSIBLE_LS_PATH_ENV} to run documentSymbol tests.",
+                f"Custom ansible-language-server not found. Set {ANSIBLE_LS_PATH_ENV} to run documentSymbol tests.",
                 allow_module_level=True,
             )
 
