@@ -500,7 +500,7 @@ class ProjectConfig(SharedConfig):
 
         # transfer missing comments from the template file
         template_config, _ = self._load_yaml_dict(PROJECT_TEMPLATE_FILE, self.YAML_COMMENT_NORMALISATION)
-        transfer_missing_yaml_comments(template_config, config_with_comments, self.YAML_COMMENT_NORMALISATION)
+        transfer_missing_yaml_comments(template_config, config_with_comments, self.YAML_COMMENT_NORMALISATION, force_update_all=True)
 
         save_yaml(config_path, config_with_comments)
 
@@ -965,7 +965,7 @@ class SerenaConfig(SharedConfig):
         # For some keys, we force updates, because old comments are problematic/misleading.
         normalise_yaml_comments(commented_yaml, YamlCommentNormalisation.LEADING_WITH_CONVERSION_FROM_TRAILING)
         template_yaml = load_yaml(SERENA_CONFIG_TEMPLATE_FILE, comment_normalisation=YamlCommentNormalisation.LEADING)
-        transfer_missing_yaml_comments(template_yaml, commented_yaml, YamlCommentNormalisation.LEADING, forced_update_keys=["projects"])
+        transfer_missing_yaml_comments(template_yaml, commented_yaml, YamlCommentNormalisation.LEADING, force_update_all=True)
 
         save_yaml(self.config_file_path, commented_yaml)
 
