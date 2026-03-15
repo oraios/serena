@@ -1,10 +1,8 @@
 """
 Basic integration tests for the Ansible language server functionality.
 
-These tests validate the functionality of the language server APIs
-using the Ansible test repository. Note that ansible-language-server
-does not support documentSymbol; it provides hover, completion, and
-definition capabilities.
+These tests validate hover, completion, and definition capabilities
+using the Ansible test repository.
 """
 
 import pytest

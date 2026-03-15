@@ -301,8 +301,6 @@ class AnsibleLanguageServer(SolidLanguageServer):
         init_response = self.server.send.initialize(initialize_params)
         log.debug(f"Received initialize response from Ansible server: {init_response}")
 
-        # note: ansible-language-server does not support documentSymbol;
-        # it provides hover, completion, definition, and semanticTokens
         log.debug(f"Ansible server capabilities: {list(init_response['capabilities'].keys())}")
 
         self.server.notify.initialized({})
