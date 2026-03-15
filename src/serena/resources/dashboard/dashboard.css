@@ -836,12 +836,11 @@ body {
     border: 1px solid var(--border-color);
     border-radius: 5px;
     height: calc(100vh - var(--header-height) - 2 * var(--header-padding) - 3 * var(--header-gap-main));
-    max-height: 700px;
     overflow-y: auto;
     overflow-x: auto;
     padding: 10px;
     white-space: pre-wrap;
-    font-size: 12px;
+    font-size: 14px;
     line-height: 1.4;
     color: var(--text-primary);
     transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
