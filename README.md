@@ -41,6 +41,7 @@ In general, Serena can be integrated with an LLM in several ways:
 * by using [mcpo to connect it to ChatGPT](docs/03-special-guides/serena_on_chatgpt.md) or other clients that don't support MCP but do support tool calling via OpenAPI.
 * by incorporating Serena's tools into an agent framework of your choice, as illustrated [here](docs/03-special-guides/custom_agent.md).
   Serena's tool implementation is decoupled from the framework-specific code and can thus easily be adapted to any agent framework.
+  Any OpenAI-compatible provider (such as [MiniMax](https://www.minimax.io/)) can be used via Agno's `OpenAILike` model class.
 
 ## Serena in Action
 

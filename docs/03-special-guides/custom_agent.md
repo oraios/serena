@@ -34,7 +34,16 @@ Here's how it works:
    uv run python scripts/agno_agent.py
    ```
    By default, the script uses Claude as the model, but you can choose any model
-   supported by Agno (which is essentially any existing model).
+   supported by Agno (which is essentially any existing model), including
+   OpenAI-compatible providers like [MiniMax](https://www.minimax.io/) via Agno's `OpenAILike`:
+   ```python
+   from agno.models.openai import OpenAILike
+   model = OpenAILike(
+       id="MiniMax-M2.5",
+       api_key=os.environ["MINIMAX_API_KEY"],
+       base_url="https://api.minimax.io/v1",
+   )
+   ```
 
 5. In a new terminal, start the agno UI with
    ```shell
