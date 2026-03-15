@@ -11,11 +11,10 @@ import shutil
 from typing import Any
 
 from solidlsp.language_servers.common import (
-    LanguageServerDependencyProviderSinglePath,
     RuntimeDependency,
     RuntimeDependencyCollection,
 )
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_process import ProcessLaunchInfo
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 
