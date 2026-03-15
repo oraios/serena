@@ -1,0 +1,6 @@
+---
+- name: Deploy web application
+  hosts: webservers
+  become: true
+  roles:
+    - nginx

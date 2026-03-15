@@ -3,11 +3,14 @@ Provides Ansible specific instantiation of the LanguageServer class using ansibl
 Contains various configurations and settings specific to Ansible YAML files (playbooks, roles, etc.).
 """
 
+import fnmatch
 import logging
 import os
 import pathlib
 import shutil
-from typing import Any
+from typing import Any, ClassVar
+
+from overrides import override
 
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
@@ -48,6 +51,75 @@ class AnsibleLanguageServer(SolidLanguageServer):
       (``ansible.*``, ``python.*``, ``validation.*``, ``completion.*``,
       ``executionEnvironment.*``).
     """
+
+    # directory names that signal ansible content at ANY nesting level
+    _ANSIBLE_DIR_NAMES: ClassVar[set[str]] = {
+        "roles",
+        "playbooks",
+        "tasks",
+        "handlers",
+        "group_vars",
+        "host_vars",
+        "inventory",
+        "inventories",
+        "defaults",
+        "vars",
+        "meta",
+    }
+
+    # filename patterns handled by ansible LS regardless of path
+    _ANSIBLE_FILENAME_PATTERNS: ClassVar[list[str]] = [
+        "playbook*.yml",
+        "playbook*.yaml",
+        "site.yml",
+        "site.yaml",
+        "requirements.yml",
+        "requirements.yaml",
+    ]
+
+    @staticmethod
+    def _is_ansible_path(relative_path: str) -> bool:
+        """Check if a file is in an ansible-specific location.
+
+        Matches if ANY component of the path is an ansible-specific
+        directory name (e.g. ``roles``, ``tasks``, ``group_vars``),
+        or if the filename matches an ansible-specific pattern.
+        This works regardless of nesting depth:
+        ``project/deploy/roles/web/tasks/main.yml`` matches on both
+        ``roles`` and ``tasks``.
+
+        :param relative_path: path relative to the repository root
+        :return: True if the path is an ansible-specific location
+        """
+        normalized = relative_path.replace("\\", "/")
+        parts = normalized.split("/")
+
+        # check if any directory component is ansible-specific
+        dir_parts = parts[:-1]
+        for part in dir_parts:
+            if part in AnsibleLanguageServer._ANSIBLE_DIR_NAMES:
+                return True
+
+        # check filename patterns (e.g. playbook.yml, site.yaml)
+        filename = parts[-1]
+        for pattern in AnsibleLanguageServer._ANSIBLE_FILENAME_PATTERNS:
+            if fnmatch.fnmatch(filename, pattern):
+                return True
+
+        return False
+
+    @override
+    def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool = True) -> bool:
+        # standard ignore rules (extension, gitignore, etc.)
+        if super().is_ignored_path(relative_path, ignore_unsupported_files):
+            return True
+
+        # for yml/yaml files, check if they are in ansible-specific paths
+        if relative_path.endswith((".yml", ".yaml")):
+            if not self._is_ansible_path(relative_path):
+                return True
+
+        return False
 
     @staticmethod
     def _determine_log_level(line: str) -> int:
