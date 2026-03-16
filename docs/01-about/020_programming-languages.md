@@ -30,7 +30,7 @@ Some languages require additional installations or setup steps, as noted.
 * **AL**
 * **Ansible**
   (experimental; requires Node.js and npm; automatically installs `@ansible/ansible-language-server`;
-  must be explicitly specified as the main language; requires `ansible` in PATH for full functionality)
+  must be explicitly specified in the `languages` entry in the `project.yml`; requires `ansible` in PATH for full functionality)
 * **Bash**
 * **C#**  
   (by default, uses the Roslyn language server (language `csharp`), requiring [.NET v10+](https://dotnet.microsoft.com/en-us/download/dotnet) and, on Windows, `pwsh` ([PowerShell 7+](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows?view=powershell-7.5));
