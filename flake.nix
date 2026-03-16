@@ -77,7 +77,16 @@
 
       packages = {
         serena-env = pythonSet.mkVirtualEnv "serena-env" workspace.deps.default;
-        serena = pkgs.runCommand "serena" {} ''
+        serena = pkgs.runCommand "serena" {
+            meta = {
+              description = "A powerful coding agent toolkit providing semantic retrieval and editing capabilities (MCP server & Agno integration)";
+              homepage = "https://oraios.github.io/serena";
+              changelog = "https://github.com/oraios/serena/blob/main/CHANGELOG.md";
+              mainProgram = "serena";
+              license = pkgs.lib.licenses.mit;
+              platforms = lib.platforms.all;
+            };
+          } ''
           mkdir -p $out/bin
           ln -s ${packages.serena-env}/bin/serena $out/bin/serena
         '';
