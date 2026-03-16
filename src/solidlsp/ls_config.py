@@ -123,6 +123,12 @@ class Language(str, Enum):
     Automatically downloads verible binary.
     """
     SOLIDITY = "solidity"
+    ANSIBLE = "ansible"
+    """Ansible language server (experimental) using @ansible/ansible-language-server.
+    Supports *.yaml and *.yml files (same extensions as YAML, hence experimental).
+    Must be explicitly specified in project.yml. Requires Node.js and npm.
+    Requires ``ansible`` in PATH for full functionality.
+    """
     """Solidity language server using the Nomic Foundation Solidity Language Server
     (@nomicfoundation/solidity-language-server).
     Supports .sol files. Provides go-to-definition, find references, document symbols,
@@ -299,6 +305,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.sv", "*.svh", "*.v", "*.vh")
             case self.SOLIDITY:
                 return FilenameMatcher("*.sol")
+            case self.ANSIBLE:
+                return FilenameMatcher("*.yaml", "*.yml")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -506,6 +514,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.solidity_language_server import SolidityLanguageServer
 
                 return SolidityLanguageServer
+            case self.ANSIBLE:
+                from solidlsp.language_servers.ansible_language_server import AnsibleLanguageServer
+
+                return AnsibleLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
