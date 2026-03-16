@@ -3,8 +3,6 @@ Configuration objects for language servers
 """
 
 import fnmatch
-import os
-from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -12,61 +10,6 @@ from typing import TYPE_CHECKING, Self
 
 if TYPE_CHECKING:
     from solidlsp import SolidLanguageServer
-
-
-class ProjectDetector(ABC):
-    """Detects whether a project uses a specific language based on directory structure rather than file extensions."""
-
-    @abstractmethod
-    def detect(self, repo_path: str) -> bool:
-        """Determine if the project at the given path matches this language.
-
-        :param repo_path: absolute path to the repository root
-        :return: True if the project matches this language
-        """
-        ...
-
-
-class AnsibleProjectDetector(ProjectDetector):
-    """Detects Ansible projects by presence of characteristic directories and files.
-
-    Checks root-level marker files (``ansible.cfg``, ``.ansible-lint``),
-    root-level marker directories (``inventory``, ``inventories``, ``playbooks``),
-    and nested marker directories (``roles``, ``group_vars``, ``host_vars``) up to depth 3.
-    """
-
-    # directories whose presence (at any nesting level) signals ansible
-    MARKER_DIRS: set[str] = {"roles", "group_vars", "host_vars"}
-    # files whose presence at project root signals ansible
-    MARKER_ROOT_FILES: set[str] = {"ansible.cfg", ".ansible-lint"}
-    # root-level dirs that are strong ansible signals
-    MARKER_ROOT_DIRS: set[str] = {"inventory", "inventories", "playbooks"}
-
-    def detect(self, repo_path: str) -> bool:
-        if not os.path.isdir(repo_path):
-            return False
-
-        # check root-level marker files
-        for f in self.MARKER_ROOT_FILES:
-            if os.path.isfile(os.path.join(repo_path, f)):
-                return True
-
-        # check root-level marker directories
-        for d in self.MARKER_ROOT_DIRS:
-            if os.path.isdir(os.path.join(repo_path, d)):
-                return True
-
-        # check marker dirs at any level (shallow scan — max depth 3)
-        for root, dirs, _files in os.walk(repo_path):
-            depth = root.replace(repo_path, "").count(os.sep)
-            if depth >= 3:
-                dirs.clear()
-                continue
-            for d in dirs:
-                if d in self.MARKER_DIRS:
-                    return True
-
-        return False
 
 
 class FilenameMatcher:
@@ -186,12 +129,6 @@ class Language(str, Enum):
     hover, and diagnostics. Requires Node.js and npm.
     Works best with a foundry.toml or hardhat.config.js in the project root.
     """
-    ANSIBLE = "ansible"
-    """Ansible language server (experimental) using @ansible/ansible-language-server.
-    Supports *.yaml and *.yml files (same extensions as YAML, hence experimental).
-    Must be explicitly specified in project.yml. Requires Node.js and npm.
-    Requires ``ansible`` in PATH for full functionality.
-    """
 
     @classmethod
     def iter_all(cls, include_experimental: bool = False) -> Iterable[Self]:
@@ -240,19 +177,6 @@ class Language(str, Enum):
             # regular languages
             case _:
                 return 2
-
-    def get_project_detector(self) -> ProjectDetector | None:
-        """Return a project detector for structure-based language detection, or None.
-
-        Languages that share file extensions with other languages (e.g. Ansible and YAML
-        both use ``.yml``/``.yaml``) can provide a detector that examines directory structure
-        to determine if the project uses this language.
-
-        :return: a project detector instance or None if extension-based detection suffices
-        """
-        if self == Language.ANSIBLE:
-            return AnsibleProjectDetector()
-        return None
 
     def get_source_fn_matcher(self) -> FilenameMatcher:
         match self:
@@ -303,8 +227,6 @@ class Language(str, Enum):
             case self.BASH:
                 return FilenameMatcher("*.sh", "*.bash")
             case self.YAML:
-                return FilenameMatcher("*.yaml", "*.yml")
-            case self.ANSIBLE:
                 return FilenameMatcher("*.yaml", "*.yml")
             case self.TOML:
                 return FilenameMatcher("*.toml")
@@ -584,10 +506,6 @@ class Language(str, Enum):
                 from solidlsp.language_servers.solidity_language_server import SolidityLanguageServer
 
                 return SolidityLanguageServer
-            case self.ANSIBLE:
-                from solidlsp.language_servers.ansible_language_server import AnsibleLanguageServer
-
-                return AnsibleLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

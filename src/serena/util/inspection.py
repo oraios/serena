@@ -63,20 +63,4 @@ def determine_programming_language_composition(repo_path: str) -> dict[Language,
         percentage = (count / total_files) * 100
         language_percentages[language] = round(percentage, 2)
 
-    # run project detectors for languages that use structure-based detection
-    for language in Language.iter_all():
-        detector = language.get_project_detector()
-        if detector is None:
-            continue
-        if language in language_percentages:
-            continue
-        if not detector.detect(repo_path):
-            continue
-
-        # detector triggered — count matching files by extension
-        matcher = language.get_source_fn_matcher()
-        count = sum(1 for f in all_files if matcher.is_relevant_filename(os.path.basename(f)))
-        if count > 0:
-            language_percentages[language] = round((count / total_files) * 100, 2)
-
     return language_percentages
