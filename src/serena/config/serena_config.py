@@ -352,7 +352,10 @@ class ProjectConfig(SharedConfig):
 
     @classmethod
     def _load_yaml_dict(
-        cls, yml_path: str, comment_normalisation: YamlCommentNormalisation = YamlCommentNormalisation.NONE
+        cls,
+        yml_path: str,
+        comment_normalisation: YamlCommentNormalisation = YamlCommentNormalisation.NONE,
+        apply_defaults: bool = True,
     ) -> tuple[CommentedMap, bool]:
         """
         Load the project configuration as a CommentedMap, preserving comments and ensuring
@@ -360,24 +363,31 @@ class ProjectConfig(SharedConfig):
         and backward compatibility adjustments.
 
         :param yml_path: the path to the project.yml file
+        :param comment_normalisation: the strategy to use for normalising comments in the loaded YAML
+        :param apply_defaults: whether to apply default values for missing fields
         :return: a tuple `(dict, was_complete)` where dict is a CommentedMap representing a
           full project configuration and `was_complete` indicates whether the loaded configuration
-          was complete (i.e., did not require any default values to be applied)
+          was complete (i.e., did not require any default values to be applied) for the case where
+          `apply_defaults` is True; If `apply_defaults` is False, the returned dict may be incomplete
+          and `was_complete` will always be True.
         """
         data = load_yaml(yml_path, comment_normalisation=comment_normalisation)
 
         # apply defaults
         was_complete = True
-        for field_info in dataclasses.fields(cls):
-            key = field_info.name
-            if key in cls.FIELDS_WITHOUT_DEFAULTS:
-                continue
-            if key not in data:
-                was_complete = False
-                default_value = get_dataclass_default(cls, key)
-                data.setdefault(key, default_value)
+        if apply_defaults:
+            for field_info in dataclasses.fields(cls):
+                key = field_info.name
+                if key in cls.FIELDS_WITHOUT_DEFAULTS:
+                    continue
+                if key not in data:
+                    was_complete = False
+                    default_value = get_dataclass_default(cls, key)
+                    data.setdefault(key, default_value)
 
-        # backward compatibility: handle single "language" field
+        # backward compatibility
+        # NOTE: This must also work for project.local.yml files, which may be highly incomplete
+        # * handle single "language" field
         if "languages" not in data and "language" in data:
             data["languages"] = [data["language"]]
             del data["language"]
@@ -462,6 +472,7 @@ class ProjectConfig(SharedConfig):
         project_root = Path(project_root)
         project_folder_name = project_root.name
         yaml_path = serena_config.get_project_yml_location(project_root)
+        log.debug("Loading project configuration from %s", yaml_path)
 
         # auto-generate if necessary
         if not os.path.exists(yaml_path):
@@ -475,13 +486,26 @@ class ProjectConfig(SharedConfig):
         if "project_name" not in yaml_data:
             yaml_data["project_name"] = project_folder_name
 
-        # instantiate the ProjectConfig
-        project_config = cls._from_dict(yaml_data)
-
         # if the configuration was incomplete, re-save it to disk
         if not was_complete:
+            project_config = cls._from_dict(yaml_data)
             log.info("Project configuration in %s was incomplete, re-saving with default values for missing fields", yaml_path)
             project_config.save(str(yaml_path))
+
+        # apply overrides from project.local.yml, if present
+        local_yaml_path = os.path.join(os.path.dirname(yaml_path), cls.SERENA_LOCAL_PROJECT_FILE)
+        if os.path.exists(local_yaml_path):
+            local_yaml_data, _ = cls._load_yaml_dict(local_yaml_path, apply_defaults=False)
+            if local_yaml_data:
+                log.debug(
+                    "Applying project configuration overrides from %s with keys %s",
+                    local_yaml_path,
+                    list(local_yaml_data.keys()),
+                )
+                yaml_data.update(local_yaml_data)
+
+        # instantiate the ProjectConfig
+        project_config = cls._from_dict(yaml_data)
 
         return project_config
 

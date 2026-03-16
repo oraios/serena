@@ -68,7 +68,9 @@ def load_yaml(path: str, comment_normalisation: YamlCommentNormalisation = YamlC
     """
     with open(path, encoding=SERENA_FILE_ENCODING) as f:
         yaml = _create_yaml(preserve_comments=True)
-        commented_map: CommentedMap = yaml.load(f)
+        commented_map: CommentedMap | None = yaml.load(f)
+    if commented_map is None:  # ruamel returns None for empty documents, but we want an empty CommentedMap
+        commented_map = CommentedMap()
     normalise_yaml_comments(commented_map, comment_normalisation)
     return commented_map
 
