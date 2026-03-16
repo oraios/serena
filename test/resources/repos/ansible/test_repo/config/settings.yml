@@ -1,4 +1,0 @@
-app:
-  name: myapp
-  debug: false
-  port: 8080
