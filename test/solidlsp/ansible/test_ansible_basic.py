@@ -28,8 +28,8 @@ class TestAnsibleLanguageServerBasics:
     @pytest.mark.parametrize("language_server", [Language.ANSIBLE], indirect=True)
     def test_hover_on_module_contains_documentation(self, language_server: SolidLanguageServer) -> None:
         """Hover on ansible.builtin.package returns module documentation."""
-        # playbook.yml line 11 (0-indexed): "ansible.builtin.package:"
-        result = language_server.request_hover("playbook.yml", 11, 8)
+        # playbook.yml line 10 (0-indexed): "ansible.builtin.package:"
+        result = language_server.request_hover("playbook.yml", 10, 8)
         assert result is not None, "Expected hover info for ansible.builtin.package"
         hover_value = result["contents"]
         if isinstance(hover_value, dict):
