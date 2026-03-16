@@ -123,17 +123,17 @@ class Language(str, Enum):
     Automatically downloads verible binary.
     """
     SOLIDITY = "solidity"
-    ANSIBLE = "ansible"
-    """Ansible language server (experimental) using @ansible/ansible-language-server.
-    Supports *.yaml and *.yml files (same extensions as YAML, hence experimental).
-    Must be explicitly specified in project.yml. Requires Node.js and npm.
-    Requires ``ansible`` in PATH for full functionality.
-    """
     """Solidity language server using the Nomic Foundation Solidity Language Server
     (@nomicfoundation/solidity-language-server).
     Supports .sol files. Provides go-to-definition, find references, document symbols,
     hover, and diagnostics. Requires Node.js and npm.
     Works best with a foundry.toml or hardhat.config.js in the project root.
+    """
+    ANSIBLE = "ansible"
+    """Ansible language server (experimental) using @ansible/ansible-language-server.
+    Supports *.yaml and *.yml files (same extensions as YAML, hence experimental).
+    Must be explicitly specified in project.yml. Requires Node.js and npm.
+    Requires ``ansible`` in PATH for full functionality.
     """
 
     @classmethod
@@ -151,6 +151,7 @@ class Language(str, Enum):
         in the project.yml configuration.
         """
         return self in {
+            self.ANSIBLE,
             self.TYPESCRIPT_VTS,
             self.PYTHON_JEDI,
             self.CSHARP_OMNISHARP,
