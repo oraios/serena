@@ -282,6 +282,16 @@ class AnsibleLanguageServer(SolidLanguageServer):
         def register_capability_handler(params: Any) -> None:
             return
 
+        def show_message_request_handler(params: Any) -> None:
+            """Handle ``window/showMessageRequest`` by returning ``null``.
+
+            Per the LSP spec, returning ``null`` means no action was selected.
+            Without this handler the client replies with ``MethodNotFound``,
+            which the ansible LS treats as fatal.
+            """
+            log.info(f"LSP: window/showMessageRequest (dismissed): {params.get('message', params)}")
+            return
+
         def do_nothing(params: Any) -> None:
             return
 
@@ -289,6 +299,7 @@ class AnsibleLanguageServer(SolidLanguageServer):
             log.info(f"LSP: window/logMessage: {msg}")
 
         self.server.on_request("client/registerCapability", register_capability_handler)
+        self.server.on_request("window/showMessageRequest", show_message_request_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
