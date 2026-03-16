@@ -187,7 +187,7 @@ class TestProjectConfigLanguageBackend:
         data["project_name"] = "test"
         data["languages"] = ["python"]
         data["language_backend"] = "JetBrains"
-        config = ProjectConfig._from_dict(data)
+        config = ProjectConfig._from_dict(data, has_local_overrides=False)
         assert config.language_backend == LanguageBackend.JETBRAINS
 
     def test_language_backend_none_when_missing_from_dict(self):
@@ -197,7 +197,7 @@ class TestProjectConfigLanguageBackend:
         data["project_name"] = "test"
         data["languages"] = ["python"]
         data.pop("language_backend", None)
-        config = ProjectConfig._from_dict(data)
+        config = ProjectConfig._from_dict(data, has_local_overrides=False)
         assert config.language_backend is None
 
 
