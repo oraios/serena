@@ -129,6 +129,12 @@ class Language(str, Enum):
     hover, and diagnostics. Requires Node.js and npm.
     Works best with a foundry.toml or hardhat.config.js in the project root.
     """
+    ANSIBLE = "ansible"
+    """Ansible language server (experimental) using @ansible/ansible-language-server.
+    Supports *.yaml and *.yml files (same extensions as YAML, hence experimental).
+    Must be explicitly specified in project.yml. Requires Node.js and npm.
+    Requires ``ansible`` in PATH for full functionality.
+    """
 
     @classmethod
     def iter_all(cls, include_experimental: bool = False) -> Iterable[Self]:
@@ -145,6 +151,7 @@ class Language(str, Enum):
         in the project.yml configuration.
         """
         return self in {
+            self.ANSIBLE,
             self.TYPESCRIPT_VTS,
             self.PYTHON_JEDI,
             self.CSHARP_OMNISHARP,
@@ -299,6 +306,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.sv", "*.svh", "*.v", "*.vh")
             case self.SOLIDITY:
                 return FilenameMatcher("*.sol")
+            case self.ANSIBLE:
+                return FilenameMatcher("*.yaml", "*.yml")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -506,6 +515,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.solidity_language_server import SolidityLanguageServer
 
                 return SolidityLanguageServer
+            case self.ANSIBLE:
+                from solidlsp.language_servers.ansible_language_server import AnsibleLanguageServer
+
+                return AnsibleLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

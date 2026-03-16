@@ -1104,12 +1104,12 @@ class SolidLanguageServer(ABC):
             }
             response: list[LSPTypes.CompletionItem] | LSPTypes.CompletionList | None = None
 
-            num_retries = 0
-            while response is None or (response["isIncomplete"] and num_retries < 30):  # type: ignore
+            for _ in range(30):
                 response = self.server.send.completion(completion_params)
                 if isinstance(response, list):
                     response = {"items": response, "isIncomplete": False}
-                num_retries += 1
+                if response is None or not response["isIncomplete"]:  # type: ignore
+                    break
 
             # TODO: Understand how to appropriately handle `isIncomplete`
             if response is None or (response["isIncomplete"] and not allow_incomplete):  # type: ignore

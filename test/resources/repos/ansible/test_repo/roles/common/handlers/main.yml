@@ -1,0 +1,4 @@
+---
+- name: Restart common services
+  ansible.builtin.debug:
+    msg: "Restarting common services"
