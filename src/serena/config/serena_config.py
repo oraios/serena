@@ -475,6 +475,14 @@ class ProjectConfig(SharedConfig):
         if "project_name" not in yaml_data:
             yaml_data["project_name"] = project_folder_name
 
+        # apply local overrides from project.local.yml if present
+        local_yaml_path = os.path.join(os.path.dirname(yaml_path), cls.SERENA_LOCAL_PROJECT_FILE)
+        if os.path.exists(local_yaml_path):
+            local_data = load_yaml(local_yaml_path)
+            if local_data:
+                log.info("Applying local project configuration overrides from %s", local_yaml_path)
+                yaml_data.update(local_data)
+
         # instantiate the ProjectConfig
         project_config = cls._from_dict(yaml_data)
 
