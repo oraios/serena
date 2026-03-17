@@ -826,7 +826,12 @@ class SerenaConfig(SharedConfig):
         instance.projects = []
         for path in loaded_commented_yaml["projects"]:
             path = Path(path).resolve()
-            if not path.exists() or (path.is_dir() and not os.path.isfile(instance.get_project_yml_location(str(path)))):
+            try:
+                path_exists = path.exists()
+            except OSError as e:
+                log.warning(f"Project path {path} is not accessible ({e}), skipping.")
+                continue
+            if not path_exists or (path.is_dir() and not os.path.isfile(instance.get_project_yml_location(str(path)))):
                 log.warning(f"Project path {path} does not exist or no associated project configuration file found, skipping.")
                 continue
             if path.is_file():
