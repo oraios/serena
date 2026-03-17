@@ -222,6 +222,7 @@ class SharedConfig(ModeSelectionDefinition, ToolInclusionDefinition, ToStringMix
     language_backend: LanguageBackend | None = None
     line_ending: LineEnding | None = None
     read_only_memory_patterns: list[str] = field(default_factory=list)
+    ignored_memory_patterns: list[str] = field(default_factory=list)
 
 
 class SerenaConfigError(Exception):
@@ -451,6 +452,7 @@ class ProjectConfig(SharedConfig):
             included_optional_tools=data["included_optional_tools"],
             read_only=data["read_only"],
             read_only_memory_patterns=data.get("read_only_memory_patterns", []),
+            ignored_memory_patterns=data.get("ignored_memory_patterns", []),
             ignore_all_files_in_gitignore=data["ignore_all_files_in_gitignore"],
             initial_prompt=data["initial_prompt"],
             encoding=data["encoding"],
