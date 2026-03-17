@@ -26,6 +26,8 @@ Instead, it can use code-centric tools like `find_symbol`, `find_referencing_sym
 
 ## LLM Integration
 
+[![AgentRank](https://agentrank-ai.com/api/badge/tool/oraios--serena)](https://agentrank-ai.com/tool/oraios--serena/)
+
 Serena provides the necessary [tools](https://oraios.github.io/serena/01-about/035_tools.html) for coding workflows, but an LLM is required to do the actual work,
 orchestrating tool use.
 
