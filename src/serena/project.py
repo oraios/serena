@@ -334,16 +334,11 @@ class Project(ToStringMixin):
         project_config = ProjectConfig.load(project_root, serena_config=serena_config, autogenerate=autogenerate)
         return Project(project_root=str(project_root), project_config=project_config, serena_config=serena_config)
 
-    def save_config(self, keys: list[str]) -> None:
+    def save_config(self) -> None:
         """
-        Saves the current project configuration (project.yml) to disk.
-
-        :param keys: the keys of the project configuration that were changed and need to be updated on disk.
-            Specifying these keys is necessary, because we cannot just save the full configuration, since
-            it may be subject to local overrides (from project.local.yml), which must never be saved to
-            project.yml.
+        Saves the current project configuration to disk.
         """
-        self.project_config.save(self.path_to_project_yml(), keys=keys)
+        self.project_config.save(self.path_to_project_yml())
 
     def path_to_serena_data_folder(self) -> str:
         return self._serena_data_folder
@@ -678,7 +673,7 @@ class Project(ToStringMixin):
 
         # update the project configuration
         self.project_config.languages.append(language)
-        self.save_config(keys=["languages"])
+        self.save_config()
 
     def remove_language(self, language: Language) -> None:
         """
@@ -693,7 +688,7 @@ class Project(ToStringMixin):
             return
         # update the project configuration
         self.project_config.languages.remove(language)
-        self.save_config(keys=["languages"])
+        self.save_config()
 
         # stop the language server (if the LS manager is active)
         if self.language_server_manager is None:

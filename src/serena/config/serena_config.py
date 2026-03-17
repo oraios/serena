@@ -246,7 +246,7 @@ class ProjectConfig(SharedConfig):
     encoding: str = DEFAULT_SOURCE_FILE_ENCODING
 
     # internal fields which are not mapped to/from the configuration file (must start with "_")
-    _has_local_overrides: bool = field(default=False, repr=False, compare=False)
+    _local_override_keys: list[str] = field(default_factory=list)
 
     # class-level constants
     SERENA_PROJECT_FILE = "project.yml"
@@ -344,7 +344,7 @@ class ProjectConfig(SharedConfig):
                 project_local_yml_path = os.path.join(os.path.dirname(project_yml_path), cls.SERENA_LOCAL_PROJECT_FILE)
                 shutil.copy(PROJECT_LOCAL_TEMPLATE_FILE, project_local_yml_path)
 
-            return cls._from_dict(config_with_comments, has_local_overrides=False)
+            return cls._from_dict(config_with_comments, local_override_keys=[])
 
     @classmethod
     def default_project_yml_path(cls, project_root: str | Path) -> str:
@@ -402,13 +402,13 @@ class ProjectConfig(SharedConfig):
         return data, was_complete
 
     @classmethod
-    def _from_dict(cls, data: dict[str, Any], has_local_overrides: bool) -> Self:
+    def _from_dict(cls, data: dict[str, Any], local_override_keys: list[str]) -> Self:
         """
         Create a ProjectConfig instance from a (full) configuration dictionary
 
         :param data: the configuration dictionary; must contain all required fields and use the same field names as
             the ProjectConfig dataclass
-        :param has_local_overrides: whether this configuration contains overrides from a project.local.yml file
+        :param local_override_keys: the list of keys that have been overridden from project.local.yml
         """
         lang_name_mapping = {"javascript": "typescript"}
         languages: list[Language] = []
@@ -459,7 +459,7 @@ class ProjectConfig(SharedConfig):
             base_modes=data["base_modes"],
             default_modes=data["default_modes"],
             symbol_info_budget=symbol_info_budget,
-            _has_local_overrides=has_local_overrides,
+            _local_override_keys=local_override_keys,
         )
 
     def _to_yaml_dict(self) -> dict:
@@ -480,6 +480,10 @@ class ProjectConfig(SharedConfig):
         d["line_ending"] = self.line_ending.value if self.line_ending is not None else None
 
         return d
+
+    @classmethod
+    def _project_local_yml_path(cls, project_yml_path: str) -> str:
+        return os.path.join(os.path.dirname(project_yml_path), cls.SERENA_LOCAL_PROJECT_FILE)
 
     @classmethod
     def load(cls, project_root: Path | str, serena_config: "SerenaConfig", autogenerate: bool = False) -> Self:
@@ -507,65 +511,72 @@ class ProjectConfig(SharedConfig):
         if "project_name" not in yaml_data:
             yaml_data["project_name"] = project_folder_name
 
-        # if the configuration was incomplete, re-save it to disk
-        if not was_complete:
-            project_config = cls._from_dict(yaml_data, has_local_overrides=False)
-            log.info("Project configuration in %s was incomplete, re-saving with default values for missing fields", yaml_path)
-            project_config.save(str(yaml_path), keys=None)
-
         # apply overrides from project.local.yml, if present
-        local_yaml_path = os.path.join(os.path.dirname(yaml_path), cls.SERENA_LOCAL_PROJECT_FILE)
-        has_local_overrides = False
+        local_yaml_path = cls._project_local_yml_path(str(yaml_path))
+        local_override_keys = []
         if os.path.exists(local_yaml_path):
             local_yaml_data, _ = cls._load_yaml_dict(local_yaml_path, apply_defaults=False)
             if local_yaml_data:
+                local_override_keys = list(local_yaml_data.keys())
                 log.debug(
                     "Applying project configuration overrides from %s with keys %s",
                     local_yaml_path,
-                    list(local_yaml_data.keys()),
+                    local_override_keys,
                 )
                 yaml_data.update(local_yaml_data)
-                has_local_overrides = True
 
         # instantiate the ProjectConfig
-        project_config = cls._from_dict(yaml_data, has_local_overrides=has_local_overrides)
+        project_config = cls._from_dict(yaml_data, local_override_keys=local_override_keys)
+
+        # if the configuration was incomplete, re-save it to disk
+        if not was_complete:
+            log.info("Project configuration in %s was incomplete, re-saving with default values for missing fields", yaml_path)
+            project_config.save(str(yaml_path), save_project_local_yml=False)
 
         return project_config
 
-    def save(self, project_yml_path: str, keys: list[str] | None) -> None:
+    def save(self, project_yml_path: str, save_project_local_yml: bool = True) -> None:
         """
-        Saves the project configuration to disk, updating the specified keys.
+        Saves the project configuration to disk, updating both the project.yml file and, optionally,
+        the project.local.yml file to reflect overridden keys.
+
+        Keys that are overridden by project.local.yml are not updated in project.yml.
+        Only keys that are overridden are updated in project.local.yml.
 
         :param project_yml_path: the path to the project.yml file
-        :param keys: the list of keys to update in the file; if None, all keys are updated
-            (which is admissible only if no local overrides have been applied to the current configuration)
+        :param save_project_local_yml: whether to also update the project.local.yml file to reflect overridden keys
         """
         config_path = project_yml_path
         log.info("Saving updated project configuration to %s", config_path)
 
-        # load commented map from the original file
-        config_with_comments, _ = self._load_yaml_dict(config_path, self.YAML_COMMENT_NORMALISATION)
-
-        # update the requested keys from the current in-memory configuration
+        # get the current configuration as a dictionary
         cur_dict = self._to_yaml_dict()
-        if keys is None:
-            if self._has_local_overrides:
-                raise ValueError(
-                    "Cannot save the project configuration with all keys updated when there are overrides from project.local.yml. Must specify the keys to update explicitly."
-                )
-            config_with_comments.update(cur_dict)
-        else:
-            for key in keys:
-                if key in cur_dict:
-                    config_with_comments[key] = cur_dict[key]
-                else:
-                    raise ValueError(f"Invalid configuration key '{key}' for project configuration.")
+
+        # load commented map from the original file and update all non-overridden keys
+        config_with_comments, _ = self._load_yaml_dict(config_path, self.YAML_COMMENT_NORMALISATION)
+        for key in cur_dict:
+            if key not in self._local_override_keys:
+                config_with_comments[key] = cur_dict[key]
 
         # transfer missing comments from the template file
         template_config, _ = self._load_yaml_dict(PROJECT_TEMPLATE_FILE, self.YAML_COMMENT_NORMALISATION)
         transfer_missing_yaml_comments(template_config, config_with_comments, self.YAML_COMMENT_NORMALISATION)
 
+        # save project.yml
         save_yaml(config_path, config_with_comments)
+
+        # update project.local.yml to reflect overridden keys if necessary
+        if save_project_local_yml:
+            project_local_yml_path = self._project_local_yml_path(project_yml_path)
+            if self._local_override_keys and os.path.exists(project_local_yml_path):
+                log.info("Saving updated local project configuration to %s", project_local_yml_path)
+                local_config_with_comments, _ = self._load_yaml_dict(
+                    project_local_yml_path, comment_normalisation=YamlCommentNormalisation.NONE, apply_defaults=False
+                )
+                for key in self._local_override_keys:
+                    if key in cur_dict:
+                        local_config_with_comments[key] = cur_dict[key]
+                save_yaml(project_local_yml_path, local_config_with_comments)
 
 
 class RegisteredProject(ToStringMixin):
