@@ -102,17 +102,26 @@ class TestRustAnalyzerDetection:
         """
         from solidlsp.language_servers.rust_analyzer import RustAnalyzer
 
-        cargo_path = os.path.expanduser("~/.cargo/bin/rust-analyzer")
+        # Use platform-appropriate paths and binary names
+        home = pathlib.Path.home()
+        if IS_WINDOWS:
+            binary_name = "rust-analyzer.exe"
+            broken_proxy_path = str(home / "AppData" / "Local" / "Microsoft" / "WindowsApps" / binary_name)
+            cargo_path = str(home / ".cargo" / "bin" / binary_name)
+        else:
+            binary_name = "rust-analyzer"
+            broken_proxy_path = "/usr/bin/rust-analyzer"
+            cargo_path = os.path.expanduser("~/.cargo/bin/rust-analyzer")
 
         def mock_isfile(path):
-            return path in ["/usr/bin/rust-analyzer", cargo_path]
+            return path in [broken_proxy_path, cargo_path]
 
         def mock_access(path, mode):
-            return path in ["/usr/bin/rust-analyzer", cargo_path]
+            return path in [broken_proxy_path, cargo_path]
 
         with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None):
             with patch.object(RustAnalyzer.DependencyProvider, "_get_rustup_version", return_value=None):
-                with patch("shutil.which", return_value="/usr/bin/rust-analyzer"):
+                with patch("shutil.which", return_value=broken_proxy_path):
                     with patch("os.path.isfile", side_effect=mock_isfile):
                         with patch("os.access", side_effect=mock_access):
                             # The PATH binary is a broken rustup proxy
