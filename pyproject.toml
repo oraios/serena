@@ -308,6 +308,7 @@ markers = [
   "zig: language server running for Zig",
   "lua: language server running for Lua",
   "luau: language server running for Luau",
+  "nim: language server running for Nim",
   "nix: language server running for Nix",
   "dart: language server running for Dart",
   "erlang: language server running for Erlang",
