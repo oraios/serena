@@ -1,6 +1,5 @@
 from typing import Literal
 
-
 from serena.tools import Tool, ToolMarkerCanEdit, ToolMarkerOptional
 from serena.util.frontmatter import parse_frontmatter
 

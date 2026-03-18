@@ -12,17 +12,17 @@ priority: high
 ---
 
 Body content...
+
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Tuple
 
 
 @dataclass(frozen=True)
 class FrontmatterParseResult:
-    frontmatter: Dict[str, str]
+    frontmatter: dict[str, str]
     body: str
 
 
@@ -36,7 +36,7 @@ class FrontmatterParser:
 
     @staticmethod
     def parse(content: str) -> FrontmatterParseResult:
-        frontmatter: Dict[str, str] = {}
+        frontmatter: dict[str, str] = {}
 
         if not content.startswith("---"):
             return FrontmatterParseResult(frontmatter=frontmatter, body=content)
@@ -70,11 +70,12 @@ class FrontmatterParser:
         return FrontmatterParseResult(frontmatter=frontmatter, body=body)
 
 
-def parse_frontmatter(content: str) -> Tuple[Dict[str, str], str]:
+def parse_frontmatter(content: str) -> tuple[dict[str, str], str]:
     """
     Backwards-compatible functional wrapper.
 
     Returns:
+
         (frontmatter_dict, body_content)
     """
     result = FrontmatterParser.parse(content)
