@@ -49,7 +49,7 @@ class NimLanguageServer(SolidLanguageServer):
                     description="Nim Language Server for Linux (x64)",
                     url=f"{base_url}/nimlangserver-linux-amd64.tar.gz",
                     platform_id="linux-x64",
-                    archive_type="tar.gz",
+                    archive_type="gztar",
                     binary_name="nimlangserver",
                 ),
                 RuntimeDependency(
@@ -57,7 +57,7 @@ class NimLanguageServer(SolidLanguageServer):
                     description="Nim Language Server for Linux (arm64)",
                     url=f"{base_url}/nimlangserver-linux-arm64.tar.gz",
                     platform_id="linux-arm64",
-                    archive_type="tar.gz",
+                    archive_type="gztar",
                     binary_name="nimlangserver",
                 ),
                 RuntimeDependency(
