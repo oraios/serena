@@ -97,16 +97,14 @@ class TestCppLanguageServer:
         try:
             # Write the new file with a reference to add()
             with open(new_file_abs_path, "w", encoding="utf-8") as f:
-                f.write(
-                    """
+                f.write("""
 #include "b.hpp"
 
 int use_add() {
     int result = add(5, 3);
     return result;
 }
-"""
-                )
+""")
 
             # Open the new file so clangd knows about it
             with language_server.open_file(new_file_path):

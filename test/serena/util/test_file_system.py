@@ -67,40 +67,32 @@ class TestGitignoreParser:
 
         # Create root .gitignore
         root_gitignore = self.repo_path / ".gitignore"
-        root_gitignore.write_text(
-            """# Root gitignore
+        root_gitignore.write_text("""# Root gitignore
 *.log
 /build/
-"""
-        )
+""")
 
         # Create src/.gitignore
         src_gitignore = self.repo_path / "src" / ".gitignore"
-        src_gitignore.write_text(
-            """# Source gitignore
+        src_gitignore.write_text("""# Source gitignore
 *.o
 build/
 !important.log
-"""
-        )
+""")
 
         # Create src/lib/.gitignore (deeply nested)
         src_lib_gitignore = self.repo_path / "src" / "lib" / ".gitignore"
-        src_lib_gitignore.write_text(
-            """# Library gitignore
+        src_lib_gitignore.write_text("""# Library gitignore
 *.tmp
 *.cache
-"""
-        )
+""")
 
         # Create docs/.gitignore
         docs_gitignore = self.repo_path / "docs" / ".gitignore"
-        docs_gitignore.write_text(
-            """# Docs gitignore
+        docs_gitignore.write_text("""# Docs gitignore
 temp/
 *.tmp
-"""
-        )
+""")
 
     def test_initialization(self):
         """Test GitignoreParser initialization."""
@@ -133,12 +125,10 @@ temp/
         test_dir.mkdir()
 
         gitignore = test_dir / ".gitignore"
-        gitignore.write_text(
-            """*.log
+        gitignore.write_text("""*.log
 build/
 /temp.txt
-"""
-        )
+""")
 
         parser = GitignoreParser(str(test_dir))
         specs = parser.get_ignore_specs()
@@ -159,12 +149,10 @@ build/
         subdir.mkdir()
 
         gitignore = subdir / ".gitignore"
-        gitignore.write_text(
-            """*.o
+        gitignore.write_text("""*.o
 /build/
 test.log
-"""
-        )
+""")
 
         parser = GitignoreParser(str(test_dir))
         specs = parser.get_ignore_specs()
@@ -228,11 +216,9 @@ test.log
 
         # Create src/.gitignore with both anchored and non-anchored patterns
         gitignore = test_dir / "src" / ".gitignore"
-        gitignore.write_text(
-            """/temp.txt
+        gitignore.write_text("""/temp.txt
 data.json
-"""
-        )
+""")
 
         # Create test files
         (test_dir / "src" / "temp.txt").touch()
@@ -263,13 +249,11 @@ data.json
 
         # Create root .gitignore with anchored patterns
         gitignore = test_dir / ".gitignore"
-        gitignore.write_text(
-            """/config.json
+        gitignore.write_text("""/config.json
 /temp.log
 /build
 *.pyc
-"""
-        )
+""")
 
         # Create test files at root level
         (test_dir / "config.json").touch()
@@ -319,15 +303,13 @@ data.json
 
         # Create root .gitignore with mixed patterns
         gitignore = test_dir / ".gitignore"
-        gitignore.write_text(
-            """/secrets.env
+        gitignore.write_text("""/secrets.env
 /dist/
 node_modules/
 *.tmp
 /app/local.config
 debug.log
-"""
-        )
+""")
 
         # Create test files and directories
         (test_dir / "secrets.env").touch()
@@ -379,12 +361,10 @@ debug.log
         test_dir.mkdir()
 
         gitignore = test_dir / ".gitignore"
-        gitignore.write_text(
-            """*.log
+        gitignore.write_text("""*.log
 !important.log
 !src/keep.log
-"""
-        )
+""")
 
         parser = GitignoreParser(str(test_dir))
         specs = parser.get_ignore_specs()
@@ -402,16 +382,14 @@ debug.log
         test_dir.mkdir()
 
         gitignore = test_dir / ".gitignore"
-        gitignore.write_text(
-            """# This is a comment
+        gitignore.write_text("""# This is a comment
 *.log
 
 # Another comment
   # Indented comment
 
 build/
-"""
-        )
+""")
 
         parser = GitignoreParser(str(test_dir))
         specs = parser.get_ignore_specs()
@@ -429,11 +407,9 @@ build/
         test_dir.mkdir()
 
         gitignore = test_dir / ".gitignore"
-        gitignore.write_text(
-            """\\#not-a-comment.txt
+        gitignore.write_text("""\\#not-a-comment.txt
 \\!not-negation.txt
-"""
-        )
+""")
 
         parser = GitignoreParser(str(test_dir))
         specs = parser.get_ignore_specs()
@@ -449,12 +425,10 @@ build/
         test_dir.mkdir()
 
         gitignore = test_dir / ".gitignore"
-        gitignore.write_text(
-            """*.log
+        gitignore.write_text("""*.log
 \\!not-negation.log
 !actual-negation.log
-"""
-        )
+""")
 
         parser = GitignoreParser(str(test_dir))
         specs = parser.get_ignore_specs()
@@ -482,14 +456,12 @@ build/
         test_dir.mkdir()
 
         gitignore = test_dir / ".gitignore"
-        gitignore.write_text(
-            """*.pyc
+        gitignore.write_text("""*.pyc
 **/*.tmp
 src/*.o
 !src/important.o
 [Tt]est*
-"""
-        )
+""")
 
         # Create test files
         (test_dir / "src").mkdir()
@@ -539,13 +511,11 @@ src/*.o
         test_dir.mkdir()
 
         gitignore = test_dir / ".gitignore"
-        gitignore.write_text(
-            """# Only comments and empty lines
+        gitignore.write_text("""# Only comments and empty lines
     
 # More comments
     
-    """
-        )
+    """)
 
         parser = GitignoreParser(str(test_dir))
 
