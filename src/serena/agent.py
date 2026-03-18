@@ -11,6 +11,7 @@ from collections.abc import Callable, Sequence
 from logging import Logger
 from typing import TYPE_CHECKING, Optional, TypeVar
 
+import webview
 from sensai.util import logging
 from sensai.util.logging import LogTime
 from sensai.util.string import TextBuilder
@@ -530,7 +531,12 @@ class SerenaAgent:
 
     @staticmethod
     def _start_dashboard_viewer_process_function(url: str, minimized: bool) -> None:
-        SerenaDashboardViewer(url, start_minimized=minimized).run()
+        try:
+            SerenaDashboardViewer(url, start_minimized=minimized).run()
+        except webview.errors.WebViewException as e:
+            # This can happen on Linux if neither GTK or QT are available. Open in browser as a fallback
+            log.warning(f"Could not open Serena Dashboard viewer; falling back to opening browser. Cause:\n{e}")
+            SerenaAgent._open_dashboard_in_browser(url)
 
     def _start_dashboard_viewer(self, minimized: bool) -> None:
         url = self.get_dashboard_url()
@@ -549,15 +555,19 @@ class SerenaAgent:
             log.warning("Not opening the Serena web dashboard because no usable display was detected.")
             return False
 
+        self._open_dashboard_in_browser(self._dashboard_url)
+        return True
+
+    @staticmethod
+    def _open_dashboard_in_browser(url) -> None:
         # Use a subprocess to avoid any output from webbrowser.open being written to stdout
         subprocess.Popen(
-            [sys.executable, "-c", f"import webbrowser; webbrowser.open({self._dashboard_url!r})"],
+            [sys.executable, "-c", f"import webbrowser; webbrowser.open({url!r})"],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,  # Detach from parent process
         )
-        return True
 
     def get_project_root(self) -> str:
         """
