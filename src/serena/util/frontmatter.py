@@ -74,9 +74,7 @@ def parse_frontmatter(content: str) -> tuple[dict[str, str], str]:
     """
     Backwards-compatible functional wrapper.
 
-    Returns:
-
-        (frontmatter_dict, body_content)
+    :return: (frontmatter_dict, body_content)
     """
     result = FrontmatterParser.parse(content)
     return result.frontmatter, result.body

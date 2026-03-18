@@ -11,9 +11,6 @@ from typing import Any, Literal
 import pathspec
 from sensai.util.logging import LogTime
 from sensai.util.string import TextBuilder, ToStringMixin
-from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
-from solidlsp.ls_utils import FileUtils
 
 from serena.config.serena_config import (
     ProjectConfig,
@@ -25,6 +22,9 @@ from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.util.file_system import GitignoreParser, match_path
 from serena.util.frontmatter import parse_frontmatter
 from serena.util.text_utils import ContentReplacer, MatchedConsecutiveLines, search_files
+from solidlsp import SolidLanguageServer
+from solidlsp.ls_config import Language
+from solidlsp.ls_utils import FileUtils
 
 log = logging.getLogger(__name__)
 
