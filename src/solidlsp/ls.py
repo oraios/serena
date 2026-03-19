@@ -1276,6 +1276,10 @@ class SolidLanguageServer(ABC):
                 item = cast(ls_types.UnifiedSymbolInformation, dict(original_symbol_dict))
                 absolute_path = os.path.join(self.repository_root_path, relative_file_path)
 
+                # handle non-standard symbol kind values (e.g., 255)
+                if "kind" in item and isinstance(item["kind"], int):
+                    item["kind"] = ls_types.SymbolKind.from_int(item["kind"])
+
                 # handle missing location and path entries
                 if "location" not in item:
                     uri = pathlib.Path(absolute_path).as_uri()

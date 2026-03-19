@@ -222,7 +222,7 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         """
         :return: string representation of the symbol kind (name attribute of the `SymbolKind` enum item)
         """
-        return SymbolKind(self.symbol_kind).name
+        return SymbolKind.from_int(self.symbol_kind).name
 
     @property
     def symbol_kind(self) -> SymbolKind:

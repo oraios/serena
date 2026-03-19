@@ -152,6 +152,7 @@ class SymbolKind(IntEnum):
 
     # TODO: This is a duplicate of SymbolKind in lsp_types.
 
+    Unknown = 0
     File = 1
     Module = 2
     Namespace = 3
@@ -178,6 +179,18 @@ class SymbolKind(IntEnum):
     Event = 24
     Operator = 25
     TypeParameter = 26
+
+    @classmethod
+    def from_int(cls, value: int) -> "SymbolKind":
+        """Convert an integer to a SymbolKind.
+
+        Returns Unknown (0) for non-standard values instead of raising ValueError.
+        This handles language servers that may use custom/extended symbol kinds.
+        """
+        try:
+            return cls(value)
+        except ValueError:
+            return cls.Unknown
 
 
 class SymbolTag(IntEnum):
