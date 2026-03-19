@@ -3,6 +3,7 @@ from typing import Any, Literal
 
 import serena.jetbrains.jetbrains_types as jb
 from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
+from serena.jetbrains.jetbrains_types import SymbolDTO
 from serena.symbol import JetBrainsSymbolDictGrouper
 from serena.tools import Tool, ToolMarkerOptional, ToolMarkerSymbolicRead
 
@@ -14,6 +15,8 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
     Performs a global (or local) search for symbols using the JetBrains backend
     """
 
+    symbol_dict_grouper = JetBrainsSymbolDictGrouper(["relative_path", "type"], ["type"], collapse_singleton=True)
+
     def apply(
         self,
         name_path_pattern: str,
@@ -22,6 +25,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         include_body: bool = False,
         include_info: bool = False,
         search_deps: bool = False,
+        max_matches: int = -1,
         max_answer_chars: int = -1,
     ) -> str:
         """
@@ -57,9 +61,11 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
             about the symbol (ignored if include_body is True).
             Default False; info is never included for child symbols and is not included when body is requested.
         :param search_deps: If True, also search in project dependencies (e.g., libraries).
+        :param max_matches: Maximum number of permitted matches. If exceeded, a shortened result is returned
+             which allows refining the search. -1 (default) means no limit. Set to 1 if you search for a single symbol.
         :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
             -1 means the default value from the config will be used.
-        :return: JSON string: a list of symbols (with locations) matching the name.
+        :return: symbols (with locations) matching the name.
         """
         if relative_path == ".":
             relative_path = None
@@ -75,7 +81,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
                     # If no additional information is requested, we still include the quick info (type signature)
                     include_documentation = False
                     include_quick_info = True
-            response_dict = client.find_symbol(
+            symbol_collection_response = client.find_symbol(
                 name_path=name_path_pattern,
                 relative_path=relative_path,
                 depth=depth,
@@ -84,8 +90,20 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
                 include_quick_info=include_quick_info,
                 search_deps=search_deps,
             )
-            result = self._to_json(response_dict)
-        return self._limit_length(result, max_answer_chars)
+        symbols = symbol_collection_response["symbols"]
+        n_matches = len(symbols)
+        grouped_symbols = self.symbol_dict_grouper.group(symbols)
+        result = self._to_json(grouped_symbols)
+
+        shortened_symbols: list[SymbolDTO] = [
+            {"name_path": s["name_path"], "type": s["type"], "relative_path": s["relative_path"]} for s in symbols
+        ]
+        grouped_shortened_symbols = self.symbol_dict_grouper.group(shortened_symbols)
+        shortened_result = self._to_json(grouped_shortened_symbols)
+        if 0 < max_matches < n_matches:
+            return f"Matched {n_matches}>{max_matches=} symbols.\n" + shortened_result
+
+        return self._limit_length(result, max_answer_chars, shortened_result=shortened_result)
 
 
 class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
@@ -121,8 +139,13 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
             )
         symbol_dicts = response_dict["symbols"]
         result = self.symbol_dict_grouper.group(symbol_dicts)
+        # we use the fact that the results are grouped by relative path, a change to the grouper
+        # will necessitate a change here!
+        n_files = len(result)
+        shortened_result = f"Found {len(symbol_dicts)} references in {n_files} files."
+
         result_json = self._to_json(result)
-        return self._limit_length(result_json, max_answer_chars)
+        return self._limit_length(result_json, max_answer_chars, shortened_result=shortened_result)
 
 
 class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
@@ -160,14 +183,29 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
             )
         if self.USE_COMPACT_FORMAT:
             symbols = symbol_overview["symbols"]
-            result: dict[str, Any] = {"symbols": self.symbol_dict_grouper.group(symbols)}
+            grouped_symbols = self.symbol_dict_grouper.group(symbols)
+            result: dict[str, Any] = {"symbols": grouped_symbols}
             documentation = symbol_overview.pop("documentation", None)
             if documentation:
                 result["docstring"] = documentation
             json_result = self._to_json(result)
+            if depth == 0:
+                shortened_result = self._to_json(grouped_symbols)
+            else:
+                depth_0_result = []
+                for d in symbols:
+                    d_copy = d.copy()
+                    d_copy.pop("children", None)
+                    depth_0_result.append(d_copy)
+                compact_depth_0_result = self.symbol_dict_grouper.group(depth_0_result)
+                shortened_result = "Depth 0 overview:\n" + self._to_json(compact_depth_0_result)
+
         else:
+            # This path is currently abandoned, consider introducing a shortened result if ever needed
+            shortened_result = None
             json_result = self._to_json(symbol_overview)
-        return self._limit_length(json_result, max_answer_chars)
+
+        return self._limit_length(json_result, max_answer_chars, shortened_result=shortened_result)
 
 
 class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):

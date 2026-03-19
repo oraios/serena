@@ -51,7 +51,20 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
         result = self.get_symbol_overview(relative_path, depth=depth)
         compact_result = self.symbol_dict_grouper.group(result)
         result_json_str = self._to_json(compact_result)
-        return self._limit_length(result_json_str, max_answer_chars)
+
+        # compute the shortened result
+        if depth == 0:
+            shortened_result = None  # can't further shorten
+        else:
+            depth_0_result = []
+            for d in result:
+                d_copy = d.copy()
+                d_copy.pop("children", None)
+                depth_0_result.append(d_copy)
+            compact_depth_0_result = self.symbol_dict_grouper.group(depth_0_result)
+            shortened_result = "Depth 0 overview:\n" + self._to_json(compact_depth_0_result)
+
+        return self._limit_length(result_json_str, max_answer_chars, shortened_result=shortened_result)
 
     def get_symbol_overview(self, relative_path: str, depth: int = 0) -> list[LanguageServerSymbol.OutputDict]:
         """
@@ -99,6 +112,8 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
     Performs a global (or local) search using the language server backend.
     """
 
+    symbol_dict_grouper = LanguageServerSymbolDictGrouper(["relative_path", "kind"], ["kind"], collapse_singleton=True)
+
     # noinspection PyDefaultArgument
     def apply(
         self,
@@ -110,6 +125,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         include_kinds: list[int] = [],  # noqa: B006
         exclude_kinds: list[int] = [],  # noqa: B006
         substring_matching: bool = False,
+        max_matches: int = -1,
         max_answer_chars: int = -1,
     ) -> str:
         """
@@ -147,10 +163,13 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             If not provided, no kinds are excluded.
         :param substring_matching: If True, use substring matching for the last element of the pattern, such that
             "Foo/get" would match "Foo/getValue" and "Foo/getData".
+        :param max_matches: Maximum number of permitted matches. If exceeded, a shortened result is returned
+             which allows refining the search. -1 (default) means no limit. Set to 1 if you search for a single symbol.
         :param max_answer_chars: Max characters for the JSON result. If exceeded, no content is returned.
             -1 means the default value from the config will be used.
-        :return: a list of symbols (with locations) matching the name.
+        :return: symbols (with locations) matching the name.
         """
+        assert max_matches != 0, "max_matches must be > 0 or equal to -1."
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
         symbol_retriever = self.create_language_server_symbol_retriever()
@@ -161,15 +180,25 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             substring_matching=substring_matching,
             within_relative_path=relative_path,
         )
-        symbol_dicts = [dict(s.to_dict(kind=True, relative_path=True, body_location=True, depth=depth, body=include_body)) for s in symbols]
+        shortened_result = f"Shortened result:\n{self._to_json([s.to_dict(kind=True) for s in symbols])}"
+        n_matches = len(symbols)
+        if 0 < max_matches < n_matches:
+            return f"Matched {n_matches}>{max_matches=} symbols.\n" + shortened_result
+
+        symbol_dicts = [s.to_dict(kind=True, relative_path=True, body_location=True, depth=depth, body=include_body) for s in symbols]
         if not include_body and include_info:
             info_by_symbol = symbol_retriever.request_info_for_symbol_batch(symbols)
             for s, s_dict in zip(symbols, symbol_dicts, strict=True):
                 if symbol_info := info_by_symbol.get(s):
-                    s_dict["info"] = symbol_info
+                    # In python 3.15 we could specify extra_items=True in the TypedDict definition,
+                    # https://peps.python.org/pep-0728/
+                    # If we ever upgrade to 3.15, we can remove the type: ignore[typeddict-unknown-key]
+                    s_dict["info"] = symbol_info  # type: ignore[typeddict-unknown-key]
+
                     s_dict.pop("name", None)  # name is included in the info
-        result = self._to_json(symbol_dicts)
-        return self._limit_length(result, max_answer_chars)
+        grouped_symbol_dicts = self.symbol_dict_grouper.group(symbol_dicts)
+        result = self._to_json(grouped_symbol_dicts)
+        return self._limit_length(result, max_answer_chars, shortened_result=shortened_result)
 
 
 class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
@@ -227,9 +256,13 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
             reference_dicts.append(ref_dict)
 
         result = self.symbol_dict_grouper.group(reference_dicts)  # type: ignore
+        # we use the fact that the results are grouped by relative path, a change to the grouper
+        # will necessitate a change here!
+        n_files = len(result)
+        shortened_result = f"Found {len(references_in_symbols)} references in {n_files} files."
 
         result_json = self._to_json(result)
-        return self._limit_length(result_json, max_answer_chars)
+        return self._limit_length(result_json, max_answer_chars, shortened_result=shortened_result)
 
 
 class ReplaceSymbolBodyTool(Tool, ToolMarkerSymbolicEdit):

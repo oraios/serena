@@ -221,16 +221,25 @@ class Tool(Component):
                 params[param] = value
         log.info(f"{self.get_name_from_cls()}: {dict_string(params)}")
 
-    def _limit_length(self, result: str, max_answer_chars: int) -> str:
+    def _limit_length(self, result: str, max_answer_chars: int, shortened_result: str | None = None) -> str:
+        """
+
+        :param result:
+        :param max_answer_chars:
+        :param shortened_result: will be returned instead of the original result if the latter is too long.
+            A callable may be passed to compute the shortened result on demand.
+        :return:
+        """
         if max_answer_chars == -1:
             max_answer_chars = self.agent.serena_config.default_max_tool_answer_chars
         if max_answer_chars <= 0:
             raise ValueError(f"Must be positive or the default (-1), got: {max_answer_chars=}")
         if (n_chars := len(result)) > max_answer_chars:
             result = (
-                f"The answer is too long ({n_chars} characters). "
-                + "Please try a more specific tool query or raise the max_answer_chars parameter."
+                f"The answer is too long ({n_chars} characters). " + "You can adjust your query or raise the max_answer_chars parameter."
             )
+            if shortened_result is not None:
+                result += f"\n{shortened_result}"
         return result
 
     def is_active(self) -> bool:
