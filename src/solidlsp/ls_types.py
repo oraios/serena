@@ -181,16 +181,8 @@ class SymbolKind(IntEnum):
     TypeParameter = 26
 
     @classmethod
-    def from_int(cls, value: int) -> "SymbolKind":
-        """Convert an integer to a SymbolKind.
-
-        Returns Unknown (0) for non-standard values instead of raising ValueError.
-        This handles language servers that may use custom/extended symbol kinds.
-        """
-        try:
-            return cls(value)
-        except ValueError:
-            return cls.Unknown
+    def _missing_(cls, value: int) -> "SymbolKind":
+        return cls.Unknown
 
 
 class SymbolTag(IntEnum):
