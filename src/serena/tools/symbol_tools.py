@@ -2,7 +2,9 @@
 Language server-related tools
 """
 
+import copy
 import os
+from collections import Counter
 from collections.abc import Sequence
 
 from serena.symbol import LanguageServerSymbol, LanguageServerSymbolDictGrouper
@@ -49,22 +51,32 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
         :return: a JSON object containing symbols grouped by kind in a compact format.
         """
         result = self.get_symbol_overview(relative_path, depth=depth)
+
+        # capture kind names and depth-0 snapshots before grouping, which mutates the dicts
+        kind_names = [d.get("kind", "unknown") for d in result]
+        if depth > 0:
+            depth_0_result = [d.copy() for d in result]
+            for d in depth_0_result:
+                d.pop("children", None)
+
         compact_result = self.symbol_dict_grouper.group(result)
         result_json_str = self._to_json(compact_result)
 
-        # compute the shortened result
-        if depth == 0:
-            shortened_result = None  # can't further shorten
-        else:
-            depth_0_result = []
-            for d in result:
-                d_copy = d.copy()
-                d_copy.pop("children", None)
-                depth_0_result.append(d_copy)
-            compact_depth_0_result = self.symbol_dict_grouper.group(depth_0_result)
-            shortened_result = "Depth 0 overview:\n" + self._to_json(compact_depth_0_result)
+        # shortened result closures
+        def make_kind_counts() -> str:
+            return f"Symbol counts by kind:\n{self._to_json(Counter(kind_names))}"
 
-        return self._limit_length(result_json_str, max_answer_chars, shortened_result=shortened_result)
+        if depth == 0:
+            shortened_results = [make_kind_counts]
+        else:
+
+            def make_depth_0_result() -> str:
+                compact_depth_0_result = self.symbol_dict_grouper.group(depth_0_result)
+                return "Depth 0 overview:\n" + self._to_json(compact_depth_0_result)
+
+            shortened_results = [make_depth_0_result, make_kind_counts]
+
+        return self._limit_length(result_json_str, max_answer_chars, shortened_results=shortened_results)
 
     def get_symbol_overview(self, relative_path: str, depth: int = 0) -> list[LanguageServerSymbol.OutputDict]:
         """
@@ -111,8 +123,6 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
     """
     Performs a global (or local) search using the language server backend.
     """
-
-    symbol_dict_grouper = LanguageServerSymbolDictGrouper(["relative_path", "kind"], ["kind"], collapse_singleton=True)
 
     # noinspection PyDefaultArgument
     def apply(
@@ -180,10 +190,13 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             substring_matching=substring_matching,
             within_relative_path=relative_path,
         )
-        shortened_result = f"Shortened result:\n{self._to_json([s.to_dict(kind=True) for s in symbols])}"
         n_matches = len(symbols)
+
+        def make_shortened_result() -> str:
+            return f"Shortened result:\n{self._to_json([s.to_dict(kind=True) for s in symbols])}"
+
         if 0 < max_matches < n_matches:
-            return f"Matched {n_matches}>{max_matches=} symbols.\n" + shortened_result
+            return f"Matched {n_matches}>{max_matches=} symbols.\n" + make_shortened_result()
 
         symbol_dicts = [s.to_dict(kind=True, relative_path=True, body_location=True, depth=depth, body=include_body) for s in symbols]
         if not include_body and include_info:
@@ -196,9 +209,8 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
                     s_dict["info"] = symbol_info  # type: ignore[typeddict-unknown-key]
 
                     s_dict.pop("name", None)  # name is included in the info
-        grouped_symbol_dicts = self.symbol_dict_grouper.group(symbol_dicts)
-        result = self._to_json(grouped_symbol_dicts)
-        return self._limit_length(result, max_answer_chars, shortened_result=shortened_result)
+        result = self._to_json(symbol_dicts)
+        return self._limit_length(result, max_answer_chars, shortened_results=[make_shortened_result])
 
 
 class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
@@ -255,14 +267,40 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
                 ref_dict["content_around_reference"] = content_around_ref.to_display_string()
             reference_dicts.append(ref_dict)
 
+        # capture lightweight reference data before grouping, which mutates the dicts
+        ref_summaries = []
+        for ref, d in zip(references_in_symbols, reference_dicts, strict=True):
+            ref_summaries.append(
+                {
+                    "name_path": d.get("name_path"),
+                    "kind": d.get("kind"),
+                    "relative_path": d.get("relative_path"),
+                    "reference_line": ref.line,
+                }
+            )
+
         result = self.symbol_dict_grouper.group(reference_dicts)  # type: ignore
         # we use the fact that the results are grouped by relative path, a change to the grouper
         # will necessitate a change here!
         n_files = len(result)
-        shortened_result = f"Found {len(references_in_symbols)} references in {n_files} files."
+
+        # shortened result closures, from least to most aggressive shortening
+        def make_refs_without_context() -> str:
+            """References with name_path and reference line, without surrounding code lines"""
+            grouped = self.symbol_dict_grouper.group(copy.deepcopy(ref_summaries))  # type: ignore
+            return f"References without surrounding lines:\n{self._to_json(grouped)}"
+
+        def make_per_file_counts() -> str:
+            counts = Counter(str(r["relative_path"]) for r in ref_summaries)
+            return f"Reference counts per file:\n{self._to_json(counts)}"
+
+        def make_summary() -> str:
+            return f"Found {len(ref_summaries)} references in {n_files} files."
+
+        shortened_results = [make_refs_without_context, make_per_file_counts, make_summary]
 
         result_json = self._to_json(result)
-        return self._limit_length(result_json, max_answer_chars, shortened_result=shortened_result)
+        return self._limit_length(result_json, max_answer_chars, shortened_results=shortened_results)
 
 
 class ReplaceSymbolBodyTool(Tool, ToolMarkerSymbolicEdit):

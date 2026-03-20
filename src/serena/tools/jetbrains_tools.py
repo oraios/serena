@@ -1,4 +1,7 @@
+import copy
 import logging
+from collections import Counter
+from collections.abc import Callable
 from typing import Any, Literal
 
 import serena.jetbrains.jetbrains_types as jb
@@ -92,18 +95,28 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
             )
         symbols = symbol_collection_response["symbols"]
         n_matches = len(symbols)
+
+        # snapshot before grouping, which mutates the dicts
+        symbols_snapshot = copy.deepcopy(symbols)
+
         grouped_symbols = self.symbol_dict_grouper.group(symbols)
         result = self._to_json(grouped_symbols)
 
-        shortened_symbols: list[SymbolDTO] = [
-            {"name_path": s["name_path"], "type": s["type"], "relative_path": s["relative_path"]} for s in symbols
-        ]
-        grouped_shortened_symbols = self.symbol_dict_grouper.group(shortened_symbols)
-        shortened_result = self._to_json(grouped_shortened_symbols)
-        if 0 < max_matches < n_matches:
-            return f"Matched {n_matches}>{max_matches=} symbols.\n" + shortened_result
+        def make_names_with_paths() -> str:
+            """Name paths grouped by file, without body, info, children, or locations"""
+            dicts: list[SymbolDTO] = [
+                {"name_path": s["name_path"], "type": s["type"], "relative_path": s["relative_path"]} for s in symbols_snapshot
+            ]
+            grouped = self.symbol_dict_grouper.group(dicts)
+            return f"Names with paths:\n{self._to_json(grouped)}"
 
-        return self._limit_length(result, max_answer_chars, shortened_result=shortened_result)
+        def make_names_only() -> str:
+            return f"Name paths only:\n{self._to_json([s['name_path'] for s in symbols_snapshot])}"
+
+        if 0 < max_matches < n_matches:
+            return f"Matched {n_matches}>{max_matches=} symbols.\n" + make_names_only()
+
+        return self._limit_length(result, max_answer_chars, shortened_results=[make_names_with_paths, make_names_only])
 
 
 class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
@@ -138,14 +151,23 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
                 include_quick_info=False,
             )
         symbol_dicts = response_dict["symbols"]
+
+        # capture file paths before grouping, which mutates the dicts
+        ref_paths = [s.get("relative_path", "unknown") for s in symbol_dicts]
+
         result = self.symbol_dict_grouper.group(symbol_dicts)
         # we use the fact that the results are grouped by relative path, a change to the grouper
         # will necessitate a change here!
         n_files = len(result)
-        shortened_result = f"Found {len(symbol_dicts)} references in {n_files} files."
+
+        def make_per_file_counts() -> str:
+            return f"Reference counts per file:\n{self._to_json(Counter(ref_paths))}"
+
+        def make_summary() -> str:
+            return f"Found {len(ref_paths)} references in {n_files} files."
 
         result_json = self._to_json(result)
-        return self._limit_length(result_json, max_answer_chars, shortened_result=shortened_result)
+        return self._limit_length(result_json, max_answer_chars, shortened_results=[make_per_file_counts, make_summary])
 
 
 class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
@@ -183,29 +205,43 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
             )
         if self.USE_COMPACT_FORMAT:
             symbols = symbol_overview["symbols"]
+
+            # capture type names and depth-0 snapshots before grouping, which mutates the dicts
+            type_names = [d.get("type", "unknown") for d in symbols]
+            if depth > 0:
+                depth_0_symbols = [d.copy() for d in symbols]
+                for d in depth_0_symbols:
+                    d.pop("children", None)
+
             grouped_symbols = self.symbol_dict_grouper.group(symbols)
             result: dict[str, Any] = {"symbols": grouped_symbols}
             documentation = symbol_overview.pop("documentation", None)
             if documentation:
                 result["docstring"] = documentation
             json_result = self._to_json(result)
+
+            def make_type_counts() -> str:
+                return f"Symbol counts by type:\n{self._to_json(Counter(type_names))}"
+
             if depth == 0:
-                shortened_result = self._to_json(grouped_symbols)
+                shortened_results: list[Callable[[], str]] | None = [
+                    lambda: self._to_json(grouped_symbols),
+                    make_type_counts,
+                ]
             else:
-                depth_0_result = []
-                for d in symbols:
-                    d_copy = d.copy()
-                    d_copy.pop("children", None)
-                    depth_0_result.append(d_copy)
-                compact_depth_0_result = self.symbol_dict_grouper.group(depth_0_result)
-                shortened_result = "Depth 0 overview:\n" + self._to_json(compact_depth_0_result)
+
+                def make_depth_0_result() -> str:
+                    compact_depth_0_result = self.symbol_dict_grouper.group(depth_0_symbols)
+                    return "Depth 0 overview:\n" + self._to_json(compact_depth_0_result)
+
+                shortened_results = [make_depth_0_result, make_type_counts]
 
         else:
-            # This path is currently abandoned, consider introducing a shortened result if ever needed
-            shortened_result = None
+            # this path is currently abandoned, consider introducing shortened results if ever needed
+            shortened_results = None
             json_result = self._to_json(symbol_overview)
 
-        return self._limit_length(json_result, max_answer_chars, shortened_result=shortened_result)
+        return self._limit_length(json_result, max_answer_chars, shortened_results=shortened_results)
 
 
 class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
