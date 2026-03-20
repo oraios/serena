@@ -1481,7 +1481,7 @@ class SolidLanguageServer(ABC):
         Get the range for the given file.
         """
         lines = file_content.split("\n")
-        end_line = len(lines)
+        end_line = len(lines) - 1
         end_column = len(lines[-1])
         return ls_types.Range(start=ls_types.Position(line=0, character=0), end=ls_types.Position(line=end_line, character=end_column))
 
