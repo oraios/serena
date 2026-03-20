@@ -38,7 +38,7 @@ _RUNTIME_DEPENDENCIES = [
         platform_id="win-x64",
         archive_type="zip",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
-        extract_path=None,
+        extract_path="LanguageServer",
     ),
     RuntimeDependency(
         id="VBNetLanguageServer",
@@ -49,7 +49,7 @@ _RUNTIME_DEPENDENCIES = [
         platform_id="win-arm64",
         archive_type="zip",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
-        extract_path=None,
+        extract_path="LanguageServer",
     ),
     RuntimeDependency(
         id="VBNetLanguageServer",
@@ -60,7 +60,7 @@ _RUNTIME_DEPENDENCIES = [
         platform_id="osx-x64",
         archive_type="gztar",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
-        extract_path=None,
+        extract_path="LanguageServer",
     ),
     RuntimeDependency(
         id="VBNetLanguageServer",
@@ -71,7 +71,7 @@ _RUNTIME_DEPENDENCIES = [
         platform_id="osx-arm64",
         archive_type="gztar",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
-        extract_path=None,
+        extract_path="LanguageServer",
     ),
     RuntimeDependency(
         id="VBNetLanguageServer",
@@ -82,7 +82,7 @@ _RUNTIME_DEPENDENCIES = [
         platform_id="linux-x64",
         archive_type="gztar",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
-        extract_path=None,
+        extract_path="LanguageServer",
     ),
     RuntimeDependency(
         id="VBNetLanguageServer",
@@ -93,7 +93,7 @@ _RUNTIME_DEPENDENCIES = [
         platform_id="linux-arm64",
         archive_type="gztar",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
-        extract_path=None,
+        extract_path="LanguageServer",
     ),
 ]
 
@@ -291,7 +291,8 @@ class VBNetLanguageServer(SolidLanguageServer):
 
             server_dir = Path(self._ls_resources_dir) / f"{package_name}.{package_version}"
             assert lang_server_dep.binary_name is not None
-            server_dll = server_dir / lang_server_dep.binary_name
+            dll_dir = server_dir / lang_server_dep.extract_path if lang_server_dep.extract_path else server_dir
+            server_dll = dll_dir / lang_server_dep.binary_name
 
             if server_dll.exists():
                 log.info(f"Using cached VB.NET Language Server from {server_dll}")
