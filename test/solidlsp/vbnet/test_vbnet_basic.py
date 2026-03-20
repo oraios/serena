@@ -182,6 +182,7 @@ class TestVBNetSolutionProjectOpening:
             assert _VBNET_VERSION in dep.url
             assert "LaunchCG/roslyn-vbnet-languageserver" in dep.url
             assert dep.binary_name == "Microsoft.CodeAnalysis.LanguageServer.dll"
+            assert dep.extract_path == "LanguageServer"
 
     @patch("solidlsp.language_servers.vbnet_language_server.VBNetLanguageServer.DependencyProvider._ensure_server_installed")
     @patch("solidlsp.language_servers.vbnet_language_server.VBNetLanguageServer._start_server")
