@@ -123,6 +123,7 @@ class LanguageServerId(Enum):
     """
 
     CSHARP = "csharp"
+    VBNET = "vbnet"
     PYTHON = "python"
     RUST = "rust"
     JAVA = "java"
@@ -439,6 +440,8 @@ class LanguageServerId(Enum):
                 return FilenameMatcher(*path_patterns)
             case self.CSHARP | self.CSHARP_OMNISHARP:
                 return FilenameMatcher(".cs")
+            case self.VBNET:
+                return FilenameMatcher(".vb")
             case self.RUST:
                 return FilenameMatcher(".rs")
             case self.GO:
@@ -717,6 +720,10 @@ class LanguageServerId(Enum):
                 from solidlsp.language_servers.csharp_language_server import CSharpLanguageServer
 
                 return CSharpLanguageServer
+            case self.VBNET:
+                from solidlsp.language_servers.vbnet_language_server import VBNetLanguageServer
+
+                return VBNetLanguageServer
             case self.CSHARP_OMNISHARP:
                 from solidlsp.language_servers.omnisharp import OmniSharp
 
