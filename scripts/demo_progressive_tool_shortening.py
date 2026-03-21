@@ -43,8 +43,8 @@ def run_with_shrinking(agent: SerenaAgent, label: str, fn, char_limits: list[int
         n = len(result)
         print(f"[length={n}]")
         try:
-            pprint(json.loads(result))
-        except json.JSONDecodeError:
+            pprint(json.loads(result), width=200)
+        except (json.JSONDecodeError, ValueError):
             print(result)
 
 
