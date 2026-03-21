@@ -483,7 +483,7 @@ class SerenaAgent:
         else:
             log_path = SerenaPaths().last_returned_log_file_path
             if log_path is not None:
-                return f"Find the current log file here: f{log_path}"
+                return f"Find the current log file here: {log_path}"
             else:
                 return "Unfortunately, logs are not available. We recommend enabling the web dashboard/logging in general."
 

@@ -752,17 +752,6 @@ class LanguageServerSymbolRetriever:
                 "They are: \n" + json.dumps([s.to_dict(kind=True, relative_path=include_rel_path) for s in symbol_candidates], indent=2)
             )
 
-    def find_by_location(self, location: LanguageServerSymbolLocation) -> LanguageServerSymbol | None:
-        if location.relative_path is None:
-            return None
-        lang_server = self.get_language_server(location.relative_path)
-        document_symbols = lang_server.request_document_symbols(location.relative_path)
-        for symbol_dict in document_symbols.iter_symbols():
-            symbol = LanguageServerSymbol(symbol_dict)
-            if symbol.location == location:
-                return symbol
-        return None
-
     def find_referencing_symbols(
         self,
         name_path: str,

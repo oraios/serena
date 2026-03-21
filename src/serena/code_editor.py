@@ -266,11 +266,6 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         with lang_server.open_file(relative_path) as file_buffer:
             yield self.EditedFile(lang_server, relative_path, file_buffer)
 
-    def _get_code_file_content(self, relative_path: str) -> str:
-        """Get the content of a file using the language server."""
-        lang_server = self._get_language_server(relative_path)
-        return lang_server.language_server.retrieve_full_file_content(relative_path)
-
     def _find_unique_symbol(self, name_path: str, relative_file_path: str) -> LanguageServerSymbol:
         return self._symbol_retriever.find_unique(name_path, within_relative_path=relative_file_path)
 

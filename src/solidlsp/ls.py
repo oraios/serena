@@ -1011,45 +1011,6 @@ class SolidLanguageServer(ABC):
 
         return ret
 
-    def request_text_document_diagnostics(self, relative_file_path: str) -> list[ls_types.Diagnostic]:
-        """
-        Raise a [textDocument/diagnostic](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_diagnostic) request to the Language Server
-        to find diagnostics for the given file. Wait for the response and return the result.
-
-        :param relative_file_path: The relative path of the file to retrieve diagnostics for
-
-        :return: A list of diagnostics for the file
-        """
-        if not self.server_started:
-            log.error("request_text_document_diagnostics called before Language Server started")
-            raise SolidLSPException("Language Server not started")
-
-        with self.open_file(relative_file_path):
-            response = self.server.send.text_document_diagnostic(
-                {
-                    LSPConstants.TEXT_DOCUMENT: {  # type: ignore
-                        LSPConstants.URI: pathlib.Path(str(PurePath(self.repository_root_path, relative_file_path))).as_uri()
-                    }
-                }
-            )
-
-        if response is None:
-            return []  # type: ignore
-
-        assert isinstance(response, dict), f"Unexpected response from Language Server (expected list, got {type(response)}): {response}"
-        ret: list[ls_types.Diagnostic] = []
-        for item in response["items"]:  # type: ignore
-            new_item: ls_types.Diagnostic = {
-                "uri": pathlib.Path(str(PurePath(self.repository_root_path, relative_file_path))).as_uri(),
-                "severity": item["severity"],
-                "message": item["message"],
-                "range": item["range"],
-                "code": item["code"],  # type: ignore
-            }
-            ret.append(ls_types.Diagnostic(**new_item))
-
-        return ret
-
     def retrieve_full_file_content(self, file_path: str) -> str:
         """
         Retrieve the full content of the given file.
@@ -1596,37 +1557,6 @@ class SolidLanguageServer(ABC):
             return None
         return ls_types.Hover(**response)  # type: ignore
 
-    def request_signature_help(self, relative_file_path: str, line: int, column: int) -> ls_types.SignatureHelp | None:
-        """
-        Raise a [textDocument/signatureHelp](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_signatureHelp)
-        request to the Language Server to find the signature help at the given line and column in the given file.
-        Note: contrary to `hover`, this only returns something on the position of a *call* and not on a symbol definition.
-        This means for Serena's purposes, this method is not particularly useful. The result is also fairly verbose (but well structured).
-
-        :param relative_file_path: The relative path of the file that has the signature help
-        :param line: The line number of the symbol
-        :param column: The column number of the symbol
-
-        :return None
-        """
-        with self.open_file(relative_file_path):
-            response = self.server.send.signature_help(
-                {
-                    "textDocument": {"uri": pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()},
-                    "position": {
-                        "line": line,
-                        "character": column,
-                    },
-                }
-            )
-
-        if response is None:
-            return None
-
-        assert isinstance(response, dict)
-
-        return ls_types.SignatureHelp(**response)  # type: ignore
-
     def create_symbol_body(
         self,
         symbol: ls_types.UnifiedSymbolInformation | LSPTypes.SymbolInformation,
@@ -1905,28 +1835,6 @@ class SolidLanguageServer(ABC):
             return containing_symbol
         else:
             return None
-
-    def request_container_of_symbol(
-        self, symbol: ls_types.UnifiedSymbolInformation, include_body: bool = False
-    ) -> ls_types.UnifiedSymbolInformation | None:
-        """
-        Finds the container of the given symbol if there is one. If the parent attribute is present, the parent is returned
-        without further searching.
-
-        :param symbol: The symbol to find the container of.
-        :param include_body: whether to include the body of the symbol in the result.
-        :return: The container of the given symbol or None if no container is found.
-        """
-        if "parent" in symbol:
-            return symbol["parent"]
-        assert "location" in symbol, f"Symbol {symbol} has no location and no parent attribute"
-        return self.request_containing_symbol(
-            symbol["location"]["relativePath"],  # type: ignore
-            symbol["location"]["range"]["start"]["line"],
-            symbol["location"]["range"]["start"]["character"],
-            strict=True,
-            include_body=include_body,
-        )
 
     def _get_preferred_definition(self, definitions: list[ls_types.Location]) -> ls_types.Location:
         """
