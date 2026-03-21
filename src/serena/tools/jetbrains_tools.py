@@ -73,7 +73,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         :param name_path_pattern: the name path matching pattern (see above)
         :param depth: depth up to which descendants shall be retrieved (e.g. use 1 to also retrieve immediate children;
             for the case where the symbol is a class, this will return its methods).
-            Default 0.
+            Ignored if `include_body=True`. Default 0.
         :param relative_path: Optional. Restrict search to this file or directory. If None, searches entire codebase.
             If a directory is passed, the search will be restricted to the files in that directory.
             If a file is passed, the search will be restricted to that file.
@@ -90,6 +90,9 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
             -1 means the default value from the config will be used.
         :return: symbols (with locations) matching the name.
         """
+        if include_body:
+            depth = 0  # ignore user-specified depth if body is requested
+
         if relative_path == ".":
             relative_path = None
         with JetBrainsPluginClient.from_project(self.project) as client:

@@ -175,7 +175,8 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
 
         :param name_path_pattern: the name path matching pattern (see above)
         :param depth: depth up to which descendants shall be retrieved (e.g. use 1 to also retrieve immediate children;
-            for the case where the symbol is a class, this will return its methods). Default 0.
+            for the case where the symbol is a class, this will return its methods).
+            Ignored if `include_body=True`. Default 0.
         :param relative_path: Optional. Restrict search to this file or directory. If None, searches entire codebase.
             If a directory is passed, the search will be restricted to the files in that directory.
             If a file is passed, the search will be restricted to that file.
