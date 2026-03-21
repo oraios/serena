@@ -404,6 +404,8 @@ class SearchForPatternTool(Tool):
             matches = search_files(
                 rel_paths_to_search,
                 substring_pattern,
+                context_lines_before=context_lines_before,
+                context_lines_after=context_lines_after,
                 file_reader=self.project.read_file,
                 root_path=self.get_project_root(),
                 paths_include_glob=paths_include_glob,
@@ -414,5 +416,24 @@ class SearchForPatternTool(Tool):
         for match in matches:
             assert match.source_file_path is not None
             file_to_matches[match.source_file_path].append(match.to_display_string())
+
+        # capture lightweight match data for shortening before serialization
+        match_lines_by_file: dict[str, list[int]] = defaultdict(list)
+        for match in matches:
+            assert match.source_file_path is not None
+            match_lines_by_file[match.source_file_path].append(match.matched_lines[0].line_number)
+
+        # shortened result closures, from least to most aggressive shortening
+        def make_lines_only() -> str:
+            """Match locations without surrounding context"""
+            return f"Match lines per file:\n{self._to_json(match_lines_by_file)}"
+
+        def make_per_file_counts() -> str:
+            counts = {path: len(lines) for path, lines in match_lines_by_file.items()}
+            return f"Match counts per file:\n{self._to_json(counts)}"
+
+        def make_summary() -> str:
+            return f"Found {len(matches)} matches in {len(match_lines_by_file)} files."
+
         result = self._to_json(file_to_matches)
-        return self._limit_length(result, max_answer_chars)
+        return self._limit_length(result, max_answer_chars, shortened_results=[make_lines_only, make_per_file_counts, make_summary])

@@ -409,8 +409,23 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         string representation of the symbol kind (name attribute of the `SymbolKind` enum item)
         """
         children: NotRequired[list["LanguageServerSymbol.OutputDict"]]
+        content_around_reference: NotRequired[str]
+        """set by :class:`FindReferencingSymbolsTool` when including surrounding code lines"""
+        reference_line: NotRequired[int]
+        """line number of the reference, set by :class:`FindReferencingSymbolsTool`"""
 
-    OutputDictKey = Literal["name", "name_path", "relative_path", "location", "body_location", "body", "kind", "children"]
+    OutputDictKey = Literal[
+        "name",
+        "name_path",
+        "relative_path",
+        "location",
+        "body_location",
+        "body",
+        "kind",
+        "children",
+        "content_around_reference",
+        "reference_line",
+    ]
 
     def to_dict(
         self,
