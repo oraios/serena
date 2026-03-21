@@ -1,6 +1,6 @@
 import copy
 import logging
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Callable
 from typing import Any, Literal
 
@@ -18,7 +18,27 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
     Performs a global (or local) search for symbols using the JetBrains backend
     """
 
-    symbol_dict_grouper = JetBrainsSymbolDictGrouper(["relative_path", "type"], ["type"], collapse_singleton=True)
+    # groups top-level symbols only; children are grouped separately by _group_children_by_type
+    symbol_dict_grouper = JetBrainsSymbolDictGrouper(["relative_path", "type"], [], collapse_singleton=True)
+
+    @staticmethod
+    def _group_children_by_type(children: list[dict]) -> dict[str, list]:
+        """Recursively group a list of child symbol dicts by type, keeping only the short name.
+
+        :return: mapping from type to list of names (or ``{name: grouped_grandchildren}`` dicts
+            for children that themselves have children)
+        """
+        by_type: defaultdict[str, list] = defaultdict(list)
+        for child in children:
+            sym_type = child.get("type", "unknown")
+            # extract the short name from the name_path (last component)
+            name = child.get("name_path", "unknown").rsplit("/", 1)[-1]
+            if "children" in child:
+                grouped_grandchildren = JetBrainsFindSymbolTool._group_children_by_type(child["children"])
+                by_type[sym_type].append({name: grouped_grandchildren})
+            else:
+                by_type[sym_type].append(name)
+        return dict(by_type)
 
     def apply(
         self,
@@ -95,6 +115,12 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
             )
         symbols = symbol_collection_response["symbols"]
         n_matches = len(symbols)
+
+        # group children by type, keeping just the short name
+        if depth > 0:
+            for s in symbols:
+                if "children" in s:
+                    s["children"] = self._group_children_by_type(s["children"])  # type: ignore
 
         # snapshot before grouping, which mutates the dicts
         symbols_snapshot = copy.deepcopy(symbols)
