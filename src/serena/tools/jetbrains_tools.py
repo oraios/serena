@@ -156,15 +156,12 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
         ref_paths = [s.get("relative_path", "unknown") for s in symbol_dicts]
 
         result = self.symbol_dict_grouper.group(symbol_dicts)
-        # we use the fact that the results are grouped by relative path, a change to the grouper
-        # will necessitate a change here!
-        n_files = len(result)
 
         def make_per_file_counts() -> str:
             return f"Reference counts per file:\n{self._to_json(Counter(ref_paths))}"
 
         def make_summary() -> str:
-            return f"Found {len(ref_paths)} references in {n_files} files."
+            return f"Found {len(ref_paths)} references."
 
         result_json = self._to_json(result)
         return self._limit_length(result_json, max_answer_chars, shortened_results=[make_per_file_counts, make_summary])

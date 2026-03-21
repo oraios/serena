@@ -313,9 +313,6 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
             )
 
         result = self.symbol_dict_grouper.group(reference_dicts)  # type: ignore
-        # we use the fact that the results are grouped by relative path, a change to the grouper
-        # will necessitate a change here!
-        n_files = len(result)
 
         # shortened result closures, from least to most aggressive shortening
         def make_refs_without_context() -> str:
@@ -328,7 +325,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
             return f"Reference counts per file:\n{self._to_json(counts)}"
 
         def make_summary() -> str:
-            return f"Found {len(ref_summaries)} references in {n_files} files."
+            return f"Found {len(ref_summaries)} references."
 
         shortened_results = [make_refs_without_context, make_per_file_counts, make_summary]
 
