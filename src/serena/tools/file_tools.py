@@ -404,6 +404,8 @@ class SearchForPatternTool(Tool):
             matches = search_files(
                 rel_paths_to_search,
                 substring_pattern,
+                context_lines_before=context_lines_before,
+                context_lines_after=context_lines_after,
                 file_reader=self.project.read_file,
                 root_path=self.get_project_root(),
                 paths_include_glob=paths_include_glob,
