@@ -228,7 +228,7 @@ class ClangdLanguageServer(SolidLanguageServer):
             "workspaceFolders": [
                 {
                     "uri": root_uri,
-                    "name": "$name",
+                    "name": os.path.basename(repository_absolute_path),
                 }
             ],
         }
