@@ -429,6 +429,42 @@ class JetBrainsPluginClient(ToStringMixin):
         }
         return cast(jb.TypeHierarchyResponse, self._make_request("POST", "/getSubtypes", request_data))
 
+    def safe_delete(self, name_path: str | None, relative_path: str, delete_even_if_used: bool, propagate: bool) -> dict[str, Any]:
+        """
+        Safely deletes a symbol, checking for usages first.
+
+        :param name_path: the name path of the symbol to delete
+        :param relative_path: the relative path to the file containing the symbol
+        :param delete_even_if_used: if True, delete the symbol even if it has usages
+        """
+        request_data = {
+            "namePath": name_path,
+            "relativePath": relative_path,
+            "deleteEvenIfUsed": delete_even_if_used,
+            "propagate": propagate,
+        }
+        return self._make_request("POST", "/safeDelete", request_data)
+
+    def inline_symbol(
+        self,
+        name_path: str,
+        relative_path: str,
+        keep_definition: bool,
+    ) -> dict[str, Any]:
+        """
+        Inlines a method, replacing all call sites with the method body.
+
+        :param name_path: the name path of the method to inline
+        :param relative_path: the relative path to the file containing the method
+        :param keep_definition: if True, keep the original method definition after inlining
+        """
+        request_data = {
+            "namePath": name_path,
+            "relativePath": relative_path,
+            "keepDefinition": keep_definition,
+        }
+        return self._make_request("POST", "/inlineSymbol", request_data)
+
     def rename_symbol(
         self, name_path: str, relative_path: str, new_name: str, rename_in_comments: bool, rename_in_text_occurrences: bool
     ) -> None:
