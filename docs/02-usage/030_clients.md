@@ -115,6 +115,62 @@ set ENABLE_TOOL_SEARCH=true && claude
 ```
 in Windows CMD to launch Claude Code.
 
+### Automatic approvals while "Accept edits" is enabled
+
+Claude Code's "accept edits" toggle only applies to its built-in editing tools. Serena's
+destructive tools (such as `serena.replace_content` or `serena.rename_symbol`) will still ask
+for approval every time, even when you have already granted Claude Code blanket edit privileges.
+
+If you want Serena to respect the toggle, add a small hook that automatically approves Serena
+tool calls whenever Claude Code is running in `acceptEdits` mode.
+
+1. Create `~/.claude/serena-auto-approve.sh` (requires [`jq`](https://jqlang.github.io/jq/)):
+
+   ```bash
+   #!/usr/bin/env bash
+   input=$(cat)
+   mode=$(echo "$input" | jq -r '.permission_mode // "default"')
+   tool=$(echo "$input" | jq -r '.tool_name // ""')
+
+   if [[ "$mode" == "acceptEdits" && "$tool" == mcp__serena__* ]]; then
+     echo '{"decision":"approve"}'
+   fi
+   ```
+
+   Make the script executable:
+
+   ```bash
+   chmod +x ~/.claude/serena-auto-approve.sh
+   ```
+
+2. Add a Claude Code hook (for example in `~/.claude/settings.local.json`):
+
+   ```json
+   {
+     "hooks": {
+       "PreToolUse": [
+         {
+           "hooks": [
+             {
+               "type": "command",
+               "command": "~/.claude/serena-auto-approve.sh"
+             }
+           ]
+         }
+       ]
+     }
+   }
+   ```
+
+The hook runs for every tool call, but it only prints a decision when the request:
+
+- comes from a Serena MCP tool (tool name starts with `mcp__serena__`), and
+- is made while Claude Code is in `acceptEdits` mode.
+
+Because nothing is printed in any other situation, Serena continues to prompt for approval
+when `acceptEdits` is turned off. Restart Claude Code after editing the settings file so the
+hook configuration is picked up.
+
 ## VSCode
 
 While serena can be directly installed from the GitHub MCP server registry, we recommend to set it up manually
