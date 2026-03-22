@@ -13,4 +13,7 @@ included_optional_tools:
   - jet_brains_find_symbol
   - jet_brains_find_referencing_symbols
   - jet_brains_get_symbols_overview
+  - jet_brains_move_symbol
   - jet_brains_type_hierarchy
+  - jet_brains_safe_delete
+  - jet_brains_inline_symbol
