@@ -543,7 +543,7 @@ class SerenaDashboardAPI:
         from solidlsp.ls_config import Language
 
         def run() -> ResponseAvailableLanguages:
-            all_languages = [lang.value for lang in Language.iter_all(include_experimental=False)]
+            all_languages = [lang.value for lang in Language.iter_all(include_experimental=True)]
 
             # Filter out already added languages for the active project
             project = self._agent.get_active_project()
