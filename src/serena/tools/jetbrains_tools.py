@@ -118,6 +118,65 @@ class JetBrainsMoveSymbolTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
         return self._to_json(response_dict)
 
 
+class JetBrainsSafeDeleteTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
+    def apply(
+        self,
+        relative_path: str,
+        name_path: str | None = None,
+        delete_even_if_used: bool = False,
+        propagate: bool = False,
+    ) -> str:
+        """
+        Safely deletes a symbol, checking for usages first. It is also
+        possible to request deleting of usages and cleaning up of unused code.
+
+        :param relative_path: the relative path to the file containing the symbol to delete.
+        :param name_path: the name path of the symbol to delete.
+            A name path identifies a symbol within a source file, e.g. "MyClass/my_method".
+        :param delete_even_if_used: whether to force deletion even if the symbol still has usages.
+            Default is False (safe mode: will report usages instead of deleting).
+        :param propagate: whether to propagate the deletion to usages of the symbol and also
+            remove symbols that become unused after the deletion. Default is False.
+        :return: JSON string with the result of the operation.
+        """
+        with JetBrainsPluginClient.from_project(self.project) as client:
+            response_dict = client.safe_delete(
+                name_path=name_path,
+                relative_path=relative_path,
+                delete_even_if_used=delete_even_if_used,
+                propagate=propagate,
+            )
+        return self._to_json(response_dict)
+
+
+class JetBrainsInlineSymbol(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
+    def apply(
+        self,
+        name_path: str,
+        relative_path: str,
+        keep_definition: bool = False,
+    ) -> str:
+        """
+        Inlines a symbol (usually method, but also classes may be amenable to inlining,
+        which turns invocation into anonymous class creation),
+        replacing all call sites with the method's body.
+        An error is raised when requested on a symbol that cannot be inlined.
+
+        :param name_path: the name path of the method to inline.
+        :param relative_path: the relative path to the file containing the method to inline.
+        :param keep_definition: whether to keep the original method definition after inlining all call sites.
+            May be ignored in some cases (e.g., when inlining a class)..
+        :return: JSON string with the result of the operation.
+        """
+        with JetBrainsPluginClient.from_project(self.project) as client:
+            response_dict = client.inline_symbol(
+                name_path=name_path,
+                relative_path=relative_path,
+                keep_definition=keep_definition,
+            )
+        return self._to_json(response_dict)
+
+
 class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
     """
     Finds symbols that reference the given symbol using the JetBrains backend
