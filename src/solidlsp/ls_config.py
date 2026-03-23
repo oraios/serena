@@ -58,6 +58,7 @@ class Language(str, Enum):
     Uses luau-lsp by JohnnyMorganz. Automatically downloads the binary if not found.
     Supports .luau files. Configure via .luaurc in the project root.
     """
+    NIM = "nim"
     NIX = "nix"
     ERLANG = "erlang"
     OCAML = "ocaml"
@@ -243,6 +244,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.lua")
             case self.LUAU:
                 return FilenameMatcher("*.luau")
+            case self.NIM:
+                return FilenameMatcher("*.nim", "*.nims")
             case self.NIX:
                 return FilenameMatcher("*.nix")
             case self.ERLANG:
@@ -433,6 +436,11 @@ class Language(str, Enum):
                 from solidlsp.language_servers.lua_ls import LuaLanguageServer
 
                 return LuaLanguageServer
+
+            case self.NIM:
+                from solidlsp.language_servers.nim_language_server import NimLanguageServer
+
+                return NimLanguageServer
 
             case self.LUAU:
                 from solidlsp.language_servers.luau_lsp import LuauLanguageServer
