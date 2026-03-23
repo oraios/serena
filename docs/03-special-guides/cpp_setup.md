@@ -15,6 +15,8 @@ for cross-file reference finding, see below for details.
 Your project must have a `compile_commands.json` file at the repository root. 
 This file is essential for correct parsing and cross-file reference finding.
 
+You can use a specific clangd or ccls installation (e.g., a custom build or a version provided by your project),
+by specifying the path in your configuration, see [ls-specific-settings](ls-specific-settings) for details.
 
 ## compile_commands.json Requirements
 
@@ -29,30 +31,6 @@ For reliable cross-file reference finding with clangd, your `compile_commands.js
 
 By default, Serena automatically downloads and manages clangd. Since clangd does not properly work with relative paths in `compile_commands.json`,
 Serena will detect them and transform them into absolute paths automatically (writing a new `compile_commands.json` file), if needed.
-
-#### Using a Custom clangd
-
-If you prefer to use a specific clangd installation (e.g., a custom build or a version provided by your project), you can specify the path in your project configuration:
-
-```yaml
-# .serena/project.yml
-ls_specific_settings:
-  cpp:
-    ls_path: /path/to/your/clangd
-```
-
-When a custom clangd path is specified, Serena will not attempt to download clangd automatically. This allows different projects to use different clangd versions or installations.
-
-You can also configure the clangd path globally in `~/.serena/serena_config.yml`:
-
-```yaml
-# ~/.serena/serena_config.yml
-ls_specific_settings:
-  cpp:
-    ls_path: /path/to/your/clangd
-```
-
-Project-level configuration takes precedence over global configuration.
 
 #### Customizing the Compilation Database Location
 

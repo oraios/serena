@@ -624,15 +624,14 @@ class Project(ToStringMixin):
 
             log.info(f"Creating language server manager for {self.project_root}")
             self._language_server_manager_init_error = None
-            # Merge ls_specific_settings from serena_config and project_config, with project_config taking precedence
-            merged_ls_specific_settings = {**self.serena_config.ls_specific_settings, **self.project_config.ls_specific_settings}
+            ls_specific_settings = {**self.serena_config.ls_specific_settings, **self.project_config.ls_specific_settings}
             factory = LanguageServerFactory(
                 project_root=self.project_root,
                 project_data_path=self._serena_data_folder,
                 encoding=self.project_config.encoding,
                 ignored_patterns=self._ignored_patterns,
                 ls_timeout=ls_timeout,
-                ls_specific_settings=merged_ls_specific_settings,
+                ls_specific_settings=ls_specific_settings,
                 trace_lsp_communication=self.serena_config.trace_lsp_communication,
             )
             self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory)

@@ -222,6 +222,8 @@ class SharedConfig(ModeSelectionDefinition, ToolInclusionDefinition, ToStringMix
     language_backend: LanguageBackend | None = None
     line_ending: LineEnding | None = None
     read_only_memory_patterns: list[str] = field(default_factory=list)
+    ls_specific_settings: dict = field(default_factory=dict)
+    """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""
 
 
 class SerenaConfigError(Exception):
@@ -244,8 +246,6 @@ class ProjectConfig(SharedConfig):
     ignore_all_files_in_gitignore: bool = True
     initial_prompt: str = ""
     encoding: str = DEFAULT_SOURCE_FILE_ENCODING
-    ls_specific_settings: dict = field(default_factory=dict)
-    """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""
 
     # internal fields which are not mapped to/from the configuration file (must start with "_")
     _local_override_keys: list[str] = field(default_factory=list)
@@ -681,8 +681,6 @@ class SerenaConfig(SharedConfig):
     Even though the value of the max_answer_chars can be changed when calling the tool, it may make sense to adjust this default 
     through the global configuration.
     """
-    ls_specific_settings: dict = field(default_factory=dict)
-    """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""
 
     ignored_paths: list[str] = field(default_factory=list)
     """List of paths to ignore across all projects. Same syntax as gitignore, so you can use * and **.
