@@ -6,6 +6,7 @@ using the standard Ansible test repository. They work with the standard
 @ansible/ansible-language-server from npm.
 """
 
+import platform
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 
 
+@pytest.mark.skipif(platform.system() == "Windows", reason="ansible-language-server does not support native Windows operation")
 @pytest.mark.ansible
 class TestAnsibleLanguageServerBasics:
     """Test basic Ansible language server functionality."""
