@@ -10,7 +10,7 @@ This file provides the Python types corresponding to the Typescript types define
 """
 
 from enum import Enum, IntEnum, IntFlag
-from typing import Literal, NotRequired, Union
+from typing import Literal, NotRequired, Union, Any
 
 from typing_extensions import TypedDict
 
@@ -179,7 +179,7 @@ class SymbolKind(IntEnum):
     TypeParameter = 26
 
     @classmethod
-    def _missing_(cls, value: int) -> "SymbolKind":
+    def _missing_(cls, value: Any) -> "SymbolKind":
         return cls.Unknown
 
 
