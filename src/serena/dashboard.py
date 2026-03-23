@@ -5,7 +5,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
-from flask import Flask, Response, request, send_from_directory
+from flask import Flask, Response, redirect, request, send_from_directory
 from pydantic import BaseModel
 from sensai.util import logging
 
@@ -148,6 +148,10 @@ class SerenaDashboardAPI:
         return self._memory_log_handler
 
     def _setup_routes(self) -> None:
+        @self._app.route("/")
+        def redirect_to_dashboard() -> Response:
+            return redirect("/dashboard/")  # type: ignore[return-value]
+
         # Static files
         @self._app.route("/dashboard/<path:filename>")
         def serve_dashboard(filename: str) -> Response:
