@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from collections.abc import Iterator, Sequence
 from logging import Logger
 from pathlib import Path
@@ -1089,6 +1090,109 @@ class PromptCommands(AutoRegisteringGroup):
         click.echo(f"Deleted override file '{prompt_yaml_name}'.")
 
 
+_HOOK_REMINDER_THRESHOLD_SECONDS = 60
+
+_HOOK_REMINDER_TEXT = (
+    "You have Serena's semantic tools available (find_symbol, get_symbols_overview, "
+    "search_for_pattern, find_referencing_symbols). Prefer these over Grep/Read/Bash "
+    "for code exploration — they provide structured, language-aware results."
+)
+
+
+def _hook_timestamp_path(session_id: str) -> str:
+    """Return the path to the session-scoped timestamp file."""
+    home = os.getenv("SERENA_HOME", "").strip()
+    if not home:
+        home = str(Path.home() / ".serena")
+    return os.path.join(home, f"hook_last_serena_call_{session_id}")
+
+
+def _session_id_from_stdin() -> str | None:
+    """Extract session_id from JSON piped to stdin by Claude Code hooks."""
+    try:
+        raw = sys.stdin.read()
+        if not raw.strip():
+            return None
+        data = json.loads(raw)
+        return data.get("session_id")
+    except (json.JSONDecodeError, ValueError, OSError):
+        return None
+
+
+def _resolve_session_id(session_id: str | None) -> str | None:
+    """Return the session_id from the option, falling back to stdin."""
+    if session_id:
+        return session_id
+    return _session_id_from_stdin()
+
+
+_SESSION_ID_OPTION = click.option(
+    "--session-id",
+    default=None,
+    help="Session ID. If omitted, reads from stdin JSON (Claude Code hook protocol).",
+)
+
+
+class HookCommands(AutoRegisteringGroup):
+    """Group for 'hook' subcommands providing Claude Code hook integration."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            name="hook",
+            help="Claude Code hook integration for context drift prevention. "
+            "You can run `serena hook <command> --help` for more info on each command.",
+        )
+
+    @staticmethod
+    @click.command("stamp", help="Record that a Serena tool was just used.")
+    @_SESSION_ID_OPTION
+    def stamp(session_id: str | None = None) -> None:
+        sid = _resolve_session_id(session_id)
+        if not sid:
+            return
+        path = _hook_timestamp_path(sid)
+        with open(path, "w") as f:
+            f.write(str(time.time()))
+
+    @staticmethod
+    @click.command("check", help="Check if Serena tools have been used recently. If not, emit a reminder.")
+    @_SESSION_ID_OPTION
+    def check(session_id: str | None = None) -> None:
+        sid = _resolve_session_id(session_id)
+        if not sid:
+            return
+        path = _hook_timestamp_path(sid)
+        if not os.path.exists(path):
+            return
+        try:
+            with open(path) as f:
+                last_stamp = float(f.read().strip())
+        except (ValueError, OSError):
+            return
+        if time.time() - last_stamp > _HOOK_REMINDER_THRESHOLD_SECONDS:
+            click.echo(
+                json.dumps(
+                    {
+                        "hookSpecificOutput": {
+                            "hookEventName": "PostToolUse",
+                            "additionalContext": _HOOK_REMINDER_TEXT,
+                        }
+                    }
+                )
+            )
+
+    @staticmethod
+    @click.command("cleanup", help="Remove the session-scoped timestamp file.")
+    @_SESSION_ID_OPTION
+    def cleanup(session_id: str | None = None) -> None:
+        sid = _resolve_session_id(session_id)
+        if not sid:
+            return
+        path = _hook_timestamp_path(sid)
+        if os.path.exists(path):
+            os.remove(path)
+
+
 # Expose groups so we can reference them in pyproject.toml
 mode = ModeCommands()
 context = ContextCommands()
@@ -1096,13 +1200,14 @@ project = ProjectCommands()
 config = SerenaConfigCommands()
 tools = ToolCommands()
 prompts = PromptCommands()
+hooks = HookCommands()
 
 # Expose toplevel commands for the same reason
 top_level = TopLevelCommands()
 start_mcp_server = top_level.start_mcp_server
 
 # needed for the help script to work - register all subcommands to the top-level group
-for subgroup in (mode, context, project, config, tools, prompts):
+for subgroup in (mode, context, project, config, tools, prompts, hooks):
     top_level.add_command(subgroup)
 
 
