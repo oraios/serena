@@ -149,9 +149,9 @@ class TestPowerShellLanguageServerBasics:
 
         # Should find at least the call site in Main function
         assert refs is not None and len(refs) >= 1, f"Should find references to Greet-User, got {refs}"
-        assert any(
-            "main.ps1" in ref.get("uri", ref.get("relativePath", "")) for ref in refs
-        ), f"Should find reference in main.ps1, got {refs}"
+        assert any("main.ps1" in ref.get("uri", ref.get("relativePath", "")) for ref in refs), (
+            f"Should find reference in main.ps1, got {refs}"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.POWERSHELL], indirect=True)
     def test_powershell_find_definition_across_files(self, language_server: SolidLanguageServer) -> None:
@@ -166,9 +166,9 @@ class TestPowerShellLanguageServerBasics:
         definition_locations = language_server.request_definition(main_path, 98, 18)
 
         # Should find the definition in utils.ps1
-        assert (
-            definition_locations is not None and len(definition_locations) >= 1
-        ), f"Should find definition of Convert-ToUpperCase, got {definition_locations}"
-        assert any(
-            "utils.ps1" in loc.get("uri", "") for loc in definition_locations
-        ), f"Should find definition in utils.ps1, got {definition_locations}"
+        assert definition_locations is not None and len(definition_locations) >= 1, (
+            f"Should find definition of Convert-ToUpperCase, got {definition_locations}"
+        )
+        assert any("utils.ps1" in loc.get("uri", "") for loc in definition_locations), (
+            f"Should find definition in utils.ps1, got {definition_locations}"
+        )

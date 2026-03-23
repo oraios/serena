@@ -63,8 +63,7 @@ class MemoriesManager:
         if self._is_global(name):
             if name == self.GLOBAL_TOPIC:
                 raise ValueError(
-                    f'Bare "{self.GLOBAL_TOPIC}" is not a valid memory name. '
-                    f'Use "{self.GLOBAL_TOPIC}/<name>" to address a global memory.'
+                    f'Bare "{self.GLOBAL_TOPIC}" is not a valid memory name. Use "{self.GLOBAL_TOPIC}/<name>" to address a global memory.'
                 )
             # Strip "global/" prefix and resolve against global dir
             sub_name = name[len(self.GLOBAL_TOPIC) + 1 :]
@@ -277,7 +276,6 @@ class Project(ToStringMixin):
 
     def _gather_ignorespec(self) -> None:
         with LogTime(f"Gathering ignore spec for project {self.project_config.project_name}", logger=log):
-
             # gather ignored paths from the global configuration, project configuration, and gitignore files
             global_ignored_paths = self.serena_config.ignored_paths
             ignored_patterns = list(global_ignored_paths) + list(self.project_config.ignored_paths)

@@ -139,9 +139,9 @@ class TestSolidityLanguageServerBasics:
         references = language_server.request_references("contracts/Token.sol", definition_line, definition_char)
 
         assert references is not None, "Should return references for '_transfer'"
-        assert (
-            len(references) >= 2
-        ), f"'_transfer' should have at least 2 references (callers), found {len(references)}"  # called in transfer() and transferFrom()
+        assert len(references) >= 2, (
+            f"'_transfer' should have at least 2 references (callers), found {len(references)}"
+        )  # called in transfer() and transferFrom()
 
         ref_files = {ref.get("uri", "") for ref in references}
         assert any("Token.sol" in uri for uri in ref_files), "References should include Token.sol"

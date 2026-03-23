@@ -76,9 +76,9 @@ class Intelephense(SolidLanguageServer):
                 )
                 deps.install(intelephense_ls_dir)
 
-            assert os.path.exists(
-                intelephense_executable_path
-            ), f"intelephense executable not found at {intelephense_executable_path}, something went wrong."
+            assert os.path.exists(intelephense_executable_path), (
+                f"intelephense executable not found at {intelephense_executable_path}, something went wrong."
+            )
 
             return intelephense_executable_path
 

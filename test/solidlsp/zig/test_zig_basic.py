@@ -193,9 +193,9 @@ class TestZigLanguageServer:
 
                     # Verify exact location in main.zig (line 8, 0-indexed: 7)
                     main_ref_line = main_refs[0]["range"]["start"]["line"]
-                    assert (
-                        main_ref_line == 7
-                    ), f"Calculator reference in main.zig should be at line 8 (0-indexed: 7), found at line {main_ref_line + 1}"
+                    assert main_ref_line == 7, (
+                        f"Calculator reference in main.zig should be at line 8 (0-indexed: 7), found at line {main_ref_line + 1}"
+                    )
 
     @pytest.mark.parametrize("language_server", [Language.ZIG], indirect=True)
     def test_cross_file_references_within_file(self, language_server: SolidLanguageServer) -> None:

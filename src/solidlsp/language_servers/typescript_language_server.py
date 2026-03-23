@@ -141,9 +141,9 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                 PlatformId.WIN_x64,
                 PlatformId.WIN_arm64,
             ]
-            assert (
-                platform_id in valid_platforms
-            ), f"Platform {platform_id} is not supported for multilspy javascript/typescript at the moment"
+            assert platform_id in valid_platforms, (
+                f"Platform {platform_id} is not supported for multilspy javascript/typescript at the moment"
+            )
 
             # Get version settings from ls_specific_settings or use defaults
             language_specific_config = self._custom_settings
@@ -272,6 +272,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             await lsp.request_references(...)
             # Shutdown the LanguageServer on exit from scope
         # LanguageServer has been shutdown
+        ```
         """
 
         def register_capability_handler(params: dict) -> None:

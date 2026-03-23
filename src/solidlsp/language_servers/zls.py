@@ -70,8 +70,7 @@ class ZigLanguageServer(SolidLanguageServer):
         # Check for Windows and provide error message
         if platform.system() == "Windows":
             raise RuntimeError(
-                "Windows is not supported by ZLS in this integration. "
-                "Cross-file references don't work reliably on Windows. Reason unknown."
+                "Windows is not supported by ZLS in this integration. Cross-file references don't work reliably on Windows. Reason unknown."
             )
 
         zig_version = ZigLanguageServer._get_zig_version()
