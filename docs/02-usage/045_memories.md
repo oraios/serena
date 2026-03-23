@@ -39,6 +39,22 @@ Since global memories are not versioned alongside your project files,
 it can be helpful to track global memories with git (i.e. to make `~/.serena/memories/` a git repository)
 in order to have a history of changes and the possibility to revert them if needed.
 
+### Ignoring Memories
+
+Projects that accumulate large numbers of archived memory files can use `ignored_memory_patterns`
+to exclude them from `list_memories` and `activate_project` output. Add regex patterns to the
+global or project-level [configuration](050_configuration):
+
+```yaml
+ignored_memory_patterns: ["_archive/.*", "_episodes/.*"]
+```
+
+Ignored memories are completely excluded — they cannot be accessed via `read_memory`, `write_memory`,
+or any other memory tool. To read an ignored memory file, use the `read_file` tool on the raw file path
+(e.g., `.serena/memories/_archive/2026-03/some-topic.md`).
+
+Like `read_only_memory_patterns`, patterns from the global and project-level configurations are merged additively.
+
 ### Manually Editing Memories
 
 You may edit memories directly in the file system, using your preferred text editor or IDE.

@@ -2,6 +2,13 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Memories:
+    * Add `ignored_memory_patterns` configuration option (regex-based) to completely exclude
+      matching memories from listing, reading, and writing. Configurable at both global
+      (`serena_config.yml`) and project (`project.yml`) level, merged additively.
+      Useful for projects with large numbers of archived memory files that inflate
+      `activate_project` output.
+
 * New language support:
     * Add Solidity language server support (`Language.SOLIDITY`) using the
       Nomic Foundation `@nomicfoundation/solidity-language-server`. Automatically
