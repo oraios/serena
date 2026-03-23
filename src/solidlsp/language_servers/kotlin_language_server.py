@@ -85,7 +85,6 @@ class KotlinLanguageServer(SolidLanguageServer):
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
         def __init__(self, custom_settings: SolidLSPSettings.CustomLSSettings, ls_resources_dir: str):
             super().__init__(custom_settings, ls_resources_dir)
-            self._java_home_path: str | None = None
 
         def _get_or_install_core_dependency(self) -> str:
             """
@@ -133,9 +132,6 @@ class KotlinLanguageServer(SolidLanguageServer):
         def create_launch_command_env(self) -> dict[str, str]:
             """Provides JAVA_HOME and JVM options for the Kotlin Language Server process."""
             env: dict[str, str] = {}
-
-            if self._java_home_path is not None:
-                env["JAVA_HOME"] = self._java_home_path
 
             # Get JVM options from settings or use default
             # Note: an explicit empty string means "no JVM options", which is distinct from not setting the key
