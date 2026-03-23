@@ -699,6 +699,11 @@ class SerenaAgent:
                 f"(2) Configure one MCP server per backend in your client."
             )
 
+        # shut down the previously active project to release its language server processes
+        if self._active_project is not None:
+            log.info(f"Shutting down previously active project '{self._active_project.project_name}' before switching")
+            self._active_project.shutdown()
+
         self._active_project = project
         project.set_agent(self)
 
@@ -845,7 +850,8 @@ class SerenaAgent:
         """
         Shuts down the agent, freeing resources and stopping background tasks.
         """
-        if not hasattr(self, "_is_initialized"):
+        # guard against __del__ being called on a partially constructed instance
+        if not hasattr(self, "_active_project"):
             return
         log.info("SerenaAgent is shutting down ...")
         if self._active_project is not None:
