@@ -217,6 +217,7 @@ class TestLanguageServerSymbols:
         assert defining_symbol.get("name") == "User"
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.xfail(reason="LS resolves to @dataclass decorator instead of create_user method — pre-existing limitation")
     def test_request_defining_symbol_method_call(self, language_server: SolidLanguageServer) -> None:
         """Test request_defining_symbol for a method call."""
         # Create an example file path for a file that calls UserService.create_user
@@ -227,19 +228,11 @@ class TestLanguageServerSymbols:
         defining_symbol = language_server.request_defining_symbol(examples_file_path, 10, 30)
 
         # Verify that we found the defining symbol - should be the create_user method
-        # Because this might fail if the structure isn't exactly as expected, we'll use try-except
-        try:
-            assert defining_symbol is not None
-            assert defining_symbol.get("name") == "create_user"
-            # The defining symbol should be in the services.py file
-            if "location" in defining_symbol and "uri" in defining_symbol["location"]:
-                assert "services.py" in defining_symbol["location"]["uri"]
-        except AssertionError:
-            # If the file structure doesn't match what we expect, we can't guarantee this test
-            # will pass, so we'll consider it a warning rather than a failure
-            import warnings
-
-            warnings.warn("Could not verify method call definition - file structure may differ from expected")
+        assert defining_symbol is not None
+        assert defining_symbol.get("name") == "create_user"
+        # The defining symbol should be in the services.py file
+        if "location" in defining_symbol and "uri" in defining_symbol["location"]:
+            assert "services.py" in defining_symbol["location"]["uri"]
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
     def test_request_defining_symbol_none(self, language_server: SolidLanguageServer) -> None:
@@ -291,27 +284,6 @@ class TestLanguageServerSymbols:
         defining_symbol = language_server.request_defining_symbol(file_path, 9, 15)  # Position inside func_within_func
 
         # This is challenging for many language servers and may fail
-        try:
-            assert defining_symbol is not None
-            assert defining_symbol.get("name") == "func_within_func"
-        except (AssertionError, TypeError, KeyError):
-            # This is expected to potentially fail in many implementations
-            import warnings
-
-            warnings.warn("Could not resolve nested class method definition - implementation limitation")
-
-        # Test 2: Find definition of the nested class
-        defining_symbol = language_server.request_defining_symbol(file_path, 15, 18)  # Position of NestedClass
-
-        # This should resolve to the NestedClass
-        assert defining_symbol is not None
-        assert defining_symbol.get("name") == "NestedClass"
-        assert defining_symbol.get("kind") == SymbolKind.Class.value
-
-        # Test 3: Find definition of a method-local function
-        defining_symbol = language_server.request_defining_symbol(file_path, 9, 15)  # Position inside func_within_func
-
-        # This is challenging for many language servers and may fail
         assert defining_symbol is not None
         assert defining_symbol.get("name") == "func_within_func"
         assert defining_symbol.get("kind") == SymbolKind.Function.value
@@ -346,24 +318,20 @@ class TestLanguageServerSymbols:
 
         # Try to get the container information for our method, but be flexible
         # since implementations may vary
+        # verify container hierarchy: either containerName includes the class,
+        # or we can find the class by scanning containing symbols
         container_name = defining_symbol.get("containerName", None)
         if container_name and "UserService" in container_name:
-            # If containerName contains UserService, that's a valid implementation
-            pass
+            pass  # containerName directly confirms the hierarchy
         else:
-            # Try an alternative approach - looking for the containing class
-            try:
-                # Look for the class symbol in the file
-                for line in range(5, 12):  # Approximate range where UserService class should be defined
-                    symbol = language_server.request_containing_symbol(file_path, line, 5)  # column 5 should be within class definition
-                    if symbol and symbol.get("name") == "UserService" and symbol.get("kind") == SymbolKind.Class.value:
-                        # Found the class - this is also a valid implementation
-                        break
-            except Exception:
-                # Just log a warning - this is an alternative verification and not essential
-                import warnings
-
-                warnings.warn("Could not verify container hierarchy - implementation detail")
+            # alternative: look for the containing class via request_containing_symbol
+            found_class = False
+            for line in range(5, 12):
+                symbol = language_server.request_containing_symbol(file_path, line, 5)
+                if symbol and symbol.get("name") == "UserService" and symbol.get("kind") == SymbolKind.Class.value:
+                    found_class = True
+                    break
+            assert found_class, "Could not verify container hierarchy: UserService class not found"
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
     def test_symbol_tree_structure(self, language_server: SolidLanguageServer) -> None:
