@@ -817,7 +817,7 @@ class SolidLanguageServer(ABC):
         Delete text between the given start and end positions in the given file and return the deleted text.
         """
         if not self.server_started:
-            log.error("insert_text_at_position called before Language Server started")
+            log.error("delete_text_between_positions called before Language Server started")
             raise SolidLSPException("Language Server not started")
 
         absolute_file_path = str(PurePath(self.repository_root_path, relative_file_path))
