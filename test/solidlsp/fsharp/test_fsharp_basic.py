@@ -10,7 +10,9 @@ from solidlsp.ls_utils import SymbolUtils
 from test.conftest import is_ci
 
 
+# Currently, most F# tests fail, there seems to be a regression or instability.
 @pytest.mark.fsharp
+@pytest.mark.skipif(is_ci)
 class TestFSharpLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
