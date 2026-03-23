@@ -222,6 +222,8 @@ class SharedConfig(ModeSelectionDefinition, ToolInclusionDefinition, ToStringMix
     language_backend: LanguageBackend | None = None
     line_ending: LineEnding | None = None
     read_only_memory_patterns: list[str] = field(default_factory=list)
+    ls_specific_settings: dict = field(default_factory=dict)
+    """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""
 
 
 class SerenaConfigError(Exception):
@@ -459,6 +461,7 @@ class ProjectConfig(SharedConfig):
             base_modes=data["base_modes"],
             default_modes=data["default_modes"],
             symbol_info_budget=symbol_info_budget,
+            ls_specific_settings=data.get("ls_specific_settings", {}),
             _local_override_keys=local_override_keys,
         )
 
@@ -678,8 +681,6 @@ class SerenaConfig(SharedConfig):
     Even though the value of the max_answer_chars can be changed when calling the tool, it may make sense to adjust this default 
     through the global configuration.
     """
-    ls_specific_settings: dict = field(default_factory=dict)
-    """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""
 
     ignored_paths: list[str] = field(default_factory=list)
     """List of paths to ignore across all projects. Same syntax as gitignore, so you can use * and **.
