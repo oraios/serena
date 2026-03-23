@@ -111,9 +111,9 @@ class TestRegoLanguageServer:
         assert definitions is not None and len(definitions) > 0, "Should find cross-file definition for is_valid_user"
 
         # Verify the definition points to helpers.rego (cross-file)
-        assert any(
-            "helpers.rego" in defn.get("relativePath", "") for defn in definitions
-        ), "Definition should be in utils/helpers.rego (cross-file reference)"
+        assert any("helpers.rego" in defn.get("relativePath", "") for defn in definitions), (
+            "Definition should be in utils/helpers.rego (cross-file reference)"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.REGO], indirect=True)
     def test_find_symbols_validation(self, language_server: SolidLanguageServer) -> None:

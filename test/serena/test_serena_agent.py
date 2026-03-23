@@ -139,9 +139,9 @@ class TestSerenaAgent:
                 continue
             symbol_info = s.get("info")
             assert symbol_info, f"Expected symbol info to be present for symbol: {s}"
-            assert (
-                symbol_name in s["info"]
-            ), f"[{serena_agent.get_active_lsp_languages()[0]}] Expected symbol info to contain symbol name {symbol_name}. Info: {s['info']}"
+            assert symbol_name in s["info"], (
+                f"[{serena_agent.get_active_lsp_languages()[0]}] Expected symbol info to contain symbol name {symbol_name}. Info: {s['info']}"
+            )
             # special additional test for Java, since Eclipse returns hover in a complex format and we want to make sure to get it right
             if s["kind"] == SymbolKind.Class.name and serena_agent.get_active_lsp_languages() == [Language.JAVA]:
                 assert "A simple model class" in symbol_info, f"Java class docstring not found in symbol info: {s}"
@@ -166,9 +166,9 @@ class TestSerenaAgent:
             f"Expected to find Dog/greet in {sample_php} but got empty result. "
             "This may indicate that find_symbol is not routing to the PHP language server for PHP files."
         )
-        assert any(
-            "greet" in s["name_path"] and sample_php in s["relative_path"] for s in symbols
-        ), f"Dog/greet not found in {sample_php}. Symbols: {symbols}"
+        assert any("greet" in s["name_path"] and sample_php in s["relative_path"] for s in symbols), (
+            f"Dog/greet not found in {sample_php}. Symbols: {symbols}"
+        )
 
     @pytest.mark.parametrize(
         "serena_agent,symbol_name,expected_kind,expected_file",
@@ -478,9 +478,9 @@ class TestSerenaAgent:
         )
 
         symbols = json.loads(result)
-        assert (
-            len(symbols) == num_expected
-        ), f"Expected to find {num_expected} symbols for overloaded function {name_path}. Symbols found: {symbols}"
+        assert len(symbols) == num_expected, (
+            f"Expected to find {num_expected} symbols for overloaded function {name_path}. Symbols found: {symbols}"
+        )
 
     @pytest.mark.parametrize(
         "serena_agent,name_path,relative_path",

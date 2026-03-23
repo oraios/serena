@@ -235,9 +235,9 @@ class TestVueUndefinedSymbols:
         result = language_server.request_containing_symbol(file_path, 1, 0)
 
         # Should handle gracefully - return None, empty dict, or a valid parent symbol
-        assert (
-            result is None or result == {} or isinstance(result, dict)
-        ), f"Whitespace line should return None, empty dict, or valid symbol. Got: {result}"
+        assert result is None or result == {} or isinstance(result, dict), (
+            f"Whitespace line should return None, empty dict, or valid symbol. Got: {result}"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_definition_at_keyword_position(self, language_server: SolidLanguageServer) -> None:
@@ -271,9 +271,9 @@ class TestVueEdgeCasePositions:
         result = language_server.request_containing_symbol(file_path, 0, 0)
 
         # Should handle gracefully
-        assert (
-            result is None or result == {} or isinstance(result, dict)
-        ), f"Position 0,0 should return None, empty dict, or valid symbol. Got: {result}"
+        assert result is None or result == {} or isinstance(result, dict), (
+            f"Position 0,0 should return None, empty dict, or valid symbol. Got: {result}"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_references_at_file_start(self, language_server: SolidLanguageServer) -> None:
@@ -317,9 +317,9 @@ class TestVueEdgeCasePositions:
         result = language_server.request_containing_symbol(file_path, 5, 10)
 
         # Should handle gracefully - template doesn't have containing symbols in the same way
-        assert (
-            result is None or result == {} or isinstance(result, dict)
-        ), f"Template position should return None, empty dict, or valid symbol. Got: {result}"
+        assert result is None or result == {} or isinstance(result, dict), (
+            f"Template position should return None, empty dict, or valid symbol. Got: {result}"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_zero_character_positions(self, language_server: SolidLanguageServer) -> None:
@@ -334,9 +334,9 @@ class TestVueEdgeCasePositions:
             result = language_server.request_containing_symbol(file_path, line, 0)
 
             # Should handle gracefully
-            assert (
-                result is None or result == {} or isinstance(result, dict)
-            ), f"Line {line}, character 0 should return None, empty dict, or valid symbol. Got: {result}"
+            assert result is None or result == {} or isinstance(result, dict), (
+                f"Line {line}, character 0 should return None, empty dict, or valid symbol. Got: {result}"
+            )
 
 
 class TestVueTypescriptFileErrors:

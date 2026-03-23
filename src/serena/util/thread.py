@@ -16,7 +16,6 @@ T = TypeVar("T")
 
 
 class ExecutionResult(Generic[T], ToStringMixin):
-
     class Status(Enum):
         SUCCESS = "success"
         TIMEOUT = "timeout"

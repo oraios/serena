@@ -120,9 +120,9 @@ class TestOCamlLanguageServer:
 
         # Should find at least 3 references in test_repo.ml: definition + 2 recursive calls
         # On OCaml 5.2+ with cross-file refs, there may be more total refs but same-file count stays the same
-        assert (
-            len(same_file_refs) >= 3
-        ), f"Expected at least 3 references in test_repo.ml (definition + 2 recursive), found {len(same_file_refs)}"
+        assert len(same_file_refs) >= 3, (
+            f"Expected at least 3 references in test_repo.ml (definition + 2 recursive), found {len(same_file_refs)}"
+        )
 
         # Verify references are on different lines (definition + recursive calls)
         ref_lines = [ref.get("range", {}).get("start", {}).get("line", -1) for ref in same_file_refs]

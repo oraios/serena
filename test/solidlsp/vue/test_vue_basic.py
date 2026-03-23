@@ -85,9 +85,9 @@ class TestVueDualLspArchitecture:
 
         # Verify references include .vue files (components that import the store)
         vue_refs = [ref for ref in refs if ".vue" in ref.get("uri", "")]
-        assert (
-            len(vue_refs) >= 3
-        ), f"Should find at least 3 references in Vue components, found {len(vue_refs)}: {[ref.get('uri', '') for ref in vue_refs]}"
+        assert len(vue_refs) >= 3, (
+            f"Should find at least 3 references in Vue components, found {len(vue_refs)}: {[ref.get('uri', '') for ref in vue_refs]}"
+        )
 
         # Verify specific components that use the store
         expected_vue_files = ["App.vue", "CalculatorInput.vue", "CalculatorDisplay.vue"]
@@ -131,9 +131,9 @@ class TestVueDualLspArchitecture:
         all_ref_uris = [ref.get("uri", "") for ref in refs]
         has_ts_refs = any(".ts" in uri and "types" not in uri for uri in all_ref_uris)
 
-        assert (
-            has_ts_refs
-        ), f"Operation type should be referenced in TypeScript files like calculator.ts. Found references in: {all_ref_uris}"
+        assert has_ts_refs, (
+            f"Operation type should be referenced in TypeScript files like calculator.ts. Found references in: {all_ref_uris}"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_reference_deduplication(self, language_server: SolidLanguageServer) -> None:
@@ -260,9 +260,9 @@ class TestVueEdgeCases:
 
         # Vue LSP returns SFC structure (template/script/style sections) for .vue files
         # This is expected behavior - overview shows the file's high-level structure
-        assert (
-            len(symbol_names) >= 1
-        ), f"Should have at least 1 symbol name in overview (e.g., 'App' or SFC section), got {len(symbol_names)}: {symbol_names}"
+        assert len(symbol_names) >= 1, (
+            f"Should have at least 1 symbol name in overview (e.g., 'App' or SFC section), got {len(symbol_names)}: {symbol_names}"
+        )
 
         # Test overview for a TypeScript file
         store_file = os.path.join("src", "stores", "calculator.ts")
@@ -272,18 +272,18 @@ class TestVueEdgeCases:
         assert len(store_overview) >= 1, f"calculator.ts should have at least 1 top-level symbol in overview, got {len(store_overview)}"
 
         store_symbol_names = [s.get("name") for s in store_overview if isinstance(s, dict)]
-        assert (
-            "useCalculatorStore" in store_symbol_names
-        ), f"useCalculatorStore should be in store file overview. Found {len(store_symbol_names)} symbols: {store_symbol_names}"
+        assert "useCalculatorStore" in store_symbol_names, (
+            f"useCalculatorStore should be in store file overview. Found {len(store_symbol_names)} symbols: {store_symbol_names}"
+        )
 
         # Test overview for another Vue component
         button_file = os.path.join("src", "components", "CalculatorButton.vue")
         button_overview = language_server.request_document_overview(button_file)
 
         assert isinstance(button_overview, list), f"Button overview should be a list, got: {type(button_overview)}"
-        assert (
-            len(button_overview) >= 1
-        ), f"CalculatorButton.vue should have at least 1 top-level symbol in overview, got {len(button_overview)}"
+        assert len(button_overview) >= 1, (
+            f"CalculatorButton.vue should have at least 1 top-level symbol in overview, got {len(button_overview)}"
+        )
 
         # For Vue files, overview provides SFC structure which is useful for navigation
         # The detailed symbols are available via request_document_symbols
@@ -324,9 +324,9 @@ class TestVueEdgeCases:
         stores_overview = language_server.request_dir_overview(stores_dir)
 
         assert isinstance(stores_overview, dict), f"Stores overview should be a dict, got: {type(stores_overview)}"
-        assert (
-            len(stores_overview) == 1
-        ), f"src/stores directory should have exactly 1 file (calculator.ts) in overview, got {len(stores_overview)}"
+        assert len(stores_overview) == 1, (
+            f"src/stores directory should have exactly 1 file (calculator.ts) in overview, got {len(stores_overview)}"
+        )
 
         # Verify calculator.ts is included
         calculator_files = [path for path in stores_overview.keys() if "calculator.ts" in path]
@@ -339,18 +339,18 @@ class TestVueEdgeCases:
         store_path = calculator_files[0]
         store_symbols = stores_overview[store_path]
         store_symbol_names = [s.get("name") for s in store_symbols if isinstance(s, dict)]
-        assert (
-            "useCalculatorStore" in store_symbol_names
-        ), f"calculator.ts should have useCalculatorStore in overview. Found {len(store_symbol_names)} symbols: {store_symbol_names}"
+        assert "useCalculatorStore" in store_symbol_names, (
+            f"calculator.ts should have useCalculatorStore in overview. Found {len(store_symbol_names)} symbols: {store_symbol_names}"
+        )
 
         # Test overview for composables directory
         composables_dir = os.path.join("src", "composables")
         composables_overview = language_server.request_dir_overview(composables_dir)
 
         assert isinstance(composables_overview, dict), f"Composables overview should be a dict, got: {type(composables_overview)}"
-        assert (
-            len(composables_overview) == 2
-        ), f"src/composables directory should have exactly 2 files in overview, got {len(composables_overview)}"
+        assert len(composables_overview) == 2, (
+            f"src/composables directory should have exactly 2 files in overview, got {len(composables_overview)}"
+        )
 
         # Verify composable files are included
         expected_composables = ["useFormatter.ts", "useTheme.ts"]

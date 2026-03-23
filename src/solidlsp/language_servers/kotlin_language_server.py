@@ -93,9 +93,9 @@ class KotlinLanguageServer(SolidLanguageServer):
             platform_id = PlatformUtils.get_platform_id()
 
             # Verify platform support
-            assert (
-                platform_id.value.startswith("win-") or platform_id.value.startswith("linux-") or platform_id.value.startswith("osx-")
-            ), "Only Windows, Linux and macOS platforms are supported for Kotlin in multilspy at the moment"
+            assert platform_id.value.startswith("win-") or platform_id.value.startswith("linux-") or platform_id.value.startswith("osx-"), (
+                "Only Windows, Linux and macOS platforms are supported for Kotlin in multilspy at the moment"
+            )
 
             kotlin_suffix = PLATFORM_KOTLIN_SUFFIX.get(platform_id.value)
             assert kotlin_suffix, f"Unsupported platform for Kotlin LSP: {platform_id.value}"
