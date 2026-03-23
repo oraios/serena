@@ -166,7 +166,7 @@ class FSharpLanguageServer(SolidLanguageServer):
                     "documentHighlight": {"dynamicRegistration": True},
                     "documentSymbol": {
                         "dynamicRegistration": True,
-                        "symbolKind": {"valueSet": list(range(1, 26))},  # All SymbolKind values
+                        "symbolKind": {"valueSet": list(range(1, 27))},  # All SymbolKind values (1-26)
                         "hierarchicalDocumentSymbolSupport": True,
                     },
                     "codeAction": {
