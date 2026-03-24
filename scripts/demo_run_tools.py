@@ -13,9 +13,12 @@ from serena.constants import REPO_ROOT
 from serena.tools import (
     FindFileTool,
     FindReferencingSymbolsTool,
+    JetBrainsFindImplementationsTool,
     JetBrainsFindSymbolTool,
     JetBrainsGetSymbolsOverviewTool,
     JetBrainsInlineSymbol,
+    JetBrainsListInspectionsTool,
+    JetBrainsRunInspectionsTool,
     JetBrainsSafeDeleteTool,
     SearchForPatternTool,
 )
@@ -35,12 +38,18 @@ if __name__ == "__main__":
     overview_tool = agent.get_tool(JetBrainsGetSymbolsOverviewTool)
     safe_delete_tool = agent.get_tool(JetBrainsSafeDeleteTool)
     inline_symbol = agent.get_tool(JetBrainsInlineSymbol)
+    inspections_tool = agent.get_tool(JetBrainsRunInspectionsTool)
+    list_inspections_tool = agent.get_tool(JetBrainsListInspectionsTool)
+    find_implementations_tool = agent.get_tool(JetBrainsFindImplementationsTool)
 
     result = agent.execute_task(
-        lambda: inline_symbol.apply(
+        lambda: find_implementations_tool.apply(
             relative_path="test_repo/nested.py",
-            name_path="OuterClass/NestedClass",
-            keep_definition=True,
+            # min_severity="WEAK_WARNING"
+            name_path="b",
+            include_info=True,
+            # language="Python",
+            # keep_definition=True,
         )
     )
     pprint(json.loads(result))
