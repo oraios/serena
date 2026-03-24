@@ -13,7 +13,7 @@ import pytest
 def ensure_erlang_test_repo_compiled(repo_path: str) -> None:
     """Ensure the Erlang test repository dependencies are installed and project is compiled.
 
-    Erlang LS requires the project to be fully compiled and indexed before providing
+    ELP requires the project to be fully compiled and indexed before providing
     complete references and symbol resolution. This function:
     1. Installs dependencies via 'rebar3 deps'
     2. Compiles the project via 'rebar3 compile'
@@ -38,7 +38,7 @@ def ensure_erlang_test_repo_compiled(repo_path: str) -> None:
         return
 
     try:
-        print("Installing dependencies and compiling Erlang test repository for optimal Erlang LS performance...")
+        print("Installing dependencies and compiling Erlang test repository for optimal ELP performance...")
 
         # First, install dependencies with increased timeout for CI
         print("=" * 60)
@@ -122,7 +122,7 @@ def ensure_erlang_test_repo_compiled(repo_path: str) -> None:
         print("=" * 60)
         print(f"❌ TIMEOUT: Erlang setup timed out after {e.timeout} seconds")
         print(f"Command: {' '.join(e.cmd)}")
-        print("This may indicate slow CI environment - Erlang LS may still work but with reduced functionality")
+        print("This may indicate slow CI environment - ELP may still work but with reduced functionality")
 
         # Try to get partial output if available
         if hasattr(e, "stdout") and e.stdout:
@@ -153,7 +153,7 @@ def setup_erlang_test_environment():
     2. Compiles the Erlang test repository via 'rebar3 compile'
 
     It uses autouse=True so it runs automatically without needing to be explicitly
-    requested by tests. This ensures Erlang LS has a fully prepared project to work with.
+    requested by tests. This ensures ELP has a fully prepared project to work with.
 
     Uses generous timeouts (3-5 minutes) to accommodate slow CI environments.
     All output is logged for transparency and debugging.

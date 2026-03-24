@@ -95,20 +95,21 @@ jobs:
         with:
           elixir-version: "1.19.3"
           otp-version: "28"
-#      Erlang currently not tested in CI, random hangings on macos, always hangs on ubuntu
-#      In local tests, erlang seems to work though
-#      - name: Install Erlang Language Server
-#        if: runner.os != 'Windows'
-#        shell: bash
-#        run: |
-#          # Install rebar3 if not already available
-#          which rebar3 || (curl -fsSL https://github.com/erlang/rebar3/releases/download/3.23.0/rebar3 -o /tmp/rebar3 && chmod +x /tmp/rebar3 && sudo mv /tmp/rebar3 /usr/local/bin/rebar3)
-#          # Clone and build erlang_ls
-#          git clone https://github.com/erlang-ls/erlang_ls.git /tmp/erlang_ls
-#          cd /tmp/erlang_ls
-#          make install PREFIX=/usr/local
-#          # Ensure erlang_ls is in PATH
-#          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Install ELP (Erlang Language Platform)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          # Download and install ELP binary
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            ELP_ARCHIVE="elp-linux-x86_64-unknown-linux-gnu-otp-28.tar.gz"
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            ELP_ARCHIVE="elp-macos-x86_64-apple-darwin-otp-28.tar.gz"
+          fi
+          curl -fsSL "https://github.com/WhatsApp/erlang-language-platform/releases/latest/download/${ELP_ARCHIVE}" -o /tmp/elp.tar.gz
+          tar xzf /tmp/elp.tar.gz -C /tmp
+          sudo mv /tmp/elp /usr/local/bin/elp
+          chmod +x /usr/local/bin/elp
+          elp version
       - name: Install clojure tools
         uses: DeLaGuardo/setup-clojure@13.4
         with:
