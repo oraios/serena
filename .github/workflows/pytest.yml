@@ -383,6 +383,9 @@ jobs:
           echo "PERL_MB_OPT=--install_base \"$HOME/perl5\"" >> $GITHUB_ENV
           echo "PERL_MM_OPT=INSTALL_BASE=$HOME/perl5" >> $GITHUB_ENV
           echo "$HOME/perl5/bin" >> $GITHUB_PATH
+      - name: Install ansible-core and ansible-lint (for Ansible language server tests)
+        shell: bash
+        run: uv run pip install ansible-core ansible-lint
       - name: Install Elm
         shell: bash
         run: npm install -g elm@0.19.1-6
@@ -562,6 +565,10 @@ jobs:
             echo "ERROR: FPCDIR does not exist: $FPCDIR"
             exit 1
           fi
+      - name: Build Lean 4 test project
+        uses: leanprover/lean-action@v1
+        with:
+          lake-package-directory: test/resources/repos/lean4/test_repo
       - name: Cache language servers
         id: cache-language-servers
         uses: actions/cache@v3

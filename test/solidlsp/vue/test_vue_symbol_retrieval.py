@@ -93,9 +93,9 @@ class TestVueSymbolRetrieval:
         containing_symbol = language_server.request_containing_symbol(file_path, import_line, import_character)
 
         # Should return None or empty dictionary for positions without containing symbol
-        assert (
-            containing_symbol is None or containing_symbol == {}
-        ), f"Expected None or empty dict for import position, got {containing_symbol}"
+        assert containing_symbol is None or containing_symbol == {}, (
+            f"Expected None or empty dict for import position, got {containing_symbol}"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_request_referencing_symbols_store_function(self, language_server: SolidLanguageServer) -> None:
@@ -153,9 +153,9 @@ class TestVueSymbolRetrieval:
         ]
 
         # Verify we found references - useFormatter is imported and used in CalculatorInput.vue
-        assert (
-            len(ref_symbols) >= 1
-        ), f"useFormatter should have at least 1 reference (used in CalculatorInput.vue), found {len(ref_symbols)} references"
+        assert len(ref_symbols) >= 1, (
+            f"useFormatter should have at least 1 reference (used in CalculatorInput.vue), found {len(ref_symbols)} references"
+        )
 
         # Check for references in Vue components
         vue_refs = [
@@ -182,9 +182,9 @@ class TestVueSymbolRetrieval:
         definitions = language_server.request_definition(input_file, 4, 10)
 
         assert len(definitions) == 1, f"Should find exactly 1 definition for CalculatorButton import, got {len(definitions)}"
-        assert (
-            "CalculatorButton.vue" in definitions[0]["relativePath"]
-        ), f"Definition should point to CalculatorButton.vue, got {definitions[0]['relativePath']}"
+        assert "CalculatorButton.vue" in definitions[0]["relativePath"], (
+            f"Definition should point to CalculatorButton.vue, got {definitions[0]['relativePath']}"
+        )
 
         refs = language_server.request_references(input_file, 4, 10)
 
@@ -225,9 +225,9 @@ class TestVueSymbolRetrieval:
 
         # Verify it points to the store file
         if "location" in defining_symbol and "uri" in defining_symbol["location"]:
-            assert (
-                "calculator.ts" in defining_symbol["location"]["uri"]
-            ), f"Should point to calculator.ts, got {defining_symbol['location']['uri']}"
+            assert "calculator.ts" in defining_symbol["location"]["uri"], (
+                f"Should point to calculator.ts, got {defining_symbol['location']['uri']}"
+            )
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
     def test_request_defining_symbol_component_import(self, language_server: SolidLanguageServer) -> None:
@@ -239,9 +239,9 @@ class TestVueSymbolRetrieval:
 
         definition = definitions[0]
         assert definition["relativePath"] is not None, "Definition should have a relative path"
-        assert (
-            "CalculatorButton.vue" in definition["relativePath"]
-        ), f"Should point to CalculatorButton.vue, got {definition['relativePath']}"
+        assert "CalculatorButton.vue" in definition["relativePath"], (
+            f"Should point to CalculatorButton.vue, got {definition['relativePath']}"
+        )
 
         assert definition["range"]["start"]["line"] == 0, "Definition should point to start of .vue file"
 

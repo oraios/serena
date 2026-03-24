@@ -33,37 +33,103 @@ class TestRustAnalyzerDetection:
     """Unit tests for rust-analyzer binary detection logic."""
 
     @pytest.mark.rust
-    def test_detect_from_path_as_last_resort(self):
+    def test_detect_from_path_when_functional(self):
         """
         GIVEN rustup is not available
-        AND rust-analyzer is NOT in common locations (Homebrew, cargo)
-        AND rust-analyzer IS in system PATH
+        AND rust-analyzer IS in system PATH and is functional
         WHEN _ensure_rust_analyzer_installed is called
-        THEN it should return the path from shutil.which as last resort
+        THEN it should return the path from shutil.which
 
-        WHY: PATH is checked last to avoid picking up incorrect aliases.
-        Users with rust-analyzer in PATH but not via rustup/common locations
-        should still work.
+        WHY: PATH is checked after rustup but before common locations.
+        This covers standalone installs via Nix, distro packages, etc.
+        The binary is verified to be functional to avoid broken rustup proxy symlinks.
+        Fixes: https://github.com/oraios/serena/issues/800
         """
         from solidlsp.language_servers.rust_analyzer import RustAnalyzer
 
         # Mock rustup to be unavailable
         with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None):
-            # Mock common locations to NOT exist
-            with patch("os.path.isfile", return_value=False):
+            with patch.object(RustAnalyzer.DependencyProvider, "_get_rustup_version", return_value=None):
                 # Mock PATH to have rust-analyzer
                 with patch("shutil.which") as mock_which:
                     mock_which.return_value = "/custom/bin/rust-analyzer"
-                    with patch("os.access", return_value=True):
-                        # Need isfile to return True for PATH result only
-                        def selective_isfile(path):
-                            return path == "/custom/bin/rust-analyzer"
-
-                        with patch("os.path.isfile", side_effect=selective_isfile):
-                            result = RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
+                    with patch("os.path.isfile", return_value=True):
+                        with patch("os.access", return_value=True):
+                            with patch.object(RustAnalyzer.DependencyProvider, "_is_rust_analyzer_functional", return_value=True):
+                                result = RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
 
         assert result == "/custom/bin/rust-analyzer"
         mock_which.assert_called_with("rust-analyzer")
+
+    @pytest.mark.rust
+    def test_detect_from_nix_path_without_rustup(self):
+        """
+        GIVEN rustup is NOT installed
+        AND rust-analyzer is installed via Nix and available in PATH
+        WHEN _ensure_rust_analyzer_installed is called
+        THEN it should find and use the Nix-provided rust-analyzer
+
+        WHY: NixOS users install rust-analyzer via home-manager or nix-env,
+        which places it in ~/.nix-profile/bin/ on PATH. Without rustup,
+        Serena should still detect and use this binary.
+        Fixes: https://github.com/oraios/serena/issues/800
+        """
+        from solidlsp.language_servers.rust_analyzer import RustAnalyzer
+
+        nix_path = "/home/user/.nix-profile/bin/rust-analyzer"
+
+        with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None):
+            with patch.object(RustAnalyzer.DependencyProvider, "_get_rustup_version", return_value=None):
+                with patch("shutil.which", return_value=nix_path):
+                    with patch("os.path.isfile", return_value=True):
+                        with patch("os.access", return_value=True):
+                            with patch.object(RustAnalyzer.DependencyProvider, "_is_rust_analyzer_functional", return_value=True):
+                                result = RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
+
+        assert result == nix_path
+
+    @pytest.mark.rust
+    def test_skip_broken_rustup_proxy_in_path(self):
+        """
+        GIVEN rustup is NOT available via 'rustup which'
+        AND rust-analyzer in PATH is a broken rustup proxy symlink
+        WHEN _ensure_rust_analyzer_installed is called
+        THEN it should skip the broken proxy and fall through to common paths
+
+        WHY: On some systems, rust-analyzer in PATH is a symlink to rustup.
+        If rustup doesn't have the component installed, running the binary fails.
+        We verify functionality with --version before accepting a PATH result.
+        """
+        from solidlsp.language_servers.rust_analyzer import RustAnalyzer
+
+        # Use platform-appropriate paths and binary names
+        home = pathlib.Path.home()
+        if IS_WINDOWS:
+            binary_name = "rust-analyzer.exe"
+            broken_proxy_path = str(home / "AppData" / "Local" / "Microsoft" / "WindowsApps" / binary_name)
+            cargo_path = str(home / ".cargo" / "bin" / binary_name)
+        else:
+            binary_name = "rust-analyzer"
+            broken_proxy_path = "/usr/bin/rust-analyzer"
+            cargo_path = os.path.expanduser("~/.cargo/bin/rust-analyzer")
+
+        def mock_isfile(path):
+            return path in [broken_proxy_path, cargo_path]
+
+        def mock_access(path, mode):
+            return path in [broken_proxy_path, cargo_path]
+
+        with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None):
+            with patch.object(RustAnalyzer.DependencyProvider, "_get_rustup_version", return_value=None):
+                with patch("shutil.which", return_value=broken_proxy_path):
+                    with patch("os.path.isfile", side_effect=mock_isfile):
+                        with patch("os.access", side_effect=mock_access):
+                            # The PATH binary is a broken rustup proxy
+                            with patch.object(RustAnalyzer.DependencyProvider, "_is_rust_analyzer_functional", return_value=False):
+                                result = RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
+
+        # Should skip broken proxy and find cargo-installed version
+        assert result == cargo_path
 
     @pytest.mark.rust
     @pytest.mark.skipif(IS_WINDOWS, reason="Homebrew paths only apply to macOS/Linux")

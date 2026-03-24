@@ -76,9 +76,9 @@ class TestRLanguageServer:
         assert len(utils_refs) >= 1, "Should find at least one reference in utils.R"
         utils_ref = utils_refs[0]
         # Should be around line 6 where calculate_mean is defined (0-indexed: line 5)
-        assert (
-            utils_ref["range"]["start"]["line"] == 5
-        ), f"Expected reference at line 5 in utils.R, got line {utils_ref['range']['start']['line']}"
+        assert utils_ref["range"]["start"]["line"] == 5, (
+            f"Expected reference at line 5 in utils.R, got line {utils_ref['range']['start']['line']}"
+        )
 
     def test_file_matching(self):
         """Test that R files are properly matched."""

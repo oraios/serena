@@ -232,6 +232,9 @@ tmp/
 # Exception: Don't ignore Julia test repository lib directory (contains source code)
 !/test/resources/repos/julia/test_repo/lib
 
+# Exception: Don't ignore Solidity test repository lib directory (contains source code)
+!/test/resources/repos/solidity/test_repo/contracts/lib
+
 # Swift
 /test/resources/repos/swift/test_repo/.build
 /test/resources/repos/swift/test_repo/.swiftpm
@@ -258,6 +261,9 @@ stack.yaml.lock
 dist-newstyle/
 cabal.project.local*
 .ghc.environment.*
+
+# Lean 4
+.lake/
 
 zz-misc/
 vue-implementation/

@@ -1,0 +1,9 @@
+{
+    "languageMode": "strict",
+    "lint": {
+        "*": true
+    },
+    "aliases": {
+        "Packages": "Packages/"
+    }
+}

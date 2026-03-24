@@ -15,6 +15,8 @@ for cross-file reference finding, see below for details.
 Your project must have a `compile_commands.json` file at the repository root. 
 This file is essential for correct parsing and cross-file reference finding.
 
+You can use a specific clangd or ccls installation (e.g., a custom build or a version provided by your project),
+by specifying the path in your configuration, see [ls-specific-settings](ls-specific-settings) for details.
 
 ## compile_commands.json Requirements
 
@@ -27,7 +29,7 @@ For reliable cross-file reference finding with clangd, your `compile_commands.js
 
 ### With clangd
 
-Serena automatically downloads and manages clangd. Since clangd does not properly work with relative paths in `compile_commands.json`,
+By default, Serena automatically downloads and manages clangd. Since clangd does not properly work with relative paths in `compile_commands.json`,
 Serena will detect them and transform them into absolute paths automatically (writing a new `compile_commands.json` file), if needed.
 
 #### Customizing the Compilation Database Location

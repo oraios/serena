@@ -124,9 +124,9 @@ class TestALLanguageServer:
 
         # Check for codeunit symbols
         assert SymbolUtils.symbol_tree_contains_name(symbols, "CustomerMgt"), "CustomerMgt codeunit not found in symbol tree"
-        assert SymbolUtils.symbol_tree_contains_name(
-            symbols, "PaymentProcessorImpl"
-        ), "PaymentProcessorImpl codeunit not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "PaymentProcessorImpl"), (
+            "PaymentProcessorImpl codeunit not found in symbol tree"
+        )
 
         # Check for enum symbol
         assert SymbolUtils.symbol_tree_contains_name(symbols, "CustomerType"), "CustomerType enum not found in symbol tree"
@@ -209,14 +209,14 @@ class TestALLanguageServer:
             refs = language_server.request_references(table_file, sel_start["line"], sel_start["character"])
 
             # The Customer table should be referenced in CustomerMgt.Codeunit.al
-            assert any(
-                "CustomerMgt.Codeunit.al" in ref.get("relativePath", "") for ref in refs
-            ), "Customer table should be referenced in CustomerMgt.Codeunit.al"
+            assert any("CustomerMgt.Codeunit.al" in ref.get("relativePath", "") for ref in refs), (
+                "Customer table should be referenced in CustomerMgt.Codeunit.al"
+            )
 
             # It should also be referenced in CustomerCard.Page.al
-            assert any(
-                "CustomerCard.Page.al" in ref.get("relativePath", "") for ref in refs
-            ), "Customer table should be referenced in CustomerCard.Page.al"
+            assert any("CustomerCard.Page.al" in ref.get("relativePath", "") for ref in refs), (
+                "Customer table should be referenced in CustomerCard.Page.al"
+            )
 
     @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
     def test_cross_file_symbols(self, language_server: SolidLanguageServer) -> None:
@@ -392,9 +392,9 @@ class TestALHoverInjection:
 
             assert hover is not None, f"Hover should return a result for {symbol_name}"
             assert value is not None, f"Hover should have content for {symbol_name}"
-            assert (
-                f"**{expected_full_name}**" in value
-            ), f"Hover for {symbol_name} should contain '{expected_full_name}'. Got: {value[:200]}"
+            assert f"**{expected_full_name}**" in value, (
+                f"Hover for {symbol_name} should contain '{expected_full_name}'. Got: {value[:200]}"
+            )
 
     @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
     def test_hover_contains_separator_after_injection(self, language_server: SolidLanguageServer) -> None:
@@ -490,9 +490,9 @@ class TestALPathNormalization:
                 hover = language_server.request_hover(file_path_forward, line, char)
                 assert hover is not None, "Hover should return a result"
                 value = hover.get("contents", {}).get("value", "")
-                assert (
-                    '**Table 50000 "TEST Customer"**' in value
-                ), f"Hover injection should work with mixed path formats. Got: {value[:200]}"
+                assert '**Table 50000 "TEST Customer"**' in value, (
+                    f"Hover injection should work with mixed path formats. Got: {value[:200]}"
+                )
                 return
 
         pytest.fail("Could not find TEST Customer symbol")
@@ -517,9 +517,9 @@ class TestALPathNormalization:
                 hover = language_server.request_hover(file_path_backslash, line, char)
                 assert hover is not None, "Hover should return a result"
                 value = hover.get("contents", {}).get("value", "")
-                assert (
-                    '**Table 50000 "TEST Customer"**' in value
-                ), f"Hover injection should work with mixed path formats. Got: {value[:200]}"
+                assert '**Table 50000 "TEST Customer"**' in value, (
+                    f"Hover injection should work with mixed path formats. Got: {value[:200]}"
+                )
                 return
 
         pytest.fail("Could not find TEST Customer symbol")
@@ -552,7 +552,7 @@ class TestALPathNormalization:
                     hover = language_server.request_hover(hover_path, line, char)
                     assert hover is not None, f"Hover should return a result for {symbol_name}"
                     value = hover.get("contents", {}).get("value", "")
-                    assert (
-                        f"**{expected_injection}**" in value
-                    ), f"Hover for {symbol_name} should have injection with mixed paths. Got: {value[:200]}"
+                    assert f"**{expected_injection}**" in value, (
+                        f"Hover for {symbol_name} should have injection with mixed paths. Got: {value[:200]}"
+                    )
                     break

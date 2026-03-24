@@ -53,6 +53,11 @@ class Language(str, Enum):
     BASH = "bash"
     ZIG = "zig"
     LUA = "lua"
+    LUAU = "luau"
+    """Luau Language Server for Roblox's Luau language (typed Lua 5.1 superset).
+    Uses luau-lsp by JohnnyMorganz. Automatically downloads the binary if not found.
+    Supports .luau files. Configure via .luaurc in the project root.
+    """
     NIX = "nix"
     ERLANG = "erlang"
     OCAML = "ocaml"
@@ -63,6 +68,7 @@ class Language(str, Enum):
     JULIA = "julia"
     FORTRAN = "fortran"
     HASKELL = "haskell"
+    LEAN4 = "lean4"
     GROOVY = "groovy"
     VUE = "vue"
     POWERSHELL = "powershell"
@@ -116,6 +122,19 @@ class Language(str, Enum):
     Supports .sv, .svh, .v, .vh files.
     Automatically downloads verible binary.
     """
+    SOLIDITY = "solidity"
+    """Solidity language server using the Nomic Foundation Solidity Language Server
+    (@nomicfoundation/solidity-language-server).
+    Supports .sol files. Provides go-to-definition, find references, document symbols,
+    hover, and diagnostics. Requires Node.js and npm.
+    Works best with a foundry.toml or hardhat.config.js in the project root.
+    """
+    ANSIBLE = "ansible"
+    """Ansible language server (experimental) using @ansible/ansible-language-server.
+    Supports *.yaml and *.yml files (same extensions as YAML, hence experimental).
+    Must be explicitly specified in project.yml. Requires Node.js and npm.
+    Requires ``ansible`` in PATH for full functionality.
+    """
 
     @classmethod
     def iter_all(cls, include_experimental: bool = False) -> Iterable[Self]:
@@ -132,6 +151,7 @@ class Language(str, Enum):
         in the project.yml configuration.
         """
         return self in {
+            self.ANSIBLE,
             self.TYPESCRIPT_VTS,
             self.PYTHON_JEDI,
             self.CSHARP_OMNISHARP,
@@ -142,6 +162,7 @@ class Language(str, Enum):
             self.TOML,
             self.GROOVY,
             self.CPP_CCLS,
+            self.SOLIDITY,
         }
 
     def __str__(self) -> str:
@@ -220,6 +241,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.zig", "*.zon")
             case self.LUA:
                 return FilenameMatcher("*.lua")
+            case self.LUAU:
+                return FilenameMatcher("*.luau")
             case self.NIX:
                 return FilenameMatcher("*.nix")
             case self.ERLANG:
@@ -244,6 +267,8 @@ class Language(str, Enum):
                 )
             case self.HASKELL:
                 return FilenameMatcher("*.hs", "*.lhs")
+            case self.LEAN4:
+                return FilenameMatcher("*.lean")
             case self.VUE:
                 path_patterns = ["*.vue"]
                 for prefix in ["c", "m", ""]:
@@ -279,6 +304,10 @@ class Language(str, Enum):
                 )
             case self.SYSTEMVERILOG:
                 return FilenameMatcher("*.sv", "*.svh", "*.v", "*.vh")
+            case self.SOLIDITY:
+                return FilenameMatcher("*.sol")
+            case self.ANSIBLE:
+                return FilenameMatcher("*.yaml", "*.yml")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -404,6 +433,12 @@ class Language(str, Enum):
                 from solidlsp.language_servers.lua_ls import LuaLanguageServer
 
                 return LuaLanguageServer
+
+            case self.LUAU:
+                from solidlsp.language_servers.luau_lsp import LuauLanguageServer
+
+                return LuauLanguageServer
+
             case self.ERLANG:
                 from solidlsp.language_servers.erlang_language_server import ErlangLanguageServer
 
@@ -444,6 +479,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.haskell_language_server import HaskellLanguageServer
 
                 return HaskellLanguageServer
+            case self.LEAN4:
+                from solidlsp.language_servers.lean4_language_server import Lean4LanguageServer
+
+                return Lean4LanguageServer
             case self.FSHARP:
                 from solidlsp.language_servers.fsharp_language_server import FSharpLanguageServer
 
@@ -472,6 +511,14 @@ class Language(str, Enum):
                 from solidlsp.language_servers.systemverilog_server import SystemVerilogLanguageServer
 
                 return SystemVerilogLanguageServer
+            case self.SOLIDITY:
+                from solidlsp.language_servers.solidity_language_server import SolidityLanguageServer
+
+                return SolidityLanguageServer
+            case self.ANSIBLE:
+                from solidlsp.language_servers.ansible_language_server import AnsibleLanguageServer
+
+                return AnsibleLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

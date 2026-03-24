@@ -83,9 +83,9 @@ class TestFortranLanguageServer:
 
         # Verify that main.f90 references the function
         main_refs = [ref for ref in refs if "main.f90" in ref.get("relativePath", "")]
-        assert (
-            len(main_refs) > 0
-        ), f"Expected to find reference in main.f90, but found references in: {[ref.get('relativePath') for ref in refs]}"
+        assert len(main_refs) > 0, (
+            f"Expected to find reference in main.f90, but found references in: {[ref.get('relativePath') for ref in refs]}"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.FORTRAN], indirect=True)
     def test_find_definition_cross_file(self, language_server: SolidLanguageServer) -> None:
@@ -104,14 +104,14 @@ class TestFortranLanguageServer:
         definition_location = definition_location_list[0]
 
         # The definition should be in modules/math_utils.f90
-        assert "math_utils.f90" in definition_location.get(
-            "uri", ""
-        ), f"Expected definition to be in math_utils.f90, but found in: {definition_location.get('uri')}"
+        assert "math_utils.f90" in definition_location.get("uri", ""), (
+            f"Expected definition to be in math_utils.f90, but found in: {definition_location.get('uri')}"
+        )
 
         # Verify the definition is around the correct line (line 4, 0-indexed)
-        assert (
-            definition_location["range"]["start"]["line"] == 4
-        ), f"Expected definition at line 4, but found at line {definition_location['range']['start']['line']}"
+        assert definition_location["range"]["start"]["line"] == 4, (
+            f"Expected definition at line 4, but found at line {definition_location['range']['start']['line']}"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.FORTRAN], indirect=True)
     def test_request_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
@@ -202,14 +202,14 @@ class TestFortranLanguageServer:
             pytest.skip("fortls does not support request_containing_symbol or couldn't find the containing symbol")
 
         # Should find the add_numbers function as the containing symbol
-        assert (
-            containing_symbol.get("name") == "add_numbers"
-        ), f"Expected containing symbol 'add_numbers', got '{containing_symbol.get('name')}'"
+        assert containing_symbol.get("name") == "add_numbers", (
+            f"Expected containing symbol 'add_numbers', got '{containing_symbol.get('name')}'"
+        )
 
         # Verify the symbol kind is Function
-        assert (
-            containing_symbol.get("kind") == SymbolKind.Function.value
-        ), f"Expected Function kind ({SymbolKind.Function.value}), got {containing_symbol.get('kind')}"
+        assert containing_symbol.get("kind") == SymbolKind.Function.value, (
+            f"Expected Function kind ({SymbolKind.Function.value}), got {containing_symbol.get('kind')}"
+        )
 
         # Verify location information exists
         assert "location" in containing_symbol, "Containing symbol should have location information"
@@ -264,9 +264,9 @@ class TestFortranLanguageServer:
 
         # Verify selectionRange points to identifier name, not line start
         # Line for "type, extends(Point2D) :: Point3D" has Point3D at position > 0
-        assert (
-            sel_start["character"] > 0
-        ), f"selectionRange should point to identifier, not line start. Got character: {sel_start['character']}"
+        assert sel_start["character"] > 0, (
+            f"selectionRange should point to identifier, not line start. Got character: {sel_start['character']}"
+        )
 
         # Test that we can find references using the corrected position
         _refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])

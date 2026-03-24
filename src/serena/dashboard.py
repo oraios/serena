@@ -5,7 +5,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
-from flask import Flask, Response, request, send_from_directory
+from flask import Flask, Response, redirect, request, send_from_directory
 from pydantic import BaseModel
 from sensai.util import logging
 
@@ -148,6 +148,10 @@ class SerenaDashboardAPI:
         return self._memory_log_handler
 
     def _setup_routes(self) -> None:
+        @self._app.route("/")
+        def redirect_to_dashboard() -> Response:
+            return redirect("/dashboard/")  # type: ignore[return-value]
+
         # Static files
         @self._app.route("/dashboard/<path:filename>")
         def serve_dashboard(filename: str) -> Response:
@@ -501,7 +505,7 @@ class SerenaDashboardAPI:
         # Get available memories if ReadMemoryTool is active
         available_memories = None
         if self._agent.tool_is_active("read_memory") and project is not None:
-            available_memories = project.memories_manager.list_memories()
+            available_memories = project.memories_manager.list_memories().get_full_list()
 
         # Get list of languages for the active project
         languages = []
@@ -524,7 +528,7 @@ class SerenaDashboardAPI:
             available_modes=available_modes,
             available_contexts=available_contexts,
             available_memories=available_memories,
-            jetbrains_mode=not self._agent.is_using_language_server(),
+            jetbrains_mode=self._agent.get_language_backend().is_jetbrains(),
             languages=languages,
             encoding=encoding,
             current_client=Tool.get_last_tool_call_client_str(),

@@ -28,6 +28,12 @@ We currently provide direct, out-of-the-box support for the programming language
 Some languages require additional installations or setup steps, as noted.
 
 * **AL**
+* **Ansible**
+  (experimental; requires Node.js and npm; automatically installs `@ansible/ansible-language-server`;
+  must be explicitly specified in the `languages` entry in the `project.yml`; requires `ansible` in PATH for full functionality)
+  the upstream `@ansible/ansible-language-server@1.2.3` supports hover, completion, definition,
+  semantic tokens, and validation; document symbols, workspace symbols, references, and rename
+  are not supported by this version)
 * **Bash**
 * **C#**  
   (by default, uses the Roslyn language server (language `csharp`), requiring [.NET v10+](https://dotnet.microsoft.com/en-us/download/dotnet) and, on Windows, `pwsh` ([PowerShell 7+](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows?view=powershell-7.5));
@@ -62,11 +68,16 @@ Some languages require additional installations or setup steps, as noted.
   on macOS, requires Rust toolchain for building from source;
   note: reference search is not supported by this language server)
 * **Java**  
-* **JavaScript**
+* **JavaScript**  
+  (supported via the TypeScript language server, i.e. use language `typescript` for both JavaScript and TypeScript)
 * **Julia**
 * **Kotlin**  
   (uses the pre-alpha [official kotlin LS](https://github.com/Kotlin/kotlin-lsp), some issues may appear)
+* **Lean 4**  
+  (requires `lean` and `lake` installed via [elan](https://github.com/leanprover/elan); uses the built-in Lean 4 LSP;
+  the project must be a Lake project with `lake build` run before use)
 * **Lua**
+* **Luau**
 * **Markdown**  
   (must explicitly enable language `markdown`, primarily useful for documentation-heavy projects)
 * **Nix**  
@@ -89,6 +100,9 @@ Some languages require additional installations or setup steps, as noted.
   (requires [rustup](https://rustup.rs/) - uses rust-analyzer from your toolchain)
 * **Scala**  
   (requires some [manual setup](../03-special-guides/scala_setup_guide_for_serena); uses Metals LSP)
+* **Solidity**
+  (experimental; requires Node.js and npm; automatically installs `@nomicfoundation/solidity-language-server`;
+  works best with a `foundry.toml` or `hardhat.config.js` in the project root)
 * **Swift**
 * **TypeScript**
 * **Vue**    

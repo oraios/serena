@@ -18,7 +18,6 @@ Instead, it can use code-centric tools like `find_symbol`, `find_referencing_sym
 
 <p align="center">
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Updates-1e293b?style=flat&logo=rss&logoColor=white&labelColor=1e293b" alt="Changelog" /></a>
-  <a href="roadmap.md"><img src="https://img.shields.io/badge/Roadmap-14532d?style=flat&logo=target&logoColor=white&labelColor=14532d" alt="Roadmap" /></a>
   <a href="lessons_learned.md"><img src="https://img.shields.io/badge/Lessons-Learned-7c4700?style=flat&logo=readthedocs&logoColor=white&labelColor=7c4700" alt="Lessons Learned" /></a>
 </p>
 
@@ -81,8 +80,8 @@ Serena incorporates a powerful abstraction layer for the integration of language
 that implement the language server protocol (LSP).
 The underlying language servers are typically open-source projects (like Serena) or at least freely available for use.
 
-With Serena's LSP library, we provide **support for over 30 programming languages**, including
-AL, Bash, C#, C/C++, Clojure, COBOL, Dart, Elixir, Elm, Erlang, Fortran, GLSL, Go, Groovy (partial support), Haskell, HLSL, Java, Javascript, Julia, Kotlin, Lua, Markdown, MATLAB, Nix, OCaml, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Scala, Swift, TOML, TypeScript, WGSL, YAML, and Zig.
+With Serena's LSP library, we provide **support for over 40 programming languages**, including
+AL, Ansible, Bash, C#, C/C++, Clojure, COBOL, Dart, Elixir, Elm, Erlang, Fortran, F# (currently with some bugs), GLSL, Go, Groovy (partial support), Haskell, HLSL, Java, Javascript, Julia, Kotlin, Lean 4, Lua, Luau, Markdown, MATLAB, Nix, OCaml, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Scala, Solidity, Swift, TOML, TypeScript, WGSL, YAML, and Zig.
 
 > [!IMPORTANT]
 > Some language servers require additional dependencies to be installed; see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.

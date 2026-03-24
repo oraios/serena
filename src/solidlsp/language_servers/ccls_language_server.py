@@ -118,7 +118,7 @@ class CCLS(SolidLanguageServer):
             "workspaceFolders": [
                 {
                     "uri": root_uri,
-                    "name": "$name",
+                    "name": os.path.basename(repository_absolute_path),
                 }
             ],
             # ccls supports initializationOptions but none are required for basic functionality

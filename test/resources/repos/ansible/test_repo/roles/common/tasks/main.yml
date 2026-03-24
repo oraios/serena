@@ -1,0 +1,19 @@
+---
+- name: Update package cache
+  ansible.builtin.package:
+    update_cache: true
+
+- name: Install common packages
+  ansible.builtin.package:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - curl
+    - git
+    - vim
+
+- name: Create deploy user
+  ansible.builtin.user:
+    name: deploy
+    state: present
+    shell: /bin/bash

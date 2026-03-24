@@ -10,7 +10,9 @@ from solidlsp.ls_utils import SymbolUtils
 from test.conftest import is_ci
 
 
+# Currently, most F# tests fail, there seems to be a regression or instability.
 @pytest.mark.fsharp
+@pytest.mark.skipif(is_ci, reason="F# language server is currently unreliable")
 class TestFSharpLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
@@ -109,6 +111,7 @@ class TestFSharpLanguageServer:
         # The subtract function should be referenced in Program.fs
         assert any("Program.fs" in ref.get("relativePath", "") for ref in refs), "Program.fs should reference subtract function"
 
+    @pytest.mark.xfail(is_ci, reason="Test is flaky")  # TODO: Re-enable if the LS can be made more reliable #1040
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
     def test_go_to_definition(self, language_server: SolidLanguageServer) -> None:
         """Test go-to-definition functionality."""

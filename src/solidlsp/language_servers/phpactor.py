@@ -46,9 +46,9 @@ class PhpactorServer(SolidLanguageServer):
             """
             # Verify PHP is installed
             php_path = shutil.which("php")
-            assert (
-                php_path is not None
-            ), "PHP is not installed or not found in PATH. Phpactor requires PHP 8.1+. Please install PHP and try again."
+            assert php_path is not None, (
+                "PHP is not installed or not found in PATH. Phpactor requires PHP 8.1+. Please install PHP and try again."
+            )
 
             # Check PHP version (Phpactor requires PHP 8.1+)
             result = subprocess.run(["php", "--version"], capture_output=True, text=True, check=False)
