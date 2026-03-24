@@ -3,6 +3,8 @@ Language server-related tools
 """
 
 import os
+import re
+from collections import defaultdict
 from collections.abc import Sequence
 
 from serena.symbol import LanguageServerSymbol, LanguageServerSymbolDictGrouper
@@ -339,3 +341,44 @@ class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
         code_editor = self.create_code_editor()
         status_message = code_editor.rename_symbol(name_path, relative_file_path=relative_path, new_name=new_name)
         return status_message
+
+
+class SafeDeleteSymbol(Tool, ToolMarkerSymbolicEdit):
+    def apply(
+        self,
+        name_path_pattern: str,
+        relative_path: str,
+    ) -> str:
+        """
+        Deletes the symbol if it is safe to do so (i.e., if there are no references to it)
+        or returns a list of references to it.
+
+        :param name_path_pattern: name path of the symbol to delete (definitions in the `find_symbol` tool apply)
+        :param relative_path: the relative path to the file containing the symbol to delete
+        """
+        ls_symbol_retriever = self.create_language_server_symbol_retriever()
+        symbol = ls_symbol_retriever.find_unique(name_path_pattern, substring_matching=False, within_relative_path=relative_path)
+        symbol_rel_path = symbol.relative_path
+        assert symbol_rel_path is not None, f"Symbol {name_path_pattern} has no relative path, this is likely a bug."
+        assert symbol_rel_path == relative_path, f"Symbol {name_path_pattern} is not in the expected relative path {relative_path}."
+        symbol_name_path = symbol.get_name_path()
+
+        symbol_line = symbol.line
+        symbol_col = symbol.column
+        assert symbol_line is not None and symbol_col is not None, (
+            f"Symbol {name_path_pattern} has no identifier position, this is likely a bug."
+        )
+        lang_server = ls_symbol_retriever.get_language_server(symbol_rel_path)
+        references_locations = lang_server.request_references(symbol_rel_path, symbol_line, symbol_col)
+        file_to_lines: dict[str, list[int]] = defaultdict(list)
+        if references_locations:
+            for ref_loc in references_locations:
+                ref_relative_path = ref_loc.get("relativePath")
+                if ref_relative_path is None:
+                    continue
+                file_to_lines[ref_relative_path].append(ref_loc["range"]["start"]["line"])
+        if file_to_lines:
+            return f"Cannot delete, the symbol {symbol_name_path} is referenced in: {self._to_json(file_to_lines)}"
+        code_editor = self.create_ls_code_editor()
+        code_editor.delete_symbol(symbol_name_path, relative_file_path=symbol_rel_path)
+        return SUCCESS_RESULT

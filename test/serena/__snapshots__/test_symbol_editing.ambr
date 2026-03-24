@@ -76,6 +76,10 @@
   
   helperFunction();
   
+  export function unusedStandaloneFunction(): string {
+      return "This function is not referenced anywhere";
+  }
+  
   '''
 # ---
 # name: test_delete_symbol_vue[test_case0]
@@ -736,6 +740,10 @@
   
   helperFunction();
   
+  export function unusedStandaloneFunction(): string {
+      return "This function is not referenced anywhere";
+  }
+  
   '''
 # ---
 # name: test_insert_in_rel_to_symbol[test_case2-before]
@@ -760,6 +768,10 @@
   }
   
   helperFunction();
+  
+  export function unusedStandaloneFunction(): string {
+      return "This function is not referenced anywhere";
+  }
   
   '''
 # ---
@@ -786,6 +798,10 @@
   
   helperFunction();
   
+  export function unusedStandaloneFunction(): string {
+      return "This function is not referenced anywhere";
+  }
+  
   '''
 # ---
 # name: test_insert_in_rel_to_symbol[test_case3-before]
@@ -810,6 +826,10 @@
   }
   
   helperFunction();
+  
+  export function unusedStandaloneFunction(): string {
+      return "This function is not referenced anywhere";
+  }
   
   '''
 # ---
@@ -1887,6 +1907,10 @@
   }
   
   helperFunction();
+  
+  export function unusedStandaloneFunction(): string {
+      return "This function is not referenced anywhere";
+  }
   
   '''
 # ---
