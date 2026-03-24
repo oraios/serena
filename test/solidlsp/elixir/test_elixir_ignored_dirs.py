@@ -92,7 +92,6 @@ def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
     """
     ignored_paths = ["*cripts", "ignored_*"]  # codespell:ignore cripts
     with start_ls_context(language=Language.ELIXIR, repo_path=str(repo_path), ignored_paths=ignored_paths) as ls:
-
         # Same as in the above tests
         root = ls.request_full_symbol_tree()[0]
         root_children = root["children"]

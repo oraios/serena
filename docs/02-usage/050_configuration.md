@@ -33,6 +33,9 @@ Some of the configurable settings include:
   * logging settings
   * advanced settings specific to individual language servers (see [below](ls-specific-settings))
 
+The global configuration settings apply to all projects.
+Some of the settings it contains can, however, be *extended* or *overridden* in project-specific settings, contexts and modes.
+
 For detailed information on the parameters and possible settings, see the
 [template file](https://github.com/oraios/serena/blob/main/src/serena/resources/serena_config.template.yml).
 
@@ -113,7 +116,8 @@ Examples of built-in modes include:
 * `one-shot`: Configures Serena for tasks that should be completed in a single response, often used with `planning` for generating reports or initial plans.
 * `no-onboarding`: Skips the initial onboarding process if it's not needed for a particular session but retains the memory tools (assuming initial memories were created externally).
 * `onboarding`: Focuses on the project onboarding process.
-* `no-memories`: Disables all memory tools (and tools building on memories such as onboarding tools)  
+* `no-memories`: Disables all memory tools (and tools building on memories such as onboarding tools)
+* `query-projects`: Enables tools for querying other Serena projects (without activating them); see section [Reading from External Projects](query-projects) 
 
 Find the concrete definitions of these modes [here](https://github.com/oraios/serena/tree/main/src/serena/resources/config/modes).
 
@@ -172,6 +176,35 @@ For advanced users, Serena's configuration can be further customized.
 The Serena user data directory (where configuration, language server files, logs, etc. are stored) defaults to `~/.serena`.
 You can change this location by setting the `SERENA_HOME` environment variable to your desired path.
 
+### Per-Project Serena Folder Location
+
+By default, each project stores its Serena data (memories, caches, etc.) in a `.serena` folder inside the project root.
+You can customize this location globally via the `project_serena_folder_location` setting in `serena_config.yml`.
+
+The setting supports two placeholders:
+
+| Placeholder          | Description                                     |
+|----------------------|-------------------------------------------------|
+| `$projectDir`        | The absolute path to the project root directory |
+| `$projectFolderName` | The name of the project folder                  |
+
+**Examples:**
+
+```yaml
+# Default: data stored inside the project directory
+project_serena_folder_location: "$projectDir/.serena"
+
+# Central location: all project data under a shared directory
+project_serena_folder_location: "/projects-metadata/$projectFolderName/.serena"
+```
+
+When a project is loaded, Serena uses the following fallback logic:
+1. Check if a `.serena` folder exists at the configured path.
+2. If not, check if one exists in the project root (default/legacy location).
+3. If neither exists, create the folder at the configured path.
+
+This ensures backward compatibility: existing projects that already have a `.serena` folder in the project root will continue to work, even after changing the `project_serena_folder_location` setting.
+
 (ls-specific-settings)=
 ### Language Server-Specific Settings
 
@@ -180,8 +213,10 @@ You can change this location by setting the `SERENA_HOME` environment variable t
 Most users will not need to adjust these settings.
 :::
 
-Under the key `ls_specific_settings` in `serena_config.yml`, you can you pass per-language, 
-language server-specific configuration.
+Under the key `ls_specific_settings` in `serena_config.yml`, you can you pass global per-language, 
+language server-specific configuration. You can use the same key in the project configuration files (`project.yml`
+and `project.local.yml` ) to override or extend the global settings for a specific project.
+The settings are merged on top-level, meaning that project-level settings for a language will replace global settings for the same language.
 
 Structure:
 
@@ -197,6 +232,7 @@ Most settings are currently undocumented. Please refer to the
 implementation to determine supported settings.
 :::
 
+(override-ls-path)=
 #### Overriding the Language Server Path
 
 Some language servers, particularly those that use a single core path for the language server (e.g. the main executable),
@@ -321,6 +357,29 @@ ls_specific_settings:
     kotlin_lsp_version: "261.13587.0"         # Override the Kotlin Language Server version
     jvm_options: "-Xmx4G -XX:+UseG1GC"       # JVM options (default: -Xmx2G). Set to "" to disable.
 ```
+
+#### Luau
+
+Serena uses [`luau-lsp`](https://github.com/JohnnyMorganz/luau-lsp) for Luau support.
+
+**Runtime Requirements:**
+
+- `luau-lsp` is used from PATH if available.
+- Otherwise, Serena downloads the pinned `luau-lsp` release for the current platform.
+
+**Configuration:**
+
+```yaml
+ls_specific_settings:
+  luau:
+    ls_path: "/path/to/luau-lsp"            # Optional: override the language server executable
+    platform: "roblox"                      # "roblox" (default) or "standard"
+    roblox_security_level: "PluginSecurity" # Roblox only: None, PluginSecurity, LocalUserSecurity, RobloxScriptSecurity
+```
+
+Notes:
+- In `roblox` mode, Serena downloads Roblox definitions and Roblox API docs and passes them to `luau-lsp`.
+- In `standard` mode, Serena skips Roblox definitions and only downloads the standard Luau docs bundle.
 
 #### Pascal (`pasls`)
 

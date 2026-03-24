@@ -22,11 +22,11 @@ class SolidLSPSettings:
     """
     Path to the directory in which to store global Solid-LSP data (which is not project-specific)
     """
-    project_data_relative_path: str = ".solidlsp"
+    project_data_path: str = ""
     """
-    Relative path within each project directory where Solid-LSP can store project-specific data, e.g. cache files.
-    For instance, if this is ".solidlsp" and the project is located at "/home/user/myproject",
-    then Solid-LSP will store project-specific data in "/home/user/myproject/.solidlsp".
+    Absolute path to a directory where Solid-LSP can store project-specific data, e.g. cache files.
+    For instance, if this is "/home/user/myproject/.solidlsp",
+    then Solid-LSP will store project-specific data (e.g. caches) in that directory.
     """
     ls_specific_settings: dict["Language", dict[str, Any]] = field(default_factory=dict)
     """

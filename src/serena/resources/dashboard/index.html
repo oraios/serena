@@ -275,7 +275,17 @@
     <div id="edit-memory-modal" class="modal" style="display:none">
         <div class="modal-content modal-content-large">
             <span class="modal-close modal-close-edit-memory">&times;</span>
-            <h3 style="margin-bottom: 20px;">Memory: <span id="edit-memory-name"></span></h3>
+            <h3 style="margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+                Memory:
+                <span id="edit-memory-name" class="memory-name-display"></span>
+                <span id="edit-memory-rename-btn" class="memory-rename-btn" title="Rename memory">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+                    </svg>
+                </span>
+                <input type="text" id="edit-memory-rename-input" class="memory-rename-input" style="display: none;">
+            </h3>
             <textarea id="edit-memory-content" class="memory-editor" rows="20"
                       style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-family: 'Courier New', monospace; font-size: 13px; resize: vertical;"></textarea>
             <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
@@ -312,13 +322,14 @@
             </p>
             <p style="margin: 15px 0; color: var(--text-muted); font-size: 13px; line-height: 1.5;">
                 Memory names should be descriptive and use underscores instead of spaces (e.g., "api_architecture",
-                "testing_guidelines").
+                "testing_guidelines"). Use "/" to organize memories into subdirectories (e.g., "architecture/api_design"),
+                use the "global/" prefix to write memories that are shared across projects (e.g., "global/java/style_guide").
             </p>
             <div style="margin: 20px 0;">
                 <label for="create-memory-name-input" style="display: block; margin-bottom: 8px; font-weight: 500;">Memory
                     Name:</label>
                 <input type="text" id="create-memory-name-input" class="memory-name-input"
-                       placeholder="e.g., project_overview"
+                       placeholder="e.g., project_overview or topic/memory_name"
                        style="width: 100%; padding: 8px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); font-size: 14px;">
             </div>
             <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">

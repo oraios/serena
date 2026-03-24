@@ -139,7 +139,10 @@ jobs:
       - name: Setup .NET SDK (for F# and C# languages)
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
+      - name: List .NET runtimes
+        shell: bash
+        run: dotnet --list-runtimes
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -196,6 +199,23 @@ jobs:
       - name: Install Ruby language server
         shell: bash
         run: gem install ruby-lsp
+      - name: Install OCaml and opam
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ runner.os == 'Windows' && '4.14' || '5.3.x' }}
+          dune-cache: true
+          opam-repositories: |
+            ${{ runner.os == 'Windows' && 'opam-repository-mingw: https://github.com/ocaml-opam/opam-repository-mingw.git#sunset' || '' }}
+            default: https://github.com/ocaml/opam-repository.git
+      - name: Install OCaml packages
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            opam install -y dune ocaml-lsp-server
+          else
+            # Require ocaml-lsp-server >= 1.23.0 for cross-file reference support
+            opam install -y dune 'ocaml-lsp-server>=1.23.0'
+          fi
       - name: Install R
         uses: r-lib/actions/setup-r@v2
         with:
@@ -363,6 +383,9 @@ jobs:
           echo "PERL_MB_OPT=--install_base \"$HOME/perl5\"" >> $GITHUB_ENV
           echo "PERL_MM_OPT=INSTALL_BASE=$HOME/perl5" >> $GITHUB_ENV
           echo "$HOME/perl5/bin" >> $GITHUB_PATH
+      - name: Install ansible-core and ansible-lint (for Ansible language server tests)
+        shell: bash
+        run: uv run pip install ansible-core ansible-lint
       - name: Install Elm
         shell: bash
         run: npm install -g elm@0.19.1-6
@@ -394,7 +417,7 @@ jobs:
       - name: Install Regal (Rego Language Server)
         shell: bash
         run: |
-          REGAL_VERSION="0.36.1"
+          REGAL_VERSION="0.39.0"
 
           if [[ "${{ runner.os }}" == "Linux" ]]; then
             if [[ "$(uname -m)" == "x86_64" ]]; then
@@ -524,6 +547,10 @@ jobs:
             echo "ERROR: FPCDIR does not exist: $FPCDIR"
             exit 1
           fi
+      - name: Build Lean 4 test project
+        uses: leanprover/lean-action@v1
+        with:
+          lake-package-directory: test/resources/repos/lean4/test_repo
       - name: Cache language servers
         id: cache-language-servers
         uses: actions/cache@v3

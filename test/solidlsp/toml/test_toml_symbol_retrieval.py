@@ -85,9 +85,9 @@ class TestTomlSymbolRetrieval:
         # Children should include TOML files
         child_names = {child["name"] for child in root.get("children", [])}
         # Note: File names are stripped of extension in some cases
-        assert (
-            "Cargo" in child_names or "Cargo.toml" in child_names or any("cargo" in name.lower() for name in child_names)
-        ), f"Should find Cargo.toml in tree, got: {child_names}"
+        assert "Cargo" in child_names or "Cargo.toml" in child_names or any("cargo" in name.lower() for name in child_names), (
+            f"Should find Cargo.toml in tree, got: {child_names}"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)

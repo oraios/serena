@@ -25,6 +25,7 @@ SERENA_FILE_ENCODING = "utf-8"
 """The encoding used for Serena's own files, such as configuration files and memories."""
 
 PROJECT_TEMPLATE_FILE = str(_serena_pkg_path / "resources" / "project.template.yml")
+PROJECT_LOCAL_TEMPLATE_FILE = str(_serena_pkg_path / "resources" / "project.local.template.yml")
 SERENA_CONFIG_TEMPLATE_FILE = str(_serena_pkg_path / "resources" / "serena_config.template.yml")
 
 SERENA_LOG_FORMAT = "%(levelname)-5s %(asctime)-15s [%(threadName)s] %(name)s:%(funcName)s:%(lineno)d - %(message)s"

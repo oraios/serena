@@ -18,7 +18,6 @@ Instead, it can use code-centric tools like `find_symbol`, `find_referencing_sym
 
 <p align="center">
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Updates-1e293b?style=flat&logo=rss&logoColor=white&labelColor=1e293b" alt="Changelog" /></a>
-  <a href="roadmap.md"><img src="https://img.shields.io/badge/Roadmap-14532d?style=flat&logo=target&logoColor=white&labelColor=14532d" alt="Roadmap" /></a>
   <a href="lessons_learned.md"><img src="https://img.shields.io/badge/Lessons-Learned-7c4700?style=flat&logo=readthedocs&logoColor=white&labelColor=7c4700" alt="Lessons Learned" /></a>
 </p>
 
@@ -81,8 +80,8 @@ Serena incorporates a powerful abstraction layer for the integration of language
 that implement the language server protocol (LSP).
 The underlying language servers are typically open-source projects (like Serena) or at least freely available for use.
 
-With Serena's LSP library, we provide **support for over 30 programming languages**, including
-AL, Bash, C#, C/C++, Clojure, Dart, Elixir, Elm, Erlang, Fortran, Go, Groovy (partial support), Haskell, Java, Javascript, Julia, Kotlin, Lua, Markdown, MATLAB, Nix, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Scala, Swift, TOML, TypeScript, YAML, and Zig.
+With Serena's LSP library, we provide **support for over 40 programming languages**, including
+AL, Ansible, Bash, C#, C/C++, Clojure, Dart, Elixir, Elm, Erlang, Fortran, F# (currently with some bugs), GLSL, Go, Groovy (partial support), Haskell, HLSL, Java, Javascript, Julia, Kotlin, Lean 4, Lua, Luau, Markdown, MATLAB, Nix, OCaml, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Scala, Solidity, Swift, TOML, TypeScript, WGSL, YAML, and Zig.
 
 > [!IMPORTANT]
 > Some language servers require additional dependencies to be installed; see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
@@ -90,14 +89,13 @@ AL, Bash, C#, C/C++, Clojure, Dart, Elixir, Elm, Erlang, Fortran, Go, Groovy (pa
 ### The Serena JetBrains Plugin
 
 As an alternative to language servers, the [Serena JetBrains Plugin](https://plugins.jetbrains.com/plugin/28946-serena/)
-leverages the powerful code analysis capabilities of your JetBrains IDE. 
-The plugin naturally supports all programming languages and frameworks that are supported by JetBrains IDEs, 
-including IntelliJ IDEA, PyCharm, Android Studio, WebStorm, PhpStorm, RubyMine, GoLand, CLion, and others.
-Only Rider is not supported.
+leverages the powerful code analysis capabilities of your JetBrains IDE.
+The plugin naturally supports all programming languages and frameworks that are supported by JetBrains IDEs,
+including IntelliJ IDEA, PyCharm, Android Studio, WebStorm, PhpStorm, RubyMine, GoLand, and potentially others (Rider and CLion are unsupported though).
 
 <a href="https://plugins.jetbrains.com/plugin/28946-serena/"><img src="docs/_static/images/jetbrains-marketplace-button.png"></a>
 
-The plugin offers the most robust and most powerful Serena experience.  
+The plugin offers the most robust and most powerful Serena experience.
 See our [documentation page](https://oraios.github.io/serena/02-usage/025_jetbrains_plugin.html) for further details and instructions.
 
 ## Quick Start

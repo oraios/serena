@@ -134,8 +134,6 @@ class VueLanguageServer(SolidLanguageServer):
 
     TS_SERVER_READY_TIMEOUT = 5.0
     VUE_SERVER_READY_TIMEOUT = 3.0
-    # Windows requires more time due to slower I/O and process operations.
-    VUE_INDEXING_WAIT_TIME = 4.0 if os.name == "nt" else 2.0
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         vue_lsp_executable_path, self.tsdk_path, self._ts_ls_cmd = self._setup_runtime_dependencies(config, solidlsp_settings)
@@ -204,6 +202,11 @@ class VueLanguageServer(SolidLanguageServer):
         vue_files = self._find_all_vue_files()
         log.debug(f"Found {len(vue_files)} .vue files to index")
 
+        # Prepare the TS server to track new $/progress notifications triggered
+        # by the didOpen calls below. Must happen BEFORE opening files to avoid
+        # a race where progress begins and ends before we start waiting.
+        self._ts_server.expect_indexing()
+
         for vue_file in vue_files:
             try:
                 with self._ts_server.open_file(vue_file) as file_buffer:
@@ -213,13 +216,23 @@ class VueLanguageServer(SolidLanguageServer):
                 log.debug(f"Failed to open {vue_file} on TS server: {e}")
 
         self._vue_files_indexed = True
-        log.info("Vue file indexing on TypeScript server complete")
+        log.info("Vue file indexing on TypeScript server complete, waiting for TS server to finish processing")
 
-        sleep(self._get_vue_indexing_wait_time())
-        log.debug("Wait period after Vue file indexing complete")
+        self._wait_for_ts_indexing_complete()
 
-    def _get_vue_indexing_wait_time(self) -> float:
-        return self.VUE_INDEXING_WAIT_TIME
+    def _wait_for_ts_indexing_complete(self) -> None:
+        """Wait for the companion TypeScript server to finish processing opened Vue files.
+
+        Uses the $/progress tracking in TypeScriptLanguageServer: after Vue files are
+        opened, tsserver sends "Initializing JS/TS language features…" progress.
+        We wait for all progress tokens to complete, with a timeout fallback.
+        """
+        assert self._ts_server is not None
+        timeout = TypeScriptLanguageServer.INDEXING_PROGRESS_TIMEOUT
+        if self._ts_server.wait_for_indexing(timeout=timeout):
+            log.info("TypeScript server finished indexing Vue files (signaled via $/progress)")
+        else:
+            log.warning(f"Timeout ({timeout}s) waiting for TypeScript server to finish indexing Vue files, proceeding anyway")
 
     def _send_references_request(self, relative_file_path: str, line: int, column: int) -> list[lsp_types.Location] | None:
         uri = PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))

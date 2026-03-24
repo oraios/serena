@@ -477,9 +477,7 @@ class SolidLanguageServer(ABC):
         self.language = Language(language_id)
 
         # initialise symbol caches
-        self.cache_dir = (
-            Path(self.repository_root_path) / self._solidlsp_settings.project_data_relative_path / self.CACHE_FOLDER_NAME / self.language_id
-        )
+        self.cache_dir = Path(self._solidlsp_settings.project_data_path) / self.CACHE_FOLDER_NAME / self.language_id
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         # * raw document symbols cache
         self._ls_specific_raw_document_symbols_cache_version = cache_version_raw_document_symbols
@@ -819,7 +817,7 @@ class SolidLanguageServer(ABC):
         Delete text between the given start and end positions in the given file and return the deleted text.
         """
         if not self.server_started:
-            log.error("insert_text_at_position called before Language Server started")
+            log.error("delete_text_between_positions called before Language Server started")
             raise SolidLSPException("Language Server not started")
 
         absolute_file_path = str(PurePath(self.repository_root_path, relative_file_path))
@@ -1106,12 +1104,12 @@ class SolidLanguageServer(ABC):
             }
             response: list[LSPTypes.CompletionItem] | LSPTypes.CompletionList | None = None
 
-            num_retries = 0
-            while response is None or (response["isIncomplete"] and num_retries < 30):  # type: ignore
+            for _ in range(30):
                 response = self.server.send.completion(completion_params)
                 if isinstance(response, list):
                     response = {"items": response, "isIncomplete": False}
-                num_retries += 1
+                if response is None or not response["isIncomplete"]:  # type: ignore
+                    break
 
             # TODO: Understand how to appropriately handle `isIncomplete`
             if response is None or (response["isIncomplete"] and not allow_incomplete):  # type: ignore
@@ -1987,14 +1985,22 @@ class SolidLanguageServer(ABC):
 
         return defining_symbol
 
-    def _cache_context_fingerprint(self) -> Hashable | None:
+    def _document_symbols_cache_fingerprint(self) -> Hashable | None:
         """
-        Return a fingerprint of any language-server-specific context that affects cached results.
+        Returns a fingerprint of any language server-specific aspects that result in changes
+        to the high-level document symbol information.
 
-        Subclasses may override to provide a deterministic value that changes when cached results
-        would be invalidated (e.g., build flags, environment variables).
+        Language servers must implement this method/change the return value
+          * whenever they change the `request_document_symbols` implementation to modify the returned content
+          * are reconfigured in a way that affects the returned contents (e.g. context-specific configuration
+            such as build flags or environment variables); configuration options can, in such cases, be
+            hashed together to produce a single fingerprint value.
+
+        Whenever the value changes, the document symbols cache will be invalidated and re-populated.
 
         The value must be hashable and safe for inclusion in cache version tuples.
+        E.g. use an integer, a string or a tuple of integers/strings.
+
         Returns None if no context-specific fingerprint is needed.
         """
         return None
@@ -2005,7 +2011,7 @@ class SolidLanguageServer(ABC):
 
         Incorporates cache context fingerprint if provided by the language server.
         """
-        fingerprint = self._cache_context_fingerprint()
+        fingerprint = self._document_symbols_cache_fingerprint()
         if fingerprint is not None:
             return (self.DOCUMENT_SYMBOL_CACHE_VERSION, fingerprint)
         return self.DOCUMENT_SYMBOL_CACHE_VERSION
@@ -2030,7 +2036,7 @@ class SolidLanguageServer(ABC):
 
     def _raw_document_symbols_cache_version(self) -> tuple[Hashable, ...]:
         base_version: tuple[Hashable, ...] = (self.RAW_DOCUMENT_SYMBOLS_CACHE_VERSION, self._ls_specific_raw_document_symbols_cache_version)
-        fingerprint = self._cache_context_fingerprint()
+        fingerprint = self._document_symbols_cache_fingerprint()
         if fingerprint is not None:
             return (*base_version, fingerprint)
         return base_version

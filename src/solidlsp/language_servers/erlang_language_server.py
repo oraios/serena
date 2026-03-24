@@ -2,6 +2,7 @@
 
 import logging
 import os
+import pathlib
 import shutil
 import subprocess
 import threading
@@ -134,7 +135,7 @@ class ErlangLanguageServer(SolidLanguageServer):
         initialize_params = {
             "processId": None,
             "rootPath": self.repository_root_path,
-            "rootUri": f"file://{self.repository_root_path}",
+            "rootUri": pathlib.Path(self.repository_root_path).as_uri(),
             "capabilities": {
                 "textDocument": {
                     "synchronization": {"didSave": True},

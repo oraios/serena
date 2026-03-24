@@ -2,7 +2,6 @@
 Tools supporting the general workflow of the agent
 """
 
-import json
 import platform
 
 from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional
@@ -18,23 +17,21 @@ class CheckOnboardingPerformedTool(Tool):
         Checks whether project onboarding was already performed.
         You should always call this tool before beginning to actually work on the project/after activating a project.
         """
-        from .memory_tools import ListMemoriesTool
-
-        list_memories_tool = self.agent.get_tool(ListMemoriesTool)
-        memories = json.loads(list_memories_tool.apply())
-        if len(memories) == 0:
-            return (
+        project_memories = self.memories_manager.list_project_memories()
+        if len(project_memories) == 0:
+            msg = (
                 "Onboarding not performed yet (no memories available). "
-                + "You should perform onboarding by calling the `onboarding` tool before proceeding with the task."
+                "You should perform onboarding by calling the `onboarding` tool before proceeding with the task. "
             )
         else:
-            return f"""The onboarding was already performed, below is the list of available memories.
-            Do not read them immediately, just remember that they exist and that you can read them later, if it is necessary
-            for the current task.
-            Some memories may be based on previous conversations, others may be general for the current project.
-            You should be able to tell which one you need based on the name of the memory.
-            
-            {memories}"""
+            # Not reporting the list of memories here, as they were already reported at project activation
+            # (with the system prompt if the project was activated at startup)
+            msg = (
+                f"Onboarding was already performed: {len(project_memories)} project memories are available. "
+                "Consider reading memories if they appear relevant to the task at hand."
+            )
+        msg += " If you have not read the 'Serena Instructions Manual', do so now."
+        return msg
 
 
 class OnboardingTool(Tool):

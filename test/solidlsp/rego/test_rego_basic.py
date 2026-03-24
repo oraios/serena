@@ -1,7 +1,6 @@
 """Tests for Rego language server (Regal) functionality."""
 
 import os
-import sys
 
 import pytest
 
@@ -11,9 +10,6 @@ from solidlsp.ls_utils import SymbolUtils
 
 
 @pytest.mark.rego
-@pytest.mark.skipif(
-    sys.platform == "win32", reason="Regal LSP has Windows path handling bug - see https://github.com/StyraInc/regal/issues/1683"
-)
 class TestRegoLanguageServer:
     """Test Regal language server functionality for Rego."""
 
@@ -115,9 +111,9 @@ class TestRegoLanguageServer:
         assert definitions is not None and len(definitions) > 0, "Should find cross-file definition for is_valid_user"
 
         # Verify the definition points to helpers.rego (cross-file)
-        assert any(
-            "helpers.rego" in defn.get("relativePath", "") for defn in definitions
-        ), "Definition should be in utils/helpers.rego (cross-file reference)"
+        assert any("helpers.rego" in defn.get("relativePath", "") for defn in definitions), (
+            "Definition should be in utils/helpers.rego (cross-file reference)"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.REGO], indirect=True)
     def test_find_symbols_validation(self, language_server: SolidLanguageServer) -> None:

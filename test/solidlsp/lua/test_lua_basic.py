@@ -146,15 +146,15 @@ class TestLuaLanguageServer:
 
         # The declaration may or may not be included
         if "calculator.lua" in ref_files:
-            assert (
-                5 in ref_files["calculator.lua"]
-            ), f"If declaration is included, it should be at line 6 (0-indexed: 5), found at {ref_files['calculator.lua']}"
+            assert 5 in ref_files["calculator.lua"], (
+                f"If declaration is included, it should be at line 6 (0-indexed: 5), found at {ref_files['calculator.lua']}"
+            )
 
         # Check main.lua has usages
         assert "main.lua" in ref_files, "Should find add usages in main.lua"
-        assert (
-            15 in ref_files["main.lua"] or 70 in ref_files["main.lua"]
-        ), f"Should find add usage in main.lua, found at lines {ref_files.get('main.lua', [])}"
+        assert 15 in ref_files["main.lua"] or 70 in ref_files["main.lua"], (
+            f"Should find add usage in main.lua, found at lines {ref_files.get('main.lua', [])}"
+        )
 
         # Check for cross-file references from main.lua
         main_refs = [ref for ref in refs if "main.lua" in ref.get("uri", "")]
@@ -202,15 +202,15 @@ class TestLuaLanguageServer:
 
         # The declaration may or may not be included
         if "utils.lua" in ref_files:
-            assert (
-                5 in ref_files["utils.lua"]
-            ), f"If declaration is included, it should be at line 6 (0-indexed: 5), found at {ref_files['utils.lua']}"
+            assert 5 in ref_files["utils.lua"], (
+                f"If declaration is included, it should be at line 6 (0-indexed: 5), found at {ref_files['utils.lua']}"
+            )
 
         # Check main.lua has usage
         assert "main.lua" in ref_files, "Should find trim usage in main.lua"
-        assert (
-            31 in ref_files["main.lua"]
-        ), f"Should find trim usage at line 32 (0-indexed: 31) in main.lua, found at lines {ref_files.get('main.lua', [])}"
+        assert 31 in ref_files["main.lua"], (
+            f"Should find trim usage at line 32 (0-indexed: 31) in main.lua, found at lines {ref_files.get('main.lua', [])}"
+        )
 
         # Check for cross-file references from main.lua
         main_refs = [ref for ref in refs if "main.lua" in ref.get("uri", "")]

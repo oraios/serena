@@ -43,7 +43,9 @@ def execute_shell_command(command: str, cwd: str | None = None, capture_stderr: 
 
 
 def subprocess_check_output(args: list[str], encoding: str = "utf-8", strip: bool = True, timeout: float | None = None) -> str:
-    output = subprocess.check_output(args, stdin=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=timeout, env=os.environ.copy(), **subprocess_kwargs()).decode(encoding)  # type: ignore
+    output = subprocess.check_output(
+        args, stdin=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=timeout, env=os.environ.copy(), **subprocess_kwargs()
+    ).decode(encoding)  # type: ignore
     if strip:
         output = output.strip()
     return output

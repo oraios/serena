@@ -8,12 +8,10 @@ from test.conftest import is_ci, is_windows, language_tests_enabled
 
 _php_servers: list[Language] = [Language.PHP]
 if language_tests_enabled(Language.PHP_PHPACTOR):
-    _php_servers.append(Language.PHP_PHPACTOR)
+    if not (is_windows and is_ci):  # TODO: Phpactor tests are flaky in Windows CI and can even cause hangs #1040
+        _php_servers.append(Language.PHP_PHPACTOR)
 
 
-@pytest.mark.xfail(
-    is_ci and is_windows, reason="Tests are flaky"
-)  # TODO: Re-enable once we have a solution for running Phpactor tests on Windows CI #1040
 @pytest.mark.php
 class TestPhpLanguageServers:
     @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
@@ -26,7 +24,6 @@ class TestPhpLanguageServers:
     @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
     def test_find_definition_within_file(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
-
         # In index.php:
         # Line 9 (1-indexed): $greeting = greet($userName);
         # Line 11 (1-indexed): echo $greeting;
@@ -187,3 +184,75 @@ class TestPhpLanguageServers:
 
             usage_in_index_php = {"uri_suffix": "index.php", "line": 13, "character": 0}
             assert usage_in_index_php in actual_locations_comparable, "Usage of helperFunction in index.php not found"
+
+    @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
+    def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
+        """Test that document symbols are properly retrieved after Intelephense capability fix."""
+        from solidlsp.ls_utils import SymbolUtils
+
+        symbols = language_server.request_full_symbol_tree()
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "helperFunction"), "helperFunction not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "greet"), "greet function not found in symbol tree"
+
+    @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
+    def test_document_symbols(self, language_server: SolidLanguageServer) -> None:
+        """Test that document symbols are properly retrieved for a specific file."""
+        doc_symbols = language_server.request_document_symbols("helper.php")
+        all_symbols = doc_symbols.get_all_symbols_and_roots()
+        symbol_names = [sym.get("name") for sym in all_symbols[0] if sym.get("name")]
+        assert "helperFunction" in symbol_names, f"helperFunction not found in document symbols. Found: {symbol_names}"
+
+    @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
+    def test_document_symbols_hierarchical_structure(self, language_server: SolidLanguageServer) -> None:
+        """Verify Intelephense returns hierarchical DocumentSymbol format.
+
+        When hierarchicalDocumentSymbolSupport is declared in client capabilities,
+        Intelephense returns DocumentSymbol[] where class methods appear as children
+        of their parent class. Without this declaration, it falls back to a flat
+        SymbolInformation[] list where all symbols appear at root level with no
+        parent-child relationships.
+        """
+        all_symbols, root_symbols = language_server.request_document_symbols("sample.php").get_all_symbols_and_roots()
+
+        root_names = [s.get("name") for s in root_symbols]
+        assert "Animal" in root_names, f"Animal class not found at root level. Roots: {root_names}"
+        assert "Dog" in root_names, f"Dog class not found at root level. Roots: {root_names}"
+        assert "Cat" in root_names, f"Cat class not found at root level. Roots: {root_names}"
+
+        # Verify Dog has method children — this is the key assertion for hierarchical support.
+        # With a flat response, Dog would have no children and all methods would be at root level.
+        dog_symbol = next((s for s in root_symbols if s.get("name") == "Dog"), None)
+        assert dog_symbol is not None, "Dog class not found in root symbols"
+        dog_children = dog_symbol.get("children", [])
+        dog_child_names = [c.get("name") for c in dog_children]
+        assert len(dog_child_names) > 0, (
+            f"Dog class has no children — hierarchicalDocumentSymbolSupport is not working. All root symbols: {root_names}"
+        )
+        expected_methods = {"greet", "fetch", "getBreed", "describe"}
+        missing = expected_methods - set(dog_child_names)
+        assert not missing, f"Dog class missing expected methods: {missing}. Children found: {dog_child_names}"
+
+        # Methods must NOT appear at root level (that would indicate the flat fallback format).
+        assert "greet" not in root_names, f"greet should be a child of Dog, not at root level. Roots: {root_names}"
+        assert "fetch" not in root_names, f"fetch should be a child of Dog, not at root level. Roots: {root_names}"
+
+    @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
+    def test_full_symbol_tree_within_file(self, language_server: SolidLanguageServer) -> None:
+        """Verify request_full_symbol_tree scoped to a PHP file returns correct symbols.
+
+        This validates that Intelephense responds correctly when symbols are requested
+        for a single file, including class/method hierarchy in sample.php.
+        """
+        from solidlsp.ls_utils import SymbolUtils
+
+        symbols = language_server.request_full_symbol_tree(within_relative_path="sample.php")
+
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "Dog"), "Dog not found in sample.php symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "Animal"), "Animal not found in sample.php symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "greet"), "greet method not found in sample.php symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "fetch"), "fetch method not found in sample.php symbol tree"
+
+        # Methods must appear as children of Dog, not as root-level symbols
+        dog_root = next((s for s in symbols if s.get("name") == "Dog"), None)
+        if dog_root is not None:
+            assert SymbolUtils.symbol_tree_contains_name([dog_root], "greet"), "greet should be nested under Dog in symbol tree"

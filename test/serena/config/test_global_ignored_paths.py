@@ -20,9 +20,7 @@ def _create_test_project(
         ignored_paths=project_ignored_paths or [],
         ignore_all_files_in_gitignore=False,
     )
-    serena_config: SerenaConfig | None = None
-    if global_ignored_paths:
-        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=global_ignored_paths)
+    serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=global_ignored_paths)
     return Project(
         project_root=str(project_root),
         project_config=config,
@@ -82,21 +80,6 @@ class TestGlobalIgnoredPaths:
         # Project pattern still works
         assert project.is_ignored_path(str(self.project_path / "build" / "output.js"))
         # Non-ignored files still accessible
-        assert not project.is_ignored_path(str(self.project_path / "node_modules" / "pkg" / "index.js"))
-
-    def test_default_global_ignored_paths_backward_compatible(self) -> None:
-        """Project created without global_ignored_paths parameter works as before."""
-        config = ProjectConfig(
-            project_name="test_project",
-            languages=[Language.PYTHON],
-            ignored_paths=["build"],
-            ignore_all_files_in_gitignore=False,
-        )
-        project = Project(
-            project_root=str(self.project_path),
-            project_config=config,
-        )
-        assert project.is_ignored_path(str(self.project_path / "build" / "output.js"))
         assert not project.is_ignored_path(str(self.project_path / "node_modules" / "pkg" / "index.js"))
 
     def test_duplicate_patterns_across_global_and_project(self) -> None:
@@ -161,7 +144,8 @@ class TestRegisteredProjectGlobalIgnoredPaths:
             project_root=str(self.project_path),
             project_config=config,
         )
-        project = registered.get_project_instance(serena_config=None)
+        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=[])
+        project = registered.get_project_instance(serena_config=serena_config)
         assert not project.is_ignored_path(str(self.project_path / "node_modules" / "pkg.js"))
 
     def test_from_project_root_passes_global_ignored_paths(self) -> None:
@@ -175,6 +159,7 @@ class TestRegisteredProjectGlobalIgnoredPaths:
         serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=["node_modules"])
         registered = RegisteredProject.from_project_root(
             str(self.project_path),
+            serena_config=serena_config,
         )
         project = registered.get_project_instance(serena_config=serena_config)
         assert project.is_ignored_path(str(self.project_path / "node_modules" / "pkg.js"))
