@@ -20,7 +20,7 @@ from solidlsp.ls_exceptions import SolidLSPException
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
-    from serena.code_editor import CodeEditor
+    from serena.code_editor import CodeEditor, LanguageServerCodeEditor
     from serena.symbol import LanguageServerSymbolRetriever
 
 log = logging.getLogger(__name__)
@@ -59,12 +59,19 @@ class Component(ABC):
         return self.agent.get_active_project_or_raise()
 
     def create_code_editor(self) -> "CodeEditor":
-        from ..code_editor import JetBrainsCodeEditor, LanguageServerCodeEditor
+        from ..code_editor import JetBrainsCodeEditor
 
         if self.agent.is_using_language_server():
-            return LanguageServerCodeEditor(self.create_language_server_symbol_retriever(), agent=self.agent)
+            return self.create_ls_code_editor()
         else:
             return JetBrainsCodeEditor(project=self.project, agent=self.agent)
+
+    def create_ls_code_editor(self) -> "LanguageServerCodeEditor":
+        from ..code_editor import LanguageServerCodeEditor
+
+        if not self.agent.is_using_language_server():
+            raise Exception("Cannot create LanguageServerCodeEditor; agent is not in language server mode.")
+        return LanguageServerCodeEditor(self.create_language_server_symbol_retriever(), agent=self.agent)
 
 
 class ToolMarker:
