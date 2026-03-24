@@ -114,7 +114,7 @@ class TestNixLanguageServer:
         if refs:
             ref_lines = sorted([ref["range"]["start"]["line"] for ref in refs])
             # Check if we found the inherit (line 67, 0-indexed: 66)
-            assert 66 in ref_lines, f"Should find makeGreeting inherit at line 67, found at lines {[l+1 for l in ref_lines]}"
+            assert 66 in ref_lines, f"Should find makeGreeting inherit at line 67, found at lines {[l + 1 for l in ref_lines]}"
 
     @pytest.mark.xfail(is_ci, reason="Test is flaky")  # TODO: Re-enable if the hover test becomes more stable (#1040)
     @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
@@ -148,9 +148,9 @@ class TestNixLanguageServer:
         if default_refs:
             ref_lines = sorted([ref["range"]["start"]["line"] for ref in default_refs])
             # Check for key references - at least the import (line 10) or usage (line 24)
-            assert (
-                9 in ref_lines or 23 in ref_lines
-            ), f"Should find utils import or usage, found references at lines {[l+1 for l in ref_lines]}"
+            assert 9 in ref_lines or 23 in ref_lines, (
+                f"Should find utils import or usage, found references at lines {[l + 1 for l in ref_lines]}"
+            )
 
     @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
     def test_verify_imports_exist(self, language_server: SolidLanguageServer) -> None:
@@ -187,9 +187,9 @@ class TestNixLanguageServer:
 
         if len(definitions) > 0:
             # Should point to the import statement or utils.nix
-            assert any(
-                "utils" in def_item.get("uri", "") or "default.nix" in def_item.get("uri", "") for def_item in definitions
-            ), "Definition should relate to utils import or utils.nix file"
+            assert any("utils" in def_item.get("uri", "") or "default.nix" in def_item.get("uri", "") for def_item in definitions), (
+                "Definition should relate to utils import or utils.nix file"
+            )
 
     @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
     def test_definition_navigation_in_flake(self, language_server: SolidLanguageServer) -> None:
@@ -202,9 +202,9 @@ class TestNixLanguageServer:
         assert isinstance(definitions, list)
         # nixd should find the definition of hello-custom in the same file
         if len(definitions) > 0:
-            assert any(
-                "flake.nix" in def_item.get("uri", "") for def_item in definitions
-            ), "Should find hello-custom definition in flake.nix"
+            assert any("flake.nix" in def_item.get("uri", "") for def_item in definitions), (
+                "Should find hello-custom definition in flake.nix"
+            )
 
     @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
     def test_full_symbol_tree(self, language_server: SolidLanguageServer) -> None:

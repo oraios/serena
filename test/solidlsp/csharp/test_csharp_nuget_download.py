@@ -69,9 +69,9 @@ class TestNuGetOrgDownload:
         for dep in lang_server_deps:
             # Verify package name uses roslyn-language-server
             assert dep.package_name is not None, f"Package name should be set for {dep.platform_id}"
-            assert dep.package_name.startswith(
-                "roslyn-language-server."
-            ), f"Package name should start with 'roslyn-language-server.' but got: {dep.package_name}"
+            assert dep.package_name.startswith("roslyn-language-server."), (
+                f"Package name should start with 'roslyn-language-server.' but got: {dep.package_name}"
+            )
 
             # Verify version is the newer NuGet.org version
             assert dep.package_version == "5.5.0-2.26078.4", f"Should use NuGet.org version 5.5.0-2.26078.4, got: {dep.package_version}"

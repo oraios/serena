@@ -121,9 +121,9 @@ class TestVueRename:
             assert len(document_changes) > 0, "Should have at least one document change"
 
             composable_changes = [dc for dc in document_changes if "useFormatter.ts" in dc.get("textDocument", {}).get("uri", "")]
-            assert (
-                len(composable_changes) > 0
-            ), f"Should have edits for useFormatter.ts (definition). Found changes for: {[dc.get('textDocument', {}).get('uri', '') for dc in document_changes]}"
+            assert len(composable_changes) > 0, (
+                f"Should have edits for useFormatter.ts (definition). Found changes for: {[dc.get('textDocument', {}).get('uri', '') for dc in document_changes]}"
+            )
 
             for change in document_changes:
                 assert "textDocument" in change, "Document change should have textDocument"

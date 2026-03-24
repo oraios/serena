@@ -49,9 +49,9 @@ class TestHlslFullIndex:
         """Symbols unique to terrain/terrain_sdf.hlsl must appear in the full tree."""
         symbols = language_server.request_full_symbol_tree()
         for name in TERRAIN_SDF_UNIQUE_SYMBOLS:
-            assert SymbolUtils.symbol_tree_contains_name(
-                symbols, name
-            ), f"Expected '{name}' from terrain/terrain_sdf.hlsl in full symbol tree"
+            assert SymbolUtils.symbol_tree_contains_name(symbols, name), (
+                f"Expected '{name}' from terrain/terrain_sdf.hlsl in full symbol tree"
+            )
 
     @pytest.mark.parametrize("language_server", [Language.HLSL], indirect=True)
     def test_include_file_document_symbols_directly(self, language_server: SolidLanguageServer) -> None:

@@ -68,9 +68,9 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
         if will_overwrite_existing:
             self.project.validate_relative_path(relative_path, require_not_ignored=True)
         else:
-            assert abs_path.is_relative_to(
-                self.get_project_root()
-            ), f"Cannot create file outside of the project directory, got {relative_path=}"
+            assert abs_path.is_relative_to(self.get_project_root()), (
+                f"Cannot create file outside of the project directory, got {relative_path=}"
+            )
 
         abs_path.parent.mkdir(parents=True, exist_ok=True)
         abs_path.write_text(content, encoding=self.project.project_config.encoding, newline=self.project.line_ending.newline_str)

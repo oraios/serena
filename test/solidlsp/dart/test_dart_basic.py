@@ -196,9 +196,9 @@ class TestDartLanguageServer:
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
 
         # Check that we found references - at least one should be in main.dart
-        assert any(
-            "main.dart" in ref.get("relativePath", "") or "main.dart" in ref.get("uri", "") for ref in refs
-        ), "main.dart should reference add method (tried all positions in selectionRange)"
+        assert any("main.dart" in ref.get("relativePath", "") or "main.dart" in ref.get("uri", "") for ref in refs), (
+            "main.dart should reference add method (tried all positions in selectionRange)"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
     def test_request_containing_symbol_method(self, language_server: SolidLanguageServer) -> None:

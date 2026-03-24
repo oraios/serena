@@ -45,9 +45,9 @@ class TestKotlinLanguageServer:
         else:
             sel_start = model_symbol["range"]["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
-        assert any(
-            "Main.kt" in ref.get("relativePath", "") for ref in refs
-        ), "Main should reference Model (tried all positions in selectionRange)"
+        assert any("Main.kt" in ref.get("relativePath", "") for ref in refs), (
+            "Main should reference Model (tried all positions in selectionRange)"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.KOTLIN], indirect=True)
     def test_overview_methods(self, language_server: SolidLanguageServer) -> None:

@@ -78,9 +78,9 @@ class GroovyLanguageServer(SolidLanguageServer):
         platform_id = PlatformUtils.get_platform_id()
 
         # Verify platform support
-        assert (
-            platform_id.value.startswith("win-") or platform_id.value.startswith("linux-") or platform_id.value.startswith("osx-")
-        ), "Only Windows, Linux and macOS platforms are supported for Groovy in multilspy at the moment"
+        assert platform_id.value.startswith("win-") or platform_id.value.startswith("linux-") or platform_id.value.startswith("osx-"), (
+            "Only Windows, Linux and macOS platforms are supported for Groovy in multilspy at the moment"
+        )
 
         # Check if user specified custom Java home path
         java_home_path = None

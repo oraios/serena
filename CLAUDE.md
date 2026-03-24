@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 **Essential Commands (use these exact commands):**
-- `uv run poe format` - Format code (BLACK + RUFF) - ONLY allowed formatting command
+- `uv run poe format` - Format code (RUFF) - ONLY allowed formatting command
 - `uv run poe type-check` - Run mypy type checking - ONLY allowed type checking command  
 - `uv run poe test` - Run tests with default markers (excludes java/rust by default)
 - `uv run poe test -m "python or go"` - Run specific language tests
@@ -108,7 +108,7 @@ Configuration is loaded from (in order of precedence):
 ## Working with the Codebase
 
 - Project uses Python 3.11 with `uv` for dependency management
-- Strict typing with mypy, formatted with black + ruff
+- Strict typing with mypy, formatted with ruff
 - Language servers run as separate processes with LSP communication
 - Memory system enables persistent project knowledge
 - Context/mode system allows workflow customization
