@@ -38,12 +38,12 @@ dependencies = [
   "beautifulsoup4==4.14.2",
   # Transitive deps pinned for security (dependabot alerts).
   # Exact pins because uvx installs from git, ignoring the lock file.
-  "urllib3==2.5.0",
-  "werkzeug==3.1.6",
+  "urllib3==2.6.3",
+  "werkzeug==3.1.7",
   "starlette==1.0.0",
   "python-multipart==0.0.22",
   "filelock==3.25.2",
-  "cryptography==46.0.3",
+  "cryptography==46.0.5",
 ]
 
 [[tool.uv.index]]
