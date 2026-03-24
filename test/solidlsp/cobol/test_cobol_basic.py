@@ -43,7 +43,7 @@ class TestCobolLanguageServer:
         # Check for key procedure names
         expected_procedures = ["MAIN-PROCEDURE", "ADD-NUMBERS", "SUBTRACT-NUMBERS", "CALL-HELPER"]
         found_procedures = [name for name in expected_procedures if name in symbol_names]
-        
+
         assert len(found_procedures) > 0, f"Should find at least one procedure from {expected_procedures}, found {symbol_names}"
 
     @pytest.mark.parametrize("language_server", [Language.COBOL], indirect=True)
@@ -63,7 +63,7 @@ class TestCobolLanguageServer:
         # Check for helper procedures
         expected_procedures = ["HELPER-MAIN", "FORMAT-MESSAGE"]
         found_procedures = [name for name in expected_procedures if name in symbol_names]
-        
+
         assert len(found_procedures) > 0, f"Should find at least one procedure from {expected_procedures}, found {symbol_names}"
 
     @pytest.mark.parametrize("language_server", [Language.COBOL], indirect=True)
@@ -78,14 +78,11 @@ class TestCobolLanguageServer:
         # Line with "PERFORM ADD-NUMBERS" is approximately line 16-17 (0-indexed)
         definition_location_list = language_server.request_definition(main_cob_path, 16, 20)
 
-        # We should get a definition location (may be empty if LS doesn't support it)
-        # If we get results, verify they point to main.cob
-        if definition_location_list:
-            assert len(definition_location_list) >= 1, "Should find at least one definition"
-            definition_location = definition_location_list[0]
-            assert definition_location["uri"].endswith("main.cob"), "Definition should be in main.cob"
-            # The definition should be on a line containing ADD-NUMBERS paragraph
-            # (exact line depends on LS implementation)
+        assert len(definition_location_list) >= 1, "Should find at least one definition"
+        definition_location = definition_location_list[0]
+        assert definition_location["uri"].endswith("main.cob"), "Definition should be in main.cob"
+        # The definition should be on a line containing ADD-NUMBERS paragraph
+        # (exact line depends on LS implementation)
 
     @pytest.mark.parametrize("language_server", [Language.COBOL], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.COBOL], indirect=True)
@@ -97,14 +94,10 @@ class TestCobolLanguageServer:
         # Try to find the definition of HELPER (in lib/helper.cob)
         definition_location_list = language_server.request_definition(main_cob_path, 32, 15)
 
-        # This test may not work for all COBOL LSPs, as cross-file references
-        # depend on the specific language server implementation
-        # If we get results, verify they make sense
-        if definition_location_list:
-            assert len(definition_location_list) >= 1, "Should find at least one definition"
-            definition_location = definition_location_list[0]
-            # The definition could be in helper.cob
-            assert "helper.cob" in definition_location["uri"] or "main.cob" in definition_location["uri"]
+        assert len(definition_location_list) >= 1, "Should find at least one definition"
+        definition_location = definition_location_list[0]
+        # The definition could be in helper.cob
+        assert "helper.cob" in definition_location["uri"] or "main.cob" in definition_location["uri"]
 
     @pytest.mark.parametrize("language_server", [Language.COBOL], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.COBOL], indirect=True)
@@ -116,12 +109,10 @@ class TestCobolLanguageServer:
         # ADD-NUMBERS is defined around line 27 and referenced on line 17
         references = language_server.request_references(main_cob_path, 27, 10)
 
-        # If the LS supports references, we should find at least the PERFORM statement
-        if references:
-            assert len(references) >= 1, f"Should find at least one reference to ADD-NUMBERS, got {references}"
-            # Verify at least one reference is in main.cob
-            main_cob_refs = [ref for ref in references if "main.cob" in ref["uri"]]
-            assert len(main_cob_refs) >= 1, "Should find at least one reference in main.cob"
+        assert len(references) >= 1, f"Should find at least one reference to ADD-NUMBERS, got {references}"
+        # Verify at least one reference is in main.cob
+        main_cob_refs = [ref for ref in references if "main.cob" in ref["uri"]]
+        assert len(main_cob_refs) >= 1, "Should find at least one reference in main.cob"
 
     @pytest.mark.parametrize("language_server", [Language.COBOL], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.COBOL], indirect=True)
@@ -133,11 +124,7 @@ class TestCobolLanguageServer:
         # HELPER-MAIN is around line 13 in helper.cob
         references = language_server.request_references(helper_cob_path, 13, 10)
 
-        # This test depends on whether the COBOL LSP supports cross-file references
-        # If it does, we should find the CALL statement in main.cob
-        if references:
-            # Check if any references are from other files
-            cross_file_refs = [ref for ref in references if not ref["uri"].endswith("helper.cob")]
-            # If we found cross-file references, verify they're meaningful
-            if cross_file_refs:
-                assert len(cross_file_refs) >= 1, "Should find cross-file references"
+        cross_file_refs = [ref for ref in references if not ref["uri"].endswith("helper.cob")]
+        # If we found cross-file references, verify they're meaningful
+        if cross_file_refs:
+            assert len(cross_file_refs) >= 1, "Should find cross-file references"

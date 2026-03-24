@@ -8,15 +8,12 @@ supporting .cob, .cbl, and .cobol file extensions.
 import logging
 import os
 import shutil
-from typing import Any
+from pathlib import Path
 
-from solidlsp.language_servers.common import (
-    RuntimeDependency,
-    RuntimeDependencyCollection,
-)
 from solidlsp.ls import LanguageServerDependencyProviderSinglePath, SolidLanguageServer
-from solidlsp.ls_process import ProcessLaunchInfo
+from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
@@ -24,20 +21,20 @@ log = logging.getLogger(__name__)
 class CobolLanguageServer(SolidLanguageServer):
     """
     COBOL Language Server implementation.
-    
+
     Supports COBOL file extensions: .cob, .cbl, .cobol, .CBL, .COB
-    
+
     Configuration:
     --------------
     You can specify a custom path to the COBOL language server executable
     using the 'ls_path' setting in your Serena configuration:
-    
+
     ```yaml
     language_servers:
       cobol:
         ls_path: '/path/to/cobol-language-server'
     ```
-    
+
     Supported Language Servers:
     ---------------------------
     - IBM Z Open Editor language server
@@ -51,16 +48,17 @@ class CobolLanguageServer(SolidLanguageServer):
         def _get_or_install_core_dependency(self) -> str:
             """
             Get or install the COBOL language server.
-            
+
             Returns:
                 Path to the COBOL language server executable
+
             """
             # First, check if user provided a custom path via ls_path setting
             custom_path = self._custom_settings.get("ls_path")
             if custom_path and os.path.exists(custom_path):
                 log.info(f"Using custom COBOL language server at: {custom_path}")
                 return custom_path
-            
+
             # Check for system-installed COBOL language server
             # Common names for COBOL language servers
             possible_commands = [
@@ -68,13 +66,13 @@ class CobolLanguageServer(SolidLanguageServer):
                 "cobol-lsp",
                 "che4z-lsp-for-cobol",
             ]
-            
+
             for cmd in possible_commands:
                 system_path = shutil.which(cmd)
                 if system_path:
                     log.info(f"Found system-installed COBOL language server: {system_path}")
                     return system_path
-            
+
             # If no system installation found, check for IBM Z Open Editor
             vscode_extensions = os.path.expanduser("~/.vscode/extensions")
             if os.path.exists(vscode_extensions):
@@ -92,7 +90,7 @@ class CobolLanguageServer(SolidLanguageServer):
                             if os.path.exists(path):
                                 log.info(f"Found COBOL language server in Z Open Editor: {path}")
                                 return path
-            
+
             # If still not found, provide helpful error message
             raise FileNotFoundError(
                 "COBOL language server not found. Please install one of the following:\n\n"
@@ -106,35 +104,35 @@ class CobolLanguageServer(SolidLanguageServer):
                 "       ls_path: '/path/to/your/cobol-language-server'\n"
             )
 
-        def _create_launch_command(self, core_path: str) -> list[str] | str:
+        def _create_launch_command(self, core_path: str) -> list[str]:
             """
             Create the launch command for the COBOL language server.
-            
+
             Args:
                 core_path: Path to the COBOL language server executable or JAR
-            
+
             Returns:
                 Command to launch the language server
+
             """
             # Handle Java-based language servers (like IBM Z Open Editor)
             if core_path.endswith(".jar"):
                 java_path = shutil.which("java")
                 if not java_path:
-                    raise RuntimeError(
-                        "Java is required to run the COBOL language server but was not found in PATH"
-                    )
+                    raise RuntimeError("Java is required to run the COBOL language server but was not found in PATH")
                 return [java_path, "-jar", core_path, "--stdio"]
-            
+
             # Handle executable-based language servers
             return [core_path, "--stdio"]
 
-    def __init__(self, *args: Any, **kwargs: Any):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """Initialize the COBOL language server."""
         super().__init__(
-            *args,
-            language_id="cobol",
-            process_launch_info=None,  # Will be created via _create_dependency_provider
-            **kwargs,
+            config,
+            repository_root_path,
+            None,
+            "cobol",
+            solidlsp_settings,
         )
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProviderSinglePath:
@@ -144,13 +142,15 @@ class CobolLanguageServer(SolidLanguageServer):
     def _get_initialize_params(self) -> InitializeParams:
         """
         Get initialization parameters for the COBOL language server.
-        
+
         Returns:
             LSP initialization parameters
+
         """
+        root_uri = Path(self.repository_root_path).as_uri()
         return {
             "processId": os.getpid(),
-            "rootUri": self._path_to_uri(self.repository_root_path),
+            "rootUri": root_uri,
             "capabilities": {
                 "textDocument": {
                     "synchronization": {
@@ -170,7 +170,7 @@ class CobolLanguageServer(SolidLanguageServer):
             },
             "workspaceFolders": [
                 {
-                    "uri": self._path_to_uri(self.repository_root_path),
+                    "uri": root_uri,
                     "name": os.path.basename(self.repository_root_path),
                 }
             ],
@@ -182,19 +182,19 @@ class CobolLanguageServer(SolidLanguageServer):
         """
         log.info("Starting COBOL language server process")
         self.server.start()
-        
+
         log.info("Sending initialize request to COBOL language server")
         initialize_params = self._get_initialize_params()
         init_response = self.server.send.initialize(initialize_params)
-        
+
         log.info("Received initialize response from COBOL language server")
         log.debug(f"Server capabilities: {init_response.get('capabilities', {})}")
-        
+
         # Send initialized notification
         self.server.notify.initialized({})
-        
+
         log.info("COBOL language server initialized successfully")
-        
+
         # Verify essential capabilities
         capabilities = init_response.get("capabilities", {})
         if "textDocumentSync" not in capabilities:

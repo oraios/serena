@@ -135,6 +135,7 @@ class Language(str, Enum):
     Must be explicitly specified in project.yml. Requires Node.js and npm.
     Requires ``ansible`` in PATH for full functionality.
     """
+    COBOL = "cobol"
 
     @classmethod
     def iter_all(cls, include_experimental: bool = False) -> Iterable[Self]:
@@ -308,6 +309,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.sol")
             case self.ANSIBLE:
                 return FilenameMatcher("*.yaml", "*.yml")
+            case self.COBOL:
+                return FilenameMatcher("*.cbl", "*.cob", "*.cpy")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -519,6 +522,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.ansible_language_server import AnsibleLanguageServer
 
                 return AnsibleLanguageServer
+            case self.COBOL:
+                from solidlsp.language_servers.cobol_language_server import CobolLanguageServer
+
+                return CobolLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
