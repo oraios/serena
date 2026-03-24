@@ -73,7 +73,7 @@ class Component(ABC):
 
         if not self.agent.is_using_language_server():
             raise Exception("Cannot create LanguageServerCodeEditor; agent is not in language server mode.")
-        return LanguageServerCodeEditor(self.create_language_server_symbol_retriever(), agent=self.agent)
+        return LanguageServerCodeEditor(self.create_language_server_symbol_retriever())
 
 
 class ToolMarker:
