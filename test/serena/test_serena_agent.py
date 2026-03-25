@@ -2,15 +2,15 @@ import json
 import logging
 import os
 import re
-import shutil
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Literal
+from copy import copy
+from dataclasses import dataclass
+from typing import Literal, cast
 
 import pytest
-from test.diagnostics_cases import WORKING_DIAGNOSTIC_TOOL_CASE_PARAMS, DiagnosticCase
-from _pytest.mark import Mark, MarkDecorator
+from _pytest.mark import Mark, MarkDecorator, ParameterSet
 
 from serena.agent import SerenaAgent
 from serena.config.serena_config import ProjectConfig, RegisteredProject, SerenaConfig
@@ -24,7 +24,6 @@ from serena.tools import (
     FindReferencingSymbolsTool,
     FindSymbolTool,
     GetDiagnosticsForFileTool,
-    GetDiagnosticsForSymbolTool,
     InitialInstructionsTool,
     ReplaceContentTool,
     ReplaceSymbolBodyTool,
@@ -34,205 +33,726 @@ from serena.tools import (
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
 from test.conftest import (
-    find_identifier_occurrence_position,
+    find_identifier_pos,
+    get_pytest_markers,
     get_repo_path,
     is_ci,
-    language_has_verified_implementation_support,
     language_tests_enabled,
 )
-from test.diagnostics_cases import WORKING_DIAGNOSTIC_TOOL_CASE_PARAMS, DiagnosticCase
-from test.solidlsp import clojure as clj
 
-DEFINING_SYMBOL_TOOL_TEST_CASES = [
-    pytest.param(
-        Language.PYTHON,
-        os.path.join("test_repo", "services.py"),
-        "User",
-        1,
-        1,
-        "User",
-        "models.py",
-        marks=pytest.mark.python,
-    ),
-    pytest.param(
-        Language.PYTHON_TY,
-        os.path.join("test_repo", "services.py"),
-        "User",
-        1,
-        1,
-        "User",
-        "models.py",
-        marks=pytest.mark.python,
-    ),
-    pytest.param(Language.GO, "main.go", "Helper", 0, 1, "Helper", "main.go", marks=pytest.mark.go),
-    pytest.param(
-        Language.JAVA,
-        os.path.join("src", "main", "java", "test_repo", "Main.java"),
-        "Model",
-        0,
-        1,
-        "Model",
-        "Model.java",
-        marks=pytest.mark.java,
-    ),
-    pytest.param(
-        Language.KOTLIN,
-        os.path.join("src", "main", "kotlin", "test_repo", "Main.kt"),
-        "Model",
-        0,
-        1,
-        "Model",
-        "Model.kt",
-        marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
-    ),
-    pytest.param(
-        Language.RUST,
-        os.path.join("src", "main.rs"),
-        "format_greeting",
-        0,
-        1,
-        "format_greeting",
-        "lib.rs",
-        marks=pytest.mark.rust,
-    ),
-    pytest.param(Language.PHP, "index.php", "helperFunction", 0, 5, "helperFunction", "helper.php", marks=pytest.mark.php),
-    pytest.param(
-        Language.CLOJURE,
-        clj.UTILS_PATH,
-        "multiply",
-        0,
-        1,
-        "multiply",
-        clj.CORE_PATH,
-        marks=[
-            pytest.mark.clojure,
-            pytest.mark.skipif(not clj.is_clojure_cli_available(), reason="clojure CLI is not installed"),
-        ],
-    ),
-    pytest.param(Language.CSHARP, "Program.cs", "Add", 0, 1, "Add", "Program.cs", marks=pytest.mark.csharp),
-    pytest.param(
-        Language.POWERSHELL,
-        "main.ps1",
-        "Convert-ToUpperCase",
-        0,
-        1,
-        "function Convert-ToUpperCase ()",
-        "utils.ps1",
-        marks=pytest.mark.powershell,
-    ),
-    pytest.param(Language.CPP_CCLS, "a.cpp", "add", 0, 1, "add", "b.cpp", marks=pytest.mark.cpp),
-    pytest.param(
-        Language.LEAN4,
-        "Main.lean",
-        "add",
-        0,
-        1,
-        "add",
-        "Helper.lean",
-        marks=[
-            pytest.mark.lean4,
-            pytest.mark.skipif(shutil.which("lean") is None, reason="Lean is not installed"),
-        ],
-    ),
-    pytest.param(Language.TYPESCRIPT, "index.ts", "helperFunction", 1, 1, "helperFunction", "index.ts", marks=pytest.mark.typescript),
-    pytest.param(
-        Language.FSHARP,
-        "Program.fs",
-        "add",
-        0,
-        1,
-        "add",
-        "Calculator.fs",
-        marks=[pytest.mark.fsharp, pytest.mark.xfail(reason="F# language server cannot reliably resolve defining symbols")],
+
+@dataclass
+class BaseCase:
+    language: Language
+    id: str
+
+    def to_pytest_param(self, *marks: MarkDecorator | Mark) -> ParameterSet:
+        return pytest.param(self.language, self, marks=[*get_pytest_markers(self.language), *marks], id=self.id)  # type: ignore
+
+
+@dataclass
+class FindSymbolCase(BaseCase):
+    symbol_name: str
+    expected_kind: str
+    expected_file: str
+
+
+@dataclass
+class FindReferenceCase(BaseCase):
+    symbol_name: str
+    definition_file: str
+    reference_file: str
+
+
+@dataclass
+class FindDefiningSymbolCase(BaseCase):
+    relative_path: str
+    identifier: str
+    occurrence_index: int
+    column_offset: int
+    expected_name: str
+    expected_definition_file: str
+
+
+@dataclass
+class RegexDefiningSymbolCase(BaseCase):
+    relative_path: str
+    regex: str
+    containing_symbol_name_path: str
+    expected_name: str
+    expected_definition_file: str
+
+
+@dataclass
+class RegexDefiningSymbolErrorCase(BaseCase):
+    relative_path: str
+    regex: str
+    containing_symbol_name_path: str
+    error_fragment: str
+
+
+@dataclass
+class FindImplementationCase(BaseCase):
+    symbol_name: str
+    definition_file: str
+    implementation_file: str
+    expected_symbol_name: str
+
+
+@dataclass
+class FindSymbolNamePathCase(BaseCase):
+    name_path: str
+    substring_matching: bool
+    expected_symbol_name: str
+    expected_kind: str
+    expected_file: str
+
+
+@dataclass
+class FindSymbolNoMatchCase(BaseCase):
+    name_path: str
+
+
+@dataclass
+class FindSymbolOverloadedCase(BaseCase):
+    name_path: str
+    num_expected: int
+
+
+@dataclass
+class NonUniqueSymbolReferenceCase(BaseCase):
+    name_path: str
+    relative_path: str
+    expected_error_fragment: str = "multiple"
+
+
+@dataclass
+class SafeDeleteCase(BaseCase):
+    name_path: str
+    relative_path: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "relative_path", self.relative_path.replace("\\", "/"))
+
+
+@dataclass
+class DiagnosticCase(BaseCase):
+    language: Language
+    relative_path: str
+    name_path1: str
+    name_path2: str | None
+    message_fragment1: str
+    message_fragment2: str | None
+
+    @property
+    def symbol1_id_str(self) -> str:
+        return self.name_path1.split("/")[-1]
+
+    @property
+    def symbol2_id_str(self) -> str | None:
+        if self.name_path2 is None:
+            return None
+        return self.name_path2.split("/")[-1]
+
+    def without_second_symbol(self) -> "DiagnosticCase":
+        result = copy(self)
+        result.name_path2 = None
+        result.message_fragment2 = None
+        return result
+
+    def assert_matches(self, tool_output: dict) -> None:
+        """
+
+        :param tool_output: Output of diagnostics tool, representing the mapping `relative_path -> severity -> name_path -> diagnostics_results`.
+        :return:
+        """
+        assert self.relative_path in tool_output, (
+            f"Missing diagnostics for relative path {self.relative_path} in tool output keys: {list(tool_output.keys())}"
+        )
+        severity_group = tool_output[self.relative_path]
+        assert "Error" in severity_group, severity_group
+        name_path_group = severity_group["Error"]
+
+        for expected_name_path in [self.name_path1, self.name_path2]:
+            if expected_name_path is not None:
+                assert expected_name_path in name_path_group, name_path_group
+
+        diagnostic_messages = [
+            diagnostic["message"] for diagnostics_for_name_path in name_path_group.values() for diagnostic in diagnostics_for_name_path
+        ]
+        for expected_fragment in [self.message_fragment1, self.message_fragment2]:
+            if expected_fragment is not None:
+                assert any(expected_fragment in message for message in diagnostic_messages), diagnostic_messages
+
+
+DIAGNOSTIC_CASES = [
+    DiagnosticCase(
+        language=Language.PYTHON,
+        id=f"{Language.PYTHON.value}_missing_user",
+        relative_path=os.path.join("test_repo", "diagnostics_sample.py"),
+        name_path1="broken_factory",
+        name_path2="broken_consumer",
+        message_fragment1="missing_user",
+        message_fragment2="undefined_name",
+    ).to_pytest_param(),
+    DiagnosticCase(
+        language=Language.CLOJURE,
+        id=f"{Language.CLOJURE.value}_missing-greeting",
+        relative_path=os.path.join("src", "test_app", "diagnostics_sample.clj"),
+        name_path1="broken-factory",
+        name_path2="broken-consumer",
+        message_fragment1="missing-greeting",
+        message_fragment2="missing-consumer-value",
+    ).to_pytest_param(),
+    DiagnosticCase(
+        language=Language.GO,
+        id=f"{Language.GO.value}_missingGreeting",
+        relative_path="diagnostics_sample.go",
+        name_path1="brokenFactory",
+        name_path2="brokenConsumer",
+        message_fragment1="missingGreeting",
+        message_fragment2="missingConsumerValue",
+    ).to_pytest_param(),
+    DiagnosticCase(
+        language=Language.TYPESCRIPT,
+        id=f"{Language.TYPESCRIPT.value}_missingGreeting",
+        relative_path="diagnostics_sample.ts",
+        name_path1="brokenFactory",
+        name_path2="brokenConsumer",
+        message_fragment1="missingGreeting",
+        message_fragment2="missingConsumerValue",
+    ).to_pytest_param(),
+]
+
+
+FIND_DEFINING_SYMBOL_CASES = [
+    FindDefiningSymbolCase(
+        language=Language.PYTHON,
+        id="python_user_in_services",
+        relative_path=os.path.join("test_repo", "services.py"),
+        identifier="User",
+        occurrence_index=1,
+        column_offset=1,
+        expected_name="User",
+        expected_definition_file="models.py",
+    ).to_pytest_param(),
+    FindDefiningSymbolCase(
+        language=Language.PYTHON_TY,
+        id="python_ty_user_in_services",
+        relative_path=os.path.join("test_repo", "services.py"),
+        identifier="User",
+        occurrence_index=1,
+        column_offset=1,
+        expected_name="User",
+        expected_definition_file="models.py",
+    ).to_pytest_param(),
+    FindDefiningSymbolCase(
+        language=Language.GO,
+        id="go_helper_in_main",
+        relative_path="main.go",
+        identifier="Helper",
+        occurrence_index=0,
+        column_offset=1,
+        expected_name="Helper",
+        expected_definition_file="main.go",
+    ).to_pytest_param(),
+    FindDefiningSymbolCase(
+        language=Language.JAVA,
+        id="java_model_in_main",
+        relative_path=os.path.join("src", "main", "java", "test_repo", "Main.java"),
+        identifier="Model",
+        occurrence_index=0,
+        column_offset=1,
+        expected_name="Model",
+        expected_definition_file="Model.java",
+    ).to_pytest_param(),
+    FindDefiningSymbolCase(
+        language=Language.KOTLIN,
+        id="kotlin_model_in_main",
+        relative_path=os.path.join("src", "main", "kotlin", "test_repo", "Main.kt"),
+        identifier="Model",
+        occurrence_index=0,
+        column_offset=1,
+        expected_name="Model",
+        expected_definition_file="Model.kt",
+    ).to_pytest_param(),
+    FindDefiningSymbolCase(
+        language=Language.RUST,
+        id="rust_format_greeting",
+        relative_path=os.path.join("src", "main.rs"),
+        identifier="format_greeting",
+        occurrence_index=0,
+        column_offset=1,
+        expected_name="format_greeting",
+        expected_definition_file="lib.rs",
+    ).to_pytest_param(),
+    FindDefiningSymbolCase(
+        language=Language.PHP,
+        id="php_helper_function",
+        relative_path="index.php",
+        identifier="helperFunction",
+        occurrence_index=0,
+        column_offset=5,
+        expected_name="helperFunction",
+        expected_definition_file="helper.php",
+    ).to_pytest_param(),
+    FindDefiningSymbolCase(
+        language=Language.CLOJURE,
+        id="clojure_multiply_in_utils",
+        relative_path=os.path.join("src", "test_app", "utils.clj"),
+        identifier="multiply",
+        occurrence_index=0,
+        column_offset=1,
+        expected_name="multiply",
+        expected_definition_file=os.path.join("src", "test_app", "core.clj"),
+    ).to_pytest_param(),
+    FindDefiningSymbolCase(
+        language=Language.CSHARP,
+        id="csharp_add_in_program",
+        relative_path="Program.cs",
+        identifier="Add",
+        occurrence_index=0,
+        column_offset=1,
+        expected_name="Add",
+        expected_definition_file="Program.cs",
+    ).to_pytest_param(),
+    FindDefiningSymbolCase(
+        language=Language.POWERSHELL,
+        id="powershell_convert_to_uppercase",
+        relative_path="main.ps1",
+        identifier="Convert-ToUpperCase",
+        occurrence_index=0,
+        column_offset=1,
+        expected_name="function Convert-ToUpperCase ()",
+        expected_definition_file="utils.ps1",
+    ).to_pytest_param(),
+    FindDefiningSymbolCase(
+        language=Language.CPP_CCLS,
+        id="cpp_add_in_a",
+        relative_path="a.cpp",
+        identifier="add",
+        occurrence_index=0,
+        column_offset=1,
+        expected_name="add",
+        expected_definition_file="b.cpp",
+    ).to_pytest_param(),
+    FindDefiningSymbolCase(
+        language=Language.LEAN4,
+        id="lean_add_in_main",
+        relative_path="Main.lean",
+        identifier="add",
+        occurrence_index=1,
+        column_offset=1,
+        expected_name="add",
+        expected_definition_file="Helper.lean",
+    ).to_pytest_param(),
+    FindDefiningSymbolCase(
+        language=Language.TYPESCRIPT,
+        id="typescript_helper_function",
+        relative_path="index.ts",
+        identifier="helperFunction",
+        occurrence_index=1,
+        column_offset=1,
+        expected_name="helperFunction",
+        expected_definition_file="index.ts",
+    ).to_pytest_param(),
+    FindDefiningSymbolCase(
+        language=Language.FSHARP,
+        id="fsharp_add_in_program",
+        relative_path="Program.fs",
+        identifier="add",
+        occurrence_index=0,
+        column_offset=1,
+        expected_name="add",
+        expected_definition_file="Calculator.fs",
+    ).to_pytest_param(
+        pytest.mark.xfail(reason="F# language server cannot reliably resolve defining symbols"),
     ),
 ]
 
-REGEX_DEFINING_SYMBOL_TOOL_TEST_CASES = [
-    pytest.param(
-        Language.PYTHON,
-        os.path.join("test_repo", "services.py"),
-        r"from \.models import Item, (User)",
-        "",
-        "User",
-        "models.py",
-        marks=pytest.mark.python,
-    ),
-    pytest.param(
-        Language.PYTHON,
-        os.path.join("test_repo", "services.py"),
-        r"=\s+(User)\(",
-        "UserService/create_user",
-        "User",
-        "models.py",
-        marks=pytest.mark.python,
-    ),
-    pytest.param(
-        Language.PYTHON_TY,
-        os.path.join("test_repo", "services.py"),
-        r"=\s+(User)\(",
-        "UserService/create_user",
-        "User",
-        "models.py",
-        marks=pytest.mark.python,
-    ),
-    pytest.param(
-        Language.GO,
-        "main.go",
-        r"var greeter (Greeter) =",
-        "main",
-        "Greeter",
-        "main.go",
-        marks=pytest.mark.go,
+FIND_DEFINING_SYMBOL_REGEX_CASES = [
+    RegexDefiningSymbolCase(
+        language=Language.PYTHON,
+        id="python_import_user",
+        relative_path=os.path.join("test_repo", "services.py"),
+        regex=r"from \.models import Item, (User)",
+        containing_symbol_name_path="",
+        expected_name="User",
+        expected_definition_file="models.py",
+    ).to_pytest_param(),
+    RegexDefiningSymbolCase(
+        language=Language.PYTHON,
+        id="python_create_user_call",
+        relative_path=os.path.join("test_repo", "services.py"),
+        regex=r"=\s+(User)\(",
+        containing_symbol_name_path="UserService/create_user",
+        expected_name="User",
+        expected_definition_file="models.py",
+    ).to_pytest_param(),
+    RegexDefiningSymbolCase(
+        language=Language.PYTHON_TY,
+        id="python_ty_create_user_call",
+        relative_path=os.path.join("test_repo", "services.py"),
+        regex=r"=\s+(User)\(",
+        containing_symbol_name_path="UserService/create_user",
+        expected_name="User",
+        expected_definition_file="models.py",
+    ).to_pytest_param(),
+    RegexDefiningSymbolCase(
+        language=Language.GO,
+        id="go_greeter_var",
+        relative_path="main.go",
+        regex=r"var greeter (Greeter) =",
+        containing_symbol_name_path="main",
+        expected_name="Greeter",
+        expected_definition_file="main.go",
+    ).to_pytest_param(),
+]
+
+FIND_IMPLEMENTATION_CASES = [
+    FindImplementationCase(
+        language=Language.CSHARP,
+        id="csharp_greeter_format",
+        symbol_name="IGreeter/FormatGreeting",
+        definition_file=os.path.join("Services", "IGreeter.cs"),
+        implementation_file=os.path.join("Services", "ConsoleGreeter.cs"),
+        expected_symbol_name="FormatGreeting",
+    ).to_pytest_param(),
+    FindImplementationCase(
+        language=Language.GO,
+        id="go_greeter_format",
+        symbol_name="Greeter/FormatGreeting",
+        definition_file="main.go",
+        implementation_file="main.go",
+        expected_symbol_name="FormatGreeting",
+    ).to_pytest_param(),
+    FindImplementationCase(
+        language=Language.JAVA,
+        id="java_greeter_format",
+        symbol_name="Greeter/formatGreeting",
+        definition_file=os.path.join("src", "main", "java", "test_repo", "Greeter.java"),
+        implementation_file=os.path.join("src", "main", "java", "test_repo", "ConsoleGreeter.java"),
+        expected_symbol_name="formatGreeting",
+    ).to_pytest_param(),
+    FindImplementationCase(
+        language=Language.RUST,
+        id="rust_greeter_format",
+        symbol_name="Greeter/format_greeting",
+        definition_file=os.path.join("src", "lib.rs"),
+        implementation_file=os.path.join("src", "lib.rs"),
+        expected_symbol_name="format_greeting",
+    ).to_pytest_param(),
+    FindImplementationCase(
+        language=Language.TYPESCRIPT,
+        id="typescript_greeter_format",
+        symbol_name="Greeter/formatGreeting",
+        definition_file="formatters.ts",
+        implementation_file="formatters.ts",
+        expected_symbol_name="formatGreeting",
+    ).to_pytest_param(),
+]
+
+
+FIND_SYMBOL_REFERENCES_CASES = [
+    FindSymbolCase(
+        language=Language.PYTHON, id="python_user_class", symbol_name="User", expected_kind="Class", expected_file="models.py"
+    ).to_pytest_param(),
+    FindSymbolCase(
+        language=Language.GO, id="go_helper_function", symbol_name="Helper", expected_kind="Function", expected_file="main.go"
+    ).to_pytest_param(),
+    FindSymbolCase(
+        language=Language.JAVA, id="java_model_class", symbol_name="Model", expected_kind="Class", expected_file="Model.java"
+    ).to_pytest_param(),
+    FindSymbolCase(
+        language=Language.KOTLIN, id="kotlin_model_struct", symbol_name="Model", expected_kind="Struct", expected_file="Model.kt"
+    ).to_pytest_param(),
+    FindSymbolCase(
+        language=Language.TYPESCRIPT,
+        id="typescript_demo_class",
+        symbol_name="DemoClass",
+        expected_kind="Class",
+        expected_file="index.ts",
+    ).to_pytest_param(),
+    FindSymbolCase(
+        language=Language.PHP,
+        id="php_helper_function",
+        symbol_name="helperFunction",
+        expected_kind="Function",
+        expected_file="helper.php",
+    ).to_pytest_param(),
+    FindSymbolCase(
+        language=Language.CLOJURE,
+        id="clojure_greet_function",
+        symbol_name="greet",
+        expected_kind="Function",
+        expected_file=os.path.join("src", "test_app", "core.clj"),
+    ).to_pytest_param(),
+    FindSymbolCase(
+        language=Language.CSHARP,
+        id="csharp_calculator_class",
+        symbol_name="Calculator",
+        expected_kind="Class",
+        expected_file="Program.cs",
+    ).to_pytest_param(),
+    FindSymbolCase(
+        language=Language.POWERSHELL,
+        id="powershell_greet_user",
+        symbol_name="Greet-User",
+        expected_kind="Function",
+        expected_file="main.ps1",
+    ).to_pytest_param(),
+    FindSymbolCase(
+        language=Language.CPP_CCLS, id="cpp_add_function", symbol_name="add", expected_kind="Function", expected_file="b.cpp"
+    ).to_pytest_param(),
+    FindSymbolCase(
+        language=Language.LEAN4, id="lean_add_method", symbol_name="add", expected_kind="Method", expected_file="Helper.lean"
+    ).to_pytest_param(),
+    FindSymbolCase(
+        language=Language.FSHARP,
+        id="fsharp_calculator_module",
+        symbol_name="Calculator",
+        expected_kind="Module",
+        expected_file="Calculator.fs",
+    ).to_pytest_param(),
+    FindSymbolCase(
+        language=Language.RUST, id="rust_add_function", symbol_name="add", expected_kind="Function", expected_file="lib.rs"
+    ).to_pytest_param(),
+]
+
+FIND_REFERENCE_CASES = [
+    FindReferenceCase(
+        language=Language.PYTHON,
+        id="python_user_refs",
+        symbol_name="User",
+        definition_file=os.path.join("test_repo", "models.py"),
+        reference_file=os.path.join("test_repo", "services.py"),
+    ).to_pytest_param(),
+    FindReferenceCase(
+        language=Language.GO, id="go_helper_refs", symbol_name="Helper", definition_file="main.go", reference_file="main.go"
+    ).to_pytest_param(),
+    FindReferenceCase(
+        language=Language.JAVA,
+        id="java_model_refs",
+        symbol_name="Model",
+        definition_file=os.path.join("src", "main", "java", "test_repo", "Model.java"),
+        reference_file=os.path.join("src", "main", "java", "test_repo", "Main.java"),
+    ).to_pytest_param(),
+    FindReferenceCase(
+        language=Language.KOTLIN,
+        id="kotlin_model_refs",
+        symbol_name="Model",
+        definition_file=os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
+        reference_file=os.path.join("src", "main", "kotlin", "test_repo", "Main.kt"),
+    ).to_pytest_param(),
+    FindReferenceCase(
+        language=Language.RUST,
+        id="rust_add_refs",
+        symbol_name="add",
+        definition_file=os.path.join("src", "lib.rs"),
+        reference_file=os.path.join("src", "main.rs"),
+    ).to_pytest_param(),
+    FindReferenceCase(
+        language=Language.PHP,
+        id="php_helper_refs",
+        symbol_name="helperFunction",
+        definition_file="helper.php",
+        reference_file="index.php",
+    ).to_pytest_param(),
+    FindReferenceCase(
+        language=Language.CLOJURE,
+        id="clojure_multiply_refs",
+        symbol_name="multiply",
+        definition_file=os.path.join("src", "test_app", "core.clj"),
+        reference_file=os.path.join("src", "test_app", "utils.clj"),
+    ).to_pytest_param(),
+    FindReferenceCase(
+        language=Language.CSHARP,
+        id="csharp_calculator_refs",
+        symbol_name="Calculator",
+        definition_file="Program.cs",
+        reference_file="Program.cs",
+    ).to_pytest_param(),
+    FindReferenceCase(
+        language=Language.POWERSHELL,
+        id="powershell_greet_user_refs",
+        symbol_name="Greet-User",
+        definition_file="main.ps1",
+        reference_file="main.ps1",
+    ).to_pytest_param(),
+    FindReferenceCase(
+        language=Language.CPP_CCLS, id="cpp_add_refs", symbol_name="add", definition_file="b.cpp", reference_file="a.cpp"
+    ).to_pytest_param(),
+    FindReferenceCase(
+        language=Language.LEAN4, id="lean_add_refs", symbol_name="add", definition_file="Helper.lean", reference_file="Main.lean"
+    ).to_pytest_param(),
+    FindReferenceCase(
+        language=Language.TYPESCRIPT,
+        id="typescript_helper_refs",
+        symbol_name="helperFunction",
+        definition_file="index.ts",
+        reference_file="use_helper.ts",
+    ).to_pytest_param(pytest.mark.xfail(False, reason="TypeScript language server is unreliable")),
+    FindReferenceCase(
+        language=Language.FSHARP, id="fsharp_add_refs", symbol_name="add", definition_file="Calculator.fs", reference_file="Program.fs"
+    ).to_pytest_param(
+        pytest.mark.xfail(reason="F# language server is unreliable"),  # See issue #1040
     ),
 ]
 
-IMPLEMENTATION_TOOL_TEST_CASE_DATA = [
-    (
-        Language.CSHARP,
-        "IGreeter/FormatGreeting",
-        os.path.join("Services", "IGreeter.cs"),
-        os.path.join("Services", "ConsoleGreeter.cs"),
-        "FormatGreeting",
-        pytest.mark.csharp,
-    ),
-    (
-        Language.GO,
-        "Greeter/FormatGreeting",
-        "main.go",
-        "main.go",
-        "(ConsoleGreeter).FormatGreeting",
-        pytest.mark.go,
-    ),
-    (
-        Language.JAVA,
-        "Greeter/formatGreeting",
-        os.path.join("src", "main", "java", "test_repo", "Greeter.java"),
-        os.path.join("src", "main", "java", "test_repo", "ConsoleGreeter.java"),
-        "formatGreeting",
-        pytest.mark.java,
-    ),
-    (
-        Language.RUST,
-        "Greeter/format_greeting",
-        os.path.join("src", "lib.rs"),
-        os.path.join("src", "lib.rs"),
-        "format_greeting",
-        pytest.mark.rust,
-    ),
-    (
-        Language.TYPESCRIPT,
-        "Greeter/formatGreeting",
-        "formatters.ts",
-        "formatters.ts",
-        "formatGreeting",
-        pytest.mark.typescript,
-    ),
+FIND_DEFINING_SYMBOL_REGEX_ERROR_CASES = [
+    RegexDefiningSymbolErrorCase(
+        language=Language.PYTHON,
+        id="python_regex_multiple_matches",
+        relative_path=os.path.join("test_repo", "services.py"),
+        regex=r"(User)",
+        containing_symbol_name_path="",
+        error_fragment="Expected exactly one regex match",
+    ).to_pytest_param(),
+    RegexDefiningSymbolErrorCase(
+        language=Language.PYTHON,
+        id="python_regex_missing_group",
+        relative_path=os.path.join("test_repo", "services.py"),
+        regex=r"User",
+        containing_symbol_name_path="UserService/create_user",
+        error_fragment="must contain exactly one capturing group",
+    ).to_pytest_param(),
 ]
 
-IMPLEMENTATION_TOOL_TEST_CASES = [
-    pytest.param(language, symbol_name, def_file, impl_file, expected_symbol_name, marks=mark)
-    for language, symbol_name, def_file, impl_file, expected_symbol_name, mark in IMPLEMENTATION_TOOL_TEST_CASE_DATA
-    if language_has_verified_implementation_support(language)
+FIND_SYMBOL_NAME_PATH_CASES = [
+    FindSymbolNamePathCase(
+        language=Language.PYTHON,
+        id="nested_class_exact",
+        name_path="OuterClass/NestedClass",
+        substring_matching=False,
+        expected_symbol_name="NestedClass",
+        expected_kind="Class",
+        expected_file=os.path.join("test_repo", "nested.py"),
+    ).to_pytest_param(),
+    FindSymbolNamePathCase(
+        language=Language.PYTHON,
+        id="nested_method_exact",
+        name_path="OuterClass/NestedClass/find_me",
+        substring_matching=False,
+        expected_symbol_name="find_me",
+        expected_kind="Method",
+        expected_file=os.path.join("test_repo", "nested.py"),
+    ).to_pytest_param(),
+    FindSymbolNamePathCase(
+        language=Language.PYTHON,
+        id="nested_class_substring",
+        name_path="OuterClass/NestedCl",
+        substring_matching=True,
+        expected_symbol_name="NestedClass",
+        expected_kind="Class",
+        expected_file=os.path.join("test_repo", "nested.py"),
+    ).to_pytest_param(),
+    FindSymbolNamePathCase(
+        language=Language.PYTHON,
+        id="nested_method_substring",
+        name_path="OuterClass/NestedClass/find_m",
+        substring_matching=True,
+        expected_symbol_name="find_me",
+        expected_kind="Method",
+        expected_file=os.path.join("test_repo", "nested.py"),
+    ).to_pytest_param(),
+    FindSymbolNamePathCase(
+        language=Language.PYTHON,
+        id="outer_class_absolute",
+        name_path="/OuterClass",
+        substring_matching=False,
+        expected_symbol_name="OuterClass",
+        expected_kind="Class",
+        expected_file=os.path.join("test_repo", "nested.py"),
+    ).to_pytest_param(),
+    FindSymbolNamePathCase(
+        language=Language.PYTHON,
+        id="nested_method_absolute_substring",
+        name_path="/OuterClass/NestedClass/find_m",
+        substring_matching=True,
+        expected_symbol_name="find_me",
+        expected_kind="Method",
+        expected_file=os.path.join("test_repo", "nested.py"),
+    ).to_pytest_param(),
+]
+
+FIND_SYMBOL_NAME_PATH_NO_MATCH_CASES = [
+    FindSymbolNoMatchCase(language=Language.PYTHON, id="nested_class_not_top_level", name_path="/NestedClass").to_pytest_param(),
+    FindSymbolNoMatchCase(
+        language=Language.PYTHON, id="nested_class_missing_parent", name_path="/NoSuchParent/NestedClass"
+    ).to_pytest_param(),
+]
+
+FIND_SYMBOL_OVERLOADED_FUNCTION_CASES = [
+    FindSymbolOverloadedCase(
+        language=Language.JAVA, id="java_overloaded_get_name", name_path="Model/getName", num_expected=2
+    ).to_pytest_param(),
+]
+
+NON_UNIQUE_SYMBOL_REFERENCE_ERROR_CASES = [
+    NonUniqueSymbolReferenceCase(
+        language=Language.JAVA,
+        id="java_overloaded_get_name",
+        name_path="Model/getName",
+        relative_path=os.path.join("src", "main", "java", "test_repo", "Model.java"),
+    ).to_pytest_param(),
+]
+
+SAFE_DELETE_BLOCKED_CASES = [
+    SafeDeleteCase(
+        language=Language.PYTHON,
+        id="python_user",
+        name_path="User",
+        relative_path=os.path.join("test_repo", "models.py"),
+    ).to_pytest_param(),
+    SafeDeleteCase(
+        language=Language.JAVA,
+        id="java_model",
+        name_path="Model",
+        relative_path=os.path.join("src", "main", "java", "test_repo", "Model.java"),
+    ).to_pytest_param(),
+    SafeDeleteCase(
+        language=Language.KOTLIN,
+        id="kotlin_model",
+        name_path="Model",
+        relative_path=os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
+    ).to_pytest_param(
+        *([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+    ),
+    SafeDeleteCase(
+        language=Language.TYPESCRIPT,
+        id="typescript_helper_function",
+        name_path="helperFunction",
+        relative_path="index.ts",
+    ).to_pytest_param(),
+]
+
+SAFE_DELETE_SUCCEEDS_CASES = [
+    SafeDeleteCase(
+        language=Language.PYTHON,
+        id="python_timer",
+        name_path="Timer",
+        relative_path=os.path.join("test_repo", "utils.py"),
+    ).to_pytest_param(),
+    SafeDeleteCase(
+        language=Language.JAVA,
+        id="java_model_user",
+        name_path="ModelUser",
+        relative_path=os.path.join("src", "main", "java", "test_repo", "ModelUser.java"),
+    ).to_pytest_param(),
+    SafeDeleteCase(
+        language=Language.KOTLIN,
+        id="kotlin_model_user",
+        name_path="ModelUser",
+        relative_path=os.path.join("src", "main", "kotlin", "test_repo", "ModelUser.kt"),
+    ).to_pytest_param(
+        *([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+    ),
+    SafeDeleteCase(
+        language=Language.TYPESCRIPT,
+        id="typescript_unused_standalone_function",
+        name_path="unusedStandaloneFunction",
+        relative_path="index.ts",
+    ).to_pytest_param(),
 ]
 
 
@@ -334,7 +854,11 @@ def serena_agent(request: pytest.FixtureRequest, serena_config) -> Iterator[Sere
 
 
 class TestSerenaAgent:
-    @pytest.mark.parametrize("project", [None, str(get_repo_path(Language.PYTHON)), "non_existent_path"])
+    @pytest.mark.parametrize(
+        "project",
+        [None, str(get_repo_path(Language.PYTHON)), "non_existent_path"],
+        ids=["no_project", "python_project_path", "invalid_project_path"],
+    )
     def test_agent_instantiation(self, project: str | None):
         """
         Tests agent instantiation for cases where
@@ -346,113 +870,62 @@ class TestSerenaAgent:
         serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False)
         SerenaAgent(project=project, serena_config=serena_config)
 
-    def _assert_find_symbol(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str) -> None:
-        agent = serena_agent
-        find_symbol_tool = agent.get_tool(FindSymbolTool)
-        result = find_symbol_tool.apply(name_path_pattern=symbol_name, include_info=True)
+    def _symbol_matches_expected_name(self, symbol: dict, expected_name: str) -> bool:
+        return (
+            symbol.get("name") == expected_name
+            or symbol.get("name_path", "").split("/")[-1] == expected_name
+            or expected_name in symbol.get("info", "")
+        )
 
-        symbols = json.loads(result)
-        assert any(
-            symbol_name in s["name_path"] and expected_kind.lower() in s["kind"].lower() and expected_file in s["relative_path"]
-            for s in symbols
-        ), f"Expected to find {symbol_name} ({expected_kind}) in {expected_file}"
-        # testing retrieval of symbol info
+    def _assert_symbol_info_present(
+        self,
+        serena_agent: SerenaAgent,
+        symbol: dict,
+        expected_name: str | None = None,
+    ) -> None:
         if serena_agent.get_active_lsp_languages() == [Language.KOTLIN]:
             # kotlin LS doesn't seem to provide hover info right now, at least for the struct we test this on
             return
-        for s in symbols:
-            if s["kind"] in (SymbolKind.File.name, SymbolKind.Module.name):
-                # we ignore file and module symbols for the info test
-                continue
-            symbol_info = s.get("info")
-            assert symbol_info, f"Expected symbol info to be present for symbol: {s}"
-            assert symbol_name in s["info"], (
-                f"[{serena_agent.get_active_lsp_languages()[0]}] Expected symbol info to contain symbol name {symbol_name}. Info: {s['info']}"
+
+        if symbol["kind"] in (SymbolKind.File.name, SymbolKind.Module.name):
+            # we ignore file and module symbols for the info test
+            return
+
+        symbol_info = symbol.get("info")
+        assert symbol_info, f"Expected symbol info to be present for symbol: {symbol}"
+
+        if expected_name is not None:
+            assert expected_name in symbol_info, (
+                f"[{serena_agent.get_active_lsp_languages()[0]}] Expected symbol info to contain symbol name "
+                f"{expected_name}. Info: {symbol_info}"
             )
-            # special additional test for Java, since Eclipse returns hover in a complex format and we want to make sure to get it right
-            if s["kind"] == SymbolKind.Class.name and serena_agent.get_active_lsp_languages() == [Language.JAVA]:
-                assert "A simple model class" in symbol_info, f"Java class docstring not found in symbol info: {s}"
 
-    @pytest.mark.php
-    @pytest.mark.parametrize("serena_agent", [Language.PHP], indirect=True)
-    def test_find_symbol_within_php_file(self, serena_agent: SerenaAgent) -> None:
-        """Verify find_symbol with a PHP file path routes to the PHP language server.
+        # special additional test for Java, since Eclipse returns hover in a complex format and we want to make sure to get it right
+        if symbol["kind"] == SymbolKind.Class.name and serena_agent.get_active_lsp_languages() == [Language.JAVA]:
+            assert "A simple model class" in symbol_info, f"Java class docstring not found in symbol info: {symbol}"
 
-        This validates the fix in symbol.py (LanguageServerSymbolRetriever.find_symbols):
-        when within_relative_path points to a PHP file, the retriever must use
-        get_language_server() rather than iterating all language servers. Without this
-        fix, non-PHP servers reject the PHP file and no symbols are returned.
-        """
-        find_symbol_tool = serena_agent.get_tool(FindSymbolTool)
-        sample_php = "sample.php"
-
-        result = find_symbol_tool.apply(name_path_pattern="Dog/greet", relative_path=sample_php)
-        symbols = json.loads(result)
-
-        assert len(symbols) > 0, (
-            f"Expected to find Dog/greet in {sample_php} but got empty result. "
-            "This may indicate that find_symbol is not routing to the PHP language server for PHP files."
-        )
-        assert any("greet" in s["name_path"] and sample_php in s["relative_path"] for s in symbols), (
-            f"Dog/greet not found in {sample_php}. Symbols: {symbols}"
-        )
-
-    @pytest.mark.parametrize(
-        "serena_agent,symbol_name,expected_kind,expected_file",
-        [
-            pytest.param(Language.PYTHON, "User", "Class", "models.py", marks=pytest.mark.python),
-            pytest.param(Language.GO, "Helper", "Function", "main.go", marks=pytest.mark.go),
-            pytest.param(Language.JAVA, "Model", "Class", "Model.java", marks=pytest.mark.java),
-            pytest.param(
-                Language.KOTLIN,
-                "Model",
-                "Struct",
-                "Model.kt",
-                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
-            ),
-            pytest.param(Language.TYPESCRIPT, "DemoClass", "Class", "index.ts", marks=pytest.mark.typescript),
-            pytest.param(Language.PHP, "helperFunction", "Function", "helper.php", marks=pytest.mark.php),
-            pytest.param(Language.CLOJURE, "greet", "Function", clj.CORE_PATH, marks=pytest.mark.clojure),
-            pytest.param(Language.CSHARP, "Calculator", "Class", "Program.cs", marks=pytest.mark.csharp),
-            pytest.param(Language.POWERSHELL, "Greet-User", "Function", "main.ps1", marks=pytest.mark.powershell),
-            pytest.param(Language.CPP_CCLS, "add", "Function", "b.cpp", marks=pytest.mark.cpp),
-            pytest.param(Language.HAXE, "Main", "Class", "Main.hx", marks=pytest.mark.haxe),
-            pytest.param(Language.LEAN4, "add", "Method", "Helper.lean", marks=pytest.mark.lean4),
-            pytest.param(Language.MSL, "greet", "Function", "main.mrc", marks=pytest.mark.msl),
-        ],
-        indirect=["serena_agent"],
-    )
-    def test_find_symbol_stable(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str) -> None:
-        self._assert_find_symbol(serena_agent, symbol_name, expected_kind, expected_file)
-
-    @pytest.mark.parametrize(
-        "serena_agent,symbol_name,expected_kind,expected_file",
-        [
-            pytest.param(Language.FSHARP, "Calculator", "Module", "Calculator.fs", marks=pytest.mark.fsharp),
-        ],
-        indirect=["serena_agent"],
-    )
-    @pytest.mark.xfail(reason="F# language server is unreliable")  # See issue #1040
-    def test_find_symbol_fsharp(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str) -> None:
-        self._assert_find_symbol(serena_agent, symbol_name, expected_kind, expected_file)
-
-    @pytest.mark.parametrize(
-        "serena_agent,symbol_name,expected_kind,expected_file",
-        [
-            pytest.param(Language.RUST, "add", "Function", "lib.rs", marks=pytest.mark.rust),
-        ],
-        indirect=["serena_agent"],
-    )
-    @pytest.mark.xfail(reason="Rust language server is unreliable")  # See issue #1040
-    def test_find_symbol_rust(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str) -> None:
-        self._assert_find_symbol(serena_agent, symbol_name, expected_kind, expected_file)
-
-    def _assert_find_symbol_references(self, serena_agent: SerenaAgent, symbol_name: str, def_file: str, ref_file: str) -> None:
+    @pytest.mark.parametrize("serena_agent,case", FIND_SYMBOL_REFERENCES_CASES, indirect=["serena_agent"])
+    def test_find_symbol(self, serena_agent: SerenaAgent, case: FindSymbolCase) -> None:
         agent = serena_agent
-
-        # Find the symbol location first
         find_symbol_tool = agent.get_tool(FindSymbolTool)
-        result = find_symbol_tool.apply(name_path_pattern=symbol_name, relative_path=def_file)
+        result = find_symbol_tool.apply(name_path_pattern=case.symbol_name, include_info=True)
+        symbols = json.loads(result)
+        assert any(
+            case.symbol_name in s["name_path"]
+            and case.expected_kind.lower() in s["kind"].lower()
+            and case.expected_file in s["relative_path"]
+            for s in symbols
+        ), (
+            f"Expected to find {case.symbol_name} ({case.expected_kind}) in {case.expected_file}. Found name paths: {[s['name_path'] for s in symbols]}"
+        )
+        for symbol in symbols:
+            self._assert_symbol_info_present(serena_agent, symbol, case.symbol_name)
+
+    @pytest.mark.parametrize("serena_agent,case", FIND_REFERENCE_CASES, indirect=["serena_agent"])
+    def test_find_symbol_references(self, serena_agent: SerenaAgent, case: FindReferenceCase) -> None:
+        # Find the symbol location first
+        find_symbol_tool = serena_agent.get_tool(FindSymbolTool)
+        result = find_symbol_tool.apply(name_path_pattern=case.symbol_name, relative_path=case.definition_file)
 
         time.sleep(1)
         symbols = json.loads(result)
@@ -460,12 +933,12 @@ class TestSerenaAgent:
         def_symbol = symbols[0]
 
         # Now find references
-        find_refs_tool = agent.get_tool(FindReferencingSymbolsTool)
+        find_refs_tool = serena_agent.get_tool(FindReferencingSymbolsTool)
         result = find_refs_tool.apply(name_path=def_symbol["name_path"], relative_path=def_symbol["relative_path"])
 
         def contains_ref_with_relative_path(refs, relative_path):
             """
-            Checks for reference to relative path, regardless of output format (grouped an ungrouped)
+            Checks for reference to relative path, regardless of output format (grouped or ungrouped)
             """
             if isinstance(refs, list):
                 for ref in refs:
@@ -480,550 +953,156 @@ class TestSerenaAgent:
             return False
 
         refs = json.loads(result)
-        assert contains_ref_with_relative_path(refs, ref_file), f"Expected to find reference to {symbol_name} in {ref_file}. refs={refs}"
+        assert contains_ref_with_relative_path(refs, case.reference_file), (
+            f"Expected to find reference to {case.symbol_name} in {case.reference_file}. refs={refs}"
+        )
 
-    def _assert_find_symbol_implementations(
+    @pytest.mark.parametrize("serena_agent,case", FIND_DEFINING_SYMBOL_CASES, indirect=["serena_agent"])
+    def test_find_defining_symbol(self, serena_agent: SerenaAgent, case: FindDefiningSymbolCase) -> None:
+        project_root = get_repo_path(case.language)
+        position = find_identifier_pos(
+            project_root / case.relative_path,
+            case.identifier,
+            case.occurrence_index,
+            case.column_offset,
+        )
+        assert position is not None, f"Could not find occurrence {case.occurrence_index} of {case.identifier!r} in {case.relative_path}"
+        find_defining_symbol_tool = serena_agent.get_tool(FindDefiningSymbolAtLocationTool)
+        result = find_defining_symbol_tool.apply(
+            relative_path=case.relative_path,
+            line=position[0],
+            column=position[1],
+            include_info=True,
+        )
+        defining_symbol = json.loads(result)
+        assert defining_symbol is not None, f"Expected defining symbol for {case.identifier!r} in {case.relative_path}"
+        assert defining_symbol.get("relative_path") is not None
+        assert case.expected_definition_file in defining_symbol["relative_path"], (
+            f"Expected defining symbol in {case.expected_definition_file!r}, got: {defining_symbol}"
+        )
+        assert self._symbol_matches_expected_name(defining_symbol, case.expected_name), (
+            f"Expected defining symbol name {case.expected_name!r}, got: {defining_symbol}"
+        )
+        self._assert_symbol_info_present(serena_agent, defining_symbol)
+
+    @pytest.mark.parametrize("serena_agent,case", FIND_DEFINING_SYMBOL_REGEX_CASES, indirect=["serena_agent"])
+    def test_find_defining_symbol_by_regex(self, serena_agent: SerenaAgent, case: RegexDefiningSymbolCase) -> None:
+        find_defining_symbol_tool = serena_agent.get_tool(FindDefiningSymbolTool)
+        result = find_defining_symbol_tool.apply(
+            regex=case.regex,
+            relative_path=case.relative_path,
+            containing_symbol_name_path=case.containing_symbol_name_path,
+            include_info=True,
+        )
+        defining_symbol = json.loads(result)
+        assert defining_symbol is not None, f"Expected defining symbol for regex {case.regex!r} in {case.relative_path}"
+        assert defining_symbol.get("relative_path") is not None
+        assert case.expected_definition_file in defining_symbol["relative_path"], (
+            f"Expected defining symbol in {case.expected_definition_file!r}, got: {defining_symbol}"
+        )
+        assert self._symbol_matches_expected_name(defining_symbol, case.expected_name), (
+            f"Expected defining symbol name {case.expected_name!r}, got: {defining_symbol}"
+        )
+        self._assert_symbol_info_present(serena_agent, defining_symbol)
+
+    @pytest.mark.parametrize("serena_agent,case", FIND_DEFINING_SYMBOL_REGEX_ERROR_CASES, indirect=["serena_agent"])
+    def test_find_defining_symbol_by_regex_error(
         self,
         serena_agent: SerenaAgent,
-        symbol_name: str,
-        def_file: str,
-        impl_file: str,
-        expected_symbol_name: str,
+        case: RegexDefiningSymbolErrorCase,
     ) -> None:
+        find_defining_symbol_tool = serena_agent.get_tool(FindDefiningSymbolTool)
+        result = find_defining_symbol_tool.apply(
+            regex=case.regex,
+            relative_path=case.relative_path,
+            containing_symbol_name_path=case.containing_symbol_name_path,
+        )
+        assert result.startswith("Error: "), result
+        assert case.error_fragment in result, result
+
+    @pytest.mark.parametrize("serena_agent,diagnostic_case", DIAGNOSTIC_CASES, indirect=["serena_agent"])
+    def test_get_diagnostics_for_file(self, serena_agent: SerenaAgent, diagnostic_case: DiagnosticCase) -> None:
+        diagnostics_tool = serena_agent.get_tool(GetDiagnosticsForFileTool)
+        result = diagnostics_tool.apply(
+            relative_path=diagnostic_case.relative_path,
+            min_severity=1,
+        )
+        full_file_diagnostics = json.loads(result)
+        diagnostic_case.assert_matches(full_file_diagnostics)
+
+        # testing diagnostics in range by removing second symbol
+        project_root = get_repo_path(diagnostic_case.language)
+        pos1 = find_identifier_pos(project_root / diagnostic_case.relative_path, diagnostic_case.symbol1_id_str)
+        pos2 = find_identifier_pos(project_root / diagnostic_case.relative_path, cast(str, diagnostic_case.symbol2_id_str))
+        assert pos1 is not None
+        assert pos2 is not None
+        result = diagnostics_tool.apply(
+            relative_path=diagnostic_case.relative_path,
+            min_severity=1,
+            start_line=pos1[0],
+            end_line=pos2[0] - 1,
+        )
+        diagnostics_in_range = json.loads(result)
+        diagnostic_case.without_second_symbol().assert_matches(diagnostics_in_range)
+
+    @pytest.mark.parametrize("serena_agent,case", FIND_IMPLEMENTATION_CASES, indirect=["serena_agent"])
+    def test_find_symbol_implementations(self, serena_agent: SerenaAgent, case: FindImplementationCase) -> None:
         agent = serena_agent
-
         find_symbol_tool = agent.get_tool(FindSymbolTool)
-        result = find_symbol_tool.apply(name_path_pattern=symbol_name, relative_path=def_file)
+        result = find_symbol_tool.apply(name_path_pattern=case.symbol_name, relative_path=case.definition_file)
         symbols = json.loads(result)
-        assert symbols, f"Expected to find symbol {symbol_name} in {def_file}"
-
+        assert symbols, f"Expected to find symbol {case.symbol_name} in {case.definition_file}"
         def_symbol = symbols[0]
         find_impl_tool = agent.get_tool(FindImplementationsTool)
         result = find_impl_tool.apply(name_path=def_symbol["name_path"], relative_path=def_symbol["relative_path"], include_info=True)
         implementations = json.loads(result)
-
         assert any(
-            impl_file in implementation["relative_path"]
-            and (
-                implementation.get("name") == expected_symbol_name
-                or implementation.get("name_path") == expected_symbol_name
-                or expected_symbol_name in implementation.get("info", "")
-            )
+            case.implementation_file in implementation["relative_path"]
+            and self._symbol_matches_expected_name(implementation, case.expected_symbol_name)
             for implementation in implementations
-        ), f"Expected to find implementation of {symbol_name} in {impl_file}. implementations={implementations}"
-
+        ), f"Expected to find implementation of {case.symbol_name} in {case.implementation_file}. implementations={implementations}"
         for implementation in implementations:
-            if implementation["kind"] in (SymbolKind.File.name, SymbolKind.Module.name):
-                continue
-            symbol_info = implementation.get("info")
-            assert symbol_info, f"Expected symbol info to be present for implementation: {implementation}"
+            self._assert_symbol_info_present(serena_agent, implementation)
 
-    def _assert_find_defining_symbol(
-        self,
-        serena_agent: SerenaAgent,
-        relative_path: str,
-        identifier: str,
-        occurrence_index: int,
-        column_offset: int,
-        expected_name: str,
-        expected_definition_file: str,
-    ) -> None:
-        project_root = get_repo_path(serena_agent.get_active_lsp_languages()[0])
-        position = find_identifier_occurrence_position(project_root / relative_path, identifier, occurrence_index, column_offset)
-        assert position is not None, f"Could not find occurrence {occurrence_index} of {identifier!r} in {relative_path}"
-
-        find_defining_symbol_tool = serena_agent.get_tool(FindDefiningSymbolAtLocationTool)
-        result = find_defining_symbol_tool.apply(relative_path=relative_path, line=position[0], column=position[1], include_info=True)
-        defining_symbol = json.loads(result)
-
-        assert defining_symbol is not None, f"Expected defining symbol for {identifier!r} in {relative_path}"
-        assert defining_symbol.get("relative_path") is not None
-        assert expected_definition_file in defining_symbol["relative_path"], (
-            f"Expected defining symbol in {expected_definition_file!r}, got: {defining_symbol}"
-        )
-        assert (
-            defining_symbol.get("name") == expected_name
-            or defining_symbol.get("name_path") == expected_name
-            or expected_name in defining_symbol.get("info", "")
-        ), f"Expected defining symbol name {expected_name!r}, got: {defining_symbol}"
-
-        if serena_agent.get_active_lsp_languages() == [Language.KOTLIN]:
-            return
-        if defining_symbol["kind"] not in (SymbolKind.File.name, SymbolKind.Module.name):
-            assert defining_symbol.get("info"), f"Expected defining symbol info to be present: {defining_symbol}"
-
-    def _assert_find_defining_symbol_by_regex(
-        self,
-        serena_agent: SerenaAgent,
-        relative_path: str,
-        regex: str,
-        containing_symbol_name_path: str,
-        expected_name: str,
-        expected_definition_file: str,
-    ) -> None:
-        find_defining_symbol_tool = serena_agent.get_tool(FindDefiningSymbolTool)
-        result = find_defining_symbol_tool.apply(
-            regex=regex,
-            relative_path=relative_path,
-            containing_symbol_name_path=containing_symbol_name_path,
-            include_info=True,
-        )
-        defining_symbol = json.loads(result)
-
-        assert defining_symbol is not None, f"Expected defining symbol for regex {regex!r} in {relative_path}"
-        assert defining_symbol.get("relative_path") is not None
-        assert expected_definition_file in defining_symbol["relative_path"], (
-            f"Expected defining symbol in {expected_definition_file!r}, got: {defining_symbol}"
-        )
-        assert (
-            defining_symbol.get("name") == expected_name
-            or defining_symbol.get("name_path") == expected_name
-            or expected_name in defining_symbol.get("info", "")
-        ), f"Expected defining symbol name {expected_name!r}, got: {defining_symbol}"
-
-        if serena_agent.get_active_lsp_languages() == [Language.KOTLIN]:
-            return
-        if defining_symbol["kind"] not in (SymbolKind.File.name, SymbolKind.Module.name):
-            assert defining_symbol.get("info"), f"Expected defining symbol info to be present: {defining_symbol}"
-
-    def _assert_diagnostics_for_file(
-        self,
-        serena_agent: SerenaAgent,
-        diagnostic_case: DiagnosticCase,
-        start_line: int = 0,
-        end_line: int = -1,
-    ) -> None:
-        diagnostics_tool = serena_agent.get_tool(GetDiagnosticsForFileTool)
-        result = diagnostics_tool.apply(
-            relative_path=diagnostic_case.relative_path,
-            start_line=start_line,
-            end_line=end_line,
-            min_severity=1,
-        )
-        grouped_diagnostics = json.loads(result)
-
-        assert diagnostic_case.relative_path in grouped_diagnostics, grouped_diagnostics
-        severity_group = grouped_diagnostics[diagnostic_case.relative_path]
-        assert "Error" in severity_group, severity_group
-        name_path_group = severity_group["Error"]
-
-        for expected_name_path in [diagnostic_case.primary_symbol_name_path, diagnostic_case.reference_symbol_name_path]:
-            assert expected_name_path in name_path_group, name_path_group
-
-        diagnostic_messages = [
-            diagnostic["message"] for diagnostics_for_name_path in name_path_group.values() for diagnostic in diagnostics_for_name_path
-        ]
-        for expected_fragment in [diagnostic_case.primary_message_fragment, diagnostic_case.reference_message_fragment]:
-            assert any(expected_fragment in message for message in diagnostic_messages), diagnostic_messages
-
-    def _assert_diagnostics_for_symbol(
-        self,
-        serena_agent: SerenaAgent,
-        diagnostic_case: DiagnosticCase,
-        check_symbol_references: bool,
-    ) -> None:
-        diagnostics_tool = serena_agent.get_tool(GetDiagnosticsForSymbolTool)
-        result = diagnostics_tool.apply(
-            name_path=diagnostic_case.primary_symbol_name_path,
-            reference_file=diagnostic_case.relative_path,
-            check_symbol_references=check_symbol_references,
-            min_severity=1,
-        )
-        grouped_diagnostics = json.loads(result)
-        diagnostics_file = diagnostic_case.relative_path
-
-        assert diagnostics_file in grouped_diagnostics, grouped_diagnostics
-        severity_group = grouped_diagnostics[diagnostics_file]
-        assert "Error" in severity_group, severity_group
-        name_path_group = severity_group["Error"]
-
-        expected_name_paths = [diagnostic_case.primary_symbol_name_path]
-        expected_message_fragments = [diagnostic_case.primary_message_fragment]
-        if check_symbol_references:
-            expected_name_paths.append(diagnostic_case.reference_symbol_name_path)
-            expected_message_fragments.append(diagnostic_case.reference_message_fragment)
-
-        assert set(expected_name_paths).issubset(name_path_group.keys()), name_path_group
-        diagnostic_messages = [
-            diagnostic["message"] for diagnostics_for_name_path in name_path_group.values() for diagnostic in diagnostics_for_name_path
-        ]
-        for expected_fragment in expected_message_fragments:
-            assert any(expected_fragment in message for message in diagnostic_messages), diagnostic_messages
-
-    @pytest.mark.parametrize(
-        "serena_agent,symbol_name,def_file,ref_file",
-        [
-            pytest.param(
-                Language.PYTHON,
-                "User",
-                os.path.join("test_repo", "models.py"),
-                os.path.join("test_repo", "services.py"),
-                marks=pytest.mark.python,
-            ),
-            pytest.param(Language.GO, "Helper", "main.go", "main.go", marks=pytest.mark.go),
-            pytest.param(
-                Language.JAVA,
-                "Model",
-                os.path.join("src", "main", "java", "test_repo", "Model.java"),
-                os.path.join("src", "main", "java", "test_repo", "Main.java"),
-                marks=pytest.mark.java,
-            ),
-            pytest.param(
-                Language.KOTLIN,
-                "Model",
-                os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
-                os.path.join("src", "main", "kotlin", "test_repo", "Main.kt"),
-                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
-            ),
-            pytest.param(Language.RUST, "add", os.path.join("src", "lib.rs"), os.path.join("src", "main.rs"), marks=pytest.mark.rust),
-            pytest.param(Language.PHP, "helperFunction", "helper.php", "index.php", marks=pytest.mark.php),
-            pytest.param(
-                Language.CLOJURE,
-                "multiply",
-                clj.CORE_PATH,
-                clj.UTILS_PATH,
-                marks=pytest.mark.clojure,
-            ),
-            pytest.param(Language.CSHARP, "Calculator", "Program.cs", "Program.cs", marks=pytest.mark.csharp),
-            pytest.param(Language.POWERSHELL, "Greet-User", "main.ps1", "main.ps1", marks=pytest.mark.powershell),
-            pytest.param(Language.CPP_CCLS, "add", "b.cpp", "a.cpp", marks=pytest.mark.cpp),
-            pytest.param(
-                Language.HAXE,
-                "addNumbers",
-                os.path.join("src", "utils", "Helper.hx"),
-                os.path.join("src", "Main.hx"),
-                marks=pytest.mark.haxe,
-            ),
-            pytest.param(Language.LEAN4, "add", "Helper.lean", "Main.lean", marks=pytest.mark.lean4),
-            pytest.param(Language.MSL, "format.coins", "utils.mrc", "main.mrc", marks=pytest.mark.msl),
-        ],
-        indirect=["serena_agent"],
-    )
-    def test_find_symbol_references_stable(self, serena_agent: SerenaAgent, symbol_name: str, def_file: str, ref_file: str) -> None:
-        self._assert_find_symbol_references(serena_agent, symbol_name, def_file, ref_file)
-
-    @pytest.mark.parametrize(
-        "serena_agent,symbol_name,def_file,ref_file",
-        [
-            pytest.param(Language.TYPESCRIPT, "helperFunction", "index.ts", "use_helper.ts", marks=pytest.mark.typescript),
-        ],
-        indirect=["serena_agent"],
-    )
-    @pytest.mark.xfail(False, reason="TypeScript language server is unreliable")  # NOTE: Testing; may be resolved by #1120; See issue #1040
-    def test_find_symbol_references_typescript(self, serena_agent: SerenaAgent, symbol_name: str, def_file: str, ref_file: str) -> None:
-        self._assert_find_symbol_references(serena_agent, symbol_name, def_file, ref_file)
-
-    @pytest.mark.parametrize(
-        "serena_agent,symbol_name,def_file,ref_file",
-        [
-            pytest.param(Language.FSHARP, "add", "Calculator.fs", "Program.fs", marks=pytest.mark.fsharp),
-        ],
-        indirect=["serena_agent"],
-    )
-    @pytest.mark.xfail(reason="F# language server is unreliable")  # See issue #1040
-    def test_find_symbol_references_fsharp(self, serena_agent: SerenaAgent, symbol_name: str, def_file: str, ref_file: str) -> None:
-        self._assert_find_symbol_references(serena_agent, symbol_name, def_file, ref_file)
-
-    @pytest.mark.parametrize(
-        "serena_agent,relative_path,identifier,occurrence_index,column_offset,expected_name,expected_definition_file",
-        DEFINING_SYMBOL_TOOL_TEST_CASES,
-        indirect=["serena_agent"],
-    )
-    def test_find_defining_symbol(
-        self,
-        serena_agent: SerenaAgent,
-        relative_path: str,
-        identifier: str,
-        occurrence_index: int,
-        column_offset: int,
-        expected_name: str,
-        expected_definition_file: str,
-    ) -> None:
-        self._assert_find_defining_symbol(
-            serena_agent,
-            relative_path,
-            identifier,
-            occurrence_index,
-            column_offset,
-            expected_name,
-            expected_definition_file,
-        )
-
-    @pytest.mark.parametrize(
-        "serena_agent,relative_path,regex,containing_symbol_name_path,expected_name,expected_definition_file",
-        REGEX_DEFINING_SYMBOL_TOOL_TEST_CASES,
-        indirect=["serena_agent"],
-    )
-    def test_find_defining_symbol_by_regex(
-        self,
-        serena_agent: SerenaAgent,
-        relative_path: str,
-        regex: str,
-        containing_symbol_name_path: str,
-        expected_name: str,
-        expected_definition_file: str,
-    ) -> None:
-        self._assert_find_defining_symbol_by_regex(
-            serena_agent,
-            relative_path,
-            regex,
-            containing_symbol_name_path,
-            expected_name,
-            expected_definition_file,
-        )
-
-    @pytest.mark.parametrize(
-        "serena_agent,relative_path,regex,containing_symbol_name_path,error_fragment",
-        [
-            pytest.param(
-                Language.PYTHON,
-                os.path.join("test_repo", "services.py"),
-                r"(User)",
-                "",
-                "Expected exactly one regex match",
-                marks=pytest.mark.python,
-            ),
-            pytest.param(
-                Language.PYTHON,
-                os.path.join("test_repo", "services.py"),
-                r"User",
-                "UserService/create_user",
-                "must contain exactly one capturing group",
-                marks=pytest.mark.python,
-            ),
-        ],
-        indirect=["serena_agent"],
-    )
-    def test_find_defining_symbol_by_regex_error(
-        self,
-        serena_agent: SerenaAgent,
-        relative_path: str,
-        regex: str,
-        containing_symbol_name_path: str,
-        error_fragment: str,
-    ) -> None:
-        find_defining_symbol_tool = serena_agent.get_tool(FindDefiningSymbolTool)
-        result = find_defining_symbol_tool.apply(
-            regex=regex,
-            relative_path=relative_path,
-            containing_symbol_name_path=containing_symbol_name_path,
-        )
-        assert result.startswith("Error: "), result
-        assert error_fragment in result, result
-
-    @pytest.mark.parametrize("serena_agent,diagnostic_case", WORKING_DIAGNOSTIC_TOOL_CASE_PARAMS, indirect=["serena_agent"])
-    def test_get_diagnostics_for_file(self, serena_agent: SerenaAgent, diagnostic_case: DiagnosticCase) -> None:
-        self._assert_diagnostics_for_file(
-            serena_agent,
-            diagnostic_case=diagnostic_case,
-        )
-
-    @pytest.mark.parametrize("serena_agent,diagnostic_case", WORKING_DIAGNOSTIC_TOOL_CASE_PARAMS, indirect=["serena_agent"])
-    def test_get_diagnostics_for_file_in_range(self, serena_agent: SerenaAgent, diagnostic_case: DiagnosticCase) -> None:
-        project_root = get_repo_path(diagnostic_case.language)
-        primary_position = find_identifier_occurrence_position(
-            project_root / diagnostic_case.relative_path, diagnostic_case.primary_symbol_identifier
-        )
-        reference_position = find_identifier_occurrence_position(
-            project_root / diagnostic_case.relative_path, diagnostic_case.reference_symbol_identifier
-        )
-        assert primary_position is not None
-        assert reference_position is not None
-
-        self._assert_diagnostics_for_file(
-            serena_agent,
-            diagnostic_case=DiagnosticCase(
-                language=diagnostic_case.language,
-                relative_path=diagnostic_case.relative_path,
-                primary_symbol_name_path=diagnostic_case.primary_symbol_name_path,
-                primary_symbol_identifier=diagnostic_case.primary_symbol_identifier,
-                reference_symbol_name_path=diagnostic_case.primary_symbol_name_path,
-                reference_symbol_identifier=diagnostic_case.reference_symbol_identifier,
-                primary_message_fragment=diagnostic_case.primary_message_fragment,
-                reference_message_fragment=diagnostic_case.primary_message_fragment,
-            ),
-            start_line=primary_position[0],
-            end_line=reference_position[0] - 1,
-        )
-
-    @pytest.mark.parametrize("serena_agent,diagnostic_case", WORKING_DIAGNOSTIC_TOOL_CASE_PARAMS, indirect=["serena_agent"])
-    def test_get_diagnostics_for_symbol(self, serena_agent: SerenaAgent, diagnostic_case: DiagnosticCase) -> None:
-        self._assert_diagnostics_for_symbol(
-            serena_agent,
-            diagnostic_case=diagnostic_case,
-            check_symbol_references=False,
-        )
-
-    @pytest.mark.parametrize("serena_agent,diagnostic_case", WORKING_DIAGNOSTIC_TOOL_CASE_PARAMS, indirect=["serena_agent"])
-    def test_get_diagnostics_for_symbol_with_references(self, serena_agent: SerenaAgent, diagnostic_case: DiagnosticCase) -> None:
-        self._assert_diagnostics_for_symbol(
-            serena_agent,
-            diagnostic_case=diagnostic_case,
-            check_symbol_references=True,
-        )
-
-    if IMPLEMENTATION_TOOL_TEST_CASES:
-
-        @pytest.mark.parametrize(
-            "serena_agent,symbol_name,def_file,impl_file,expected_symbol_name",
-            IMPLEMENTATION_TOOL_TEST_CASES,
-            indirect=["serena_agent"],
-        )
-        def test_find_symbol_implementations(
-            self,
-            serena_agent: SerenaAgent,
-            symbol_name: str,
-            def_file: str,
-            impl_file: str,
-            expected_symbol_name: str,
-        ) -> None:
-            self._assert_find_symbol_implementations(serena_agent, symbol_name, def_file, impl_file, expected_symbol_name)
-
-    @pytest.mark.parametrize(
-        "serena_agent,name_path,substring_matching,expected_symbol_name,expected_kind,expected_file",
-        [
-            pytest.param(
-                Language.PYTHON,
-                "OuterClass/NestedClass",
-                False,
-                "NestedClass",
-                "Class",
-                os.path.join("test_repo", "nested.py"),
-                id="exact_qualname_class",
-                marks=pytest.mark.python,
-            ),
-            pytest.param(
-                Language.PYTHON,
-                "OuterClass/NestedClass/find_me",
-                False,
-                "find_me",
-                "Method",
-                os.path.join("test_repo", "nested.py"),
-                id="exact_qualname_method",
-                marks=pytest.mark.python,
-            ),
-            pytest.param(
-                Language.PYTHON,
-                "OuterClass/NestedCl",  # Substring for NestedClass
-                True,
-                "NestedClass",
-                "Class",
-                os.path.join("test_repo", "nested.py"),
-                id="substring_qualname_class",
-                marks=pytest.mark.python,
-            ),
-            pytest.param(
-                Language.PYTHON,
-                "OuterClass/NestedClass/find_m",  # Substring for find_me
-                True,
-                "find_me",
-                "Method",
-                os.path.join("test_repo", "nested.py"),
-                id="substring_qualname_method",
-                marks=pytest.mark.python,
-            ),
-            pytest.param(
-                Language.PYTHON,
-                "/OuterClass",  # Absolute path
-                False,
-                "OuterClass",
-                "Class",
-                os.path.join("test_repo", "nested.py"),
-                id="absolute_qualname_class",
-                marks=pytest.mark.python,
-            ),
-            pytest.param(
-                Language.PYTHON,
-                "/OuterClass/NestedClass/find_m",  # Absolute path with substring
-                True,
-                "find_me",
-                "Method",
-                os.path.join("test_repo", "nested.py"),
-                id="absolute_substring_qualname_method",
-                marks=pytest.mark.python,
-            ),
-        ],
-        indirect=["serena_agent"],
-    )
-    def test_find_symbol_name_path(
-        self,
-        serena_agent,
-        name_path: str,
-        substring_matching: bool,
-        expected_symbol_name: str,
-        expected_kind: str,
-        expected_file: str,
-    ):
+    @pytest.mark.parametrize("serena_agent,case", FIND_SYMBOL_NAME_PATH_CASES, indirect=["serena_agent"])
+    def test_find_symbol_name_path(self, serena_agent: SerenaAgent, case: FindSymbolNamePathCase) -> None:
         agent = serena_agent
 
         find_symbol_tool = agent.get_tool(FindSymbolTool)
         result = find_symbol_tool.apply_ex(
-            name_path_pattern=name_path,
+            name_path_pattern=case.name_path,
             depth=0,
             relative_path=None,
             include_body=False,
             include_kinds=None,
             exclude_kinds=None,
-            substring_matching=substring_matching,
+            substring_matching=case.substring_matching,
         )
 
         symbols = json.loads(result)
         assert any(
-            expected_symbol_name == s["name_path"].split("/")[-1]
-            and expected_kind.lower() in s["kind"].lower()
-            and expected_file in s["relative_path"]
+            case.expected_symbol_name == s["name_path"].split("/")[-1]
+            and case.expected_kind.lower() in s["kind"].lower()
+            and case.expected_file in s["relative_path"]
             for s in symbols
-        ), f"Expected to find {name_path} ({expected_kind}) in {expected_file}. Symbols: {symbols}"
+        ), f"Expected to find {case.name_path} ({case.expected_kind}) in {case.expected_file}. Symbols: {symbols}"
 
-    @pytest.mark.parametrize(
-        "serena_agent,name_path",
-        [
-            pytest.param(
-                Language.PYTHON,
-                "/NestedClass",  # Absolute path, NestedClass is not top-level
-                id="absolute_path_non_top_level_no_match",
-                marks=pytest.mark.python,
-            ),
-            pytest.param(
-                Language.PYTHON,
-                "/NoSuchParent/NestedClass",  # Absolute path with non-existent parent
-                id="absolute_path_non_existent_parent_no_match",
-                marks=pytest.mark.python,
-            ),
-        ],
-        indirect=["serena_agent"],
-    )
-    def test_find_symbol_name_path_no_match(
-        self,
-        serena_agent,
-        name_path: str,
-    ):
+    @pytest.mark.parametrize("serena_agent,case", FIND_SYMBOL_NAME_PATH_NO_MATCH_CASES, indirect=["serena_agent"])
+    def test_find_symbol_name_path_no_match(self, serena_agent: SerenaAgent, case: FindSymbolNoMatchCase) -> None:
         agent = serena_agent
 
         find_symbol_tool = agent.get_tool(FindSymbolTool)
         result = find_symbol_tool.apply_ex(
-            name_path_pattern=name_path,
+            name_path_pattern=case.name_path,
             depth=0,
             substring_matching=True,
         )
 
         symbols = json.loads(result)
-        assert not symbols, f"Expected to find no symbols for {name_path}. Symbols found: {symbols}"
+        assert not symbols, f"Expected to find no symbols for {case.name_path}. Symbols found: {symbols}"
 
-    @pytest.mark.parametrize(
-        "serena_agent,name_path,num_expected",
-        [
-            pytest.param(
-                Language.JAVA,
-                "Model/getName",
-                2,
-                id="overloaded_java_method",
-                marks=pytest.mark.java,
-            ),
-        ],
-        indirect=["serena_agent"],
-    )
-    def test_find_symbol_overloaded_function(self, serena_agent: SerenaAgent, name_path: str, num_expected: int):
+    @pytest.mark.parametrize("serena_agent,case", FIND_SYMBOL_OVERLOADED_FUNCTION_CASES, indirect=["serena_agent"])
+    def test_find_symbol_overloaded_function(self, serena_agent: SerenaAgent, case: FindSymbolOverloadedCase) -> None:
         """
         Tests whether the FindSymbolTool can find all overloads of a function/method
         (provided that the overload id remains unspecified in the name path)
@@ -1032,51 +1111,38 @@ class TestSerenaAgent:
 
         find_symbol_tool = agent.get_tool(FindSymbolTool)
         result = find_symbol_tool.apply_ex(
-            name_path_pattern=name_path,
+            name_path_pattern=case.name_path,
             depth=0,
             substring_matching=False,
         )
 
         symbols = json.loads(result)
-        assert len(symbols) == num_expected, (
-            f"Expected to find {num_expected} symbols for overloaded function {name_path}. Symbols found: {symbols}"
+        assert len(symbols) == case.num_expected, (
+            f"Expected to find {case.num_expected} symbols for overloaded function {case.name_path}. Symbols found: {symbols}"
         )
 
-    @pytest.mark.parametrize(
-        "serena_agent,name_path,relative_path",
-        [
-            pytest.param(
-                Language.JAVA,
-                "Model/getName",
-                os.path.join("src", "main", "java", "test_repo", "Model.java"),
-                id="overloaded_java_method",
-                marks=pytest.mark.java,
-            ),
-        ],
-        indirect=["serena_agent"],
-    )
-    def test_non_unique_symbol_reference_error(self, serena_agent: SerenaAgent, name_path: str, relative_path: str):
+    @pytest.mark.parametrize("serena_agent,case", NON_UNIQUE_SYMBOL_REFERENCE_ERROR_CASES, indirect=["serena_agent"])
+    def test_non_unique_symbol_reference_error(
+        self,
+        serena_agent: SerenaAgent,
+        case: NonUniqueSymbolReferenceCase,
+    ) -> None:
         """
         Tests whether the tools operating on a well-defined symbol raises an error when the symbol reference is non-unique.
         We exemplarily test a retrieval tool (FindReferencingSymbolsTool) and an editing tool (ReplaceSymbolBodyTool).
         """
-        match_text = "multiple"
-
         find_refs_tool = serena_agent.get_tool(FindReferencingSymbolsTool)
-        with pytest.raises(ValueError, match=match_text):
-            find_refs_tool.apply(name_path=name_path, relative_path=relative_path)
+        with pytest.raises(ValueError, match=case.expected_error_fragment):
+            find_refs_tool.apply(name_path=case.name_path, relative_path=case.relative_path)
 
         replace_symbol_body_tool = serena_agent.get_tool(ReplaceSymbolBodyTool)
-        with pytest.raises(ValueError, match=match_text):
-            replace_symbol_body_tool.apply(name_path=name_path, relative_path=relative_path, body="")
+        with pytest.raises(ValueError, match=case.expected_error_fragment):
+            replace_symbol_body_tool.apply(name_path=case.name_path, relative_path=case.relative_path, body="")
 
     @pytest.mark.parametrize(
         "serena_agent",
         [
-            pytest.param(
-                Language.TYPESCRIPT,
-                marks=pytest.mark.typescript,
-            ),
+            pytest.param(Language.TYPESCRIPT, marks=get_pytest_markers(Language.TYPESCRIPT), id="typescript_unique_regex"),
         ],
         indirect=["serena_agent"],
     )
@@ -1089,7 +1155,7 @@ class TestSerenaAgent:
             replace_content_tool = serena_agent.get_tool(ReplaceContentTool)
             result = replace_content_tool.apply(
                 needle=r'catch \(error\) \{\s*console.error\("Failed to connect.*?\}',
-                repl='catch(error) { console.log("Never mind"); }',
+                repl='catch(error) {console.log("Never mind"); }',
                 relative_path=relative_path,
                 mode="regex",
             )
@@ -1098,14 +1164,11 @@ class TestSerenaAgent:
     @pytest.mark.parametrize(
         "serena_agent",
         [
-            pytest.param(
-                Language.TYPESCRIPT,
-                marks=pytest.mark.typescript,
-            ),
+            pytest.param(Language.TYPESCRIPT, marks=get_pytest_markers(Language.TYPESCRIPT), id="typescript_backslashes"),
         ],
         indirect=["serena_agent"],
     )
-    @pytest.mark.parametrize("mode", ["literal", "regex"])
+    @pytest.mark.parametrize("mode", ["literal", "regex"], ids=["literal_mode", "regex_mode"])
     def test_replace_content_with_backslashes(self, serena_agent: SerenaAgent, mode: Literal["literal", "regex"]):
         """
         Tests a content replacement where the needle and replacement strings contain backslashes.
@@ -1129,8 +1192,8 @@ class TestSerenaAgent:
     @pytest.mark.parametrize(
         "serena_agent",
         [
-            pytest.param(Language.PYTHON, marks=pytest.mark.python),
-            pytest.param(Language.PYTHON_TY, marks=pytest.mark.python),
+            pytest.param(Language.PYTHON, marks=get_pytest_markers(Language.PYTHON), id="python_services"),
+            pytest.param(Language.PYTHON_TY, marks=get_pytest_markers(Language.PYTHON_TY), id="python_ty_services"),
         ],
         indirect=["serena_agent"],
     )
@@ -1138,6 +1201,7 @@ class TestSerenaAgent:
         """Tests that file-level edits report newly introduced diagnostics."""
         relative_path = os.path.join("test_repo", "services.py")
         replace_content_tool = serena_agent.get_tool(ReplaceContentTool)
+        replace_content_tool._ENABLE_DIAGNOSTICS = True
 
         with project_file_modification_context(serena_agent, relative_path):
             result = replace_content_tool.apply(
@@ -1156,8 +1220,8 @@ class TestSerenaAgent:
     @pytest.mark.parametrize(
         "serena_agent",
         [
-            pytest.param(Language.PYTHON, marks=pytest.mark.python),
-            pytest.param(Language.PYTHON_TY, marks=pytest.mark.python),
+            pytest.param(Language.PYTHON, marks=get_pytest_markers(Language.PYTHON), id="python_container_body"),
+            pytest.param(Language.PYTHON_TY, marks=get_pytest_markers(Language.PYTHON_TY), id="python_ty_container_body"),
         ],
         indirect=["serena_agent"],
     )
@@ -1165,6 +1229,7 @@ class TestSerenaAgent:
         """Tests that symbol-level edits report newly introduced diagnostics."""
         relative_path = os.path.join("test_repo", "services.py")
         replace_symbol_body_tool = serena_agent.get_tool(ReplaceSymbolBodyTool)
+        replace_symbol_body_tool._ENABLE_DIAGNOSTICS = True
 
         with project_file_modification_context(serena_agent, relative_path):
             result = replace_symbol_body_tool.apply(
@@ -1185,10 +1250,7 @@ def create_service_container() -> dict[str, Any]:
     @pytest.mark.parametrize(
         "serena_agent",
         [
-            pytest.param(
-                Language.TYPESCRIPT,
-                marks=pytest.mark.typescript,
-            ),
+            pytest.param(Language.TYPESCRIPT, marks=get_pytest_markers(Language.TYPESCRIPT), id="typescript_ambiguous_regex"),
         ],
         indirect=["serena_agent"],
     )
@@ -1201,98 +1263,40 @@ def create_service_container() -> dict[str, Any]:
         with pytest.raises(ValueError, match="ambiguous"):
             replace_content_tool.apply(
                 needle=r'catch \(error\) \{.*?this\.updateConnectionStatus\("Connection failed", false\);.*?\}',
-                repl='catch(error) { console.log("Never mind"); }',
+                repl='catch(error) {console.log("Never mind"); }',
                 relative_path="ws_manager.js",
                 mode="regex",
             )
 
-    @pytest.mark.parametrize(
-        "serena_agent,name_path,relative_path",
-        [
-            pytest.param(
-                Language.PYTHON,
-                "User",
-                os.path.join("test_repo", "models.py"),
-                marks=pytest.mark.python,
-            ),
-            pytest.param(
-                Language.JAVA,
-                "Model",
-                os.path.join("src", "main", "java", "test_repo", "Model.java"),
-                marks=pytest.mark.java,
-            ),
-            pytest.param(
-                Language.KOTLIN,
-                "Model",
-                os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
-                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
-            ),
-            pytest.param(
-                Language.TYPESCRIPT,
-                "helperFunction",
-                "index.ts",
-                marks=pytest.mark.typescript,
-            ),
-        ],
-        indirect=["serena_agent"],
-    )
-    def test_safe_delete_symbol_blocked_by_references(self, serena_agent: SerenaAgent, name_path: str, relative_path: str):
+    @pytest.mark.parametrize("serena_agent,case", SAFE_DELETE_BLOCKED_CASES, indirect=["serena_agent"])
+    def test_safe_delete_symbol_blocked_by_references(self, serena_agent: SerenaAgent, case: SafeDeleteCase):
         """
         Tests that SafeDeleteSymbol refuses to delete a symbol that is referenced elsewhere
         and returns a message listing the referencing files.
         """
         # wrap in modification context as a safety net: if the tool has a bug and deletes anyway,
         # the file will be restored, preventing corruption of test resources
-        with project_file_modification_context(serena_agent, relative_path):
+        with project_file_modification_context(serena_agent, case.relative_path):
             safe_delete_tool = serena_agent.get_tool(SafeDeleteSymbol)
-            result = safe_delete_tool.apply(name_path_pattern=name_path, relative_path=relative_path)
+            result = safe_delete_tool.apply(name_path_pattern=case.name_path, relative_path=case.relative_path)
             assert "Cannot delete" in result, f"Expected deletion to be blocked due to existing references, but got: {result}"
             assert "referenced in" in result, f"Expected reference information in result, but got: {result}"
 
-    @pytest.mark.parametrize(
-        "serena_agent,name_path,relative_path",
-        [
-            pytest.param(
-                Language.PYTHON,
-                "Timer",
-                os.path.join("test_repo", "utils.py"),
-                marks=pytest.mark.python,
-            ),
-            pytest.param(
-                Language.JAVA,
-                "ModelUser",
-                os.path.join("src", "main", "java", "test_repo", "ModelUser.java"),
-                marks=pytest.mark.java,
-            ),
-            pytest.param(
-                Language.KOTLIN,
-                "ModelUser",
-                os.path.join("src", "main", "kotlin", "test_repo", "ModelUser.kt"),
-                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
-            ),
-            pytest.param(
-                Language.TYPESCRIPT,
-                "unusedStandaloneFunction",
-                "index.ts",
-                marks=pytest.mark.typescript,
-            ),
-        ],
-        indirect=["serena_agent"],
-    )
-    def test_safe_delete_symbol_succeeds_when_no_references(self, serena_agent: SerenaAgent, name_path: str, relative_path: str):
+    @pytest.mark.parametrize("serena_agent,case", SAFE_DELETE_SUCCEEDS_CASES, indirect=["serena_agent"])
+    def test_safe_delete_symbol_succeeds_when_no_references(self, serena_agent: SerenaAgent, case: SafeDeleteCase):
         """
         Tests that SafeDeleteSymbol successfully deletes a symbol that has no references
         and that the symbol is actually removed from the file.
         """
-        with project_file_modification_context(serena_agent, relative_path):
+        with project_file_modification_context(serena_agent, case.relative_path):
             safe_delete_tool = serena_agent.get_tool(SafeDeleteSymbol)
-            result = safe_delete_tool.apply(name_path_pattern=name_path, relative_path=relative_path)
+            result = safe_delete_tool.apply(name_path_pattern=case.name_path, relative_path=case.relative_path)
             assert result == SUCCESS_RESULT, f"Expected successful deletion, but got: {result}"
 
             # verify the symbol was actually removed from the file
-            file_content = read_project_file(serena_agent.get_active_project(), relative_path)
-            assert name_path not in file_content, (
-                f"Expected symbol {name_path} to be removed from {relative_path}, but it still appears in the file content"
+            file_content = read_project_file(serena_agent.get_active_project(), case.relative_path)
+            assert case.name_path not in file_content, (
+                f"Expected symbol {case.name_path} to be removed from {case.relative_path}, but it still appears in the file content"
             )
 
 

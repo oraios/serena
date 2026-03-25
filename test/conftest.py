@@ -370,7 +370,7 @@ def find_identifier_position(file_path: Path, identifier: str) -> tuple[int, int
     return None
 
 
-def find_identifier_occurrence_position(
+def find_identifier_pos(
     file_path: Path,
     identifier: str,
     occurrence_index: int = 0,
