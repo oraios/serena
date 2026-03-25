@@ -1,4 +1,3 @@
-import copy
 import logging
 from collections import Counter, defaultdict
 from collections.abc import Callable
@@ -117,7 +116,6 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
                 search_deps=search_deps,
             )
         symbols = symbol_collection_response["symbols"]
-        n_matches = len(symbols)
 
         # group children by type, keeping just the short name
         if depth > 0:
@@ -125,27 +123,21 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
                 if "children" in s:
                     s["children"] = self._group_children_by_type(s["children"])  # type: ignore
 
-        # snapshot before grouping, which mutates the dicts
-        symbols_snapshot = copy.deepcopy(symbols)
-
-        grouped_symbols = self.symbol_dict_grouper.group(symbols)
-        result = self._to_json(grouped_symbols)
-
-        def make_names_with_paths() -> str:
-            """Name paths grouped by file, without body, info, children, or locations"""
+        def create_shortened_result() -> str:
+            """Shortened results containing symbol types and identifiers (path + name_path) only"""
             dicts: list[SymbolDTO] = [
-                {"name_path": s["name_path"], "type": s["type"], "relative_path": s["relative_path"]} for s in symbols_snapshot
+                {"name_path": s["name_path"], "type": s["type"], "relative_path": s["relative_path"]} for s in symbols
             ]
             grouped = self.symbol_dict_grouper.group(dicts)
             return f"Names with paths:\n{self._to_json(grouped)}"
 
-        def make_names_only() -> str:
-            return f"Name paths only:\n{self._to_json([s['name_path'] for s in symbols_snapshot])}"
-
+        n_matches = len(symbols)
         if 0 < max_matches < n_matches:
-            return f"Matched {n_matches}>{max_matches=} symbols.\n" + make_names_only()
+            return f"Matched {n_matches}>{max_matches=} symbols.\n" + create_shortened_result()
 
-        return self._limit_length(result, max_answer_chars, shortened_result_factories=[make_names_with_paths, make_names_only])
+        grouped_symbols = self.symbol_dict_grouper.group(symbols)
+        result = self._to_json(grouped_symbols)
+        return self._limit_length(result, max_answer_chars, shortened_result_factories=[create_shortened_result])
 
 
 class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
