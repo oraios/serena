@@ -56,21 +56,16 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         :param depth: depth up to which descendants shall be retrieved (e.g. use 1 to also retrieve immediate children;
             for the case where the symbol is a class, this will return its methods).
             Ignored if `include_body=True`. Default 0.
-        :param relative_path: Optional. Restrict search to this file or directory. If None, searches entire codebase.
-            If a directory is passed, the search will be restricted to the files in that directory.
-            If a file is passed, the search will be restricted to that file.
-            If you have some knowledge about the codebase, you should use this parameter, as it will significantly
-            speed up the search as well as reduce the number of results.
+        :param relative_path: Optional. Restrict search to this file or directory. If not specified, searches entire codebase.
         :param include_body: If True, include the symbol's source code. Use judiciously.
         :param include_info: whether to include additional info (hover-like, typically including docstring and signature),
-            about the symbol (ignored if include_body is True).
-            Default False; info is never included for child symbols and is not included when body is requested.
+            about the symbol.
+            Default False; info is never included for child symbols or if include_body is True.
         :param search_deps: If True, also search in project dependencies (e.g., libraries).
         :param max_matches: Maximum number of permitted matches. If exceeded, a shortened result is returned
              which allows refining the search. -1 (default) means no limit. Set to 1 if you search for a single symbol.
-        :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
-            -1 means the default value from the config will be used.
-        :return: symbols (with locations) matching the name.
+        :param max_answer_chars: max characters for the result (-1 for default). If exceeded, no content/a shortened result is returned.
+        :return: symbols matching the name.
         """
         if include_body:
             depth = 0  # ignore user-specified depth if body is requested
