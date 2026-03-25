@@ -3,12 +3,12 @@ Provides Java specific instantiation of the LanguageServer class. Contains vario
 """
 
 import dataclasses
+import hashlib
 import logging
 import os
 import pathlib
 import shutil
 import threading
-import hashlib
 from pathlib import PurePath
 from time import sleep
 from typing import cast
