@@ -43,6 +43,14 @@ DEFAULT_KOTLIN_JVM_OPTIONS = "-Xmx2G"
 
 # Default Kotlin Language Server version (can be overridden via ls_specific_settings)
 DEFAULT_KOTLIN_LSP_VERSION = "261.13587.0"
+KOTLIN_LSP_ALLOWED_HOSTS = ("download-cdn.jetbrains.com",)
+KOTLIN_LSP_SHA256_BY_SUFFIX = {
+    "win-x64": "2806c2bd4810bd8e7ccc27d8c0ca4a5232a1c4f26ea1f4ba40e578b60860ccad",
+    "linux-x64": "dc0ed2e70cb0d61fdabb26aefce8299b7a75c0dcfffb9413715e92caec6e83ec",
+    "linux-aarch64": "d1dceb000fe06c5e2c30b95e7f4ab01d05101bd03ed448167feeb544a9f1d651",
+    "mac-x64": "a3972f27229eba2c226060e54baea1c958c82c326dfc971bf53f72a74d0564a3",
+    "mac-aarch64": "d4ea28b22b29cf906fe16d23698a8468f11646a6a66dcb15584f306aaefbee6c",
+}
 
 # Platform-specific Kotlin LSP download suffixes
 PLATFORM_KOTLIN_SUFFIX = {
@@ -111,8 +119,17 @@ class KotlinLanguageServer(SolidLanguageServer):
             if not os.path.exists(kotlin_script):
                 kotlin_lsp_version = self._custom_settings.get("kotlin_lsp_version", DEFAULT_KOTLIN_LSP_VERSION)
                 kotlin_url = f"https://download-cdn.jetbrains.com/kotlin-lsp/{kotlin_lsp_version}/kotlin-lsp-{kotlin_lsp_version}-{kotlin_suffix}.zip"
+                expected_sha256 = None
+                if kotlin_lsp_version == DEFAULT_KOTLIN_LSP_VERSION:
+                    expected_sha256 = KOTLIN_LSP_SHA256_BY_SUFFIX[kotlin_suffix]
                 log.info("Downloading Kotlin Language Server...")
-                FileUtils.download_and_extract_archive(kotlin_url, static_dir, "zip")
+                FileUtils.download_and_extract_archive_verified(
+                    kotlin_url,
+                    static_dir,
+                    "zip",
+                    expected_sha256=expected_sha256,
+                    allowed_hosts=KOTLIN_LSP_ALLOWED_HOSTS,
+                )
 
                 if os.path.exists(kotlin_script) and not platform_id.value.startswith("win-"):
                     os.chmod(

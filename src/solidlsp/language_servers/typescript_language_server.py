@@ -19,7 +19,7 @@ from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
-from .common import RuntimeDependency, RuntimeDependencyCollection
+from .common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
 
 log = logging.getLogger(__name__)
 
@@ -149,19 +149,20 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             language_specific_config = self._custom_settings
             typescript_version = language_specific_config.get("typescript_version", "5.9.3")
             typescript_language_server_version = language_specific_config.get("typescript_language_server_version", "5.1.3")
+            npm_registry = language_specific_config.get("npm_registry")
 
             deps = RuntimeDependencyCollection(
                 [
                     RuntimeDependency(
                         id="typescript",
                         description="typescript package",
-                        command=["npm", "install", "--prefix", "./", f"typescript@{typescript_version}"],
+                        command=build_npm_install_command("typescript", typescript_version, npm_registry),
                         platform_id="any",
                     ),
                     RuntimeDependency(
                         id="typescript-language-server",
                         description="typescript-language-server package",
-                        command=["npm", "install", "--prefix", "./", f"typescript-language-server@{typescript_language_server_version}"],
+                        command=build_npm_install_command("typescript-language-server", typescript_language_server_version, npm_registry),
                         platform_id="any",
                     ),
                 ]
