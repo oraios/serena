@@ -1,6 +1,5 @@
 import logging
 from collections import Counter
-from collections.abc import Callable
 from typing import Any, Literal
 
 import serena.jetbrains.jetbrains_types as jb
@@ -133,8 +132,7 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
         :param name_path: name path of the symbol for which to find references; matching logic as described in find symbol tool.
         :param relative_path: the relative path to the file containing the symbol for which to find references.
             Note that here you can't pass a directory but must pass a file.
-        :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned. -1 means the
-            default value from the config will be used.
+        :param max_answer_chars: max characters for the result (-1 for default). If exceeded, no content/a shortened result is returned.
         :return: a list of JSON objects with the symbols referencing the requested symbol
         """
         with JetBrainsPluginClient.from_project(self.project) as client:
@@ -150,14 +148,18 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
 
         result = self.symbol_dict_grouper.group(symbol_dicts)
 
-        def make_per_file_counts() -> str:
+        def create_shortened_result_counts_per_file() -> str:
             return f"Reference counts per file:\n{self._to_json(Counter(ref_paths))}"
 
-        def make_summary() -> str:
+        def create_shortened_result_num_results() -> str:
             return f"Found {len(ref_paths)} references."
 
         result_json = self._to_json(result)
-        return self._limit_length(result_json, max_answer_chars, shortened_result_factories=[make_per_file_counts, make_summary])
+        return self._limit_length(
+            result_json,
+            max_answer_chars,
+            shortened_result_factories=[create_shortened_result_counts_per_file, create_shortened_result_num_results],
+        )
 
 
 class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
@@ -184,8 +186,7 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
 
         :param relative_path: the relative path to the file to get the overview of
         :param depth: depth up to which descendants shall be retrieved (e.g., use 1 to also retrieve immediate children).
-        :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
-            -1 means the default value from the config will be used.
+        :param max_answer_chars: max characters for the result (-1 for default). If exceeded, no content/a shortened result is returned.
         :param include_file_documentation: whether to include the file's docstring. Default False.
         :return: a JSON object containing the symbols grouped by kind in a compact format.
         """
@@ -193,45 +194,44 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
             symbol_overview = client.get_symbols_overview(
                 relative_path=relative_path, depth=depth, include_file_documentation=include_file_documentation
             )
+
         if self.USE_COMPACT_FORMAT:
             symbols = symbol_overview["symbols"]
 
-            # capture type names and depth-0 snapshots before grouping, which mutates the dicts
-            type_names = [d.get("type", "unknown") for d in symbols]
-            if depth > 0:
-                depth_0_symbols = [d.copy() for d in symbols]
-                for d in depth_0_symbols:
-                    d.pop("children", None)
-
             grouped_symbols = self.symbol_dict_grouper.group(symbols)
+
+            shortened_result_factories = []
+
+            # create full result
             result: dict[str, Any] = {"symbols": grouped_symbols}
             documentation = symbol_overview.pop("documentation", None)
             if documentation:
                 result["docstring"] = documentation
+                shortened_result_factories.append(lambda: self._to_json(grouped_symbols))  # shortened result without docstring
             json_result = self._to_json(result)
 
-            def make_type_counts() -> str:
-                return f"Symbol counts by type:\n{self._to_json(Counter(type_names))}"
+            if depth > 0:
 
-            if depth == 0:
-                shortened_results: list[Callable[[], str]] | None = [
-                    lambda: self._to_json(grouped_symbols),
-                    make_type_counts,
-                ]
-            else:
-
-                def make_depth_0_result() -> str:
+                def create_short_result_depth_0() -> str:
+                    depth_0_symbols = [d.copy() for d in symbols]
+                    for d in depth_0_symbols:
+                        d.pop("children", None)
                     compact_depth_0_result = self.symbol_dict_grouper.group(depth_0_symbols)
                     return "Depth 0 overview:\n" + self._to_json(compact_depth_0_result)
 
-                shortened_results = [make_depth_0_result, make_type_counts]
+                shortened_result_factories.append(create_short_result_depth_0)
 
+            def create_short_result_type_counts() -> str:
+                type_names = [d.get("type", "unknown") for d in symbols]
+                return f"Symbol counts by type:\n{self._to_json(Counter(type_names))}"
+
+            shortened_result_factories.append(create_short_result_type_counts)
         else:
             # this path is currently abandoned, consider introducing shortened results if ever needed
-            shortened_results = None
+            shortened_result_factories = None
             json_result = self._to_json(symbol_overview)
 
-        return self._limit_length(json_result, max_answer_chars, shortened_result_factories=shortened_results)
+        return self._limit_length(json_result, max_answer_chars, shortened_result_factories=shortened_result_factories)
 
 
 class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
