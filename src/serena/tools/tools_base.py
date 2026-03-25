@@ -336,7 +336,7 @@ class Tool(Component):
         for edited_file_path in edited_file_paths:
             try:
                 language_server = symbol_retriever.get_language_server(edited_file_path.after_relative_path)
-            except BaseException:
+            except Exception:
                 return None
 
             generation_by_after_path[edited_file_path.after_relative_path] = language_server.get_published_diagnostics_generation(
@@ -353,7 +353,7 @@ class Tool(Component):
                         edited_file_path.before_relative_path,
                         min_severity=2,
                     )
-                except BaseException:
+                except Exception:
                     cached_diagnostics = []
             warning_identities_by_before_path[edited_file_path.before_relative_path] = {
                 self._diagnostic_identity(diagnostic) for diagnostic in cached_diagnostics or []
@@ -381,7 +381,7 @@ class Tool(Component):
         for edited_file_path in edited_file_paths:
             try:
                 language_server = symbol_retriever.get_language_server(edited_file_path.after_relative_path)
-            except BaseException:
+            except Exception:
                 return default_result
 
             published_diagnostics = language_server.request_published_text_document_diagnostics(
@@ -397,7 +397,7 @@ class Tool(Component):
                         edited_file_path.after_relative_path,
                         min_severity=2,
                     )
-                except BaseException:
+                except Exception:
                     published_diagnostics = None
             if published_diagnostics is None:
                 continue
@@ -442,7 +442,7 @@ class Tool(Component):
                     if client_str != self.get_last_tool_call_client_str():
                         log.debug(f"Updating client info: {client_info}")
                         self.set_last_tool_call_client_str(client_str)
-            except BaseException as e:
+            except Exception as e:
                 log.info(f"Failed to get client info: {e}.")
 
         def task() -> str:
