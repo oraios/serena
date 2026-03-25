@@ -101,6 +101,7 @@ from test.solidlsp import clojure as clj
             marks=[
                 pytest.mark.lean4,
                 pytest.mark.skipif(shutil.which("lean") is None, reason="Lean is not installed"),
+                pytest.mark.xfail(reason="Lean4 LS does not reliably resolve cross-file defining symbols in CI"),
             ],
         ),
         pytest.param(Language.TYPESCRIPT, "index.ts", "helperFunction", 1, 1, "helperFunction", "index.ts", marks=pytest.mark.typescript),

@@ -2422,7 +2422,8 @@ class SolidLanguageServer(ABC):
         # Select the preferred definition (subclasses can override _get_preferred_definition)
         definition = self._get_preferred_definition(definitions)
         def_path = definition["relativePath"]
-        assert def_path is not None
+        if def_path is None:
+            return None
         def_line = definition["range"]["start"]["line"]
         def_col = definition["range"]["start"]["character"]
 

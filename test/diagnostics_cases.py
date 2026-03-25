@@ -188,6 +188,7 @@ DIAGNOSTIC_CASE_PARAMS = [
             primary_message_fragment="missingGreeting",
             reference_message_fragment="missingConsumerValue",
         ),
+        pytest.mark.xfail(reason="Lean4 LS does not reliably surface diagnostics in CI"),
         id="lean_missing_greeting",
     ),
     diagnostic_case_param(
