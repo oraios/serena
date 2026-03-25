@@ -2326,6 +2326,49 @@ class SolidLanguageServer(ABC):
             best_symbol["body"] = self.create_symbol_body(best_symbol, factory=body_factory)
         return best_symbol
 
+    @staticmethod
+    def _iter_symbol_descendants(symbol: ls_types.UnifiedSymbolInformation) -> Iterator[ls_types.UnifiedSymbolInformation]:
+        """Yield descendant symbols in depth-first order."""
+        for child in symbol.get("children", []):
+            yield child
+            yield from SolidLanguageServer._iter_symbol_descendants(child)
+
+    def _refine_implementing_symbol(
+        self,
+        target_symbol: ls_types.UnifiedSymbolInformation | None,
+        implementing_symbol: ls_types.UnifiedSymbolInformation,
+        include_body: bool = False,
+    ) -> ls_types.UnifiedSymbolInformation:
+        """Resolve member-level implementation symbols when the LS returns a containing type."""
+        if target_symbol is None:
+            return implementing_symbol
+
+        target_kind = target_symbol["kind"]
+        if target_kind not in (ls_types.SymbolKind.Method, ls_types.SymbolKind.Function):
+            return implementing_symbol
+
+        if implementing_symbol["kind"] == target_kind and implementing_symbol.get("name") == target_symbol.get("name"):
+            return implementing_symbol
+
+        candidate_descendants: list[ls_types.UnifiedSymbolInformation] = []
+        for descendant in self._iter_symbol_descendants(implementing_symbol):
+            if descendant.get("name") != target_symbol.get("name"):
+                continue
+            if descendant["kind"] != target_kind:
+                continue
+            candidate_descendants.append(descendant)
+
+        if not candidate_descendants:
+            return implementing_symbol
+
+        refined_symbol = min(
+            candidate_descendants,
+            key=lambda symbol: self._symbol_match_sort_key(symbol, match_priority=0),
+        )
+        if include_body:
+            refined_symbol["body"] = self.create_symbol_body(refined_symbol)
+        return refined_symbol
+
     def request_symbol_at_location(
         self,
         relative_file_path: str,
@@ -2414,6 +2457,7 @@ class SolidLanguageServer(ABC):
             log.error("request_implementing_symbols called before language server started")
             raise SolidLSPException("Language Server not started")
 
+        target_symbol = self._request_symbol_at_location(relative_file_path, line, column, include_body=False)
         implementation_locations = self.request_implementation(relative_file_path, line, column)
         if not implementation_locations:
             return []
@@ -2425,15 +2469,16 @@ class SolidLanguageServer(ABC):
             assert implementation_path is not None
             implementation_line = implementation["range"]["start"]["line"]
             implementation_col = implementation["range"]["start"]["character"]
-            implementing_symbol = self.request_containing_symbol(
+            implementing_symbol = self._request_symbol_at_location(
                 implementation_path,
                 implementation_line,
                 implementation_col,
-                strict=False,
                 include_body=include_body,
+                body_factory=None,
             )
             if implementing_symbol is None:
                 continue
+            implementing_symbol = self._refine_implementing_symbol(target_symbol, implementing_symbol, include_body=include_body)
             if "location" not in implementing_symbol:
                 continue
             symbol_location = implementing_symbol["location"]
