@@ -1,16 +1,28 @@
+"""
+Python language server integration using Astral's ``ty``.
+
+You can pass the following entries in ``ls_specific_settings["python_ty"]``:
+    - ls_path: Override the executable used to start ``ty``.
+    - ty_version: Override the pinned ``ty`` version used with ``uvx`` / ``uv x``
+      (default: the bundled Serena version).
+"""
+
 import logging
 import os
 import pathlib
 import shutil
 from typing import cast
+
 from typing_extensions import override
 
 from solidlsp.ls import LanguageServerDependencyProvider, SolidLanguageServer
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
+
+TY_VERSION = "0.0.25"
 
 
 class TyLanguageServer(SolidLanguageServer):
@@ -41,20 +53,19 @@ class TyLanguageServer(SolidLanguageServer):
             if ls_path is not None:
                 return [ls_path, "server"]
 
+            ty_version = self._custom_settings.get("ty_version", TY_VERSION)
+
             # preferring uvx for on-demand execution
             uvx_path = os.environ.get("UVX") or shutil.which("uvx")
             if uvx_path is not None:
-                return [uvx_path, "--from", "ty", "ty", "server"]
+                return [uvx_path, "--from", f"ty=={ty_version}", "ty", "server"]
 
             # falling back to uv's uvx-compatible subcommand when only `uv` is available
             uv_path = shutil.which("uv")
             if uv_path is not None:
-                return [uv_path, "x", "--from", "ty", "ty", "server"]
+                return [uv_path, "x", "--from", f"ty=={ty_version}", "ty", "server"]
 
-            raise RuntimeError(
-                "Could not find 'uvx' or 'uv' in PATH.\n"
-                "Install uv or provide ls_specific_settings.python_ty.ls_path."
-            )
+            raise RuntimeError("Could not find 'uvx' or 'uv' in PATH.\nInstall uv or provide ls_specific_settings.python_ty.ls_path.")
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:

@@ -104,7 +104,10 @@ DIAGNOSTIC_CASE_PARAMS = [
             primary_message_fragment="missing_greeting",
             reference_message_fragment="missing_consumer_value",
         ),
-        marks=[pytest.mark.rust, pytest.mark.xfail(reason="rust-analyzer does not surface diagnostics for this fixture through Serena currently")],
+        marks=[
+            pytest.mark.rust,
+            pytest.mark.xfail(reason="rust-analyzer does not surface diagnostics for this fixture through Serena currently"),
+        ],
     ),
     pytest.param(
         Language.PHP,
@@ -208,7 +211,10 @@ DIAGNOSTIC_CASE_PARAMS = [
             primary_message_fragment="missingGreeting",
             reference_message_fragment="missingConsumerValue",
         ),
-        marks=[pytest.mark.typescript, pytest.mark.xfail(reason="TypeScript LS does not surface document diagnostics through this integration")],
+        marks=[
+            pytest.mark.typescript,
+            pytest.mark.xfail(reason="TypeScript LS does not surface document diagnostics through this integration"),
+        ],
     ),
     pytest.param(
         Language.FSHARP,

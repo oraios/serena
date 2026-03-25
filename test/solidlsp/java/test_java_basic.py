@@ -79,7 +79,6 @@ class TestJavaLanguageServer:
             implementing_symbols = language_server.request_implementing_symbols("src/main/java/test_repo/Greeter.java", *pos)
             assert implementing_symbols, "Expected implementing symbols for Greeter.formatGreeting"
             assert any(
-                symbol.get("name") == "formatGreeting"
-                and "ConsoleGreeter.java" in symbol["location"].get("relativePath", "")
+                symbol.get("name") == "formatGreeting" and "ConsoleGreeter.java" in symbol["location"].get("relativePath", "")
                 for symbol in implementing_symbols
             ), f"Expected ConsoleGreeter.formatGreeting symbol, got: {implementing_symbols}"

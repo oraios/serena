@@ -18,11 +18,17 @@ from .common import RuntimeDependency, RuntimeDependencyCollection
 
 log = logging.getLogger(__name__)
 
+VERIBLE_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
+
 
 class SystemVerilogLanguageServer(SolidLanguageServer):
     """
     SystemVerilog language server using verible-verilog-ls.
     Supports .sv, .svh, .v, .vh files.
+
+    You can pass the following entries in ``ls_specific_settings["systemverilog"]``:
+        - verible_version: Override the pinned Verible release version downloaded
+          by Serena (default: the bundled Serena version).
     """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings) -> None:
@@ -67,6 +73,8 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
                         platform_id="linux-x64",
                         archive_type="gztar",
                         binary_name=f"verible-{verible_version}/bin/verible-verilog-ls",
+                        sha256="f52e5920ef63f70620a6086e09dea8bd778147cd7a9ff827bb7de5d6316b1754",
+                        allowed_hosts=VERIBLE_ALLOWED_HOSTS,
                     ),
                     RuntimeDependency(
                         id="verible-ls",
@@ -75,6 +83,8 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
                         platform_id="linux-arm64",
                         archive_type="gztar",
                         binary_name=f"verible-{verible_version}/bin/verible-verilog-ls",
+                        sha256="30dd9c6f6e0f4840d6ba0c9e81ea2774a50b5a1a523a855245f9a9b4beb6b58b",
+                        allowed_hosts=VERIBLE_ALLOWED_HOSTS,
                     ),
                     RuntimeDependency(
                         id="verible-ls",
@@ -83,6 +93,8 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
                         platform_id="osx-x64",
                         archive_type="gztar",
                         binary_name=f"verible-{verible_version}/bin/verible-verilog-ls",
+                        sha256="9ef92e9ad345285dd593763e10ca61c8532fcf47bbb6cf4448f9a9423882d662",
+                        allowed_hosts=VERIBLE_ALLOWED_HOSTS,
                     ),
                     RuntimeDependency(
                         id="verible-ls",
@@ -91,6 +103,8 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
                         platform_id="osx-arm64",
                         archive_type="gztar",
                         binary_name=f"verible-{verible_version}/bin/verible-verilog-ls",
+                        sha256="9ef92e9ad345285dd593763e10ca61c8532fcf47bbb6cf4448f9a9423882d662",
+                        allowed_hosts=VERIBLE_ALLOWED_HOSTS,
                     ),
                     RuntimeDependency(
                         id="verible-ls",
@@ -99,6 +113,8 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
                         platform_id="win-x64",
                         archive_type="zip",
                         binary_name=f"verible-{verible_version}/bin/verible-verilog-ls.exe",
+                        sha256="729aa244036da4a4f87bc026d33555456fc7f7be79778d983ebe9c893f4a0ca3",
+                        allowed_hosts=VERIBLE_ALLOWED_HOSTS,
                     ),
                 ]
             )

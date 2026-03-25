@@ -3,7 +3,6 @@ import os
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
 from test.conftest import PYTHON_LANGUAGE_BACKENDS
 
 

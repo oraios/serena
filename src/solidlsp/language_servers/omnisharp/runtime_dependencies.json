@@ -310,7 +310,8 @@
                 "x86_64"
             ],
             "platformId": "win-x64",
-            "dll_path": "OmniSharpPlugin/Microsoft.AspNetCore.Razor.OmniSharpPlugin.dll"
+            "dll_path": "OmniSharpPlugin/Microsoft.AspNetCore.Razor.OmniSharpPlugin.dll",
+            "integrity": "8D2DC5484018A2390A2366D05CADDD2BE21F619122DACD1BA1A87815B98D7361"
         },
         {
             "id": "RazorOmnisharp",
@@ -324,7 +325,8 @@
                 "x86"
             ],
             "platformId": "win-x86",
-            "dll_path": "OmniSharpPlugin/Microsoft.AspNetCore.Razor.OmniSharpPlugin.dll"
+            "dll_path": "OmniSharpPlugin/Microsoft.AspNetCore.Razor.OmniSharpPlugin.dll",
+            "integrity": "94C365B9D4B8D17612AF3574A3ABFB8CA75727866A8AF892EEEBE8F7559729A7"
         },
         {
             "id": "RazorOmnisharp",
@@ -338,7 +340,8 @@
                 "arm64"
             ],
             "platformId": "win-arm64",
-            "dll_path": "OmniSharpPlugin/Microsoft.AspNetCore.Razor.OmniSharpPlugin.dll"
+            "dll_path": "OmniSharpPlugin/Microsoft.AspNetCore.Razor.OmniSharpPlugin.dll",
+            "integrity": "2186E17AB20621C13A5B04F7053BDC744A9938AF6F9FA6259208F09F55999946"
         },
         {
             "id": "RazorOmnisharp",
@@ -355,7 +358,8 @@
                 "./rzls"
             ],
             "platformId": "linux-x64",
-            "dll_path": "OmniSharpPlugin/Microsoft.AspNetCore.Razor.OmniSharpPlugin.dll"
+            "dll_path": "OmniSharpPlugin/Microsoft.AspNetCore.Razor.OmniSharpPlugin.dll",
+            "integrity": "4B08C47D70AA96BE40AEDE22CDFCD909EB9073F1E1992E2B5B99D9D7A47F3276"
         },
         {
             "id": "RazorOmnisharp",
@@ -371,7 +375,8 @@
             "binaries": [
                 "./rzls"
             ],
-            "platformId": "linux-arm64"
+            "platformId": "linux-arm64",
+            "integrity": "A73FA7D0AC5E4DAC9FF15B9B675D90E30DFB45E40A66ECC70E22433EE028791C"
         },
         {
             "id": "RazorOmnisharp",
@@ -387,7 +392,8 @@
             "binaries": [
                 "./rzls"
             ],
-            "platformId": "linux-musl-x64"
+            "platformId": "linux-musl-x64",
+            "integrity": "7B0F8B1FEAC7726A5AC8D2C19F19B3530615F9226F75BB40D74EB0D8757CD11C"
         },
         {
             "id": "RazorOmnisharp",
@@ -403,7 +409,8 @@
             "binaries": [
                 "./rzls"
             ],
-            "platformId": "linux-musl-arm64"
+            "platformId": "linux-musl-arm64",
+            "integrity": "8BC53D60D53B7FC9E40144D862B0748BCB8768C7C18C8E6900D675DED14ABD08"
         },
         {
             "id": "RazorOmnisharp",
@@ -419,7 +426,8 @@
             "binaries": [
                 "./rzls"
             ],
-            "platformId": "osx-x64"
+            "platformId": "osx-x64",
+            "integrity": "7678022CBAC975A6D45E01A2985B88307E88F110578F3C04DB9D1C545BC69BDB"
         },
         {
             "id": "RazorOmnisharp",
@@ -435,7 +443,8 @@
             "binaries": [
                 "./rzls"
             ],
-            "platformId": "osx-arm64"
+            "platformId": "osx-arm64",
+            "integrity": "0A68EE21F5B8DDFDFC8D5E86E519C54D29B3A4D582F4D4284545C40A741AAFE6"
         }
     ]
 }

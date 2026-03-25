@@ -80,7 +80,6 @@ class TestRustLanguageServer:
             implementing_symbols = language_server.request_implementing_symbols(os.path.join("src", "lib.rs"), *pos)
             assert implementing_symbols, "Expected implementing symbols for Greeter.format_greeting"
             assert any(
-                symbol.get("name") == "format_greeting"
-                and "src\\lib.rs" in symbol["location"].get("relativePath", "")
+                symbol.get("name") == "format_greeting" and "src\\lib.rs" in symbol["location"].get("relativePath", "")
                 for symbol in implementing_symbols
             ), f"Expected ConsoleGreeter.format_greeting symbol, got: {implementing_symbols}"

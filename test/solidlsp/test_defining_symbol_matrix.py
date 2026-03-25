@@ -132,9 +132,7 @@ def test_request_defining_symbol_matrix(
 
     defining_symbol = language_server.request_defining_symbol(relative_path, *position)
     assert defining_symbol is not None, f"Expected a defining symbol for {identifier!r} in {relative_path}"
-    assert defining_symbol.get("name") == expected_name, (
-        f"Expected defining symbol name {expected_name!r}, got: {defining_symbol}"
-    )
+    assert defining_symbol.get("name") == expected_name, f"Expected defining symbol name {expected_name!r}, got: {defining_symbol}"
     assert expected_definition_file in defining_symbol["location"].get("relativePath", ""), (
         f"Expected defining symbol in {expected_definition_file!r}, got: {defining_symbol}"
     )

@@ -4,8 +4,8 @@ Language server-related tools
 
 import os
 import re
-from typing import Any
 from collections.abc import Sequence
+from typing import Any
 
 from serena.code_editor import EditedFilePath
 from serena.symbol import LanguageServerSymbol, LanguageServerSymbolDictGrouper
@@ -18,7 +18,6 @@ from serena.tools import (
 from serena.tools.tools_base import ToolMarkerOptional
 from solidlsp.ls_types import SymbolKind
 from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticSeverity
-
 
 FILE_LEVEL_DIAGNOSTIC_BUCKET = "<file>"
 
@@ -341,7 +340,9 @@ class FindImplementationsTool(Tool, ToolMarkerSymbolicRead):
             exclude_kinds=parsed_exclude_kinds,
         )
 
-        symbol_dicts = [dict(s.to_dict(kind=True, relative_path=True, depth=0, body=include_body, body_location=True)) for s in implementing_symbols]
+        symbol_dicts = [
+            dict(s.to_dict(kind=True, relative_path=True, depth=0, body=include_body, body_location=True)) for s in implementing_symbols
+        ]
         if include_info:
             info_by_symbol = symbol_retriever.request_info_for_symbol_batch(implementing_symbols)
             for s, s_dict in zip(implementing_symbols, symbol_dicts, strict=True):
@@ -518,7 +519,7 @@ class FindDefiningSymbolTool(Tool, ToolMarkerSymbolicRead):
         include_info: bool = False,
         max_answer_chars: int = -1,
     ) -> str:
-        """
+        r"""
         Finds the defining symbol for a uniquely captured regex match in a file.
 
         The regex must contain exactly one capturing group, and exactly one overall match must be found.
