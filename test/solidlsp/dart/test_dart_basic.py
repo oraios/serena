@@ -243,8 +243,8 @@ class TestDartLanguageServer:
     def test_request_defining_symbol_variable(self, language_server: SolidLanguageServer) -> None:
         """Test request_defining_symbol for a variable usage."""
         file_path = os.path.join("lib", "main.dart")
-        # Line 14 contains 'final result = a + b;' - test position on 'result'
-        defining_symbol = language_server.request_defining_symbol(file_path, 13, 10)
+        # Line 13 (0-indexed line 12) contains 'final result = a + b;' - test position on 'result'
+        defining_symbol = language_server.request_defining_symbol(file_path, 12, 10)
 
         # The defining symbol might be the variable itself or the containing method
         # This is acceptable behavior - different language servers handle this differently

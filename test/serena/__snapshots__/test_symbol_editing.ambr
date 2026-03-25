@@ -67,11 +67,16 @@
 # ---
 # name: test_delete_symbol[test_case1]
   '''
+  import { ConsoleGreeter, Greeter } from "./formatters";
+  
   
   
   export function helperFunction() {
       const demo = new DemoClass(42);
       demo.printValue();
+  
+      const greeter: Greeter = new ConsoleGreeter();
+      console.log(greeter.formatGreeting("World"));
   }
   
   helperFunction();
@@ -719,6 +724,8 @@
 # ---
 # name: test_insert_in_rel_to_symbol[test_case2-after]
   '''
+  import { ConsoleGreeter, Greeter } from "./formatters";
+  
   export class DemoClass {
       value: number;
       constructor(value: number) {
@@ -736,6 +743,9 @@
   export function helperFunction() {
       const demo = new DemoClass(42);
       demo.printValue();
+  
+      const greeter: Greeter = new ConsoleGreeter();
+      console.log(greeter.formatGreeting("World"));
   }
   
   helperFunction();
@@ -748,6 +758,8 @@
 # ---
 # name: test_insert_in_rel_to_symbol[test_case2-before]
   '''
+  import { ConsoleGreeter, Greeter } from "./formatters";
+  
   function newFunctionAfterClass(): void {
       console.log("This function is after DemoClass.");
   }
@@ -765,6 +777,9 @@
   export function helperFunction() {
       const demo = new DemoClass(42);
       demo.printValue();
+  
+      const greeter: Greeter = new ConsoleGreeter();
+      console.log(greeter.formatGreeting("World"));
   }
   
   helperFunction();
@@ -777,6 +792,8 @@
 # ---
 # name: test_insert_in_rel_to_symbol[test_case3-after]
   '''
+  import { ConsoleGreeter, Greeter } from "./formatters";
+  
   export class DemoClass {
       value: number;
       constructor(value: number) {
@@ -790,6 +807,9 @@
   export function helperFunction() {
       const demo = new DemoClass(42);
       demo.printValue();
+  
+      const greeter: Greeter = new ConsoleGreeter();
+      console.log(greeter.formatGreeting("World"));
   }
   
   function newInsertedFunction(): void {
@@ -806,6 +826,8 @@
 # ---
 # name: test_insert_in_rel_to_symbol[test_case3-before]
   '''
+  import { ConsoleGreeter, Greeter } from "./formatters";
+  
   export class DemoClass {
       value: number;
       constructor(value: number) {
@@ -823,6 +845,9 @@
   export function helperFunction() {
       const demo = new DemoClass(42);
       demo.printValue();
+  
+      const greeter: Greeter = new ConsoleGreeter();
+      console.log(greeter.formatGreeting("World"));
   }
   
   helperFunction();
@@ -1890,6 +1915,8 @@
 # ---
 # name: test_replace_body[test_case1]
   '''
+  import { ConsoleGreeter, Greeter } from "./formatters";
+  
   export class DemoClass {
       value: number;
       constructor(value: number) {
@@ -1904,6 +1931,9 @@
   export function helperFunction() {
       const demo = new DemoClass(42);
       demo.printValue();
+  
+      const greeter: Greeter = new ConsoleGreeter();
+      console.log(greeter.formatGreeting("World"));
   }
   
   helperFunction();

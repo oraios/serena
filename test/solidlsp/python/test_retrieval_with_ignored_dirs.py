@@ -1,25 +1,24 @@
 from collections.abc import Generator
-from pathlib import Path
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from test.conftest import start_ls_context
+from test.conftest import PYTHON_LANGUAGE_BACKENDS, LanguageParamRequest, get_repo_path, start_ls_context
 
 # This mark will be applied to all tests in this module
 pytestmark = pytest.mark.python
 
 
 @pytest.fixture(scope="module")
-def ls_with_ignored_dirs() -> Generator[SolidLanguageServer, None, None]:
+def ls_with_ignored_dirs(request: LanguageParamRequest) -> Generator[SolidLanguageServer, None, None]:
     """Fixture to set up an LS for the python test repo with the 'scripts' directory ignored."""
     ignored_paths = ["scripts", "custom_test"]
-    with start_ls_context(language=Language.PYTHON, ignored_paths=ignored_paths) as ls:
+    with start_ls_context(language=request.param, ignored_paths=ignored_paths) as ls:
         yield ls
 
 
-@pytest.mark.parametrize("ls_with_ignored_dirs", [Language.PYTHON], indirect=True)
+@pytest.mark.parametrize("ls_with_ignored_dirs", PYTHON_LANGUAGE_BACKENDS, indirect=True)
 def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     """Tests that request_full_symbol_tree ignores the configured directory."""
     root = ls_with_ignored_dirs.request_full_symbol_tree()[0]
@@ -28,7 +27,7 @@ def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     assert children_names == {"test_repo", "examples"}
 
 
-@pytest.mark.parametrize("ls_with_ignored_dirs", [Language.PYTHON], indirect=True)
+@pytest.mark.parametrize("ls_with_ignored_dirs", PYTHON_LANGUAGE_BACKENDS, indirect=True)
 def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     """Tests that find_references ignores the configured directory."""
     # Location of Item, which is referenced in scripts
@@ -42,11 +41,12 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     assert not any("scripts" in ref["relativePath"] for ref in references)
 
 
-@pytest.mark.parametrize("repo_path", [Language.PYTHON], indirect=True)
-def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
+@pytest.mark.parametrize("language", PYTHON_LANGUAGE_BACKENDS)
+def test_refs_and_symbols_with_glob_patterns(language: Language) -> None:
     """Tests that refs and symbols with glob patterns are ignored."""
     ignored_paths = ["*ipts", "custom_t*"]
-    with start_ls_context(language=Language.PYTHON, repo_path=str(repo_path), ignored_paths=ignored_paths) as ls:
+    repo_path = get_repo_path(language)
+    with start_ls_context(language=language, repo_path=str(repo_path), ignored_paths=ignored_paths) as ls:
         # same as in the above tests
         root = ls.request_full_symbol_tree()[0]
         root_children = root["children"]
