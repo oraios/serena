@@ -957,7 +957,7 @@ class SymbolDictGrouper(Generic[TSymbolDict], ABC):
         self._group_children_keys = group_children_keys
         self._collapse_singleton = collapse_singleton
 
-    def _group_by(self, l: list[dict], keys: list[str], children_keys: list[str]) -> dict[str, Any]:
+    def _group_by(self, l: list[dict], keys: list[str], children_keys: list[str], is_children: bool) -> dict[str, Any]:
         assert len(keys) > 0, "keys must not be empty"
         # group by the first key
         grouped: dict[str, Any] = {}
@@ -969,7 +969,7 @@ class SymbolDictGrouper(Generic[TSymbolDict], ABC):
         if len(keys) > 1:
             # continue grouping by the remaining keys
             for k, group in grouped.items():
-                grouped[k] = self._group_by(group, keys[1:], children_keys)
+                grouped[k] = self._group_by(group, keys[1:], children_keys, is_children=is_children)
         else:
             # grouping is complete; now group the children if necessary
             if children_keys:
@@ -977,15 +977,18 @@ class SymbolDictGrouper(Generic[TSymbolDict], ABC):
                     for item in group:
                         if self._children_key in item:
                             children = item[self._children_key]
-                            item[self._children_key] = self._group_by(children, children_keys, children_keys)
+                            item[self._children_key] = self._group_by(children, children_keys, children_keys, is_children=True)
             # post-process final group items
-            grouped = {k: [self._transform_item(i) for i in v] for k, v in grouped.items()}
+            grouped = {k: [self._transform_item(i, is_children) for i in v] for k, v in grouped.items()}
         return grouped
 
-    def _transform_item(self, item: dict) -> dict:
+    def _transform_item(self, item: dict, is_child: bool) -> dict:
         """
         Post-processes a final group item (which has been regrouped, i.e. some keys may have been removed),
         collapsing singleton items (and items containing only a single non-children key)
+
+        :param item: the item to post-process
+        :param is_child: whether the item is a child item
         """
         if self._collapse_singleton:
             if len(item) == 1:
@@ -1008,7 +1011,7 @@ class SymbolDictGrouper(Generic[TSymbolDict], ABC):
         """
         # avoid side effects by working on a deep-copy
         symbols_copy = copy.deepcopy(symbols)
-        return self._group_by(symbols_copy, self._group_keys, self._group_children_keys)  # type: ignore
+        return self._group_by(symbols_copy, self._group_keys, self._group_children_keys, is_children=False)  # type: ignore
 
 
 class LanguageServerSymbolDictGrouper(SymbolDictGrouper[LanguageServerSymbol.OutputDict]):
@@ -1029,16 +1032,22 @@ class JetBrainsSymbolDictGrouper(SymbolDictGrouper[jb.SymbolDTO]):
         collapse_singleton: bool = False,
         map_name_path_to_name: bool = False,
     ) -> None:
+        """
+        :param group_keys: keys to group main symbols by
+        :param group_children_keys: keys to group child symbols by
+        :param collapse_singleton: whether to collapse singleton symbol dictionaries
+        :param map_name_path_to_name: whether to transform the "name_path" key of child symbols to the bare "name"
+        """
         super().__init__(jb.SymbolDTO, "children", group_keys, group_children_keys, collapse_singleton)
         self._map_name_path_to_name = map_name_path_to_name
 
-    def _transform_item(self, item: dict) -> dict:
-        if self._map_name_path_to_name:
+    def _transform_item(self, item: dict, is_child: bool) -> dict:
+        if self._map_name_path_to_name and is_child:
             # {"name_path: "Class/myMethod"} -> {"name: "myMethod"}
             new_item = dict(item)
             if "name_path" in item:
                 name_path = new_item.pop("name_path")
                 new_item["name"] = name_path.split("/")[-1]
-            return super()._transform_item(new_item)
+            return super()._transform_item(new_item, is_child)
         else:
-            return super()._transform_item(item)
+            return super()._transform_item(item, is_child)
