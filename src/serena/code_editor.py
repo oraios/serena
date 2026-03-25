@@ -4,6 +4,7 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Reversible
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Generic, TypeVar, cast
 
 from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
@@ -18,11 +19,18 @@ log = logging.getLogger(__name__)
 TSymbol = TypeVar("TSymbol", bound=Symbol)
 
 
+@dataclass(frozen=True)
+class EditedFilePath:
+    before_relative_path: str
+    after_relative_path: str
+
+
 class CodeEditor(Generic[TSymbol], ABC):
     def __init__(self, project: Project) -> None:
         self.project_root = project.project_root
         self.encoding = project.project_config.encoding
         self.newline = project.line_ending.newline_str
+        self._last_edited_file_paths: list[EditedFilePath] = []
 
     class EditedFile(ABC):
         def __init__(self, relative_path: str) -> None:
@@ -83,6 +91,20 @@ class CodeEditor(Generic[TSymbol], ABC):
         with open(abs_path, "w", encoding=self.encoding, newline=self.newline) as f:
             f.write(new_contents)
 
+    def _set_last_edited_file_paths(self, edited_file_paths: Iterable[EditedFilePath]) -> None:
+        unique_paths: list[EditedFilePath] = []
+        seen_keys: set[tuple[str, str]] = set()
+        for edited_file_path in edited_file_paths:
+            key = (edited_file_path.before_relative_path, edited_file_path.after_relative_path)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            unique_paths.append(edited_file_path)
+        self._last_edited_file_paths = unique_paths
+
+    def get_last_edited_file_paths(self) -> list[EditedFilePath]:
+        return list(self._last_edited_file_paths)
+
     @abstractmethod
     def _find_unique_symbol(self, name_path: str, relative_file_path: str) -> TSymbol:
         """
@@ -113,6 +135,8 @@ class CodeEditor(Generic[TSymbol], ABC):
 
             edited_file.delete_text_between_positions(start_pos, end_pos)
             edited_file.insert_text_at_position(start_pos, body)
+
+        self._set_last_edited_file_paths([EditedFilePath(relative_file_path, relative_file_path)])
 
     @staticmethod
     def _count_leading_newlines(text: Iterable) -> int:
@@ -171,6 +195,8 @@ class CodeEditor(Generic[TSymbol], ABC):
         with self.edited_file_context(relative_file_path) as edited_file:
             edited_file.insert_text_at_position(PositionInFile(line, col), body)
 
+        self._set_last_edited_file_paths([EditedFilePath(relative_file_path, relative_file_path)])
+
     def insert_before_symbol(self, name_path: str, relative_file_path: str, body: str) -> None:
         """
         Inserts content before the symbol with the given name in the given file.
@@ -199,6 +225,8 @@ class CodeEditor(Generic[TSymbol], ABC):
         with self.edited_file_context(relative_file_path) as edited_file:
             edited_file.insert_text_at_position(PositionInFile(line=line, col=col), body)
 
+        self._set_last_edited_file_paths([EditedFilePath(relative_file_path, relative_file_path)])
+
     def insert_at_line(self, relative_path: str, line: int, content: str) -> None:
         """
         Inserts content at the given line in the given file.
@@ -209,6 +237,8 @@ class CodeEditor(Generic[TSymbol], ABC):
         """
         with self.edited_file_context(relative_path) as edited_file:
             edited_file.insert_text_at_position(PositionInFile(line, 0), content)
+
+        self._set_last_edited_file_paths([EditedFilePath(relative_path, relative_path)])
 
     def delete_lines(self, relative_path: str, start_line: int, end_line: int) -> None:
         """
@@ -226,6 +256,8 @@ class CodeEditor(Generic[TSymbol], ABC):
             end_pos = PositionInFile(line=end_line_for_delete, col=end_col)
             edited_file.delete_text_between_positions(start_pos, end_pos)
 
+        self._set_last_edited_file_paths([EditedFilePath(relative_path, relative_path)])
+
     def delete_symbol(self, name_path: str, relative_file_path: str) -> None:
         """
         Deletes the symbol with the given name in the given file.
@@ -235,6 +267,8 @@ class CodeEditor(Generic[TSymbol], ABC):
         end_pos = symbol.get_body_end_position_or_raise()
         with self.edited_file_context(relative_file_path) as edited_file:
             edited_file.delete_text_between_positions(start_pos, end_pos)
+
+        self._set_last_edited_file_paths([EditedFilePath(relative_file_path, relative_file_path)])
 
     @abstractmethod
     def rename_symbol(self, name_path: str, relative_path: str, new_name: str) -> str:
@@ -292,6 +326,10 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         def apply(self) -> None:
             pass
 
+        @abstractmethod
+        def get_edited_file_paths(self) -> list[EditedFilePath]:
+            pass
+
     class EditOperationFileTextEdits(EditOperation):
         def __init__(self, code_editor: "LanguageServerCodeEditor", file_uri: str, text_edits: list[ls_types.TextEdit]):
             self._code_editor = code_editor
@@ -303,6 +341,9 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
                 edited_file = cast(LanguageServerCodeEditor.EditedFile, edited_file)
                 edited_file.apply_text_edits(self._text_edits)
 
+        def get_edited_file_paths(self) -> list[EditedFilePath]:
+            return [EditedFilePath(self._relative_path, self._relative_path)]
+
     class EditOperationRenameFile(EditOperation):
         def __init__(self, code_editor: "LanguageServerCodeEditor", old_uri: str, new_uri: str):
             self._code_editor = code_editor
@@ -313,6 +354,9 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
             old_abs_path = os.path.join(self._code_editor.project_root, self._old_relative_path)
             new_abs_path = os.path.join(self._code_editor.project_root, self._new_relative_path)
             os.rename(old_abs_path, new_abs_path)
+
+        def get_edited_file_paths(self) -> list[EditedFilePath]:
+            return [EditedFilePath(self._old_relative_path, self._new_relative_path)]
 
     def _workspace_edit_to_edit_operations(self, workspace_edit: ls_types.WorkspaceEdit) -> list["LanguageServerCodeEditor.EditOperation"]:
         operations: list[LanguageServerCodeEditor.EditOperation] = []
@@ -343,6 +387,15 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         :return: number of edit operations applied
         """
         operations = self._workspace_edit_to_edit_operations(workspace_edit)
+
+        # recording the affected files
+        edited_file_paths: list[EditedFilePath] = []
+        for operation in operations:
+            edited_file_paths.extend(operation.get_edited_file_paths())
+
+        self._set_last_edited_file_paths(edited_file_paths)
+
+        # applying the edit operations
         for operation in operations:
             operation.apply()
         return len(operations)

@@ -1,4 +1,5 @@
 using System;
+using TestProject.Services;
 
 namespace TestProject
 {
@@ -7,10 +8,13 @@ namespace TestProject
         static void Main(string[] args)
         {
             Console.WriteLine("Hello, World!");
-            
+             
             var calculator = new Calculator();
             int result = calculator.Add(5, 3);
             Console.WriteLine($"5 + 3 = {result}");
+
+            IGreeter greeter = new ConsoleGreeter();
+            Console.WriteLine(greeter.FormatGreeting("World"));
         }
     }
     
