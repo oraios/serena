@@ -26,21 +26,25 @@ from solidlsp.settings import SolidLSPSettings
 log = logging.getLogger(__name__)
 
 GRADLE_ALLOWED_HOSTS = ("services.gradle.org", "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
+DEFAULT_GRADLE_VERSION="8.14.2"
 GRADLE_SHA256 = "7197a12f450794931532469d4ff21a59ea2c1cd59a3ec3f89c035c3c420a6999"
 VSCODE_JAVA_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
+DEFAULT_VSCODE_JAVA_VERSION="1.53.0-873"
 VSCODE_JAVA_SHA256_BY_PLATFORM = {
-    "osx-arm64": "bc00c2699d4b8d478eb9a1621db9d6d3a12ea0dcc247a9cd8040e8ac19c03933",
-    "osx-x64": "03ae1db1a22c15561a620f1b722d6797d35d4faaa7c4666dbe6ca2715089852f",
-    "linux-arm64": "e15bc9b2a665d3453203402621b5441062aa41b0ec2d140661f439326fd248c1",
-    "linux-x64": "7660b7b527be6fda46a917966b34d828e7416d5cc84287b29b88e7b99c1737f9",
-    "win-x64": "ef195b45bd260976ad2e84618f4044b5d7248deed41d647573f0ee22c4233df3",
+    "osx-arm64": "3a9acf30b682df2f0b895728ad8f84725a95b326e2265f17bf9b087acb08dd0d",
+    "osx-x64": "73823bd3b0765bb9b483ba45216c229065df33e16a40623a7da5d92ae32e1471",
+    "linux-arm64": "92d42123b2282f970517a62cdb4ea2e5d7ffb255e665537f40641f6961a148fc",
+    "linux-x64": "24e9e605cd40b523fe62be350fe8550dafdaa6881010b2c595b26e425f2ee400",
+    "win-x64": "13aeda95e0494442a951f752c7334d97bb7a49991ae5a8b1a6cdb6a8dfcac128",
 }
 INTELLICODE_ALLOWED_HOSTS = (
     "visualstudioexptteam.gallery.vsassets.io",
     "marketplace.visualstudio.com",
     "download.visualstudio.microsoft.com",
 )
+DEFAULT_INTELLICODE_VERSION="1.2.30"
 INTELLICODE_SHA256 = "7f61a7f96d101cdf230f96821be3fddd8f890ebfefb3695d18beee43004ae251"
+DEFAULT_ECLIPSE_LAUNCHER_VERSION="1.7.0.v20250424-1814"
 
 
 @dataclasses.dataclass
@@ -148,13 +152,14 @@ class EclipseJDTLS(SolidLanguageServer):
             Setup runtime dependencies for EclipseJDTLS and return the paths.
             """
             platformId = PlatformUtils.get_platform_id()
-            gradle_version = custom_settings.get("gradle_version", "8.14.2")
-            vscode_java_version = custom_settings.get("vscode_java_version", "1.42.0-561")
+            gradle_version = custom_settings.get("gradle_version", DEFAULT_GRADLE_VERSION)
+            vscode_java_version = custom_settings.get("vscode_java_version", DEFAULT_VSCODE_JAVA_VERSION)
             vscode_java_tag = f"v{vscode_java_version.rsplit('-', 1)[0]}"
-            intellicode_version = custom_settings.get("intellicode_version", "1.2.30")
-            default_gradle_version = gradle_version == "8.14.2"
-            default_vscode_java_version = vscode_java_version == "1.42.0-561"
-            default_intellicode_version = intellicode_version == "1.2.30"
+            intellicode_version = custom_settings.get("intellicode_version", DEFAULT_INTELLICODE_VERSION)
+            eclipse_launcher_version=custom_settings.get("eclipse_launcher_version", DEFAULT_ECLIPSE_LAUNCHER_VERSION)
+            is_default_gradle_version = gradle_version == DEFAULT_GRADLE_VERSION
+            is_default_vscode_java_version = vscode_java_version == DEFAULT_VSCODE_JAVA_VERSION
+            is_default_intellicode_version = intellicode_version == DEFAULT_INTELLICODE_VERSION
 
             runtime_dependencies: dict[str, dict[str, dict[str, object]]] = {
                 "gradle": {
@@ -162,7 +167,7 @@ class EclipseJDTLS(SolidLanguageServer):
                         "url": f"https://services.gradle.org/distributions/gradle-{gradle_version}-bin.zip",
                         "archiveType": "zip",
                         "relative_extraction_path": ".",
-                        "sha256": GRADLE_SHA256 if default_gradle_version else None,
+                        "sha256": GRADLE_SHA256 if is_default_gradle_version else None,
                         "allowed_hosts": GRADLE_ALLOWED_HOSTS,
                     }
                 },
@@ -171,67 +176,67 @@ class EclipseJDTLS(SolidLanguageServer):
                         "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-darwin-arm64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "relative_extraction_path": "vscode-java",
-                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["osx-arm64"] if default_vscode_java_version else None,
+                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["osx-arm64"] if is_default_vscode_java_version else None,
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                     },
                     "osx-arm64": {
                         "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-darwin-arm64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "relative_extraction_path": "vscode-java",
-                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["osx-arm64"] if default_vscode_java_version else None,
+                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["osx-arm64"] if is_default_vscode_java_version else None,
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                         "jre_home_path": "extension/jre/21.0.7-macosx-aarch64",
                         "jre_path": "extension/jre/21.0.7-macosx-aarch64/bin/java",
                         "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
-                        "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                        "jdtls_launcher_jar_path": f"extension/server/plugins/org.eclipse.equinox.launcher_{eclipse_launcher_version}.jar",
                         "jdtls_readonly_config_path": "extension/server/config_mac_arm",
                     },
                     "osx-x64": {
                         "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-darwin-x64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "relative_extraction_path": "vscode-java",
-                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["osx-x64"] if default_vscode_java_version else None,
+                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["osx-x64"] if is_default_vscode_java_version else None,
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                         "jre_home_path": "extension/jre/21.0.7-macosx-x86_64",
                         "jre_path": "extension/jre/21.0.7-macosx-x86_64/bin/java",
                         "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
-                        "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                        "jdtls_launcher_jar_path": f"extension/server/plugins/org.eclipse.equinox.launcher_{eclipse_launcher_version}.jar",
                         "jdtls_readonly_config_path": "extension/server/config_mac",
                     },
                     "linux-arm64": {
                         "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-linux-arm64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "relative_extraction_path": "vscode-java",
-                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["linux-arm64"] if default_vscode_java_version else None,
+                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["linux-arm64"] if is_default_vscode_java_version else None,
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                         "jre_home_path": "extension/jre/21.0.7-linux-aarch64",
                         "jre_path": "extension/jre/21.0.7-linux-aarch64/bin/java",
                         "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
-                        "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                        "jdtls_launcher_jar_path": f"extension/server/plugins/org.eclipse.equinox.launcher_{eclipse_launcher_version}.jar",
                         "jdtls_readonly_config_path": "extension/server/config_linux_arm",
                     },
                     "linux-x64": {
                         "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-linux-x64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "relative_extraction_path": "vscode-java",
-                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["linux-x64"] if default_vscode_java_version else None,
+                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["linux-x64"] if is_default_vscode_java_version else None,
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                         "jre_home_path": "extension/jre/21.0.7-linux-x86_64",
                         "jre_path": "extension/jre/21.0.7-linux-x86_64/bin/java",
                         "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
-                        "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                        "jdtls_launcher_jar_path": f"extension/server/plugins/org.eclipse.equinox.launcher_{eclipse_launcher_version}.jar",
                         "jdtls_readonly_config_path": "extension/server/config_linux",
                     },
                     "win-x64": {
                         "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-win32-x64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "relative_extraction_path": "vscode-java",
-                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["win-x64"] if default_vscode_java_version else None,
+                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["win-x64"] if is_default_vscode_java_version else None,
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                         "jre_home_path": "extension/jre/21.0.7-win32-x86_64",
                         "jre_path": "extension/jre/21.0.7-win32-x86_64/bin/java.exe",
                         "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
-                        "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                        "jdtls_launcher_jar_path": f"extension/server/plugins/org.eclipse.equinox.launcher_{eclipse_launcher_version}.jar",
                         "jdtls_readonly_config_path": "extension/server/config_win",
                     },
                 },
@@ -241,7 +246,7 @@ class EclipseJDTLS(SolidLanguageServer):
                         "alternate_url": f"https://marketplace.visualstudio.com/_apis/public/gallery/publishers/VisualStudioExptTeam/vsextensions/vscodeintellicode/{intellicode_version}/vspackage",
                         "archiveType": "zip",
                         "relative_extraction_path": "intellicode",
-                        "sha256": INTELLICODE_SHA256 if default_intellicode_version else None,
+                        "sha256": INTELLICODE_SHA256 if is_default_intellicode_version else None,
                         "allowed_hosts": INTELLICODE_ALLOWED_HOSTS,
                         "intellicode_jar_path": "extension/dist/com.microsoft.jdtls.intellicode.core-0.7.0.jar",
                         "intellisense_members_path": "extension/dist/bundledModels/java_intellisense-members",
@@ -698,7 +703,7 @@ class EclipseJDTLS(SolidLanguageServer):
                             },
                             "workspaceCacheLimit": 90,
                             "runtimes": [
-                                {"name": "JavaSE-21", "path": "static/vscode-java/extension/jre/21.0.7-linux-x86_64", "default": True}
+                                {"name": "JavaSE-21", "path": "static/vscode-java/extension/jre/21.0.10-linux-x86_64", "default": True}
                             ],
                         },
                         "trace": {"server": "verbose"},
