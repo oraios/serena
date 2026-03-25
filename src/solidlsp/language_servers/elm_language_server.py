@@ -12,12 +12,12 @@ from overrides import override
 from sensai.util.logging import LogTime
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
-from .common import RuntimeDependency, RuntimeDependencyCollection
+from .common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
 
 log = logging.getLogger(__name__)
 
@@ -76,13 +76,16 @@ class ElmLanguageServer(SolidLanguageServer):
         assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
         is_npm_installed = shutil.which("npm") is not None
         assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
+        elm_config = solidlsp_settings.get_ls_specific_settings(Language.ELM)
+        elm_language_server_version = elm_config.get("elm_language_server_version", "2.8.0")
+        npm_registry = elm_config.get("npm_registry")
 
         deps = RuntimeDependencyCollection(
             [
                 RuntimeDependency(
                     id="elm-language-server",
                     description="@elm-tooling/elm-language-server package",
-                    command=["npm", "install", "--prefix", "./", "@elm-tooling/elm-language-server@2.8.0"],
+                    command=build_npm_install_command("@elm-tooling/elm-language-server", elm_language_server_version, npm_registry),
                     platform_id="any",
                 ),
             ]
