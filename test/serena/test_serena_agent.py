@@ -15,13 +15,13 @@ from serena.config.serena_config import ProjectConfig, RegisteredProject, Serena
 from serena.project import Project
 from serena.tools import (
     SUCCESS_RESULT,
-    FindDefiningSymbolTool,
-    GetDiagnosticsForFileTool,
-    GetDiagnosticsForSymbolTool,
     FindDefiningSymbolAtLocationTool,
+    FindDefiningSymbolTool,
     FindImplementationsTool,
     FindReferencingSymbolsTool,
     FindSymbolTool,
+    GetDiagnosticsForFileTool,
+    GetDiagnosticsForSymbolTool,
     ReplaceContentTool,
     ReplaceSymbolBodyTool,
 )
@@ -34,7 +34,7 @@ from test.conftest import (
     language_has_verified_implementation_support,
     language_tests_enabled,
 )
-from test.diagnostics_cases import DiagnosticCase, WORKING_DIAGNOSTIC_TOOL_CASE_PARAMS
+from test.diagnostics_cases import WORKING_DIAGNOSTIC_TOOL_CASE_PARAMS, DiagnosticCase
 from test.solidlsp import clojure as clj
 
 DEFINING_SYMBOL_TOOL_TEST_CASES = [
@@ -601,9 +601,7 @@ class TestSerenaAgent:
             assert expected_name_path in name_path_group, name_path_group
 
         diagnostic_messages = [
-            diagnostic["message"]
-            for diagnostics_for_name_path in name_path_group.values()
-            for diagnostic in diagnostics_for_name_path
+            diagnostic["message"] for diagnostics_for_name_path in name_path_group.values() for diagnostic in diagnostics_for_name_path
         ]
         for expected_fragment in [diagnostic_case.primary_message_fragment, diagnostic_case.reference_message_fragment]:
             assert any(expected_fragment in message for message in diagnostic_messages), diagnostic_messages
@@ -637,9 +635,7 @@ class TestSerenaAgent:
 
         assert set(expected_name_paths).issubset(name_path_group.keys()), name_path_group
         diagnostic_messages = [
-            diagnostic["message"]
-            for diagnostics_for_name_path in name_path_group.values()
-            for diagnostic in diagnostics_for_name_path
+            diagnostic["message"] for diagnostics_for_name_path in name_path_group.values() for diagnostic in diagnostics_for_name_path
         ]
         for expected_fragment in expected_message_fragments:
             assert any(expected_fragment in message for message in diagnostic_messages), diagnostic_messages
@@ -807,8 +803,12 @@ class TestSerenaAgent:
     @pytest.mark.parametrize("serena_agent,diagnostic_case", WORKING_DIAGNOSTIC_TOOL_CASE_PARAMS, indirect=["serena_agent"])
     def test_get_diagnostics_for_file_in_range(self, serena_agent: SerenaAgent, diagnostic_case: DiagnosticCase) -> None:
         project_root = get_repo_path(diagnostic_case.language)
-        primary_position = find_identifier_occurrence_position(project_root / diagnostic_case.relative_path, diagnostic_case.primary_symbol_identifier)
-        reference_position = find_identifier_occurrence_position(project_root / diagnostic_case.relative_path, diagnostic_case.reference_symbol_identifier)
+        primary_position = find_identifier_occurrence_position(
+            project_root / diagnostic_case.relative_path, diagnostic_case.primary_symbol_identifier
+        )
+        reference_position = find_identifier_occurrence_position(
+            project_root / diagnostic_case.relative_path, diagnostic_case.reference_symbol_identifier
+        )
         assert primary_position is not None
         assert reference_position is not None
 

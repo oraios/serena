@@ -21,8 +21,12 @@ def test_request_text_document_diagnostics_matrix(
     assert any(diagnostic_case.reference_message_fragment in message for message in diagnostic_messages), diagnostic_messages
 
     repo_root = language_server.repository_root_path
-    primary_symbol_position = find_identifier_position(Path(repo_root) / diagnostic_case.relative_path, diagnostic_case.primary_symbol_identifier)
-    reference_symbol_position = find_identifier_position(Path(repo_root) / diagnostic_case.relative_path, diagnostic_case.reference_symbol_identifier)
+    primary_symbol_position = find_identifier_position(
+        Path(repo_root) / diagnostic_case.relative_path, diagnostic_case.primary_symbol_identifier
+    )
+    reference_symbol_position = find_identifier_position(
+        Path(repo_root) / diagnostic_case.relative_path, diagnostic_case.reference_symbol_identifier
+    )
     assert primary_symbol_position is not None
     assert reference_symbol_position is not None
 

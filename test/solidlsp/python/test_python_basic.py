@@ -12,7 +12,6 @@ import pytest
 from serena.project import Project
 from serena.util.text_utils import LineType
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
 from test.conftest import PYTHON_LANGUAGE_BACKENDS
 
 

@@ -992,11 +992,7 @@ class SolidLanguageServer(ABC):
             if LSPConstants.URI in item and LSPConstants.RANGE in item:
                 uri = item[LSPConstants.URI]
                 range_d = item[LSPConstants.RANGE]
-            elif (
-                LSPConstants.TARGET_URI in item
-                and LSPConstants.TARGET_RANGE in item
-                and LSPConstants.TARGET_SELECTION_RANGE in item
-            ):
+            elif LSPConstants.TARGET_URI in item and LSPConstants.TARGET_RANGE in item and LSPConstants.TARGET_SELECTION_RANGE in item:
                 uri = item[LSPConstants.TARGET_URI]
                 range_d = item[LSPConstants.TARGET_SELECTION_RANGE]
             else:
@@ -1321,7 +1317,9 @@ class SolidLanguageServer(ABC):
                 pull_diagnostics_failed = True
 
             if response is not None:
-                assert isinstance(response, dict), f"Unexpected response from Language Server (expected list, got {type(response)}): {response}"
+                assert isinstance(response, dict), (
+                    f"Unexpected response from Language Server (expected list, got {type(response)}): {response}"
+                )
                 ret = []
                 for item in response["items"]:  # type: ignore
                     new_item: ls_types.Diagnostic = {

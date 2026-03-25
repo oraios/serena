@@ -26,57 +26,79 @@ from .common import RuntimeDependency, RuntimeDependencyCollection
 
 log = logging.getLogger(__name__)
 
+MARKSMAN_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
+
 
 class Marksman(SolidLanguageServer):
     """
     Provides Markdown specific instantiation of the LanguageServer class using marksman.
+
+    You can pass the following entries in ``ls_specific_settings["markdown"]``:
+        - marksman_version: Override the pinned Marksman release tag downloaded by
+          Serena (default: the bundled Serena version).
     """
 
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
-        marksman_releases = "https://github.com/artempyanykh/marksman/releases/download/2024-12-18"
-        runtime_dependencies = RuntimeDependencyCollection(
-            [
-                RuntimeDependency(
-                    id="marksman",
-                    url=f"{marksman_releases}/marksman-linux-x64",
-                    platform_id="linux-x64",
-                    archive_type="binary",
-                    binary_name="marksman",
-                ),
-                RuntimeDependency(
-                    id="marksman",
-                    url=f"{marksman_releases}/marksman-linux-arm64",
-                    platform_id="linux-arm64",
-                    archive_type="binary",
-                    binary_name="marksman",
-                ),
-                RuntimeDependency(
-                    id="marksman",
-                    url=f"{marksman_releases}/marksman-macos",
-                    platform_id="osx-x64",
-                    archive_type="binary",
-                    binary_name="marksman",
-                ),
-                RuntimeDependency(
-                    id="marksman",
-                    url=f"{marksman_releases}/marksman-macos",
-                    platform_id="osx-arm64",
-                    archive_type="binary",
-                    binary_name="marksman",
-                ),
-                RuntimeDependency(
-                    id="marksman",
-                    url=f"{marksman_releases}/marksman.exe",
-                    platform_id="win-x64",
-                    archive_type="binary",
-                    binary_name="marksman.exe",
-                ),
-            ]
-        )
+        DEFAULT_MARKSMAN_VERSION = "2024-12-18"
+
+        @classmethod
+        def _runtime_dependencies(cls, version: str) -> RuntimeDependencyCollection:
+            marksman_releases = f"https://github.com/artempyanykh/marksman/releases/download/{version}"
+            default_version = version == cls.DEFAULT_MARKSMAN_VERSION
+            return RuntimeDependencyCollection(
+                [
+                    RuntimeDependency(
+                        id="marksman",
+                        url=f"{marksman_releases}/marksman-linux-x64",
+                        platform_id="linux-x64",
+                        archive_type="binary",
+                        binary_name="marksman",
+                        sha256="b9cb666c643dfd9b699811fdfc445ed4c56be65c1d878c21d46847f0d7b0e475" if default_version else None,
+                        allowed_hosts=MARKSMAN_ALLOWED_HOSTS,
+                    ),
+                    RuntimeDependency(
+                        id="marksman",
+                        url=f"{marksman_releases}/marksman-linux-arm64",
+                        platform_id="linux-arm64",
+                        archive_type="binary",
+                        binary_name="marksman",
+                        sha256="b8d6972a56f3f9b7bbbf7c77ef8998e3b66fa82fb03c01398e224144486c9e73" if default_version else None,
+                        allowed_hosts=MARKSMAN_ALLOWED_HOSTS,
+                    ),
+                    RuntimeDependency(
+                        id="marksman",
+                        url=f"{marksman_releases}/marksman-macos",
+                        platform_id="osx-x64",
+                        archive_type="binary",
+                        binary_name="marksman",
+                        sha256="7e18803966231a33ee107d0d26f69b41f2f0dc1332c52dd9729c2e29fb77be83" if default_version else None,
+                        allowed_hosts=MARKSMAN_ALLOWED_HOSTS,
+                    ),
+                    RuntimeDependency(
+                        id="marksman",
+                        url=f"{marksman_releases}/marksman-macos",
+                        platform_id="osx-arm64",
+                        archive_type="binary",
+                        binary_name="marksman",
+                        sha256="7e18803966231a33ee107d0d26f69b41f2f0dc1332c52dd9729c2e29fb77be83" if default_version else None,
+                        allowed_hosts=MARKSMAN_ALLOWED_HOSTS,
+                    ),
+                    RuntimeDependency(
+                        id="marksman",
+                        url=f"{marksman_releases}/marksman.exe",
+                        platform_id="win-x64",
+                        archive_type="binary",
+                        binary_name="marksman.exe",
+                        sha256="39de9df039c8b0d627ac5918a9d8792ad20fc49e2461d1f5c906975c016799ec" if default_version else None,
+                        allowed_hosts=MARKSMAN_ALLOWED_HOSTS,
+                    ),
+                ]
+            )
 
         def _get_or_install_core_dependency(self) -> str:
             """Setup runtime dependencies for marksman and return the command to start the server."""
-            deps = self.runtime_dependencies
+            marksman_version = self._custom_settings.get("marksman_version", self.DEFAULT_MARKSMAN_VERSION)
+            deps = self._runtime_dependencies(marksman_version)
             dependency = deps.get_single_dep_for_current_platform()
 
             marksman_ls_dir = self._ls_resources_dir

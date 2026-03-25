@@ -24,12 +24,22 @@ log = logging.getLogger(__name__)
 # GitHub release version to download when not installed locally
 _DEFAULT_VERSION = "1.3.0"
 _GITHUB_RELEASE_BASE = "https://github.com/antaalt/shader-sense/releases/download"
+_HLSL_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
+_HLSL_SHA256_BY_ASSET = {
+    "shader-language-server-x86_64-pc-windows-msvc.zip": "a945b000c296cdeebb9ee2d4452cec2a0f26544dd076bb08bfdcade2278296a6",
+    "shader-language-server-x86_64-unknown-linux-gnu.zip": "8c0a7b36f51cc58593762db3592ae13e21ca3cb982b2526cfaaf7c82e92ca089",
+    "shader-language-server-aarch64-pc-windows-msvc.zip": "cdbd7b41e71cf6040d5cdb7e211ba4b76671a404ee0f7add281d72d3ab8dfa65",
+}
 
 
 class HlslLanguageServer(SolidLanguageServer):
     """
     Shader language server using shader-language-server.
     Supports .hlsl, .hlsli, .fx, .fxh, .cginc, .compute, .shader, .glsl, .vert, .frag, .geom, .tesc, .tese, .comp, .wgsl files.
+
+    You can pass the following entries in ``ls_specific_settings["hlsl"]``:
+        - version: Override the pinned shader-language-server version downloaded
+          or built by Serena (default: the bundled Serena version).
     """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings) -> None:
@@ -53,7 +63,7 @@ class HlslLanguageServer(SolidLanguageServer):
             base_url = f"{_GITHUB_RELEASE_BASE}/{tag}"
 
             # macOS has no pre-built binaries; build from source via cargo install
-            cargo_install_cmd = f"cargo install shader_language_server --version {version} --root ."
+            cargo_install_cmd = ["cargo", "install", "shader_language_server", "--version", version, "--root", "."]
 
             deps = RuntimeDependencyCollection(
                 [
@@ -64,6 +74,10 @@ class HlslLanguageServer(SolidLanguageServer):
                         platform_id="win-x64",
                         archive_type="zip",
                         binary_name="shader-language-server.exe",
+                        sha256=_HLSL_SHA256_BY_ASSET["shader-language-server-x86_64-pc-windows-msvc.zip"]
+                        if version == _DEFAULT_VERSION
+                        else None,
+                        allowed_hosts=_HLSL_ALLOWED_HOSTS,
                     ),
                     RuntimeDependency(
                         id="shader-language-server",
@@ -72,6 +86,10 @@ class HlslLanguageServer(SolidLanguageServer):
                         platform_id="linux-x64",
                         archive_type="zip",
                         binary_name="shader-language-server",
+                        sha256=_HLSL_SHA256_BY_ASSET["shader-language-server-x86_64-unknown-linux-gnu.zip"]
+                        if version == _DEFAULT_VERSION
+                        else None,
+                        allowed_hosts=_HLSL_ALLOWED_HOSTS,
                     ),
                     RuntimeDependency(
                         id="shader-language-server",
@@ -80,6 +98,10 @@ class HlslLanguageServer(SolidLanguageServer):
                         platform_id="win-arm64",
                         archive_type="zip",
                         binary_name="shader-language-server.exe",
+                        sha256=_HLSL_SHA256_BY_ASSET["shader-language-server-aarch64-pc-windows-msvc.zip"]
+                        if version == _DEFAULT_VERSION
+                        else None,
+                        allowed_hosts=_HLSL_ALLOWED_HOSTS,
                     ),
                     RuntimeDependency(
                         id="shader-language-server",
