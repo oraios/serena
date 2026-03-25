@@ -161,7 +161,7 @@ doc-build = ["doc-clean", "doc-generate-files", "_sphinx_build"]
 [tool.ruff]
 target-version = "py311"
 line-length = 140
-exclude = ["src/solidlsp/language_servers/**/static", "src/multilspy"]
+exclude = ["src/solidlsp/language_servers/**/static", "src/multilspy", "test/resources/repos"]
 
 [tool.ruff.format]
 quote-style = "double"
