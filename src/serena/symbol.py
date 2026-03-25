@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import os
@@ -1005,7 +1006,9 @@ class SymbolDictGrouper(Generic[TSymbolDict], ABC):
         :param symbols: the symbols to group
         :return: dictionary with the symbols grouped as defined at construction
         """
-        return self._group_by(symbols, self._group_keys, self._group_children_keys)  # type: ignore
+        # avoid side effects by working on a deep-copy
+        symbols_copy = copy.deepcopy(symbols)
+        return self._group_by(symbols_copy, self._group_keys, self._group_children_keys)  # type: ignore
 
 
 class LanguageServerSymbolDictGrouper(SymbolDictGrouper[LanguageServerSymbol.OutputDict]):
