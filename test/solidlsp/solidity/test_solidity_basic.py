@@ -13,6 +13,7 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.conftest import language_has_verified_implementation_support
 
 
 def _find_identifier_position(file_path: Path, symbol_name: str) -> Optional[tuple[int, int]]:
@@ -163,3 +164,30 @@ class TestSolidityLanguageServerBasics:
 
         ref_files = {ref.get("uri", "") for ref in references}
         assert any("Token.sol" in uri for uri in ref_files), "IERC20.transfer references should include Token.sol"
+
+    if language_has_verified_implementation_support(Language.SOLIDITY):
+
+        @pytest.mark.parametrize("language_server", [Language.SOLIDITY], indirect=True)
+        @pytest.mark.parametrize("repo_path", [Language.SOLIDITY], indirect=True)
+        def test_find_implementations(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
+            pos = _find_identifier_position(repo_path / "contracts/interfaces/IERC20.sol", "transfer")
+            assert pos is not None, "Should find 'transfer' identifier in IERC20.sol"
+
+            implementations = language_server.request_implementation("contracts/interfaces/IERC20.sol", *pos)
+            assert implementations, "Expected Token.transfer to be returned as an implementation"
+            assert any("Token.sol" in implementation.get("relativePath", "") for implementation in implementations), (
+                f"Expected Token.transfer implementation, got: {implementations}"
+            )
+
+        @pytest.mark.parametrize("language_server", [Language.SOLIDITY], indirect=True)
+        @pytest.mark.parametrize("repo_path", [Language.SOLIDITY], indirect=True)
+        def test_request_implementing_symbols(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
+            pos = _find_identifier_position(repo_path / "contracts/interfaces/IERC20.sol", "transfer")
+            assert pos is not None, "Should find 'transfer' identifier in IERC20.sol"
+
+            implementing_symbols = language_server.request_implementing_symbols("contracts/interfaces/IERC20.sol", *pos)
+            assert implementing_symbols, "Expected implementing symbols for IERC20.transfer"
+            assert any(
+                symbol.get("name") == "transfer" and "Token.sol" in symbol["location"].get("relativePath", "")
+                for symbol in implementing_symbols
+            ), f"Expected Token.transfer symbol, got: {implementing_symbols}"

@@ -12,6 +12,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Literal
 
+from serena.code_editor import EditedFilePath
 from serena.tools import SUCCESS_RESULT, EditedFileContext, Tool, ToolMarkerCanEdit, ToolMarkerOptional
 from serena.util.file_system import scan_directory
 from serena.util.text_utils import ContentReplacer, search_files
@@ -61,6 +62,11 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
         :param content: the (appropriately encoded) content to write to the file
         :return: a message indicating success or failure
         """
+        # capturing diagnostics before the edit
+        edited_file_paths = [EditedFilePath(relative_path, relative_path)]
+        diagnostics_snapshot = self._capture_published_lsp_diagnostics_snapshot(edited_file_paths)
+
+        # validating the destination path
         project_root = self.get_project_root()
         abs_path = (Path(project_root) / relative_path).resolve()
         will_overwrite_existing = abs_path.exists()
@@ -72,12 +78,14 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
                 f"Cannot create file outside of the project directory, got {relative_path=}"
             )
 
+        # writing the file
         abs_path.parent.mkdir(parents=True, exist_ok=True)
         abs_path.write_text(content, encoding=self.project.project_config.encoding, newline=self.project.line_ending.newline_str)
         answer = f"File created: {relative_path}."
         if will_overwrite_existing:
             answer += " Overwrote existing file."
-        return answer
+
+        return self._format_lsp_edit_result_with_new_diagnostics(answer, edited_file_paths, diagnostics_snapshot)
 
 
 class ListDirTool(Tool):
@@ -212,13 +220,19 @@ class ReplaceContentTool(Tool, ToolMarkerCanEdit):
         Performs the replacement, with additional options not exposed in the tool.
         This function can be used internally by other tools.
         """
+        # capturing diagnostics before the edit
+        edited_file_paths = [EditedFilePath(relative_path, relative_path)]
+        diagnostics_snapshot = self._capture_published_lsp_diagnostics_snapshot(edited_file_paths)
+
+        # applying the content replacement
         self.project.validate_relative_path(relative_path, require_not_ignored=require_not_ignored)
         with EditedFileContext(relative_path, self.create_code_editor()) as context:
             original_content = context.get_original_content()
             replacer = ContentReplacer(mode=mode, allow_multiple_occurrences=allow_multiple_occurrences)
             updated_content = replacer.replace(original_content, needle, repl)
             context.set_updated_content(updated_content)
-        return SUCCESS_RESULT
+
+        return self._format_lsp_edit_result_with_new_diagnostics(SUCCESS_RESULT, edited_file_paths, diagnostics_snapshot)
 
 
 class DeleteLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
@@ -241,9 +255,15 @@ class DeleteLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
         :param start_line: the 0-based index of the first line to be deleted
         :param end_line: the 0-based index of the last line to be deleted
         """
+        # capturing diagnostics before the edit
+        edited_file_paths = [EditedFilePath(relative_path, relative_path)]
+        diagnostics_snapshot = self._capture_published_lsp_diagnostics_snapshot(edited_file_paths)
+
+        # applying the edit
         code_editor = self.create_code_editor()
         code_editor.delete_lines(relative_path, start_line, end_line)
-        return SUCCESS_RESULT
+
+        return self._format_lsp_edit_result_with_new_diagnostics(SUCCESS_RESULT, edited_file_paths, diagnostics_snapshot)
 
 
 class ReplaceLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
@@ -268,13 +288,20 @@ class ReplaceLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
         :param end_line: the 0-based index of the last line to be deleted
         :param content: the content to insert
         """
+        # normalizing the replacement content
         if not content.endswith("\n"):
             content += "\n"
-        result = self.agent.get_tool(DeleteLinesTool).apply(relative_path, start_line, end_line)
-        if result != SUCCESS_RESULT:
-            return result
-        self.agent.get_tool(InsertAtLineTool).apply(relative_path, start_line, content)
-        return SUCCESS_RESULT
+
+        # capturing diagnostics before the edit
+        edited_file_paths = [EditedFilePath(relative_path, relative_path)]
+        diagnostics_snapshot = self._capture_published_lsp_diagnostics_snapshot(edited_file_paths)
+
+        # applying the replacement
+        code_editor = self.create_code_editor()
+        code_editor.delete_lines(relative_path, start_line, end_line)
+        code_editor.insert_at_line(relative_path, start_line, content)
+
+        return self._format_lsp_edit_result_with_new_diagnostics(SUCCESS_RESULT, edited_file_paths, diagnostics_snapshot)
 
 
 class InsertAtLineTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
@@ -298,11 +325,19 @@ class InsertAtLineTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
         :param line: the 0-based index of the line to insert content at
         :param content: the content to be inserted
         """
+        # normalizing the inserted content
         if not content.endswith("\n"):
             content += "\n"
+
+        # capturing diagnostics before the edit
+        edited_file_paths = [EditedFilePath(relative_path, relative_path)]
+        diagnostics_snapshot = self._capture_published_lsp_diagnostics_snapshot(edited_file_paths)
+
+        # applying the insertion
         code_editor = self.create_code_editor()
         code_editor.insert_at_line(relative_path, line, content)
-        return SUCCESS_RESULT
+
+        return self._format_lsp_edit_result_with_new_diagnostics(SUCCESS_RESULT, edited_file_paths, diagnostics_snapshot)
 
 
 class SearchForPatternTool(Tool):

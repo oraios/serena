@@ -1,7 +1,9 @@
 module Program
 
 open Calculator
+open Formatter
 open Models
+open Shapes
 
 [<EntryPoint>]
 let main argv =
@@ -24,6 +26,12 @@ let main argv =
     let calc = CalculatorClass()
     let classResult = calc.Add(20, 5)
     printfn "Calculator class: 20 + 5 = %d" classResult
+
+    let greeter: IGreeter = ConsoleGreeter() :> IGreeter
+    printfn "%s" (greeter.FormatGreeting("World"))
+
+    let shape: Shape = Circle(2.0) :> Shape
+    printfn "Area: %.2f" (shape.Area())
     
     // Test person module
     let person = PersonModule.createPerson "Alice Smith" 25 (Some "alice@example.com")

@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -12,11 +13,221 @@ import pytest
 from serena.agent import SerenaAgent
 from serena.config.serena_config import ProjectConfig, RegisteredProject, SerenaConfig
 from serena.project import Project
-from serena.tools import SUCCESS_RESULT, FindReferencingSymbolsTool, FindSymbolTool, ReplaceContentTool, ReplaceSymbolBodyTool
+from serena.tools import (
+    SUCCESS_RESULT,
+    FindDefiningSymbolTool,
+    GetDiagnosticsForFileTool,
+    GetDiagnosticsForSymbolTool,
+    FindDefiningSymbolAtLocationTool,
+    FindImplementationsTool,
+    FindReferencingSymbolsTool,
+    FindSymbolTool,
+    ReplaceContentTool,
+    ReplaceSymbolBodyTool,
+)
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
-from test.conftest import get_repo_path, is_ci, language_tests_enabled
+from test.conftest import (
+    find_identifier_occurrence_position,
+    get_repo_path,
+    is_ci,
+    language_has_verified_implementation_support,
+    language_tests_enabled,
+)
+from test.diagnostics_cases import DiagnosticCase, WORKING_DIAGNOSTIC_TOOL_CASE_PARAMS
 from test.solidlsp import clojure as clj
+
+DEFINING_SYMBOL_TOOL_TEST_CASES = [
+    pytest.param(
+        Language.PYTHON,
+        os.path.join("test_repo", "services.py"),
+        "User",
+        1,
+        1,
+        "User",
+        "models.py",
+        marks=pytest.mark.python,
+    ),
+    pytest.param(
+        Language.PYTHON_TY,
+        os.path.join("test_repo", "services.py"),
+        "User",
+        1,
+        1,
+        "User",
+        "models.py",
+        marks=pytest.mark.python,
+    ),
+    pytest.param(Language.GO, "main.go", "Helper", 0, 1, "Helper", "main.go", marks=pytest.mark.go),
+    pytest.param(
+        Language.JAVA,
+        os.path.join("src", "main", "java", "test_repo", "Main.java"),
+        "Model",
+        0,
+        1,
+        "Model",
+        "Model.java",
+        marks=pytest.mark.java,
+    ),
+    pytest.param(
+        Language.KOTLIN,
+        os.path.join("src", "main", "kotlin", "test_repo", "Main.kt"),
+        "Model",
+        0,
+        1,
+        "Model",
+        "Model.kt",
+        marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+    ),
+    pytest.param(
+        Language.RUST,
+        os.path.join("src", "main.rs"),
+        "format_greeting",
+        0,
+        1,
+        "format_greeting",
+        "lib.rs",
+        marks=pytest.mark.rust,
+    ),
+    pytest.param(Language.PHP, "index.php", "helperFunction", 0, 5, "helperFunction", "helper.php", marks=pytest.mark.php),
+    pytest.param(
+        Language.CLOJURE,
+        clj.UTILS_PATH,
+        "multiply",
+        0,
+        1,
+        "multiply",
+        clj.CORE_PATH,
+        marks=[
+            pytest.mark.clojure,
+            pytest.mark.skipif(not clj.is_clojure_cli_available(), reason="clojure CLI is not installed"),
+        ],
+    ),
+    pytest.param(Language.CSHARP, "Program.cs", "Add", 0, 1, "Add", "Program.cs", marks=pytest.mark.csharp),
+    pytest.param(
+        Language.POWERSHELL,
+        "main.ps1",
+        "Convert-ToUpperCase",
+        0,
+        1,
+        "function Convert-ToUpperCase ()",
+        "utils.ps1",
+        marks=pytest.mark.powershell,
+    ),
+    pytest.param(Language.CPP_CCLS, "a.cpp", "add", 0, 1, "add", "b.cpp", marks=pytest.mark.cpp),
+    pytest.param(
+        Language.LEAN4,
+        "Main.lean",
+        "add",
+        0,
+        1,
+        "add",
+        "Helper.lean",
+        marks=[
+            pytest.mark.lean4,
+            pytest.mark.skipif(shutil.which("lean") is None, reason="Lean is not installed"),
+        ],
+    ),
+    pytest.param(Language.TYPESCRIPT, "index.ts", "helperFunction", 1, 1, "helperFunction", "index.ts", marks=pytest.mark.typescript),
+    pytest.param(
+        Language.FSHARP,
+        "Program.fs",
+        "add",
+        0,
+        1,
+        "add",
+        "Calculator.fs",
+        marks=[pytest.mark.fsharp, pytest.mark.xfail(reason="F# language server cannot reliably resolve defining symbols")],
+    ),
+]
+
+REGEX_DEFINING_SYMBOL_TOOL_TEST_CASES = [
+    pytest.param(
+        Language.PYTHON,
+        os.path.join("test_repo", "services.py"),
+        r"from \.models import Item, (User)",
+        "",
+        "User",
+        "models.py",
+        marks=pytest.mark.python,
+    ),
+    pytest.param(
+        Language.PYTHON,
+        os.path.join("test_repo", "services.py"),
+        r"=\s+(User)\(",
+        "UserService/create_user",
+        "User",
+        "models.py",
+        marks=pytest.mark.python,
+    ),
+    pytest.param(
+        Language.PYTHON_TY,
+        os.path.join("test_repo", "services.py"),
+        r"=\s+(User)\(",
+        "UserService/create_user",
+        "User",
+        "models.py",
+        marks=pytest.mark.python,
+    ),
+    pytest.param(
+        Language.GO,
+        "main.go",
+        r"var greeter (Greeter) =",
+        "main",
+        "Greeter",
+        "main.go",
+        marks=pytest.mark.go,
+    ),
+]
+
+IMPLEMENTATION_TOOL_TEST_CASE_DATA = [
+    (
+        Language.CSHARP,
+        "IGreeter/FormatGreeting",
+        os.path.join("Services", "IGreeter.cs"),
+        os.path.join("Services", "ConsoleGreeter.cs"),
+        "FormatGreeting",
+        pytest.mark.csharp,
+    ),
+    (
+        Language.GO,
+        "Greeter/FormatGreeting",
+        "main.go",
+        "main.go",
+        "(ConsoleGreeter).FormatGreeting",
+        pytest.mark.go,
+    ),
+    (
+        Language.JAVA,
+        "Greeter/formatGreeting",
+        os.path.join("src", "main", "java", "test_repo", "Greeter.java"),
+        os.path.join("src", "main", "java", "test_repo", "ConsoleGreeter.java"),
+        "formatGreeting",
+        pytest.mark.java,
+    ),
+    (
+        Language.RUST,
+        "Greeter/format_greeting",
+        os.path.join("src", "lib.rs"),
+        os.path.join("src", "lib.rs"),
+        "format_greeting",
+        pytest.mark.rust,
+    ),
+    (
+        Language.TYPESCRIPT,
+        "Greeter/formatGreeting",
+        "formatters.ts",
+        "formatters.ts",
+        "formatGreeting",
+        pytest.mark.typescript,
+    ),
+]
+
+IMPLEMENTATION_TOOL_TEST_CASES = [
+    pytest.param(language, symbol_name, def_file, impl_file, expected_symbol_name, marks=mark)
+    for language, symbol_name, def_file, impl_file, expected_symbol_name, mark in IMPLEMENTATION_TOOL_TEST_CASE_DATA
+    if language_has_verified_implementation_support(language)
+]
 
 
 @pytest.fixture
@@ -27,6 +238,7 @@ def serena_config():
     test_projects = []
     for language in [
         Language.PYTHON,
+        Language.PYTHON_TY,
         Language.GO,
         Language.JAVA,
         Language.KOTLIN,
@@ -68,6 +280,13 @@ def read_project_file(project: Project, relative_path: str) -> str:
     file_path = os.path.join(project.project_root, relative_path)
     with open(file_path, encoding=project.project_config.encoding) as f:
         return f.read()
+
+
+def parse_edit_diagnostics_result(result: str) -> dict:
+    """Utility function to parse the diagnostic payload returned by edit tools."""
+    prefix = "Edit introduced new warning-or-higher diagnostics: "
+    assert result.startswith(prefix), result
+    return json.loads(result[len(prefix) :])
 
 
 @contextmanager
@@ -253,6 +472,178 @@ class TestSerenaAgent:
         refs = json.loads(result)
         assert contains_ref_with_relative_path(refs, ref_file), f"Expected to find reference to {symbol_name} in {ref_file}. refs={refs}"
 
+    def _assert_find_symbol_implementations(
+        self,
+        serena_agent: SerenaAgent,
+        symbol_name: str,
+        def_file: str,
+        impl_file: str,
+        expected_symbol_name: str,
+    ) -> None:
+        agent = serena_agent
+
+        find_symbol_tool = agent.get_tool(FindSymbolTool)
+        result = find_symbol_tool.apply(name_path_pattern=symbol_name, relative_path=def_file)
+        symbols = json.loads(result)
+        assert symbols, f"Expected to find symbol {symbol_name} in {def_file}"
+
+        def_symbol = symbols[0]
+        find_impl_tool = agent.get_tool(FindImplementationsTool)
+        result = find_impl_tool.apply(name_path=def_symbol["name_path"], relative_path=def_symbol["relative_path"], include_info=True)
+        implementations = json.loads(result)
+
+        assert any(
+            impl_file in implementation["relative_path"]
+            and (
+                implementation.get("name") == expected_symbol_name
+                or implementation.get("name_path") == expected_symbol_name
+                or expected_symbol_name in implementation.get("info", "")
+            )
+            for implementation in implementations
+        ), f"Expected to find implementation of {symbol_name} in {impl_file}. implementations={implementations}"
+
+        for implementation in implementations:
+            if implementation["kind"] in (SymbolKind.File.name, SymbolKind.Module.name):
+                continue
+            symbol_info = implementation.get("info")
+            assert symbol_info, f"Expected symbol info to be present for implementation: {implementation}"
+
+    def _assert_find_defining_symbol(
+        self,
+        serena_agent: SerenaAgent,
+        relative_path: str,
+        identifier: str,
+        occurrence_index: int,
+        column_offset: int,
+        expected_name: str,
+        expected_definition_file: str,
+    ) -> None:
+        project_root = get_repo_path(serena_agent.get_active_lsp_languages()[0])
+        position = find_identifier_occurrence_position(project_root / relative_path, identifier, occurrence_index, column_offset)
+        assert position is not None, f"Could not find occurrence {occurrence_index} of {identifier!r} in {relative_path}"
+
+        find_defining_symbol_tool = serena_agent.get_tool(FindDefiningSymbolAtLocationTool)
+        result = find_defining_symbol_tool.apply(relative_path=relative_path, line=position[0], column=position[1], include_info=True)
+        defining_symbol = json.loads(result)
+
+        assert defining_symbol is not None, f"Expected defining symbol for {identifier!r} in {relative_path}"
+        assert defining_symbol.get("relative_path") is not None
+        assert expected_definition_file in defining_symbol["relative_path"], (
+            f"Expected defining symbol in {expected_definition_file!r}, got: {defining_symbol}"
+        )
+        assert (
+            defining_symbol.get("name") == expected_name
+            or defining_symbol.get("name_path") == expected_name
+            or expected_name in defining_symbol.get("info", "")
+        ), f"Expected defining symbol name {expected_name!r}, got: {defining_symbol}"
+
+        if serena_agent.get_active_lsp_languages() == [Language.KOTLIN]:
+            return
+        if defining_symbol["kind"] not in (SymbolKind.File.name, SymbolKind.Module.name):
+            assert defining_symbol.get("info"), f"Expected defining symbol info to be present: {defining_symbol}"
+
+    def _assert_find_defining_symbol_by_regex(
+        self,
+        serena_agent: SerenaAgent,
+        relative_path: str,
+        regex: str,
+        containing_symbol_name_path: str,
+        expected_name: str,
+        expected_definition_file: str,
+    ) -> None:
+        find_defining_symbol_tool = serena_agent.get_tool(FindDefiningSymbolTool)
+        result = find_defining_symbol_tool.apply(
+            regex=regex,
+            relative_path=relative_path,
+            containing_symbol_name_path=containing_symbol_name_path,
+            include_info=True,
+        )
+        defining_symbol = json.loads(result)
+
+        assert defining_symbol is not None, f"Expected defining symbol for regex {regex!r} in {relative_path}"
+        assert defining_symbol.get("relative_path") is not None
+        assert expected_definition_file in defining_symbol["relative_path"], (
+            f"Expected defining symbol in {expected_definition_file!r}, got: {defining_symbol}"
+        )
+        assert (
+            defining_symbol.get("name") == expected_name
+            or defining_symbol.get("name_path") == expected_name
+            or expected_name in defining_symbol.get("info", "")
+        ), f"Expected defining symbol name {expected_name!r}, got: {defining_symbol}"
+
+        if serena_agent.get_active_lsp_languages() == [Language.KOTLIN]:
+            return
+        if defining_symbol["kind"] not in (SymbolKind.File.name, SymbolKind.Module.name):
+            assert defining_symbol.get("info"), f"Expected defining symbol info to be present: {defining_symbol}"
+
+    def _assert_diagnostics_for_file(
+        self,
+        serena_agent: SerenaAgent,
+        diagnostic_case: DiagnosticCase,
+        start_line: int = 0,
+        end_line: int = -1,
+    ) -> None:
+        diagnostics_tool = serena_agent.get_tool(GetDiagnosticsForFileTool)
+        result = diagnostics_tool.apply(
+            relative_path=diagnostic_case.relative_path,
+            start_line=start_line,
+            end_line=end_line,
+            min_severity=1,
+        )
+        grouped_diagnostics = json.loads(result)
+
+        assert diagnostic_case.relative_path in grouped_diagnostics, grouped_diagnostics
+        severity_group = grouped_diagnostics[diagnostic_case.relative_path]
+        assert "Error" in severity_group, severity_group
+        name_path_group = severity_group["Error"]
+
+        for expected_name_path in [diagnostic_case.primary_symbol_name_path, diagnostic_case.reference_symbol_name_path]:
+            assert expected_name_path in name_path_group, name_path_group
+
+        diagnostic_messages = [
+            diagnostic["message"]
+            for diagnostics_for_name_path in name_path_group.values()
+            for diagnostic in diagnostics_for_name_path
+        ]
+        for expected_fragment in [diagnostic_case.primary_message_fragment, diagnostic_case.reference_message_fragment]:
+            assert any(expected_fragment in message for message in diagnostic_messages), diagnostic_messages
+
+    def _assert_diagnostics_for_symbol(
+        self,
+        serena_agent: SerenaAgent,
+        diagnostic_case: DiagnosticCase,
+        check_symbol_references: bool,
+    ) -> None:
+        diagnostics_tool = serena_agent.get_tool(GetDiagnosticsForSymbolTool)
+        result = diagnostics_tool.apply(
+            name_path=diagnostic_case.primary_symbol_name_path,
+            reference_file=diagnostic_case.relative_path,
+            check_symbol_references=check_symbol_references,
+            min_severity=1,
+        )
+        grouped_diagnostics = json.loads(result)
+        diagnostics_file = diagnostic_case.relative_path
+
+        assert diagnostics_file in grouped_diagnostics, grouped_diagnostics
+        severity_group = grouped_diagnostics[diagnostics_file]
+        assert "Error" in severity_group, severity_group
+        name_path_group = severity_group["Error"]
+
+        expected_name_paths = [diagnostic_case.primary_symbol_name_path]
+        expected_message_fragments = [diagnostic_case.primary_message_fragment]
+        if check_symbol_references:
+            expected_name_paths.append(diagnostic_case.reference_symbol_name_path)
+            expected_message_fragments.append(diagnostic_case.reference_message_fragment)
+
+        assert set(expected_name_paths).issubset(name_path_group.keys()), name_path_group
+        diagnostic_messages = [
+            diagnostic["message"]
+            for diagnostics_for_name_path in name_path_group.values()
+            for diagnostic in diagnostics_for_name_path
+        ]
+        for expected_fragment in expected_message_fragments:
+            assert any(expected_fragment in message for message in diagnostic_messages), diagnostic_messages
+
     @pytest.mark.parametrize(
         "serena_agent,symbol_name,def_file,ref_file",
         [
@@ -318,6 +709,157 @@ class TestSerenaAgent:
     @pytest.mark.xfail(reason="F# language server is unreliable")  # See issue #1040
     def test_find_symbol_references_fsharp(self, serena_agent: SerenaAgent, symbol_name: str, def_file: str, ref_file: str) -> None:
         self._assert_find_symbol_references(serena_agent, symbol_name, def_file, ref_file)
+
+    @pytest.mark.parametrize(
+        "serena_agent,relative_path,identifier,occurrence_index,column_offset,expected_name,expected_definition_file",
+        DEFINING_SYMBOL_TOOL_TEST_CASES,
+        indirect=["serena_agent"],
+    )
+    def test_find_defining_symbol(
+        self,
+        serena_agent: SerenaAgent,
+        relative_path: str,
+        identifier: str,
+        occurrence_index: int,
+        column_offset: int,
+        expected_name: str,
+        expected_definition_file: str,
+    ) -> None:
+        self._assert_find_defining_symbol(
+            serena_agent,
+            relative_path,
+            identifier,
+            occurrence_index,
+            column_offset,
+            expected_name,
+            expected_definition_file,
+        )
+
+    @pytest.mark.parametrize(
+        "serena_agent,relative_path,regex,containing_symbol_name_path,expected_name,expected_definition_file",
+        REGEX_DEFINING_SYMBOL_TOOL_TEST_CASES,
+        indirect=["serena_agent"],
+    )
+    def test_find_defining_symbol_by_regex(
+        self,
+        serena_agent: SerenaAgent,
+        relative_path: str,
+        regex: str,
+        containing_symbol_name_path: str,
+        expected_name: str,
+        expected_definition_file: str,
+    ) -> None:
+        self._assert_find_defining_symbol_by_regex(
+            serena_agent,
+            relative_path,
+            regex,
+            containing_symbol_name_path,
+            expected_name,
+            expected_definition_file,
+        )
+
+    @pytest.mark.parametrize(
+        "serena_agent,relative_path,regex,containing_symbol_name_path,error_fragment",
+        [
+            pytest.param(
+                Language.PYTHON,
+                os.path.join("test_repo", "services.py"),
+                r"(User)",
+                "",
+                "Expected exactly one regex match",
+                marks=pytest.mark.python,
+            ),
+            pytest.param(
+                Language.PYTHON,
+                os.path.join("test_repo", "services.py"),
+                r"User",
+                "UserService/create_user",
+                "must contain exactly one capturing group",
+                marks=pytest.mark.python,
+            ),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_find_defining_symbol_by_regex_error(
+        self,
+        serena_agent: SerenaAgent,
+        relative_path: str,
+        regex: str,
+        containing_symbol_name_path: str,
+        error_fragment: str,
+    ) -> None:
+        find_defining_symbol_tool = serena_agent.get_tool(FindDefiningSymbolTool)
+        result = find_defining_symbol_tool.apply(
+            regex=regex,
+            relative_path=relative_path,
+            containing_symbol_name_path=containing_symbol_name_path,
+        )
+        assert result.startswith("Error: "), result
+        assert error_fragment in result, result
+
+    @pytest.mark.parametrize("serena_agent,diagnostic_case", WORKING_DIAGNOSTIC_TOOL_CASE_PARAMS, indirect=["serena_agent"])
+    def test_get_diagnostics_for_file(self, serena_agent: SerenaAgent, diagnostic_case: DiagnosticCase) -> None:
+        self._assert_diagnostics_for_file(
+            serena_agent,
+            diagnostic_case=diagnostic_case,
+        )
+
+    @pytest.mark.parametrize("serena_agent,diagnostic_case", WORKING_DIAGNOSTIC_TOOL_CASE_PARAMS, indirect=["serena_agent"])
+    def test_get_diagnostics_for_file_in_range(self, serena_agent: SerenaAgent, diagnostic_case: DiagnosticCase) -> None:
+        project_root = get_repo_path(diagnostic_case.language)
+        primary_position = find_identifier_occurrence_position(project_root / diagnostic_case.relative_path, diagnostic_case.primary_symbol_identifier)
+        reference_position = find_identifier_occurrence_position(project_root / diagnostic_case.relative_path, diagnostic_case.reference_symbol_identifier)
+        assert primary_position is not None
+        assert reference_position is not None
+
+        self._assert_diagnostics_for_file(
+            serena_agent,
+            diagnostic_case=DiagnosticCase(
+                language=diagnostic_case.language,
+                relative_path=diagnostic_case.relative_path,
+                primary_symbol_name_path=diagnostic_case.primary_symbol_name_path,
+                primary_symbol_identifier=diagnostic_case.primary_symbol_identifier,
+                reference_symbol_name_path=diagnostic_case.primary_symbol_name_path,
+                reference_symbol_identifier=diagnostic_case.reference_symbol_identifier,
+                primary_message_fragment=diagnostic_case.primary_message_fragment,
+                reference_message_fragment=diagnostic_case.primary_message_fragment,
+            ),
+            start_line=primary_position[0],
+            end_line=reference_position[0] - 1,
+        )
+
+    @pytest.mark.parametrize("serena_agent,diagnostic_case", WORKING_DIAGNOSTIC_TOOL_CASE_PARAMS, indirect=["serena_agent"])
+    def test_get_diagnostics_for_symbol(self, serena_agent: SerenaAgent, diagnostic_case: DiagnosticCase) -> None:
+        self._assert_diagnostics_for_symbol(
+            serena_agent,
+            diagnostic_case=diagnostic_case,
+            check_symbol_references=False,
+        )
+
+    @pytest.mark.parametrize("serena_agent,diagnostic_case", WORKING_DIAGNOSTIC_TOOL_CASE_PARAMS, indirect=["serena_agent"])
+    def test_get_diagnostics_for_symbol_with_references(self, serena_agent: SerenaAgent, diagnostic_case: DiagnosticCase) -> None:
+        self._assert_diagnostics_for_symbol(
+            serena_agent,
+            diagnostic_case=diagnostic_case,
+            check_symbol_references=True,
+        )
+
+    if IMPLEMENTATION_TOOL_TEST_CASES:
+
+        @pytest.mark.parametrize(
+            "serena_agent,symbol_name,def_file,impl_file,expected_symbol_name",
+            IMPLEMENTATION_TOOL_TEST_CASES,
+            indirect=["serena_agent"],
+        )
+        def test_find_symbol_implementations(
+            self,
+            serena_agent: SerenaAgent,
+            symbol_name: str,
+            def_file: str,
+            impl_file: str,
+            expected_symbol_name: str,
+        ) -> None:
+            self._assert_find_symbol_implementations(serena_agent, symbol_name, def_file, impl_file, expected_symbol_name)
 
     @pytest.mark.parametrize(
         "serena_agent,name_path,substring_matching,expected_symbol_name,expected_kind,expected_file",
@@ -565,6 +1107,62 @@ class TestSerenaAgent:
             assert result == SUCCESS_RESULT
             new_content = read_project_file(serena_agent.get_active_project(), relative_path)
             assert repl in new_content
+
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [
+            pytest.param(Language.PYTHON, marks=pytest.mark.python),
+            pytest.param(Language.PYTHON_TY, marks=pytest.mark.python),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_replace_content_reports_new_diagnostics(self, serena_agent: SerenaAgent):
+        """Tests that file-level edits report newly introduced diagnostics."""
+        relative_path = os.path.join("test_repo", "services.py")
+        replace_content_tool = serena_agent.get_tool(ReplaceContentTool)
+
+        with project_file_modification_context(serena_agent, relative_path):
+            result = replace_content_tool.apply(
+                relative_path=relative_path,
+                needle="return container",
+                repl="return missing_container",
+                mode="literal",
+            )
+
+        diagnostics = parse_edit_diagnostics_result(result)
+        relative_path_result = diagnostics[relative_path]
+        diagnostic_messages = json.dumps(relative_path_result)
+        assert "missing_container" in diagnostic_messages
+        assert "create_service_container" in diagnostic_messages
+
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [
+            pytest.param(Language.PYTHON, marks=pytest.mark.python),
+            pytest.param(Language.PYTHON_TY, marks=pytest.mark.python),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_replace_symbol_body_reports_new_diagnostics(self, serena_agent: SerenaAgent):
+        """Tests that symbol-level edits report newly introduced diagnostics."""
+        relative_path = os.path.join("test_repo", "services.py")
+        replace_symbol_body_tool = serena_agent.get_tool(ReplaceSymbolBodyTool)
+
+        with project_file_modification_context(serena_agent, relative_path):
+            result = replace_symbol_body_tool.apply(
+                name_path="create_service_container",
+                relative_path=relative_path,
+                body="""
+def create_service_container() -> dict[str, Any]:
+    return missing_container
+""",
+            )
+
+        diagnostics = parse_edit_diagnostics_result(result)
+        relative_path_result = diagnostics[relative_path]
+        diagnostic_messages = json.dumps(relative_path_result)
+        assert "missing_container" in diagnostic_messages
+        assert "create_service_container" in diagnostic_messages
 
     @pytest.mark.parametrize(
         "serena_agent",

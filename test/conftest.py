@@ -1,6 +1,7 @@
 import logging
 import os
 import platform
+import re
 import shutil as _sh
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -40,8 +41,11 @@ _LANGUAGE_REPO_ALIASES: dict[Language, Language] = {
     Language.CPP_CCLS: Language.CPP,
     Language.PHP_PHPACTOR: Language.PHP,
     Language.PYTHON_JEDI: Language.PYTHON,
+    Language.PYTHON_TY: Language.PYTHON,
     Language.RUBY_SOLARGRAPH: Language.RUBY,
 }
+
+PYTHON_LANGUAGE_BACKENDS = [Language.PYTHON, Language.PYTHON_TY]
 
 
 def get_repo_path(language: Language) -> Path:
@@ -292,3 +296,60 @@ def language_tests_enabled(language: Language) -> bool:
     :return: True if tests for the language are enabled, False otherwise
     """
     return language not in _disabled_languages
+
+
+def language_supports_implementation(language: Language) -> bool:
+    return language.supports_implementation_request()
+
+
+def languages_supporting_implementation(*languages: Language) -> list[Language]:
+    return [language for language in languages if language_supports_implementation(language)]
+
+
+_VERIFIED_IMPLEMENTATION_LANGUAGES = {
+    Language.CSHARP,
+    Language.GO,
+    Language.JAVA,
+    Language.RUST,
+    Language.TYPESCRIPT,
+}
+
+
+def language_has_verified_implementation_support(language: Language) -> bool:
+    """
+    True only for languages where the server advertises implementation support and
+    the repo fixtures contain a verified working go-to-implementation scenario.
+    """
+    return language in _VERIFIED_IMPLEMENTATION_LANGUAGES and language_supports_implementation(language)
+
+
+def find_identifier_position(file_path: Path, identifier: str) -> tuple[int, int] | None:
+    pattern = re.compile(r"\b" + re.escape(identifier) + r"\b")
+    with file_path.open(encoding="utf-8") as f:
+        for line_idx, line in enumerate(f):
+            match = pattern.search(line)
+            if match:
+                return line_idx, match.start()
+    return None
+
+
+def find_identifier_occurrence_position(
+    file_path: Path,
+    identifier: str,
+    occurrence_index: int = 0,
+    column_offset: int = 0,
+) -> tuple[int, int] | None:
+    if occurrence_index < 0:
+        raise ValueError("occurrence_index must be non-negative")
+    if column_offset < 0:
+        raise ValueError("column_offset must be non-negative")
+
+    pattern = re.compile(r"\b" + re.escape(identifier) + r"\b")
+    current_index = 0
+    with file_path.open(encoding="utf-8") as f:
+        for line_idx, line in enumerate(f):
+            for match in pattern.finditer(line):
+                if current_index == occurrence_index:
+                    return line_idx, match.start() + column_offset
+                current_index += 1
+    return None

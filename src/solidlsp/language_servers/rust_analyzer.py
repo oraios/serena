@@ -26,6 +26,10 @@ class RustAnalyzer(SolidLanguageServer):
     Provides Rust specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Rust.
     """
 
+    @classmethod
+    def supports_implementation_request(cls) -> bool:
+        return True
+
     @staticmethod
     def _determine_log_level(line: str) -> int:
         """Classify rust-analyzer stderr output to avoid false-positive errors."""
