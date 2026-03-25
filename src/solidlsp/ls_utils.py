@@ -166,7 +166,7 @@ class PathUtils:
         """
         if PurePath(path).drive == PurePath(base_path).drive:
             rel_path = str(PurePath(os.path.relpath(path, base_path)))
-            return rel_path
+            return rel_path.replace("\\", "/")
         return None
 
 
@@ -227,6 +227,7 @@ class FileUtils:
         target_directory = os.path.dirname(target_path) or "."
         os.makedirs(target_directory, exist_ok=True)
         temp_file_path = str(PurePath(target_directory, f".{Path(target_path).name}.{uuid.uuid4().hex}.download"))
+        response: requests.Response | None = None
         try:
             response = requests.get(url, stream=True, timeout=60)
             if response.status_code != 200:
@@ -236,7 +237,9 @@ class FileUtils:
             FileUtils._validate_download_host(response.url, allowed_hosts)
 
             with open(temp_file_path, "wb") as output_file:
-                shutil.copyfileobj(response.raw, output_file)
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        output_file.write(chunk)
 
             FileUtils._verify_sha256_if_configured(temp_file_path, expected_sha256)
 
@@ -245,6 +248,8 @@ class FileUtils:
             log.error(f"Error downloading file '{url}': {exc}")
             raise SolidLSPException("Error downloading file.") from None
         finally:
+            if response is not None:
+                response.close()
             if os.path.exists(temp_file_path):
                 Path.unlink(Path(temp_file_path))
 

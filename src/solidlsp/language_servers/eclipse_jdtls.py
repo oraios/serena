@@ -40,7 +40,7 @@ INTELLICODE_ALLOWED_HOSTS = (
     "marketplace.visualstudio.com",
     "download.visualstudio.microsoft.com",
 )
-INTELLICODE_SHA256 = "7c5874c217c1e54243edf62044393d814763c415ece4ab80cea45bfb4992cf0e"
+INTELLICODE_SHA256 = "7f61a7f96d101cdf230f96821be3fddd8f890ebfefb3695d18beee43004ae251"
 
 
 @dataclasses.dataclass
