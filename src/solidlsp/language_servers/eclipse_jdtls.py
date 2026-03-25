@@ -160,7 +160,7 @@ class EclipseJDTLS(SolidLanguageServer):
             default_vscode_java_version = vscode_java_version == "1.42.0-561"
             default_intellicode_version = intellicode_version == "1.2.30"
 
-            runtime_dependencies = {
+            runtime_dependencies: dict[str, dict[str, dict[str, object]]] = {
                 "gradle": {
                     "platform-agnostic": {
                         "url": f"https://services.gradle.org/distributions/gradle-{gradle_version}-bin.zip",
@@ -261,24 +261,25 @@ class EclipseJDTLS(SolidLanguageServer):
             )
 
             if not os.path.exists(gradle_path):
+                gradle_dependency = runtime_dependencies["gradle"]["platform-agnostic"]
                 FileUtils.download_and_extract_archive_verified(
-                    runtime_dependencies["gradle"]["platform-agnostic"]["url"],
+                    cast(str, gradle_dependency["url"]),
                     str(PurePath(gradle_path).parent),
-                    runtime_dependencies["gradle"]["platform-agnostic"]["archiveType"],
-                    expected_sha256=runtime_dependencies["gradle"]["platform-agnostic"]["sha256"],
-                    allowed_hosts=runtime_dependencies["gradle"]["platform-agnostic"]["allowed_hosts"],
+                    cast(str, gradle_dependency["archiveType"]),
+                    expected_sha256=cast(str | None, gradle_dependency["sha256"]),
+                    allowed_hosts=cast(tuple[str, ...], gradle_dependency["allowed_hosts"]),
                 )
 
             assert os.path.exists(gradle_path)
 
             dependency = runtime_dependencies["vscode-java"][platformId.value]
-            vscode_java_path = str(PurePath(ls_resources_dir, dependency["relative_extraction_path"]))
+            vscode_java_path = str(PurePath(ls_resources_dir, cast(str, dependency["relative_extraction_path"])))
             os.makedirs(vscode_java_path, exist_ok=True)
-            jre_home_path = str(PurePath(vscode_java_path, dependency["jre_home_path"]))
-            jre_path = str(PurePath(vscode_java_path, dependency["jre_path"]))
-            lombok_jar_path = str(PurePath(vscode_java_path, dependency["lombok_jar_path"]))
-            jdtls_launcher_jar_path = str(PurePath(vscode_java_path, dependency["jdtls_launcher_jar_path"]))
-            jdtls_readonly_config_path = str(PurePath(vscode_java_path, dependency["jdtls_readonly_config_path"]))
+            jre_home_path = str(PurePath(vscode_java_path, cast(str, dependency["jre_home_path"])))
+            jre_path = str(PurePath(vscode_java_path, cast(str, dependency["jre_path"])))
+            lombok_jar_path = str(PurePath(vscode_java_path, cast(str, dependency["lombok_jar_path"])))
+            jdtls_launcher_jar_path = str(PurePath(vscode_java_path, cast(str, dependency["jdtls_launcher_jar_path"])))
+            jdtls_readonly_config_path = str(PurePath(vscode_java_path, cast(str, dependency["jdtls_readonly_config_path"])))
             if not all(
                 [
                     os.path.exists(vscode_java_path),
@@ -290,11 +291,11 @@ class EclipseJDTLS(SolidLanguageServer):
                 ]
             ):
                 FileUtils.download_and_extract_archive_verified(
-                    dependency["url"],
+                    cast(str, dependency["url"]),
                     vscode_java_path,
-                    dependency["archiveType"],
-                    expected_sha256=dependency["sha256"],
-                    allowed_hosts=dependency["allowed_hosts"],
+                    cast(str, dependency["archiveType"]),
+                    expected_sha256=cast(str | None, dependency["sha256"]),
+                    allowed_hosts=cast(tuple[str, ...], dependency["allowed_hosts"]),
                 )
 
             os.chmod(jre_path, 0o755)
@@ -307,10 +308,10 @@ class EclipseJDTLS(SolidLanguageServer):
             assert os.path.exists(jdtls_readonly_config_path)
 
             dependency = runtime_dependencies["intellicode"]["platform-agnostic"]
-            intellicode_directory_path = str(PurePath(ls_resources_dir, dependency["relative_extraction_path"]))
+            intellicode_directory_path = str(PurePath(ls_resources_dir, cast(str, dependency["relative_extraction_path"])))
             os.makedirs(intellicode_directory_path, exist_ok=True)
-            intellicode_jar_path = str(PurePath(intellicode_directory_path, dependency["intellicode_jar_path"]))
-            intellisense_members_path = str(PurePath(intellicode_directory_path, dependency["intellisense_members_path"]))
+            intellicode_jar_path = str(PurePath(intellicode_directory_path, cast(str, dependency["intellicode_jar_path"])))
+            intellisense_members_path = str(PurePath(intellicode_directory_path, cast(str, dependency["intellisense_members_path"])))
             if not all(
                 [
                     os.path.exists(intellicode_directory_path),
@@ -319,11 +320,11 @@ class EclipseJDTLS(SolidLanguageServer):
                 ]
             ):
                 FileUtils.download_and_extract_archive_verified(
-                    dependency["url"],
+                    cast(str, dependency["url"]),
                     intellicode_directory_path,
-                    dependency["archiveType"],
-                    expected_sha256=dependency["sha256"],
-                    allowed_hosts=dependency["allowed_hosts"],
+                    cast(str, dependency["archiveType"]),
+                    expected_sha256=cast(str | None, dependency["sha256"]),
+                    allowed_hosts=cast(tuple[str, ...], dependency["allowed_hosts"]),
                 )
 
             assert os.path.exists(intellicode_directory_path)

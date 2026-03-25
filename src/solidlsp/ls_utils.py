@@ -14,6 +14,7 @@ import uuid
 import zipfile
 from enum import Enum
 from pathlib import Path, PurePath
+from typing import Literal, cast
 from urllib.parse import urlparse
 
 import charset_normalizer
@@ -401,7 +402,7 @@ class FileUtils:
             "bztar": "r:bz2",
             "xztar": "r:xz",
         }
-        tar_mode = archive_mode_by_type[archive_type]
+        tar_mode = cast(Literal["r:", "r:gz", "r:bz2", "r:xz"], archive_mode_by_type[archive_type])
 
         with tarfile.open(archive_path, tar_mode) as tar_ref:
             for tar_member in tar_ref.getmembers():

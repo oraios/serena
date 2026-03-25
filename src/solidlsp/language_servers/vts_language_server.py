@@ -72,7 +72,7 @@ class VtsLanguageServer(SolidLanguageServer):
             PlatformId.WIN_arm64,
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for vtsls at the moment"
-        vts_config = solidlsp_settings.get_ls_specific_settings(Language.VTS)
+        vts_config = solidlsp_settings.get_ls_specific_settings(Language.TYPESCRIPT_VTS)
         vtsls_version = vts_config.get("vtsls_version", "0.2.9")
         npm_registry = vts_config.get("npm_registry")
 

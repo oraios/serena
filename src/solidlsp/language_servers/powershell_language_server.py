@@ -103,7 +103,7 @@ class PowerShellLanguageServer(SolidLanguageServer):
     @classmethod
     def _download_pses(cls, solidlsp_settings: SolidLSPSettings) -> str:
         """Download and install PowerShell Editor Services."""
-        ps_settings = solidlsp_settings.get_ls_specific_settings(Language.POWERSHELL) if solidlsp_settings else {}
+        ps_settings = solidlsp_settings.get_ls_specific_settings(Language.POWERSHELL)
         pses_version = ps_settings.get("pses_version", PSES_VERSION)
         download_url = (
             f"https://github.com/PowerShell/PowerShellEditorServices/releases/download/v{pses_version}/PowerShellEditorServices.zip"

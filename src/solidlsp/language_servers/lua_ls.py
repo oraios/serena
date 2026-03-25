@@ -90,7 +90,7 @@ class LuaLanguageServer(SolidLanguageServer):
     @staticmethod
     def _download_lua_ls(solidlsp_settings: SolidLSPSettings) -> str:
         """Download and install lua-language-server if not present."""
-        lua_settings = solidlsp_settings.get_ls_specific_settings(Language.LUA) if solidlsp_settings else {}
+        lua_settings = solidlsp_settings.get_ls_specific_settings(Language.LUA)
         lua_ls_version = lua_settings.get("lua_language_server_version", LUA_LS_VERSION)
         system = platform.system()
         machine = platform.machine().lower()

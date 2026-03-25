@@ -41,7 +41,7 @@ class RubyLsp(SolidLanguageServer):
         Creates a RubyLsp instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        ruby_lsp_executable = self._setup_runtime_dependencies(config, repository_root_path)
+        ruby_lsp_executable = self._setup_runtime_dependencies(config, repository_root_path, solidlsp_settings)
         super().__init__(
             config, repository_root_path, ProcessLaunchInfo(cmd=ruby_lsp_executable, cwd=repository_root_path), "ruby", solidlsp_settings
         )
@@ -100,13 +100,15 @@ class RubyLsp(SolidLanguageServer):
             return shutil.which(executable_name)
 
     @staticmethod
-    def _setup_runtime_dependencies(config: LanguageServerConfig, repository_root_path: str) -> list[str]:
+    def _setup_runtime_dependencies(
+        config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ) -> list[str]:
         """
         Setup runtime dependencies for ruby-lsp and return the command list to start the server.
         Installation strategy: Bundler project > global ruby-lsp > gem install ruby-lsp at the pinned version
         """
-        ls_specific_settings = config.ls_specific_settings if config is not None else {}
-        ruby_lsp_version = ls_specific_settings.get(Language.RUBY, {}).get("ruby_lsp_version", RUBY_LSP_VERSION)
+        ls_specific_settings = solidlsp_settings.get_ls_specific_settings(Language.RUBY)
+        ruby_lsp_version = ls_specific_settings.get("ruby_lsp_version", RUBY_LSP_VERSION)
         # Detect rbenv-managed Ruby environment
         # When .ruby-version exists, it indicates the project uses rbenv for version management.
         # rbenv automatically reads .ruby-version to determine which Ruby version to use.

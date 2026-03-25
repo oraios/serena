@@ -17,6 +17,7 @@ from serena.project import MemoriesManager, Project
 from serena.prompt_factory import PromptFactory
 from serena.util.class_decorators import singleton
 from serena.util.inspection import iter_subclasses
+from solidlsp import ls_types
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticSeverity
 
@@ -271,7 +272,7 @@ class Tool(Component):
             return repr(code)
 
     @classmethod
-    def _diagnostic_identity(cls, diagnostic: dict[str, Any]) -> DiagnosticIdentity:
+    def _diagnostic_identity(cls, diagnostic: ls_types.Diagnostic) -> DiagnosticIdentity:
         diagnostic_range = diagnostic["range"]
         start = diagnostic_range["start"]
         end = diagnostic_range["end"]
@@ -296,8 +297,8 @@ class Tool(Component):
             return f"Severity_{severity}"
 
     @staticmethod
-    def _diagnostic_output_dict(diagnostic: dict[str, Any]) -> dict[str, Any]:
-        result = {
+    def _diagnostic_output_dict(diagnostic: ls_types.Diagnostic) -> dict[str, Any]:
+        result: dict[str, Any] = {
             "message": diagnostic["message"],
             "range": diagnostic["range"],
         }
@@ -313,7 +314,7 @@ class Tool(Component):
         grouped_result: dict[str, dict[str, dict[str, list[dict[str, Any]]]]],
         relative_path: str,
         name_path: str,
-        diagnostic: dict[str, Any],
+        diagnostic: ls_types.Diagnostic,
     ) -> None:
         severity_name = cls._diagnostic_severity_name(diagnostic.get("severity"))
         grouped_result.setdefault(relative_path, {}).setdefault(severity_name, {}).setdefault(name_path, []).append(

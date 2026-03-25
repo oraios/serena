@@ -158,7 +158,7 @@ class OmniSharp(SolidLanguageServer):
         with open(os.path.join(os.path.dirname(__file__), "omnisharp", "runtime_dependencies.json"), encoding="utf-8") as f:
             d = json.load(f)
             del d["_description"]
-        omnisharp_settings = solidlsp_settings.get_ls_specific_settings(Language.CSHARP_OMNISHARP) if solidlsp_settings else {}
+        omnisharp_settings = solidlsp_settings.get_ls_specific_settings(Language.CSHARP_OMNISHARP)
         omnisharp_version = omnisharp_settings.get("omnisharp_version", DEFAULT_OMNISHARP_VERSION)
         razor_omnisharp_version = omnisharp_settings.get("razor_omnisharp_version", DEFAULT_RAZOR_OMNISHARP_VERSION)
         for dependency in d["runtimeDependencies"]:

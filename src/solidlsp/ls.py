@@ -577,9 +577,15 @@ class SolidLanguageServer(ABC):
                 "uri": uri,
                 "message": diagnostic["message"],
                 "range": diagnostic["range"],
-                "severity": diagnostic.get("severity"),
-                "code": diagnostic.get("code"),
             }
+            severity = diagnostic.get("severity")
+            if isinstance(severity, int):
+                normalized_diagnostic["severity"] = ls_types.DiagnosticSeverity(severity)
+
+            code = diagnostic.get("code")
+            if isinstance(code, int | str):
+                normalized_diagnostic["code"] = code
+
             if "source" in diagnostic:
                 normalized_diagnostic["source"] = diagnostic["source"]
             normalized_diagnostics.append(ls_types.Diagnostic(**normalized_diagnostic))
@@ -982,17 +988,18 @@ class SolidLanguageServer(ABC):
             )
             response = request_sender(request_params)
 
-        def convert_location_item(item: dict) -> ls_types.Location | None:
-            if LSPConstants.URI in item and LSPConstants.RANGE in item:
-                uri = item[LSPConstants.URI]
-                range_d = item[LSPConstants.RANGE]
-            elif LSPConstants.TARGET_URI in item and LSPConstants.TARGET_RANGE in item and LSPConstants.TARGET_SELECTION_RANGE in item:
-                uri = item[LSPConstants.TARGET_URI]
-                range_d = item[LSPConstants.TARGET_SELECTION_RANGE]
+        def convert_location_item(item: dict[str, object]) -> ls_types.Location | None:
+            if "uri" in item and "range" in item:
+                uri = cast(str, item["uri"])
+                range_d = cast(ls_types.Range, item["range"])
+            elif "targetUri" in item and "targetRange" in item and "targetSelectionRange" in item:
+                uri = cast(str, item["targetUri"])
+                range_d = cast(ls_types.Range, item["targetSelectionRange"])
             else:
                 raise AssertionError(f"Unexpected response from Language Server: {item}")
 
             abs_path = PathUtils.uri_to_path(uri)
+            rel_path_str: str | None
             if filter_ignored_paths:
                 if not Path(abs_path).is_relative_to(self.repository_root_path):
                     log.warning(
@@ -1002,29 +1009,24 @@ class SolidLanguageServer(ABC):
                         abs_path,
                     )
                     return None
-                rel_path = Path(abs_path).relative_to(self.repository_root_path)
-                if self.is_ignored_path(str(rel_path)):
-                    log.debug("Ignoring %s in %s since it should be ignored", request_name, rel_path)
+                rel_path_in_repo = Path(abs_path).relative_to(self.repository_root_path)
+                rel_path_str = str(rel_path_in_repo)
+                if self.is_ignored_path(rel_path_str):
+                    log.debug("Ignoring %s in %s since it should be ignored", request_name, rel_path_in_repo)
                     return None
             else:
-                rel_path = PathUtils.get_relative_path(abs_path, self.repository_root_path)
+                rel_path_str = PathUtils.get_relative_path(abs_path, self.repository_root_path)
 
-            normalized_item: dict = {
-                "uri": uri,
-                "range": range_d,
-                "absolutePath": str(abs_path),
-                "relativePath": str(rel_path),
-            }
-            return ls_types.Location(**normalized_item)  # type: ignore[arg-type]
+            return ls_types.Location(uri=uri, range=range_d, absolutePath=str(abs_path), relativePath=rel_path_str)
 
         ret: list[ls_types.Location] = []
         if isinstance(response, list):
             for item in response:
                 assert isinstance(item, dict)
-                if location := convert_location_item(item):
+                if location := convert_location_item(cast(dict[str, object], item)):
                     ret.append(location)
         elif isinstance(response, dict):
-            if location := convert_location_item(response):
+            if location := convert_location_item(cast(dict[str, object], response)):
                 ret.append(location)
         elif response is None:
             log.warning("Language server returned None for %s request at %s:%s:%s", request_name, relative_file_path, line, column)
@@ -2242,7 +2244,7 @@ class SolidLanguageServer(ABC):
         """
         return definitions[0]
 
-    def _get_document_symbols_with_locations(self, relative_file_path: str) -> list[GenericDocumentSymbol]:
+    def _get_document_symbols_with_locations(self, relative_file_path: str) -> list[ls_types.UnifiedSymbolInformation]:
         absolute_file_path = str(PurePath(self.repository_root_path, relative_file_path))
         document_symbols = self.request_document_symbols(relative_file_path)
         symbols = list(document_symbols.iter_symbols())
@@ -2250,23 +2252,10 @@ class SolidLanguageServer(ABC):
         # Make SymbolInformation and DocumentSymbol shapes consistent by ensuring every
         # symbol exposes a normalized location/range in the current workspace.
         for symbol in symbols:
-            if "location" not in symbol:
-                symbol_range = symbol.get("range")
-                if symbol_range is None:
-                    continue
-                symbol["location"] = ls_types.Location(
-                    uri=Path(absolute_file_path).as_uri(),
-                    range=symbol_range,
-                    absolutePath=absolute_file_path,
-                    relativePath=relative_file_path,
-                )
-            else:
-                location = symbol["location"]
-                if "range" not in location:
-                    continue
-                location["absolutePath"] = absolute_file_path
-                location["relativePath"] = relative_file_path
-                location["uri"] = Path(absolute_file_path).as_uri()
+            location = symbol["location"]
+            location["absolutePath"] = absolute_file_path
+            location["relativePath"] = relative_file_path
+            location["uri"] = Path(absolute_file_path).as_uri()
         return symbols
 
     @staticmethod
@@ -2284,7 +2273,7 @@ class SolidLanguageServer(ABC):
         return True
 
     @staticmethod
-    def _symbol_match_sort_key(symbol: GenericDocumentSymbol, match_priority: int) -> tuple[int, int, int, int, int]:
+    def _symbol_match_sort_key(symbol: ls_types.UnifiedSymbolInformation, match_priority: int) -> tuple[int, int, int, int, int]:
         location = symbol["location"]
         symbol_range = location["range"]
         start = symbol_range["start"]
@@ -2301,13 +2290,9 @@ class SolidLanguageServer(ABC):
         include_body: bool = False,
         body_factory: SymbolBodyFactory | None = None,
     ) -> ls_types.UnifiedSymbolInformation | None:
-        candidates: list[tuple[tuple[int, int, int, int, int], GenericDocumentSymbol]] = []
+        candidates: list[tuple[tuple[int, int, int, int, int], ls_types.UnifiedSymbolInformation]] = []
         for symbol in self._get_document_symbols_with_locations(relative_file_path):
-            if "location" not in symbol:
-                continue
             location = symbol["location"]
-            if "range" not in location:
-                continue
             symbol_range = location["range"]
             selection_range = symbol.get("selectionRange") or symbol_range
 
@@ -2339,7 +2324,7 @@ class SolidLanguageServer(ABC):
         best_symbol = candidates[0][1]
         if include_body:
             best_symbol["body"] = self.create_symbol_body(best_symbol, factory=body_factory)
-        return cast(ls_types.UnifiedSymbolInformation, best_symbol)
+        return best_symbol
 
     def request_symbol_at_location(
         self,

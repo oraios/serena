@@ -1,6 +1,7 @@
 import os
 import shutil
 from dataclasses import dataclass
+from typing import cast
 
 import pytest
 
@@ -236,5 +237,6 @@ DIAGNOSTIC_CASE_PARAMS = [
 WORKING_DIAGNOSTIC_TOOL_CASE_PARAMS = [
     case_param
     for case_param in DIAGNOSTIC_CASE_PARAMS
-    if case_param.values[1].language in {Language.PYTHON, Language.PYTHON_TY, Language.GO, Language.JAVA, Language.KOTLIN, Language.CSHARP}
+    if cast(DiagnosticCase, case_param.values[1]).language
+    in {Language.PYTHON, Language.PYTHON_TY, Language.GO, Language.JAVA, Language.KOTLIN, Language.CSHARP}
 ]

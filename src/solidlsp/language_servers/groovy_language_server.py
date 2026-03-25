@@ -92,7 +92,7 @@ class GroovyLanguageServer(SolidLanguageServer):
         Setup runtime dependencies for Groovy Language Server and return paths.
         """
         platform_id = PlatformUtils.get_platform_id()
-        groovy_settings = solidlsp_settings.get_ls_specific_settings(Language.GROOVY) if solidlsp_settings else {}
+        groovy_settings = solidlsp_settings.get_ls_specific_settings(Language.GROOVY)
         vscode_java_version = groovy_settings.get("vscode_java_version", "1.42.0-561")
         vscode_java_tag = f"v{vscode_java_version.rsplit('-', 1)[0]}"
 
@@ -162,6 +162,14 @@ class GroovyLanguageServer(SolidLanguageServer):
             }
 
             java_dependency = runtime_dependencies["java"][platform_id.value]
+            java_home_relative_path = java_dependency["java_home_path"]
+            java_relative_path = java_dependency["java_path"]
+            java_download_url = java_dependency["url"]
+            java_archive_type = java_dependency["archiveType"]
+            assert java_home_relative_path is not None
+            assert java_relative_path is not None
+            assert java_download_url is not None
+            assert java_archive_type is not None
 
             static_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "groovy_language_server")
             os.makedirs(static_dir, exist_ok=True)
@@ -169,15 +177,15 @@ class GroovyLanguageServer(SolidLanguageServer):
             java_dir = os.path.join(static_dir, "java")
             os.makedirs(java_dir, exist_ok=True)
 
-            java_home_path = os.path.join(java_dir, java_dependency["java_home_path"])
-            java_path = os.path.join(java_dir, java_dependency["java_path"])
+            java_home_path = os.path.join(java_dir, java_home_relative_path)
+            java_path = os.path.join(java_dir, java_relative_path)
 
             if not os.path.exists(java_path):
                 log.info(f"Downloading Java for {platform_id.value}...")
                 FileUtils.download_and_extract_archive_verified(
-                    java_dependency["url"],
+                    java_download_url,
                     java_dir,
-                    java_dependency["archiveType"],
+                    java_archive_type,
                     expected_sha256=java_dependency["sha256"],
                     allowed_hosts=VSCODE_JAVA_ALLOWED_HOSTS,
                 )

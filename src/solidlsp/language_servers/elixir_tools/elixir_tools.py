@@ -77,7 +77,7 @@ class ElixirTools(SolidLanguageServer):
         Setup runtime dependencies for Expert.
         Downloads the Expert binary for the current platform and returns the path to the executable.
         """
-        elixir_settings = solidlsp_settings.get_ls_specific_settings(Language.ELIXIR) if solidlsp_settings else {}
+        elixir_settings = solidlsp_settings.get_ls_specific_settings(Language.ELIXIR)
         expert_version = elixir_settings.get("expert_version", EXPERT_VERSION)
         # Check if Elixir is available first
         elixir_version = cls._get_elixir_version()

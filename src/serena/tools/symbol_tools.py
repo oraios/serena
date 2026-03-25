@@ -16,6 +16,7 @@ from serena.tools import (
     ToolMarkerSymbolicRead,
 )
 from serena.tools.tools_base import ToolMarkerOptional
+from solidlsp import ls_types
 from solidlsp.ls_types import SymbolKind
 from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticSeverity
 
@@ -31,8 +32,8 @@ def _diagnostic_severity_name(severity: int | None) -> str:
         return f"Severity_{severity}"
 
 
-def _diagnostic_output_dict(diagnostic: dict[str, Any]) -> dict[str, Any]:
-    result = {
+def _diagnostic_output_dict(diagnostic: ls_types.Diagnostic) -> dict[str, Any]:
+    result: dict[str, Any] = {
         "message": diagnostic["message"],
         "range": diagnostic["range"],
     }
@@ -48,7 +49,7 @@ def _add_grouped_diagnostic(
     relative_path: str,
     severity_name: str,
     name_path: str,
-    diagnostic: dict[str, Any],
+    diagnostic: ls_types.Diagnostic,
 ) -> None:
     grouped_result.setdefault(relative_path, {}).setdefault(severity_name, {}).setdefault(name_path, []).append(
         _diagnostic_output_dict(diagnostic)
