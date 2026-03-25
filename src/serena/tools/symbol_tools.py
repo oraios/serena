@@ -76,7 +76,7 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
 
             shortened_results = [make_depth_0_result, make_kind_counts]
 
-        return self._limit_length(result_json_str, max_answer_chars, shortened_results=shortened_results)
+        return self._limit_length(result_json_str, max_answer_chars, shortened_result_factories=shortened_results)
 
     def get_symbol_overview(self, relative_path: str, depth: int = 0) -> list[LanguageServerSymbol.OutputDict]:
         """
@@ -244,7 +244,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
                     s_dict["children"] = self._group_children_by_kind(s_dict["children"])  # type: ignore
 
         result = self._to_json(symbol_dicts)
-        return self._limit_length(result, max_answer_chars, shortened_results=[make_shortened_result])
+        return self._limit_length(result, max_answer_chars, shortened_result_factories=[make_shortened_result])
 
 
 class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
@@ -331,7 +331,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         shortened_results = [make_refs_without_context, make_per_file_counts, make_summary]
 
         result_json = self._to_json(result)
-        return self._limit_length(result_json, max_answer_chars, shortened_results=shortened_results)
+        return self._limit_length(result_json, max_answer_chars, shortened_result_factories=shortened_results)
 
 
 class ReplaceSymbolBodyTool(Tool, ToolMarkerSymbolicEdit):

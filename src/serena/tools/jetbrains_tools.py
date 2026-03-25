@@ -145,7 +145,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         if 0 < max_matches < n_matches:
             return f"Matched {n_matches}>{max_matches=} symbols.\n" + make_names_only()
 
-        return self._limit_length(result, max_answer_chars, shortened_results=[make_names_with_paths, make_names_only])
+        return self._limit_length(result, max_answer_chars, shortened_result_factories=[make_names_with_paths, make_names_only])
 
 
 class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
@@ -193,7 +193,7 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
             return f"Found {len(ref_paths)} references."
 
         result_json = self._to_json(result)
-        return self._limit_length(result_json, max_answer_chars, shortened_results=[make_per_file_counts, make_summary])
+        return self._limit_length(result_json, max_answer_chars, shortened_result_factories=[make_per_file_counts, make_summary])
 
 
 class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
@@ -267,7 +267,7 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
             shortened_results = None
             json_result = self._to_json(symbol_overview)
 
-        return self._limit_length(json_result, max_answer_chars, shortened_results=shortened_results)
+        return self._limit_length(json_result, max_answer_chars, shortened_result_factories=shortened_results)
 
 
 class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
