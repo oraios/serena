@@ -379,6 +379,13 @@ class SolidLanguageServer(ABC):
         return Language.from_ls_class(cls)
 
     @classmethod
+    def supports_implementation_request(cls) -> bool:
+        """
+        Return whether this language server supports ``textDocument/implementation``.
+        """
+        return False
+
+    @classmethod
     def ls_resources_dir(cls, solidlsp_settings: SolidLSPSettings, mkdir: bool = True) -> str:
         """
         Returns the directory where the language server resources are downloaded.
