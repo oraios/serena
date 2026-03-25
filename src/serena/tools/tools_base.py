@@ -23,7 +23,7 @@ from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticSeverity
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
-    from serena.code_editor import CodeEditor, EditedFilePath
+    from serena.code_editor import CodeEditor, EditedFilePath, LanguageServerCodeEditor
     from serena.symbol import LanguageServerSymbolRetriever
 
 log = logging.getLogger(__name__)
