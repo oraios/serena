@@ -13,8 +13,8 @@ def _test_clojure_cli() -> bool:
 
 CLI_FAIL = _test_clojure_cli()
 TEST_APP_PATH = Path("src") / "test_app"
-CORE_PATH = str(TEST_APP_PATH / "core.clj")
-UTILS_PATH = str(TEST_APP_PATH / "utils.clj")
+CORE_PATH = str(TEST_APP_PATH / "core.clj").replace("\\", "/")
+UTILS_PATH = str(TEST_APP_PATH / "utils.clj").replace("\\", "/")
 
 
 def is_clojure_cli_available() -> bool:

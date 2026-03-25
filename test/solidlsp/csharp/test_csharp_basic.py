@@ -17,6 +17,7 @@ from solidlsp.language_servers.csharp_language_server import (
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import SymbolUtils
 from solidlsp.settings import SolidLSPSettings
+from test.conftest import find_identifier_position, get_repo_path, language_has_verified_implementation_support
 
 
 @pytest.mark.csharp
@@ -173,6 +174,33 @@ class TestCSharpLanguageServer:
         # Verify the hover contains method signature with return type
         assert "bool" in method_hover_text, f"Hover should include 'bool' return type, got: {method_hover_text}"
         assert "IsAdult" in method_hover_text, f"Hover should include 'IsAdult' method name, got: {method_hover_text}"
+
+    if language_has_verified_implementation_support(Language.CSHARP):
+
+        @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
+        def test_find_implementations(self, language_server: SolidLanguageServer) -> None:
+            repo_path = get_repo_path(Language.CSHARP)
+            pos = find_identifier_position(repo_path / "Services" / "IGreeter.cs", "FormatGreeting")
+            assert pos is not None, "Could not find IGreeter.FormatGreeting in fixture"
+
+            implementations = language_server.request_implementation("Services/IGreeter.cs", *pos)
+            assert implementations, "Expected at least one implementation of IGreeter.FormatGreeting"
+            assert any("ConsoleGreeter.cs" in implementation.get("relativePath", "") for implementation in implementations), (
+                f"Expected ConsoleGreeter.FormatGreeting in implementations, got: {implementations}"
+            )
+
+        @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
+        def test_request_implementing_symbols(self, language_server: SolidLanguageServer) -> None:
+            repo_path = get_repo_path(Language.CSHARP)
+            pos = find_identifier_position(repo_path / "Services" / "IGreeter.cs", "FormatGreeting")
+            assert pos is not None, "Could not find IGreeter.FormatGreeting in fixture"
+
+            implementing_symbols = language_server.request_implementing_symbols("Services/IGreeter.cs", *pos)
+            assert implementing_symbols, "Expected implementing symbols for IGreeter.FormatGreeting"
+            assert any(
+                symbol.get("name") == "FormatGreeting" and "ConsoleGreeter.cs" in symbol["location"].get("relativePath", "")
+                for symbol in implementing_symbols
+            ), f"Expected ConsoleGreeter.FormatGreeting symbol, got: {implementing_symbols}"
 
 
 @pytest.mark.csharp

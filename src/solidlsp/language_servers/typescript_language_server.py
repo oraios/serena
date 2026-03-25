@@ -67,6 +67,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         - typescript_language_server_version: Version of typescript-language-server to install (default: "5.1.3")
     """
 
+    @classmethod
+    def supports_implementation_request(cls) -> bool:
+        return True
+
     # Safety timeout for $/progress-based indexing wait. Normally the event fires
     # well within this window; the timeout is only hit if the server never sends progress.
     INDEXING_PROGRESS_TIMEOUT = 15.0 if os.name == "nt" else 10.0

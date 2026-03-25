@@ -4,12 +4,13 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.conftest import PYTHON_LANGUAGE_BACKENDS
 
 
 class TestLanguageServerCommonFunctionality:
     """Test common functionality of SolidLanguageServer base implementation (not language-specific behaviour)."""
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_LANGUAGE_BACKENDS, indirect=True)
     def test_open_file_cache_invalidate(self, language_server: SolidLanguageServer) -> None:
         """
         Tests that the file buffer cache is invalidated when the file is changed on disk.

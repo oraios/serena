@@ -8,5 +8,10 @@
     "directory": ".",
     "command": "g++ -std=c++17 -I . -c b.cpp",
     "file": "b.cpp"
+  },
+  {
+    "directory": ".",
+    "command": "g++ -std=c++17 -I . -c diagnostics_sample.cpp",
+    "file": "diagnostics_sample.cpp"
   }
 ]

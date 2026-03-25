@@ -347,7 +347,7 @@ class Diagnostic(TypedDict):
     """ The severity of the diagnostic. """
     message: str
     """ The diagnostic message. """
-    code: str
+    code: NotRequired[str | int]
     """ The code of the diagnostic. """
     source: NotRequired[str]
     """ The source of the diagnostic, e.g. the name of the tool that produced it. """
