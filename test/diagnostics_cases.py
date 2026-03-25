@@ -1,13 +1,12 @@
 import os
-import shutil
 from dataclasses import dataclass
 from typing import cast
 
 import pytest
+from _pytest.mark import Mark, MarkDecorator
 
 from solidlsp.ls_config import Language
-from test.conftest import is_ci
-from test.solidlsp import clojure as clj
+from test.conftest import get_pytest_markers
 
 
 @dataclass(frozen=True)
@@ -22,9 +21,16 @@ class DiagnosticCase:
     reference_message_fragment: str
 
 
+def diagnostic_case_param(
+    case: DiagnosticCase,
+    *marks: MarkDecorator | Mark,
+    id: str,
+):
+    return pytest.param(case.language, case, marks=[*get_pytest_markers(case.language), *marks], id=id)
+
+
 DIAGNOSTIC_CASE_PARAMS = [
-    pytest.param(
-        Language.PYTHON,
+    diagnostic_case_param(
         DiagnosticCase(
             language=Language.PYTHON,
             relative_path=os.path.join("test_repo", "diagnostics_sample.py"),
@@ -35,10 +41,9 @@ DIAGNOSTIC_CASE_PARAMS = [
             primary_message_fragment="missing_user",
             reference_message_fragment="undefined_name",
         ),
-        marks=pytest.mark.python,
+        id="python_missing_user",
     ),
-    pytest.param(
-        Language.PYTHON_TY,
+    diagnostic_case_param(
         DiagnosticCase(
             language=Language.PYTHON_TY,
             relative_path=os.path.join("test_repo", "diagnostics_sample.py"),
@@ -49,10 +54,9 @@ DIAGNOSTIC_CASE_PARAMS = [
             primary_message_fragment="missing_user",
             reference_message_fragment="undefined_name",
         ),
-        marks=pytest.mark.python,
+        id="python_ty_missing_user",
     ),
-    pytest.param(
-        Language.GO,
+    diagnostic_case_param(
         DiagnosticCase(
             language=Language.GO,
             relative_path="diagnostics_sample.go",
@@ -63,10 +67,9 @@ DIAGNOSTIC_CASE_PARAMS = [
             primary_message_fragment="missingGreeting",
             reference_message_fragment="missingConsumerValue",
         ),
-        marks=pytest.mark.go,
+        id="go_missing_greeting",
     ),
-    pytest.param(
-        Language.JAVA,
+    diagnostic_case_param(
         DiagnosticCase(
             language=Language.JAVA,
             relative_path=os.path.join("src", "main", "java", "test_repo", "DiagnosticsSample.java"),
@@ -77,10 +80,9 @@ DIAGNOSTIC_CASE_PARAMS = [
             primary_message_fragment="missingGreeting",
             reference_message_fragment="missingConsumerValue",
         ),
-        marks=pytest.mark.java,
+        id="java_missing_greeting",
     ),
-    pytest.param(
-        Language.KOTLIN,
+    diagnostic_case_param(
         DiagnosticCase(
             language=Language.KOTLIN,
             relative_path=os.path.join("src", "main", "kotlin", "test_repo", "DiagnosticsSample.kt"),
@@ -91,10 +93,9 @@ DIAGNOSTIC_CASE_PARAMS = [
             primary_message_fragment="missingGreeting",
             reference_message_fragment="missingConsumerValue",
         ),
-        marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+        id="kotlin_missing_greeting",
     ),
-    pytest.param(
-        Language.RUST,
+    diagnostic_case_param(
         DiagnosticCase(
             language=Language.RUST,
             relative_path=os.path.join("src", "diagnostics_sample.rs"),
@@ -105,13 +106,10 @@ DIAGNOSTIC_CASE_PARAMS = [
             primary_message_fragment="missing_greeting",
             reference_message_fragment="missing_consumer_value",
         ),
-        marks=[
-            pytest.mark.rust,
-            pytest.mark.xfail(reason="rust-analyzer does not surface diagnostics for this fixture through Serena currently"),
-        ],
+        pytest.mark.xfail(reason="rust-analyzer does not surface diagnostics for this fixture through Serena currently"),
+        id="rust_missing_greeting",
     ),
-    pytest.param(
-        Language.PHP,
+    diagnostic_case_param(
         DiagnosticCase(
             language=Language.PHP,
             relative_path="diagnostics_sample.php",
@@ -122,10 +120,10 @@ DIAGNOSTIC_CASE_PARAMS = [
             primary_message_fragment="missingGreeting",
             reference_message_fragment="missingConsumerValue",
         ),
-        marks=[pytest.mark.php, pytest.mark.xfail(reason="PHP LS integration does not expose document diagnostics in this environment")],
+        pytest.mark.xfail(reason="PHP LS integration does not expose document diagnostics in this environment"),
+        id="php_missing_greeting",
     ),
-    pytest.param(
-        Language.CLOJURE,
+    diagnostic_case_param(
         DiagnosticCase(
             language=Language.CLOJURE,
             relative_path=os.path.join("src", "test_app", "diagnostics_sample.clj"),
@@ -136,13 +134,9 @@ DIAGNOSTIC_CASE_PARAMS = [
             primary_message_fragment="missing-greeting",
             reference_message_fragment="missing-consumer-value",
         ),
-        marks=[
-            pytest.mark.clojure,
-            pytest.mark.skipif(not clj.is_clojure_cli_available(), reason="clojure CLI is not installed"),
-        ],
+        id="clojure_missing_greeting",
     ),
-    pytest.param(
-        Language.CSHARP,
+    diagnostic_case_param(
         DiagnosticCase(
             language=Language.CSHARP,
             relative_path="DiagnosticsSample.cs",
@@ -153,10 +147,9 @@ DIAGNOSTIC_CASE_PARAMS = [
             primary_message_fragment="missingGreeting",
             reference_message_fragment="missingConsumerValue",
         ),
-        marks=pytest.mark.csharp,
+        id="csharp_missing_greeting",
     ),
-    pytest.param(
-        Language.POWERSHELL,
+    diagnostic_case_param(
         DiagnosticCase(
             language=Language.POWERSHELL,
             relative_path="diagnostics_sample.ps1",
@@ -167,10 +160,10 @@ DIAGNOSTIC_CASE_PARAMS = [
             primary_message_fragment="MissingGreeting",
             reference_message_fragment="MissingConsumerValue",
         ),
-        marks=[pytest.mark.powershell, pytest.mark.xfail(reason="PowerShell LS does not surface document diagnostics in this environment")],
+        pytest.mark.xfail(reason="PowerShell LS does not surface document diagnostics in this environment"),
+        id="powershell_missing_greeting",
     ),
-    pytest.param(
-        Language.CPP_CCLS,
+    diagnostic_case_param(
         DiagnosticCase(
             language=Language.CPP_CCLS,
             relative_path="diagnostics_sample.cpp",
@@ -181,10 +174,10 @@ DIAGNOSTIC_CASE_PARAMS = [
             primary_message_fragment="missingGreeting",
             reference_message_fragment="missingConsumerValue",
         ),
-        marks=[pytest.mark.cpp, pytest.mark.xfail(reason="ccls does not expose document diagnostics through this integration")],
+        pytest.mark.xfail(reason="ccls does not expose document diagnostics through this integration"),
+        id="cpp_missing_greeting",
     ),
-    pytest.param(
-        Language.LEAN4,
+    diagnostic_case_param(
         DiagnosticCase(
             language=Language.LEAN4,
             relative_path="DiagnosticsSample.lean",
@@ -195,13 +188,9 @@ DIAGNOSTIC_CASE_PARAMS = [
             primary_message_fragment="missingGreeting",
             reference_message_fragment="missingConsumerValue",
         ),
-        marks=[
-            pytest.mark.lean4,
-            pytest.mark.skipif(shutil.which("lean") is None, reason="Lean is not installed"),
-        ],
+        id="lean_missing_greeting",
     ),
-    pytest.param(
-        Language.TYPESCRIPT,
+    diagnostic_case_param(
         DiagnosticCase(
             language=Language.TYPESCRIPT,
             relative_path="diagnostics_sample.ts",
@@ -212,13 +201,10 @@ DIAGNOSTIC_CASE_PARAMS = [
             primary_message_fragment="missingGreeting",
             reference_message_fragment="missingConsumerValue",
         ),
-        marks=[
-            pytest.mark.typescript,
-            pytest.mark.xfail(reason="TypeScript LS does not surface document diagnostics through this integration"),
-        ],
+        pytest.mark.xfail(reason="TypeScript LS does not surface document diagnostics through this integration"),
+        id="typescript_missing_greeting",
     ),
-    pytest.param(
-        Language.FSHARP,
+    diagnostic_case_param(
         DiagnosticCase(
             language=Language.FSHARP,
             relative_path="DiagnosticsSample.fs",
@@ -229,7 +215,8 @@ DIAGNOSTIC_CASE_PARAMS = [
             primary_message_fragment="missingGreeting",
             reference_message_fragment="missingConsumerValue",
         ),
-        marks=[pytest.mark.fsharp, pytest.mark.xfail(reason="F# LS does not expose document diagnostics through this integration")],
+        pytest.mark.xfail(reason="F# LS does not expose document diagnostics through this integration"),
+        id="fsharp_missing_greeting",
     ),
 ]
 
