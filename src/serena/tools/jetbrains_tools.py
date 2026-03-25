@@ -1,5 +1,5 @@
 import logging
-from collections import Counter, defaultdict
+from collections import Counter
 from collections.abc import Callable
 from typing import Any, Literal
 
@@ -18,26 +18,9 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
     """
 
     # groups top-level symbols only; children are grouped separately by _group_children_by_type
-    symbol_dict_grouper = JetBrainsSymbolDictGrouper(["relative_path", "type"], [], collapse_singleton=True)
-
-    @staticmethod
-    def _group_children_by_type(children: list[dict]) -> dict[str, list]:
-        """Recursively group a list of child symbol dicts by type, keeping only the short name.
-
-        :return: mapping from type to list of names (or ``{name: grouped_grandchildren}`` dicts
-            for children that themselves have children)
-        """
-        by_type: defaultdict[str, list] = defaultdict(list)
-        for child in children:
-            sym_type = child.get("type", "unknown")
-            # extract the short name from the name_path (last component)
-            name = child.get("name_path", "unknown").rsplit("/", 1)[-1]
-            if "children" in child:
-                grouped_grandchildren = JetBrainsFindSymbolTool._group_children_by_type(child["children"])
-                by_type[sym_type].append({name: grouped_grandchildren})
-            else:
-                by_type[sym_type].append(name)
-        return dict(by_type)
+    symbol_dict_grouper = JetBrainsSymbolDictGrouper(
+        ["relative_path", "type"], ["type"], collapse_singleton=True, map_name_path_to_name=True
+    )
 
     def apply(
         self,
@@ -117,14 +100,8 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
             )
         symbols = symbol_collection_response["symbols"]
 
-        # group children by type, keeping just the short name
-        if depth > 0:
-            for s in symbols:
-                if "children" in s:
-                    s["children"] = self._group_children_by_type(s["children"])  # type: ignore
-
         def create_shortened_result() -> str:
-            """Shortened results containing symbol types and identifiers (path + name_path) only"""
+            """Shortened results containing symbol types and identifiers (path + name_path) only, without children"""
             dicts: list[SymbolDTO] = [
                 {"name_path": s["name_path"], "type": s["type"], "relative_path": s["relative_path"]} for s in symbols
             ]
