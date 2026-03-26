@@ -23,10 +23,13 @@ The proceeds from plugin sales allow us to dedicate more resources to further de
 There are multiple features that are only available when using the JetBrains plugin:
 
 * **External library indexing**: Dependencies and libraries are fully indexed and accessible to Serena
-* **No additional setup**: No need to download or configure separate language servers
+* **Enhanced retrieval & refactoring capabilities**: The plugin supports additional tools (e.g. type
+  hierarchy retrieval, move, find declaration, inline symbol, etc.)
+* **Improved multi-agent support**: A single IDE instance naturally serves arbitrarily many agent sessions
 * **Enhanced performance**: Faster tool execution thanks to optimized IDE integration
-* **Multi-language excellence**: First-class support for polyglot projects with multiple languages and frameworks
-* **Enhanced retrieval capabilities**: The plugin supports additional retrieval tools for type hierarchy information as well as fast and reliable documentation/type signature retrieval
+* **Multi-language excellence** and **framework support**: First-class support for polyglot projects with multiple languages 
+  and frameworks (whatever is recognised by your IDE as a symbol will also be available to Serena)
+* **No additional setup**: No need to download or configure separate language servers
 
 We are also working on additional features like a `move_symbol` tool and debugging-related capabilities that
 will be available exclusively through the JetBrains plugin.
