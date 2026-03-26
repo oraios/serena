@@ -125,6 +125,15 @@ class NonUniqueSymbolReferenceCase(BaseCase):
     expected_error_fragment: str = "multiple"
 
 
+@dataclass(frozen=True)
+class SafeDeleteCase(BaseCase):
+    name_path: str
+    relative_path: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "relative_path", self.relative_path.replace("\\", "/"))
+
+
 FIND_DEFINING_SYMBOL_CASES = [
     FindDefiningSymbolCase(
         language=Language.PYTHON,
@@ -567,6 +576,58 @@ NON_UNIQUE_SYMBOL_REFERENCE_ERROR_CASES = [
         name_path="Model/getName",
         relative_path=os.path.join("src", "main", "java", "test_repo", "Model.java"),
     ).to_pytest_param(id="java_overloaded_get_name"),
+]
+
+SAFE_DELETE_BLOCKED_CASES = [
+    SafeDeleteCase(
+        language=Language.PYTHON,
+        name_path="User",
+        relative_path=os.path.join("test_repo", "models.py"),
+    ).to_pytest_param(id="python_user"),
+    SafeDeleteCase(
+        language=Language.JAVA,
+        name_path="Model",
+        relative_path=os.path.join("src", "main", "java", "test_repo", "Model.java"),
+    ).to_pytest_param(id="java_model"),
+    SafeDeleteCase(
+        language=Language.KOTLIN,
+        name_path="Model",
+        relative_path=os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
+    ).to_pytest_param(
+        *([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+        id="kotlin_model",
+    ),
+    SafeDeleteCase(
+        language=Language.TYPESCRIPT,
+        name_path="helperFunction",
+        relative_path="index.ts",
+    ).to_pytest_param(id="typescript_helper_function"),
+]
+
+SAFE_DELETE_SUCCEEDS_CASES = [
+    SafeDeleteCase(
+        language=Language.PYTHON,
+        name_path="Timer",
+        relative_path=os.path.join("test_repo", "utils.py"),
+    ).to_pytest_param(id="python_timer"),
+    SafeDeleteCase(
+        language=Language.JAVA,
+        name_path="ModelUser",
+        relative_path=os.path.join("src", "main", "java", "test_repo", "ModelUser.java"),
+    ).to_pytest_param(id="java_model_user"),
+    SafeDeleteCase(
+        language=Language.KOTLIN,
+        name_path="ModelUser",
+        relative_path=os.path.join("src", "main", "kotlin", "test_repo", "ModelUser.kt"),
+    ).to_pytest_param(
+        *([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+        id="kotlin_model_user",
+    ),
+    SafeDeleteCase(
+        language=Language.TYPESCRIPT,
+        name_path="unusedStandaloneFunction",
+        relative_path="index.ts",
+    ).to_pytest_param(id="typescript_unused_standalone_function"),
 ]
 
 
@@ -1239,91 +1300,33 @@ def create_service_container() -> dict[str, Any]:
                 mode="regex",
             )
 
-    @pytest.mark.parametrize(
-        "serena_agent,name_path,relative_path",
-        [
-            pytest.param(
-                Language.PYTHON,
-                "User",
-                os.path.join("test_repo", "models.py"),
-                marks=pytest.mark.python,
-            ),
-            pytest.param(
-                Language.JAVA,
-                "Model",
-                os.path.join("src", "main", "java", "test_repo", "Model.java"),
-                marks=pytest.mark.java,
-            ),
-            pytest.param(
-                Language.KOTLIN,
-                "Model",
-                os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
-                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
-            ),
-            pytest.param(
-                Language.TYPESCRIPT,
-                "helperFunction",
-                "index.ts",
-                marks=pytest.mark.typescript,
-            ),
-        ],
-        indirect=["serena_agent"],
-    )
-    def test_safe_delete_symbol_blocked_by_references(self, serena_agent: SerenaAgent, name_path: str, relative_path: str):
+    @pytest.mark.parametrize("serena_agent,case", SAFE_DELETE_BLOCKED_CASES, indirect=["serena_agent"])
+    def test_safe_delete_symbol_blocked_by_references(self, serena_agent: SerenaAgent, case: SafeDeleteCase):
         """
         Tests that SafeDeleteSymbol refuses to delete a symbol that is referenced elsewhere
         and returns a message listing the referencing files.
         """
         # wrap in modification context as a safety net: if the tool has a bug and deletes anyway,
         # the file will be restored, preventing corruption of test resources
-        with project_file_modification_context(serena_agent, relative_path):
+        with project_file_modification_context(serena_agent, case.relative_path):
             safe_delete_tool = serena_agent.get_tool(SafeDeleteSymbol)
-            result = safe_delete_tool.apply(name_path_pattern=name_path, relative_path=relative_path)
+            result = safe_delete_tool.apply(name_path_pattern=case.name_path, relative_path=case.relative_path)
             assert "Cannot delete" in result, f"Expected deletion to be blocked due to existing references, but got: {result}"
             assert "referenced in" in result, f"Expected reference information in result, but got: {result}"
 
-    @pytest.mark.parametrize(
-        "serena_agent,name_path,relative_path",
-        [
-            pytest.param(
-                Language.PYTHON,
-                "Timer",
-                os.path.join("test_repo", "utils.py"),
-                marks=pytest.mark.python,
-            ),
-            pytest.param(
-                Language.JAVA,
-                "ModelUser",
-                os.path.join("src", "main", "java", "test_repo", "ModelUser.java"),
-                marks=pytest.mark.java,
-            ),
-            pytest.param(
-                Language.KOTLIN,
-                "ModelUser",
-                os.path.join("src", "main", "kotlin", "test_repo", "ModelUser.kt"),
-                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
-            ),
-            pytest.param(
-                Language.TYPESCRIPT,
-                "unusedStandaloneFunction",
-                "index.ts",
-                marks=pytest.mark.typescript,
-            ),
-        ],
-        indirect=["serena_agent"],
-    )
-    def test_safe_delete_symbol_succeeds_when_no_references(self, serena_agent: SerenaAgent, name_path: str, relative_path: str):
+    @pytest.mark.parametrize("serena_agent,case", SAFE_DELETE_SUCCEEDS_CASES, indirect=["serena_agent"])
+    def test_safe_delete_symbol_succeeds_when_no_references(self, serena_agent: SerenaAgent, case: SafeDeleteCase):
         """
         Tests that SafeDeleteSymbol successfully deletes a symbol that has no references
         and that the symbol is actually removed from the file.
         """
-        with project_file_modification_context(serena_agent, relative_path):
+        with project_file_modification_context(serena_agent, case.relative_path):
             safe_delete_tool = serena_agent.get_tool(SafeDeleteSymbol)
-            result = safe_delete_tool.apply(name_path_pattern=name_path, relative_path=relative_path)
+            result = safe_delete_tool.apply(name_path_pattern=case.name_path, relative_path=case.relative_path)
             assert result == SUCCESS_RESULT, f"Expected successful deletion, but got: {result}"
 
             # verify the symbol was actually removed from the file
-            file_content = read_project_file(serena_agent.get_active_project(), relative_path)
-            assert name_path not in file_content, (
-                f"Expected symbol {name_path} to be removed from {relative_path}, but it still appears in the file content"
+            file_content = read_project_file(serena_agent.get_active_project(), case.relative_path)
+            assert case.name_path not in file_content, (
+                f"Expected symbol {case.name_path} to be removed from {case.relative_path}, but it still appears in the file content"
             )
