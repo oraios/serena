@@ -60,6 +60,10 @@ Some languages require additional installations or setup steps, as noted.
   (requires local groovy-language-server.jar setup via `GROOVY_LS_JAR_PATH` or configuration)
 * **Haskell**
   (automatically locates HLS via ghcup, stack, or system PATH; supports Stack and Cabal projects)
+* **Haxe**
+  (uses [haxe-language-server](https://github.com/vshaxe/haxe-language-server); requires Node.js and the Haxe compiler 3.4.0+;
+  set `build_file` in `ls_specific_settings` to point to the `.hxml` build configuration for full cross-file support;
+  the server binary can be provided via `ls_path`, discovered from the VS Code extension, or built from source)
 * **HLSL / GLSL / WGSL**
   (uses [shader-language-server](https://github.com/antaalt/shader-sense) (language `hlsl`); automatically downloaded;
   on macOS, requires Rust toolchain for building from source;

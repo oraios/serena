@@ -10,6 +10,14 @@ Status of the `main` branch. Changes prior to the next official version change w
       `activate_project` output.
 
 * New language support:
+    * Add Haxe language server support (`Language.HAXE`) using the
+      [vshaxe/haxe-language-server](https://github.com/vshaxe/haxe-language-server).
+      Requires Node.js and Haxe compiler (3.4.0+). Supports `.hx` files with
+      go-to-definition, find references, document symbols, hover, and completion.
+      Set `build_file` in `ls_specific_settings` to specify the `.hxml` build
+      configuration for full cross-file support. The server binary (`server.js`)
+      can be provided via `ls_path`, discovered from the VS Code extension, or
+      built from source.
     * Add Solidity language server support (`Language.SOLIDITY`) using the
       Nomic Foundation `@nomicfoundation/solidity-language-server`. Automatically
       installed via npm. Supports `.sol` files with go-to-definition, find references,

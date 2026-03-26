@@ -70,6 +70,12 @@ class Language(str, Enum):
     HASKELL = "haskell"
     LEAN4 = "lean4"
     GROOVY = "groovy"
+    HAXE = "haxe"
+    """Haxe Language Server (vshaxe/haxe-language-server).
+    Requires Node.js and the Haxe compiler (3.4.0+).
+    Set build_file in ls_specific_settings to specify the .hxml build configuration.
+    The server.js can be provided via ls_path, or will be built from source.
+    """
     VUE = "vue"
     POWERSHELL = "powershell"
     PASCAL = "pascal"
@@ -265,6 +271,8 @@ class Language(str, Enum):
                 return FilenameMatcher(
                     "*.f90", "*.F90", "*.f95", "*.F95", "*.f03", "*.F03", "*.f08", "*.F08", "*.f", "*.F", "*.for", "*.FOR", "*.fpp", "*.FPP"
                 )
+            case self.HAXE:
+                return FilenameMatcher("*.hx")
             case self.HASKELL:
                 return FilenameMatcher("*.hs", "*.lhs")
             case self.LEAN4:
@@ -475,6 +483,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.fortran_language_server import FortranLanguageServer
 
                 return FortranLanguageServer
+            case self.HAXE:
+                from solidlsp.language_servers.haxe_language_server import HaxeLanguageServer
+
+                return HaxeLanguageServer
             case self.HASKELL:
                 from solidlsp.language_servers.haskell_language_server import HaskellLanguageServer
 
