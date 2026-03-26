@@ -124,23 +124,9 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
     Performs a global (or local) search using the language server backend.
     """
 
-    @staticmethod
-    def _group_children_by_kind(children: list[dict]) -> dict[str, list]:
-        """Recursively group a list of child symbol dicts by kind, keeping only the name.
-
-        :return: mapping from kind to list of names (or ``{name: grouped_grandchildren}`` dicts
-            for children that themselves have children)
-        """
-        by_kind: defaultdict[str, list] = defaultdict(list)
-        for child in children:
-            kind = child.get("kind", "unknown")
-            name = child.get("name", "unknown")
-            if "children" in child:
-                grouped_grandchildren = FindSymbolTool._group_children_by_kind(child["children"])
-                by_kind[kind].append({name: grouped_grandchildren})
-            else:
-                by_kind[kind].append(name)
-        return dict(by_kind)
+    # group children by kind, keeping just the name (the parent's name_path makes it unambiguous);
+    # we don't group the top-level result list because many tests rely on it being a flat list of symbol dicts
+    symbol_dict_grouper = LanguageServerSymbolDictGrouper([], ["kind"], collapse_singleton=True)
 
     # noinspection PyDefaultArgument
     def apply(
@@ -213,14 +199,14 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         )
         n_matches = len(symbols)
 
-        def make_shortened_result() -> str:
-            by_file: defaultdict[str, list[str]] = defaultdict(list)
+        def create_short_result_relative_path_to_name_paths() -> str:
+            relative_path_to_name_paths: defaultdict[str, list[str]] = defaultdict(list)
             for s in symbols:
-                by_file[s.location.relative_path or "unknown"].append(s.get_name_path())
-            return f"Shortened result:\n{self._to_json(by_file)}"
+                relative_path_to_name_paths[s.location.relative_path or "unknown"].append(s.get_name_path())
+            return f"Shortened result:\n{self._to_json(relative_path_to_name_paths)}"
 
         if 0 < max_matches < n_matches:
-            return f"Matched {n_matches}>{max_matches=} symbols.\n" + make_shortened_result()
+            return f"Matched {n_matches}>{max_matches=} symbols.\n" + create_short_result_relative_path_to_name_paths()
 
         symbol_dicts = [
             s.to_dict(kind=True, name=True, relative_path=True, body_location=True, depth=depth, body=include_body) for s in symbols
@@ -234,17 +220,14 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
                     # If we ever upgrade to 3.15, we can remove the type: ignore[typeddict-unknown-key]
                     s_dict["info"] = symbol_info  # type: ignore[typeddict-unknown-key]
 
+                # TODO: This is only applied conditionally.
+                #   Why don't we just pass name=False - and while we're at it,
+                #   change to_dict to always return name instead of name_path for children
                 s_dict.pop("name", None)  # we just need name for children
 
-        # group children by kind, keeping just the name (the parent's name_path makes it unambiguous);
-        # we don't group the top-level result list because many tests rely on it being a flat list of symbol dicts
-        if depth > 0:
-            for s_dict in symbol_dicts:
-                if "children" in s_dict:
-                    s_dict["children"] = self._group_children_by_kind(s_dict["children"])  # type: ignore
-
-        result = self._to_json(symbol_dicts)
-        return self._limit_length(result, max_answer_chars, shortened_result_factories=[make_shortened_result])
+        grouped_symbol_dicts = self.symbol_dict_grouper.group(symbol_dicts)
+        result = self._to_json(grouped_symbol_dicts)
+        return self._limit_length(result, max_answer_chars, shortened_result_factories=[create_short_result_relative_path_to_name_paths])
 
 
 class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
