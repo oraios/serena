@@ -3,6 +3,7 @@
 -- main.lua: Entry point for the test application
 
 local calculator = require("src.calculator")
+local animals = require("src.animals")
 local utils = require("src.utils")
 
 local function print_banner()
@@ -48,6 +49,12 @@ local function test_utils()
     logger:info("Application started")
     logger:debug("Debug information")
     logger:warn("This is a warning")
+end
+
+local function test_animals()
+    print("\nTesting Animal Module:")
+    local dog = animals.Dog:new("Rex")
+    print(dog:speak())
 end
 
 local function interactive_calculator()
@@ -99,11 +106,13 @@ local function main(args)
     if #args == 0 then
         test_calculator()
         test_utils()
+        test_animals()
     elseif args[1] == "interactive" then
         interactive_calculator()
     elseif args[1] == "test" then
         test_calculator()
         test_utils()
+        test_animals()
         print("\nAll tests completed!")
     else
         print("Usage: lua main.lua [interactive|test]")

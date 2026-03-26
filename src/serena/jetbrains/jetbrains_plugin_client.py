@@ -425,6 +425,21 @@ class JetBrainsPluginClient(ToStringMixin):
         self._postprocess_symbol_collection_response(symbol_collection)
         return symbol_collection
 
+    def move_symbol(
+        self,
+        name_path: str | None,
+        relative_path: str | None,
+        target_parent_name_path: str | None,
+        target_relative_path: str | None,
+    ) -> dict[str, Any]:
+        request_data = {
+            "namePath": name_path,
+            "relativePath": relative_path,
+            "targetParentNamePath": target_parent_name_path,
+            "targetRelativePath": target_relative_path,
+        }
+        return self._make_request("POST", "/moveSymbol", request_data)
+
     def find_references(self, name_path: str, relative_path: str, include_quick_info: bool) -> jb.SymbolCollectionResponse:
         """
         Finds references to a symbol.
@@ -504,6 +519,42 @@ class JetBrainsPluginClient(ToStringMixin):
         }
         return cast(jb.TypeHierarchyResponse, self._make_request("POST", "/getSubtypes", request_data))
 
+    def safe_delete(self, name_path: str | None, relative_path: str, delete_even_if_used: bool, propagate: bool) -> dict[str, Any]:
+        """
+        Safely deletes a symbol, checking for usages first.
+
+        :param name_path: the name path of the symbol to delete
+        :param relative_path: the relative path to the file containing the symbol
+        :param delete_even_if_used: if True, delete the symbol even if it has usages
+        """
+        request_data = {
+            "namePath": name_path,
+            "relativePath": relative_path,
+            "deleteEvenIfUsed": delete_even_if_used,
+            "propagate": propagate,
+        }
+        return self._make_request("POST", "/safeDelete", request_data)
+
+    def inline_symbol(
+        self,
+        name_path: str,
+        relative_path: str,
+        keep_definition: bool,
+    ) -> dict[str, Any]:
+        """
+        Inlines a method, replacing all call sites with the method body.
+
+        :param name_path: the name path of the method to inline
+        :param relative_path: the relative path to the file containing the method
+        :param keep_definition: if True, keep the original method definition after inlining
+        """
+        request_data = {
+            "namePath": name_path,
+            "relativePath": relative_path,
+            "keepDefinition": keep_definition,
+        }
+        return self._make_request("POST", "/inlineSymbol", request_data)
+
     def rename_symbol(
         self, name_path: str, relative_path: str, new_name: str, rename_in_comments: bool, rename_in_text_occurrences: bool
     ) -> None:
@@ -524,6 +575,76 @@ class JetBrainsPluginClient(ToStringMixin):
             "renameInTextOccurrences": rename_in_text_occurrences,
         }
         self._make_request("POST", "/renameSymbol", request_data)
+
+    def run_inspections(
+        self,
+        relative_path: str,
+        min_severity: str | None = None,
+        inspection_names: list[str] | None = None,
+        start_line: int | None = None,
+        end_line: int | None = None,
+    ) -> jb.RunInspectionsResponse:
+        """
+        Runs IDE inspections on the given file and returns the results.
+
+        :param relative_path: the relative path to the file to inspect
+        :param min_severity: minimum severity level to include (e.g. "WARNING", "ERROR")
+        :param inspection_names: optional list of specific inspection names to run
+        :param start_line: optional start line to restrict the inspection range
+        :param end_line: optional end line to restrict the inspection range
+        """
+        request_data: dict[str, Any] = {
+            "relativePath": relative_path,
+        }
+        if min_severity is not None:
+            request_data["minSeverity"] = min_severity
+        if inspection_names is not None:
+            request_data["inspectionNames"] = inspection_names
+        if start_line is not None:
+            request_data["startLine"] = start_line
+        if end_line is not None:
+            request_data["endLine"] = end_line
+        return cast(jb.RunInspectionsResponse, self._make_request("POST", "/runInspections", request_data))
+
+    def find_implementations(
+        self,
+        name_path: str,
+        relative_path: str,
+        include_quick_info: bool = False,
+    ) -> jb.SymbolCollectionResponse:
+        """
+        Finds implementations of a symbol (e.g. implementations of an interface method or abstract class).
+
+        :param name_path: the name path of the symbol to find implementations for
+        :param relative_path: the relative path to the file containing the symbol
+        :param include_quick_info: whether to include quick info (hover text) for each implementation
+        """
+        request_data = {
+            "namePath": name_path,
+            "relativePath": relative_path,
+            "includeQuickInfo": include_quick_info,
+        }
+        symbol_collection = cast(jb.SymbolCollectionResponse, self._make_request("POST", "/findImplementations", request_data))
+        self._postprocess_symbol_collection_response(symbol_collection)
+        return symbol_collection
+
+    def list_inspections(
+        self,
+        language: str | None = None,
+        group_path_contains: str | None = None,
+    ) -> jb.ListInspectionsResponse:
+        """
+        Lists available IDE inspections, optionally filtered by language and/or group path.
+
+        :param language: optional language to filter inspections by (e.g. "Java", "Python")
+        :param group_path_contains: optional substring to filter inspection group paths
+        """
+        request_data: dict[str, Any] = {}
+        if language is not None:
+            request_data["language"] = language
+        if group_path_contains is not None:
+            request_data["groupPathContains"] = group_path_contains
+        return cast(jb.ListInspectionsResponse, self._make_request("POST", "/listInspections", request_data))
 
     def refresh_file(self, relative_path: str) -> None:
         """

@@ -15,7 +15,7 @@ from typing import Any
 from overrides import override
 
 from solidlsp import ls_types
-from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
+from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
 from solidlsp.language_servers.typescript_language_server import (
     TypeScriptLanguageServer,
     prefer_non_node_modules_definition,
@@ -407,31 +407,26 @@ class VueLanguageServer(SolidLanguageServer):
         typescript_language_server_version = typescript_config.get("typescript_language_server_version", "5.1.3")
         vue_config = solidlsp_settings.get_ls_specific_settings(Language.VUE)
         vue_language_server_version = vue_config.get("vue_language_server_version", "3.1.5")
+        npm_registry = vue_config.get("npm_registry", typescript_config.get("npm_registry"))
 
         deps = RuntimeDependencyCollection(
             [
                 RuntimeDependency(
                     id="vue-language-server",
                     description="Vue language server package (Volar)",
-                    command=["npm", "install", "--prefix", "./", f"@vue/language-server@{vue_language_server_version}"],
+                    command=build_npm_install_command("@vue/language-server", vue_language_server_version, npm_registry),
                     platform_id="any",
                 ),
                 RuntimeDependency(
                     id="typescript",
                     description="TypeScript (required for tsdk)",
-                    command=["npm", "install", "--prefix", "./", f"typescript@{typescript_version}"],
+                    command=build_npm_install_command("typescript", typescript_version, npm_registry),
                     platform_id="any",
                 ),
                 RuntimeDependency(
                     id="typescript-language-server",
                     description="TypeScript language server (for Vue LS 3.x tsserver forwarding)",
-                    command=[
-                        "npm",
-                        "install",
-                        "--prefix",
-                        "./",
-                        f"typescript-language-server@{typescript_language_server_version}",
-                    ],
+                    command=build_npm_install_command("typescript-language-server", typescript_language_server_version, npm_registry),
                     platform_id="any",
                 ),
             ]

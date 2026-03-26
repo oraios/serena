@@ -9,8 +9,15 @@ excluded_tools:
   - find_referencing_symbols
   - get_symbols_overview
   - restart_language_server
+  - safe_delete_symbol
 included_optional_tools:
   - jet_brains_find_symbol
   - jet_brains_find_referencing_symbols
   - jet_brains_get_symbols_overview
+  - jet_brains_move_symbol
   - jet_brains_type_hierarchy
+  - jet_brains_safe_delete
+  - jet_brains_inline_symbol
+  - jet_brains_find_implementations
+  - jet_brains_run_inspections
+  - jet_brains_list_inspections

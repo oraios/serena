@@ -150,6 +150,7 @@ class LanguageServerProcess:
         self._pending_requests: dict[Any, Request] = {}
         self.on_request_handlers: dict[str, Callable[[Any], Any]] = {}
         self.on_notification_handlers: dict[str, Callable[[Any], None]] = {}
+        self._notification_observers: list[Callable[[str, Any], None]] = []
         self._trace_log_fn = logger
         self.tasks: dict[int, Any] = {}
         self.task_counter = 0
@@ -510,6 +511,12 @@ class LanguageServerProcess:
         """
         self.on_notification_handlers[method] = cb
 
+    def on_any_notification(self, cb: Callable[[str, Any], None]) -> None:
+        """
+        Register an observer that is invoked for every notification received from the server.
+        """
+        self._notification_observers.append(cb)
+
     def _response_handler(self, response: StringDict) -> None:
         """
         Handle the response received from the server for a request, using the id to determine the request
@@ -561,6 +568,16 @@ class LanguageServerProcess:
         """
         method = response.get("method", "")
         params = response.get("params")
+
+        for observer in self._notification_observers:
+            try:
+                observer(method, params)
+            except asyncio.CancelledError:
+                return
+            except Exception as ex:
+                if not self._is_shutting_down:
+                    log.error("Error handling notification observer for method '%s': %s", method, ex, exc_info=ex)
+
         handler = self.on_notification_handlers.get(method)
         if not handler:
             log.warning("Unhandled method '%s'", method)

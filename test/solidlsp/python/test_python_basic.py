@@ -12,14 +12,14 @@ import pytest
 from serena.project import Project
 from serena.util.text_utils import LineType
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from test.conftest import PYTHON_LANGUAGE_BACKENDS
 
 
 @pytest.mark.python
 class TestPythonLanguageServerBasics:
     """Test basic functionality of the language server."""
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_LANGUAGE_BACKENDS, indirect=True)
     def test_request_references_user_class(self, language_server: SolidLanguageServer) -> None:
         """Test request_references on the User class."""
         # Get references to the User class in models.py
@@ -34,7 +34,7 @@ class TestPythonLanguageServerBasics:
         references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         assert len(references) > 1, "User class should be referenced in multiple files (using selectionRange if present)"
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_LANGUAGE_BACKENDS, indirect=True)
     def test_request_references_item_class(self, language_server: SolidLanguageServer) -> None:
         """Test request_references on the Item class."""
         # Get references to the Item class in models.py
@@ -50,7 +50,7 @@ class TestPythonLanguageServerBasics:
         services_references = [ref for ref in references if "services.py" in ref["uri"]]
         assert len(services_references) > 0, "At least one reference should be in services.py (using selectionRange if present)"
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_LANGUAGE_BACKENDS, indirect=True)
     def test_request_references_function_parameter(self, language_server: SolidLanguageServer) -> None:
         """Test request_references on a function parameter."""
         # Get references to the id parameter in get_user method
@@ -65,7 +65,7 @@ class TestPythonLanguageServerBasics:
         references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         assert len(references) > 0, "id parameter should be referenced within the method (using selectionRange if present)"
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_LANGUAGE_BACKENDS, indirect=True)
     def test_request_references_create_user_method(self, language_server: SolidLanguageServer) -> None:
         # Get references to the create_user method in UserService
         file_path = os.path.join("test_repo", "services.py")
@@ -79,9 +79,29 @@ class TestPythonLanguageServerBasics:
         references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         assert len(references) > 1, "Should get valid references for create_user (using selectionRange if present)"
 
+    @pytest.mark.parametrize("language_server", PYTHON_LANGUAGE_BACKENDS, indirect=True)
+    def test_request_text_document_diagnostics_with_filters(self, language_server: SolidLanguageServer) -> None:
+        file_path = os.path.join("test_repo", "diagnostics_sample.py")
+
+        diagnostics = language_server.request_text_document_diagnostics(file_path)
+        assert len(diagnostics) >= 2
+        diagnostic_messages = [diagnostic["message"] for diagnostic in diagnostics]
+        assert any("missing_user" in message for message in diagnostic_messages), diagnostic_messages
+        assert any("undefined_name" in message for message in diagnostic_messages), diagnostic_messages
+
+        factory_diagnostics = language_server.request_text_document_diagnostics(file_path, start_line=3, end_line=5, min_severity=1)
+        factory_messages = [diagnostic["message"] for diagnostic in factory_diagnostics]
+        assert factory_messages, "Expected diagnostics in broken_factory range"
+        assert all("missing_user" in message for message in factory_messages), factory_messages
+
+        consumer_diagnostics = language_server.request_text_document_diagnostics(file_path, start_line=7, end_line=10, min_severity=1)
+        consumer_messages = [diagnostic["message"] for diagnostic in consumer_diagnostics]
+        assert consumer_messages, "Expected diagnostics in broken_consumer range"
+        assert all("undefined_name" in message for message in consumer_messages), consumer_messages
+
 
 class TestProjectBasics:
-    @pytest.mark.parametrize("project", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("project", PYTHON_LANGUAGE_BACKENDS, indirect=True)
     def test_retrieve_content_around_line(self, project: Project) -> None:
         """Test retrieve_content_around_line functionality with various scenarios."""
         file_path = os.path.join("test_repo", "models.py")
@@ -188,7 +208,7 @@ class TestProjectBasics:
             else:
                 assert line.match_type == LineType.AFTER_MATCH
 
-    @pytest.mark.parametrize("project", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("project", PYTHON_LANGUAGE_BACKENDS, indirect=True)
     def test_search_files_for_pattern(self, project: Project) -> None:
         """Test search_files_for_pattern with various patterns and glob filters."""
         # Test 1: Search for class definitions across all files

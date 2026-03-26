@@ -583,8 +583,8 @@ class TestRubyLanguageServerSymbols:
         """Test request_defining_symbol for a method call."""
         # Test finding the definition of a method being called
         file_path = os.path.join("examples", "user_management.rb")
-        # Position at a method call like create_user
-        defining_symbol = language_server.request_defining_symbol(file_path, 30, 15)
+        # Position at the create_user method call on line 36 (0-indexed line 35)
+        defining_symbol = language_server.request_defining_symbol(file_path, 35, 20)
 
         # Verify that we can find method definitions
         if defining_symbol is not None:

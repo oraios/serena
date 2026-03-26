@@ -226,11 +226,55 @@ ls_specific_settings:
     # language-server-specific keys
 ```
 
-:::{attention}
-Most settings are currently undocumented. Please refer to the 
-[source code of the respective language server](https://github.com/oraios/serena/tree/main/src/solidlsp/language_servers) 
-implementation to determine supported settings.
-:::
+The following table summarizes the currently supported `ls_specific_settings` keys.
+Version keys override Serena's bundled default for managed downloads or installs.
+
+| Language key | Supported settings |
+|---|---|
+| `al` | `al_extension_version` |
+| `ansible` | `ls_path`, `ansible_language_server_version`, `npm_registry`, `ansible_path`, `ansible_settings`, `lint_enabled`, `lint_path`, `python_interpreter_path`, `python_activation_script` |
+| `bash` | `ls_path`, `bash_language_server_version`, `npm_registry` |
+| `clojure` | `ls_path`, `clojure_lsp_version` |
+| `cpp` | `ls_path`, `compile_commands_dir`, `clangd_version` |
+| `cpp_ccls` | `ls_path` |
+| `csharp` | `csharp_language_server_version`, `runtime_dependencies` |
+| `csharp_omnisharp` | `omnisharp_version`, `razor_omnisharp_version` |
+| `dart` | `dart_sdk_version` |
+| `elixir` | `expert_version` |
+| `elm` | `elm_language_server_version`, `npm_registry` |
+| `fsharp` | `fsautocomplete_version` |
+| `go` | `gopls_settings` |
+| `groovy` | `ls_jar_path`, `ls_java_home_path`, `ls_jar_options`, `vscode_java_version` |
+| `hlsl` | `ls_path`, `version` |
+| `java` | `maven_user_settings`, `gradle_user_home`, `gradle_wrapper_enabled`, `gradle_java_home`, `use_system_java_home`, `gradle_version`, `vscode_java_version`, `intellicode_version` |
+| `kotlin` | `ls_path`, `kotlin_lsp_version`, `jvm_options` |
+| `lean4` | `ls_path` |
+| `lua` | `lua_language_server_version` |
+| `luau` | `ls_path`, `luau_lsp_version`, `platform`, `roblox_security_level` |
+| `markdown` | `ls_path`, `marksman_version` |
+| `matlab` | `matlab_path`, `matlab_extension_version` |
+| `pascal` | `pasls_version`, `pp`, `fpcdir`, `lazarusdir`, `fpc_target`, `fpc_target_cpu` |
+| `php` | `ls_path`, `intelephense_version`, `npm_registry`, `ignore_vendor`, `maxFileSize`, `maxMemory` |
+| `php_phpactor` | `ls_path`, `phpactor_version`, `ignore_vendor` |
+| `powershell` | `pses_version` |
+| `python` | `ls_path` |
+| `python_ty` | `ls_path`, `ty_version` |
+| `ruby` | `ruby_lsp_version` |
+| `rust` | `ls_path` |
+| `scala` | `metals_version`, `client_name`, `on_stale_lock`, `log_multi_instance_notice` |
+| `solidity` | `ls_path`, `solidity_language_server_version`, `npm_registry` |
+| `systemverilog` | `ls_path`, `verible_version` |
+| `terraform` | `terraform_ls_version` |
+| `toml` | `ls_path`, `taplo_version` |
+| `typescript` | `ls_path`, `typescript_version`, `typescript_language_server_version`, `npm_registry` |
+| `vts` | `vtsls_version`, `npm_registry` |
+| `vue` | `vue_language_server_version`, `typescript_version`, `typescript_language_server_version`, `npm_registry` |
+| `yaml` | `ls_path`, `yaml_language_server_version`, `npm_registry` |
+
+Notes:
+- `ls_path` means Serena uses your explicitly provided executable instead of the managed installation.
+- Version overrides apply only to Serena-managed installs or downloads for that language server.
+- If a language is not listed above, Serena currently does not document any `ls_specific_settings` for it.
 
 (override-ls-path)=
 #### Overriding the Language Server Path
@@ -246,9 +290,10 @@ ls_specific_settings:
     ls_path: "/path/to/language-server"
 ```
 
-This is supported by all language servers deriving their dependency provider from  `LanguageServerDependencyProviderSinglePath`.
-Currently, this includes the following languages: `bash`, `clojure`, `cpp`, `kotlin`, `markdown`, `php`, `php_phpactor`, `python`, `rust`, `toml`, `typescript`, `yaml`.
-We will add support for more languages over time.
+This is supported by all language servers deriving their dependency provider from `LanguageServerDependencyProviderSinglePath`,
+and by some additional wrappers that explicitly expose `ls_path`.
+Common examples include: `ansible`, `bash`, `clojure`, `cpp`, `cpp_ccls`, `hlsl`, `kotlin`, `lean4`, `luau`, `markdown`, `php`,
+`php_phpactor`, `python`, `python_ty`, `rust`, `solidity`, `systemverilog`, `toml`, `typescript`, and `yaml`.
 
 #### C# (Roslyn Language Server)
 
@@ -266,12 +311,14 @@ Automatic download is supported for: Windows (x64, ARM64), macOS (x64, ARM64), L
 **Configuration:**
 
 The `runtime_dependencies` setting allows you to override the download URLs for the Roslyn Language Server. This is useful if you need to use a private package mirror or a specific version.
+For the common case of changing only the package version, use `csharp_language_server_version`.
 
 Example configuration to override the language server download URL:
 
 ```yaml
 ls_specific_settings:
   csharp:
+    csharp_language_server_version: "5.5.0-2.26078.4"
     runtime_dependencies:
       - id: "CSharpLanguageServer"
         platform_id: "linux-x64"  # or win-x64, win-arm64, osx-x64, osx-arm64, linux-arm64
@@ -318,6 +365,33 @@ Notes:
 - `GOFLAGS` (from the environment you start Serena in) may also affect the Go build context. Prefer `buildFlags` for tags.
 - Build context changes are only picked up when `gopls` starts. After changing `gopls_settings` (or relevant env vars like `GOFLAGS`), restart the Serena process (or server) that hosts the Go language server, or use your client's "Restart language server" action if it causes `gopls` to restart.
 
+#### Groovy
+
+Serena uses a user-provided Groovy Language Server JAR for Groovy support. If `ls_java_home_path` is not set, Serena downloads
+a bundled Java runtime for launching that JAR.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_jar_path` | required | Path to the Groovy Language Server JAR |
+| `ls_java_home_path` | `null` | Path to a Java installation to use instead of Serena's managed runtime |
+| `ls_jar_options` | `""` | Additional options passed when launching the Groovy LS JAR |
+| `vscode_java_version` | `1.42.0-561` | Override the bundled Java runtime bundle version Serena downloads by default |
+
+Note:
+- When overriding `vscode_java_version`, Serena still assumes that the downloaded runtime bundle keeps the same internal
+  directory layout and file names as the bundled default version.
+
+Example:
+
+```yaml
+ls_specific_settings:
+  groovy:
+    ls_jar_path: "/path/to/groovy-language-server-all.jar"
+    vscode_java_version: "1.42.0-561"
+```
+
 #### Java (`eclipse.jdt.ls`)
 
 The following settings are supported for the Java language server:
@@ -329,6 +403,13 @@ The following settings are supported for the Java language server:
 | `gradle_wrapper_enabled` | `false` | Use the project's Gradle wrapper (`gradlew`) instead of the bundled Gradle distribution. Enable this for projects with custom plugins or repositories. |
 | `gradle_java_home` | `null` | Path to the JDK used by Gradle. When unset, Gradle uses the bundled JRE. |
 | `use_system_java_home` | `false` | Use the system's `JAVA_HOME` environment variable for JDTLS itself. Enable this if your project requires a specific JDK vendor or version for Gradle's JDK checks. |
+| `gradle_version` | `8.14.2` | Override the Gradle distribution version Serena downloads by default. |
+| `vscode_java_version` | `1.42.0-561` | Override the bundled `vscode-java` runtime bundle version Serena downloads by default. |
+| `intellicode_version` | `1.2.30` | Override the IntelliCode VSIX version Serena downloads by default. |
+
+Note:
+- When overriding `vscode_java_version`, Serena still assumes that the downloaded runtime bundle keeps the same internal
+  directory layout and file names as the bundled default version.
 
 Example for a project with custom Gradle plugins and JDK requirements:
 
@@ -373,6 +454,7 @@ Serena uses [`luau-lsp`](https://github.com/JohnnyMorganz/luau-lsp) for Luau sup
 ls_specific_settings:
   luau:
     ls_path: "/path/to/luau-lsp"            # Optional: override the language server executable
+    luau_lsp_version: "1.63.0"              # Optional: override the bundled luau-lsp version
     platform: "roblox"                      # "roblox" (default) or "standard"
     roblox_security_level: "PluginSecurity" # Roblox only: None, PluginSecurity, LocalUserSecurity, RobloxScriptSecurity
 ```
@@ -405,6 +487,7 @@ Configure pasls via `ls_specific_settings.pascal` in `serena_config.yml`:
 
 | Setting          | Description                                                                 |
 | ---------------- | --------------------------------------------------------------------------- |
+| `pasls_version`  | Override the pinned pasls version Serena downloads by default               |
 | `pp`             | Path to FPC compiler driver (must be `fpc` or `fpc.exe`, not `ppc386.exe`)  |
 | `fpcdir`         | Path to FPC source directory                                                |
 | `lazarusdir`     | Path to Lazarus directory (required for LCL projects)                       |

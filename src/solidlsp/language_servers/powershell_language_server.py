@@ -1,6 +1,10 @@
 """
 Provides PowerShell specific instantiation of the LanguageServer class using PowerShell Editor Services.
 Contains various configurations and settings specific to PowerShell scripting.
+
+You can pass the following entries in ``ls_specific_settings["powershell"]``:
+    - pses_version: Override the pinned PowerShell Editor Services version
+      downloaded by Serena (default: the bundled Serena version).
 """
 
 import logging
@@ -10,14 +14,13 @@ import platform
 import shutil
 import tempfile
 import threading
-import zipfile
 from pathlib import Path
 
-import requests
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_utils import FileUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -26,6 +29,8 @@ log = logging.getLogger(__name__)
 
 # PowerShell Editor Services version to download
 PSES_VERSION = "4.4.0"
+PSES_SHA256 = "690b91092989a0f66e6f43986166aaef69d64b559a9fda51feed882e1103fbcc"
+PSES_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
 
 
 class PowerShellLanguageServer(SolidLanguageServer):
@@ -98,31 +103,24 @@ class PowerShellLanguageServer(SolidLanguageServer):
     @classmethod
     def _download_pses(cls, solidlsp_settings: SolidLSPSettings) -> str:
         """Download and install PowerShell Editor Services."""
+        ps_settings = solidlsp_settings.get_ls_specific_settings(Language.POWERSHELL)
+        pses_version = ps_settings.get("pses_version", PSES_VERSION)
         download_url = (
-            f"https://github.com/PowerShell/PowerShellEditorServices/releases/download/v{PSES_VERSION}/PowerShellEditorServices.zip"
+            f"https://github.com/PowerShell/PowerShellEditorServices/releases/download/v{pses_version}/PowerShellEditorServices.zip"
         )
 
         # Create installation directory
         install_dir = Path(cls.ls_resources_dir(solidlsp_settings)) / "powershell"
         install_dir.mkdir(parents=True, exist_ok=True)
 
-        # Download the file
         log.info(f"Downloading PowerShell Editor Services from {download_url}...")
-        response = requests.get(download_url, stream=True, timeout=120)
-        response.raise_for_status()
-
-        # Save the zip file
-        zip_path = install_dir / "PowerShellEditorServices.zip"
-        with open(zip_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-
-        log.info(f"Extracting PowerShell Editor Services to {install_dir}...")
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(install_dir)
-
-        # Clean up zip file
-        zip_path.unlink()
+        FileUtils.download_and_extract_archive_verified(
+            download_url,
+            str(install_dir),
+            "zip",
+            expected_sha256=PSES_SHA256 if pses_version == PSES_VERSION else None,
+            allowed_hosts=PSES_ALLOWED_HOSTS,
+        )
 
         start_script = install_dir / "PowerShellEditorServices" / "Start-EditorServices.ps1"
         if not start_script.exists():

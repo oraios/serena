@@ -15,6 +15,8 @@ end
 def helper_function(number = 42)
   demo = DemoClass.new(number)
   Calculator.new.add(demo.value, 10)
+  greeter = ConsoleGreeter.new
+  puts greeter.format_greeting("Ruby")
   demo.print_value
 end
 

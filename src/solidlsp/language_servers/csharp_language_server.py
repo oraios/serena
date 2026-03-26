@@ -7,8 +7,8 @@ import os
 import platform
 import shutil
 import threading
-import urllib.request
 from collections.abc import Iterable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -19,83 +19,115 @@ from solidlsp.ls import DocumentSymbols, LanguageServerDependencyProvider, LSPFi
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_types import Hover, UnifiedSymbolInformation
-from solidlsp.ls_utils import PathUtils
+from solidlsp.ls_utils import FileUtils, PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams, InitializeResult
 from solidlsp.settings import SolidLSPSettings
-from solidlsp.util.zip import SafeZipExtractor
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
 log = logging.getLogger(__name__)
+
+NUGET_ALLOWED_HOSTS = ("www.nuget.org", "nuget.org", "globalcdn.nuget.org")
+DEFAULT_CSHARP_LANGUAGE_SERVER_VERSION = "5.5.0-2.26078.4"
 
 _RUNTIME_DEPENDENCIES = [
     RuntimeDependency(
         id="CSharpLanguageServer",
         description="Roslyn Language Server for Windows (x64)",
         package_name="roslyn-language-server.win-x64",
-        package_version="5.5.0-2.26078.4",
-        url="https://www.nuget.org/api/v2/package/roslyn-language-server.win-x64/5.5.0-2.26078.4",
+        package_version=DEFAULT_CSHARP_LANGUAGE_SERVER_VERSION,
+        url=f"https://www.nuget.org/api/v2/package/roslyn-language-server.win-x64/{DEFAULT_CSHARP_LANGUAGE_SERVER_VERSION}",
         platform_id="win-x64",
         archive_type="nupkg",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
         extract_path="tools/net10.0/win-x64",
+        sha256="7f3d4119e75305399e6faa81a68240b33c48b94ad523a904594abd00db95572a",
+        allowed_hosts=NUGET_ALLOWED_HOSTS,
     ),
     RuntimeDependency(
         id="CSharpLanguageServer",
         description="Roslyn Language Server for Windows (ARM64)",
         package_name="roslyn-language-server.win-arm64",
-        package_version="5.5.0-2.26078.4",
-        url="https://www.nuget.org/api/v2/package/roslyn-language-server.win-arm64/5.5.0-2.26078.4",
+        package_version=DEFAULT_CSHARP_LANGUAGE_SERVER_VERSION,
+        url=f"https://www.nuget.org/api/v2/package/roslyn-language-server.win-arm64/{DEFAULT_CSHARP_LANGUAGE_SERVER_VERSION}",
         platform_id="win-arm64",
         archive_type="nupkg",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
         extract_path="tools/net10.0/win-arm64",
+        sha256="0fe3381c4340a7494a5242c3d0c8be1af6ef0802de8b458f947cebca76fd26bc",
+        allowed_hosts=NUGET_ALLOWED_HOSTS,
     ),
     RuntimeDependency(
         id="CSharpLanguageServer",
         description="Roslyn Language Server for macOS (x64)",
         package_name="roslyn-language-server.osx-x64",
-        package_version="5.5.0-2.26078.4",
-        url="https://www.nuget.org/api/v2/package/roslyn-language-server.osx-x64/5.5.0-2.26078.4",
+        package_version=DEFAULT_CSHARP_LANGUAGE_SERVER_VERSION,
+        url=f"https://www.nuget.org/api/v2/package/roslyn-language-server.osx-x64/{DEFAULT_CSHARP_LANGUAGE_SERVER_VERSION}",
         platform_id="osx-x64",
         archive_type="nupkg",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
         extract_path="tools/net10.0/osx-x64",
+        sha256="c8de61a88c65150e12f561a2659f70b59d27a7465865136a1de950d2ef826c6d",
+        allowed_hosts=NUGET_ALLOWED_HOSTS,
     ),
     RuntimeDependency(
         id="CSharpLanguageServer",
         description="Roslyn Language Server for macOS (ARM64)",
         package_name="roslyn-language-server.osx-arm64",
-        package_version="5.5.0-2.26078.4",
-        url="https://www.nuget.org/api/v2/package/roslyn-language-server.osx-arm64/5.5.0-2.26078.4",
+        package_version=DEFAULT_CSHARP_LANGUAGE_SERVER_VERSION,
+        url=f"https://www.nuget.org/api/v2/package/roslyn-language-server.osx-arm64/{DEFAULT_CSHARP_LANGUAGE_SERVER_VERSION}",
         platform_id="osx-arm64",
         archive_type="nupkg",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
         extract_path="tools/net10.0/osx-arm64",
+        sha256="995207c14e01dafa71e84080a7eb1f045a697b0c3bb468077bb3809b69bdf456",
+        allowed_hosts=NUGET_ALLOWED_HOSTS,
     ),
     RuntimeDependency(
         id="CSharpLanguageServer",
         description="Roslyn Language Server for Linux (x64)",
         package_name="roslyn-language-server.linux-x64",
-        package_version="5.5.0-2.26078.4",
-        url="https://www.nuget.org/api/v2/package/roslyn-language-server.linux-x64/5.5.0-2.26078.4",
+        package_version=DEFAULT_CSHARP_LANGUAGE_SERVER_VERSION,
+        url=f"https://www.nuget.org/api/v2/package/roslyn-language-server.linux-x64/{DEFAULT_CSHARP_LANGUAGE_SERVER_VERSION}",
         platform_id="linux-x64",
         archive_type="nupkg",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
         extract_path="tools/net10.0/linux-x64",
+        sha256="1aad25de456d637a1eee993ca0d569a1b78d711744ccb36410a3a20250a48aa6",
+        allowed_hosts=NUGET_ALLOWED_HOSTS,
     ),
     RuntimeDependency(
         id="CSharpLanguageServer",
         description="Roslyn Language Server for Linux (ARM64)",
         package_name="roslyn-language-server.linux-arm64",
-        package_version="5.5.0-2.26078.4",
-        url="https://www.nuget.org/api/v2/package/roslyn-language-server.linux-arm64/5.5.0-2.26078.4",
+        package_version=DEFAULT_CSHARP_LANGUAGE_SERVER_VERSION,
+        url=f"https://www.nuget.org/api/v2/package/roslyn-language-server.linux-arm64/{DEFAULT_CSHARP_LANGUAGE_SERVER_VERSION}",
         platform_id="linux-arm64",
         archive_type="nupkg",
         binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
         extract_path="tools/net10.0/linux-arm64",
+        sha256="a7dd49bbc0e25d0e2968ae31ec5f3c774373866db51f3500fcea0ac320e2bbc1",
+        allowed_hosts=NUGET_ALLOWED_HOSTS,
     ),
 ]
+
+
+def _runtime_dependencies_for_version(version: str) -> list[RuntimeDependency]:
+    """Return the Roslyn LS runtime dependencies for the configured version."""
+    default_version = version == DEFAULT_CSHARP_LANGUAGE_SERVER_VERSION
+    result: list[RuntimeDependency] = []
+    for dependency in _RUNTIME_DEPENDENCIES:
+        assert dependency.package_version is not None
+        assert dependency.url is not None
+        result.append(
+            replace(
+                dependency,
+                package_version=version,
+                url=dependency.url.replace(dependency.package_version, version),
+                sha256=dependency.sha256 if default_version else None,
+            )
+        )
+    return result
 
 
 def breadth_first_file_scan(root_dir: str) -> Iterable[str]:
@@ -151,6 +183,9 @@ class CSharpLanguageServer(SolidLanguageServer):
     This is a list of dicts, each containing at least the "id" key, and optionally "platform_id" to uniquely
     identify the dependency to override.
 
+    You can also set `csharp_language_server_version` in ``ls_specific_settings["csharp"]`` to override
+    the pinned Roslyn Language Server package version Serena downloads by default.
+
     Example - Override Roslyn Language Server URL:
     ```
         {
@@ -165,6 +200,10 @@ class CSharpLanguageServer(SolidLanguageServer):
     Note: .NET runtime (version 10+) is required and installed automatically via Microsoft's official install
     scripts. If you have a custom .NET installation, ensure 'dotnet' is available in PATH with version 10 or higher.
     """
+
+    @classmethod
+    def supports_implementation_request(cls) -> bool:
+        return True
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
@@ -347,9 +386,12 @@ class CSharpLanguageServer(SolidLanguageServer):
                     filtered_overrides.append(dep_override)
 
             log.debug("Resolving runtime dependencies")
+            csharp_language_server_version = self._custom_settings.get(
+                "csharp_language_server_version", DEFAULT_CSHARP_LANGUAGE_SERVER_VERSION
+            )
 
             runtime_dependencies = RuntimeDependencyCollection(
-                _RUNTIME_DEPENDENCIES,
+                _runtime_dependencies_for_version(csharp_language_server_version),
                 overrides=filtered_overrides,
             )
 
@@ -433,27 +475,19 @@ class CSharpLanguageServer(SolidLanguageServer):
             if url is None:
                 raise SolidLSPException(f"No URL specified for package {package_name} version {package_version}")
 
-            # Create temporary directory for package download
             temp_dir = Path(self._ls_resources_dir) / "temp_downloads"
             temp_dir.mkdir(parents=True, exist_ok=True)
 
             try:
                 log.debug(f"Downloading package from: {url}")
-
-                # Download the .nupkg file
-                nupkg_file = temp_dir / f"{package_name}.{package_version}.nupkg"
-                urllib.request.urlretrieve(url, nupkg_file)
-
-                # Extract the .nupkg file (it's just a zip file)
                 package_extract_dir = temp_dir / f"{package_name}.{package_version}"
-                package_extract_dir.mkdir(exist_ok=True)
-
-                # Use SafeZipExtractor to handle long paths and skip errors
-                extractor = SafeZipExtractor(archive_path=nupkg_file, extract_dir=package_extract_dir, verbose=False)
-                extractor.extract_all()
-
-                # Clean up the nupkg file
-                nupkg_file.unlink()
+                FileUtils.download_and_extract_archive_verified(
+                    url,
+                    str(package_extract_dir),
+                    "zip",
+                    expected_sha256=dependency.sha256,
+                    allowed_hosts=dependency.allowed_hosts,
+                )
 
                 log.info(f"Successfully downloaded and extracted {package_name} version {package_version} from NuGet.org")
                 return package_extract_dir

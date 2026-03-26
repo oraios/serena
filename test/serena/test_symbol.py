@@ -4,7 +4,13 @@ import pytest
 
 from serena.jetbrains.jetbrains_types import SymbolDTO, SymbolDTOKey
 from serena.project import Project
-from serena.symbol import LanguageServerSymbol, LanguageServerSymbolRetriever, NamePathComponent, NamePathMatcher
+from serena.symbol import (
+    LanguageServerSymbol,
+    LanguageServerSymbolLocation,
+    LanguageServerSymbolRetriever,
+    NamePathComponent,
+    NamePathMatcher,
+)
 from solidlsp.ls_config import Language
 
 
@@ -445,3 +451,9 @@ class TestHoverBudget:
         # Global budget is 10s, all 3 should succeed
         assert call_count == 3
         assert all(info is not None for info in result.values())
+
+
+def test_language_server_symbol_location_normalizes_windows_separators() -> None:
+    location = LanguageServerSymbolLocation(relative_path="src\\test_app\\core.clj", line=1, column=2)
+
+    assert location.relative_path == "src/test_app/core.clj"

@@ -5,6 +5,7 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
+from test.conftest import find_identifier_position, get_repo_path, language_has_verified_implementation_support
 
 
 @pytest.mark.rust
@@ -55,3 +56,30 @@ class TestRustLanguageServer:
         symbols = language_server.request_full_symbol_tree()
         assert SymbolUtils.symbol_tree_contains_name(symbols, "main"), "main missing from overview"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "add"), "add missing from overview"
+
+    if language_has_verified_implementation_support(Language.RUST):
+
+        @pytest.mark.parametrize("language_server", [Language.RUST], indirect=True)
+        def test_find_implementations(self, language_server: SolidLanguageServer) -> None:
+            repo_path = get_repo_path(Language.RUST)
+            pos = find_identifier_position(repo_path / os.path.join("src", "lib.rs"), "format_greeting")
+            assert pos is not None, "Could not find Greeter.format_greeting in fixture"
+
+            implementations = language_server.request_implementation(os.path.join("src", "lib.rs"), *pos)
+            assert implementations, "Expected at least one implementation of Greeter.format_greeting"
+            assert any("src/lib.rs" in implementation.get("relativePath", "").replace("\\", "/") for implementation in implementations), (
+                f"Expected ConsoleGreeter.format_greeting in implementations, got: {implementations}"
+            )
+
+        @pytest.mark.parametrize("language_server", [Language.RUST], indirect=True)
+        def test_request_implementing_symbols(self, language_server: SolidLanguageServer) -> None:
+            repo_path = get_repo_path(Language.RUST)
+            pos = find_identifier_position(repo_path / os.path.join("src", "lib.rs"), "format_greeting")
+            assert pos is not None, "Could not find Greeter.format_greeting in fixture"
+
+            implementing_symbols = language_server.request_implementing_symbols(os.path.join("src", "lib.rs"), *pos)
+            assert implementing_symbols, "Expected implementing symbols for Greeter.format_greeting"
+            assert any(
+                symbol.get("name") == "format_greeting" and "src/lib.rs" in symbol["location"].get("relativePath", "").replace("\\", "/")
+                for symbol in implementing_symbols
+            ), f"Expected ConsoleGreeter.format_greeting symbol, got: {implementing_symbols}"
