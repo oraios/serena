@@ -96,6 +96,18 @@ class JetBrainsMoveSymbolTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
         target_parent_name_path: str | None = None,
         target_relative_path: str | None = None,
     ) -> str:
+        """
+        Moves a symbol to a different location (file or parent symbol) using the JetBrains refactoring engine.
+        References to the symbol are automatically updated.
+
+        :param name_path: the name path of the symbol to move (e.g. "MyClass/my_method").
+        :param relative_path: the relative path to the file containing the symbol to move.
+        :param target_parent_name_path: the name path of the target parent symbol (e.g. "TargetClass").
+            If None, the symbol is moved to the top level of the target file.
+        :param target_relative_path: the relative path to the target file. If None, the symbol
+            is moved within the same file.
+        :return: JSON string with the result of the operation.
+        """
         with JetBrainsPluginClient.from_project(self.project) as client:
             response_dict = client.move_symbol(
                 name_path=name_path,

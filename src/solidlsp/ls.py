@@ -2670,7 +2670,7 @@ class SolidLanguageServer(ABC):
             assert LSPConstants.KIND in item
             assert LSPConstants.LOCATION in item
 
-            location = cast(dict[str, object], item[LSPConstants.LOCATION])
+            location = cast(dict[str, object], item[LSPConstants.LOCATION])  # type: ignore[literal-required]
             if "relativePath" in location and isinstance(location["relativePath"], str):
                 location["relativePath"] = location["relativePath"].replace("\\", "/")
 
