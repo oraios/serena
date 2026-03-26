@@ -25,8 +25,6 @@ from serena.tools import (
     GetDiagnosticsForSymbolTool,
     ReplaceContentTool,
     ReplaceSymbolBodyTool,
-)
-from serena.tools import (
     SafeDeleteSymbol,
 )
 from solidlsp.ls_config import Language
