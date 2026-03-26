@@ -225,13 +225,13 @@ class Tool(Component):
         self,
         result: str,
         max_answer_chars: int,
-        shortened_results: list[Callable[[], str]] | None = None,
+        shortened_result_factories: list[Callable[[], str]] | None = None,
     ) -> str:
         """Limit the length of the result string, optionally trying progressively shorter versions.
 
         :param result: the full result string
         :param max_answer_chars: maximum allowed characters. -1 means use the default from config.
-        :param shortened_results: optional list of closures, each producing a progressively shorter
+        :param shortened_result_factories: optional list of closures, each producing a progressively shorter
             version of the result. They are tried in order until one fits within ``max_answer_chars``.
         :return: the result string, potentially replaced by a shortened version
         """
@@ -243,9 +243,9 @@ class Tool(Component):
             too_long_msg = (
                 f"The answer is too long ({n_chars} characters). " + "You can adjust your query or raise the max_answer_chars parameter."
             )
-            if shortened_results is not None:
+            if shortened_result_factories is not None:
                 # try each shortening closure in order;
-                for make_shorter in shortened_results:
+                for make_shorter in shortened_result_factories:
                     shortened = make_shorter()
                     candidate = f"{too_long_msg}\n{shortened}"
                     if len(candidate) <= max_answer_chars:

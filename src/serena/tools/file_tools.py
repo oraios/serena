@@ -436,4 +436,6 @@ class SearchForPatternTool(Tool):
             return f"Found {len(matches)} matches in {len(match_lines_by_file)} files."
 
         result = self._to_json(file_to_matches)
-        return self._limit_length(result, max_answer_chars, shortened_results=[make_lines_only, make_per_file_counts, make_summary])
+        return self._limit_length(
+            result, max_answer_chars, shortened_result_factories=[make_lines_only, make_per_file_counts, make_summary]
+        )
