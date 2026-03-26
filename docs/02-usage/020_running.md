@@ -132,7 +132,7 @@ to use such a launch command.
 (streamable-http)=
 ### Streamable HTTP Mode
 
-When using instead the *Streamable HTTP* mode, you control the server lifecycle yourself,
+When using *Streamable HTTP* mode, you control the server lifecycle yourself,
 i.e. you start the server and provide the client with the URL to connect to it.
 
 Simply provide `start-mcp-server` with the `--transport streamable-http` option and optionally provide the desired port
@@ -147,7 +147,14 @@ you would run
 
 and then configure your client to connect to `http://localhost:9121/mcp`.
 
-Note that while the legacy SSE transport is also supported (via `--transport sse` with corresponding /sse endpoint), its use is discouraged.
+**When to use.** Note that Serena is a stateful MCP server, and only one coding project can be active at a time.
+Therefore, starting a single Serena instance and connecting it to multiple clients is only 
+appropriate if all clients will be working on the same project.  
+If you want several agents to work on different projects, making each client/agent start its own server
+in stdio mode is likely the best option.
+See section [The Project Workflow](040_workflow) for more information on how to manage projects in Serena.
+
+The legacy SSE transport is also supported (via `--transport sse` with corresponding /sse endpoint), its use is discouraged.
 
 (mcp-args)=
 ### MCP Server Command-Line Arguments

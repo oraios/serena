@@ -8,6 +8,7 @@ import logging
 import re
 import threading
 from concurrent.futures.thread import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, Optional, Self, TypeVar, cast
 
@@ -16,6 +17,7 @@ from requests import Response
 from sensai.util.string import ToStringMixin
 
 import serena.jetbrains.jetbrains_types as jb
+from serena.config.serena_config import RegisteredProject
 from serena.jetbrains.jetbrains_types import PluginStatusDTO
 from serena.project import Project
 from serena.util.class_decorators import singleton
@@ -63,6 +65,12 @@ class ServerNotFoundError(Exception):
     """Raised when the plugin's service is not found."""
 
 
+@dataclass
+class MatchedClient:
+    client: "JetBrainsPluginClient"
+    registered_project: RegisteredProject
+
+
 @singleton
 class JetBrainsPluginClientManager:
     """
@@ -73,6 +81,7 @@ class JetBrainsPluginClientManager:
 
     def __init__(self) -> None:
         self._clients: dict[int, "JetBrainsPluginClient"] = {}
+        self._matched_clients: list[MatchedClient] = []
         self._lock = threading.Lock()
 
     def _submit_scan(self) -> list[concurrent.futures.Future["JetBrainsPluginClient"]]:
@@ -115,6 +124,47 @@ class JetBrainsPluginClientManager:
             "STOP. Do not attempt any other tools or workarounds. Ask the user to open this folder as a project in a JetBrains IDE "
             "with the Serena plugin installed and running!"
         )
+
+    def match_clients(self, registered_projects: list[RegisteredProject]) -> list[MatchedClient]:
+        """
+        Scans for plugin instances and matches them against the given registered projects.
+
+        :param registered_projects: the list of registered projects to match plugin instances against
+        :return: the list of matched clients with their corresponding registered project
+        """
+        matched_clients = []
+        for future in self._submit_scan():
+            client = future.result()
+            if client.project_root is not None:
+                for rp in registered_projects:
+                    if client.matches(Path(rp.project_root)):
+                        matched_clients.append(MatchedClient(client, rp))
+                        break
+        self._matched_clients = matched_clients
+        return matched_clients
+
+    def get_matched_client(
+        self, registered_project: RegisteredProject, registered_projects: list[RegisteredProject]
+    ) -> Optional["JetBrainsPluginClient"]:
+        """
+        Gets the matched client for a given registered project, if any.
+
+        :param registered_project: the registered project to get the matched client for
+        :param registered_projects: the list of all registered projects (used to perform matching of all clients
+            if no match is found for the given project)
+        :return: the matched client or None if no match is found
+        """
+
+        def find_match() -> Optional["JetBrainsPluginClient"]:
+            for matched_client in self._matched_clients:
+                if matched_client.registered_project.project_root == registered_project.project_root:
+                    return matched_client.client
+            return None
+
+        match = find_match()
+        if match is None:
+            self.match_clients(registered_projects)
+        return find_match()
 
 
 class JetBrainsPluginClient(ToStringMixin):

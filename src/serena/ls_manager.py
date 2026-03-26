@@ -6,7 +6,6 @@ from collections.abc import Iterator
 from sensai.util.logging import LogTime
 
 from serena.config.serena_config import SerenaPaths
-from serena.constants import SERENA_MANAGED_DIR_NAME
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
@@ -23,6 +22,7 @@ class LanguageServerFactory:
     def __init__(
         self,
         project_root: str,
+        project_data_path: str,
         encoding: str,
         ignored_patterns: list[str],
         ls_timeout: float | None = None,
@@ -30,6 +30,7 @@ class LanguageServerFactory:
         trace_lsp_communication: bool = False,
     ):
         self.project_root = project_root
+        self.project_data_path = project_data_path
         self.encoding = encoding
         self.ignored_patterns = ignored_patterns
         self.ls_timeout = ls_timeout
@@ -51,7 +52,7 @@ class LanguageServerFactory:
             timeout=self.ls_timeout,
             solidlsp_settings=SolidLSPSettings(
                 solidlsp_dir=SerenaPaths().serena_user_home_dir,
-                project_data_relative_path=SERENA_MANAGED_DIR_NAME,
+                project_data_path=self.project_data_path,
                 ls_specific_settings=self.ls_specific_settings or {},
             ),
         )
@@ -76,8 +77,12 @@ class LanguageServerManager:
         """
         self._language_servers = language_servers
         self._language_server_factory = language_server_factory
-        self._default_language_server = next(iter(language_servers.values()))
-        self._root_path = self._default_language_server.repository_root_path
+
+    @property
+    def _default_language_server(self) -> SolidLanguageServer:
+        if len(self._language_servers) == 0:
+            raise ValueError("No language servers available in the manager")
+        return next(iter(self._language_servers.values()))
 
     @staticmethod
     def from_languages(languages: list[Language], factory: LanguageServerFactory) -> "LanguageServerManager":
@@ -138,14 +143,18 @@ class LanguageServerManager:
 
         return LanguageServerManager(language_servers, factory)
 
-    def get_root_path(self) -> str:
-        return self._root_path
-
     def _ensure_functional_ls(self, ls: SolidLanguageServer) -> SolidLanguageServer:
         if not ls.is_running():
             log.warning(f"Language server for language {ls.language} is not running; restarting ...")
             ls = self.restart_language_server(ls.language)
         return ls
+
+    def _get_suitable_language_server(self, relative_path: str) -> SolidLanguageServer | None:
+        """:param relative_path: relative path to a file"""
+        for candidate in self._language_servers.values():
+            if not candidate.is_ignored_path(relative_path, ignore_unsupported_files=True):
+                return candidate
+        return None
 
     def get_language_server(self, relative_path: str) -> SolidLanguageServer:
         """:param relative_path: relative path to a file"""
@@ -153,10 +162,7 @@ class LanguageServerManager:
         if len(self._language_servers) > 1:
             if os.path.isdir(relative_path):
                 raise ValueError(f"Expected a file path, but got a directory: {relative_path}")
-            for candidate in self._language_servers.values():
-                if not candidate.is_ignored_path(relative_path, ignore_unsupported_files=True):
-                    ls = candidate
-                    break
+            ls = self._get_suitable_language_server(relative_path)
         if ls is None:
             ls = self._default_language_server
         return self._ensure_functional_ls(ls)
@@ -241,3 +247,6 @@ class LanguageServerManager:
         for ls in self.iter_language_servers():
             if ls.is_running():
                 ls.save_cache()
+
+    def has_suitable_ls_for_file(self, relative_file_path: str) -> bool:
+        return self._get_suitable_language_server(relative_file_path) is not None

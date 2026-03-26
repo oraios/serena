@@ -63,9 +63,9 @@ class TestCSharpLanguageServer:
         assert add_symbol is not None, "Could not find 'Add' method symbol in Program.cs"
         sel_start = add_symbol["selectionRange"]["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
-        assert any(
-            "Program.cs" in ref.get("relativePath", "") for ref in refs
-        ), "Program.cs should reference Add method (tried all positions in selectionRange)"
+        assert any("Program.cs" in ref.get("relativePath", "") for ref in refs), (
+            "Program.cs should reference Add method (tried all positions in selectionRange)"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
     def test_nested_namespace_symbols(self, language_server: SolidLanguageServer) -> None:
@@ -121,9 +121,9 @@ class TestCSharpLanguageServer:
 
         # Check that we have reference in Models/Person.cs where Calculator.Subtract is called
         # Note: New Roslyn version doesn't include the definition itself as a reference (more correct behavior)
-        assert any(
-            os.path.join("Models", "Person.cs") in ref_file for ref_file in ref_files
-        ), "Should find reference in Models/Person.cs where Calculator.Subtract is called"
+        assert any(os.path.join("Models", "Person.cs") in ref_file for ref_file in ref_files), (
+            "Should find reference in Models/Person.cs where Calculator.Subtract is called"
+        )
         assert len(refs) > 0, "Should find at least one reference"
 
         # check for a second time, since the first call may trigger initialization and change the state of the LS
@@ -302,7 +302,7 @@ class TestCSharpSolutionProjectOpening:
             # Create CSharpLanguageServer instance
             mock_settings = Mock(spec=SolidLSPSettings)
             mock_settings.ls_resources_dir = "/tmp/test_ls_resources"
-            mock_settings.project_data_relative_path = "project_data"
+            mock_settings.project_data_path = str(temp_path / "project_data")
 
             with SuspendedLoggersContext():
                 logging.getLogger().setLevel(logging.DEBUG)
@@ -330,7 +330,7 @@ class TestCSharpSolutionProjectOpening:
 
             mock_settings = Mock(spec=SolidLSPSettings)
             mock_settings.ls_resources_dir = "/tmp/test_ls_resources"
-            mock_settings.project_data_relative_path = "project_data"
+            mock_settings.project_data_path = str(temp_path / "project_data")
 
             # Create CSharpLanguageServer instance
             with SuspendedLoggersContext():

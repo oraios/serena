@@ -35,10 +35,13 @@ prompts:
     You can understand relationships between symbols by using the `find_referencing_symbols` tool.
     {% endif %}
 
-    {% if 'read_memory' in available_tools %}
+    {% if 'read_memory' in available_tools -%}
     You generally have access to memories and it may be useful for you to read them.
     You infer whether memories are relevant based on their names.
-    {% endif %}
+    {% if global_memories_list -%}
+    The following global (not project-specific) memories are available to you: {{ global_memories_list }}
+    {%- endif -%}
+    {%- endif %}
 
     The context and modes of operation are described below. These determine how to interact with your user
     and which kinds of interactions are expected of you.

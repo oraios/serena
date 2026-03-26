@@ -154,9 +154,9 @@ class TestGoBuildTags:
 
             assert versioned_cache_files, f"Expected at least one SolidLSP cache file with a __cache_version under {cache_dir}"
             saved_versions = {v for _, v in versioned_cache_files}
-            assert (
-                default_raw_cache_version in saved_versions or default_doc_cache_version in saved_versions
-            ), "Expected at least one persisted cache to match the default-context cache version"
+            assert default_raw_cache_version in saved_versions or default_doc_cache_version in saved_versions, (
+                "Expected at least one persisted cache to match the default-context cache version"
+            )
 
         # Run 2 (default context again): prove that persisted caches are actually loaded and used.
         with start_ls_context(Language.GO, repo_path=str(repo_path), solidlsp_dir=tmp_path) as ls_default_again:

@@ -135,9 +135,9 @@ int use_add() {
             ref_files = [ref.get("relativePath", "") for ref in refs]
 
             # Should find reference in the newly written file
-            assert any(
-                "temp_new_file.cpp" in ref_file for ref_file in ref_files
-            ), f"Should find reference in newly written temp_new_file.cpp, {ref_files=}"
+            assert any("temp_new_file.cpp" in ref_file for ref_file in ref_files), (
+                f"Should find reference in newly written temp_new_file.cpp, {ref_files=}"
+            )
         finally:
             # Clean up the new file
             if os.path.exists(new_file_abs_path):

@@ -28,6 +28,6 @@ class TestTypescriptLanguageServer:
         assert helper_symbol is not None, "Could not find 'helperFunction' symbol in index.ts"
         sel_start = helper_symbol["selectionRange"]["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
-        assert any(
-            "index.ts" in ref.get("relativePath", "") for ref in refs
-        ), "index.ts should reference helperFunction (tried all positions in selectionRange)"
+        assert any("index.ts" in ref.get("relativePath", "") for ref in refs), (
+            "index.ts should reference helperFunction (tried all positions in selectionRange)"
+        )

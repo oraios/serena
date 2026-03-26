@@ -66,6 +66,19 @@ class RustAnalyzer(SolidLanguageServer):
             return None
 
         @staticmethod
+        def _is_rust_analyzer_functional(path: str) -> bool:
+            """Check if a rust-analyzer binary is functional by running --version.
+
+            This catches the case where rust-analyzer in PATH is actually a rustup proxy
+            that fails because the component is not installed.
+            """
+            try:
+                result = subprocess.run([path, "--version"], capture_output=True, text=True, check=False, timeout=10)
+                return result.returncode == 0
+            except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+                return False
+
+        @staticmethod
         def _ensure_rust_analyzer_installed() -> str:
             """
             Ensure rust-analyzer is available.
@@ -73,8 +86,8 @@ class RustAnalyzer(SolidLanguageServer):
             Priority order:
             1. Rustup existing installation (preferred - matches toolchain version)
             2. Rustup auto-install if rustup is available (ensures correct version)
-            3. Common installation locations as fallback (only if rustup not available)
-            4. System PATH last (can pick up incompatible versions)
+            3. System PATH (covers Nix, distro packages, and other standalone installs)
+            4. Common installation locations as final fallback
 
             :return: path to rust-analyzer executable
             """
@@ -84,7 +97,7 @@ class RustAnalyzer(SolidLanguageServer):
                 return rustup_path
 
             # If rustup is available but rust-analyzer not installed, auto-install it BEFORE
-            # checking common paths. This ensures we get the correct version matching the toolchain.
+            # checking PATH. This ensures we get the correct version matching the toolchain.
             if RustAnalyzer.DependencyProvider._get_rustup_version():
                 result = subprocess.run(["rustup", "component", "add", "rust-analyzer"], check=False, capture_output=True, text=True)
                 if result.returncode == 0:
@@ -92,13 +105,20 @@ class RustAnalyzer(SolidLanguageServer):
                     rustup_path = RustAnalyzer.DependencyProvider._get_rust_analyzer_via_rustup()
                     if rustup_path:
                         return rustup_path
-                # If auto-install failed, fall through to common paths as last resort
+                # If auto-install failed, fall through to PATH and common paths
+
+            # Check system PATH early - this covers Nix, distro packages, and other standalone installs.
+            # We verify the binary is functional to avoid picking up broken rustup proxy symlinks.
+            path_result = shutil.which("rust-analyzer")
+            if path_result and os.path.isfile(path_result) and os.access(path_result, os.X_OK):
+                if RustAnalyzer.DependencyProvider._is_rust_analyzer_functional(path_result):
+                    return path_result
 
             # Determine platform-specific binary name and paths
             is_windows = platform.system() == "Windows"
             binary_name = "rust-analyzer.exe" if is_windows else "rust-analyzer"
 
-            # Fallback to common installation locations (only used if rustup not available)
+            # Fallback to common installation locations
             common_paths: list[str | None] = []
 
             if is_windows:
@@ -128,11 +148,6 @@ class RustAnalyzer(SolidLanguageServer):
             for path in common_paths:
                 if path and os.path.isfile(path) and os.access(path, os.X_OK):
                     return path
-
-            # Last resort: check system PATH (can pick up incorrect aliases, hence checked last)
-            path_result = shutil.which("rust-analyzer")
-            if path_result and os.path.isfile(path_result) and os.access(path_result, os.X_OK):
-                return path_result
 
             # Provide helpful error message with all searched locations
             searched = [p for p in common_paths if p]

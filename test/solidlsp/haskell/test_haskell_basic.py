@@ -145,9 +145,9 @@ class TestHaskellLanguageServer:
 
         # All references should be in Helper.hs
         reference_paths = [ref["relativePath"] for ref in references]
-        assert all(
-            "Helper.hs" in path for path in reference_paths
-        ), f"All isNegative references should be in Helper.hs, got: {reference_paths}"
+        assert all("Helper.hs" in path for path in reference_paths), (
+            f"All isNegative references should be in Helper.hs, got: {reference_paths}"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
     def test_function_references_from_main(self, language_server: SolidLanguageServer):
@@ -168,9 +168,9 @@ class TestHaskellLanguageServer:
 
         add_ref_paths = [ref["relativePath"] for ref in add_refs]
         # Should have at least one reference in Main.hs or Calculator.hs
-        assert any(
-            "Main.hs" in path or "Calculator.hs" in path for path in add_ref_paths
-        ), f"Expected 'add' to be referenced in Main.hs or Calculator.hs, got: {add_ref_paths}"
+        assert any("Main.hs" in path or "Calculator.hs" in path for path in add_ref_paths), (
+            f"Expected 'add' to be referenced in Main.hs or Calculator.hs, got: {add_ref_paths}"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
     def test_multiply_function_usage_in_calculate(self, language_server: SolidLanguageServer):
@@ -191,9 +191,9 @@ class TestHaskellLanguageServer:
 
         # Should have reference in Calculator.hs (calculate function)
         multiply_ref_paths = [ref["relativePath"] for ref in multiply_refs]
-        assert any(
-            "Calculator.hs" in path for path in multiply_ref_paths
-        ), f"Expected 'multiply' to be referenced in Calculator.hs, got: {multiply_ref_paths}"
+        assert any("Calculator.hs" in path for path in multiply_ref_paths), (
+            f"Expected 'multiply' to be referenced in Calculator.hs, got: {multiply_ref_paths}"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
     def test_data_type_constructor_references(self, language_server: SolidLanguageServer):
@@ -214,6 +214,6 @@ class TestHaskellLanguageServer:
 
         # Should have at least one reference in Main.hs or Calculator.hs
         calc_ref_paths = [ref["relativePath"] for ref in calculator_refs]
-        assert any(
-            "Main.hs" in path or "Calculator.hs" in path for path in calc_ref_paths
-        ), f"Expected Calculator to be referenced in Main.hs or Calculator.hs, got: {calc_ref_paths}"
+        assert any("Main.hs" in path or "Calculator.hs" in path for path in calc_ref_paths), (
+            f"Expected Calculator to be referenced in Main.hs or Calculator.hs, got: {calc_ref_paths}"
+        )

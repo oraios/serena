@@ -67,6 +67,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         - typescript_language_server_version: Version of typescript-language-server to install (default: "5.1.3")
     """
 
+    # Safety timeout for $/progress-based indexing wait. Normally the event fires
+    # well within this window; the timeout is only hit if the server never sends progress.
+    INDEXING_PROGRESS_TIMEOUT = 15.0 if os.name == "nt" else 10.0
+
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a TypeScriptLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
@@ -80,6 +84,29 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         )
         self.server_ready = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
+
+        # Progress tracking for $/progress notifications (project indexing, etc.)
+        self._progress_lock = threading.Lock()
+        self._active_progress_tokens: set[str] = set()
+        self._indexing_complete = threading.Event()
+        self._indexing_complete.set()  # Initially set (no active work)
+
+    def wait_for_indexing(self, timeout: float) -> bool:
+        """Block until all $/progress tokens complete.
+
+        :param timeout: Maximum seconds to wait.
+        :return: True if indexing completed, False on timeout.
+        """
+        return self._indexing_complete.wait(timeout=timeout)
+
+    def expect_indexing(self) -> None:
+        """Signal that new files are about to be opened and async indexing should be awaited.
+
+        Clears the internal indexing-complete event so that a subsequent
+        :meth:`wait_for_indexing` call blocks until all $/progress tokens
+        complete (or the timeout expires).
+        """
+        self._indexing_complete.clear()
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
@@ -114,9 +141,9 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                 PlatformId.WIN_x64,
                 PlatformId.WIN_arm64,
             ]
-            assert (
-                platform_id in valid_platforms
-            ), f"Platform {platform_id} is not supported for multilspy javascript/typescript at the moment"
+            assert platform_id in valid_platforms, (
+                f"Platform {platform_id} is not supported for multilspy javascript/typescript at the moment"
+            )
 
             # Get version settings from ls_specific_settings or use defaults
             language_specific_config = self._custom_settings
@@ -217,6 +244,9 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                     "didChangeConfiguration": {"dynamicRegistration": True},
                     "symbol": {"dynamicRegistration": True},
                 },
+                "window": {
+                    "workDoneProgress": True,  # Enables $/progress notifications for project loading
+                },
             },
             "processId": os.getpid(),
             "rootPath": repository_absolute_path,
@@ -242,6 +272,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             await lsp.request_references(...)
             # Shutdown the LanguageServer on exit from scope
         # LanguageServer has been shutdown
+        ```
         """
 
         def register_capability_handler(params: dict) -> None:
@@ -263,19 +294,65 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         def window_log_message(msg: dict) -> None:
             log.info(f"LSP: window/logMessage: {msg}")
 
-        def check_experimental_status(params: dict) -> None:
+        def handle_typescript_version(params: dict) -> None:
             """
-            Also listen for experimental/serverStatus as a backup signal
+            The $/typescriptVersion notification is sent by typescript-language-server
+            once tsserver has loaded and reported its version. This is a reliable
+            signal that tsserver is running and responsive.
             """
-            if params.get("quiescent") == True:
-                self.server_ready.set()
+            log.info(f"TypeScript server version notification received: {params}")
+            self.server_ready.set()
+
+        def work_done_progress_create(params: dict) -> dict:
+            """Handle window/workDoneProgress/create: the server is about to report async progress.
+
+            Clear the indexing-complete event so callers waiting on it will block until
+            all progress tokens finish. This is sent by typescript-language-server when
+            tsserver starts processing files (e.g. "Initializing JS/TS language features...").
+            """
+            token = str(params.get("token", ""))
+            log.debug(f"TypeScript LSP workDoneProgress/create: token={token!r}")
+            with self._progress_lock:
+                self._active_progress_tokens.add(token)
+                self._indexing_complete.clear()
+            return {}
+
+        def progress_handler(params: dict) -> None:
+            """Track $/progress begin/end to detect when all async work finishes.
+
+            typescript-language-server sends $/progress for project loading operations
+            like "Initializing JS/TS language features...". When all progress tokens
+            complete (kind='end'), _indexing_complete is set.
+            """
+            token = str(params.get("token", ""))
+            value = params.get("value", {})
+            kind = value.get("kind")
+            if kind == "begin":
+                title = value.get("title", "")
+                log.info(f"TypeScript LSP progress [{token}]: started - {title}")
+                with self._progress_lock:
+                    self._active_progress_tokens.add(token)
+                    self._indexing_complete.clear()
+            elif kind == "report":
+                pct = value.get("percentage")
+                msg = value.get("message", "")
+                pct_str = f" ({pct}%)" if pct is not None else ""
+                log.debug(f"TypeScript LSP progress [{token}]: {msg}{pct_str}")
+            elif kind == "end":
+                msg = value.get("message", "")
+                log.info(f"TypeScript LSP progress [{token}]: ended - {msg}")
+                with self._progress_lock:
+                    self._active_progress_tokens.discard(token)
+                    if not self._active_progress_tokens:
+                        self._indexing_complete.set()
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
-        self.server.on_notification("$/progress", do_nothing)
+        self.server.on_request("window/workDoneProgress/create", work_done_progress_create)
+        self.server.on_notification("$/progress", progress_handler)
+        self.server.on_notification("$/typescriptVersion", handle_typescript_version)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
-        self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
         log.info("Starting TypeScript server process")
         self.server.start()
@@ -295,12 +372,25 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         }
 
         self.server.notify.initialized({})
-        if self.server_ready.wait(timeout=1.0):
+        if self.server_ready.wait(timeout=10.0):
             log.info("TypeScript server is ready")
         else:
             log.info("Timeout waiting for TypeScript server to become ready, proceeding anyway")
             # Fallback: assume server is ready after timeout
             self.server_ready.set()
+
+        # Wait for any async project loading to complete.
+        # typescript-language-server may send $/progress for "Initializing JS/TS
+        # language features…" after initialized. If no progress is sent,
+        # _indexing_complete stays SET and wait() returns immediately.
+        log.info("Waiting for TypeScript project indexing to complete (if async)...")
+        if self.wait_for_indexing(timeout=self.INDEXING_PROGRESS_TIMEOUT):
+            log.info("TypeScript project indexing complete")
+        else:
+            log.warning(
+                "TypeScript project indexing did not complete within %.0fs; proceeding anyway",
+                self.INDEXING_PROGRESS_TIMEOUT,
+            )
 
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
