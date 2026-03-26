@@ -36,6 +36,7 @@ from test.conftest import (
     is_ci,
     language_has_verified_implementation_support,
     language_tests_enabled,
+    normalize_relative_path,
 )
 from test.diagnostics_cases import WORKING_DIAGNOSTIC_TOOL_CASE_PARAMS, DiagnosticCase
 from test.solidlsp import clojure as clj
@@ -782,7 +783,7 @@ class TestSerenaAgent:
         assert any(
             case.symbol_name in s["name_path"]
             and case.expected_kind.lower() in s["kind"].lower()
-            and case.expected_file in s["relative_path"]
+            and normalize_relative_path(case.expected_file) in normalize_relative_path(s["relative_path"])
             for s in symbols
         ), f"Expected to find {case.symbol_name} ({case.expected_kind}) in {case.expected_file}"
 
@@ -850,12 +851,13 @@ class TestSerenaAgent:
             """
             Checks for reference to relative path, regardless of output format (grouped an ungrouped)
             """
+            normalized_relative_path = normalize_relative_path(relative_path)
             if isinstance(refs, list):
                 for ref in refs:
                     if contains_ref_with_relative_path(ref, relative_path):
                         return True
             elif isinstance(refs, dict):
-                if relative_path in refs:
+                if normalized_relative_path in {normalize_relative_path(key) for key in refs}:
                     return True
                 for value in refs.values():
                     if contains_ref_with_relative_path(value, relative_path):
@@ -881,7 +883,7 @@ class TestSerenaAgent:
         implementations = json.loads(result)
 
         assert any(
-            case.implementation_file in implementation["relative_path"]
+            normalize_relative_path(case.implementation_file) in normalize_relative_path(implementation["relative_path"])
             and self._symbol_matches_expected_name(implementation, case.expected_symbol_name)
             for implementation in implementations
         ), f"Expected to find implementation of {case.symbol_name} in {case.implementation_file}. implementations={implementations}"
@@ -910,7 +912,7 @@ class TestSerenaAgent:
 
         assert defining_symbol is not None, f"Expected defining symbol for {case.identifier!r} in {case.relative_path}"
         assert defining_symbol.get("relative_path") is not None
-        assert case.expected_definition_file in defining_symbol["relative_path"], (
+        assert normalize_relative_path(case.expected_definition_file) in normalize_relative_path(defining_symbol["relative_path"]), (
             f"Expected defining symbol in {case.expected_definition_file!r}, got: {defining_symbol}"
         )
         assert self._symbol_matches_expected_name(defining_symbol, case.expected_name), (
@@ -931,7 +933,7 @@ class TestSerenaAgent:
 
         assert defining_symbol is not None, f"Expected defining symbol for regex {case.regex!r} in {case.relative_path}"
         assert defining_symbol.get("relative_path") is not None
-        assert case.expected_definition_file in defining_symbol["relative_path"], (
+        assert normalize_relative_path(case.expected_definition_file) in normalize_relative_path(defining_symbol["relative_path"]), (
             f"Expected defining symbol in {case.expected_definition_file!r}, got: {defining_symbol}"
         )
         assert self._symbol_matches_expected_name(defining_symbol, case.expected_name), (
@@ -956,8 +958,11 @@ class TestSerenaAgent:
         )
         grouped_diagnostics = json.loads(result)
 
-        assert diagnostic_case.relative_path in grouped_diagnostics, grouped_diagnostics
-        severity_group = grouped_diagnostics[diagnostic_case.relative_path]
+        diagnostics_file = normalize_relative_path(diagnostic_case.relative_path)
+        assert diagnostics_file in {normalize_relative_path(path) for path in grouped_diagnostics}, grouped_diagnostics
+        severity_group = next(
+            diagnostics for path, diagnostics in grouped_diagnostics.items() if normalize_relative_path(path) == diagnostics_file
+        )
         assert "Error" in severity_group, severity_group
         name_path_group = severity_group["Error"]
 
@@ -984,10 +989,12 @@ class TestSerenaAgent:
             min_severity=1,
         )
         grouped_diagnostics = json.loads(result)
-        diagnostics_file = diagnostic_case.relative_path
+        diagnostics_file = normalize_relative_path(diagnostic_case.relative_path)
 
-        assert diagnostics_file in grouped_diagnostics, grouped_diagnostics
-        severity_group = grouped_diagnostics[diagnostics_file]
+        assert diagnostics_file in {normalize_relative_path(path) for path in grouped_diagnostics}, grouped_diagnostics
+        severity_group = next(
+            diagnostics for path, diagnostics in grouped_diagnostics.items() if normalize_relative_path(path) == diagnostics_file
+        )
         assert "Error" in severity_group, severity_group
         name_path_group = severity_group["Error"]
 
@@ -1117,7 +1124,7 @@ class TestSerenaAgent:
         assert any(
             case.expected_symbol_name == s["name_path"].split("/")[-1]
             and case.expected_kind.lower() in s["kind"].lower()
-            and case.expected_file in s["relative_path"]
+            and normalize_relative_path(case.expected_file) in normalize_relative_path(s["relative_path"])
             for s in symbols
         ), f"Expected to find {case.name_path} ({case.expected_kind}) in {case.expected_file}. Symbols: {symbols}"
 
@@ -1245,7 +1252,12 @@ class TestSerenaAgent:
             )
 
         diagnostics = parse_edit_diagnostics_result(result)
-        relative_path_result = diagnostics[relative_path]
+        normalized_relative_path = normalize_relative_path(relative_path)
+        relative_path_result = next(
+            diagnostics_for_path
+            for path, diagnostics_for_path in diagnostics.items()
+            if normalize_relative_path(path) == normalized_relative_path
+        )
         diagnostic_messages = json.dumps(relative_path_result)
         assert "missing_container" in diagnostic_messages
         assert "create_service_container" in diagnostic_messages
@@ -1274,7 +1286,12 @@ def create_service_container() -> dict[str, Any]:
             )
 
         diagnostics = parse_edit_diagnostics_result(result)
-        relative_path_result = diagnostics[relative_path]
+        normalized_relative_path = normalize_relative_path(relative_path)
+        relative_path_result = next(
+            diagnostics_for_path
+            for path, diagnostics_for_path in diagnostics.items()
+            if normalize_relative_path(path) == normalized_relative_path
+        )
         diagnostic_messages = json.dumps(relative_path_result)
         assert "missing_container" in diagnostic_messages
         assert "create_service_container" in diagnostic_messages
