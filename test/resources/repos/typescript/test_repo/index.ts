@@ -19,3 +19,7 @@ export function helperFunction() {
 }
 
 helperFunction();
+
+export function unusedStandaloneFunction(): string {
+    return "This function is not referenced anywhere";
+}
