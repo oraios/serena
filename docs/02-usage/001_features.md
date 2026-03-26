@@ -2,8 +2,9 @@
 
 Serena is essentially an **IDE for coding agents** -- it gives LLMs the same kind of structural code understanding
 that human developers get from their IDEs, but through interfaces purpose-built for agents.
-Every feature is available through both the **Language Server (LS)** backend (free, open-source) and the **JetBrains (JB)** plugin backend.
-The JetBrains backend provides equivalents for all LS tools and adds additional, more powerful capabilities on top.
+Serena supports both the **Language Server (LS)** backend (free, open-source) and the **JetBrains (JB)** plugin backend.
+The LS backend is the broadly available baseline.
+The JetBrains backend is the premium option, offering a deeper IDE-native workflow and significantly broader functionality.
 
 ## General
 
@@ -27,19 +28,18 @@ Serena is designed around a few core principles:
 Serena's navigation tools allow agents to explore codebases at the symbol level, understanding structure and relationships
 without reading entire files.
 
-| Capability                         | Language Server                      | JetBrains Plugin (additional)          |
-|------------------------------------|--------------------------------------|----------------------------------------|
-| **Symbol overview** (file outline) | yes                                  | --                                     |
-| **Find symbol** (by name path)     | yes                                  | --                                     |
-| **Find references**                | yes                                  | --                                     |
-| **Find implementations**          | yes (limited language support)       | yes (all languages)                    |
-| **Go to definition** (by location) | yes                                  | --                                     |
-| **Go to definition** (by regex)   | yes                                  | --                                     |
-| **Type hierarchy** (super/subtypes)| --                                   | yes                                    |
-| **Search in dependencies**        | --                                   | yes                                    |
+| Capability                          | Language Server                      | JetBrains Plugin      |
+|-------------------------------------|--------------------------------------|-----------------------|
+| **Symbol overview** (file outline)  | yes                                  | yes                   |
+| **Find symbol** (by name path)      | yes                                  | yes                   |
+| **Find referencing symbols**        | yes                                  | yes                   |
+| **Find implementations**            | yes (limited language support)       | yes (all languages)   |
+| **Go to definition**                | yes                                  | yes                   |
+| **Type hierarchy** (super/subtypes) | --                                   | yes                   |
+| **Search in dependencies**          | --                                   | yes                   |
 
 The JetBrains backend supports **find implementations** across all languages, whereas the LS backend is limited to
-languages whose language server supports it (e.g. not Python). The **type hierarchy** and **dependency search** are
+languages whose language server supports it (e.g., not Python). The **type hierarchy** and **dependency search** are
 JetBrains-exclusive features.
 
 <!-- TODO: Add navigation demo video here
@@ -55,12 +55,13 @@ Your browser does not support the video tag.
 
 Serena supports safe, codebase-wide refactoring operations.
 
-| Capability              | Language Server | JetBrains Plugin (additional) |
-|-------------------------|-----------------|-------------------------------|
-| **Rename symbol**       | yes             | --                            |
-| **Move** (symbol, file, directory) | --   | yes                           |
-| **Inline method**       | --              | yes                           |
-| **Safe delete**         | --              | yes                           |
+| Capability                                  | Language Server | JetBrains Plugin |
+|---------------------------------------------|-----------------|------------------|
+| **Rename symbol**                           | yes             | yes              |
+| **Safe delete**                             | yes             | yes              |
+| **Propagate deletions, remove unused code** | --              | yes              |
+| **Move** (symbol, file, directory)          | --              | yes              |
+| **Inline method**                           | --              | yes              |
 
 **Rename** updates all references across the codebase automatically.
 The JetBrains backend adds **move** (relocate symbols, files, or directories with automatic reference updates),
@@ -81,12 +82,12 @@ Your browser does not support the video tag.
 Diagnostics expose compiler errors, warnings, and hints to the agent, enabling it to identify and fix issues
 without running external build commands.
 
-| Capability                            | Language Server | JetBrains Plugin (additional)                |
-|---------------------------------------|-----------------|----------------------------------------------|
-| **File diagnostics** (by line range)  | yes             | --                                           |
-| **Symbol diagnostics** (+ references) | yes             | --                                           |
-| **Automatic post-edit diagnostics**   | yes             | --                                           |
-| **Quick fixes**                       | --              | yes                                          |
+| Capability                            | Language Server | JetBrains Plugin |
+|---------------------------------------|-----------------|------------------|
+| **File diagnostics** (by line range)  | yes             | yes              |
+| **Symbol diagnostics** (+ references) | yes             | yes              |
+| **Automatic post-edit diagnostics**   | yes             | yes              |
+| **Quick fixes**                       | --              | yes              |
 
 Both backends surface compiler errors, warnings, and hints. Serena's editing tools automatically report new diagnostics
 after every edit, giving the agent immediate feedback on whether its changes introduced errors.
@@ -105,8 +106,7 @@ Your browser does not support the video tag.
 
 ## Debugging
 
-Debugging is a **JetBrains-exclusive** feature. It allows the agent to launch run/debug configurations,
-set breakpoints, and inspect program state -- all through the IDE's debugger.
+Debugging integration is included **only for the JetBrains backend**.
 
 <!-- TODO: Add debugging demo video here
 <video src=""
@@ -121,17 +121,12 @@ Your browser does not support the video tag.
 
 Serena provides both symbol-level and file-level editing tools for precise code modifications.
 
-| Capability                    | Language Server | JetBrains Plugin (additional) |
-|-------------------------------|-----------------|-------------------------------|
-| **Replace symbol body**       | yes             | --                            |
-| **Insert after symbol**       | yes             | --                            |
-| **Insert before symbol**      | yes             | --                            |
-| **Replace content** (regex)   | yes             | --                            |
-| **Create / overwrite file**   | yes             | --                            |
-| **Delete lines**              | yes             | --                            |
-| **Replace lines**             | yes             | --                            |
-| **Insert at line**            | yes             | --                            |
-| **Auto-format after edit**    | --              | yes                           |
+| Capability                    | Language Server | JetBrains Plugin   |
+|-------------------------------|-----------------|--------------------|
+| **Replace symbol body**       | yes             | yes                |
+| **Insert after symbol**       | yes             | yes                |
+| **Insert before symbol**      | yes             | yes                |
+| **Auto-format after edit**    | --              | yes                |
 
 Symbol-level editing is Serena's recommended approach: the agent retrieves a symbol's body, modifies it, and writes
 it back using `replace_symbol_body`. This avoids line-number fragility and ensures precise edits.
@@ -150,7 +145,9 @@ Your browser does not support the video tag.
 
 ## Basic Features
 
-Beyond its semantic capabilities, Serena includes essential utilities that round out the agent's toolkit.
+Beyond its semantic capabilities, Serena includes a set of basic utilities for completeness.
+When Serena is used inside an agentic harness such as Claude Code or Codex, these tools are typically disabled by default,
+since the surrounding harness already provides overlapping file, search, and shell capabilities.
 
 - **`search_for_pattern`** -- Flexible regex search across the codebase with glob-based file filtering, context lines,
   and the option to restrict to code files only. Useful when you don't know the exact symbol name.
