@@ -957,30 +957,34 @@ class SymbolDictGrouper(Generic[TSymbolDict], ABC):
         self._group_children_keys = group_children_keys
         self._collapse_singleton = collapse_singleton
 
-    def _group_by(self, l: list[dict], keys: list[str], children_keys: list[str], is_children: bool) -> dict[str, Any]:
-        assert len(keys) > 0, "keys must not be empty"
-        # group by the first key
-        grouped: dict[str, Any] = {}
-        for item in l:
-            key_value = item.pop(keys[0], "unknown")
-            if key_value not in grouped:
-                grouped[key_value] = []
-            grouped[key_value].append(item)
-        if len(keys) > 1:
+    def _group_by(self, l: list[dict], keys: list[str], children_keys: list[str], is_children: bool) -> dict[str, Any] | list[Any]:
+        """
+        :param l: the list of symbol dictionaries to group
+        :param keys: the keys to group by
+        :param children_keys: the keys to group the children by
+        :param is_children: whether this is a children grouping operation
+        :return: the (grouped) symbols
+        """
+        if len(keys) > 0:
+            # group by the first key
+            grouped: dict[str, Any] = {}
+            for item in l:
+                key_value = item.pop(keys[0], "unknown")
+                if key_value not in grouped:
+                    grouped[key_value] = []
+                grouped[key_value].append(item)
             # continue grouping by the remaining keys
             for k, group in grouped.items():
                 grouped[k] = self._group_by(group, keys[1:], children_keys, is_children=is_children)
+            return grouped
         else:
             # grouping is complete; now group the children if necessary
-            if children_keys:
-                for k, group in grouped.items():
-                    for item in group:
-                        if self._children_key in item:
-                            children = item[self._children_key]
-                            item[self._children_key] = self._group_by(children, children_keys, children_keys, is_children=True)
-            # post-process final group items
-            grouped = {k: [self._transform_item(i, is_children) for i in v] for k, v in grouped.items()}
-        return grouped
+            for item in l:
+                if self._children_key in item:
+                    children = item[self._children_key]
+                    item[self._children_key] = self._group_by(children, children_keys, children_keys, is_children=True)
+            # post-process final items
+            return [self._transform_item(item, is_children) for item in l]
 
     def _transform_item(self, item: dict, is_child: bool) -> dict:
         """
@@ -1004,10 +1008,11 @@ class SymbolDictGrouper(Generic[TSymbolDict], ABC):
                 return new_item
         return item
 
-    def group(self, symbols: list[TSymbolDict]) -> GroupedSymbolDict:
+    def group(self, symbols: list[TSymbolDict]) -> GroupedSymbolDict | list:
         """
         :param symbols: the symbols to group
-        :return: dictionary with the symbols grouped as defined at construction
+        :return: dictionary with the symbols grouped as defined at construction if at least one key was used for grouping,
+            otherwise the list of symbols (potentially transformed)
         """
         # avoid side effects by working on a deep-copy
         symbols_copy = copy.deepcopy(symbols)
