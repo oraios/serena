@@ -17,7 +17,7 @@ from solidlsp.language_servers.csharp_language_server import (
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import SymbolUtils
 from solidlsp.settings import SolidLSPSettings
-from test.conftest import find_identifier_position, get_repo_path, language_has_verified_implementation_support
+from test.conftest import find_identifier_position, get_repo_path, language_has_verified_implementation_support, normalize_relative_path
 
 
 @pytest.mark.csharp
@@ -122,7 +122,7 @@ class TestCSharpLanguageServer:
 
         # Check that we have reference in Models/Person.cs where Calculator.Subtract is called
         # Note: New Roslyn version doesn't include the definition itself as a reference (more correct behavior)
-        assert any(os.path.join("Models", "Person.cs") in ref_file for ref_file in ref_files), (
+        assert any(normalize_relative_path(os.path.join("Models", "Person.cs")) in ref_file for ref_file in ref_files), (
             "Should find reference in Models/Person.cs where Calculator.Subtract is called"
         )
         assert len(refs) > 0, "Should find at least one reference"

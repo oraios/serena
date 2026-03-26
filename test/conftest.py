@@ -49,6 +49,10 @@ _LANGUAGE_REPO_ALIASES: dict[Language, Language] = {
 PYTHON_LANGUAGE_BACKENDS = [Language.PYTHON, Language.PYTHON_TY]
 
 
+def normalize_relative_path(path: str) -> str:
+    return path.replace("\\", "/")
+
+
 def get_repo_path(language: Language) -> Path:
     repo_language = _LANGUAGE_REPO_ALIASES.get(language, language)
     return Path(__file__).parent / "resources" / "repos" / repo_language / "test_repo"
