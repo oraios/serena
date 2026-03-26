@@ -14,7 +14,7 @@ from serena.symbol import LanguageServerSymbol
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
-from test.conftest import PYTHON_LANGUAGE_BACKENDS
+from test.conftest import PYTHON_LANGUAGE_BACKENDS, normalize_relative_path
 
 pytestmark = pytest.mark.python
 
@@ -390,9 +390,9 @@ class TestLanguageServerSymbols:
         user_management_node = next(child for child in examples_package["children"] if child["name"] == "user_management")
         if "location" in user_management_node and "relativePath" in user_management_node["location"]:
             user_management_rel_path = user_management_node["location"]["relativePath"]
-            assert user_management_rel_path == os.path.join("examples", "user_management.py")
+            assert user_management_rel_path == normalize_relative_path(os.path.join("examples", "user_management.py"))
             _, user_management_roots = language_server.request_document_symbols(
-                os.path.join("examples", "user_management.py")
+                normalize_relative_path(os.path.join("examples", "user_management.py"))
             ).get_all_symbols_and_roots()
             assert user_management_roots == user_management_node["children"]
 
@@ -413,9 +413,9 @@ class TestLanguageServerSymbols:
         user_management_node = next(child for child in examples_package["children"] if child["name"] == "user_management")
         if "location" in user_management_node and "relativePath" in user_management_node["location"]:
             user_management_rel_path = user_management_node["location"]["relativePath"]
-            assert user_management_rel_path == os.path.join("examples", "user_management.py")
+            assert user_management_rel_path == normalize_relative_path(os.path.join("examples", "user_management.py"))
             _, user_management_roots = language_server.request_document_symbols(
-                os.path.join("examples", "user_management.py")
+                normalize_relative_path(os.path.join("examples", "user_management.py"))
             ).get_all_symbols_and_roots()
             assert user_management_roots == user_management_node["children"]
 
@@ -426,10 +426,10 @@ class TestLanguageServerSymbols:
         overview = language_server.request_dir_overview("test_repo")
 
         # Verify that we have entries for both files
-        assert os.path.join("test_repo", "nested.py") in overview
+        assert normalize_relative_path(os.path.join("test_repo", "nested.py")) in overview
 
         # Get the symbols for user_management.py
-        services_symbols = overview[os.path.join("test_repo", "services.py")]
+        services_symbols = overview[normalize_relative_path(os.path.join("test_repo", "services.py"))]
         assert len(services_symbols) > 0
 
         # Check for specific symbols from services.py

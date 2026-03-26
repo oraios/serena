@@ -5,15 +5,17 @@ This file contains various utility functions like I/O operations, handling paths
 import gzip
 import hashlib
 import logging
+import ntpath
 import os
 import platform
+import posixpath
 import shutil
 import subprocess
 import tarfile
 import uuid
 import zipfile
 from enum import Enum
-from pathlib import Path, PurePath
+from pathlib import Path, PurePath, PureWindowsPath
 from typing import Literal, cast
 from urllib.parse import urlparse
 
@@ -164,10 +166,17 @@ class PathUtils:
         Gets relative path if it's possible (paths should be on the same drive),
         returns `None` otherwise.
         """
-        if PurePath(path).drive == PurePath(base_path).drive:
-            rel_path = str(PurePath(os.path.relpath(path, base_path)))
+        uses_windows_paths = bool(PureWindowsPath(path).drive) or bool(PureWindowsPath(base_path).drive)
+
+        if uses_windows_paths:
+            if PureWindowsPath(path).drive.lower() != PureWindowsPath(base_path).drive.lower():
+                return None
+
+            rel_path = ntpath.relpath(path, base_path)
             return rel_path.replace("\\", "/")
-        return None
+
+        rel_path = posixpath.relpath(path, base_path)
+        return rel_path.replace("\\", "/")
 
 
 class FileUtils:
