@@ -3,12 +3,12 @@ Provides Java specific instantiation of the LanguageServer class. Contains vario
 """
 
 import dataclasses
+import hashlib
 import logging
 import os
 import pathlib
 import shutil
 import threading
-import uuid
 from pathlib import PurePath
 from time import sleep
 from typing import cast
@@ -276,13 +276,16 @@ class EclipseJDTLS(SolidLanguageServer):
             )
 
         def create_launch_command(self) -> list[str]:
-            # ws_dir is the workspace directory for the EclipseJDTLS server
+            # ws_dir is the workspace directory for the EclipseJDTLS server.
+            # Use a deterministic hash of the project path so the workspace
+            # (and its cached index) can be reused across restarts.
+            project_hash = hashlib.md5(self._repository_root_path.encode()).hexdigest()
             ws_dir = str(
                 PurePath(
                     self._solidlsp_settings.ls_resources_dir,
                     "EclipseJDTLS",
                     "workspaces",
-                    uuid.uuid4().hex,
+                    project_hash,
                 )
             )
 
