@@ -3,8 +3,8 @@ Language server-related tools
 """
 
 import os
-from collections import defaultdict
 import re
+from collections import defaultdict
 from collections.abc import Sequence
 from typing import Any
 

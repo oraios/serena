@@ -35,6 +35,7 @@ from test.conftest import (
     find_identifier_occurrence_position,
     get_pytest_markers,
     get_repo_path,
+    is_ci,
     language_has_verified_implementation_support,
     language_tests_enabled,
 )
