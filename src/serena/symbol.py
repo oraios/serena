@@ -439,6 +439,8 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         body: bool = False,
         body_location: bool = False,
         children_body: bool = False,
+        children_name_path: bool | None = None,
+        children_name: bool | None = None,
         relative_path: bool = False,
         child_inclusion_predicate: Callable[[Self], bool] | None = None,
     ) -> OutputDict:
@@ -455,6 +457,8 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
             Note that the body of the children is part of the body of the parent symbol,
             so there is usually no need to set this to True unless you want process the output
             and pass the children without passing the parent body to the LM.
+        :param children_name_path: whether to include the name path of the children; if None, defaults to the value of `name_path`
+        :param children_name: whether to include the name of the children; if None, defaults to the value of `name`
         :param relative_path: whether to include the relative path of the symbol.
             If `location` is True, this defines whether to include the path in the location entry.
             If `location` is False, this defines whether to include the relative path as a top-level entry.
@@ -464,6 +468,11 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         :return: a dictionary representation of the symbol
         """
         result: LanguageServerSymbol.OutputDict = {}
+
+        if children_name_path is None:
+            children_name_path = name_path
+        if children_name is None:
+            children_name = name
 
         if name_path:
             result["name_path"] = self.get_name_path()
@@ -495,8 +504,8 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
                     continue
                 children.append(
                     c.to_dict(
-                        name_path=name_path,
-                        name=name,
+                        name_path=children_name_path,
+                        name=children_name,
                         kind=kind,
                         location=location,
                         body_location=body_location,

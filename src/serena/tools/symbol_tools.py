@@ -209,7 +209,18 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             return f"Matched {n_matches}>{max_matches=} symbols.\n" + create_short_result_relative_path_to_name_paths()
 
         symbol_dicts = [
-            s.to_dict(kind=True, name=True, relative_path=True, body_location=True, depth=depth, body=include_body) for s in symbols
+            s.to_dict(
+                kind=True,
+                name_path=True,
+                name=False,
+                relative_path=True,
+                body_location=True,
+                depth=depth,
+                body=include_body,
+                children_name=True,
+                children_name_path=False,
+            )
+            for s in symbols
         ]
         if not include_body and include_info:
             info_by_symbol = symbol_retriever.request_info_for_symbol_batch(symbols)
@@ -219,11 +230,6 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
                     # https://peps.python.org/pep-0728/
                     # If we ever upgrade to 3.15, we can remove the type: ignore[typeddict-unknown-key]
                     s_dict["info"] = symbol_info  # type: ignore[typeddict-unknown-key]
-
-                # TODO: This is only applied conditionally.
-                #   Why don't we just pass name=False - and while we're at it,
-                #   change to_dict to always return name instead of name_path for children
-                s_dict.pop("name", None)  # we just need name for children
 
         grouped_symbol_dicts = self.symbol_dict_grouper.group(symbol_dicts)
         result = self._to_json(grouped_symbol_dicts)
