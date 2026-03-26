@@ -1009,10 +1009,10 @@ class SolidLanguageServer(ABC):
                         abs_path,
                     )
                     return None
-                rel_path_in_repo = Path(abs_path).relative_to(self.repository_root_path)
-                rel_path_str = str(rel_path_in_repo)
+                rel_path_str = PathUtils.get_relative_path(abs_path, self.repository_root_path)
+                assert rel_path_str is not None, f"Failed to compute repository-relative path for {abs_path}"
                 if self.is_ignored_path(rel_path_str):
-                    log.debug("Ignoring %s in %s since it should be ignored", request_name, rel_path_in_repo)
+                    log.debug("Ignoring %s in %s since it should be ignored", request_name, rel_path_str)
                     return None
             else:
                 rel_path_str = PathUtils.get_relative_path(abs_path, self.repository_root_path)
@@ -1138,15 +1138,16 @@ class SolidLanguageServer(ABC):
                 )
                 continue
 
-            rel_path = Path(abs_path).relative_to(self.repository_root_path)
-            if self.is_ignored_path(str(rel_path)):
+            rel_path = PathUtils.get_relative_path(abs_path, self.repository_root_path)
+            assert rel_path is not None, f"Failed to compute repository-relative path for {abs_path}"
+            if self.is_ignored_path(rel_path):
                 log.debug("Ignoring reference in %s since it should be ignored", rel_path)
                 continue
 
             new_item: dict = {}
             new_item.update(item)
             new_item["absolutePath"] = str(abs_path)
-            new_item["relativePath"] = str(rel_path)
+            new_item["relativePath"] = rel_path
             ret.append(ls_types.Location(**new_item))  # type: ignore
 
         if _debug_enabled:
@@ -1591,6 +1592,8 @@ class SolidLanguageServer(ABC):
                     location["absolutePath"] = absolute_path  # type: ignore
                 if "relativePath" not in location:
                     location["relativePath"] = relative_file_path  # type: ignore
+                elif isinstance(location["relativePath"], str):
+                    location["relativePath"] = location["relativePath"].replace("\\", "/")  # type: ignore
 
                 item["body"] = self.create_symbol_body(item, factory=body_factory)
 
@@ -1673,7 +1676,9 @@ class SolidLanguageServer(ABC):
             abs_dir_path = self.repository_root_path if rel_dir_path == "." else os.path.join(self.repository_root_path, rel_dir_path)
             abs_dir_path = os.path.realpath(abs_dir_path)
 
-            if self.is_ignored_path(str(Path(abs_dir_path).relative_to(self.repository_root_path))):
+            relative_dir_path = PathUtils.get_relative_path(abs_dir_path, self.repository_root_path)
+            assert relative_dir_path is not None, f"Failed to compute repository-relative path for {abs_dir_path}"
+            if self.is_ignored_path(relative_dir_path):
                 log.debug("Skipping directory: %s (because it should be ignored)", rel_dir_path)
                 return []
 
@@ -1691,7 +1696,7 @@ class SolidLanguageServer(ABC):
                     uri=str(pathlib.Path(abs_dir_path).as_uri()),
                     range={"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}},
                     absolutePath=str(abs_dir_path),
-                    relativePath=str(Path(abs_dir_path).resolve().relative_to(self.repository_root_path)),
+                    relativePath=relative_dir_path,
                 ),
                 children=[],
             )
@@ -1702,9 +1707,15 @@ class SolidLanguageServer(ABC):
 
                 # obtain relative path
                 try:
-                    contained_dir_or_file_rel_path = str(
-                        Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path)
+                    contained_dir_or_file_resolved_path = str(Path(contained_dir_or_file_abs_path).resolve())
+                    if not Path(contained_dir_or_file_resolved_path).is_relative_to(self.repository_root_path):
+                        raise ValueError(
+                            f"Resolved path {contained_dir_or_file_resolved_path} is outside repository root {self.repository_root_path}"
+                        )
+                    contained_dir_or_file_rel_path = PathUtils.get_relative_path(
+                        contained_dir_or_file_resolved_path, self.repository_root_path
                     )
+                    assert contained_dir_or_file_rel_path is not None
                 except ValueError as e:
                     # Typically happens when the path is not under the repository root (e.g., symlink pointing outside)
                     log.warning(
@@ -1741,7 +1752,7 @@ class SolidLanguageServer(ABC):
                                 uri=str(pathlib.Path(contained_dir_or_file_abs_path).as_uri()),
                                 range=file_range,
                                 absolutePath=str(contained_dir_or_file_abs_path),
-                                relativePath=str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path)),
+                                relativePath=contained_dir_or_file_rel_path,
                             ),
                             children=file_root_nodes,
                             parent=package_symbol,
@@ -1756,13 +1767,13 @@ class SolidLanguageServer(ABC):
                     def fix_relative_path(nodes: list[ls_types.UnifiedSymbolInformation]) -> None:
                         for node in nodes:
                             if "location" in node and "relativePath" in node["location"]:
-                                path = Path(node["location"]["relativePath"])  # type: ignore
-                                if path.is_absolute():
-                                    try:
-                                        path = path.relative_to(self.repository_root_path)
-                                        node["location"]["relativePath"] = str(path)
-                                    except Exception:
-                                        pass
+                                relative_path = cast(str, node["location"]["relativePath"])
+                                if Path(relative_path).is_absolute():
+                                    normalized_relative_path = PathUtils.get_relative_path(relative_path, self.repository_root_path)
+                                    if normalized_relative_path is not None:
+                                        node["location"]["relativePath"] = normalized_relative_path
+                                else:
+                                    node["location"]["relativePath"] = relative_path.replace("\\", "/")
                             if "children" in node:
                                 fix_relative_path(node["children"])
 
@@ -2658,6 +2669,10 @@ class SolidLanguageServer(ABC):
             assert LSPConstants.NAME in item
             assert LSPConstants.KIND in item
             assert LSPConstants.LOCATION in item
+
+            location = cast(dict[str, object], item[LSPConstants.LOCATION])
+            if "relativePath" in location and isinstance(location["relativePath"], str):
+                location["relativePath"] = location["relativePath"].replace("\\", "/")
 
             ret.append(ls_types.UnifiedSymbolInformation(**item))  # type: ignore
 
