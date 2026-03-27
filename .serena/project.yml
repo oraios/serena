@@ -8,10 +8,10 @@ project_name: "serena"
 #   fortran             fsharp              go                  groovy              haskell
 #   java                julia               kotlin              lua                 markdown
 #   matlab              nix                 pascal              perl                php
-#   powershell          python              python_jedi         r                   rego
-#   ruby                ruby_solargraph     rust                scala               swift
-#   terraform           toml                typescript          typescript_vts      vue
-#   yaml                zig
+#   php_phpactor        powershell          python              python_jedi         r
+#   rego                ruby                ruby_solargraph     rust                scala
+#   swift               terraform           toml                typescript          typescript_vts
+#   vue                 yaml                zig
 #   (This list may be outdated. For the current list, see values of Language enum here:
 #   https://github.com/oraios/serena/blob/main/src/solidlsp/ls_config.py
 #   For some languages, there are alternative language servers, e.g. csharp_omnisharp, ruby_solargraph.)
@@ -20,8 +20,8 @@ project_name: "serena"
 #   - For JavaScript, use typescript
 #   - For Free Pascal/Lazarus, use pascal
 # Special requirements:
-#   - csharp: Requires the presence of a .sln file in the project folder.
-#   - pascal: Requires Free Pascal Compiler (fpc) and optionally Lazarus.
+#   Some languages require additional setup/installations.
+#   See here for details: https://oraios.github.io/serena/01-about/020_programming-languages.html#language-servers
 # When using multiple languages, the first language server that supports a given file will be used for that file.
 # The first language is the default language and the respective language server will be used as a fallback.
 # Note that when using the JetBrains backend, language servers are not used and this list is correspondingly ignored.
@@ -32,15 +32,15 @@ languages:
 # whether to use project's .gitignore files to ignore files
 ignore_all_files_in_gitignore: true
 
-
-# list of additional paths to ignore in all projects
-# same syntax as gitignore, so you can use * and **
+# list of additional paths to ignore in this project.
+# Same syntax as gitignore, so you can use * and **.
+# Note: global ignored_paths from serena_config.yml are also applied additively.
 ignored_paths: []
 
 # whether the project is in read-only mode
 # If set to true, all editing tools will be disabled and attempts to use them will result in an error
+# Added on 2025-04-18
 read_only: false
-
 
 # list of tool names to exclude. We recommend not excluding any tools, see the readme for more details.
 # Below is the complete list of tools for convenience.
@@ -86,8 +86,6 @@ excluded_tools: []
 # list of tools to include that would otherwise be disabled (particularly optional tools that are disabled by default)
 included_optional_tools: []
 
-# fixed set of tools to use as the base tool set (if non-empty), replacing Serena's default set of tools.
-# This cannot be combined with non-empty excluded_tools or included_optional_tools.
 # initial prompt for the project. It will always be given to the LLM upon activating the project
 # (contrary to the memories, which are loaded on demand).
 initial_prompt: |
@@ -106,10 +104,10 @@ initial_prompt: |
   Comments:
   When describing parameters, methods/functions and classes, you use a precise style, where the initial (elliptical) phrase
   clearly defines *what* it is. Any details then follow in subsequent sentences.
+
 # the encoding used by text files in the project
 # For a list of possible encodings, see https://docs.python.org/3.11/library/codecs.html#standard-encodings
 encoding: utf-8
-
 
 # list of mode names to that are always to be included in the set of active modes
 # The full set of modes to be activated is base_modes + default_modes.
@@ -147,6 +145,7 @@ language_backend:
 # Extends the list from the global configuration, merging the two lists.
 read_only_memory_patterns: []
 
-# line ending convention for file writes: unset (use global setting, "lf", "crlf", or "native" (platform default)
-# If not undefined, overrides the global setting in serena_config.yml
+# line ending convention to use when writing source files.
+# Possible values: unset (use global setting), "lf", "crlf", or "native" (platform default)
+# This does not affect Serena's own files (e.g. memories and configuration files), which always use native line endings.
 line_ending:
