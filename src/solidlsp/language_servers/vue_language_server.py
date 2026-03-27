@@ -21,7 +21,7 @@ from solidlsp.language_servers.typescript_language_server import (
     prefer_non_node_modules_definition,
 )
 from solidlsp.ls import LSPFileBuffer, SolidLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_types import Location
 from solidlsp.ls_utils import PathUtils
@@ -46,6 +46,11 @@ class VueTypeScriptServer(TypeScriptLanguageServer):
         with the TypeScript language server infrastructure.
         """
         return Language.TYPESCRIPT
+
+    def get_source_fn_matcher(self) -> FilenameMatcher:
+        # must override with Vue-specific matcher to ensure .vue files are included (as they can be discovered via references,
+        # for instance; otherwise, we may find references in .vue files but then filter the results out, because .vue files are ignored.)
+        return Language.VUE.get_source_fn_matcher()
 
     class DependencyProvider(TypeScriptLanguageServer.DependencyProvider):
         override_ts_ls_executable: str | None = None

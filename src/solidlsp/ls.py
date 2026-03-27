@@ -23,7 +23,7 @@ from sensai.util.string import ToStringMixin
 from serena.util.file_system import match_path
 from serena.util.text_utils import MatchedConsecutiveLines
 from solidlsp import ls_types
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_process import LanguageServerProcess
 from solidlsp.ls_types import UnifiedSymbolInformation
@@ -583,6 +583,14 @@ class SolidLanguageServer(ABC):
         """
         return self._ignore_spec
 
+    def get_source_fn_matcher(self) -> FilenameMatcher:
+        """
+        :return: the source filename matcher for this language server, which must positively match all files that
+          are understood by this language server or are discovered as containing sources indirectly, e.g. via references
+        """
+        # By default, use the matcher of the language
+        return self.language.get_source_fn_matcher()
+
     def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool = True) -> bool:
         """
         Determine if a path should be ignored based on file type
@@ -600,7 +608,7 @@ class SolidLanguageServer(ABC):
         # Check file extension if it's a file
         is_file = os.path.isfile(abs_path)
         if is_file and ignore_unsupported_files:
-            fn_matcher = self.language.get_source_fn_matcher()
+            fn_matcher = self.get_source_fn_matcher()
             if not fn_matcher.is_relevant_filename(abs_path):
                 return True
 
@@ -917,10 +925,10 @@ class SolidLanguageServer(ABC):
                 uri = cast(str, item[LSPConstants.URI])
                 range_d = cast(ls_types.Range, item[LSPConstants.RANGE])
             elif (
-                    allow_location_links
-                    and LSPConstants.TARGET_URI in item
-                    and LSPConstants.TARGET_RANGE in item
-                    and LSPConstants.TARGET_SELECTION_RANGE in item
+                allow_location_links
+                and LSPConstants.TARGET_URI in item
+                and LSPConstants.TARGET_RANGE in item
+                and LSPConstants.TARGET_SELECTION_RANGE in item
             ):
                 uri = cast(str, item[LSPConstants.TARGET_URI])
                 range_d = cast(ls_types.Range, item[LSPConstants.TARGET_SELECTION_RANGE])
@@ -950,13 +958,13 @@ class SolidLanguageServer(ABC):
 
     class DefinitionLocationRequest(SymbolLocationRequest):
         def __init__(
-                self,
-                language_server: "SolidLanguageServer",
-                relative_file_path: str,
-                line: int,
-                column: int,
-                *,
-                request_name: str = "request_definition",
+            self,
+            language_server: "SolidLanguageServer",
+            relative_file_path: str,
+            line: int,
+            column: int,
+            *,
+            request_name: str = "request_definition",
         ) -> None:
             super().__init__(
                 language_server,
