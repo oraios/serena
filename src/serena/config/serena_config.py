@@ -607,6 +607,7 @@ class RegisteredProject(ToStringMixin):
         project_root: str,
         project_config: "ProjectConfig",
         configured_project_root: Optional[str] = None,
+        configured_project_root_template: Optional[str] = None,
         project_instance: Optional["Project"] = None,
     ) -> None:
         """
@@ -614,11 +615,14 @@ class RegisteredProject(ToStringMixin):
 
         :param project_root: the root directory of the project
         :param project_config: the configuration of the project
-        :param configured_project_root: the original project root value from configuration serialization
+        :param configured_project_root: the resolved project root value used at runtime
+        :param configured_project_root_template: the original project root value from configuration serialization,
+            potentially containing template/environment variables
         :param project_instance: an existing project instance (if already loaded)
         """
         self.project_root = Path(project_root).resolve()
         self.configured_project_root = configured_project_root or str(self.project_root)
+        self.configured_project_root_template = configured_project_root_template or self.configured_project_root
         self.project_config = project_config
         self._project_instance = project_instance
 
@@ -904,7 +908,8 @@ class SerenaConfig(SharedConfig):
             project = RegisteredProject(
                 project_root=str(path),
                 project_config=project_config,
-                configured_project_root=str(path) if path_was_config_file else configured_path,
+                configured_project_root=str(path),
+                configured_project_root_template=str(path) if path_was_config_file else configured_path,
             )
             instance.projects.append(project)
 
@@ -1093,7 +1098,7 @@ class SerenaConfig(SharedConfig):
 
         # convert project objects into list of paths while preserving configured templates
         projects_by_resolved_root = {project.project_root: project for project in self.projects}
-        commented_yaml["projects"] = sorted(project.configured_project_root for project in projects_by_resolved_root.values())
+        commented_yaml["projects"] = sorted(project.configured_project_root_template for project in projects_by_resolved_root.values())
 
         # convert language backend to string
         commented_yaml["language_backend"] = self.language_backend.value
