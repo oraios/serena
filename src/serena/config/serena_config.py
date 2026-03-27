@@ -47,6 +47,7 @@ T = TypeVar("T")
 DEFAULT_TOOL_TIMEOUT: float = 240
 DictType = dict | CommentedMap
 TDict = TypeVar("TDict", bound=DictType)
+SHELL_VARIABLE_PATTERN = re.compile(r"\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)")
 
 
 @singleton
@@ -55,13 +56,29 @@ class SerenaPaths:
     Provides paths to various Serena-related directories and files.
     """
 
-    def __init__(self) -> None:
+    @staticmethod
+    def _contains_unresolved_environment_variables(path: str) -> bool:
+        has_unresolved_shell_var = re.search(r"\$\{[^}]+\}|\$[A-Za-z_][A-Za-z0-9_]*", path) is not None
+        has_unresolved_windows_var = re.search(r"%[^%]+%", path) is not None
+        return has_unresolved_shell_var or has_unresolved_windows_var
+
+    @classmethod
+    def _resolve_serena_user_home_dir(cls) -> Path:
         home_dir = os.getenv("SERENA_HOME")
         if home_dir is None or home_dir.strip() == "":
-            home_dir = str(Path.home() / SERENA_MANAGED_DIR_NAME)
-        else:
-            home_dir = home_dir.strip()
-        self.serena_user_home_dir: str = home_dir
+            return Path.home() / SERENA_MANAGED_DIR_NAME
+
+        expanded_home_dir = os.path.expandvars(os.path.expanduser(home_dir.strip()))
+        if cls._contains_unresolved_environment_variables(expanded_home_dir):
+            log.warning(
+                "SERENA_HOME contains unresolved environment variables (%s); falling back to default home path",
+                home_dir,
+            )
+            return Path.home() / SERENA_MANAGED_DIR_NAME
+        return Path(expanded_home_dir).resolve()
+
+    def __init__(self) -> None:
+        self.serena_user_home_dir: str = str(self._resolve_serena_user_home_dir())
         """
         the path to the Serena home directory, where the user's configuration/data is stored.
         This is ~/.serena by default, but it can be overridden via the SERENA_HOME environment variable.
@@ -770,6 +787,37 @@ class SerenaConfig(SharedConfig):
         loaded_commented_yaml = load_yaml(SERENA_CONFIG_TEMPLATE_FILE)
         save_yaml(config_file_path, loaded_commented_yaml)
 
+    @staticmethod
+    def _resolve_environment_variable(name: str) -> str | None:
+        if name in {"home", "HOME"}:
+            return str(Path.home())
+        if name in os.environ:
+            return os.environ[name]
+        if os.name == "nt":
+            lowered_name = name.lower()
+            for key, value in os.environ.items():
+                if key.lower() == lowered_name:
+                    return value
+        return None
+
+    @staticmethod
+    def _resolve_template_variable(name: str, placeholders: dict[str, str]) -> str:
+        if name in placeholders:
+            return placeholders[name]
+
+        environment_value = SerenaConfig._resolve_environment_variable(name)
+        if environment_value is not None:
+            return environment_value
+
+        raise SerenaConfigError(
+            f"Unknown placeholder '${name}' in project_serena_folder_location. "
+            f"Supported placeholders: {', '.join('$' + k for k in placeholders)}"
+        )
+
+    @staticmethod
+    def _has_unresolved_windows_variable(value: str) -> bool:
+        return re.search(r"%[^%]+%", value) is not None
+
     @classmethod
     def _determine_config_file_path(cls) -> str:
         """
@@ -827,8 +875,14 @@ class SerenaConfig(SharedConfig):
         if "projects" not in loaded_commented_yaml:
             raise SerenaConfigError("`projects` key not found in Serena configuration. Please update your `serena_config.yml` file.")
         instance.projects = []
-        for path in loaded_commented_yaml["projects"]:
-            path = Path(path).resolve()
+        for configured_path in loaded_commented_yaml["projects"]:
+            configured_path = str(configured_path)
+            try:
+                expanded_path = cls._expand_template_variables(configured_path, {})
+            except SerenaConfigError as e:
+                log.warning(f"Project path {configured_path} could not be resolved ({e}), skipping.")
+                continue
+            path = Path(expanded_path).resolve()
             try:
                 path_exists = path.exists()
             except OSError as e:
@@ -1052,7 +1106,20 @@ class SerenaConfig(SharedConfig):
         save_yaml(self.config_file_path, commented_yaml)
 
     @staticmethod
-    def _resolve_serena_folder_location(template: str, placeholders: dict[str, str]) -> str:
+    def _expand_template_variables(template: str, placeholders: dict[str, str]) -> str:
+        def _replace(match: re.Match[str]) -> str:
+            name = match.group(1) or match.group(2)
+            assert name is not None
+            return SerenaConfig._resolve_template_variable(name, placeholders)
+
+        expanded = SHELL_VARIABLE_PATTERN.sub(_replace, template)
+        expanded = os.path.expanduser(os.path.expandvars(expanded))
+        if SerenaConfig._has_unresolved_windows_variable(expanded):
+            raise SerenaConfigError(f"Unresolved environment variable in project_serena_folder_location: '{template}'")
+        return expanded
+
+    @classmethod
+    def _resolve_serena_folder_location(cls, template: str, placeholders: dict[str, str]) -> str:
         """
         Resolves a folder location template by replacing known ``$placeholder`` tokens
         and raising on any unrecognised ones.
@@ -1062,17 +1129,7 @@ class SerenaConfig(SharedConfig):
         :return: the resolved absolute path
         :raises SerenaConfigError: if the template contains an unknown ``$placeholder``
         """
-
-        def _replace(match: re.Match[str]) -> str:
-            name = match.group(1)
-            if name not in placeholders:
-                raise SerenaConfigError(
-                    f"Unknown placeholder '${name}' in project_serena_folder_location. "
-                    f"Supported placeholders: {', '.join('$' + k for k in placeholders)}"
-                )
-            return placeholders[name]
-
-        result = re.sub(r"\$([A-Za-z_]\w*)", _replace, template)
+        result = cls._expand_template_variables(template, placeholders)
         return os.path.abspath(result)
 
     def get_configured_project_serena_folder(self, project_root: str | Path) -> str:
