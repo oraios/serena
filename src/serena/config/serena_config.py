@@ -606,6 +606,7 @@ class RegisteredProject(ToStringMixin):
         self,
         project_root: str,
         project_config: "ProjectConfig",
+        configured_project_root: Optional[str] = None,
         project_instance: Optional["Project"] = None,
     ) -> None:
         """
@@ -613,9 +614,11 @@ class RegisteredProject(ToStringMixin):
 
         :param project_root: the root directory of the project
         :param project_config: the configuration of the project
+        :param configured_project_root: the original project root value from configuration serialization
         :param project_instance: an existing project instance (if already loaded)
         """
         self.project_root = Path(project_root).resolve()
+        self.configured_project_root = configured_project_root or str(self.project_root)
         self.project_config = project_config
         self._project_instance = project_instance
 
@@ -891,7 +894,8 @@ class SerenaConfig(SharedConfig):
             if not path_exists or (path.is_dir() and not os.path.isfile(instance.get_project_yml_location(str(path)))):
                 log.warning(f"Project path {path} does not exist or no associated project configuration file found, skipping.")
                 continue
-            if path.is_file():
+            path_was_config_file = path.is_file()
+            if path_was_config_file:
                 path = cls._migrate_out_of_project_config_file(path)
                 if path is None:
                     continue
@@ -900,6 +904,7 @@ class SerenaConfig(SharedConfig):
             project = RegisteredProject(
                 project_root=str(path),
                 project_config=project_config,
+                configured_project_root=str(path) if path_was_config_file else configured_path,
             )
             instance.projects.append(project)
 
@@ -1086,8 +1091,9 @@ class SerenaConfig(SharedConfig):
         for field_name in self._iter_config_file_mapped_fields_without_type_conversion():
             commented_yaml[field_name] = getattr(self, field_name)
 
-        # convert project objects into list of paths
-        commented_yaml["projects"] = sorted({str(project.project_root) for project in self.projects})
+        # convert project objects into list of paths while preserving configured templates
+        projects_by_resolved_root = {project.project_root: project for project in self.projects}
+        commented_yaml["projects"] = sorted(project.configured_project_root for project in projects_by_resolved_root.values())
 
         # convert language backend to string
         commented_yaml["language_backend"] = self.language_backend.value

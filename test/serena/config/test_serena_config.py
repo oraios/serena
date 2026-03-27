@@ -389,8 +389,8 @@ class TestGetConfiguredProjectSerenaFolder:
         expected = os.path.abspath(str(Path.home() / ".serena" / "myproject"))
         assert result == expected
 
-    def test_expands_environment_variable(self, monkeypatch):
-        base_dir = os.path.abspath("/tmp/serena-test-base")
+    def test_expands_environment_variable(self, monkeypatch, tmp_path):
+        base_dir = os.path.abspath(str(tmp_path))
         monkeypatch.setenv("SERENA_TEST_BASE", base_dir)
         config = SerenaConfig(
             gui_log_window=False,

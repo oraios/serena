@@ -589,7 +589,13 @@ class ProjectCommands(AutoRegisteringGroup):
     @staticmethod
     def _resolve_project_path(project_path: str) -> str:
         expanded_project_path = SerenaConfig._expand_template_variables(project_path, {})
-        return str(Path(expanded_project_path).resolve())
+        expanded_project_path = os.path.expandvars(os.path.expanduser(expanded_project_path))
+        resolved_project_path = Path(expanded_project_path).resolve()
+        if not resolved_project_path.exists():
+            raise ValueError(f"Project path does not exist: {resolved_project_path}")
+        if not resolved_project_path.is_dir():
+            raise ValueError(f"Project path is not a directory: {resolved_project_path}")
+        return str(resolved_project_path)
 
     @staticmethod
     def _create_project(project_path: str, name: str | None, language: tuple[str, ...]) -> RegisteredProject:
@@ -637,7 +643,7 @@ class ProjectCommands(AutoRegisteringGroup):
 
     @staticmethod
     @click.command("create", help="Create a new Serena project configuration.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
-    @click.argument("project_path", type=click.Path(exists=True, file_okay=False), default=os.getcwd())
+    @click.argument("project_path", type=click.Path(exists=False, file_okay=False), default=os.getcwd())
     @click.option("--name", type=str, default=None, help="Project name; defaults to directory name if not specified.")
     @click.option(
         "--language", type=str, multiple=True, help="Programming language(s); inferred if not specified. Can be passed multiple times."
@@ -683,12 +689,17 @@ class ProjectCommands(AutoRegisteringGroup):
     )
     @click.option("--timeout", type=float, default=10, help="Timeout for indexing a single file.")
     def index(project: str, name: str | None, language: tuple[str, ...], log_level: str, timeout: float) -> None:
-        project = ProjectCommands._resolve_project_path(project)
+        project_name_or_path = project
         serena_config = SerenaConfig.from_config_file()
-        registered_project = serena_config.get_registered_project(project, autoregister=True)
+        registered_project = serena_config.get_registered_project(project_name_or_path, autoregister=True)
+
+        if registered_project is None:
+            project = ProjectCommands._resolve_project_path(project_name_or_path)
+            registered_project = serena_config.get_registered_project(project, autoregister=True)
+
         if registered_project is None:
             # Project not found; auto-create it
-            click.echo(f"No existing project found for '{project}'. Attempting auto-creation ...")
+            click.echo(f"No existing project found for '{project_name_or_path}'. Attempting auto-creation ...")
             try:
                 registered_project = ProjectCommands._create_project(project, name, language)
             except Exception as e:
