@@ -869,6 +869,7 @@ class SolidLanguageServer(ABC):
             self.line = line
             self.column = column
             self.request_name = request_name
+            self.skip_ignored_paths = True
 
         def execute(self) -> list[ls_types.Location]:
             self._ensure_server_started()
@@ -927,8 +928,9 @@ class SolidLanguageServer(ABC):
                 raise AssertionError(f"Unexpected response from Language Server: {item}")
 
             abs_path = PathUtils.uri_to_path(uri)
-            rel_path_str: str | None
-            if not Path(abs_path).is_relative_to(self.language_server.repository_root_path):
+            rel_path_str = PathUtils.get_relative_path(abs_path, self.language_server.repository_root_path)
+
+            if rel_path_str is None:
                 log.warning(
                     "Found a %s in a path outside the repository, probably the LS is parsing things in installed packages or in the standardlib! "
                     "Path: %s. This is a bug but we currently simply skip these locations.",
@@ -936,10 +938,10 @@ class SolidLanguageServer(ABC):
                     abs_path,
                 )
                 return None
-            rel_path_str = PathUtils.get_relative_path(abs_path, self.language_server.repository_root_path)
-            assert rel_path_str is not None, f"Failed to compute repository-relative path for {abs_path}"
-            if self.language_server.is_ignored_path(rel_path_str):
+
+            if self.skip_ignored_paths and self.language_server.is_ignored_path(rel_path_str):
                 log.info("%s found symbol in ignored path: %s", self.request_name, rel_path_str)
+                return None
 
             return ls_types.Location(uri=uri, range=range_d, absolutePath=str(abs_path), relativePath=rel_path_str)
 
