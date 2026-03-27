@@ -900,9 +900,10 @@ class SerenaConfig(SharedConfig):
                 continue
             path_was_config_file = path.is_file()
             if path_was_config_file:
-                path = cls._migrate_out_of_project_config_file(path)
-                if path is None:
+                migrated_project_root = cls._migrate_out_of_project_config_file(path)
+                if migrated_project_root is None:
                     continue
+                path = migrated_project_root
                 num_migrations += 1
             project_config = ProjectConfig.load(path, serena_config=instance)  # instance is sufficiently populated
             project = RegisteredProject(
