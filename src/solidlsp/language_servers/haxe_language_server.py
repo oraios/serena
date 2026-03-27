@@ -241,10 +241,10 @@ class HaxeLanguageServer(SolidLanguageServer):
             },
             "initializationOptions": {
                 "displayArguments": display_arguments,
-            },
-            "settings": {
-                "haxe": {
-                    "executable": haxe_executable,
+                "displayServerConfig": {
+                    "path": haxe_executable,
+                    "arguments": [],
+                    "useSocket": False,
                 },
             },
             "processId": os.getpid(),
@@ -259,9 +259,21 @@ class HaxeLanguageServer(SolidLanguageServer):
         }
         return cast(InitializeParams, initialize_params)
 
+    # Timeout for waiting on dynamic capability registration and diagnostics
+    READY_TIMEOUT = 30.0
+
     def _start_server(self) -> None:
-        """Starts the Haxe Language Server and waits for it to be ready."""
-        server_ready = threading.Event()
+        """Starts the Haxe Language Server and waits for it to be ready.
+
+        The Haxe LS reports minimal capabilities in its initialize response
+        (textDocumentSync, formatting, folding, color, inlayHints). Features like
+        completion, definition, references, and document symbols are registered
+        dynamically via client/registerCapability after initialization.
+        We wait for both dynamic capability registration and diagnostics before
+        declaring the server ready.
+        """
+        capabilities_ready = threading.Event()
+        diagnostics_received = threading.Event()
 
         def do_nothing(params: dict) -> None:
             return
@@ -270,12 +282,21 @@ class HaxeLanguageServer(SolidLanguageServer):
             log.info(f"LSP: window/logMessage: {msg}")
 
         def on_diagnostics(params: dict) -> None:
-            log.info("LSP: Received diagnostics notification, server is ready")
-            server_ready.set()
+            log.info("LSP: Received diagnostics notification")
+            diagnostics_received.set()
+
+        def register_capability_handler(params: dict) -> None:
+            assert "registrations" in params
+            for registration in params["registrations"]:
+                method = registration["method"]
+                log.info(f"LSP: Haxe LS registered dynamic capability: {method}")
+                if method == "textDocument/references":
+                    capabilities_ready.set()
 
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", on_diagnostics)
+        self.server.on_request("client/registerCapability", register_capability_handler)
 
         log.info("Starting Haxe server process")
         self.server.start()
@@ -284,18 +305,52 @@ class HaxeLanguageServer(SolidLanguageServer):
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
 
-        # Verify expected capabilities
+        # The Haxe LS reports only static capabilities here; dynamic ones
+        # (completion, definition, references, documentSymbol) are registered
+        # via client/registerCapability after initialized notification.
         capabilities = init_response.get("capabilities", {})
         assert "textDocumentSync" in capabilities, "Haxe LS did not report textDocumentSync capability"
-        assert "completionProvider" in capabilities, "Haxe LS did not report completionProvider capability"
 
         self.server.notify.initialized({})
-        log.info("Haxe server initialized, waiting for workspace to be ready...")
 
-        if server_ready.wait(timeout=30.0):
+        # The Haxe LS requires a workspace/didChangeConfiguration notification
+        # to trigger the display server (compiler) startup. Without this,
+        # features like references, definition, and completion won't work.
+        # See: https://github.com/vshaxe/vshaxe/issues/359
+        build_file = self._custom_settings.get("build_file", self._find_hxml_file())
+        haxe_executable = self._custom_settings.get("haxe_executable", shutil.which("haxe") or "haxe")
+        display_arguments = [build_file] if build_file else []
+        self.server.send_notification(
+            "workspace/didChangeConfiguration",
+            {
+                "settings": {
+                    "haxe": {
+                        "executable": haxe_executable,
+                        "displayArguments": display_arguments,
+                    },
+                },
+            },
+        )
+        log.info("Sent workspace/didChangeConfiguration to trigger Haxe display server")
+        log.info("Haxe server initialized, waiting for dynamic capabilities and workspace scan...")
+
+        # Wait for dynamic capability registration (references, etc.)
+        if capabilities_ready.wait(timeout=self.READY_TIMEOUT):
+            log.info("Haxe server dynamic capabilities registered")
+        else:
+            log.warning("Timeout waiting for Haxe dynamic capability registration, proceeding anyway")
+
+        # Wait for diagnostics indicating the workspace has been scanned and
+        # the Haxe display server (compiler) is connected. This is the key signal
+        # that the LS can actually handle requests like references and definition.
+        if diagnostics_received.wait(timeout=self.READY_TIMEOUT):
             log.info("Haxe server workspace scan completed")
         else:
-            log.warning("Timeout waiting for Haxe workspace scan, proceeding anyway")
+            log.warning(
+                "Timeout waiting for Haxe workspace diagnostics. "
+                "The Haxe display server may not have connected. "
+                "Check that a valid .hxml build file is configured."
+            )
 
         log.info("Haxe server ready")
 
