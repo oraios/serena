@@ -1,7 +1,7 @@
 import inspect
 import json
 from abc import ABC
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Protocol, Self, TypeVar, cast
@@ -221,16 +221,36 @@ class Tool(Component):
                 params[param] = value
         log.info(f"{self.get_name_from_cls()}: {dict_string(params)}")
 
-    def _limit_length(self, result: str, max_answer_chars: int) -> str:
+    def _limit_length(
+        self,
+        result: str,
+        max_answer_chars: int,
+        shortened_result_factories: list[Callable[[], str]] | None = None,
+    ) -> str:
+        """Limit the length of the result string, optionally trying progressively shorter versions.
+
+        :param result: the full result string
+        :param max_answer_chars: maximum allowed characters. -1 means use the default from config.
+        :param shortened_result_factories: optional list of closures, each producing a progressively shorter
+            version of the result. They are tried in order until one fits within ``max_answer_chars``.
+        :return: the result string, potentially replaced by a shortened version
+        """
         if max_answer_chars == -1:
             max_answer_chars = self.agent.serena_config.default_max_tool_answer_chars
         if max_answer_chars <= 0:
             raise ValueError(f"Must be positive or the default (-1), got: {max_answer_chars=}")
         if (n_chars := len(result)) > max_answer_chars:
-            result = (
-                f"The answer is too long ({n_chars} characters). "
-                + "Please try a more specific tool query or raise the max_answer_chars parameter."
+            too_long_msg = (
+                f"The answer is too long ({n_chars} characters). " + "You can adjust your query or raise the max_answer_chars parameter."
             )
+            if shortened_result_factories is not None:
+                # try each shortening closure in order;
+                for make_shorter in shortened_result_factories:
+                    shortened = make_shorter()
+                    candidate = f"{too_long_msg}\n{shortened}"
+                    if len(candidate) <= max_answer_chars:
+                        return candidate
+            result = too_long_msg
         return result
 
     def is_active(self) -> bool:
