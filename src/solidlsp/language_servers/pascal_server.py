@@ -4,20 +4,23 @@ Contains various configurations and settings specific to Pascal and Free Pascal.
 
 pasls installation strategy:
 1. Use existing pasls from PATH
-2. Download prebuilt binary from GitHub releases (auto-updated)
+2. Download a pinned prebuilt binary from GitHub releases
 
 Supported platforms for binary download:
 - linux-x64, linux-arm64
 - osx-x64, osx-arm64
 - win-x64
 
-Auto-update features:
-- Checks for updates every 24 hours via GitHub API
+Integrity features:
 - SHA256 checksum verification before installation
 - Atomic update with rollback on failure
 - Windows file locking detection
 
 You can pass the following entries in ls_specific_settings["pascal"]:
+
+Version management:
+- pasls_version: Override the pinned pasls version downloaded by Serena
+  (default: the bundled Serena version).
 
 Environment variables (recommended for CodeTools configuration):
 - pp: Path to FPC compiler driver, must be "fpc.exe" (e.g., "D:/laz32/fpc/bin/i386-win32/fpc.exe").
@@ -59,23 +62,27 @@ import zipfile
 
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection, quote_windows_path
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
+PASLS_VERSION = "v0.2.0"
+
 
 class PascalLanguageServer(SolidLanguageServer):
     """
     Provides Pascal specific instantiation of the LanguageServer class using pasls.
     Contains various configurations and settings specific to Free Pascal and Lazarus.
+    Supports overriding the bundled pasls version via ``pasls_version``.
     """
 
     # URL configuration
-    PASLS_RELEASES_URL = "https://github.com/zen010101/pascal-language-server/releases/latest/download"
-    PASLS_API_URL = "https://api.github.com/repos/zen010101/pascal-language-server/releases/latest"
+    PASLS_VERSION = PASLS_VERSION
+    PASLS_RELEASES_URL = f"https://github.com/zen010101/pascal-language-server/releases/download/{PASLS_VERSION}"
+    PASLS_API_URL = f"https://api.github.com/repos/zen010101/pascal-language-server/releases/tags/{PASLS_VERSION}"
 
     # Update check interval (seconds)
     UPDATE_CHECK_INTERVAL = 86400  # 24 hours
@@ -523,21 +530,18 @@ class PascalLanguageServer(SolidLanguageServer):
                 return False
 
             # 3. Verify SHA256 checksum (critical security step, before extraction)
-            if checksums:
-                expected_sha256 = checksums.get(archive_filename)
-                if expected_sha256:
-                    log.info(f"Verifying SHA256 checksum for {archive_filename}...")
-                    if not cls._verify_checksum(archive_path, expected_sha256):
-                        log.error(f"SHA256 checksum verification FAILED for {archive_filename}")
-                        log.error("Aborting installation due to checksum mismatch - possible security issue!")
-                        try:
-                            os.remove(archive_path)
-                        except OSError:
-                            pass
-                        return False
-                    log.info("SHA256 checksum verified successfully")
-                else:
-                    log.warning(f"No checksum found for {archive_filename} in checksums file")
+            expected_sha256 = checksums.get(archive_filename) if checksums else dep.sha256
+            if expected_sha256:
+                log.info(f"Verifying SHA256 checksum for {archive_filename}...")
+                if not cls._verify_checksum(archive_path, expected_sha256):
+                    log.error(f"SHA256 checksum verification FAILED for {archive_filename}")
+                    log.error("Aborting installation due to checksum mismatch - possible security issue!")
+                    try:
+                        os.remove(archive_path)
+                    except OSError:
+                        pass
+                    return False
+                log.info("SHA256 checksum verified successfully")
             else:
                 log.warning("No checksums available - skipping verification (not recommended for production)")
 
@@ -607,12 +611,18 @@ class PascalLanguageServer(SolidLanguageServer):
     def _setup_runtime_dependencies(cls, solidlsp_settings: SolidLSPSettings) -> str:
         """
         Setup runtime dependencies for Pascal Language Server (pasls).
-        Automatically checks for updates every 24 hours with security verification.
+        Downloads the pinned Serena-supported pasls release with checksum verification.
 
         Returns:
             str: The command to start the pasls server
 
         """
+        pascal_settings = solidlsp_settings.get_ls_specific_settings(Language.PASCAL)
+        pasls_version = pascal_settings.get("pasls_version", PASLS_VERSION)
+        cls.PASLS_VERSION = pasls_version
+        cls.PASLS_RELEASES_URL = f"https://github.com/zen010101/pascal-language-server/releases/download/{pasls_version}"
+        cls.PASLS_API_URL = f"https://api.github.com/repos/zen010101/pascal-language-server/releases/tags/{pasls_version}"
+
         # Check if pasls is already in PATH
         pasls_in_path = shutil.which("pasls")
         if pasls_in_path:
@@ -637,6 +647,7 @@ class PascalLanguageServer(SolidLanguageServer):
                     platform_id="linux-x64",
                     archive_type="gztar",
                     binary_name="pasls",
+                    sha256="517259395b0a385a5e848cf48b967645a984be3dd456118bc08771283a822a5b",
                 ),
                 RuntimeDependency(
                     id="PascalLanguageServer",
@@ -645,6 +656,7 @@ class PascalLanguageServer(SolidLanguageServer):
                     platform_id="linux-arm64",
                     archive_type="gztar",
                     binary_name="pasls",
+                    sha256="cb4986941cfdcf9cb74ece6bbb53a443390a908e880108a37f4ccf82b2d6c502",
                 ),
                 RuntimeDependency(
                     id="PascalLanguageServer",
@@ -653,6 +665,7 @@ class PascalLanguageServer(SolidLanguageServer):
                     platform_id="osx-x64",
                     archive_type="zip",
                     binary_name="pasls",
+                    sha256="0abfcd98f63f77dba74094339a40d4407b69317c1c77b13a26b9b7dbdfd885f1",
                 ),
                 RuntimeDependency(
                     id="PascalLanguageServer",
@@ -661,6 +674,7 @@ class PascalLanguageServer(SolidLanguageServer):
                     platform_id="osx-arm64",
                     archive_type="zip",
                     binary_name="pasls",
+                    sha256="d4c2411e406af96ceae12b11e77fdb0c684ca15a68bfd8b4f9c6fe1fbdf515a7",
                 ),
                 RuntimeDependency(
                     id="PascalLanguageServer",
@@ -669,6 +683,7 @@ class PascalLanguageServer(SolidLanguageServer):
                     platform_id="win-x64",
                     archive_type="zip",
                     binary_name="pasls.exe",
+                    sha256="1493c31552e6f90a59800b2d44669e01fc4551d3647f3cea5dd105a9f6bc73e5",
                 ),
             ]
         )

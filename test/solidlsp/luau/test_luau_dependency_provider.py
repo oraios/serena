@@ -1,7 +1,5 @@
 """Tests for the Luau language server dependency provider."""
 
-import io
-import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -19,23 +17,6 @@ def _make_provider(
         custom_settings=SolidLSPSettings.CustomLSSettings(custom_settings or {}),
         ls_resources_dir=str(tmp_path),
     )
-
-
-class _FakeResponse:
-    def __init__(self, content: bytes) -> None:
-        self.content = content
-
-    def raise_for_status(self) -> None:
-        return
-
-    def iter_content(self, chunk_size: int = 8192):
-        yield self.content
-
-    def __enter__(self) -> "_FakeResponse":
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> None:
-        return None
 
 
 @pytest.mark.luau
@@ -110,13 +91,24 @@ class TestLuauDependencyProvider:
     def test_download_luau_lsp_extracts_binary_into_ls_resources_dir(self, tmp_path: Path) -> None:
         provider = _make_provider(tmp_path)
 
-        archive = io.BytesIO()
-        with zipfile.ZipFile(archive, "w") as zip_file:
-            zip_file.writestr("nested/luau-lsp", "#!/bin/sh\n")
+        def fake_extract(
+            url: str,
+            target_path: str,
+            archive_type: str,
+            expected_sha256: str | None = None,
+            allowed_hosts: tuple[str, ...] | list[str] | None = None,
+        ) -> None:
+            del url, archive_type, expected_sha256, allowed_hosts
+            nested_dir = Path(target_path) / "nested"
+            nested_dir.mkdir(parents=True, exist_ok=True)
+            (nested_dir / "luau-lsp").write_text("#!/bin/sh\n", encoding="utf-8")
 
         with patch("solidlsp.language_servers.luau_lsp.platform.system", return_value="Linux"):
             with patch("solidlsp.language_servers.luau_lsp.platform.machine", return_value="aarch64"):
-                with patch("solidlsp.language_servers.luau_lsp.requests.get", return_value=_FakeResponse(archive.getvalue())):
+                with patch(
+                    "solidlsp.language_servers.luau_lsp.FileUtils.download_and_extract_archive_verified",
+                    side_effect=fake_extract,
+                ):
                     binary_path = provider._download_luau_lsp()
 
         resolved_binary = Path(binary_path)
@@ -127,10 +119,16 @@ class TestLuauDependencyProvider:
     def test_download_roblox_support_files_writes_into_ls_resources_dir(self, tmp_path: Path) -> None:
         provider = _make_provider(tmp_path)
 
-        with patch(
-            "solidlsp.language_servers.luau_lsp.requests.get",
-            side_effect=[_FakeResponse(b"types"), _FakeResponse(b"docs")],
-        ):
+        def fake_download(
+            url: str, target_path: str, expected_sha256: str | None = None, allowed_hosts: tuple[str, ...] | list[str] | None = None
+        ) -> None:
+            del expected_sha256, allowed_hosts
+            if "type-definitions" in url:
+                Path(target_path).write_bytes(b"types")
+            else:
+                Path(target_path).write_bytes(b"docs")
+
+        with patch("solidlsp.language_servers.luau_lsp.FileUtils.download_file_verified", side_effect=fake_download):
             definitions_path, docs_path = provider._download_roblox_support_files("LocalUserSecurity")
 
         assert definitions_path == str(tmp_path / "globalTypes.LocalUserSecurity.d.luau")
@@ -141,7 +139,10 @@ class TestLuauDependencyProvider:
     def test_download_standard_docs_writes_into_ls_resources_dir(self, tmp_path: Path) -> None:
         provider = _make_provider(tmp_path, {"platform": "standard"})
 
-        with patch("solidlsp.language_servers.luau_lsp.requests.get", return_value=_FakeResponse(b"docs")):
+        with patch(
+            "solidlsp.language_servers.luau_lsp.FileUtils.download_file_verified",
+            side_effect=lambda url, target_path, expected_sha256=None, allowed_hosts=None: Path(target_path).write_bytes(b"docs"),
+        ):
             docs_path = provider._download_standard_docs()
 
         assert docs_path == str(tmp_path / "luau-en-us.json")

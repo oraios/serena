@@ -1,5 +1,9 @@
 """
 Provides Lua specific instantiation of the LanguageServer class using lua-language-server.
+
+You can pass the following entries in ``ls_specific_settings["lua"]``:
+    - lua_language_server_version: Override the pinned lua-language-server version
+      downloaded by Serena (default: the bundled Serena version).
 """
 
 import logging
@@ -7,20 +11,28 @@ import os
 import pathlib
 import platform
 import shutil
-import tarfile
-import zipfile
 from pathlib import Path
 
-import requests
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_utils import FileUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
+
+LUA_LS_VERSION = "3.15.0"
+LUA_LS_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
+LUA_LS_SHA256_BY_ASSET = {
+    "lua-language-server-3.15.0-linux-x64.tar.gz": "4877b874c52fb7587707898da9026cc3a6c854d9bbab115ef49ac4e6a1b88007",
+    "lua-language-server-3.15.0-linux-arm64.tar.gz": "7dff8edfed4f34cf6325ff384791287d95f9a8dd9615a5279c7c6af81cf8c45d",
+    "lua-language-server-3.15.0-darwin-x64.tar.gz": "01d28a31e264434e51662814a68f584af068393caecfa158c4df5f7fdc3ca2f7",
+    "lua-language-server-3.15.0-darwin-arm64.tar.gz": "050f5f493f65112afc116e31281a9f73918546782d3696485dc052724838f58b",
+    "lua-language-server-3.15.0-win32-x64.zip": "76a10c05e8c947a448f00a61acead4240484cd1e2e8c66d54401c67d99b77535",
+}
 
 
 class LuaLanguageServer(SolidLanguageServer):
@@ -37,7 +49,7 @@ class LuaLanguageServer(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in [".luarocks", "lua_modules", "node_modules", "build", "dist", ".cache"]
 
     @staticmethod
-    def _get_lua_ls_path() -> str | None:
+    def _get_lua_ls_path(solidlsp_settings: SolidLSPSettings | None = None) -> str | None:
         """Get the path to lua-language-server executable."""
         # First check if it's in PATH
         lua_ls = shutil.which("lua-language-server")
@@ -48,17 +60,24 @@ class LuaLanguageServer(SolidLanguageServer):
         home = Path.home()
         possible_paths = [
             home / ".local" / "bin" / "lua-language-server",
-            home / ".serena" / "language_servers" / "lua" / "bin" / "lua-language-server",
             Path("/usr/local/bin/lua-language-server"),
             Path("/opt/lua-language-server/bin/lua-language-server"),
         ]
+
+        if solidlsp_settings is not None:
+            ls_resource_dir = Path(LuaLanguageServer.ls_resources_dir(solidlsp_settings)) / "lua"
+            possible_paths.extend(
+                [
+                    ls_resource_dir / "bin" / "lua-language-server",
+                    ls_resource_dir / "bin" / "lua-language-server.exe",
+                ]
+            )
 
         # Add Windows-specific paths
         if platform.system() == "Windows":
             possible_paths.extend(
                 [
                     home / "AppData" / "Local" / "lua-language-server" / "bin" / "lua-language-server.exe",
-                    home / ".serena" / "language_servers" / "lua" / "bin" / "lua-language-server.exe",
                 ]
             )
 
@@ -69,11 +88,12 @@ class LuaLanguageServer(SolidLanguageServer):
         return None
 
     @staticmethod
-    def _download_lua_ls() -> str:
+    def _download_lua_ls(solidlsp_settings: SolidLSPSettings) -> str:
         """Download and install lua-language-server if not present."""
+        lua_settings = solidlsp_settings.get_ls_specific_settings(Language.LUA)
+        lua_ls_version = lua_settings.get("lua_language_server_version", LUA_LS_VERSION)
         system = platform.system()
         machine = platform.machine().lower()
-        lua_ls_version = "3.15.0"
 
         # Map platform and architecture to download URL
         if system == "Linux":
@@ -100,31 +120,18 @@ class LuaLanguageServer(SolidLanguageServer):
 
         download_url = f"https://github.com/LuaLS/lua-language-server/releases/download/{lua_ls_version}/{download_name}"
 
-        # Create installation directory
-        install_dir = Path.home() / ".serena" / "language_servers" / "lua"
+        install_dir = Path(LuaLanguageServer.ls_resources_dir(solidlsp_settings)) / "lua"
         install_dir.mkdir(parents=True, exist_ok=True)
 
-        # Download the file
-        print(f"Downloading lua-language-server from {download_url}...")
-        response = requests.get(download_url, stream=True)
-        response.raise_for_status()
-
-        # Save and extract
-        download_path = install_dir / download_name
-        with open(download_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-
-        print(f"Extracting lua-language-server to {install_dir}...")
-        if download_name.endswith(".tar.gz"):
-            with tarfile.open(download_path, "r:gz") as tar:
-                tar.extractall(install_dir)
-        elif download_name.endswith(".zip"):
-            with zipfile.ZipFile(download_path, "r") as zip_ref:
-                zip_ref.extractall(install_dir)
-
-        # Clean up download file
-        download_path.unlink()
+        log.info("Downloading lua-language-server from %s", download_url)
+        archive_type = "gztar" if download_name.endswith(".tar.gz") else "zip"
+        FileUtils.download_and_extract_archive_verified(
+            download_url,
+            str(install_dir),
+            archive_type,
+            expected_sha256=LUA_LS_SHA256_BY_ASSET.get(download_name) if lua_ls_version == LUA_LS_VERSION else None,
+            allowed_hosts=LUA_LS_ALLOWED_HOSTS,
+        )
 
         # Make executable on Unix systems
         if system != "Windows":
@@ -140,22 +147,22 @@ class LuaLanguageServer(SolidLanguageServer):
         raise RuntimeError("Failed to find lua-language-server executable after extraction")
 
     @staticmethod
-    def _setup_runtime_dependency() -> str:
+    def _setup_runtime_dependency(solidlsp_settings: SolidLSPSettings) -> str:
         """
         Check if required Lua runtime dependencies are available.
         Downloads lua-language-server if not present.
         """
-        lua_ls_path = LuaLanguageServer._get_lua_ls_path()
+        lua_ls_path = LuaLanguageServer._get_lua_ls_path(solidlsp_settings)
 
         if not lua_ls_path:
-            print("lua-language-server not found. Downloading...")
-            lua_ls_path = LuaLanguageServer._download_lua_ls()
-            print(f"lua-language-server installed at: {lua_ls_path}")
+            log.info("lua-language-server not found. Downloading...")
+            lua_ls_path = LuaLanguageServer._download_lua_ls(solidlsp_settings)
+            log.info("lua-language-server installed at: %s", lua_ls_path)
 
         return lua_ls_path
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        lua_ls_path = self._setup_runtime_dependency()
+        lua_ls_path = self._setup_runtime_dependency(solidlsp_settings)
 
         super().__init__(
             config, repository_root_path, ProcessLaunchInfo(cmd=lua_ls_path, cwd=repository_root_path), "lua", solidlsp_settings
