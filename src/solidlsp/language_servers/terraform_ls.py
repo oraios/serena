@@ -6,7 +6,7 @@ from typing import cast
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import PathUtils, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -16,10 +16,16 @@ from .common import RuntimeDependency, RuntimeDependencyCollection
 
 log = logging.getLogger(__name__)
 
+TERRAFORM_LS_ALLOWED_HOSTS = ("releases.hashicorp.com",)
+
 
 class TerraformLS(SolidLanguageServer):
     """
     Provides Terraform specific instantiation of the LanguageServer class using terraform-ls.
+
+    You can pass the following entries in ``ls_specific_settings["terraform"]``:
+        - terraform_ls_version: Override the pinned terraform-ls version downloaded
+          by Serena (default: the bundled Serena version).
     """
 
     @override
@@ -92,48 +98,60 @@ class TerraformLS(SolidLanguageServer):
         Downloads and installs terraform-ls if not already present.
         """
         cls._ensure_tf_command_available()
+        terraform_settings = solidlsp_settings.get_ls_specific_settings(Language.TERRAFORM)
+        terraform_ls_version = terraform_settings.get("terraform_ls_version", "0.36.5")
         platform_id = PlatformUtils.get_platform_id()
         deps = RuntimeDependencyCollection(
             [
                 RuntimeDependency(
                     id="TerraformLS",
                     description="terraform-ls for macOS (ARM64)",
-                    url="https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_darwin_arm64.zip",
+                    url=f"https://releases.hashicorp.com/terraform-ls/{terraform_ls_version}/terraform-ls_{terraform_ls_version}_darwin_arm64.zip",
                     platform_id="osx-arm64",
                     archive_type="zip",
                     binary_name="terraform-ls",
+                    sha256="fee8743aa71fe2d8b0b9b91283b844cfa57d58457306a62e53a8f38d143cec8c" if terraform_ls_version == "0.36.5" else None,
+                    allowed_hosts=TERRAFORM_LS_ALLOWED_HOSTS,
                 ),
                 RuntimeDependency(
                     id="TerraformLS",
                     description="terraform-ls for macOS (x64)",
-                    url="https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_darwin_amd64.zip",
+                    url=f"https://releases.hashicorp.com/terraform-ls/{terraform_ls_version}/terraform-ls_{terraform_ls_version}_darwin_amd64.zip",
                     platform_id="osx-x64",
                     archive_type="zip",
                     binary_name="terraform-ls",
+                    sha256="17c5c480f8eec7e528292565f1c05d5097a41edf7ef8ee2a9f3a18d288a1415a" if terraform_ls_version == "0.36.5" else None,
+                    allowed_hosts=TERRAFORM_LS_ALLOWED_HOSTS,
                 ),
                 RuntimeDependency(
                     id="TerraformLS",
                     description="terraform-ls for Linux (ARM64)",
-                    url="https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_linux_arm64.zip",
+                    url=f"https://releases.hashicorp.com/terraform-ls/{terraform_ls_version}/terraform-ls_{terraform_ls_version}_linux_arm64.zip",
                     platform_id="linux-arm64",
                     archive_type="zip",
                     binary_name="terraform-ls",
+                    sha256="724f45029f32d02d88b1952c7d1526c59fc8cd5dae49e31b9fed676a83f6cae7" if terraform_ls_version == "0.36.5" else None,
+                    allowed_hosts=TERRAFORM_LS_ALLOWED_HOSTS,
                 ),
                 RuntimeDependency(
                     id="TerraformLS",
                     description="terraform-ls for Linux (x64)",
-                    url="https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_linux_amd64.zip",
+                    url=f"https://releases.hashicorp.com/terraform-ls/{terraform_ls_version}/terraform-ls_{terraform_ls_version}_linux_amd64.zip",
                     platform_id="linux-x64",
                     archive_type="zip",
                     binary_name="terraform-ls",
+                    sha256="37e645cc54fd03e863157e2a3e773e7a5ff1d6cb3d045e4c20860cac1f550a44" if terraform_ls_version == "0.36.5" else None,
+                    allowed_hosts=TERRAFORM_LS_ALLOWED_HOSTS,
                 ),
                 RuntimeDependency(
                     id="TerraformLS",
                     description="terraform-ls for Windows (x64)",
-                    url="https://releases.hashicorp.com/terraform-ls/0.36.5/terraform-ls_0.36.5_windows_amd64.zip",
+                    url=f"https://releases.hashicorp.com/terraform-ls/{terraform_ls_version}/terraform-ls_{terraform_ls_version}_windows_amd64.zip",
                     platform_id="win-x64",
                     archive_type="zip",
                     binary_name="terraform-ls.exe",
+                    sha256="a9223462cac9e1c0e6ba33043fbf9fb4483609b6970b5681a6306b04366698ec" if terraform_ls_version == "0.36.5" else None,
+                    allowed_hosts=TERRAFORM_LS_ALLOWED_HOSTS,
                 ),
             ]
         )

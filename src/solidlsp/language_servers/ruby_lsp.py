@@ -1,6 +1,11 @@
 """
 Ruby LSP Language Server implementation using Shopify's ruby-lsp.
 Provides modern Ruby language server capabilities with improved performance.
+
+You can pass the following entries in ``ls_specific_settings["ruby"]``:
+    - ruby_lsp_version: Override the pinned ruby-lsp gem version installed by
+      Serena when no project-local or global ruby-lsp is already available
+      (default: the bundled Serena version).
 """
 
 import json
@@ -14,18 +19,21 @@ import threading
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams, InitializeResult
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
+RUBY_LSP_VERSION = "0.26.8"
+
 
 class RubyLsp(SolidLanguageServer):
     """
     Provides Ruby specific instantiation of the LanguageServer class using ruby-lsp.
     Contains various configurations and settings specific to Ruby with modern LSP features.
+    Supports overriding the bundled gem version via ``ruby_lsp_version``.
     """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
@@ -33,7 +41,7 @@ class RubyLsp(SolidLanguageServer):
         Creates a RubyLsp instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        ruby_lsp_executable = self._setup_runtime_dependencies(config, repository_root_path)
+        ruby_lsp_executable = self._setup_runtime_dependencies(config, repository_root_path, solidlsp_settings)
         super().__init__(
             config, repository_root_path, ProcessLaunchInfo(cmd=ruby_lsp_executable, cwd=repository_root_path), "ruby", solidlsp_settings
         )
@@ -92,11 +100,15 @@ class RubyLsp(SolidLanguageServer):
             return shutil.which(executable_name)
 
     @staticmethod
-    def _setup_runtime_dependencies(config: LanguageServerConfig, repository_root_path: str) -> list[str]:
+    def _setup_runtime_dependencies(
+        config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ) -> list[str]:
         """
         Setup runtime dependencies for ruby-lsp and return the command list to start the server.
-        Installation strategy: Bundler project > global ruby-lsp > gem install ruby-lsp
+        Installation strategy: Bundler project > global ruby-lsp > gem install ruby-lsp at the pinned version
         """
+        ls_specific_settings = solidlsp_settings.get_ls_specific_settings(Language.RUBY)
+        ruby_lsp_version = ls_specific_settings.get("ruby_lsp_version", RUBY_LSP_VERSION)
         # Detect rbenv-managed Ruby environment
         # When .ruby-version exists, it indicates the project uses rbenv for version management.
         # rbenv automatically reads .ruby-version to determine which Ruby version to use.
@@ -215,7 +227,12 @@ class RubyLsp(SolidLanguageServer):
         # Try to install ruby-lsp globally
         log.info("ruby-lsp not found, attempting to install globally...")
         try:
-            subprocess.run(["gem", "install", "ruby-lsp"], check=True, capture_output=True, cwd=repository_root_path)
+            subprocess.run(
+                ["gem", "install", "ruby-lsp", "-v", ruby_lsp_version],
+                check=True,
+                capture_output=True,
+                cwd=repository_root_path,
+            )
             log.info("Successfully installed ruby-lsp globally")
             # Find the newly installed ruby-lsp executable
             ruby_lsp_path = RubyLsp._find_executable_with_extensions("ruby-lsp")
@@ -226,9 +243,11 @@ class RubyLsp(SolidLanguageServer):
                 raise RuntimeError(
                     f"Failed to install ruby-lsp globally: {error_msg}\n"
                     "For Bundler projects, please add 'gem \"ruby-lsp\"' to your Gemfile and run 'bundle install'.\n"
-                    "Alternatively, install globally: gem install ruby-lsp"
+                    f"Alternatively, install globally: gem install ruby-lsp -v {ruby_lsp_version}"
                 ) from e
-            raise RuntimeError(f"Failed to install ruby-lsp: {error_msg}\nPlease try installing manually: gem install ruby-lsp") from e
+            raise RuntimeError(
+                f"Failed to install ruby-lsp: {error_msg}\nPlease try installing manually: gem install ruby-lsp -v {ruby_lsp_version}"
+            ) from e
 
     @staticmethod
     def _detect_rails_project(repository_root_path: str) -> bool:

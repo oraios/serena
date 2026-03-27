@@ -12,7 +12,7 @@ from typing import Any, ClassVar
 
 from overrides import override
 
-from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
+from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
@@ -162,13 +162,19 @@ class AnsibleLanguageServer(SolidLanguageServer):
             assert is_node_installed, "node is not installed or isn't in PATH. Please install Node.js and try again."
             is_npm_installed = shutil.which("npm") is not None
             assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
+            ansible_language_server_version = self._custom_settings.get("ansible_language_server_version", "1.2.3")
+            npm_registry = self._custom_settings.get("npm_registry")
 
             deps = RuntimeDependencyCollection(
                 [
                     RuntimeDependency(
                         id="ansible-language-server",
                         description="Ansible Language Server (@ansible/ansible-language-server)",
-                        command="npm install --prefix ./ @ansible/ansible-language-server@1.2.3",
+                        command=build_npm_install_command(
+                            "@ansible/ansible-language-server",
+                            ansible_language_server_version,
+                            npm_registry,
+                        ),
                         platform_id="any",
                     ),
                 ]

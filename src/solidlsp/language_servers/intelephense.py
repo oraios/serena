@@ -17,7 +17,7 @@ from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams
 from solidlsp.settings import SolidLSPSettings
 
 from ..lsp_protocol_handler import lsp_types
-from .common import RuntimeDependency, RuntimeDependencyCollection
+from .common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +59,8 @@ class Intelephense(SolidLanguageServer):
             assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
             is_npm_installed = shutil.which("npm") is not None
             assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
+            intelephense_version = self._custom_settings.get("intelephense_version", "1.14.4")
+            npm_registry = self._custom_settings.get("npm_registry")
 
             # Install intelephense if not already installed
             intelephense_ls_dir = os.path.join(self._ls_resources_dir, "php-lsp")
@@ -69,7 +71,7 @@ class Intelephense(SolidLanguageServer):
                     [
                         RuntimeDependency(
                             id="intelephense",
-                            command="npm install --prefix ./ intelephense@1.14.4",
+                            command=build_npm_install_command("intelephense", intelephense_version, npm_registry),
                             platform_id="any",
                         )
                     ]

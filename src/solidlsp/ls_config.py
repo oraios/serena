@@ -87,6 +87,8 @@ class Language(str, Enum):
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
     PYTHON_JEDI = "python_jedi"
     """Jedi language server for Python (instead of pyright, which is the default)"""
+    PYTHON_TY = "python_ty"
+    """Ty language server for Python (instead of pyright, which is the default)."""
     CSHARP_OMNISHARP = "csharp_omnisharp"
     """OmniSharp language server for C# (instead of the default csharp-ls by microsoft).
     Currently has problems with finding references, and generally seems less stable and performant.
@@ -154,6 +156,7 @@ class Language(str, Enum):
             self.ANSIBLE,
             self.TYPESCRIPT_VTS,
             self.PYTHON_JEDI,
+            self.PYTHON_TY,
             self.CSHARP_OMNISHARP,
             self.RUBY_SOLARGRAPH,
             self.PHP_PHPACTOR,
@@ -187,7 +190,7 @@ class Language(str, Enum):
 
     def get_source_fn_matcher(self) -> FilenameMatcher:
         match self:
-            case self.PYTHON | self.PYTHON_JEDI:
+            case self.PYTHON | self.PYTHON_JEDI | self.PYTHON_TY:
                 return FilenameMatcher("*.py", "*.pyi")
             case self.JAVA:
                 return FilenameMatcher("*.java")
@@ -321,6 +324,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.jedi_server import JediServer
 
                 return JediServer
+            case self.PYTHON_TY:
+                from solidlsp.language_servers.ty_server import TyLanguageServer
+
+                return TyLanguageServer
             case self.JAVA:
                 from solidlsp.language_servers.eclipse_jdtls import EclipseJDTLS
 

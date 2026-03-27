@@ -10,6 +10,8 @@ Requirements:
       or it will be automatically downloaded from GitHub releases.
 
 Advanced settings via ls_specific_settings["luau"]:
+    - luau_lsp_version: Override the pinned luau-lsp version downloaded by Serena
+      (default: the bundled Serena version)
     - platform: "roblox" (default) or "standard"
     - roblox_security_level: "None", "PluginSecurity" (default),
       "LocalUserSecurity", or "RobloxScriptSecurity"
@@ -23,14 +25,13 @@ import pathlib
 import platform
 import shutil
 import threading
-import zipfile
 from pathlib import Path
 
-import requests
 from overrides import override
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_utils import FileUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
@@ -38,6 +39,13 @@ log = logging.getLogger(__name__)
 
 # Pin to a known stable release
 LUAU_LSP_VERSION = "1.63.0"
+LUAU_LSP_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
+LUAU_LSP_SHA256_BY_ASSET = {
+    "luau-lsp-linux-x86_64.zip": "e4b633ad9a2c15437f60f9e721263f79aa0da606867d8458f0e159a325bf2db8",
+    "luau-lsp-linux-arm64.zip": "355be010f337a6772df6255c92e1fb28a59d194abe5c570453f4186472244355",
+    "luau-lsp-macos.zip": "01c1d6dd5fee27295b2968915dabb08c192192c46d9fe9c97bf31a130c96b8cb",
+    "luau-lsp-win64.zip": "eea596d47dc1c94a61ba1b78e6472bb4445bc3309780751515e6ab0a0abba57d",
+}
 
 # Luau built-in docs CDN
 LUAU_DOCS_URL = "https://luau-lsp.pages.dev/api-docs/luau-en-us.json"
@@ -51,6 +59,7 @@ SUPPORTED_ROBLOX_SECURITY_LEVELS = {
     "LocalUserSecurity",
     "RobloxScriptSecurity",
 }
+LUAU_DOCS_ALLOWED_HOSTS = ("luau-lsp.pages.dev",)
 
 
 class LuauLanguageServer(SolidLanguageServer):
@@ -96,24 +105,18 @@ class LuauLanguageServer(SolidLanguageServer):
             if binary_path is not None:
                 return binary_path
 
+            luau_lsp_version = self._custom_settings.get("luau_lsp_version", LUAU_LSP_VERSION)
             asset_name = self._get_luau_lsp_asset_name()
-            download_url = f"https://github.com/JohnnyMorganz/luau-lsp/releases/download/{LUAU_LSP_VERSION}/{asset_name}"
-            download_path = install_dir / asset_name
+            download_url = f"https://github.com/JohnnyMorganz/luau-lsp/releases/download/{luau_lsp_version}/{asset_name}"
 
-            log.info("Downloading luau-lsp %s from %s", LUAU_LSP_VERSION, download_url)
-            with requests.get(download_url, stream=True, timeout=60) as response:
-                response.raise_for_status()
-                with open(download_path, "wb") as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-
-            log.info("Extracting luau-lsp to %s", install_dir)
-            with zipfile.ZipFile(download_path, "r") as zip_ref:
-                zip_ref.extractall(install_dir)
-
-            if download_path.exists():
-                download_path.unlink()
+            log.info("Downloading luau-lsp %s from %s", luau_lsp_version, download_url)
+            FileUtils.download_and_extract_archive_verified(
+                download_url,
+                str(install_dir),
+                "zip",
+                expected_sha256=LUAU_LSP_SHA256_BY_ASSET.get(asset_name) if luau_lsp_version == LUAU_LSP_VERSION else None,
+                allowed_hosts=LUAU_LSP_ALLOWED_HOSTS,
+            )
 
             binary_path = self._find_existing_binary(install_dir)
             if binary_path is None:
@@ -164,9 +167,7 @@ class LuauLanguageServer(SolidLanguageServer):
 
             try:
                 log.info("Downloading %s from %s", description, url)
-                response = requests.get(url, timeout=30)
-                response.raise_for_status()
-                path.write_bytes(response.content)
+                FileUtils.download_file_verified(url, str(path), allowed_hosts=LUAU_DOCS_ALLOWED_HOSTS)
                 return str(path)
             except Exception as exc:
                 log.warning("Failed to download %s: %s", description, exc)
