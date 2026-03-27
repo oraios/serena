@@ -149,4 +149,5 @@ symbol_info_budget: 10
 project_serena_folder_location: "$projectDir/.serena"
 
 # the list of registered project paths (updated automatically).
+# Supports environment variable and home expansion (e.g. "$HOME/work/my-project" or "~/work/my-project").
 projects: []

@@ -145,6 +145,30 @@ class TestProjectConfig:
         assert is_complete, "Project template YAML is incomplete; all fields must be present (with descriptions)."
 
 
+class TestSerenaConfigProjectPathExpansion:
+    def test_from_config_file_expands_environment_variables_in_projects(self, monkeypatch: pytest.MonkeyPatch):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            project_root = temp_path / "project"
+            project_root.mkdir()
+
+            project_config = ProjectConfig(project_name="project", languages=[Language.PYTHON])
+            project_config.save(ProjectConfig.default_project_yml_path(str(project_root)))
+
+            config_file_path = temp_path / "serena_config.yml"
+            config_file_path.write_text('projects:\n  - "$SERENA_TEST_PROJECT_ROOT"\n', encoding="utf-8")
+
+            monkeypatch.setenv("SERENA_TEST_PROJECT_ROOT", str(project_root))
+            monkeypatch.setattr(
+                SerenaConfig,
+                "_determine_config_file_path",
+                classmethod(lambda cls: str(config_file_path)),
+            )
+
+            config = SerenaConfig.from_config_file()
+            assert config.project_paths == [str(project_root.resolve())]
+
+
 class TestProjectConfigLanguageBackend:
     """Tests for the per-project language_backend field."""
 

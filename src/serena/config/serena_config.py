@@ -828,7 +828,7 @@ class SerenaConfig(SharedConfig):
             raise SerenaConfigError("`projects` key not found in Serena configuration. Please update your `serena_config.yml` file.")
         instance.projects = []
         for path in loaded_commented_yaml["projects"]:
-            path = Path(path).resolve()
+            path = Path(os.path.expandvars(os.path.expanduser(path))).resolve()
             try:
                 path_exists = path.exists()
             except OSError as e:
@@ -1055,7 +1055,7 @@ class SerenaConfig(SharedConfig):
     def _resolve_serena_folder_location(template: str, placeholders: dict[str, str]) -> str:
         """
         Resolves a folder location template by replacing known ``$placeholder`` tokens
-        and raising on any unrecognised ones.
+        and environment variable tokens, raising on any unrecognised ones.
 
         :param template: the template string (e.g. ``"$projectDir/.serena"``)
         :param placeholders: mapping from placeholder name (without ``$``) to replacement value
@@ -1064,15 +1064,21 @@ class SerenaConfig(SharedConfig):
         """
 
         def _replace(match: re.Match[str]) -> str:
-            name = match.group(1)
-            if name not in placeholders:
-                raise SerenaConfigError(
-                    f"Unknown placeholder '${name}' in project_serena_folder_location. "
-                    f"Supported placeholders: {', '.join('$' + k for k in placeholders)}"
-                )
-            return placeholders[name]
+            name = match.group(1) or match.group(2)
+            if name in placeholders:
+                return placeholders[name]
 
-        result = re.sub(r"\$([A-Za-z_]\w*)", _replace, template)
+            env_value = os.environ.get(name)
+            if env_value is not None:
+                return env_value
+
+            raise SerenaConfigError(
+                f"Unknown placeholder '${name}' in project_serena_folder_location. "
+                f"Supported placeholders: {', '.join('$' + k for k in placeholders)} "
+                "or existing environment variables."
+            )
+
+        result = re.sub(r"\$(?:{([A-Za-z_]\w*)}|([A-Za-z_]\w*))", _replace, template)
         return os.path.abspath(result)
 
     def get_configured_project_serena_folder(self, project_root: str | Path) -> str:
