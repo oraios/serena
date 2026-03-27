@@ -10,7 +10,7 @@ import pytest
 from click.testing import CliRunner
 
 from serena.cli import ProjectCommands, TopLevelCommands, find_project_root
-from serena.config.serena_config import ProjectConfig
+from serena.config.serena_config import ProjectConfig, SerenaConfig
 
 pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
 
@@ -51,6 +51,14 @@ def cli_runner():
     return CliRunner()
 
 
+def _project_yml_path(project_root: str) -> str:
+    return SerenaConfig.from_config_file().get_project_yml_location(project_root)
+
+
+def _project_cache_dir(project_root: str) -> str:
+    return os.path.join(SerenaConfig.from_config_file().get_project_serena_folder(project_root), "cache")
+
+
 class TestProjectCreate:
     """Tests for 'project create' command."""
 
@@ -62,7 +70,7 @@ class TestProjectCreate:
         assert "python" in result.output.lower()
 
         # Verify project.yml was created
-        yml_path = os.path.join(temp_project_dir, ".serena", "project.yml")
+        yml_path = _project_yml_path(temp_project_dir)
         assert os.path.exists(yml_path), f"project.yml not found at {yml_path}"
 
     def test_create_auto_detect_language(self, cli_runner, temp_project_dir_with_python_file):
@@ -73,7 +81,7 @@ class TestProjectCreate:
         assert "python" in result.output.lower()
 
         # Verify project.yml was created
-        yml_path = os.path.join(temp_project_dir_with_python_file, ".serena", "project.yml")
+        yml_path = _project_yml_path(temp_project_dir_with_python_file)
         assert os.path.exists(yml_path)
 
     def test_create_with_name(self, cli_runner, temp_project_dir):
@@ -83,7 +91,7 @@ class TestProjectCreate:
         assert "Generated project" in result.output
 
         # Verify project.yml was created
-        yml_path = os.path.join(temp_project_dir, ".serena", "project.yml")
+        yml_path = _project_yml_path(temp_project_dir)
         assert os.path.exists(yml_path)
 
     def test_create_with_language(self, cli_runner, temp_project_dir):
@@ -134,11 +142,11 @@ class TestProjectCreate:
         assert "Indexing project" in result.output
 
         # Verify project.yml was created
-        yml_path = os.path.join(temp_project_dir_with_python_file, ".serena", "project.yml")
+        yml_path = _project_yml_path(temp_project_dir_with_python_file)
         assert os.path.exists(yml_path)
 
         # Verify cache directory was created (proof of indexing)
-        cache_dir = os.path.join(temp_project_dir_with_python_file, ".serena", "cache")
+        cache_dir = _project_cache_dir(temp_project_dir_with_python_file)
         assert os.path.exists(cache_dir), "Cache directory should exist after indexing"
 
     def test_create_without_index_flag(self, cli_runner, temp_project_dir):
@@ -149,7 +157,7 @@ class TestProjectCreate:
         assert "Indexing" not in result.output
 
         # Verify cache directory was NOT created
-        cache_dir = os.path.join(temp_project_dir, ".serena", "cache")
+        cache_dir = _project_cache_dir(temp_project_dir)
         assert not os.path.exists(cache_dir), "Cache directory should not exist without --index"
 
 
@@ -164,7 +172,7 @@ class TestProjectIndex:
         assert "Auto-creating" in result.output or "Indexing" in result.output
 
         # Verify project.yml was auto-created
-        yml_path = os.path.join(temp_project_dir_with_python_file, ".serena", "project.yml")
+        yml_path = _project_yml_path(temp_project_dir_with_python_file)
         assert os.path.exists(yml_path), "project.yml should be auto-created"
 
     def test_index_with_explicit_language(self, cli_runner, temp_project_dir):
@@ -176,7 +184,7 @@ class TestProjectIndex:
         # Should succeed even without source files if language is explicit
         assert result.exit_code == 0, f"Command failed: {result.output}"
 
-        yml_path = os.path.join(temp_project_dir, ".serena", "project.yml")
+        yml_path = _project_yml_path(temp_project_dir)
         assert os.path.exists(yml_path)
 
     def test_index_with_language_auto_creates(self, cli_runner, temp_project_dir):
@@ -187,7 +195,7 @@ class TestProjectIndex:
         )
         assert result.exit_code == 0 or "Indexing" in result.output
 
-        yml_path = os.path.join(temp_project_dir, ".serena", "project.yml")
+        yml_path = _project_yml_path(temp_project_dir)
         assert os.path.exists(yml_path)
 
     def test_index_is_equivalent_to_create_with_index(self, cli_runner, temp_project_dir_with_python_file):
@@ -216,12 +224,12 @@ class TestProjectIndex:
             assert result2.exit_code == 0, f"index failed: {result2.output}"
 
             # Both should create project.yml
-            assert os.path.exists(os.path.join(dir1, ".serena", "project.yml"))
-            assert os.path.exists(os.path.join(dir2, ".serena", "project.yml"))
+            assert os.path.exists(_project_yml_path(dir1))
+            assert os.path.exists(_project_yml_path(dir2))
 
             # Both should create cache (proof of indexing)
-            assert os.path.exists(os.path.join(dir1, ".serena", "cache"))
-            assert os.path.exists(os.path.join(dir2, ".serena", "cache"))
+            assert os.path.exists(_project_cache_dir(dir1))
+            assert os.path.exists(_project_cache_dir(dir2))
         finally:
             # Windows-safe cleanup: wait for file handles to be released
             if os.name == "nt":

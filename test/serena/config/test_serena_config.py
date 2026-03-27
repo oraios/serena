@@ -379,6 +379,28 @@ class TestGetConfiguredProjectSerenaFolder:
         )
         assert config.project_serena_folder_location == DEFAULT_PROJECT_SERENA_FOLDER_LOCATION
 
+    def test_expands_home_variable_lowercase(self):
+        config = SerenaConfig(
+            gui_log_window=False,
+            web_dashboard=False,
+            project_serena_folder_location="$home/.serena/$projectFolderName",
+        )
+        result = config.get_configured_project_serena_folder("/home/user/myproject")
+        expected = os.path.abspath(str(Path.home() / ".serena" / "myproject"))
+        assert result == expected
+
+    def test_expands_environment_variable(self, monkeypatch):
+        base_dir = os.path.abspath("/tmp/serena-test-base")
+        monkeypatch.setenv("SERENA_TEST_BASE", base_dir)
+        config = SerenaConfig(
+            gui_log_window=False,
+            web_dashboard=False,
+            project_serena_folder_location="$SERENA_TEST_BASE/$projectFolderName/.serena",
+        )
+        result = config.get_configured_project_serena_folder("/home/user/myproject")
+        expected = os.path.abspath(os.path.join(base_dir, "myproject", ".serena"))
+        assert result == expected
+
     def test_rejects_unknown_placeholder(self):
         config = SerenaConfig(
             gui_log_window=False,

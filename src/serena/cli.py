@@ -587,6 +587,11 @@ class ProjectCommands(AutoRegisteringGroup):
         )
 
     @staticmethod
+    def _resolve_project_path(project_path: str) -> str:
+        expanded_project_path = SerenaConfig._expand_template_variables(project_path, {})
+        return str(Path(expanded_project_path).resolve())
+
+    @staticmethod
     def _create_project(project_path: str, name: str | None, language: tuple[str, ...]) -> RegisteredProject:
         """
         Helper method to create a project configuration file.
@@ -598,7 +603,8 @@ class ProjectCommands(AutoRegisteringGroup):
         :raises ValueError: If an unsupported language is specified
         :return: the RegisteredProject instance
         """
-        project_root = Path(project_path).resolve()
+        resolved_project_path = ProjectCommands._resolve_project_path(project_path)
+        project_root = Path(resolved_project_path)
         serena_config = SerenaConfig.from_config_file()
         yml_path = serena_config.get_project_yml_location(str(project_root))
         if os.path.exists(yml_path):
@@ -614,7 +620,7 @@ class ProjectCommands(AutoRegisteringGroup):
                     raise ValueError(f"Unknown language '{lang}'. Supported: {all_langs}")
 
         generated_conf = ProjectConfig.autogenerate(
-            project_root=project_path,
+            project_root=resolved_project_path,
             serena_config=serena_config,
             project_name=name,
             languages=languages if languages else None,
@@ -677,6 +683,7 @@ class ProjectCommands(AutoRegisteringGroup):
     )
     @click.option("--timeout", type=float, default=10, help="Timeout for indexing a single file.")
     def index(project: str, name: str | None, language: tuple[str, ...], log_level: str, timeout: float) -> None:
+        project = ProjectCommands._resolve_project_path(project)
         serena_config = SerenaConfig.from_config_file()
         registered_project = serena_config.get_registered_project(project, autoregister=True)
         if registered_project is None:
