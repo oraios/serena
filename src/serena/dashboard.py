@@ -12,6 +12,7 @@ from flask import Flask, Response, redirect, request, send_from_directory
 from PIL import Image
 from pydantic import BaseModel
 from pystray import MenuItem as Item
+from pystray._base import Icon as TrayIcon
 from sensai.util import logging
 
 from serena.analytics import ToolUsageStats
@@ -704,8 +705,8 @@ class SerenaDashboardViewer:
         self.height = height
         self.start_minimized = start_minimized
 
-        self.window: webview.Window | None = None
-        self._tray_icon = None
+        self.window: webview.Window
+        self._tray_icon: TrayIcon
         self._quitting = False
 
     def run(self) -> None:
@@ -722,7 +723,7 @@ class SerenaDashboardViewer:
 
         # Create hidden to avoid flash; show/restore/minimize in start callback.
         # When tray is enabled, confirm_close allows us to intercept the X button.
-        self.window = webview.create_window(
+        window = webview.create_window(
             self.title,
             self.url,
             width=self.width,
@@ -730,6 +731,8 @@ class SerenaDashboardViewer:
             hidden=self.start_minimized,
             confirm_close=False,
         )
+        assert window is not None
+        self.window = window
 
         if self.tray:
             self.window.events.closing += self._on_closing
@@ -738,7 +741,7 @@ class SerenaDashboardViewer:
             self._start_tray()
             self._set_dock_icon_visible(not self.start_minimized)
 
-        def _start_callback():
+        def _start_callback() -> None:
             if self.start_minimized:
                 self.window.minimize()
             else:
@@ -792,18 +795,18 @@ class SerenaDashboardViewer:
         icon_filename = "serena-icon-32.png" if sys.platform == "darwin" else "serena-icon-48.png"
         icon_img = Image.open(dashboard_path / icon_filename)
 
-        def show(_icon, _item):
+        def show(_icon: TrayIcon, _item: Item) -> None:
             if self.window:
                 self._set_dock_icon_visible(True)
                 self.window.show()
                 self.window.restore()
 
-        def hide(_icon, _item):
+        def hide(_icon: TrayIcon, _item: Item) -> None:
             if self.window:
                 self.window.hide()
                 self._set_dock_icon_visible(False)
 
-        def quit_app(_icon, _item):
+        def quit_app(_icon: TrayIcon, _item: Item) -> None:
             self._quitting = True
             try:
                 _icon.stop()
@@ -817,7 +820,7 @@ class SerenaDashboardViewer:
             Item("Quit", quit_app),
         )
 
-        kwargs = {}
+        kwargs: dict[str, Any] = {}
         if sys.platform == "darwin":
             # Passing darwin_nsapplication integrates pystray with the NSApplication
             # run loop that webview.start() is about to enter.  sharedApplication()
