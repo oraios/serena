@@ -26,10 +26,10 @@ from solidlsp.settings import SolidLSPSettings
 log = logging.getLogger(__name__)
 
 GRADLE_ALLOWED_HOSTS = ("services.gradle.org", "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
-DEFAULT_GRADLE_VERSION="8.14.2"
+DEFAULT_GRADLE_VERSION = "8.14.2"
 GRADLE_SHA256 = "7197a12f450794931532469d4ff21a59ea2c1cd59a3ec3f89c035c3c420a6999"
 VSCODE_JAVA_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
-DEFAULT_VSCODE_JAVA_VERSION="1.53.0-873"
+DEFAULT_VSCODE_JAVA_VERSION = "1.53.0-873"
 VSCODE_JAVA_SHA256_BY_PLATFORM = {
     "osx-arm64": "3a9acf30b682df2f0b895728ad8f84725a95b326e2265f17bf9b087acb08dd0d",
     "osx-x64": "73823bd3b0765bb9b483ba45216c229065df33e16a40623a7da5d92ae32e1471",
@@ -42,10 +42,10 @@ INTELLICODE_ALLOWED_HOSTS = (
     "marketplace.visualstudio.com",
     "download.visualstudio.microsoft.com",
 )
-DEFAULT_INTELLICODE_VERSION="1.2.30"
+DEFAULT_INTELLICODE_VERSION = "1.2.30"
 INTELLICODE_SHA256 = "7f61a7f96d101cdf230f96821be3fddd8f890ebfefb3695d18beee43004ae251"
-DEFAULT_ECLIPSE_LAUNCHER_VERSION="1.7.100.v20251111-0406"
-DEFAULT_JRE_VERSION="21.0.10"
+DEFAULT_ECLIPSE_LAUNCHER_VERSION = "1.7.100.v20251111-0406"
+DEFAULT_JRE_VERSION = "21.0.10"
 
 
 @dataclasses.dataclass
@@ -157,7 +157,7 @@ class EclipseJDTLS(SolidLanguageServer):
             vscode_java_version = custom_settings.get("vscode_java_version", DEFAULT_VSCODE_JAVA_VERSION)
             vscode_java_tag = f"v{vscode_java_version.rsplit('-', 1)[0]}"
             intellicode_version = custom_settings.get("intellicode_version", DEFAULT_INTELLICODE_VERSION)
-            eclipse_launcher_version=custom_settings.get("eclipse_launcher_version", DEFAULT_ECLIPSE_LAUNCHER_VERSION)
+            eclipse_launcher_version = custom_settings.get("eclipse_launcher_version", DEFAULT_ECLIPSE_LAUNCHER_VERSION)
             is_default_gradle_version = gradle_version == DEFAULT_GRADLE_VERSION
             is_default_vscode_java_version = vscode_java_version == DEFAULT_VSCODE_JAVA_VERSION
             is_default_intellicode_version = intellicode_version == DEFAULT_INTELLICODE_VERSION
