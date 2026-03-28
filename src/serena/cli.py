@@ -1,5 +1,6 @@
 import collections
 import glob
+import time
 import json
 import os
 import shutil
@@ -705,6 +706,7 @@ class ProjectCommands(AutoRegisteringGroup):
             collected_exceptions: list[Exception] = []
             files_failed = []
             language_file_counts: dict[Language, int] = collections.defaultdict(lambda: 0)
+            last_save_time = time.time()
             for i, f in enumerate(tqdm(files, desc="Indexing")):
                 try:
                     ls = ls_mgr.get_language_server(f)
@@ -714,8 +716,9 @@ class ProjectCommands(AutoRegisteringGroup):
                     log.error(f"Failed to index {f}, continuing.")
                     collected_exceptions.append(e)
                     files_failed.append(f)
-                if (i + 1) % 10 == 0:
+                if time.time() - last_save_time >= 30:
                     ls_mgr.save_all_caches()
+                    last_save_time = time.time()
             reported_language_file_counts = {k.value: v for k, v in language_file_counts.items()}
             click.echo(f"Indexed files per language: {dict_string(reported_language_file_counts, brackets=None)}")
             ls_mgr.save_all_caches()
