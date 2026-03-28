@@ -3,6 +3,7 @@ Provides Java specific instantiation of the LanguageServer class. Contains vario
 """
 
 import dataclasses
+import glob
 import hashlib
 import logging
 import os
@@ -188,7 +189,6 @@ class EclipseJDTLS(SolidLanguageServer):
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                         "jre_home_path": f"extension/jre/{DEFAULT_JRE_VERSION}-macosx-aarch64",
                         "jre_path": f"extension/jre/{DEFAULT_JRE_VERSION}-macosx-aarch64/bin/java",
-                        "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
                         "jdtls_launcher_jar_path": f"extension/server/plugins/org.eclipse.equinox.launcher_{eclipse_launcher_version}.jar",
                         "jdtls_readonly_config_path": "extension/server/config_mac_arm",
                     },
@@ -200,7 +200,6 @@ class EclipseJDTLS(SolidLanguageServer):
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                         "jre_home_path": f"extension/jre/{DEFAULT_JRE_VERSION}-macosx-x86_64",
                         "jre_path": f"extension/jre/{DEFAULT_JRE_VERSION}-macosx-x86_64/bin/java",
-                        "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
                         "jdtls_launcher_jar_path": f"extension/server/plugins/org.eclipse.equinox.launcher_{eclipse_launcher_version}.jar",
                         "jdtls_readonly_config_path": "extension/server/config_mac",
                     },
@@ -212,7 +211,6 @@ class EclipseJDTLS(SolidLanguageServer):
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                         "jre_home_path": f"extension/jre/{DEFAULT_JRE_VERSION}-linux-aarch64",
                         "jre_path": f"extension/jre/{DEFAULT_JRE_VERSION}-linux-aarch64/bin/java",
-                        "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
                         "jdtls_launcher_jar_path": f"extension/server/plugins/org.eclipse.equinox.launcher_{eclipse_launcher_version}.jar",
                         "jdtls_readonly_config_path": "extension/server/config_linux_arm",
                     },
@@ -224,7 +222,6 @@ class EclipseJDTLS(SolidLanguageServer):
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                         "jre_home_path": f"extension/jre/{DEFAULT_JRE_VERSION}-linux-x86_64",
                         "jre_path": f"extension/jre/{DEFAULT_JRE_VERSION}-linux-x86_64/bin/java",
-                        "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
                         "jdtls_launcher_jar_path": f"extension/server/plugins/org.eclipse.equinox.launcher_{eclipse_launcher_version}.jar",
                         "jdtls_readonly_config_path": "extension/server/config_linux",
                     },
@@ -236,7 +233,6 @@ class EclipseJDTLS(SolidLanguageServer):
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                         "jre_home_path": f"extension/jre/{DEFAULT_JRE_VERSION}-win32-x86_64",
                         "jre_path": f"extension/jre/{DEFAULT_JRE_VERSION}-win32-x86_64/bin/java.exe",
-                        "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
                         "jdtls_launcher_jar_path": f"extension/server/plugins/org.eclipse.equinox.launcher_{eclipse_launcher_version}.jar",
                         "jdtls_readonly_config_path": "extension/server/config_win",
                     },
@@ -279,17 +275,17 @@ class EclipseJDTLS(SolidLanguageServer):
             os.makedirs(vscode_java_path, exist_ok=True)
             jre_home_path = str(PurePath(vscode_java_path, cast(str, dependency["jre_home_path"])))
             jre_path = str(PurePath(vscode_java_path, cast(str, dependency["jre_path"])))
-            lombok_jar_path = str(PurePath(vscode_java_path, cast(str, dependency["lombok_jar_path"])))
             jdtls_launcher_jar_path = str(PurePath(vscode_java_path, cast(str, dependency["jdtls_launcher_jar_path"])))
             jdtls_readonly_config_path = str(PurePath(vscode_java_path, cast(str, dependency["jdtls_readonly_config_path"])))
+            lombok_dir = str(PurePath(vscode_java_path, "extension", "lombok"))
             if not all(
                 [
                     os.path.exists(vscode_java_path),
                     os.path.exists(jre_home_path),
                     os.path.exists(jre_path),
-                    os.path.exists(lombok_jar_path),
                     os.path.exists(jdtls_launcher_jar_path),
                     os.path.exists(jdtls_readonly_config_path),
+                    bool(glob.glob(os.path.join(lombok_dir, "lombok-*.jar"))),
                 ]
             ):
                 FileUtils.download_and_extract_archive_verified(
@@ -302,10 +298,14 @@ class EclipseJDTLS(SolidLanguageServer):
 
             os.chmod(jre_path, 0o755)
 
+            lombok_jars = glob.glob(os.path.join(lombok_dir, "lombok-*.jar"))
+            if len(lombok_jars) != 1:
+                raise RuntimeError(f"Expected exactly one lombok jar in {lombok_dir}, found: {lombok_jars}")
+            lombok_jar_path = lombok_jars[0]
+
             assert os.path.exists(vscode_java_path)
             assert os.path.exists(jre_home_path)
             assert os.path.exists(jre_path)
-            assert os.path.exists(lombok_jar_path)
             assert os.path.exists(jdtls_launcher_jar_path)
             assert os.path.exists(jdtls_readonly_config_path)
 
