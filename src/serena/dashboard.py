@@ -716,7 +716,9 @@ class SerenaDashboardViewer:
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("oraios.serena")
 
         dashboard_path = Path(SERENA_DASHBOARD_DIR)
-        icon_path = str(dashboard_path / "serena.ico")
+        # .ico is Windows-only; macOS expects a PNG for the window/dock icon.
+        icon_filename = "serena.ico" if sys.platform == "win32" else "serena-icon-64.png"
+        icon_path = str(dashboard_path / icon_filename)
 
         # Create hidden to avoid flash; show/restore/minimize in start callback.
         # When tray is enabled, confirm_close allows us to intercept the X button.
@@ -755,8 +757,10 @@ class SerenaDashboardViewer:
     def _start_tray(self) -> None:
         dashboard_path = Path(SERENA_DASHBOARD_DIR)
 
-        icon_path = dashboard_path / "serena-icon-48.png"
-        icon_img = Image.open(icon_path)
+        # macOS menu bar icons are displayed at 16pt; 32px covers Retina (@2x).
+        # Windows/Linux tray icons are larger, so 48px is the better fit there.
+        icon_filename = "serena-icon-32.png" if sys.platform == "darwin" else "serena-icon-48.png"
+        icon_img = Image.open(dashboard_path / icon_filename)
 
         def show(_icon, _item):
             if self.window:
