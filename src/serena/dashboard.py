@@ -709,7 +709,7 @@ class SerenaDashboardViewer:
         self._quitting = False
 
     def run(self) -> None:
-        # Set app id (avoid app being lumped together with other Python-based apps in Windows taskbar)
+        # set app id (avoid app being lumped together with other Python-based apps in Windows taskbar)
         if sys.platform == "win32":
             import ctypes
 
@@ -732,15 +732,15 @@ class SerenaDashboardViewer:
         if self.tray:
             self.window.events.closing += self._on_closing
 
+        if self.tray:
+            self._start_tray()
+
         def _start_callback():
             if self.start_minimized:
                 self.window.minimize()
             else:
                 self.window.show()
                 self.window.restore()
-
-            if self.tray:
-                threading.Thread(target=self._run_tray, daemon=True).start()
 
         webview.start(_start_callback, icon=icon_path)
 
@@ -752,7 +752,7 @@ class SerenaDashboardViewer:
             self.window.hide()
         return False  # Prevent the window from actually closing
 
-    def _run_tray(self) -> None:
+    def _start_tray(self) -> None:
         dashboard_path = Path(SERENA_DASHBOARD_DIR)
 
         icon_path = dashboard_path / "serena-icon-48.png"
@@ -781,5 +781,19 @@ class SerenaDashboardViewer:
             Item("Quit", quit_app),
         )
 
-        self._tray_icon = pystray.Icon("dashboard_viewer", icon_img, self.title, menu)
-        self._tray_icon.run()
+        kwargs = {}
+        if sys.platform == "darwin":
+            # Passing darwin_nsapplication integrates pystray with the NSApplication
+            # run loop that webview.start() is about to enter.  sharedApplication()
+            # is idempotent; pywebview will reuse the same singleton.
+            from AppKit import NSApplication
+
+            kwargs["darwin_nsapplication"] = NSApplication.sharedApplication()
+
+        self._tray_icon = pystray.Icon("dashboard_viewer", icon_img, self.title, menu, **kwargs)
+
+        # On Windows/Linux, run_detached spawns pystray's own internal thread and
+        # returns immediately.  On macOS it hooks into the NSApplication run loop
+        # that webview.start() is about to enter (run_detached is always called
+        # before webview.start() on macOS — see run()).
+        self._tray_icon.run_detached()
