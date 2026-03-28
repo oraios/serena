@@ -522,22 +522,39 @@ class SerenaAgent:
 
     @staticmethod
     def _start_dashboard_viewer_process_function(url: str, minimized: bool) -> None:
+        """
+        Main function of the subprocess for starting the dashboard viewer
+        """
         try:
             SerenaDashboardViewer(url, start_minimized=minimized).run()
         except webview.errors.WebViewException as e:
-            # This can happen on Linux if neither GTK or QT are available. Open in browser as a fallback
-            log.warning(f"Could not open Serena Dashboard viewer; falling back to opening browser. Cause:\n{e}")
-            SerenaAgent._open_dashboard_in_browser(url)
+            log.warning(f"Could not open Serena Dashboard viewer. Cause:\n{e}")
+            # Fall back to opening the browser window if the window was supposed to be shown directly
+            if not minimized:
+                SerenaAgent._open_dashboard_in_browser(url)
 
     def _start_dashboard_viewer(self, minimized: bool) -> None:
+        """
+        Starts the dashboard viewer (in a separate process) or, if the current platform does not support it,
+        opens the dashboard in the default web browser.
+
+        :param minimized: whether the dashboard viewer should be started minimized (if supported on the current platform).
+            If the viewer is not supported on the current platform, then this controls whether to open the browser window.
+        """
         url = self.get_dashboard_url()
         assert url is not None
-        process = multiprocessing.Process(target=self._start_dashboard_viewer_process_function, args=(url, minimized), daemon=True)
-        process.start()
+        if SerenaDashboardViewer.is_current_platform_supported():
+            process = multiprocessing.Process(target=self._start_dashboard_viewer_process_function, args=(url, minimized), daemon=True)
+            process.start()
+        else:
+            if not minimized:
+                self._open_dashboard_in_browser(url)
 
     def open_dashboard(self) -> bool:
         """
-        Opens the viewer for the Serena dashboard
+        Opens the Serena dashboard (for on-demand usage as triggered by the user, e.g. via a tool)
+
+        :return: True if the dashboard was opened, False if it could not be opened
         """
         if self._dashboard_url is None:
             raise Exception("Dashboard is not running.")
@@ -550,7 +567,7 @@ class SerenaAgent:
         return True
 
     @staticmethod
-    def _open_dashboard_in_browser(url) -> None:
+    def _open_dashboard_in_browser(url: str) -> None:
         # Use a subprocess to avoid any output from webbrowser.open being written to stdout
         subprocess.Popen(
             [sys.executable, "-c", f"import webbrowser; webbrowser.open({url!r})"],
