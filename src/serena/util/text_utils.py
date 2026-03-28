@@ -523,3 +523,35 @@ class ContentReplacer:
                 "Please revise the expression to be more specific or enable allow_multiple_occurrences if this is expected."
             )
         return updated_content
+
+
+@dataclass
+class TextCoords:
+    line: int
+    """
+    0-based line number
+    """
+    col: int
+    """
+    0-based column number
+    """
+
+
+def find_text_coordinates(content: str, regex: str) -> TextCoords | None:
+    """
+    Finds the line and column number of the first match of a regex pattern in the given content.
+
+    :param content: the text content to search through
+    :param regex: the regular expression pattern to search for; it must match part of a single line,
+        and contain exactly one group that captures the position of interest (e.g., the exact variable name to find the coordinates of)
+    :return: a tuple of (line_number, column_number) for the first match found, both 0-based, or None if no match is found
+    """
+    pattern = re.compile(regex)
+    for line_number, line in enumerate(content.splitlines()):
+        match = pattern.search(line)
+        if match:
+            if len(match.groups()) != 1:
+                raise ValueError(f"Regex must contain exactly one group to capture the position, but found {len(match.groups())} groups.")
+            column_number = match.start(1)
+            return TextCoords(line_number, column_number)
+    return None

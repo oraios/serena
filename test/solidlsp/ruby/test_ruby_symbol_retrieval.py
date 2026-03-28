@@ -12,6 +12,7 @@ import os
 
 import pytest
 
+from serena.util.text_utils import find_text_coordinates
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
@@ -583,15 +584,17 @@ class TestRubyLanguageServerSymbols:
         """Test request_defining_symbol for a method call."""
         # Test finding the definition of a method being called
         file_path = os.path.join("examples", "user_management.rb")
-        # Position at a method call like create_user
-        defining_symbol = language_server.request_defining_symbol(file_path, 30, 15)
 
-        # Verify that we can find method definitions
-        if defining_symbol is not None:
-            assert "name" in defining_symbol
-            assert "kind" in defining_symbol
-            # Should be a method or constructor
-            assert defining_symbol.get("kind") in [SymbolKind.Method.value, SymbolKind.Constructor.value, SymbolKind.Function.value]
+        # Position at a method call like create_user
+        with language_server.open_file(file_path, open_in_ls=False) as fb:
+            pos = find_text_coordinates(fb.contents, r"user = @service\.(create_user)")
+
+        # Verify that we can find the method definition
+        defining_symbol = language_server.request_defining_symbol(file_path, pos.line, pos.col)
+        assert "name" in defining_symbol
+        assert "kind" in defining_symbol
+        assert defining_symbol.get("name") == "create_user"
+        assert defining_symbol.get("kind") == SymbolKind.Method.value
 
     @pytest.mark.parametrize("language_server", [Language.RUBY], indirect=True)
     def test_request_defining_symbol_nested_function(self, language_server: SolidLanguageServer) -> None:
