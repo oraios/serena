@@ -8,6 +8,7 @@ import logging
 import os
 import platform
 import shutil
+import stat
 import subprocess
 import tarfile
 import uuid
@@ -387,6 +388,9 @@ class FileUtils:
                     continue
 
                 os.makedirs(os.path.dirname(extracted_path), exist_ok=True)
+                if os.path.exists(extracted_path):
+                    # Some archives are re-extracted over an older read-only install.
+                    os.chmod(extracted_path, os.stat(extracted_path).st_mode | stat.S_IWUSR)
                 with zip_ref.open(zip_info, "r") as source_file, open(extracted_path, "wb") as output_file:
                     shutil.copyfileobj(source_file, output_file)
 
