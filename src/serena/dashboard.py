@@ -736,6 +736,7 @@ class SerenaDashboardViewer:
 
         if self.tray:
             self._start_tray()
+            self._set_dock_icon_visible(not self.start_minimized)
 
         def _start_callback():
             if self.start_minimized:
@@ -752,7 +753,36 @@ class SerenaDashboardViewer:
             return True
         if self.window:
             self.window.hide()
-        return False  # Prevent the window from actually closing
+            if sys.platform == "darwin":
+                # setActivationPolicy_ must run on the main thread; _on_closing
+                # may be called from a pywebview background thread.
+                from PyObjCTools.AppHelper import callAfter
+
+                callAfter(self._set_dock_icon_visible, False)
+        return False  # prevent the window from actually closing
+
+    def _set_dock_icon_visible(self, visible: bool) -> None:
+        """macOS-only; toggles the dock icon.
+
+        Sets the NSApplication activation policy to Regular (shows in dock) or
+        Accessory (hides from dock).  No-op on other platforms.
+        """
+        if sys.platform != "darwin":
+            return
+        from AppKit import (
+            NSApplication,
+            NSApplicationActivationPolicyAccessory,
+            NSApplicationActivationPolicyRegular,
+        )
+
+        ns_app = NSApplication.sharedApplication()
+        policy = NSApplicationActivationPolicyRegular if visible else NSApplicationActivationPolicyAccessory
+        ns_app.setActivationPolicy_(policy)
+        if visible:
+            # setActivationPolicy_ alone is not enough at runtime; unhide_ fires
+            # the full applicationWillUnhide:/applicationDidUnhide: cycle, which
+            # is what actually restores the dock icon and brings windows forward.
+            ns_app.unhide_(None)
 
     def _start_tray(self) -> None:
         dashboard_path = Path(SERENA_DASHBOARD_DIR)
@@ -764,12 +794,14 @@ class SerenaDashboardViewer:
 
         def show(_icon, _item):
             if self.window:
+                self._set_dock_icon_visible(True)
                 self.window.show()
                 self.window.restore()
 
         def hide(_icon, _item):
             if self.window:
                 self.window.hide()
+                self._set_dock_icon_visible(False)
 
         def quit_app(_icon, _item):
             self._quitting = True
