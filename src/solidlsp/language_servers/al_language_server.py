@@ -18,7 +18,7 @@ from overrides import override
 
 from solidlsp import ls_types
 from solidlsp.language_servers.common import quote_windows_path
-from solidlsp.ls import DocumentSymbols, GenericDocumentSymbol, LSPFileBuffer, SolidLanguageServer
+from solidlsp.ls import DocumentSymbols, LSPFileBuffer, RawDocumentSymbol, SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils
@@ -1009,7 +1009,7 @@ class ALLanguageServer(SolidLanguageServer):
 
         return document_symbols
 
-    def _normalize_symbol_name(self, symbol: GenericDocumentSymbol, relative_file_path: str) -> str:
+    def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
         original_name = symbol["name"]
         normalized_name = self._extract_al_display_name(original_name)
 

@@ -16,9 +16,9 @@ from overrides import override
 
 from serena.util.dotnet import DotNETUtil
 from solidlsp.ls import (
-    GenericDocumentSymbol,
     LanguageServerDependencyProvider,
     LSPFileBuffer,
+    RawDocumentSymbol,
     SolidLanguageServer,
 )
 from solidlsp.ls_config import LanguageServerConfig
@@ -252,7 +252,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         normalize_symbol_name_version = 1
         return normalize_symbol_name_version
 
-    def _normalize_symbol_name(self, symbol: GenericDocumentSymbol, relative_file_path: str) -> str:
+    def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
         # Roslyn 5.5.0+ returns symbol names with type annotations:
         #  - Properties: "Name : string"
         #  - Methods: "Add(int, int) : int"

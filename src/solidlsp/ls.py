@@ -48,7 +48,13 @@ from solidlsp.lsp_protocol_handler.server import (
 from solidlsp.settings import SolidLSPSettings
 from solidlsp.util.cache import load_cache, save_cache
 
-GenericDocumentSymbol = Union[LSPTypes.DocumentSymbol, LSPTypes.SymbolInformation, ls_types.UnifiedSymbolInformation]
+RawDocumentSymbol = Union[DocumentSymbol, SymbolInformation]
+"""
+Type alias for the raw symbol information returned by a language server in response to a
+`textDocument/documentSymbol` request.
+The `DocumentSymbol` is the preferred type, but the legacy type `SymbolInformation` is also still used.
+"""
+
 log = logging.getLogger(__name__)
 
 _debug_enabled = log.isEnabledFor(logging.DEBUG)
@@ -211,7 +217,7 @@ class SymbolBodyFactory:
     def __init__(self, file_buffer: LSPFileBuffer):
         self._lines = file_buffer.split_lines()
 
-    def create_symbol_body(self, symbol: GenericDocumentSymbol) -> SymbolBody:
+    def create_symbol_body(self, symbol: UnifiedSymbolInformation) -> SymbolBody:
         existing_body = symbol.get("body", None)
         if existing_body and isinstance(existing_body, SymbolBody):
             return existing_body
@@ -1312,7 +1318,7 @@ class SolidLanguageServer(ABC):
         with self._open_file_context(relative_file_path, file_buffer=file_data) as fd:
             return get_raw_document_symbols(fd)
 
-    def _normalize_symbol_name(self, symbol: GenericDocumentSymbol, relative_file_path: str) -> str:
+    def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
         """
         Normalizes the name of the given symbol, e.g. by removing parameter lists from method symbols.
 
@@ -1379,7 +1385,7 @@ class SolidLanguageServer(ABC):
 
             body_factory = SymbolBodyFactory(file_data)
 
-            def convert_to_unified_symbol(original_symbol_dict: GenericDocumentSymbol) -> ls_types.UnifiedSymbolInformation:
+            def convert_to_unified_symbol(original_symbol_dict: RawDocumentSymbol) -> ls_types.UnifiedSymbolInformation:
                 """
                 Converts the given symbol dictionary to the unified representation, ensuring
                 that all required fields are present (except 'children' which is handled separately).
@@ -1420,7 +1426,7 @@ class SolidLanguageServer(ABC):
                 return item
 
             def convert_symbols_with_common_parent(
-                symbols: list[DocumentSymbol] | list[SymbolInformation] | list[UnifiedSymbolInformation],
+                symbols: list[DocumentSymbol] | list[SymbolInformation],
                 parent: ls_types.UnifiedSymbolInformation | None,
             ) -> list[ls_types.UnifiedSymbolInformation]:
                 """
@@ -1751,7 +1757,7 @@ class SolidLanguageServer(ABC):
 
     def create_symbol_body(
         self,
-        symbol: ls_types.UnifiedSymbolInformation | LSPTypes.SymbolInformation,
+        symbol: ls_types.UnifiedSymbolInformation,
         factory: SymbolBodyFactory | None = None,
     ) -> SymbolBody:
         if factory is None:
