@@ -89,6 +89,8 @@ class Language(str, Enum):
     """Jedi language server for Python (instead of pyright, which is the default)"""
     PYTHON_TY = "python_ty"
     """Ty language server for Python (instead of pyright, which is the default)."""
+    PYTHON_BASEDPYRIGHT = "python_basedpyright"
+    """basedpyright language server for Python (fork of pyright with additional features)."""
     CSHARP_OMNISHARP = "csharp_omnisharp"
     """OmniSharp language server for C# (instead of the default csharp-ls by microsoft).
     Currently has problems with finding references, and generally seems less stable and performant.
@@ -157,6 +159,7 @@ class Language(str, Enum):
             self.TYPESCRIPT_VTS,
             self.PYTHON_JEDI,
             self.PYTHON_TY,
+            self.PYTHON_BASEDPYRIGHT,
             self.CSHARP_OMNISHARP,
             self.RUBY_SOLARGRAPH,
             self.PHP_PHPACTOR,
@@ -190,7 +193,7 @@ class Language(str, Enum):
 
     def get_source_fn_matcher(self) -> FilenameMatcher:
         match self:
-            case self.PYTHON | self.PYTHON_JEDI | self.PYTHON_TY:
+            case self.PYTHON | self.PYTHON_JEDI | self.PYTHON_TY | self.PYTHON_BASEDPYRIGHT:
                 return FilenameMatcher("*.py", "*.pyi")
             case self.JAVA:
                 return FilenameMatcher("*.java")
@@ -328,6 +331,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.ty_server import TyLanguageServer
 
                 return TyLanguageServer
+            case self.PYTHON_BASEDPYRIGHT:
+                from solidlsp.language_servers.basedpyright_server import BasedPyrightServer
+
+                return BasedPyrightServer
             case self.JAVA:
                 from solidlsp.language_servers.eclipse_jdtls import EclipseJDTLS
 
