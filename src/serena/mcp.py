@@ -270,7 +270,7 @@ class SerenaMCPFactory:
 
     def create_mcp_server(
         self,
-        host: str = "0.0.0.0",
+        host: str = "127.0.0.1",
         port: int = 8000,
         modes: Sequence[str] = (),
         language_backend: LanguageBackend | None = None,
