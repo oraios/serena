@@ -1262,7 +1262,7 @@ class SolidLanguageServer(ABC):
         The returned symbols are considered "raw document symbols" (in contrast to processed symbols returned by `request_document_symbols`).
 
         NOTE: This method can be overridden in subclasses to post-process the raw results.
-              When doing so, be sure to update the init parameter `cache_version_raw_document_symbols`
+              When doing so after the initial implementation, be sure to update the init parameter `cache_version_raw_document_symbols`
               to a different version (add 1) to ensure that all caches are invalidated appropriately.
               IMPORTANT: Since rebuilding the raw document symbol cache from the language server results
               is potentially expensive, prefer overriding the `request_document_symbols` method
@@ -1312,13 +1312,30 @@ class SolidLanguageServer(ABC):
         with self._open_file_context(relative_file_path, file_buffer=file_data) as fd:
             return get_raw_document_symbols(fd)
 
+    def _normalize_symbol_name(self, symbol: GenericDocumentSymbol, relative_file_path: str) -> str:
+        """
+        Normalizes the name of the given symbol, e.g. by removing parameter lists from method symbols.
+
+        Override this method in subclasses to implement language-specific normalization logic.
+        NOTE: When changing the override of this method after the initial LS implementation,
+              be sure to also override `_document_symbols_cache_fingerprint` in order to ensure that
+              the caches are invalidated appropriately.
+
+        :param symbol: the symbol
+        :param relative_file_path: the relative path of the file the symbol is located in
+        :return: the normalized name of the symbol
+        """
+        # the default implementation does not change the name
+        return symbol["name"]
+
     def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
         """
         Retrieves the collection of symbols in the given file.
 
         NOTE: This method can be overridden in subclasses to post-process the results.
-              When doing so, be sure to also override `_document_symbols_cache_fingerprint`
+              When doing so after the initial LS implementation, be sure to also override `_document_symbols_cache_fingerprint`
               to ensure that the caches are invalidated appropriately.
+              DO NOT override this method to modify symbol names; override `_normalize_symbol_name` instead.
 
         :param relative_file_path: The relative path of the file that has the symbols
         :param file_buffer: an optional file buffer if the file is already opened.
@@ -1410,9 +1427,16 @@ class SolidLanguageServer(ABC):
                 Converts the given symbols into UnifiedSymbolInformation with proper parent-child relationships,
                 adding overload indices for symbols with the same name under the same parent.
                 """
+                # apply name normalization and count occurrences of each symbol name
                 total_name_counts: dict[str, int] = defaultdict(lambda: 0)
                 for symbol in symbols:
-                    total_name_counts[symbol["name"]] += 1
+                    name = self._normalize_symbol_name(symbol, relative_file_path=relative_file_path)
+                    symbol["name"] = name
+                    total_name_counts[name] += 1
+
+                # convert symbols to the unified representation and
+                #  * add overload indices where necessary
+                #  * ensure that the "parent" field is set correctly
                 name_counts: dict[str, int] = defaultdict(lambda: 0)
                 unified_symbols = []
                 for symbol in symbols:

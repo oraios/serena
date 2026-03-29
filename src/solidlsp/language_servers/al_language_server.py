@@ -18,7 +18,7 @@ from overrides import override
 
 from solidlsp import ls_types
 from solidlsp.language_servers.common import quote_windows_path
-from solidlsp.ls import DocumentSymbols, LSPFileBuffer, SolidLanguageServer
+from solidlsp.ls import DocumentSymbols, GenericDocumentSymbol, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils
@@ -1007,34 +1007,24 @@ class ALLanguageServer(SolidLanguageServer):
         # Get symbols from parent implementation
         document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
 
-        # Normalize names by stripping AL object metadata, storing originals for hover
-        def normalize_name(symbol: UnifiedSymbolInformation) -> None:
-            original_name = symbol["name"]
-            normalized_name = self._extract_al_display_name(original_name)
-
-            # Store original name if it was normalized (for hover injection)
-            # Only store if we have valid position data to avoid false matches at (0, 0)
-            if original_name != normalized_name:
-                sel_range = symbol.get("selectionRange")
-                if sel_range:
-                    start = sel_range.get("start")
-                    if start and "line" in start and "character" in start:
-                        line = start["line"]
-                        char = start["character"]
-                        self._al_original_names[(relative_file_path, line, char)] = original_name
-
-            symbol["name"] = normalized_name
-
-            # Process children recursively
-            if symbol.get("children"):
-                for child in symbol["children"]:
-                    normalize_name(child)
-
-        # Apply to all root symbols
-        for sym in document_symbols.root_symbols:
-            normalize_name(sym)
-
         return document_symbols
+
+    def _normalize_symbol_name(self, symbol: GenericDocumentSymbol, relative_file_path: str) -> str:
+        original_name = symbol["name"]
+        normalized_name = self._extract_al_display_name(original_name)
+
+        # Store original name if it was normalized (for hover injection)
+        # Only store if we have valid position data to avoid false matches at (0, 0)
+        if original_name != normalized_name:
+            sel_range = symbol.get("selectionRange")
+            if sel_range:
+                start = sel_range.get("start")  # type: ignore
+                if start and "line" in start and "character" in start:
+                    line = start["line"]
+                    char = start["character"]
+                    self._al_original_names[(relative_file_path, line, char)] = original_name
+
+        return normalized_name
 
     @override
     def request_hover(

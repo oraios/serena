@@ -7,7 +7,7 @@ import os
 import platform
 import shutil
 import threading
-from collections.abc import Iterable
+from collections.abc import Hashable, Iterable
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
@@ -15,10 +15,15 @@ from typing import Any, cast
 from overrides import override
 
 from serena.util.dotnet import DotNETUtil
-from solidlsp.ls import DocumentSymbols, LanguageServerDependencyProvider, LSPFileBuffer, SolidLanguageServer
+from solidlsp.ls import (
+    GenericDocumentSymbol,
+    LanguageServerDependencyProvider,
+    LSPFileBuffer,
+    SolidLanguageServer,
+)
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
-from solidlsp.ls_types import Hover, UnifiedSymbolInformation
+from solidlsp.ls_types import Hover
 from solidlsp.ls_utils import FileUtils, PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams, InitializeResult
 from solidlsp.settings import SolidLSPSettings
@@ -219,28 +224,6 @@ class CSharpLanguageServer(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in ["bin", "obj", "packages", ".vs"]
 
     @override
-    def request_document_symbols(self, relative_file_path: str, file_buffer: Any = None) -> DocumentSymbols:
-        """
-        Override to normalize Roslyn symbol names and cache originals.
-
-        Roslyn 5.5.0+ returns symbol names with type annotations:
-        - Properties: "Name : string"
-        - Methods: "Add(int, int) : int"
-
-        This method:
-        1. Normalizes names to base form ("Name", "Add")
-        2. Caches original names for rich information display
-        3. Populates LSP spec's 'detail' field with type/signature info
-        """
-        symbols = super().request_document_symbols(relative_file_path, file_buffer)
-
-        # Normalize all symbols recursively
-        for symbol in symbols.iter_symbols():
-            self._normalize_symbol_name(symbol, relative_file_path)
-
-        return symbols
-
-    @override
     def request_hover(self, relative_file_path: str, line: int, column: int, file_buffer: LSPFileBuffer | None = None) -> Hover | None:
         """
         Override to inject original Roslyn symbol names (with type annotations) into hover responses.
@@ -265,12 +248,20 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         return hover
 
-    def _normalize_symbol_name(self, symbol: UnifiedSymbolInformation, relative_file_path: str) -> None:
-        """
-        Normalize a single symbol's name and cache the original.
-        Processes children recursively.
-        """
-        original_name = symbol.get("name", "")
+    def _document_symbols_cache_fingerprint(self) -> Hashable | None:
+        normalize_symbol_name_version = 1
+        return normalize_symbol_name_version
+
+    def _normalize_symbol_name(self, symbol: GenericDocumentSymbol, relative_file_path: str) -> str:
+        # Roslyn 5.5.0+ returns symbol names with type annotations:
+        #  - Properties: "Name : string"
+        #  - Methods: "Add(int, int) : int"
+        #
+        # This method:
+        #  1. Normalizes names to base form ("Name", "Add")
+        #  2. Caches original names for rich information display
+        #  3. Populates LSP spec's 'detail' field with type/signature info
+        original_name = symbol["name"]
 
         # Extract base name and type/signature info
         normalized_name, type_info = self._extract_base_name_and_type(original_name)
@@ -279,24 +270,18 @@ class CSharpLanguageServer(SolidLanguageServer):
         if original_name != normalized_name:
             sel_range = symbol.get("selectionRange")
             if sel_range:
-                start = sel_range.get("start")
+                start = sel_range.get("start")  # type: ignore
                 if start and "line" in start and "character" in start:
                     line = start["line"]
                     char = start["character"]
                     cache_key = (relative_file_path, line, char)
                     self._original_symbol_names[cache_key] = original_name
 
-            # Populate LSP spec's 'detail' field with type/signature information
+            # Populate 'detail' field with type/signature information (for UnifiedSymbolInformation)
             if type_info and "detail" not in symbol:
-                symbol["detail"] = type_info
+                symbol["detail"] = type_info  # type: ignore
 
-        # Update the symbol name
-        symbol["name"] = normalized_name
-
-        # Process children recursively
-        children = symbol.get("children", [])
-        for child in children:
-            self._normalize_symbol_name(child, relative_file_path)
+        return normalized_name
 
     @staticmethod
     def _extract_base_name_and_type(roslyn_name: str) -> tuple[str, str]:
