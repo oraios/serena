@@ -48,7 +48,13 @@ from solidlsp.lsp_protocol_handler.server import (
 from solidlsp.settings import SolidLSPSettings
 from solidlsp.util.cache import load_cache, save_cache
 
-GenericDocumentSymbol = Union[LSPTypes.DocumentSymbol, LSPTypes.SymbolInformation, ls_types.UnifiedSymbolInformation]
+RawDocumentSymbol = Union[DocumentSymbol, SymbolInformation]
+"""
+Type alias for the raw symbol information returned by a language server in response to a
+`textDocument/documentSymbol` request.
+The `DocumentSymbol` is the preferred type, but the legacy type `SymbolInformation` is also still used.
+"""
+
 log = logging.getLogger(__name__)
 
 _debug_enabled = log.isEnabledFor(logging.DEBUG)
@@ -211,7 +217,7 @@ class SymbolBodyFactory:
     def __init__(self, file_buffer: LSPFileBuffer):
         self._lines = file_buffer.split_lines()
 
-    def create_symbol_body(self, symbol: GenericDocumentSymbol) -> SymbolBody:
+    def create_symbol_body(self, symbol: UnifiedSymbolInformation) -> SymbolBody:
         existing_body = symbol.get("body", None)
         if existing_body and isinstance(existing_body, SymbolBody):
             return existing_body
@@ -1262,7 +1268,7 @@ class SolidLanguageServer(ABC):
         The returned symbols are considered "raw document symbols" (in contrast to processed symbols returned by `request_document_symbols`).
 
         NOTE: This method can be overridden in subclasses to post-process the raw results.
-              When doing so, be sure to update the init parameter `cache_version_raw_document_symbols`
+              When doing so after the initial implementation, be sure to update the init parameter `cache_version_raw_document_symbols`
               to a different version (add 1) to ensure that all caches are invalidated appropriately.
               IMPORTANT: Since rebuilding the raw document symbol cache from the language server results
               is potentially expensive, prefer overriding the `request_document_symbols` method
@@ -1312,13 +1318,30 @@ class SolidLanguageServer(ABC):
         with self._open_file_context(relative_file_path, file_buffer=file_data) as fd:
             return get_raw_document_symbols(fd)
 
+    def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
+        """
+        Normalizes the name of the given symbol, e.g. by removing parameter lists from method symbols.
+
+        Override this method in subclasses to implement language-specific normalization logic.
+        NOTE: When changing the override of this method after the initial LS implementation,
+              be sure to also override `_document_symbols_cache_fingerprint` in order to ensure that
+              the caches are invalidated appropriately.
+
+        :param symbol: the symbol
+        :param relative_file_path: the relative path of the file the symbol is located in
+        :return: the normalized name of the symbol
+        """
+        # the default implementation does not change the name
+        return symbol["name"]
+
     def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
         """
         Retrieves the collection of symbols in the given file.
 
         NOTE: This method can be overridden in subclasses to post-process the results.
-              When doing so, be sure to also override `_document_symbols_cache_fingerprint`
+              When doing so after the initial LS implementation, be sure to also override `_document_symbols_cache_fingerprint`
               to ensure that the caches are invalidated appropriately.
+              DO NOT override this method to modify symbol names; override `_normalize_symbol_name` instead.
 
         :param relative_file_path: The relative path of the file that has the symbols
         :param file_buffer: an optional file buffer if the file is already opened.
@@ -1362,7 +1385,7 @@ class SolidLanguageServer(ABC):
 
             body_factory = SymbolBodyFactory(file_data)
 
-            def convert_to_unified_symbol(original_symbol_dict: GenericDocumentSymbol) -> ls_types.UnifiedSymbolInformation:
+            def convert_to_unified_symbol(original_symbol_dict: RawDocumentSymbol) -> ls_types.UnifiedSymbolInformation:
                 """
                 Converts the given symbol dictionary to the unified representation, ensuring
                 that all required fields are present (except 'children' which is handled separately).
@@ -1403,16 +1426,23 @@ class SolidLanguageServer(ABC):
                 return item
 
             def convert_symbols_with_common_parent(
-                symbols: list[DocumentSymbol] | list[SymbolInformation] | list[UnifiedSymbolInformation],
+                symbols: list[DocumentSymbol] | list[SymbolInformation],
                 parent: ls_types.UnifiedSymbolInformation | None,
             ) -> list[ls_types.UnifiedSymbolInformation]:
                 """
                 Converts the given symbols into UnifiedSymbolInformation with proper parent-child relationships,
                 adding overload indices for symbols with the same name under the same parent.
                 """
+                # apply name normalization and count occurrences of each symbol name
                 total_name_counts: dict[str, int] = defaultdict(lambda: 0)
                 for symbol in symbols:
-                    total_name_counts[symbol["name"]] += 1
+                    name = self._normalize_symbol_name(symbol, relative_file_path=relative_file_path)
+                    symbol["name"] = name
+                    total_name_counts[name] += 1
+
+                # convert symbols to the unified representation and
+                #  * add overload indices where necessary
+                #  * ensure that the "parent" field is set correctly
                 name_counts: dict[str, int] = defaultdict(lambda: 0)
                 unified_symbols = []
                 for symbol in symbols:
@@ -1727,7 +1757,7 @@ class SolidLanguageServer(ABC):
 
     def create_symbol_body(
         self,
-        symbol: ls_types.UnifiedSymbolInformation | LSPTypes.SymbolInformation,
+        symbol: ls_types.UnifiedSymbolInformation,
         factory: SymbolBodyFactory | None = None,
     ) -> SymbolBody:
         if factory is None:
