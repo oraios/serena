@@ -26,6 +26,8 @@ Instead, it can use code-centric tools like `find_symbol`, `find_referencing_sym
 
 ## LLM Integration
 
+[![SafeSkill 80/100](https://img.shields.io/badge/SafeSkill-80%2F100_Passes%20with%20Notes-yellow)](https://safeskill.dev/scan/oraios-serena)
+
 Serena provides the necessary [tools](https://oraios.github.io/serena/01-about/035_tools.html) for coding workflows, but an LLM is required to do the actual work,
 orchestrating tool use.
 
