@@ -1259,6 +1259,14 @@ class SolidLanguageServer(ABC):
         """
         Sends a [documentSymbol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_documentSymbol)
         request to the language server to find symbols in the given file - or returns a cached result if available.
+        The returned symbols are considered "raw document symbols" (in contrast to processed symbols returned by `request_document_symbols`).
+
+        NOTE: This method can be overridden in subclasses to post-process the raw results.
+              When doing so, be sure to update the init parameter `cache_version_raw_document_symbols`
+              to a different version (add 1) to ensure that all caches are invalidated appropriately.
+              IMPORTANT: Since rebuilding the raw document symbol cache from the language server results
+              is potentially expensive, prefer overriding the `request_document_symbols` method
+              if the post-processing can also be done on the processed/high-level symbols.
 
         :param relative_file_path: the relative path of the file that has the symbols.
         :param file_data: the file data buffer, if already opened. If None, the file will be opened in this method.
@@ -1306,7 +1314,11 @@ class SolidLanguageServer(ABC):
 
     def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
         """
-        Retrieves the collection of symbols in the given file
+        Retrieves the collection of symbols in the given file.
+
+        NOTE: This method can be overridden in subclasses to post-process the results.
+              When doing so, be sure to also override `_document_symbols_cache_fingerprint`
+              to ensure that the caches are invalidated appropriately.
 
         :param relative_file_path: The relative path of the file that has the symbols
         :param file_buffer: an optional file buffer if the file is already opened.
@@ -2299,7 +2311,9 @@ class SolidLanguageServer(ABC):
         The value must be hashable and safe for inclusion in cache version tuples.
         E.g. use an integer, a string or a tuple of integers/strings.
 
-        Returns None if no context-specific fingerprint is needed.
+        For example, if there is a single aspect being considered, use an integer to reflect the version
+        of this aspect (incrementing it whenever the implementation changes).
+        If multiple versioned aspects exist, use a tuple of versions, etc.
         """
         return None
 
