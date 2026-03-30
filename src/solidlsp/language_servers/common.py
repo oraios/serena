@@ -117,7 +117,6 @@ class RuntimeDependencyCollection:
         completed_process = subprocess.run(
             command,
             shell=True,
-            check=True,
             cwd=cwd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -126,6 +125,9 @@ class RuntimeDependencyCollection:
         if completed_process.returncode != 0:
             log.warning("Command '%s' failed with return code %d", command, completed_process.returncode)
             log.warning("Command output:\n%s", completed_process.stdout)
+            raise subprocess.CalledProcessError(
+                completed_process.returncode, command, completed_process.stdout
+            )
         else:
             log.info(
                 "Command completed successfully",
