@@ -498,6 +498,10 @@ The following settings are supported for the Java language server:
 | `gradle_version` | `8.14.2` | Override the Gradle distribution version Serena downloads by default. |
 | `vscode_java_version` | `1.42.0-561` | Override the bundled `vscode-java` runtime bundle version Serena downloads by default. |
 | `intellicode_version` | `1.2.30` | Override the IntelliCode VSIX version Serena downloads by default. |
+| `jdtls_xmx` | `3G` | Maximum heap size for the JDTLS server JVM. |
+| `jdtls_xms` | `100m` | Initial heap size for the JDTLS server JVM. |
+| `intellicode_xmx` | `1G` | Maximum heap size for the IntelliCode embedded JVM. |
+| `intellicode_xms` | `100m` | Initial heap size for the IntelliCode embedded JVM. |
 
 Note:
 - When overriding `vscode_java_version`, Serena still assumes that the downloaded runtime bundle keeps the same internal
