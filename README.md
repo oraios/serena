@@ -98,6 +98,10 @@ including IntelliJ IDEA, PyCharm, Android Studio, WebStorm, PhpStorm, RubyMine, 
 The plugin offers the most robust and most powerful Serena experience.
 See our [documentation page](https://oraios.github.io/serena/02-usage/025_jetbrains_plugin.html) for further details and instructions.
 
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/oraios-serena).
+
 ## Quick Start
 
 **Prerequisites**. Serena is managed by *uv*. If you don’t already have it, you need to [install uv](https://docs.astral.sh/uv/getting-started/installation/) before proceeding.
