@@ -117,6 +117,7 @@ class RuntimeDependencyCollection:
         completed_process = subprocess.run(
             command,
             shell=True,
+            check=False,
             cwd=cwd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -126,10 +127,7 @@ class RuntimeDependencyCollection:
             log.warning("Command '%s' failed with return code %d", command, completed_process.returncode)
             log.warning("Command output:\n%s", completed_process.stdout)
             raise subprocess.CalledProcessError(completed_process.returncode, command, completed_process.stdout)
-        else:
-            log.info(
-                "Command completed successfully",
-            )
+        log.info("Command completed successfully")
 
     @staticmethod
     def _install_from_url(dep: RuntimeDependency, target_dir: str) -> None:
