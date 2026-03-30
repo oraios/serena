@@ -147,6 +147,9 @@ you would run
 
 and then configure your client to connect to `http://localhost:9121/mcp`.
 
+By default, only connections from localhost are allowed; pass the `--host <listen_address>` option to configure
+the listen address and allow remote connections if needed (but be aware of the security implications of doing so).
+
 **When to use.** Note that Serena is a stateful MCP server, and only one coding project can be active at a time.
 Therefore, starting a single Serena instance and connecting it to multiple clients is only 
 appropriate if all clients will be working on the same project.  

@@ -19,6 +19,13 @@ from .common import RuntimeDependency, RuntimeDependencyCollection
 
 log = logging.getLogger(__name__)
 
+CLOJURE_LSP_VERSION = "2026.02.20-16.08.58"
+CLOJURE_LSP_ALLOWED_HOSTS = (
+    "github.com",
+    "release-assets.githubusercontent.com",
+    "objects.githubusercontent.com",
+)
+
 
 def run_command(cmd: list, capture_output: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(
@@ -42,49 +49,69 @@ def verify_clojure_cli() -> None:
 
 class ClojureLSP(SolidLanguageServer):
     """
-    Provides a clojure-lsp specific instantiation of the LanguageServer class. Contains various configurations and settings specific to clojure.
+    Provides a clojure-lsp specific instantiation of the LanguageServer class.
+
+    You can pass the following entries in ``ls_specific_settings["clojure"]``:
+        - clojure_lsp_version: Override the pinned clojure-lsp version downloaded
+          by Serena (default: the bundled Serena version).
     """
 
-    clojure_lsp_releases = "https://github.com/clojure-lsp/clojure-lsp/releases/latest/download"
-    runtime_dependencies = RuntimeDependencyCollection(
-        [
-            RuntimeDependency(
-                id="clojure-lsp",
-                url=f"{clojure_lsp_releases}/clojure-lsp-native-macos-aarch64.zip",
-                platform_id="osx-arm64",
-                archive_type="zip",
-                binary_name="clojure-lsp",
-            ),
-            RuntimeDependency(
-                id="clojure-lsp",
-                url=f"{clojure_lsp_releases}/clojure-lsp-native-macos-amd64.zip",
-                platform_id="osx-x64",
-                archive_type="zip",
-                binary_name="clojure-lsp",
-            ),
-            RuntimeDependency(
-                id="clojure-lsp",
-                url=f"{clojure_lsp_releases}/clojure-lsp-native-linux-aarch64.zip",
-                platform_id="linux-arm64",
-                archive_type="zip",
-                binary_name="clojure-lsp",
-            ),
-            RuntimeDependency(
-                id="clojure-lsp",
-                url=f"{clojure_lsp_releases}/clojure-lsp-native-linux-amd64.zip",
-                platform_id="linux-x64",
-                archive_type="zip",
-                binary_name="clojure-lsp",
-            ),
-            RuntimeDependency(
-                id="clojure-lsp",
-                url=f"{clojure_lsp_releases}/clojure-lsp-native-windows-amd64.zip",
-                platform_id="win-x64",
-                archive_type="zip",
-                binary_name="clojure-lsp.exe",
-            ),
-        ]
-    )
+    CLOJURE_LSP_VERSION = CLOJURE_LSP_VERSION
+    CLOJURE_LSP_ALLOWED_HOSTS = CLOJURE_LSP_ALLOWED_HOSTS
+
+    @classmethod
+    def _runtime_dependencies(cls, version: str) -> RuntimeDependencyCollection:
+        clojure_lsp_releases = f"https://github.com/clojure-lsp/clojure-lsp/releases/download/{version}"
+        default_version = version == cls.CLOJURE_LSP_VERSION
+        return RuntimeDependencyCollection(
+            [
+                RuntimeDependency(
+                    id="clojure-lsp",
+                    url=f"{clojure_lsp_releases}/clojure-lsp-native-macos-aarch64.zip",
+                    platform_id="osx-arm64",
+                    archive_type="zip",
+                    binary_name="clojure-lsp",
+                    sha256="a14d4db074f665378214e2dc888472e186c228dfa065c777b0534bfda5571669" if default_version else None,
+                    allowed_hosts=CLOJURE_LSP_ALLOWED_HOSTS,
+                ),
+                RuntimeDependency(
+                    id="clojure-lsp",
+                    url=f"{clojure_lsp_releases}/clojure-lsp-native-macos-amd64.zip",
+                    platform_id="osx-x64",
+                    archive_type="zip",
+                    binary_name="clojure-lsp",
+                    sha256="5507434c27104ab816e096d3336d8191641de8a65b57d76afb585d07167a3cf2" if default_version else None,
+                    allowed_hosts=CLOJURE_LSP_ALLOWED_HOSTS,
+                ),
+                RuntimeDependency(
+                    id="clojure-lsp",
+                    url=f"{clojure_lsp_releases}/clojure-lsp-native-linux-aarch64.zip",
+                    platform_id="linux-arm64",
+                    archive_type="zip",
+                    binary_name="clojure-lsp",
+                    sha256="f8f09fa07dd4b6743b5c57270ccf1ee5cdbc5fca09dbca8b6a3b22705b5da4e1" if default_version else None,
+                    allowed_hosts=CLOJURE_LSP_ALLOWED_HOSTS,
+                ),
+                RuntimeDependency(
+                    id="clojure-lsp",
+                    url=f"{clojure_lsp_releases}/clojure-lsp-native-linux-amd64.zip",
+                    platform_id="linux-x64",
+                    archive_type="zip",
+                    binary_name="clojure-lsp",
+                    sha256="52e8bf4fd4cf171df0a3077c8bb5a3bf598d4c621e94b4876dab943a61267309" if default_version else None,
+                    allowed_hosts=CLOJURE_LSP_ALLOWED_HOSTS,
+                ),
+                RuntimeDependency(
+                    id="clojure-lsp",
+                    url=f"{clojure_lsp_releases}/clojure-lsp-native-windows-amd64.zip",
+                    platform_id="win-x64",
+                    archive_type="zip",
+                    binary_name="clojure-lsp.exe",
+                    sha256="817b1271288817c954fb9e595278b1f25003827ce31f8785f253dc4ac911041f" if default_version else None,
+                    allowed_hosts=CLOJURE_LSP_ALLOWED_HOSTS,
+                ),
+            ]
+        )
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
@@ -109,7 +136,8 @@ class ClojureLSP(SolidLanguageServer):
         def _get_or_install_core_dependency(self) -> str:
             """Setup runtime dependencies for clojure-lsp and return the path to the executable."""
             verify_clojure_cli()
-            deps = ClojureLSP.runtime_dependencies
+            clojure_lsp_version = self._custom_settings.get("clojure_lsp_version", ClojureLSP.CLOJURE_LSP_VERSION)
+            deps = ClojureLSP._runtime_dependencies(clojure_lsp_version)
             dependency = deps.get_single_dep_for_current_platform()
 
             clojurelsp_executable_path = deps.binary_path(self._ls_resources_dir)
