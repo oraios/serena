@@ -5,7 +5,9 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
+from test.solidlsp.conftest import _is_decorated_symbol_name, _iter_symbols
 
 
 @pytest.mark.ruby
@@ -46,4 +48,13 @@ class TestRubyLanguageServer:
 
 @pytest.mark.parametrize("language_server", [Language.RUBY], indirect=True)
 def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
-    assert_bare_symbol_names(language_server)
+    symbols = language_server.request_full_symbol_tree()
+    offending_symbols = [
+        f"{SymbolKind(symbol['kind']).name}:{symbol['name']}"
+        for symbol in _iter_symbols(symbols)
+        if not symbol["name"].startswith("self.") and _is_decorated_symbol_name(symbol["name"], symbol["kind"])
+    ]
+
+    assert not offending_symbols, (
+        f"Expected bare symbol names for ruby except singleton methods, but found decorated names: {offending_symbols[:20]}"
+    )

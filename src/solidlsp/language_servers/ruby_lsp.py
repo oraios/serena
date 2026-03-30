@@ -15,13 +15,11 @@ import pathlib
 import shutil
 import subprocess
 import threading
-from collections.abc import Hashable
 
 from overrides import override
 
-from solidlsp.ls import RawDocumentSymbol, SolidLanguageServer
+from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
-from solidlsp.ls_types import SymbolKind
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams, InitializeResult
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -52,23 +50,6 @@ class RubyLsp(SolidLanguageServer):
 
         # Set timeout for ruby-lsp requests - ruby-lsp is fast
         self.set_request_timeout(30.0)  # 30 seconds for initialization and requests
-
-    @override
-    def _document_symbols_cache_fingerprint(self) -> Hashable:
-        normalize_symbol_name_version = 1
-        return normalize_symbol_name_version
-
-    @override
-    def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
-        original_name = symbol["name"]
-
-        if symbol.get("kind") not in (SymbolKind.Function, SymbolKind.Method, SymbolKind.Constructor):
-            return original_name
-
-        if not original_name.startswith("self."):
-            return original_name
-
-        return original_name.removeprefix("self.")
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
