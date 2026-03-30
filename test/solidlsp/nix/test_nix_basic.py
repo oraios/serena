@@ -218,3 +218,8 @@ class TestNixLanguageServer:
         root = symbols[0]
         assert isinstance(root, dict), "Root should be a dict"
         assert "name" in root, "Root should have a name"
+
+
+@pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

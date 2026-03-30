@@ -1,3 +1,5 @@
+import shutil
+
 import pytest
 
 from solidlsp.ls import SolidLanguageServer
@@ -48,3 +50,9 @@ class TestJuliaLanguageServer:
         reference_paths = [ref["relativePath"] for ref in references]
         # The reference might be in either file (definition or usage)
         assert "main.jl" in reference_paths or "lib/helper.jl" in reference_paths
+
+
+@pytest.mark.skipif(shutil.which("julia") is None, reason="Julia is not available")
+@pytest.mark.parametrize("language_server", [Language.JULIA], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

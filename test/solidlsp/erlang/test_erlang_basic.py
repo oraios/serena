@@ -41,3 +41,9 @@ class TestErlangLanguageServerBasics:
                 pytest.skip("Erlang language server not fully initialized")
             else:
                 raise
+
+
+@pytest.mark.skipif(ERLANG_LS_UNAVAILABLE, reason=f"Erlang LS not available: {ERLANG_LS_UNAVAILABLE_REASON}")
+@pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

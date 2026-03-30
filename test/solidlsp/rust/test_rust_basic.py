@@ -55,3 +55,8 @@ class TestRustLanguageServer:
         symbols = language_server.request_full_symbol_tree()
         assert SymbolUtils.symbol_tree_contains_name(symbols, "main"), "main missing from overview"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "add"), "add missing from overview"
+
+
+@pytest.mark.parametrize("language_server", [Language.RUST], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

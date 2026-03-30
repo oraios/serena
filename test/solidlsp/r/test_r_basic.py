@@ -3,6 +3,7 @@ Basic tests for R Language Server integration
 """
 
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -95,3 +96,9 @@ class TestRLanguageServer:
         """Test R language enum value."""
         assert Language.R == "r"
         assert str(Language.R) == "r"
+
+
+@pytest.mark.skipif(shutil.which("R") is None, reason="R is not available")
+@pytest.mark.parametrize("language_server", [Language.R], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

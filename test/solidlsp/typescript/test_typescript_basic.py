@@ -31,3 +31,8 @@ class TestTypescriptLanguageServer:
         assert any("index.ts" in ref.get("relativePath", "") for ref in refs), (
             "index.ts should reference helperFunction (tried all positions in selectionRange)"
         )
+
+
+@pytest.mark.parametrize("language_server", [Language.TYPESCRIPT], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

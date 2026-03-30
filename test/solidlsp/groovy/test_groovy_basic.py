@@ -103,3 +103,8 @@ class TestGroovyLanguageServer:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Utils"), "Utils missing from overview"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Model"), "Model missing from overview"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "ModelUser"), "ModelUser missing from overview"
+
+    def test_bare_symbol_names(self, assert_bare_symbol_names) -> None:
+        assert self.language_server is not None
+
+        assert_bare_symbol_names(self.language_server)

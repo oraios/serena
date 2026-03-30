@@ -93,3 +93,8 @@ class TestMarkdownLanguageServerBasics:
 
         for symbol in all_symbols:
             assert symbol["kind"] == SymbolKind.Namespace, f"Nested heading '{symbol['name']}' should be remapped to Namespace"
+
+
+@pytest.mark.parametrize("language_server", [Language.MARKDOWN], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

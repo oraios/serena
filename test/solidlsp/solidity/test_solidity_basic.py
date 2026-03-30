@@ -163,3 +163,8 @@ class TestSolidityLanguageServerBasics:
 
         ref_files = {ref.get("uri", "") for ref in references}
         assert any("Token.sol" in uri for uri in ref_files), "IERC20.transfer references should include Token.sol"
+
+
+@pytest.mark.parametrize("language_server", [Language.SOLIDITY], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

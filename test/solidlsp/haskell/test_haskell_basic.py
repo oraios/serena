@@ -217,3 +217,9 @@ class TestHaskellLanguageServer:
         assert any("Main.hs" in path or "Calculator.hs" in path for path in calc_ref_paths), (
             f"Expected Calculator to be referenced in Main.hs or Calculator.hs, got: {calc_ref_paths}"
         )
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="HLS not installed on Windows CI")
+@pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

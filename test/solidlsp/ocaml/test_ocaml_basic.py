@@ -1,4 +1,5 @@
 import os
+import shutil
 
 import pytest
 
@@ -150,3 +151,9 @@ class TestOCamlLanguageServer:
         file_path = os.path.join("bin", "main.ml")
         symbols, _roots = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         assert len(symbols) > 0, "Should find symbols in main.ml that use opened modules"
+
+
+@pytest.mark.skipif(shutil.which("opam") is None, reason="OPAM is not available")
+@pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

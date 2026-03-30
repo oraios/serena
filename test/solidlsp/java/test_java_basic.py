@@ -50,3 +50,8 @@ class TestJavaLanguageServer:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Main"), "Main missing from overview"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Utils"), "Utils missing from overview"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Model"), "Model missing from overview"
+
+
+@pytest.mark.parametrize("language_server", [Language.JAVA], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

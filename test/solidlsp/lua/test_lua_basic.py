@@ -253,3 +253,8 @@ class TestLuaLanguageServer:
         # The test file should have some content that references calculator
         symbol_list = test_symbols[0] if isinstance(test_symbols, tuple) else test_symbols
         assert len(symbol_list) > 0, "test_calculator.lua should have symbols"
+
+
+@pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

@@ -221,3 +221,9 @@ class TestProjectBasics:
         assert result is not None, "Should find require statements"
         utils_matches = [match for match in result if match.source_file_path and "utils.clj" in match.source_file_path]
         assert len(utils_matches) > 0, "Should find require statement in utils.clj"
+
+
+@pytest.mark.skipif(not language_tests_enabled(Language.CLOJURE), reason="Clojure tests are disabled")
+@pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

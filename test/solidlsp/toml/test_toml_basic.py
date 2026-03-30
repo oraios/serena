@@ -233,3 +233,8 @@ class TestTomlLanguageServerBasics:
         strict_symbol = next((s for s in pyproject_symbols if s.get("name") == "strict"), None)
         if strict_symbol:
             assert strict_symbol.get("kind") == 17, "'strict' should have kind 17 (boolean)"
+
+
+@pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

@@ -158,3 +158,8 @@ class TestHlslHover:
         hover_info = language_server.request_hover("common.hlsl", 3, 7)
         assert hover_info is not None, "Hover should return information for VertexInput"
         assert "contents" in hover_info, "Hover should have contents"
+
+
+@pytest.mark.parametrize("language_server", [Language.HLSL], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

@@ -1,4 +1,5 @@
 import os
+import shutil
 
 import pytest
 
@@ -52,3 +53,9 @@ class TestElmLanguageServer:
 
         # Verify that at least one reference is in Main.elm (where formatMessage is used)
         assert any("Main.elm" in ref.get("relativePath", "") for ref in refs), "Expected to find usage of formatMessage in Main.elm"
+
+
+@pytest.mark.skipif(shutil.which("elm") is None, reason="Elm compiler is not available")
+@pytest.mark.parametrize("language_server", [Language.ELM], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

@@ -361,3 +361,8 @@ class TestDartLanguageServer:
             if main_dart_refs:
                 for ref in main_dart_refs:
                     assert "range" in ref or "location" in ref
+
+
+@pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

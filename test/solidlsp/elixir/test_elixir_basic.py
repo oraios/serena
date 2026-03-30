@@ -110,3 +110,8 @@ class TestElixirBasic:
         for _ in range(3):
             symbols = language_server.request_document_symbols("lib/services.ex").get_all_symbols_and_roots()
             assert symbols is not None
+
+
+@pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

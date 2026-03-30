@@ -142,3 +142,9 @@ int use_add() {
             # Clean up the new file
             if os.path.exists(new_file_abs_path):
                 os.remove(new_file_abs_path)
+
+
+@pytest.mark.skipif(not _cpp_servers, reason="No C++ language server (clangd or ccls) available")
+@pytest.mark.parametrize("language_server", _cpp_servers, indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

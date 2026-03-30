@@ -105,5 +105,11 @@ function Main {
     Write-Output "Script completed successfully"
 }
 
+class PersonFormatter {
+    [string] FormatName([string]$Name) {
+        return "Formatted: $Name"
+    }
+}
+
 # Run main function
 Main @args

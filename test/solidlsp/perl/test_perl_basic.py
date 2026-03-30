@@ -74,3 +74,9 @@ class TestPerlLanguageServer:
         main_pl_lines = sorted([ref["range"]["start"]["line"] for ref in main_pl_refs])
         assert 17 in main_pl_lines, f"Expected reference at line 18 (0-indexed 17), found: {main_pl_lines}"
         assert 20 in main_pl_lines, f"Expected reference at line 21 (0-indexed 20), found: {main_pl_lines}"
+
+
+@pytest.mark.skipif(platform.system() == "Windows", reason="Perl::LanguageServer does not support native Windows operation")
+@pytest.mark.parametrize("language_server", [Language.PERL], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

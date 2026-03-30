@@ -5,6 +5,7 @@ This module tests Language.SYSTEMVERILOG using verible-verilog-ls.
 Tests are skipped if the language server is not available.
 """
 
+import shutil
 from typing import Any
 
 import pytest
@@ -262,3 +263,9 @@ class TestSystemVerilogRename:
         for uri, file_edits in changes.items():
             for edit in file_edits:
                 assert edit["newText"] == "my_counter", f"Expected 'my_counter', got {edit['newText']}"
+
+
+@pytest.mark.skipif(shutil.which("verible-verilog-ls") is None, reason="verible-verilog-ls is not available")
+@pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

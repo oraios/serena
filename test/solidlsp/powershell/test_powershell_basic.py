@@ -9,6 +9,7 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from solidlsp.ls_utils import SymbolUtils
 
 
 @pytest.mark.powershell
@@ -131,6 +132,14 @@ class TestPowerShellLanguageServerBasics:
         assert len(utils_functions) >= 8, f"Should find at least 8 functions in utils.ps1, found {len(utils_functions)}"
 
     @pytest.mark.parametrize("language_server", [Language.POWERSHELL], indirect=True)
+    def test_powershell_class_method_symbols_use_bare_method_name(self, language_server: SolidLanguageServer) -> None:
+        """Test whether PSES already reports class methods with bare names."""
+        symbols = language_server.request_full_symbol_tree(within_relative_path="main.ps1")
+
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "PersonFormatter"), "Should find PersonFormatter class in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "FormatName"), "Expected PowerShell method to be exposed with bare name"
+
+    @pytest.mark.parametrize("language_server", [Language.POWERSHELL], indirect=True)
     def test_powershell_find_references_within_file(self, language_server: SolidLanguageServer) -> None:
         """Test finding references to a function within the same file."""
         main_path = "main.ps1"
@@ -172,3 +181,8 @@ class TestPowerShellLanguageServerBasics:
         assert any("utils.ps1" in loc.get("uri", "") for loc in definition_locations), (
             f"Should find definition in utils.ps1, got {definition_locations}"
         )
+
+
+@pytest.mark.parametrize("language_server", [Language.POWERSHELL], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

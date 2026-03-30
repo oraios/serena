@@ -224,3 +224,8 @@ class TestSwiftProjectBasics:
         # Should find Status enum
         status_matches = [m for m in matches if "Status" in str(m)]
         assert len(status_matches) > 0, "Should find Status enum"
+
+
+@pytest.mark.parametrize("language_server", [Language.SWIFT], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

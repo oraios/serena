@@ -341,3 +341,11 @@ class TestZigLanguageServer:
         root = symbols[0]
         assert isinstance(root, dict), "Root should be a dict"
         assert "name" in root, "Root should have a name"
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="ZLS is disabled on Windows - cross-file references don't work reliably. Reason unknown."
+)
+@pytest.mark.parametrize("language_server", [Language.ZIG], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

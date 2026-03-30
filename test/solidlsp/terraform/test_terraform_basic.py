@@ -5,6 +5,8 @@ These tests validate the functionality of the language server APIs
 like request_references using the test repository.
 """
 
+import shutil
+
 import pytest
 
 from solidlsp import SolidLanguageServer
@@ -51,3 +53,9 @@ class TestLanguageServerBasics:
         sel_start = var_symbol["selectionRange"]["start"]
         references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         assert len(references) >= 1, "variable should be referenced at least once"
+
+
+@pytest.mark.skipif(shutil.which("terraform") is None, reason="Terraform CLI is not available")
+@pytest.mark.parametrize("language_server", [Language.TERRAFORM], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

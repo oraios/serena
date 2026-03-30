@@ -359,3 +359,8 @@ class TestCSharpSolutionProjectOpening:
 
         # Verify the file actually exists
         assert os.path.exists(result)
+
+
+@pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

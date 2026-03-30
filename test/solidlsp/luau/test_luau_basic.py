@@ -151,3 +151,8 @@ class TestLuauLanguageServer:
         assert definition["uri"].endswith("init.luau"), f"Definition should be in init.luau, got: {definition['uri']}"
         # createConfig is defined at line 8 (0-indexed): `local function createConfig(...)`
         assert definition["range"]["start"]["line"] == 8, f"Definition should be at line 8, got line {definition['range']['start']['line']}"
+
+
+@pytest.mark.parametrize("language_server", [Language.LUAU], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

@@ -42,3 +42,8 @@ class TestRubyLanguageServer:
         print(f"Found definition: {definition_location}")
         assert definition_location["uri"].endswith("lib.rb")
         assert definition_location["range"]["start"]["line"] == 1  # add method on line 2 (0-indexed 1)
+
+
+@pytest.mark.parametrize("language_server", [Language.RUBY], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

@@ -119,3 +119,8 @@ class TestBashLanguageServerBasics:
         # Verify total counts match expectations
         assert len(main_functions) >= 3, f"Should find at least 3 functions in main.sh, found {len(main_functions)}"
         assert len(utils_functions) >= 8, f"Should find at least 8 functions in utils.sh, found {len(utils_functions)}"
+
+
+@pytest.mark.parametrize("language_server", [Language.BASH], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

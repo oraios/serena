@@ -55,3 +55,9 @@ class TestKotlinLanguageServer:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Main"), "Main missing from overview"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Utils"), "Utils missing from overview"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Model"), "Model missing from overview"
+
+
+@pytest.mark.skipif(is_ci, reason="Kotlin LSP JVM restart is unstable on CI runners")
+@pytest.mark.parametrize("language_server", [Language.KOTLIN], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

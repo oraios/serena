@@ -10,6 +10,8 @@ Uses genericptr/pascal-language-server which returns SymbolInformation[] format:
 - Method names don't include parent class prefix; uses containerName instead
 """
 
+import shutil
+
 import pytest
 
 from solidlsp import SolidLanguageServer
@@ -193,3 +195,9 @@ class TestPascalLanguageServerBasics:
 
         # Should contain the doc comment
         assert "Calculates the sum" in value, f"Hover should include doc comment. Got: {value[:500]}"
+
+
+@pytest.mark.skipif(shutil.which("fpc") is None, reason="Free Pascal compiler is not available")
+@pytest.mark.parametrize("language_server", [Language.PASCAL], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

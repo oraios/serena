@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -6,9 +7,16 @@ from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from test.conftest import is_ci, is_windows, language_tests_enabled
 
+
+def _php_supports_phpactor() -> bool:
+    completed_process = subprocess.run(["php", "-m"], capture_output=True, text=True, check=False)
+    installed_extensions = {line.strip().lower() for line in completed_process.stdout.splitlines()}
+    return "openssl" in installed_extensions
+
+
 _php_servers: list[Language] = [Language.PHP]
 if language_tests_enabled(Language.PHP_PHPACTOR):
-    if not (is_windows and is_ci):  # TODO: Phpactor tests are flaky in Windows CI and can even cause hangs #1040
+    if not (is_windows and is_ci) and _php_supports_phpactor():
         _php_servers.append(Language.PHP_PHPACTOR)
 
 
@@ -256,3 +264,8 @@ class TestPhpLanguageServers:
         dog_root = next((s for s in symbols if s.get("name") == "Dog"), None)
         if dog_root is not None:
             assert SymbolUtils.symbol_tree_contains_name([dog_root], "greet"), "greet should be nested under Dog in symbol tree"
+
+
+@pytest.mark.parametrize("language_server", _php_servers, indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

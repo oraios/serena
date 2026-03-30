@@ -233,3 +233,8 @@ class TestProjectBasics:
         no_match_pattern = r"def\s+this_method_does_not_exist\s*\([^)]*\):"
         matches = project.search_source_files_for_pattern(no_match_pattern)
         assert len(matches) == 0
+
+
+@pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)

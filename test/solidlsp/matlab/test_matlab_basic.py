@@ -115,3 +115,9 @@ class TestMatlabLanguageServerReferences:
 
         # Should find references in both main.m and Calculator.m
         assert references is not None
+
+
+@pytest.mark.skipif(not MATLAB_AVAILABLE, reason="MATLAB installation not found")
+@pytest.mark.parametrize("language_server", [Language.MATLAB], indirect=True)
+def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
+    assert_bare_symbol_names(language_server)
