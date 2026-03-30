@@ -1,4 +1,3 @@
-import re
 from collections.abc import Callable
 
 import pytest
@@ -6,11 +5,8 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
 
-_KEYWORD_PREFIX_PATTERN = re.compile(r"^(?:class|function|interface|enum|struct|module|type)\s+")
-_GO_RECEIVER_PATTERN = re.compile(r"^(?:\(\*?[\w\[\], ]+\)|\*?[\w\[\], ]+)\.[A-Za-z_]\w*$")
-_TYPED_SIGNATURE_PATTERN = re.compile(r"^(?:[\w\[\].]+\s+)+(?P<name>[A-Za-z_][\w-]*)\s*\(.*\)$")
-_CALL_SIGNATURE_PATTERN = re.compile(r"^[A-Za-z_][\w-]*\s*\(.*\)\s*(?::\s*.+)?$")
-_TYPE_ANNOTATION_PATTERN = re.compile(r"^[A-Za-z_][\w-]*\s*:\s*.+$")
+_TYPE_KEYWORD_PREFIXES = ("class ", "interface ", "enum ", "struct ", "module ", "type ")
+_CALLABLE_KEYWORD_PREFIXES = _TYPE_KEYWORD_PREFIXES + ("function ", "def ", "defp ")
 
 _CALLABLE_KINDS = {
     SymbolKind.Function,
@@ -44,21 +40,21 @@ def _iter_symbols(symbols: list[UnifiedSymbolInformation]) -> list[UnifiedSymbol
 
 
 def _is_decorated_symbol_name(name: str, kind: int) -> bool:
+    stripped_name = name.strip()
+    lowercase_name = stripped_name.lower()
+
     if kind in _TYPE_KINDS:
-        return _KEYWORD_PREFIX_PATTERN.match(name) is not None
+        return lowercase_name.startswith(_TYPE_KEYWORD_PREFIXES) or "{" in stripped_name
 
     if kind in _CALLABLE_KINDS:
-        return any(
-            [
-                _KEYWORD_PREFIX_PATTERN.match(name) is not None,
-                _GO_RECEIVER_PATTERN.match(name) is not None,
-                _TYPED_SIGNATURE_PATTERN.match(name) is not None,
-                _CALL_SIGNATURE_PATTERN.match(name) is not None,
-            ]
+        return (
+            lowercase_name.startswith(_CALLABLE_KEYWORD_PREFIXES)
+            or any(character.isspace() for character in stripped_name)
+            or any(separator in stripped_name for separator in ("(", ",", ".", "{"))
         )
 
     if kind in _MEMBER_KINDS:
-        return _TYPE_ANNOTATION_PATTERN.match(name) is not None
+        return ":" in stripped_name
 
     return False
 

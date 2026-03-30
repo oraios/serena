@@ -52,8 +52,7 @@ class TestAnsibleLanguageServerBasics:
         labels = [item["completionText"] for item in result if "completionText" in item]
         assert labels, f"Expected completions with completionText, got: {result[:3]}"
 
-
-@pytest.mark.skipif(platform.system() == "Windows", reason="ansible-language-server does not support native Windows operation")
-@pytest.mark.parametrize("language_server", [Language.ANSIBLE], indirect=True)
-def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
-    assert_bare_symbol_names(language_server)
+    @pytest.mark.xfail(reason="Seems like ansible LS lacks basic functionality at the moment, textDocument/documentSymbol doesn't work")
+    @pytest.mark.parametrize("language_server", [Language.ANSIBLE], indirect=True)
+    def test_bare_symbol_names(self, language_server, assert_bare_symbol_names) -> None:
+        assert_bare_symbol_names(language_server)
