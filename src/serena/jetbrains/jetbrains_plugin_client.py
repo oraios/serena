@@ -587,6 +587,29 @@ class JetBrainsPluginClient(ToStringMixin):
         }
         self._make_request("POST", "/refreshFile", request_data)
 
+    def find_declaration(
+        self, relative_path: str, line: int, col: int, include_body: bool, include_quick_info: bool
+    ) -> jb.SymbolCollectionResponse:
+        """
+        Finds the declaration of the symbol at the given location.
+
+        :param relative_path: the relative path to the file
+        :param line: the line number (0-based)
+        :param col: the column number (0-based)
+        :param include_body: whether to include the symbol body
+        :param include_quick_info: whether to include quick info about the symbol
+        """
+        request_data = {
+            "relativePath": relative_path,
+            "line": line,
+            "col": col,
+            "includeBody": include_body,
+            "includeQuickInfo": include_quick_info,
+        }
+        symbol_collection = cast(jb.SymbolCollectionResponse, self._make_request("POST", "/findDeclaration", request_data))
+        self._postprocess_symbol_collection_response(symbol_collection)
+        return symbol_collection
+
     def close(self) -> None:
         self._session.close()
 

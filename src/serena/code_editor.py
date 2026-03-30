@@ -57,6 +57,16 @@ class CodeEditor(Generic[TSymbol], ABC):
         """
         raise NotImplementedError("This method must be overridden for each subclass")
 
+    def read_file(self, relative_path: str) -> str:
+        """
+        Reads the content of a file.
+
+        :param relative_path: the relative path of the file to read
+        :return: the content of the file
+        """
+        with self._open_file_context(relative_path) as file:
+            return file.get_contents()
+
     @contextmanager
     def edited_file_context(self, relative_path: str) -> Iterator["CodeEditor.EditedFile"]:
         """

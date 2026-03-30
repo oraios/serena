@@ -7,6 +7,7 @@ from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
 from serena.jetbrains.jetbrains_types import SymbolDTO
 from serena.symbol import JetBrainsSymbolDictGrouper
 from serena.tools import Tool, ToolMarkerOptional, ToolMarkerSymbolicEdit, ToolMarkerSymbolicRead
+from serena.util.text_utils import find_text_coordinates
 
 log = logging.getLogger(__name__)
 
@@ -416,3 +417,32 @@ class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptiona
 
             result = self._to_json(result_dict)
         return self._limit_length(result, max_answer_chars)
+
+
+class JetBrainsFindDeclarationTool(Tool, ToolMarkerSymbolicRead):
+    """
+    Finds the declaration of a symbol using the JetBrains backend
+    """
+
+    def apply(self, relative_path: str, regex: str, include_body: bool = False) -> str:
+        r"""
+        Finds the declaration of a symbol.
+
+        :param relative_path: the relative path to the source file containing the symbol for which to find the declaration.
+        :param regex: a regular expression with one group, where the group matches the symbol for which to perform the lookup.
+            For example, to find the declaration of the `process` method in a call like `obj.process()`,
+            pass an expression like "obj\.(process)\(\)".
+            Provide as much context as necessary to render the regex unambiguous.
+            Uses Python syntax with MULTILINE and DOTALL flags enabled.
+        :param include_body: whether to include the symbol's body in the result. Default False.
+        """
+        editor = self.create_code_editor()
+        content = editor.read_file(relative_path)
+        coords = find_text_coordinates(content, regex, require_unique=True)
+        assert coords is not None
+        with JetBrainsPluginClient.from_project(self.project) as client:
+            symbol_collection = client.find_declaration(
+                relative_path=relative_path, line=coords.line, col=coords.col, include_quick_info=False, include_body=include_body
+            )
+        result = self._to_json(symbol_collection)
+        return result
