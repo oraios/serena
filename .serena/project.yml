@@ -42,7 +42,9 @@ ignored_paths: []
 # Added on 2025-04-18
 read_only: false
 
-# list of tool names to exclude. We recommend not excluding any tools, see the readme for more details.
+# list of tool names to exclude.
+# This extends the existing exclusions (e.g. from the global configuration)
+#
 # Below is the complete list of tools for convenience.
 # To make sure you have the latest list of tools, and to view their descriptions, 
 # execute `uv run scripts/print_tool_overview.py`.
@@ -83,7 +85,8 @@ read_only: false
 #  * `write_memory`: Writes a named memory (for future reference) to Serena's project-specific memory store.
 excluded_tools: []
 
-# list of tools to include that would otherwise be disabled (particularly optional tools that are disabled by default)
+# list of tools to include that would otherwise be disabled (particularly optional tools that are disabled by default).
+# This extends the existing inclusions (e.g. from the global configuration).
 included_optional_tools: []
 
 # initial prompt for the project. It will always be given to the LLM upon activating the project
@@ -149,3 +152,17 @@ read_only_memory_patterns: []
 # Possible values: unset (use global setting), "lf", "crlf", or "native" (platform default)
 # This does not affect Serena's own files (e.g. memories and configuration files), which always use native line endings.
 line_ending:
+
+# list of regex patterns for memories to completely ignore.
+# Matching memories will not appear in list_memories or activate_project output
+# and cannot be accessed via read_memory or write_memory.
+# To access ignored memory files, use the read_file tool on the raw file path.
+# Extends the list from the global configuration, merging the two lists.
+# Example: ["_archive/.*", "_episodes/.*"]
+ignored_memory_patterns: []
+
+# advanced configuration option allowing to configure language server-specific options.
+# Maps the language key to the options.
+# Have a look at the docstring of the constructors of the LS implementations within solidlsp (e.g., for C# or PHP) to see which options are available.
+# No documentation on options means no options are available.
+ls_specific_settings: {}
