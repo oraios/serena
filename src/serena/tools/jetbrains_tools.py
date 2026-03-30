@@ -446,3 +446,25 @@ class JetBrainsFindDeclarationTool(Tool, ToolMarkerSymbolicRead):
             )
         result = self._to_json(symbol_collection)
         return result
+
+
+class JetBrainsFindImplementationsTool(Tool, ToolMarkerSymbolicRead):
+    """
+    Finds the implementations of a symbol using the JetBrains backend
+    """
+
+    def apply(self, relative_path: str, name_path: str) -> str:
+        """
+        Finds the implementations of a symbol.
+
+        :param relative_path: the relative path to the source file containing the symbol for which to find implementations.
+        :param name_path: name path of the symbol for which to find implementations
+        """
+        with JetBrainsPluginClient.from_project(self.project) as client:
+            symbol_collection = client.find_implementations(
+                relative_path=relative_path,
+                name_path=name_path,
+                include_quick_info=False,
+            )
+        result = self._to_json(symbol_collection)
+        return result

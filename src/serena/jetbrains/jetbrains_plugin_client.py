@@ -610,6 +610,23 @@ class JetBrainsPluginClient(ToStringMixin):
         self._postprocess_symbol_collection_response(symbol_collection)
         return symbol_collection
 
+    def find_implementations(self, relative_path: str, name_path: str, include_quick_info: bool) -> jb.SymbolCollectionResponse:
+        """
+        Finds the implementations of a symbol.
+
+        :param relative_path: the relative path to the file containing the symbol
+        :param name_path: the name path of the symbol
+        :param include_quick_info: whether to include quick info about the symbol
+        """
+        request_data = {
+            "relativePath": relative_path,
+            "namePath": name_path,
+            "includeQuickInfo": include_quick_info,
+        }
+        symbol_collection = cast(jb.SymbolCollectionResponse, self._make_request("POST", "/findImplementations", request_data))
+        self._postprocess_symbol_collection_response(symbol_collection)
+        return symbol_collection
+
     def close(self) -> None:
         self._session.close()
 
