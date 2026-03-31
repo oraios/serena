@@ -109,39 +109,62 @@ class RubyLsp(SolidLanguageServer):
         """
         ls_specific_settings = solidlsp_settings.get_ls_specific_settings(Language.RUBY)
         ruby_lsp_version = ls_specific_settings.get("ruby_lsp_version", RUBY_LSP_VERSION)
-        # Detect rbenv-managed Ruby environment
-        # When .ruby-version exists, it indicates the project uses rbenv for version management.
-        # rbenv automatically reads .ruby-version to determine which Ruby version to use.
-        # Using "rbenv exec" ensures commands run with the correct Ruby version and its gems.
+        # Detect Ruby version manager environment
+        # Using the version manager's exec wrapper ensures commands run with the correct Ruby version
+        # and its gems.
         #
-        # Why rbenv is preferred over system Ruby:
-        # - Respects project-specific Ruby versions
-        # - Avoids bundler version mismatches between system and project
-        # - Ensures consistent environment across developers
-        #
-        # Fallback behavior:
-        # If .ruby-version doesn't exist or rbenv isn't installed, we fall back to system Ruby.
-        # This may cause issues if:
-        # - System Ruby version differs from what the project expects
-        # - System bundler version is incompatible with Gemfile.lock
-        # - Project gems aren't installed in system Ruby
+        # Priority order:
+        # 1. rbenv  - .ruby-version + rbenv binary; uses "rbenv exec <cmd>"
+        # 2. mise   - .ruby-version + mise binary; uses "mise exec ruby -- <cmd>" (scoped to ruby
+        #             tool only, avoids activating unrelated tools in .tool-versions)
+        # 3. asdf   - .tool-versions + asdf binary; uses "asdf exec <cmd>"
+        # 4. RVM    - .ruby-version + rvm-exec binary; uses "rvm-exec ruby-X.Y.Z <cmd>"
+        #             rvm-exec requires the version string as first arg (e.g. "ruby-3.2.0");
+        #             may live at ~/.rvm/bin/rvm-exec if not on PATH
+        # 5. system Ruby - fallback, may cause version/gem mismatches
         ruby_version_file = os.path.join(repository_root_path, ".ruby-version")
+        tool_versions_file = os.path.join(repository_root_path, ".tool-versions")
+        rvm_exec_path = shutil.which("rvm-exec") or os.path.join(os.path.expanduser("~"), ".rvm", "bin", "rvm-exec")
+
         use_rbenv = os.path.exists(ruby_version_file) and shutil.which("rbenv") is not None
+        use_mise = os.path.exists(ruby_version_file) and not use_rbenv and shutil.which("mise") is not None
+        use_asdf = os.path.exists(tool_versions_file) and not use_rbenv and not use_mise and shutil.which("asdf") is not None
+        use_rvm = (
+            os.path.exists(ruby_version_file)
+            and not use_rbenv
+            and not use_mise
+            and not use_asdf
+            and os.path.exists(rvm_exec_path)
+        )
 
         if use_rbenv:
             ruby_cmd = ["rbenv", "exec", "ruby"]
             bundle_cmd = ["rbenv", "exec", "bundle"]
             log.info(f"Using rbenv-managed Ruby (found {ruby_version_file})")
+        elif use_mise:
+            ruby_cmd = ["mise", "exec", "ruby", "--", "ruby"]
+            bundle_cmd = ["mise", "exec", "ruby", "--", "bundle"]
+            log.info(f"Using mise-managed Ruby (found {ruby_version_file})")
+        elif use_asdf:
+            ruby_cmd = ["asdf", "exec", "ruby"]
+            bundle_cmd = ["asdf", "exec", "bundle"]
+            log.info(f"Using asdf-managed Ruby (found {tool_versions_file})")
+        elif use_rvm:
+            raw_version = open(ruby_version_file).read().strip()
+            rvm_ruby_version = raw_version if raw_version.startswith("ruby-") else f"ruby-{raw_version}"
+            ruby_cmd = [rvm_exec_path, rvm_ruby_version, "ruby"]
+            bundle_cmd = [rvm_exec_path, rvm_ruby_version, "bundle"]
+            log.info(f"Using RVM-managed Ruby (found {ruby_version_file}, version={rvm_ruby_version})")
         else:
             ruby_cmd = ["ruby"]
             bundle_cmd = ["bundle"]
-            if os.path.exists(ruby_version_file):
+            if os.path.exists(ruby_version_file) or os.path.exists(tool_versions_file):
                 log.warning(
-                    f"Found {ruby_version_file} but rbenv is not installed. "
-                    "Using system Ruby. Consider installing rbenv for better version management: https://github.com/rbenv/rbenv",
+                    "Found Ruby version file but no supported version manager (rbenv, mise, asdf, rvm) detected. "
+                    "Using system Ruby. Consider installing mise: https://mise.jdx.dev",
                 )
             else:
-                log.info("No .ruby-version file found, using system Ruby")
+                log.info("No Ruby version file found, using system Ruby")
 
         # Check if Ruby is installed
         try:
@@ -166,9 +189,10 @@ class RubyLsp(SolidLanguageServer):
         except FileNotFoundError as e:
             raise RuntimeError(
                 "Ruby is not installed or not found in PATH. Please install Ruby using one of these methods:\n"
+                "  - Using mise:  mise install ruby && mise use ruby  (https://mise.jdx.dev)\n"
                 "  - Using rbenv: rbenv install 3.0.0 && rbenv global 3.0.0\n"
-                "  - Using RVM: rvm install 3.0.0 && rvm use 3.0.0 --default\n"
-                "  - Using asdf: asdf install ruby 3.0.0 && asdf global ruby 3.0.0\n"
+                "  - Using asdf:  asdf install ruby 3.0.0 && asdf global ruby 3.0.0\n"
+                "  - Using RVM:   rvm install 3.0.0 && rvm use 3.0.0 --default\n"
                 "  - System package manager (brew install ruby, apt install ruby, etc.)"
             ) from e
 
