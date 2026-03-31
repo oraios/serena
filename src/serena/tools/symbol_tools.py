@@ -408,27 +408,28 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerSymbolicEdit):
 
 class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
     """
-    Renames a symbol throughout the codebase using language server refactoring capabilities.
+    Renames a symbol, file, or directory throughout the codebase using language server refactoring capabilities.
     """
 
     def apply(
         self,
-        name_path: str,
         relative_path: str,
         new_name: str,
+        name_path: str | None = None,
     ) -> str:
         """
-        Renames the symbol with the given `name_path` to `new_name` throughout the entire codebase.
+        Renames the symbol with the given `name_path` or a file/directory (if no `name_path` is passed)
+        to `new_name` throughout the entire codebase.
         Note: for languages with method overloading, like Java, name_path may have to include a method's
         signature to uniquely identify a method.
 
-        :param name_path: name path of the symbol to rename (definitions in the `find_symbol` tool apply)
         :param relative_path: the relative path to the file containing the symbol to rename
         :param new_name: the new name for the symbol
+        :param name_path: name path of the symbol to rename (definitions in the `find_symbol` tool apply)
         :return: result summary indicating success or failure
         """
         code_editor = self.create_code_editor()
-        status_message = code_editor.rename_symbol(name_path, relative_file_path=relative_path, new_name=new_name)
+        status_message = code_editor.rename_symbol(name_path, relative_path=relative_path, new_name=new_name)
         return status_message
 
 

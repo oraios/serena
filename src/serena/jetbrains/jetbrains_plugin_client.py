@@ -556,7 +556,7 @@ class JetBrainsPluginClient(ToStringMixin):
         return self._make_request("POST", "/inlineSymbol", request_data)
 
     def rename_symbol(
-        self, name_path: str, relative_path: str, new_name: str, rename_in_comments: bool, rename_in_text_occurrences: bool
+        self, name_path: str | None, relative_path: str, new_name: str, rename_in_comments: bool, rename_in_text_occurrences: bool
     ) -> None:
         """
         Renames a symbol.

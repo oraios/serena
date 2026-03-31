@@ -230,13 +230,14 @@ class CodeEditor(Generic[TSymbol], ABC):
             edited_file.delete_text_between_positions(start_pos, end_pos)
 
     @abstractmethod
-    def rename_symbol(self, name_path: str, relative_file_path: str, new_name: str) -> str:
+    def rename_symbol(self, name_path: str | None, relative_path: str, new_name: str) -> str:
         """
-        Renames the symbol with the given name throughout the codebase.
+        Renames a symbol, file, or directory throughout the codebase.
 
         :param name_path: the name path of the symbol to rename
-        :param relative_file_path: the relative path of the file containing the symbol
-        :param new_name: the new name for the symbol
+        :param relative_path: if `name_path` is passed, the relative path of the file containing the symbol.
+            Otherwise, the path to the directory or file to rename.
+        :param new_name: the new name
         :return: a status message
         """
 
@@ -347,8 +348,10 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
             operation.apply()
         return len(operations)
 
-    def rename_symbol(self, name_path: str, relative_file_path: str, new_name: str) -> str:
-        symbol = self._find_unique_symbol(name_path, relative_file_path)
+    def rename_symbol(self, name_path: str | None, relative_path: str, new_name: str) -> str:
+        if name_path is None:
+            raise NotImplementedError("Renaming files/directories is not yet implemented for in the language server backend.")
+        symbol = self._find_unique_symbol(name_path, relative_path)
         if not symbol.location.has_position_in_file():
             raise ValueError(f"Symbol '{name_path}' does not have a valid position in file for renaming")
 
@@ -356,9 +359,9 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         assert symbol.location.line is not None
         assert symbol.location.column is not None
 
-        lang_server = self._get_language_server(relative_file_path)
+        lang_server = self._get_language_server(relative_path)
         rename_result = lang_server.request_rename_symbol_edit(
-            relative_file_path=relative_file_path, line=symbol.location.line, column=symbol.location.column, new_name=new_name
+            relative_file_path=relative_path, line=symbol.location.line, column=symbol.location.column, new_name=new_name
         )
         if rename_result is None:
             raise ValueError(
@@ -425,11 +428,11 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
                 )
             return JetBrainsSymbol(symbols[0], self._project)
 
-    def rename_symbol(self, name_path: str, relative_file_path: str, new_name: str) -> str:
+    def rename_symbol(self, name_path: str | None, relative_path: str, new_name: str) -> str:
         with JetBrainsPluginClient.from_project(self._project) as client:
             client.rename_symbol(
                 name_path=name_path,
-                relative_path=relative_file_path,
+                relative_path=relative_path,
                 new_name=new_name,
                 rename_in_comments=False,
                 rename_in_text_occurrences=False,
