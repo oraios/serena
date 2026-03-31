@@ -36,6 +36,8 @@ dependencies = [
   "tiktoken==0.12.0",
   "anthropic==0.59.0",
   "beautifulsoup4==4.14.2",
+  "pywebview",
+  "pystray==0.19.5",
   # Transitive deps pinned for security (dependabot alerts).
   # Exact pins because uvx installs from git, ignoring the lock file.
   "urllib3==2.6.3",
@@ -46,6 +48,9 @@ dependencies = [
   "cryptography==46.0.6",
   "regex==2026.2.28",
 ]
+
+[tool.uv.sources]
+pywebview = { git = "https://github.com/r0x0r/pywebview", rev = "345596c1f4fd59fd26c7aa02d4176c5362bcbabe" }
 
 [[tool.uv.index]]
 name = "testpypi"

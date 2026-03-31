@@ -1,11 +1,14 @@
 import os
 import socket
+import sys
 import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
+import webview
 from flask import Flask, Response, redirect, request, send_from_directory
+from PIL import Image
 from pydantic import BaseModel
 from sensai.util import logging
 
@@ -676,3 +679,172 @@ class SerenaDashboardAPI:
         thread = threading.Thread(target=lambda: self.run(host=host, port=port), daemon=True)
         thread.start()
         return thread, port
+
+
+class SerenaDashboardViewer:
+    """
+    Minimal pywebview wrapper with optional system tray.
+    """
+
+    def __init__(
+        self,
+        url: str,
+        *,
+        start_minimized: bool = False,
+        width: int = 1400,
+        height: int = 900,
+    ):
+        self.url = url
+        self.tray = True
+        """
+        whether we use the system tray to allow minimizing to tray and intercepting the close event to hide to tray instead of quitting.
+        """
+        self.title = "Serena Dashboard"
+        self.width = width
+        self.height = height
+        self.start_minimized = start_minimized
+
+        self.window: webview.Window
+        self._tray_icon: Any
+        self._quitting = False
+
+    @staticmethod
+    def is_current_platform_supported() -> bool:
+        """
+        :return: whether the current platform supports the dashboard viewer
+        """
+        # We fully support the dashboard viewer (with system tray) only on Windows and macOS.
+        # Linux support is problematic; see https://github.com/oraios/serena/pull/1117#issuecomment-4128753943
+        return sys.platform in ("win32", "darwin")
+
+    def run(self) -> None:
+        # set app id (avoid app being lumped together with other Python-based apps in Windows taskbar)
+        if sys.platform == "win32":
+            import ctypes
+
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("oraios.serena")
+
+        dashboard_path = Path(SERENA_DASHBOARD_DIR)
+        # .ico is Windows-only; macOS expects a PNG for the window/dock icon.
+        icon_filename = "serena.ico" if sys.platform == "win32" else "serena-icon-64.png"
+        icon_path = str(dashboard_path / icon_filename)
+
+        # Create hidden to avoid flash; show/restore/minimize in start callback.
+        # When tray is enabled, confirm_close allows us to intercept the X button.
+        window = webview.create_window(
+            self.title,
+            self.url,
+            width=self.width,
+            height=self.height,
+            hidden=self.start_minimized,
+            confirm_close=False,
+        )
+        assert window is not None
+        self.window = window
+
+        if self.tray:
+            self.window.events.closing += self._on_closing
+
+        if self.tray:
+            self._start_tray()
+            self._set_dock_icon_visible(not self.start_minimized)
+
+        def _start_callback() -> None:
+            if self.start_minimized:
+                self.window.minimize()
+            else:
+                self.window.show()
+                self.window.restore()
+
+        webview.start(_start_callback, icon=icon_path)
+
+    def _on_closing(self) -> bool:
+        """Intercept window close: hide to tray instead of quitting."""
+        if self._quitting:
+            return True
+        if self.window:
+            self.window.hide()
+            if sys.platform == "darwin":
+                # setActivationPolicy_ must run on the main thread; _on_closing
+                # may be called from a pywebview background thread.
+                from PyObjCTools.AppHelper import callAfter
+
+                callAfter(self._set_dock_icon_visible, False)
+        return False  # prevent the window from actually closing
+
+    def _set_dock_icon_visible(self, visible: bool) -> None:
+        """macOS-only; toggles the dock icon.
+
+        Sets the NSApplication activation policy to Regular (shows in dock) or
+        Accessory (hides from dock).  No-op on other platforms.
+        """
+        if sys.platform == "darwin":
+            from AppKit import (
+                NSApplication,
+                NSApplicationActivationPolicyAccessory,
+                NSApplicationActivationPolicyRegular,
+            )
+
+            ns_app = NSApplication.sharedApplication()
+            policy = NSApplicationActivationPolicyRegular if visible else NSApplicationActivationPolicyAccessory
+            ns_app.setActivationPolicy_(policy)
+            if visible:
+                # setActivationPolicy_ alone is not enough at runtime; unhide_ fires
+                # the full applicationWillUnhide:/applicationDidUnhide: cycle, which
+                # is what actually restores the dock icon and brings windows forward.
+                ns_app.unhide_(None)
+
+    def _start_tray(self) -> None:
+        # import pystray locally, because the import fails when there is no display!
+        import pystray
+        from pystray import MenuItem as Item
+        from pystray._base import Icon as TrayIcon
+
+        dashboard_path = Path(SERENA_DASHBOARD_DIR)
+
+        # macOS menu bar icons are displayed at 16pt; 32px covers Retina (@2x).
+        # Windows/Linux tray icons are larger, so 48px is the better fit there.
+        icon_filename = "serena-icon-32.png" if sys.platform == "darwin" else "serena-icon-48.png"
+        icon_img = Image.open(dashboard_path / icon_filename)
+
+        def show(_icon: TrayIcon, _item: Item) -> None:
+            if self.window:
+                self._set_dock_icon_visible(True)
+                self.window.show()
+                self.window.restore()
+
+        def hide(_icon: TrayIcon, _item: Item) -> None:
+            if self.window:
+                self.window.hide()
+                self._set_dock_icon_visible(False)
+
+        def quit_app(_icon: TrayIcon, _item: Item) -> None:
+            self._quitting = True
+            try:
+                _icon.stop()
+            finally:
+                if self.window:
+                    self.window.destroy()
+
+        menu = pystray.Menu(
+            Item("Open", show, default=True),
+            Item("Hide", hide),
+            Item("Quit", quit_app),
+        )
+
+        kwargs: dict[str, Any] = {}
+        if sys.platform == "darwin":
+            # Passing darwin_nsapplication integrates pystray with the NSApplication
+            # run loop that webview.start() is about to enter.  sharedApplication()
+            # is idempotent; pywebview will reuse the same singleton.
+            from AppKit import NSApplication
+
+            kwargs["darwin_nsapplication"] = NSApplication.sharedApplication()
+
+        self._tray_icon = pystray.Icon("dashboard_viewer", icon_img, self.title, menu, **kwargs)
+
+        # On Windows/Linux, run_detached spawns pystray's own internal thread and
+        # returns immediately.  On macOS it hooks into the NSApplication run loop
+        # that webview.start() is about to enter (run_detached is always called
+        # before webview.start() on macOS — see run()).
+        self._tray_icon.run_detached()
