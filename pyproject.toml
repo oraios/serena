@@ -37,7 +37,7 @@ dependencies = [
   "anthropic==0.59.0",
   "beautifulsoup4==4.14.2",
   "pywebview",
-  "pystray>=0.19.5",
+  "pystray==0.19.5",
   # Transitive deps pinned for security (dependabot alerts).
   # Exact pins because uvx installs from git, ignoring the lock file.
   "urllib3==2.6.3",

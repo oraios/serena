@@ -3009,7 +3009,7 @@ requires-dist = [
     { name = "pyinstrument", marker = "extra == 'dev'", specifier = "==5.1.1" },
     { name = "pyjwt", marker = "extra == 'dev'", specifier = "==2.10.1" },
     { name = "pyright", specifier = "==1.1.403" },
-    { name = "pystray", specifier = ">=0.19.5" },
+    { name = "pystray", specifier = "==0.19.5" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "==8.4.1" },
     { name = "pytest-timeout", marker = "extra == 'dev'", specifier = "==2.4.0" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = "==3.8.0" },
