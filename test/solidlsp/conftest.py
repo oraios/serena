@@ -1,6 +1,6 @@
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from solidlsp.ls_types import UnifiedSymbolInformation
+from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
 
 PYTHON_BACKEND_LANGUAGES = [Language.PYTHON, Language.PYTHON_TY]
 
@@ -45,3 +45,12 @@ def request_all_symbols(language_server: SolidLanguageServer) -> list[UnifiedSym
         visit(symbol)
 
     return result
+
+
+def format_symbol_for_assert(symbol: UnifiedSymbolInformation) -> str:
+    relative_path = symbol.get("location", {}).get("relativePath", "<unknown>")
+    try:
+        kind = SymbolKind(symbol["kind"]).name
+    except ValueError:
+        kind = str(symbol["kind"])
+    return f"{symbol['name']} [{kind}] ({relative_path})"

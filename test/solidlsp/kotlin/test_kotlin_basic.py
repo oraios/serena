@@ -7,7 +7,7 @@ from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
 from test.conftest import is_ci
-from test.solidlsp.conftest import has_malformed_name, request_all_symbols
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
 # Kotlin LSP (IntelliJ-based, pre-alpha v261) crashes on JVM restart under CI resource constraints
@@ -65,4 +65,4 @@ class TestKotlinLanguageServer:
         for s in all_symbols:
             if has_malformed_name(s, period_allowed=s["kind"] == SymbolKind.File):
                 malformed_symbols.append(s)
-        assert not malformed_symbols, f"Found malformed symbols: {[sym['name'] for sym in malformed_symbols]}"
+        assert len(malformed_symbols) == 0, f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}"

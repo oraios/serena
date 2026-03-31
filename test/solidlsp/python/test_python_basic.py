@@ -12,7 +12,7 @@ import pytest
 from serena.project import Project
 from serena.util.text_utils import LineType
 from solidlsp import SolidLanguageServer
-from test.solidlsp.conftest import PYTHON_BACKEND_LANGUAGES, has_malformed_name, request_all_symbols
+from test.solidlsp.conftest import PYTHON_BACKEND_LANGUAGES, format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
 @pytest.mark.python
@@ -241,4 +241,4 @@ class TestProjectBasics:
         for s in all_symbols:
             if has_malformed_name(s):
                 malformed_symbols.append(s)
-        assert not malformed_symbols, f"Found malformed symbols: {[sym['name'] for sym in malformed_symbols]}"
+        assert len(malformed_symbols) == 0, f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}"

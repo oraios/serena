@@ -11,7 +11,7 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from test.conftest import is_ci
-from test.solidlsp.conftest import has_malformed_name, request_all_symbols
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 # Skip all Nix tests on Windows as Nix doesn't support Windows
 pytestmark = pytest.mark.skipif(platform.system() == "Windows", reason="Nix and nil are not available on Windows")
@@ -231,4 +231,4 @@ class TestNixLanguageServer:
                 parenthesis_allowed=s["name"] == "(anonymous lambda)",
             ):
                 malformed_symbols.append(s)
-        assert not malformed_symbols, f"Found malformed symbols: {[sym['name'] for sym in malformed_symbols]}"
+        assert len(malformed_symbols) == 0, f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}"

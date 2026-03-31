@@ -13,7 +13,7 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from test.solidlsp.conftest import has_malformed_name, request_all_symbols
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
 def _find_identifier_position(file_path: Path, symbol_name: str) -> Optional[tuple[int, int]]:
@@ -172,4 +172,4 @@ class TestSolidityLanguageServerBasics:
         for s in all_symbols:
             if has_malformed_name(s):
                 malformed_symbols.append(s)
-        assert not malformed_symbols, f"Found malformed symbols: {[sym['name'] for sym in malformed_symbols]}"
+        assert len(malformed_symbols) == 0, f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}"

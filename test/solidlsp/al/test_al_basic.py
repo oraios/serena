@@ -9,7 +9,7 @@ from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
 from test.conftest import language_tests_enabled
-from test.solidlsp.conftest import has_malformed_name, request_all_symbols
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 pytestmark = [pytest.mark.al, pytest.mark.skipif(not language_tests_enabled(Language.AL), reason="AL tests are disabled")]
 
@@ -588,4 +588,4 @@ class TestALPathNormalization:
                 whitespace_allowed=s["kind"] in {SymbolKind.Class, SymbolKind.Struct, SymbolKind.Interface, SymbolKind.Enum},
             ):
                 malformed_symbols.append(s)
-        assert not malformed_symbols, f"Found malformed symbols: {[sym['name'] for sym in malformed_symbols]}"
+        assert len(malformed_symbols) == 0, f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}"
