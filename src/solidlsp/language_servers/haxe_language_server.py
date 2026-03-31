@@ -21,8 +21,11 @@ from typing import cast
 
 from overrides import override
 
+from solidlsp import ls_types
 from solidlsp.ls import LanguageServerDependencyProviderSinglePath, SolidLanguageServer
+from solidlsp.ls_utils import PathUtils
 from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.lsp_protocol_handler import lsp_types
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
@@ -46,17 +49,19 @@ class HaxeLanguageServer(SolidLanguageServer):
         - haxe_executable: Path to the Haxe compiler (default: "haxe" from PATH)
     """
 
-    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        super().__init__(
-            config,
-            repository_root_path,
-            None,
-            "haxe",
-            solidlsp_settings,
-        )
-
     def _create_dependency_provider(self) -> "HaxeLanguageServer.DependencyProvider":
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
+
+    @override
+    def open_file(self, relative_file_path: str, open_in_ls: bool = True) -> "Iterator[LSPFileBuffer]":
+        """Override to never send didOpen to the Haxe LS.
+
+        The Haxe LS triggers a recompilation on didOpen, which causes subsequent
+        requests (hover, references) to return empty results. The LS can handle
+        requests without files being opened — it uses its own file system access.
+        We still read the file locally for serena's caching and symbol parsing.
+        """
+        return super().open_file(relative_file_path, open_in_ls=False)
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -201,6 +206,207 @@ class HaxeLanguageServer(SolidLanguageServer):
             )
         return None
 
+    def _parse_hxml_classpaths(self, hxml_rel_path: str, visited: set[str] | None = None) -> list[str]:
+        """Recursively parse an hxml file and its includes, extracting -cp entries.
+
+        Returns a list of classpath strings as they appear in the hxml files
+        (relative to the project root or absolute).
+        """
+        if visited is None:
+            visited = set()
+
+        hxml_abs = os.path.normpath(os.path.join(self.repository_root_path, hxml_rel_path))
+        if hxml_abs in visited or not os.path.isfile(hxml_abs):
+            return []
+        visited.add(hxml_abs)
+
+        hxml_dir = os.path.dirname(hxml_abs)
+        classpaths: list[str] = []
+
+        with open(hxml_abs, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("#") or not line:
+                    continue
+
+                # Extract -cp / --class-path entries
+                cp = None
+                if line.startswith("-cp "):
+                    cp = line[4:].strip()
+                elif line.startswith("--class-path "):
+                    cp = line[13:].strip()
+
+                if cp is not None:
+                    classpaths.append(cp)
+                    continue
+
+                # Follow hxml includes (lines like ./build/haxe/build-desktop.hxml)
+                # Haxe resolves include paths relative to the working directory (project root),
+                # not relative to the hxml file containing the include.
+                if line.endswith(".hxml") and not line.startswith("-"):
+                    classpaths.extend(self._parse_hxml_classpaths(line, visited))
+
+        return classpaths
+
+    def _get_external_classpaths(self) -> list[str]:
+        """Get resolved absolute paths for classpaths outside the repository root.
+
+        Parses the configured hxml build file chain and returns directories that
+        are part of the Haxe compilation but outside the serena project root.
+        """
+        build_file = self._custom_settings.get("build_file", self._find_hxml_file())
+        if not build_file:
+            return []
+
+        raw_classpaths = self._parse_hxml_classpaths(build_file)
+        external: list[str] = []
+        seen: set[str] = set()
+
+        for cp in raw_classpaths:
+            abs_cp = os.path.normpath(os.path.join(self.repository_root_path, cp))
+            if not os.path.isdir(abs_cp):
+                continue
+            abs_cp = os.path.realpath(abs_cp)
+            if abs_cp in seen:
+                continue
+            seen.add(abs_cp)
+
+            # Skip if already under repo root
+            try:
+                pathlib.Path(abs_cp).relative_to(self.repository_root_path)
+                continue
+            except ValueError:
+                pass
+
+            external.append(abs_cp)
+
+        # Remove paths that are subdirectories of other external paths to avoid duplicate scanning
+        filtered: list[str] = []
+        for path in external:
+            is_subdir = any(
+                pathlib.Path(path).is_relative_to(other) for other in external if other != path
+            )
+            if not is_subdir:
+                filtered.append(path)
+
+        if filtered:
+            log.info("External Haxe classpaths detected: %s", filtered)
+        return filtered
+
+    @override
+    def request_full_symbol_tree(
+        self, within_relative_path: str | None = None
+    ) -> list["ls_types.UnifiedSymbolInformation"]:
+        """Override to also scan external classpath directories for symbols.
+
+        The base class only walks files under the repository root. For Haxe projects,
+        source files often live in sibling directories (e.g. ../shared/src) defined via
+        -cp in the hxml build file. This override includes those external directories
+        in the symbol tree so that find_symbol can discover them.
+        """
+        # Get the normal in-repo symbol tree
+        result = super().request_full_symbol_tree(within_relative_path)
+
+        # Only add external classpaths for full-project scans or when no specific path is given
+        if within_relative_path is not None and within_relative_path != "":
+            # Check if the path points to an external classpath directory
+            within_abs = os.path.join(self.repository_root_path, within_relative_path)
+            if os.path.exists(within_abs):
+                return result
+            # Path doesn't exist in repo — might be an absolute external path
+            if os.path.isabs(within_relative_path) and os.path.exists(within_relative_path):
+                return self._scan_external_directory(within_relative_path)
+            return result
+
+        # Full scan: also scan external classpaths
+        for ext_path in self._get_external_classpaths():
+            try:
+                ext_symbols = self._scan_external_directory(ext_path)
+                result.extend(ext_symbols)
+            except Exception as e:
+                log.warning("Error scanning external classpath %s: %s", ext_path, e)
+
+        return result
+
+    def _scan_external_directory(self, abs_dir_path: str) -> list["ls_types.UnifiedSymbolInformation"]:
+        """Scan an external directory for Haxe symbols.
+
+        Uses absolute paths as identifiers since these files are outside the repo root.
+        """
+        abs_dir_path = os.path.realpath(abs_dir_path)
+        if not os.path.isdir(abs_dir_path):
+            return []
+
+        result: list[ls_types.UnifiedSymbolInformation] = []
+
+        def process_ext_dir(abs_path: str) -> list[ls_types.UnifiedSymbolInformation]:
+            try:
+                entries = os.listdir(abs_path)
+            except OSError:
+                return []
+
+            dir_result: list[ls_types.UnifiedSymbolInformation] = []
+
+            package_symbol = ls_types.UnifiedSymbolInformation(  # type: ignore
+                name=os.path.basename(abs_path),
+                kind=ls_types.SymbolKind.Package,
+                location=ls_types.Location(
+                    uri=str(pathlib.Path(abs_path).as_uri()),
+                    range={"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}},
+                    absolutePath=abs_path,
+                    relativePath=abs_path,
+                ),
+                children=[],
+            )
+            dir_result.append(package_symbol)
+
+            for entry in entries:
+                entry_abs = os.path.join(abs_path, entry)
+
+                if os.path.isdir(entry_abs):
+                    if entry.startswith(".") or self.is_ignored_dirname(entry):
+                        continue
+                    child_symbols = process_ext_dir(entry_abs)
+                    package_symbol["children"].extend(child_symbols)
+                    for child in child_symbols:
+                        child["parent"] = package_symbol
+
+                elif os.path.isfile(entry_abs) and entry.endswith(".hx"):
+                    try:
+                        # Use absolute path as the "relative" path — this works because
+                        # os.path.join(repo_root, absolute_path) returns absolute_path
+                        file_path_key = entry_abs
+                        with self._open_file_context(file_path_key, open_in_ls=False) as file_data:
+                            document_symbols = self.request_document_symbols(file_path_key, file_data)
+                            file_root_nodes = document_symbols.root_symbols
+
+                            file_range = self._get_range_from_file_content(file_data.contents)
+                            file_symbol = ls_types.UnifiedSymbolInformation(  # type: ignore
+                                name=os.path.splitext(entry)[0],
+                                kind=ls_types.SymbolKind.File,
+                                range=file_range,
+                                selectionRange=file_range,
+                                location=ls_types.Location(
+                                    uri=str(pathlib.Path(entry_abs).as_uri()),
+                                    range=file_range,
+                                    absolutePath=entry_abs,
+                                    relativePath=entry_abs,
+                                ),
+                                children=file_root_nodes,
+                                parent=package_symbol,
+                            )
+                            for child in file_root_nodes:
+                                child["parent"] = file_symbol
+
+                        package_symbol["children"].append(file_symbol)
+                    except Exception as e:
+                        log.debug("Error scanning external file %s: %s", entry_abs, e)
+
+            return dir_result
+
+        result = process_ext_dir(abs_dir_path)
+        return result
+
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """Returns the initialize params for the Haxe Language Server."""
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
@@ -259,8 +465,25 @@ class HaxeLanguageServer(SolidLanguageServer):
         }
         return cast(InitializeParams, initialize_params)
 
-    # Timeout for waiting on dynamic capability registration and diagnostics
+    # Timeout for waiting on dynamic capability registration during startup
     READY_TIMEOUT = 30.0
+
+    # Timeout for waiting on the Haxe compiler to finish its initial compilation
+    # when a cross-file feature (e.g., references) is first requested.
+    # Large Haxe projects can take many minutes for the initial compilation pass.
+    # Set to 0 to disable waiting (references will return empty until the compiler is ready).
+    COMPILER_READY_TIMEOUT = 600.0
+
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
+        super().__init__(
+            config,
+            repository_root_path,
+            None,
+            "haxe",
+            solidlsp_settings,
+        )
+        self._diagnostics_received = threading.Event()
+        self._refactor_cache_ready = threading.Event()
 
     def _start_server(self) -> None:
         """Starts the Haxe Language Server and waits for it to be ready.
@@ -273,17 +496,20 @@ class HaxeLanguageServer(SolidLanguageServer):
         declaring the server ready.
         """
         capabilities_ready = threading.Event()
-        diagnostics_received = threading.Event()
 
         def do_nothing(params: dict) -> None:
             return
 
         def window_log_message(msg: dict) -> None:
             log.info(f"LSP: window/logMessage: {msg}")
+            message = msg.get("message", "")
+            if "[RefactorCache] detected classpaths" in message:
+                log.info("LSP: RefactorCache ready — compiler has indexed the project")
+                self._refactor_cache_ready.set()
 
         def on_diagnostics(params: dict) -> None:
             log.info("LSP: Received diagnostics notification")
-            diagnostics_received.set()
+            self._diagnostics_received.set()
 
         def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
@@ -335,25 +561,111 @@ class HaxeLanguageServer(SolidLanguageServer):
         log.info("Haxe server initialized, waiting for dynamic capabilities and workspace scan...")
 
         # Wait for dynamic capability registration (references, etc.)
+        # This is fast (~1s) — the LS registers capabilities right after initialization.
         if capabilities_ready.wait(timeout=self.READY_TIMEOUT):
             log.info("Haxe server dynamic capabilities registered")
         else:
             log.warning("Timeout waiting for Haxe dynamic capability registration, proceeding anyway")
 
-        # Wait for diagnostics indicating the workspace has been scanned and
-        # the Haxe display server (compiler) is connected. This is the key signal
-        # that the LS can actually handle requests like references and definition.
-        if diagnostics_received.wait(timeout=self.READY_TIMEOUT):
-            log.info("Haxe server workspace scan completed")
-        else:
-            log.warning(
-                "Timeout waiting for Haxe workspace diagnostics. "
-                "The Haxe display server may not have connected. "
-                "Check that a valid .hxml build file is configured."
-            )
+        # IMPORTANT: Do NOT wait for diagnostics or compiler completion here.
+        # The Haxe LS queues requests (like textDocument/references) that arrive
+        # while the compiler is still performing its initial compilation, and
+        # responds with full results once compilation finishes. However, requests
+        # sent AFTER compilation finishes get quick but incomplete (empty) responses.
+        # By not blocking startup, we allow tool calls to send requests while the
+        # compiler is still working, which produces correct results.
 
         log.info("Haxe server ready")
 
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
-        return 2.0
+        """Don't wait before sending references requests.
+
+        The Haxe LS queues references requests that arrive while the compiler is
+        still performing its initial compilation, and responds once ready. If we
+        wait until after compilation and then send the request, the LS returns
+        empty results immediately. So we must NOT wait — just send the request
+        and let the LS handle the timing internally.
+        """
+        return 0.0
+
+    @override
+    def request_references(self, relative_file_path: str, line: int, column: int) -> list["ls_types.Location"]:
+        """Override to skip opening the file before sending references.
+
+        The Haxe LS does not require a didOpen notification before handling
+        textDocument/references. Sending didOpen triggers a recompilation that
+        can interfere with the references response (returning empty results).
+        By sending the references request directly (without didOpen), the LS
+        uses its existing compilation state and returns correct results.
+        """
+        if not self.server_started:
+            raise Exception("Language Server not started")
+
+        # Send references request directly WITHOUT opening the file
+        original_timeout = self.server._request_timeout
+        try:
+            self.server._request_timeout = max(original_timeout or 0, self.COMPILER_READY_TIMEOUT)
+            response = self._send_references_request(relative_file_path, line=line, column=column)
+        finally:
+            self.server._request_timeout = original_timeout
+
+        if response is None:
+            return []
+
+        ret = []
+        for item in response:
+            abs_path = PathUtils.uri_to_path(item["uri"])
+            if not pathlib.Path(abs_path).is_relative_to(self.repository_root_path):
+                log.info("Reference outside repo root: %s (including with absolute path)", abs_path)
+                rel_path = pathlib.Path(abs_path)
+            else:
+                rel_path = pathlib.Path(abs_path).relative_to(self.repository_root_path)
+
+            if self.is_ignored_path(str(rel_path)):
+                continue
+
+            new_item = dict(item)
+            new_item["absolutePath"] = str(abs_path)
+            new_item["relativePath"] = str(rel_path)
+            ret.append(ls_types.Location(**new_item))
+        return ret
+
+    @override
+    def request_hover(
+        self, relative_file_path: str, line: int, column: int, file_buffer=None
+    ) -> "ls_types.Hover | None":
+        """Override to skip opening the file before sending hover request.
+
+        Same issue as references: sending didOpen triggers a recompilation that
+        causes the hover response to be empty. The Haxe LS can handle hover
+        requests without the file being opened.
+        """
+        if not self.server_started:
+            raise Exception("Language Server not started")
+
+        uri = PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))
+
+        # Wait for the compiler to finish its initial compilation before sending hover.
+        # Unlike references (which the LS queues during compilation), hover returns null
+        # immediately if the compiler isn't ready. We must wait for RefactorCache first.
+        if not self._refactor_cache_ready.is_set():
+            log.info("Waiting for Haxe compiler before hover request...")
+            self._refactor_cache_ready.wait(timeout=self.COMPILER_READY_TIMEOUT)
+
+        response = self.server.send.hover(
+            {
+                "textDocument": {"uri": uri},
+                "position": {"line": line, "character": column},
+            }
+        )
+
+        if response is None:
+            return None
+        assert isinstance(response, dict)
+        contents = response.get("contents")
+        if not contents:
+            return None
+        if isinstance(contents, dict) and not contents.get("value"):
+            return None
+        return ls_types.Hover(**response)
