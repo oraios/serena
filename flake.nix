@@ -62,6 +62,12 @@
             final.setuptools
           ];
         });
+        pywebview = prev.pywebview.overrideAttrs (old: {
+          nativeBuildInputs = (old.nativeBuildInputs or []) ++ [
+            final.setuptools
+            final.setuptools-scm
+          ];
+        });
       };
 
       python = pkgs.python311;
