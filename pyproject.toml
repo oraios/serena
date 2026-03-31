@@ -45,7 +45,7 @@ dependencies = [
   "starlette==1.0.0",
   "python-multipart==0.0.22",
   "filelock==3.25.2",
-  "cryptography==46.0.5",
+  "cryptography==46.0.6",
   "regex==2026.2.28",
 ]
 
