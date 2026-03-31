@@ -69,6 +69,10 @@ class EclipseJDTLS(SolidLanguageServer):
         - gradle_wrapper_enabled: Whether to use the project's Gradle wrapper (default: false)
         - gradle_java_home: Path to JDK for Gradle (default: null, uses bundled JRE)
         - use_system_java_home: Whether to use the system's JAVA_HOME for JDTLS itself (default: false)
+        - jdtls_xmx: Maximum heap size for the JDTLS server JVM (default: "3G")
+        - jdtls_xms: Initial heap size for the JDTLS server JVM (default: "100m")
+        - intellicode_xmx: Maximum heap size for the IntelliCode embedded JVM (default: "1G")
+        - intellicode_xms: Initial heap size for the IntelliCode embedded JVM (default: "100m")
         - gradle_version: Override the pinned Gradle distribution version downloaded by Serena
         - vscode_java_version: Override the pinned vscode-java runtime bundle version downloaded by Serena
         - intellicode_version: Override the pinned IntelliCode VSIX version downloaded by Serena
@@ -84,6 +88,10 @@ class EclipseJDTLS(SolidLanguageServer):
         gradle_wrapper_enabled: true  # set to true for projects with custom plugins/repositories
         gradle_java_home: "/path/to/jdk"  # set to override Gradle's JDK
         use_system_java_home: true  # set to true to use system JAVA_HOME for JDTLS
+        jdtls_xmx: "3G"  # maximum heap size for the JDTLS server JVM
+        jdtls_xms: "100m"  # initial heap size for the JDTLS server JVM
+        intellicode_xmx: "1G"  # maximum heap size for the IntelliCode embedded JVM
+        intellicode_xms: "100m"  # initial heap size for the IntelliCode embedded JVM
         gradle_version: "8.14.2"
         vscode_java_version: "1.42.0-561"
         intellicode_version: "1.2.30"
@@ -361,6 +369,8 @@ class EclipseJDTLS(SolidLanguageServer):
             lombok_jar_path = self.runtime_dependency_paths.lombok_jar_path
 
             jdtls_launcher_jar = self.runtime_dependency_paths.jdtls_launcher_jar_path
+            jdtls_xmx = self._custom_settings.get("jdtls_xmx", "3G")
+            jdtls_xms = self._custom_settings.get("jdtls_xms", "100m")
 
             data_dir = str(PurePath(ws_dir, "data_dir"))
             jdtls_config_path = str(PurePath(ws_dir, "config_path"))
@@ -399,8 +409,8 @@ class EclipseJDTLS(SolidLanguageServer):
                 "-XX:AdaptiveSizePolicyWeight=90",
                 "-Dsun.zip.disableMemoryMapping=true",
                 "-Djava.lsp.joinOnCompletion=true",
-                "-Xmx3G",
-                "-Xms100m",
+                f"-Xmx{jdtls_xmx}",
+                f"-Xms{jdtls_xms}",
                 "-Xlog:disable",
                 "-Dlog.level=ALL",
                 f"-javaagent:{lombok_jar_path}",
@@ -483,6 +493,10 @@ class EclipseJDTLS(SolidLanguageServer):
         else:
             gradle_user_home = None
             log.info(f"Gradle user home not found at default location ({default_gradle_home}), will use JDTLS defaults")
+
+        # IntelliCode JVM settings (used in vmargs for the embedded JVM)
+        intellicode_xmx = self._custom_settings.get("intellicode_xmx", "1G")
+        intellicode_xms = self._custom_settings.get("intellicode_xms", "100m")
 
         # Gradle wrapper: default to False to preserve existing behaviour
         gradle_wrapper_enabled = self._custom_settings.get("gradle_wrapper_enabled", False)
@@ -680,7 +694,7 @@ class EclipseJDTLS(SolidLanguageServer):
                         "jdt": {
                             "ls": {
                                 "java": {"home": None},
-                                "vmargs": "-XX:+UseParallelGC -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Dsun.zip.disableMemoryMapping=true -Xmx1G -Xms100m -Xlog:disable",
+                                "vmargs": f"-XX:+UseParallelGC -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Dsun.zip.disableMemoryMapping=true -Xmx{intellicode_xmx} -Xms{intellicode_xms} -Xlog:disable",
                                 "lombokSupport": {"enabled": True},
                                 "protobufSupport": {"enabled": True},
                                 "androidSupport": {"enabled": True},

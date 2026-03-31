@@ -29,15 +29,13 @@ line_ending: native
 # we have to live with this limitation for now.
 gui_log_window: False
 
-# whether to open the Serena web dashboard (which will be accessible through your web browser) that
-# provides access to Serena's configuration and state as well as the current session logs.
+# whether to start the Serena web dashboard, which provides access to Serena's configuration
+# and state as well as the current session logs.
 # The web dashboard is supported on all platforms.
 # We strongly recommend to always enable this option, since the dashboard provides important information
-# about the current state of Serena, including the configuration, the logs and tool usage statistics.
-# If you don't want the browser window to pop up automatically, set the `web_dashboard_open_on_launch` to False
-# (either here or through the corresponding flag in the `start-mcp-server` CLI command).
-# You can then open the dashboard by asking your agent to do so (e.g., by saying "open the dashboard"), Serena provides
-# a tool for this.
+# about the current state of Serena.
+# If you don't want the browser window to pop up automatically, set `web_dashboard_open_on_launch` to False
+# (see option below).
 # Further information: https://oraios.github.io/serena/02-usage/060_dashboard.html
 web_dashboard: True
 

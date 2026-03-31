@@ -368,6 +368,8 @@ class SerenaDashboardAPI:
                     return post_installation_news_ids
                 with open(news_snippet_id_file, encoding="utf-8") as f:
                     last_read_news_id = int(f.read().strip())
+                    if last_read_news_id == 20262103:
+                        last_read_news_id = 20260321  # fix originally misnamed file
                 return [news_id for news_id in post_installation_news_ids if news_id > last_read_news_id]
 
             try:
@@ -547,7 +549,7 @@ class SerenaDashboardAPI:
         from solidlsp.ls_config import Language
 
         def run() -> ResponseAvailableLanguages:
-            all_languages = [lang.value for lang in Language.iter_all(include_experimental=False)]
+            all_languages = [lang.value for lang in Language.iter_all(include_experimental=True)]
 
             # Filter out already added languages for the active project
             project = self._agent.get_active_project()

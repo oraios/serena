@@ -1,29 +1,77 @@
 # Security Considerations
 
-Security and protection against supply chain attacks are important to us, and we take this topic seriously.
+Security is important to us, and we take this topic seriously.
 
-Serena comes in two main variants with different security characteristics:
+## Serena's Assumptions
 
-- the **JetBrains-based variant**, which integrates with a running JetBrains IDE, and
-- the **language-server-based variant** (the free variant), which can automatically acquire language-server dependencies on demand.
+The current security model for Serena assumes:
 
-## JetBrains Variant
+- the local machine is trusted,  
+- the MCP client (i.e. the LLM) is trusted,
+- the code repository being worked on is trusted,
+- user configuration is trusted,
+- package manager configuration (e.g. npm) for downloading additional dependencies (i.e. language servers when using Serena with the LSP backend) is trusted.
 
-The JetBrains variant of Serena is safe by default.
+Serena contains tools for executing shell commands and modifying files.
+As such tools are, however, an essential part of coding agent workflows, they typically need to be made available. 
+Therefore, the only way to *fully* protect against unintended consequences is to use a [sandboxed environment](sandboxing) for running Serena.
 
-At runtime, Serena does **not** download additional components and does **not** start extra helper processes beyond the Serena MCP server itself. It talks to the already running JetBrains IDE and relies on the IDE's own indexing and language intelligence.
+## General Recommendations for Risk Reduction
 
-This means that, from a supply-chain perspective, the JetBrains variant has a much smaller runtime attack surface than the language-server-based variant.
+To reduce the risk of unintended consequences, we recommend that you:
+- back up your work regularly (keep the project being worked on under version control),
+- restrict the set of allowed tools via the [configuration](050_configuration),
+- do not expose [Serena's network services](network-security) to untrusted networks.
 
-## Language-Server Variant
+If you do not fully the trust the client/the LLM, we additionally recommend to monitor tool executions carefully 
+(provided that your MCP client supports this).
 
-The language-server-based variant supports many languages, including languages whose language servers are not typically preinstalled on a machine. For convenience, Serena can therefore download or install certain language-server dependencies on demand.
+(sandboxing)=
+## Sandboxing
 
+Sandboxing is the most effective way to mitigate risks when using coding agents.
+[Running Serena inside a docker container](docker) which only exposes the necessary files and tools to the agent is a good way to achieve this.
+
+While setting up a sandboxed environment may require some initial effort, we highly recommend it for all security-conscious users.
+
+(network-security)=
+## Network Security
+
+Serena includes several network services:
+- the Serena MCP server itself (when run in [HTTP or SSE mode](streamable-http) instead of stdio mode)
+- the Serena Dashboard web server
+- the Serena JetBrains Plugin server, which runs within the JetBrains IDE (when using the JetBrains language backend)
+- the Serena Project Server (only started explicitly for [project querying](query-projects)) 
+
+By default, these services accept connections from localhost only, which is a secure default for most users
+(given our assumption that the local machine is trusted; see above).
+
+These services can be reconfigured to listen on other addresses, but doing so may have security implications.
+If you need to allow connections from other machines, we recommend that you set up a secure networking environment 
+(e.g. using a VPN or SSH tunnels) and ensure that only trusted machines can connect to these services.
+
+## Supply Chain Security
+
+Serena has two language backends with different security characteristics:
+
+- the JetBrains-based variant, which integrates with a running JetBrains IDE, and
+- the language-server-based variant (the free variant), which can automatically acquire language server dependencies on demand.
+
+While we can assume that JetBrains IDEs installed by the user do not pose a security risk,
+language server dependencies (if not handled with care) could. 
+For convenience, Serena downloads or installs certain language server dependencies on demand.
 We treat this path as security-sensitive and have hardened it accordingly.
 
-### How Serena Secures Downloaded Language-Server Dependencies
+The most important supply chain protections are:
 
-For language servers that download archives, binaries, VSIX packages, NuGet packages, or other release artifacts, Serena uses a hardened shared download path with the following protections:
+- exact version pinning,
+- hash verification,
+- host restriction,
+- and isolated Serena-managed installation directories.
+
+### Auto-Downloaded Language Server Dependencies
+
+For language servers that are auto-installed by downloading archives, binaries, VSIX packages, NuGet packages, or other release artifacts, Serena uses a hardened shared download path with the following protections:
 
 - **Pinned versions by default**: default downloads use exact versions instead of floating `latest` or nightly channels.
 - **Integrity verification**: downloaded artifacts are checked against pinned SHA256 hashes stored in Serena's source code.
@@ -62,35 +110,6 @@ Some parts of Serena rely on `uv` / `uvx`.
 One important detail is that `uvx` ignores the lockfile when installing directly from a Git repository. Because of that, we pin Serena's Python dependencies exactly in `pyproject.toml` so that installations from Git still resolve to exact dependency versions rather than floating ranges.
 
 For the `ty` Python language server, Serena also uses an exact pinned version when invoking it through `uvx`.
-
-### Our Assumptions
-
-The current security model for Serena's language-server variant assumes:
-
-- the local machine is trusted,
-- the checked-out repository is trusted,
-- user configuration is trusted,
-- package-manager configuration such as npm config is trusted unless explicitly overridden,
-- and the main risk to defend against is compromised or unexpectedly changing upstream artifacts.
-
-Under these assumptions, the most important supply-chain protections are:
-
-- exact version pinning,
-- hash verification,
-- host restriction,
-- and isolated Serena-managed installation directories.
-
-## Operational Recommendations
-
-As fundamental abilities for a coding agent, Serena contains tools for executing shell commands and modifying files. Therefore, if the respective tool calls are not monitored or restricted, and execution takes place in a sensitive environment, there is a risk of unintended consequences.
-
-To reduce that risk, we recommend that you:
-
-- back up your work regularly, for example by using Git,
-- monitor tool executions carefully, if your MCP client supports this,
-- consider enabling read-only mode for analysis-only sessions by setting `read_only: True` in `project.yml`,
-- restrict the set of allowed tools via the [configuration](050_configuration),
-- and use a sandboxed environment for running Serena, for example by [using Docker](docker).
 
 ```{dropdown} What Serena Downloads by Default for Language Servers
 :open:
