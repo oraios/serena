@@ -57,6 +57,11 @@
             final.setuptools
           ];
         });
+        proxy-tools = prev.proxy-tools.overrideAttrs (old: {
+          nativeBuildInputs = (old.nativeBuildInputs or []) ++ [
+            final.setuptools
+          ];
+        });
       };
 
       python = pkgs.python311;
