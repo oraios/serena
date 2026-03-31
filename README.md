@@ -120,6 +120,21 @@ Follow the link for specific instructions on how to set up Serena for Claude Cod
 >   * [Serena's project-based workflow](https://oraios.github.io/serena/02-usage/040_workflow.html) and
 >   * [configuring Serena](https://oraios.github.io/serena/02-usage/050_configuration.html).
 
+## Uninstallation
+
+Serena is not explicitly installed as a traditional application; therefore, uninstallation involves removing cached files and configuration data.
+
+**Remove Serena's cached files**:
+* If you have been running Serena through `uvx`, you can delete Serena's files by clearing uv's cache:
+  ```bash
+  uv cache clean
+  ```
+* If you manually cloned the repository or used another installation method, simply delete whatever you created.
+
+**Remove configuration files and project-specific resources**:
+* Delete the Serena home folder (default location: `~/.serena`)
+* Delete `.serena` folders within any projects where you have used Serena
+
 ## User Guide
 
 Please refer to the [user guide](https://oraios.github.io/serena/02-usage/000_intro.html) for detailed instructions on how to use Serena effectively.
