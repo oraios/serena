@@ -1016,6 +1016,9 @@ class ALLanguageServer(SolidLanguageServer):
         if symbol.get("kind") in (SymbolKind.Function, SymbolKind.Method) and "(" in normalized_name:
             normalized_name = normalized_name.split("(", 1)[0].strip()
 
+        if symbol.get("kind") == SymbolKind.Method and normalized_name.lower().startswith("action "):
+            normalized_name = normalized_name.split(None, 1)[-1].strip()
+
         if symbol.get("kind") == SymbolKind.Field and ":" in normalized_name:
             normalized_name = normalized_name.split(":", 1)[0].strip()
 
@@ -1034,7 +1037,7 @@ class ALLanguageServer(SolidLanguageServer):
 
     @override
     def _document_symbols_cache_fingerprint(self) -> int:
-        normalize_symbol_name_version = 1
+        normalize_symbol_name_version = 2
         return normalize_symbol_name_version
 
     @override

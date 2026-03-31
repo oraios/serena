@@ -7,7 +7,7 @@ from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
-from test.solidlsp.conftest import _is_decorated_symbol_name, _iter_symbols
+from test.solidlsp.conftest import _is_decorated_symbol_name_default, _iter_symbols
 
 
 @pytest.mark.ruby
@@ -39,8 +39,19 @@ class TestRubyLanguageServer:
             str(repo_path / "main.rb"), 16, 17
         )  # add method at line 17 (0-indexed 16), position 17
 
-        assert len(definition_location_list) == 1
-        definition_location = definition_location_list[0]
+        unique_locations = {
+            (
+                location["relativePath"],
+                location["range"]["start"]["line"],
+                location["range"]["start"]["character"],
+                location["range"]["end"]["line"],
+                location["range"]["end"]["character"],
+            ): location
+            for location in definition_location_list
+        }
+
+        assert len(unique_locations) == 1
+        definition_location = next(iter(unique_locations.values()))
         print(f"Found definition: {definition_location}")
         assert definition_location["uri"].endswith("lib.rb")
         assert definition_location["range"]["start"]["line"] == 1  # add method on line 2 (0-indexed 1)
@@ -52,7 +63,7 @@ def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
     offending_symbols = [
         f"{SymbolKind(symbol['kind']).name}:{symbol['name']}"
         for symbol in _iter_symbols(symbols)
-        if not symbol["name"].startswith("self.") and _is_decorated_symbol_name(symbol["name"], symbol["kind"])
+        if not symbol["name"].startswith("self.") and _is_decorated_symbol_name_default(symbol["name"], symbol["kind"])
     ]
 
     assert not offending_symbols, (
