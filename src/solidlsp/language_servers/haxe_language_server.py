@@ -9,6 +9,7 @@ You can pass the following entries in ls_specific_settings["haxe"]:
     - ls_path: Path to a pre-built server.js (from vshaxe or VS Code extension)
     - build_file: Path to the .hxml build file for display arguments (default: auto-detected)
     - haxe_executable: Path to the Haxe compiler executable (default: "haxe" from PATH)
+    - working_directory: Subdirectory to use as the Haxe compiler's CWD (default: project root)
 """
 
 import glob
@@ -47,10 +48,37 @@ class HaxeLanguageServer(SolidLanguageServer):
         - ls_path: Path to a pre-built server.js
         - build_file: Path to the .hxml build file (default: auto-detected from project root)
         - haxe_executable: Path to the Haxe compiler (default: "haxe" from PATH)
+        - working_directory: Subdirectory to use as the Haxe compiler's working directory.
+            When the serena project root is a parent of the actual Haxe project (e.g. a monorepo),
+            set this to the subdirectory containing the hxml build files (e.g. "desktop").
+            Hxml relative paths (-cp, includes) will resolve relative to this directory.
+            If not set, defaults to the repository root.
     """
+
+    @property
+    def _haxe_cwd(self) -> str:
+        """The working directory for the Haxe compiler and LS.
+
+        When working_directory is set, returns repo_root/working_directory.
+        Otherwise returns repo_root. This affects hxml path resolution,
+        the LS rootUri, and the compiler process CWD.
+        """
+        wd = self._custom_settings.get("working_directory")
+        if wd:
+            return os.path.normpath(os.path.join(self.repository_root_path, wd))
+        return self.repository_root_path
 
     def _create_dependency_provider(self) -> "HaxeLanguageServer.DependencyProvider":
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
+
+    @override
+    def _create_process_launch_info(self) -> "ProcessLaunchInfo":
+        """Override to use _haxe_cwd as the process working directory."""
+        from solidlsp.ls_process import ProcessLaunchInfo
+        assert self._dependency_provider is not None
+        cmd = self._dependency_provider.create_launch_command()
+        env = self._dependency_provider.create_launch_command_env()
+        return ProcessLaunchInfo(cmd=cmd, cwd=self._haxe_cwd, env=env)
 
     @override
     def open_file(self, relative_file_path: str, open_in_ls: bool = True) -> "Iterator[LSPFileBuffer]":
@@ -190,14 +218,14 @@ class HaxeLanguageServer(SolidLanguageServer):
             return ["node", core_path]
 
     def _find_hxml_file(self) -> str | None:
-        """Auto-detect a .hxml build file in the project root."""
-        hxml_files = glob.glob(os.path.join(self.repository_root_path, "*.hxml"))
+        """Auto-detect a .hxml build file in the Haxe working directory."""
+        hxml_files = glob.glob(os.path.join(self._haxe_cwd, "*.hxml"))
         if len(hxml_files) == 1:
-            return os.path.relpath(hxml_files[0], self.repository_root_path)
+            return os.path.relpath(hxml_files[0], self._haxe_cwd)
         if len(hxml_files) > 1:
             # Prefer common names
             for preferred in ["build.hxml", "compile.hxml", "all.hxml"]:
-                candidate = os.path.join(self.repository_root_path, preferred)
+                candidate = os.path.join(self._haxe_cwd, preferred)
                 if os.path.exists(candidate):
                     return preferred
             log.warning(
@@ -210,12 +238,12 @@ class HaxeLanguageServer(SolidLanguageServer):
         """Recursively parse an hxml file and its includes, extracting -cp entries.
 
         Returns a list of classpath strings as they appear in the hxml files
-        (relative to the project root or absolute).
+        (relative to the Haxe working directory or absolute).
         """
         if visited is None:
             visited = set()
 
-        hxml_abs = os.path.normpath(os.path.join(self.repository_root_path, hxml_rel_path))
+        hxml_abs = os.path.normpath(os.path.join(self._haxe_cwd, hxml_rel_path))
         if hxml_abs in visited or not os.path.isfile(hxml_abs):
             return []
         visited.add(hxml_abs)
@@ -263,7 +291,7 @@ class HaxeLanguageServer(SolidLanguageServer):
         seen: set[str] = set()
 
         for cp in raw_classpaths:
-            abs_cp = os.path.normpath(os.path.join(self.repository_root_path, cp))
+            abs_cp = os.path.normpath(os.path.join(self._haxe_cwd, cp))
             if not os.path.isdir(abs_cp):
                 continue
             abs_cp = os.path.realpath(abs_cp)
@@ -524,9 +552,9 @@ class HaxeLanguageServer(SolidLanguageServer):
         self.server.on_notification("textDocument/publishDiagnostics", on_diagnostics)
         self.server.on_request("client/registerCapability", register_capability_handler)
 
-        log.info("Starting Haxe server process")
+        log.info("Starting Haxe server process (cwd=%s)", self._haxe_cwd)
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._get_initialize_params(self._haxe_cwd)
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
