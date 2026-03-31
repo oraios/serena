@@ -203,7 +203,7 @@ class PowerShellLanguageServer(SolidLanguageServer):
 
     @override
     def _document_symbols_cache_fingerprint(self) -> Hashable:
-        normalize_symbol_name_version = 2
+        normalize_symbol_name_version = 1
         return normalize_symbol_name_version
 
     @override
