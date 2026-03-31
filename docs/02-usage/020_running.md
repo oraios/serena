@@ -78,6 +78,7 @@ See our [advanced Docker usage](https://github.com/oraios/serena/blob/main/DOCKE
 Docker usage is subject to limitations; see the [advanced Docker usage](https://github.com/oraios/serena/blob/main/DOCKER.md) documentation for details.
 :::
 
+(nix-usage)=
 ### Using Nix
 
 If you are using Nix and [have enabled the `nix-command` and `flakes` features](https://nixos.wiki/wiki/flakes), you can run Serena using the following command:
@@ -87,6 +88,15 @@ nix run github:oraios/serena -- <command> [options]
 ```
 
 You can also install Serena by referencing this repo (`github:oraios/serena`) and using it in your Nix flake. The package is exported as `serena`.
+
+#### Linux: Native Dashboard Support
+
+On Linux, the Nix flake automatically wraps the Serena binary with the GTK 3 and WebKit2GTK libraries
+required by pywebview. This means the **native dashboard viewer** (with system tray integration) works
+out of the box — no manual installation of system packages is needed.
+
+When Serena is run via `nix run` or installed from the flake, the dashboard will open as a native
+window (same as on Windows and macOS) rather than falling back to the web browser.
 
 (start-mcp-server)=
 ## Running the MCP Server

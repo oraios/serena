@@ -22,7 +22,9 @@ Both can be configured in Serena's [configuration](050_configuration) file (`ser
 The dashboard is a web application, which is opened via a native application wrapper on Windows and macOS,
 where it will appear in the system tray. **Click on the tray icon** to open the application window.
 
-On Linux, native app support is difficult to provide, so the dashboard will be opened in your default web browser instead.  
+On Linux, native app support requires GTK 3 and WebKit2GTK. When running Serena via the [Nix flake](nix-usage),
+these libraries are bundled automatically, so the native dashboard viewer (with system tray) works out of the box.
+Without the Nix wrapper, the dashboard will be opened in your default web browser instead.
 
 By default, the dashboard can be accessed at `http://localhost:24282/dashboard/index.html`,
 but a higher port may be used if the default port is unavailable/multiple instances are running.
@@ -61,7 +63,7 @@ to the `start-mcp-server` CLI command.
 On Windows and macOS, you can conveniently open the dashboard at any time by clicking on the tray icon, so automatic
 opening is not a requirement to be able to access the dashboard on these platforms.
 
-On Linux, access to the dashboard is more cumbersome without native app support.  
+On Linux without the Nix wrapper, access to the dashboard is more cumbersome without native app support.
 Yet you may still access it by
 * asking the LLM to "open the Serena dashboard", which will open the dashboard in your default browser
   (the tool `open_dashboard` is enabled for this purpose, provided that the dashboard is active, 

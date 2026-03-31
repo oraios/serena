@@ -713,9 +713,14 @@ class SerenaDashboardViewer:
         """
         :return: whether the current platform supports the dashboard viewer
         """
-        # We fully support the dashboard viewer (with system tray) only on Windows and macOS.
-        # Linux support is problematic; see https://github.com/oraios/serena/pull/1117#issuecomment-4128753943
-        return sys.platform in ("win32", "darwin")
+        # We fully support the dashboard viewer (with system tray) on Windows and macOS.
+        # Linux support is problematic in general (see https://github.com/oraios/serena/pull/1117#issuecomment-4128753943),
+        # but works when the required GTK/WebKit libraries are available, e.g. when running via the Nix flake.
+        if sys.platform in ("win32", "darwin"):
+            return True
+        if sys.platform == "linux" and os.environ.get("SERENA_NIX_WRAPPED"):
+            return True
+        return False
 
     def run(self) -> None:
         # set app id (avoid app being lumped together with other Python-based apps in Windows taskbar)
