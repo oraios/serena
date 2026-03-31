@@ -778,22 +778,21 @@ class SerenaDashboardViewer:
         Sets the NSApplication activation policy to Regular (shows in dock) or
         Accessory (hides from dock).  No-op on other platforms.
         """
-        if sys.platform != "darwin":
-            return
-        from AppKit import (
-            NSApplication,
-            NSApplicationActivationPolicyAccessory,
-            NSApplicationActivationPolicyRegular,
-        )
+        if sys.platform == "darwin":
+            from AppKit import (
+                NSApplication,
+                NSApplicationActivationPolicyAccessory,
+                NSApplicationActivationPolicyRegular,
+            )
 
-        ns_app = NSApplication.sharedApplication()
-        policy = NSApplicationActivationPolicyRegular if visible else NSApplicationActivationPolicyAccessory
-        ns_app.setActivationPolicy_(policy)
-        if visible:
-            # setActivationPolicy_ alone is not enough at runtime; unhide_ fires
-            # the full applicationWillUnhide:/applicationDidUnhide: cycle, which
-            # is what actually restores the dock icon and brings windows forward.
-            ns_app.unhide_(None)
+            ns_app = NSApplication.sharedApplication()
+            policy = NSApplicationActivationPolicyRegular if visible else NSApplicationActivationPolicyAccessory
+            ns_app.setActivationPolicy_(policy)
+            if visible:
+                # setActivationPolicy_ alone is not enough at runtime; unhide_ fires
+                # the full applicationWillUnhide:/applicationDidUnhide: cycle, which
+                # is what actually restores the dock icon and brings windows forward.
+                ns_app.unhide_(None)
 
     def _start_tray(self) -> None:
         # import pystray locally, because the import fails when there is no display!
