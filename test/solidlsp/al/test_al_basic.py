@@ -6,8 +6,10 @@ from serena.symbol import LanguageServerSymbol
 from solidlsp import SolidLanguageServer
 from solidlsp.language_servers.al_language_server import ALLanguageServer
 from solidlsp.ls_config import Language
+from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
 from test.conftest import language_tests_enabled
+from test.solidlsp.conftest import has_malformed_name, request_all_symbols
 
 pytestmark = [pytest.mark.al, pytest.mark.skipif(not language_tests_enabled(Language.AL), reason="AL tests are disabled")]
 
@@ -557,7 +559,33 @@ class TestALPathNormalization:
                     )
                     break
 
-
-@pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
-def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
-    assert_bare_symbol_names(language_server)
+    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            is_al_display_symbol = (
+                s["name"].endswith((".Codeunit", ".Page", ".Table", ".TableExt", ".Enum", ".Interface"))
+                or (s["name"].startswith('"') and s["name"].endswith('"'))
+                or s["name"].startswith(
+                    (
+                        "Enum Name ",
+                        "Area ",
+                        "Group ",
+                        "Field ",
+                        "Part ",
+                        "SystemPart ",
+                        "Repeater ",
+                        "ActionRef ",
+                        "Key ",
+                        "FieldGroup ",
+                    )
+                )
+                or ":" in s["name"]
+            )
+            if not is_al_display_symbol and has_malformed_name(
+                s,
+                whitespace_allowed=s["kind"] in {SymbolKind.Class, SymbolKind.Struct, SymbolKind.Interface, SymbolKind.Enum},
+            ):
+                malformed_symbols.append(s)
+        assert not malformed_symbols, f"Found malformed symbols: {[sym['name'] for sym in malformed_symbols]}"

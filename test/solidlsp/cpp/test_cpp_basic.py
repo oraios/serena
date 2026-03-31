@@ -15,6 +15,7 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
+from test.solidlsp.conftest import has_malformed_name, request_all_symbols
 
 
 def _ccls_available() -> bool:
@@ -143,8 +144,11 @@ int use_add() {
             if os.path.exists(new_file_abs_path):
                 os.remove(new_file_abs_path)
 
-
-@pytest.mark.skipif(not _cpp_servers, reason="No C++ language server (clangd or ccls) available")
-@pytest.mark.parametrize("language_server", _cpp_servers, indirect=True)
-def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
-    assert_bare_symbol_names(language_server)
+    @pytest.mark.parametrize("language_server", _cpp_servers, indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s):
+                malformed_symbols.append(s)
+        assert not malformed_symbols, f"Found malformed symbols: {[sym['name'] for sym in malformed_symbols]}"

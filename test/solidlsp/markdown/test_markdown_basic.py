@@ -11,6 +11,7 @@ from serena.symbol import LanguageServerSymbol
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
+from test.solidlsp.conftest import has_malformed_name, request_all_symbols
 
 
 @pytest.mark.markdown
@@ -94,7 +95,11 @@ class TestMarkdownLanguageServerBasics:
         for symbol in all_symbols:
             assert symbol["kind"] == SymbolKind.Namespace, f"Nested heading '{symbol['name']}' should be remapped to Namespace"
 
-
-@pytest.mark.parametrize("language_server", [Language.MARKDOWN], indirect=True)
-def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
-    assert_bare_symbol_names(language_server)
+    @pytest.mark.parametrize("language_server", [Language.MARKDOWN], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s, whitespace_allowed=True, parenthesis_allowed=True):
+                malformed_symbols.append(s)
+        assert not malformed_symbols, f"Found malformed symbols: {[sym['name'] for sym in malformed_symbols]}"

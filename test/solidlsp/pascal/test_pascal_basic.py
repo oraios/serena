@@ -10,14 +10,13 @@ Uses genericptr/pascal-language-server which returns SymbolInformation[] format:
 - Method names don't include parent class prefix; uses containerName instead
 """
 
-import shutil
-
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
 from test.conftest import language_tests_enabled
+from test.solidlsp.conftest import has_malformed_name, request_all_symbols
 
 pytestmark = [
     pytest.mark.pascal,
@@ -196,8 +195,11 @@ class TestPascalLanguageServerBasics:
         # Should contain the doc comment
         assert "Calculates the sum" in value, f"Hover should include doc comment. Got: {value[:500]}"
 
-
-@pytest.mark.skipif(shutil.which("fpc") is None, reason="Free Pascal compiler is not available")
-@pytest.mark.parametrize("language_server", [Language.PASCAL], indirect=True)
-def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
-    assert_bare_symbol_names(language_server)
+    @pytest.mark.parametrize("language_server", [Language.PASCAL], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s):
+                malformed_symbols.append(s)
+        assert not malformed_symbols, f"Found malformed symbols: {[sym['name'] for sym in malformed_symbols]}"

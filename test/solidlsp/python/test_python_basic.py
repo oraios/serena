@@ -12,14 +12,14 @@ import pytest
 from serena.project import Project
 from serena.util.text_utils import LineType
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from test.solidlsp.conftest import PYTHON_BACKEND_LANGUAGES, has_malformed_name, request_all_symbols
 
 
 @pytest.mark.python
 class TestPythonLanguageServerBasics:
     """Test basic functionality of the language server."""
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_references_user_class(self, language_server: SolidLanguageServer) -> None:
         """Test request_references on the User class."""
         # Get references to the User class in models.py
@@ -34,7 +34,7 @@ class TestPythonLanguageServerBasics:
         references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         assert len(references) > 1, "User class should be referenced in multiple files (using selectionRange if present)"
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_references_item_class(self, language_server: SolidLanguageServer) -> None:
         """Test request_references on the Item class."""
         # Get references to the Item class in models.py
@@ -50,7 +50,7 @@ class TestPythonLanguageServerBasics:
         services_references = [ref for ref in references if "services.py" in ref["uri"]]
         assert len(services_references) > 0, "At least one reference should be in services.py (using selectionRange if present)"
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_references_function_parameter(self, language_server: SolidLanguageServer) -> None:
         """Test request_references on a function parameter."""
         # Get references to the id parameter in get_user method
@@ -65,7 +65,7 @@ class TestPythonLanguageServerBasics:
         references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         assert len(references) > 0, "id parameter should be referenced within the method (using selectionRange if present)"
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_references_create_user_method(self, language_server: SolidLanguageServer) -> None:
         # Get references to the create_user method in UserService
         file_path = os.path.join("test_repo", "services.py")
@@ -81,7 +81,7 @@ class TestPythonLanguageServerBasics:
 
 
 class TestProjectBasics:
-    @pytest.mark.parametrize("project", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("project", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_retrieve_content_around_line(self, project: Project) -> None:
         """Test retrieve_content_around_line functionality with various scenarios."""
         file_path = os.path.join("test_repo", "models.py")
@@ -188,7 +188,7 @@ class TestProjectBasics:
             else:
                 assert line.match_type == LineType.AFTER_MATCH
 
-    @pytest.mark.parametrize("project", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("project", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_search_files_for_pattern(self, project: Project) -> None:
         """Test search_files_for_pattern with various patterns and glob filters."""
         # Test 1: Search for class definitions across all files
@@ -234,7 +234,11 @@ class TestProjectBasics:
         matches = project.search_source_files_for_pattern(no_match_pattern)
         assert len(matches) == 0
 
-
-@pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
-def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
-    assert_bare_symbol_names(language_server)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s):
+                malformed_symbols.append(s)
+        assert not malformed_symbols, f"Found malformed symbols: {[sym['name'] for sym in malformed_symbols]}"

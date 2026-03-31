@@ -9,6 +9,7 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.solidlsp.conftest import has_malformed_name, request_all_symbols
 
 
 @pytest.mark.bash
@@ -120,7 +121,11 @@ class TestBashLanguageServerBasics:
         assert len(main_functions) >= 3, f"Should find at least 3 functions in main.sh, found {len(main_functions)}"
         assert len(utils_functions) >= 8, f"Should find at least 8 functions in utils.sh, found {len(utils_functions)}"
 
-
-@pytest.mark.parametrize("language_server", [Language.BASH], indirect=True)
-def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
-    assert_bare_symbol_names(language_server)
+    @pytest.mark.parametrize("language_server", [Language.BASH], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s):
+                malformed_symbols.append(s)
+        assert not malformed_symbols, f"Found malformed symbols: {[sym['name'] for sym in malformed_symbols]}"

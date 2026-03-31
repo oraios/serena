@@ -11,6 +11,7 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.solidlsp.conftest import has_malformed_name, request_all_symbols
 
 from . import EXPERT_UNAVAILABLE, EXPERT_UNAVAILABLE_REASON
 
@@ -111,7 +112,20 @@ class TestElixirBasic:
             symbols = language_server.request_document_symbols("lib/services.ex").get_all_symbols_and_roots()
             assert symbols is not None
 
-
-@pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)
-def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
-    assert_bare_symbol_names(language_server)
+    @pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            allow_test_style_name = s["name"].startswith(('test "', 'describe "'))
+            allow_struct_name = s["name"].startswith("%")
+            if has_malformed_name(
+                s,
+                whitespace_allowed=allow_test_style_name,
+                period_allowed=allow_struct_name,
+                colon_allowed=allow_test_style_name,
+                brace_allowed=allow_test_style_name or allow_struct_name,
+                comma_allowed=allow_test_style_name,
+            ):
+                malformed_symbols.append(s)
+        assert not malformed_symbols, f"Found malformed symbols: {[sym['name'] for sym in malformed_symbols]}"

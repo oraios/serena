@@ -5,6 +5,7 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
+from test.solidlsp.conftest import has_malformed_name, request_all_symbols
 
 
 @pytest.mark.vue
@@ -361,7 +362,20 @@ class TestVueEdgeCases:
                 f"Found {len(matching_files)} matches. All files: {list(composables_overview.keys())}"
             )
 
-
-@pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
-def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
-    assert_bare_symbol_names(language_server)
+    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            is_callback = s["name"].endswith(" callback")
+            is_vue_selector = "." in s["name"] or ":" in s["name"]
+            is_vue_block = s["name"] in {"script setup", "style scoped"}
+            if has_malformed_name(
+                s,
+                whitespace_allowed=is_callback or is_vue_selector or is_vue_block,
+                period_allowed=is_vue_selector,
+                colon_allowed=is_vue_selector,
+                parenthesis_allowed=is_callback or is_vue_selector,
+            ):
+                malformed_symbols.append(s)
+        assert not malformed_symbols, f"Found malformed symbols: {[sym['name'] for sym in malformed_symbols]}"

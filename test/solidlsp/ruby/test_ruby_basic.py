@@ -5,9 +5,8 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
-from test.solidlsp.conftest import _is_decorated_symbol_name_default, _iter_symbols
+from test.solidlsp.conftest import has_malformed_name, request_all_symbols
 
 
 @pytest.mark.ruby
@@ -56,16 +55,15 @@ class TestRubyLanguageServer:
         assert definition_location["uri"].endswith("lib.rb")
         assert definition_location["range"]["start"]["line"] == 1  # add method on line 2 (0-indexed 1)
 
-
-@pytest.mark.parametrize("language_server", [Language.RUBY], indirect=True)
-def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
-    symbols = language_server.request_full_symbol_tree()
-    offending_symbols = [
-        f"{SymbolKind(symbol['kind']).name}:{symbol['name']}"
-        for symbol in _iter_symbols(symbols)
-        if not symbol["name"].startswith("self.") and _is_decorated_symbol_name_default(symbol["name"], symbol["kind"])
-    ]
-
-    assert not offending_symbols, (
-        f"Expected bare symbol names for ruby except singleton methods, but found decorated names: {offending_symbols[:20]}"
-    )
+    @pytest.mark.parametrize("language_server", [Language.RUBY], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(
+                s,
+                whitespace_allowed=s["name"] == "<< self",
+                period_allowed=s["name"].startswith("self."),
+            ):
+                malformed_symbols.append(s)
+        assert not malformed_symbols, f"Found malformed symbols: {[sym['name'] for sym in malformed_symbols]}"

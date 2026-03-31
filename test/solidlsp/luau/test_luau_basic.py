@@ -9,6 +9,7 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.solidlsp.conftest import has_malformed_name, request_all_symbols
 
 
 @pytest.mark.luau
@@ -152,7 +153,11 @@ class TestLuauLanguageServer:
         # createConfig is defined at line 8 (0-indexed): `local function createConfig(...)`
         assert definition["range"]["start"]["line"] == 8, f"Definition should be at line 8, got line {definition['range']['start']['line']}"
 
-
-@pytest.mark.parametrize("language_server", [Language.LUAU], indirect=True)
-def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
-    assert_bare_symbol_names(language_server)
+    @pytest.mark.parametrize("language_server", [Language.LUAU], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s):
+                malformed_symbols.append(s)
+        assert not malformed_symbols, f"Found malformed symbols: {[sym['name'] for sym in malformed_symbols]}"

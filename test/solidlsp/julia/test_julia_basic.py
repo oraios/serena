@@ -1,9 +1,8 @@
-import shutil
-
 import pytest
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.solidlsp.conftest import has_malformed_name, request_all_symbols
 
 
 @pytest.mark.julia
@@ -51,8 +50,11 @@ class TestJuliaLanguageServer:
         # The reference might be in either file (definition or usage)
         assert "main.jl" in reference_paths or "lib/helper.jl" in reference_paths
 
-
-@pytest.mark.skipif(shutil.which("julia") is None, reason="Julia is not available")
-@pytest.mark.parametrize("language_server", [Language.JULIA], indirect=True)
-def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
-    assert_bare_symbol_names(language_server)
+    @pytest.mark.parametrize("language_server", [Language.JULIA], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s):
+                malformed_symbols.append(s)
+        assert not malformed_symbols, f"Found malformed symbols: {[sym['name'] for sym in malformed_symbols]}"

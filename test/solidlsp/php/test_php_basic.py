@@ -6,6 +6,7 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from test.conftest import is_ci, is_windows, language_tests_enabled
+from test.solidlsp.conftest import has_malformed_name, request_all_symbols
 
 
 def _php_supports_phpactor() -> bool:
@@ -265,7 +266,11 @@ class TestPhpLanguageServers:
         if dog_root is not None:
             assert SymbolUtils.symbol_tree_contains_name([dog_root], "greet"), "greet should be nested under Dog in symbol tree"
 
-
-@pytest.mark.parametrize("language_server", _php_servers, indirect=True)
-def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
-    assert_bare_symbol_names(language_server)
+    @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s):
+                malformed_symbols.append(s)
+        assert not malformed_symbols, f"Found malformed symbols: {[sym['name'] for sym in malformed_symbols]}"

@@ -3,13 +3,13 @@ Basic tests for R Language Server integration
 """
 
 import os
-import shutil
 from pathlib import Path
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.solidlsp.conftest import has_malformed_name, request_all_symbols
 
 
 @pytest.mark.r
@@ -83,8 +83,6 @@ class TestRLanguageServer:
 
     def test_file_matching(self):
         """Test that R files are properly matched."""
-        from solidlsp.ls_config import Language
-
         matcher = Language.R.get_source_fn_matcher()
 
         assert matcher.is_relevant_filename("script.R")
@@ -97,8 +95,11 @@ class TestRLanguageServer:
         assert Language.R == "r"
         assert str(Language.R) == "r"
 
-
-@pytest.mark.skipif(shutil.which("R") is None, reason="R is not available")
-@pytest.mark.parametrize("language_server", [Language.R], indirect=True)
-def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
-    assert_bare_symbol_names(language_server)
+    @pytest.mark.parametrize("language_server", [Language.R], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s):
+                malformed_symbols.append(s)
+        assert not malformed_symbols, f"Found malformed symbols: {[sym['name'] for sym in malformed_symbols]}"

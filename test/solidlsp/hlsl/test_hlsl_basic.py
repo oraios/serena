@@ -12,7 +12,9 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_exceptions import SolidLSPException
+from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
+from test.solidlsp.conftest import has_malformed_name, request_all_symbols
 
 
 def _find_symbol_by_name(language_server: SolidLanguageServer, file_path: str, name: str) -> dict[str, Any] | None:
@@ -159,7 +161,11 @@ class TestHlslHover:
         assert hover_info is not None, "Hover should return information for VertexInput"
         assert "contents" in hover_info, "Hover should have contents"
 
-
-@pytest.mark.parametrize("language_server", [Language.HLSL], indirect=True)
-def test_bare_symbol_names(language_server, assert_bare_symbol_names) -> None:
-    assert_bare_symbol_names(language_server)
+    @pytest.mark.parametrize("language_server", [Language.HLSL], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s, period_allowed=s["kind"] == SymbolKind.File):
+                malformed_symbols.append(s)
+        assert not malformed_symbols, f"Found malformed symbols: {[sym['name'] for sym in malformed_symbols]}"
