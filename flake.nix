@@ -86,9 +86,43 @@
     in rec {
       formatter = pkgs.alejandra;
 
+      # GTK/WebKit libraries needed by pywebview and pystray on Linux.
+      gtkDeps = lib.optionals pkgs.stdenv.isLinux (with pkgs; [
+        gtk3
+        webkitgtk_4_1
+        glib
+        pango
+        gdk-pixbuf
+        gobject-introspection
+        libayatana-appindicator
+      ]);
+
       packages = {
         serena-env = pythonSet.mkVirtualEnv "serena-env" workspace.deps.default;
-        serena = pkgs.runCommand "serena" {
+        serena = let
+          unwrapped = pkgs.runCommand "serena-unwrapped" {} ''
+            mkdir -p $out/bin
+            ln -s ${packages.serena-env}/bin/serena $out/bin/serena
+          '';
+        in
+          pkgs.stdenv.mkDerivation {
+            pname = "serena";
+            version = "0.1.4";
+            dontUnpack = true;
+            nativeBuildInputs = lib.optionals pkgs.stdenv.isLinux [pkgs.makeWrapper];
+            installPhase =
+              if pkgs.stdenv.isLinux
+              then ''
+                mkdir -p $out/bin
+                makeWrapper ${unwrapped}/bin/serena $out/bin/serena \
+                  --set GI_TYPELIB_PATH "${lib.makeSearchPath "lib/girepository-1.0" gtkDeps}" \
+                  --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath gtkDeps}" \
+                  --set SERENA_NIX_WRAPPED "1"
+              ''
+              else ''
+                mkdir -p $out/bin
+                ln -s ${unwrapped}/bin/serena $out/bin/serena
+              '';
             meta = {
               description = "A powerful coding agent toolkit providing semantic retrieval and editing capabilities (MCP server & Agno integration)";
               homepage = "https://oraios.github.io/serena";
@@ -97,10 +131,7 @@
               license = pkgs.lib.licenses.mit;
               platforms = lib.platforms.all;
             };
-          } ''
-          mkdir -p $out/bin
-          ln -s ${packages.serena-env}/bin/serena $out/bin/serena
-        '';
+          };
         default = packages.serena;
       };
 
