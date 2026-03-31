@@ -541,12 +541,17 @@ class SerenaAgent:
         :param minimized: whether the dashboard viewer should be started minimized (if supported on the current platform).
             If the viewer is not supported on the current platform, then this controls whether to open the browser window.
         """
+        if not system_has_usable_display():
+            log.info("Not starting the Serena dashboard viewer because no usable display was detected.")
+            return
+
         url = self.get_dashboard_url()
         assert url is not None
         if SerenaDashboardViewer.is_current_platform_supported():
             process = multiprocessing.Process(target=self._start_dashboard_viewer_process_function, args=(url, minimized), daemon=True)
             process.start()
         else:
+            log.info("Not starting Serena dashboard viewer because the current platform does not support it; using browser-based fallback")
             if not minimized:
                 self._open_dashboard_in_browser(url)
 
