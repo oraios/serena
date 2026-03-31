@@ -6,13 +6,10 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
-import pystray
 import webview
 from flask import Flask, Response, redirect, request, send_from_directory
 from PIL import Image
 from pydantic import BaseModel
-from pystray import MenuItem as Item
-from pystray._base import Icon as TrayIcon
 from sensai.util import logging
 
 from serena.analytics import ToolUsageStats
@@ -708,7 +705,7 @@ class SerenaDashboardViewer:
         self.start_minimized = start_minimized
 
         self.window: webview.Window
-        self._tray_icon: TrayIcon
+        self._tray_icon: Any
         self._quitting = False
 
     @staticmethod
@@ -799,6 +796,11 @@ class SerenaDashboardViewer:
             ns_app.unhide_(None)
 
     def _start_tray(self) -> None:
+        # import pystray locally, because the import fails when there is no display!
+        import pystray
+        from pystray import MenuItem as Item
+        from pystray._base import Icon as TrayIcon
+
         dashboard_path = Path(SERENA_DASHBOARD_DIR)
 
         # macOS menu bar icons are displayed at 16pt; 32px covers Retina (@2x).
