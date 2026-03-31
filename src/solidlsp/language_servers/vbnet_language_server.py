@@ -130,7 +130,7 @@ def find_solution_or_project_file(root_dir: str) -> str | None:
     for filename in breadth_first_file_scan(root_dir):
         if filename.endswith((".sln", ".slnx")) and sln_file is None:
             sln_file = filename
-        elif filename.endswith(".vbproj") and vbproj_file is None:
+        elif filename.endswith((".vbproj", ".csproj")) and vbproj_file is None:
             vbproj_file = filename
 
         if sln_file:
@@ -419,7 +419,7 @@ class VBNetLanguageServer(SolidLanguageServer):
             for item in items:
                 section = item.get("section", "")
 
-                if section.startswith(("dotnet", "visualbasic")):
+                if section.startswith(("dotnet", "visualbasic", "csharp")):
                     if "enable" in section or "show" in section or "suppress" in section or "navigate" in section:
                         result.append(False)
                     elif "scope" in section:
@@ -543,7 +543,7 @@ class VBNetLanguageServer(SolidLanguageServer):
 
         project_files = []
         for filename in breadth_first_file_scan(self.repository_root_path):
-            if filename.endswith(".vbproj"):
+            if filename.endswith((".vbproj", ".csproj")):
                 project_files.append(filename)
 
         if project_files:
