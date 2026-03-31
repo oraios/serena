@@ -10,12 +10,14 @@ Uses genericptr/pascal-language-server which returns SymbolInformation[] format:
 - Method names don't include parent class prefix; uses containerName instead
 """
 
+import shutil
+
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
-from test.conftest import language_tests_enabled
+from test.conftest import is_ci, language_tests_enabled
 from test.solidlsp.conftest import has_malformed_name, request_all_symbols
 
 pytestmark = [
@@ -25,6 +27,7 @@ pytestmark = [
 
 
 @pytest.mark.pascal
+@pytest.mark.skipif(shutil.which("fpc") is None and not is_ci, reason="Free Pascal compiler is not available")
 class TestPascalLanguageServerBasics:
     """Test basic functionality of the Pascal language server."""
 

@@ -3,15 +3,18 @@ Basic tests for R Language Server integration
 """
 
 import os
+import shutil
 from pathlib import Path
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.conftest import is_ci
 from test.solidlsp.conftest import has_malformed_name, request_all_symbols
 
 
+@pytest.mark.skipif(shutil.which("R") is None and not is_ci, reason="R is not available")
 @pytest.mark.r
 class TestRLanguageServer:
     """Test basic functionality of the R language server."""

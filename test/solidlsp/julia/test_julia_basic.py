@@ -1,10 +1,14 @@
+import shutil
+
 import pytest
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.conftest import is_ci
 from test.solidlsp.conftest import has_malformed_name, request_all_symbols
 
 
+@pytest.mark.skipif(shutil.which("julia") is None and not is_ci, reason="Julia is not available")
 @pytest.mark.julia
 class TestJuliaLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.JULIA], indirect=True)

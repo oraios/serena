@@ -188,6 +188,8 @@ class TestLanguageServerBasics:
         assert found_relevant_references, f"Should have found calculate-area referencing multiply, but got: {result}"
 
 
+@pytest.mark.skipif(not language_tests_enabled(Language.CLOJURE), reason="Clojure tests are disabled")
+@pytest.mark.clojure
 class TestProjectBasics:
     @pytest.mark.parametrize("project", [Language.CLOJURE], indirect=True)
     def test_retrieve_content_around_line(self, project: Project):
