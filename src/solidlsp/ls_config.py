@@ -441,7 +441,7 @@ class LanguageServerId(Enum):
             case self.CSHARP | self.CSHARP_OMNISHARP:
                 return FilenameMatcher(".cs")
             case self.VBNET:
-                return FilenameMatcher(".vb")
+                return FilenameMatcher(".vb", ".cs")
             case self.RUST:
                 return FilenameMatcher(".rs")
             case self.GO:
