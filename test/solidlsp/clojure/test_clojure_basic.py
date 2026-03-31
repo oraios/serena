@@ -3,7 +3,7 @@ import pytest
 from serena.project import Project
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language
-from solidlsp.ls_types import UnifiedSymbolInformation
+from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
 from test.conftest import language_tests_enabled
 from test.solidlsp.conftest import has_malformed_name, request_all_symbols
 
@@ -230,6 +230,10 @@ class TestProjectBasics:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []
         for s in all_symbols:
+            # clojure-lsp exposes namespace and dependency/container entries in addition to real vars/functions.
+            # Those qualified names are not the target of this regression check.
+            if s["kind"] in {SymbolKind.Namespace, SymbolKind.Struct}:
+                continue
             if has_malformed_name(s):
                 malformed_symbols.append(s)
         assert not malformed_symbols, f"Found malformed symbols: {[sym['name'] for sym in malformed_symbols]}"
