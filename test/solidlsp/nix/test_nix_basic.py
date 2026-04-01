@@ -231,4 +231,8 @@ class TestNixLanguageServer:
                 parenthesis_allowed=s["name"] == "(anonymous lambda)",
             ):
                 malformed_symbols.append(s)
-        assert len(malformed_symbols) == 0, f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}"
+            if malformed_symbols:
+                pytest.fail(
+                    f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                    pytrace=False,
+                )
