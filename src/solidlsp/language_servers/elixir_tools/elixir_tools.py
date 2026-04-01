@@ -4,11 +4,12 @@ import pathlib
 import stat
 import subprocess
 import threading
+from collections.abc import Hashable
 from typing import Any, cast
 
 from overrides import override
 
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import RawDocumentSymbol, SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import FileUtils, PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
@@ -214,6 +215,15 @@ class ElixirTools(SolidLanguageServer):
 
         # Set generous timeout for Expert which can be slow to initialize and respond
         self.set_request_timeout(180.0)
+
+    @override
+    def _document_symbols_cache_fingerprint(self) -> Hashable:
+        normalize_symbol_name_version = 1
+        return normalize_symbol_name_version
+
+    @override
+    def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
+        return symbol["name"].removeprefix("defp ").removeprefix("def ").split("(", 1)[0].strip()
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:

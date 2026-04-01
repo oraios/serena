@@ -29,27 +29,25 @@ line_ending: native
 # we have to live with this limitation for now.
 gui_log_window: False
 
-# whether to start the Serena web dashboard, which provides access to Serena's configuration
-# and state as well as the current session logs.
-# The web dashboard is supported on all platforms.
-# We strongly recommend to always enable this option, since the dashboard provides important information
-# about the current state of Serena.
-# If you don't want the browser window to pop up automatically, set `web_dashboard_open_on_launch` to False
-# (see option below).
+# whether to start the Serena Dashboard, which provides detailed information on your Serena session,
+# the current configuration and furthermore allows some settings to be conveniently modified on the fly.
+# We strongly recommend to always enable this option!
+# If you want to prevent the Dashboard window from being opened on launch,
+# set `web_dashboard_open_on_launch` to false (see below).
 # Further information: https://oraios.github.io/serena/02-usage/060_dashboard.html
 web_dashboard: True
 
-# the address the web dashboard will listen on (bind address).
-web_dashboard_listen_address: 127.0.0.1
-
-# whether to open a browser window with the web dashboard when Serena starts (provided that web_dashboard
-# is enabled). See also the web_dashboard option.
-# If set to false, you can still open the dashboard manually by
+# whether to open the Dashboard window/browser tab when Serena starts (provided that web_dashboard is enabled).
+# If set to false, you can still open the dashboard manually by clicking on the Serena icon in your system
+# tray on Windows and macOS. On Linux, there is no system tray support, so you can only open the dashboard by
 # a) telling the LLM to "open the dashboard" (provided that the open_dashboard tool is enabled) or by
 # b) manually navigating to http://localhost:24282/dashboard/ in your web browser (actual port
 #    may be higher if you have multiple instances running; try ports 24283, 24284, etc.)
 # See also: https://oraios.github.io/serena/02-usage/060_dashboard.html
 web_dashboard_open_on_launch: True
+
+# the address the web dashboard will listen on (bind address).
+web_dashboard_listen_address: 127.0.0.1
 
 # address where JetBrains plugin servers are running (only relevant when using the JetBrains language backend)
 jetbrains_plugin_server_address: 127.0.0.1

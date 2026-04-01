@@ -11,12 +11,14 @@ import os
 import pathlib
 import platform
 import shutil
+from collections.abc import Hashable
 from pathlib import Path
 
 from overrides import override
 
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import RawDocumentSymbol, SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import FileUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -168,6 +170,26 @@ class LuaLanguageServer(SolidLanguageServer):
             config, repository_root_path, ProcessLaunchInfo(cmd=lua_ls_path, cwd=repository_root_path), "lua", solidlsp_settings
         )
         self.request_id = 0
+
+    @override
+    def _document_symbols_cache_fingerprint(self) -> Hashable:
+        normalize_symbol_name_version = 1
+        return normalize_symbol_name_version
+
+    @override
+    def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
+        original_name = symbol["name"]
+
+        if symbol.get("kind") not in (SymbolKind.Function, SymbolKind.Method):
+            return original_name
+
+        if "." in original_name:
+            return original_name.rsplit(".", 1)[-1]
+
+        if ":" in original_name:
+            return original_name.rsplit(":", 1)[-1]
+
+        return original_name
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:

@@ -2,6 +2,7 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
+import multiprocessing
 import os
 import platform
 import subprocess
@@ -11,6 +12,7 @@ from contextlib import contextmanager
 from logging import Logger
 from typing import TYPE_CHECKING, Optional, TypeVar
 
+import webview
 from sensai.util import logging
 from sensai.util.logging import LogTime
 from sensai.util.string import dict_string
@@ -28,7 +30,7 @@ from serena.config.serena_config import (
     SerenaPaths,
     ToolInclusionDefinition,
 )
-from serena.dashboard import SerenaDashboardAPI
+from serena.dashboard import SerenaDashboardAPI, SerenaDashboardViewer
 from serena.ls_manager import LanguageServerManager
 from serena.project import MemoriesManager, Project
 from serena.prompt_factory import SerenaPromptFactory
@@ -375,8 +377,7 @@ class SerenaAgent:
             dashboard_url = f"http://{dashboard_host}:{port}/dashboard/index.html"
             self._dashboard_url = dashboard_url
             log.info("Serena web dashboard started at %s", dashboard_url)
-            if self.serena_config.web_dashboard_open_on_launch:
-                self.open_dashboard()
+            self._start_dashboard_viewer(minimized=not self.serena_config.web_dashboard_open_on_launch)
             # inform the GUI window (if any)
             if self._gui_log_viewer is not None:
                 self._gui_log_viewer.set_dashboard_url(dashboard_url)
@@ -519,11 +520,46 @@ class SerenaAgent:
         """
         return self._dashboard_url
 
+    @staticmethod
+    def _start_dashboard_viewer_process_function(url: str, minimized: bool) -> None:
+        """
+        Main function of the subprocess for starting the dashboard viewer
+        """
+        try:
+            SerenaDashboardViewer(url, start_minimized=minimized).run()
+        except webview.errors.WebViewException as e:
+            log.warning(f"Could not open Serena Dashboard viewer. Cause:\n{e}")
+            # Fall back to opening the browser window if the window was supposed to be shown directly
+            if not minimized:
+                SerenaAgent._open_dashboard_in_browser(url)
+
+    def _start_dashboard_viewer(self, minimized: bool) -> None:
+        """
+        Starts the dashboard viewer (in a separate process) or, if the current platform does not support it,
+        opens the dashboard in the default web browser.
+
+        :param minimized: whether the dashboard viewer should be started minimized (if supported on the current platform).
+            If the viewer is not supported on the current platform, then this controls whether to open the browser window.
+        """
+        if not system_has_usable_display():
+            log.info("Not starting the Serena dashboard viewer because no usable display was detected.")
+            return
+
+        url = self.get_dashboard_url()
+        assert url is not None
+        if SerenaDashboardViewer.is_current_platform_supported():
+            process = multiprocessing.Process(target=self._start_dashboard_viewer_process_function, args=(url, minimized), daemon=True)
+            process.start()
+        else:
+            log.info("Not starting Serena dashboard viewer because the current platform does not support it; using browser-based fallback")
+            if not minimized:
+                self._open_dashboard_in_browser(url)
+
     def open_dashboard(self) -> bool:
         """
-        Opens the Serena web dashboard in the default web browser.
+        Opens the Serena dashboard (for on-demand usage as triggered by the user, e.g. via a tool)
 
-        :return: a message indicating success or failure
+        :return: True if the dashboard was opened, False if it could not be opened
         """
         if self._dashboard_url is None:
             raise Exception("Dashboard is not running.")
@@ -532,15 +568,19 @@ class SerenaAgent:
             log.warning("Not opening the Serena web dashboard because no usable display was detected.")
             return False
 
+        self._open_dashboard_in_browser(self._dashboard_url)
+        return True
+
+    @staticmethod
+    def _open_dashboard_in_browser(url: str) -> None:
         # Use a subprocess to avoid any output from webbrowser.open being written to stdout
         subprocess.Popen(
-            [sys.executable, "-c", f"import webbrowser; webbrowser.open({self._dashboard_url!r})"],
+            [sys.executable, "-c", f"import webbrowser; webbrowser.open({url!r})"],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,  # Detach from parent process
         )
-        return True
 
     def get_exposed_tool_instances(self) -> list["Tool"]:
         """

@@ -14,12 +14,14 @@ import platform
 import shutil
 import tempfile
 import threading
+from collections.abc import Hashable
 from pathlib import Path
 
 from overrides import override
 
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import RawDocumentSymbol, SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import FileUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -198,6 +200,30 @@ class PowerShellLanguageServer(SolidLanguageServer):
             solidlsp_settings,
         )
         self.server_ready = threading.Event()
+
+    @override
+    def _document_symbols_cache_fingerprint(self) -> Hashable:
+        normalize_symbol_name_version = 1
+        return normalize_symbol_name_version
+
+    @override
+    def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
+        original_name = symbol["name"]
+        symbol_kind = symbol.get("kind")
+
+        # normalize class declarations
+        if symbol_kind == SymbolKind.Class:
+            return original_name.removeprefix("class ").split("{", 1)[0].strip()
+
+        # normalize method signatures
+        if symbol_kind == SymbolKind.Method:
+            return original_name.split("(", 1)[0].rsplit(None, 1)[-1]
+
+        # normalize function declarations
+        if symbol_kind == SymbolKind.Function:
+            return original_name.removeprefix("function ").split("(", 1)[0].strip()
+
+        return original_name
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
