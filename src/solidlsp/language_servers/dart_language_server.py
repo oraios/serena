@@ -1,9 +1,12 @@
 import logging
 import os
 import pathlib
+from collections.abc import Hashable
 from typing import cast
 
-from solidlsp.ls import SolidLanguageServer
+from overrides import override
+
+from solidlsp.ls import RawDocumentSymbol, SolidLanguageServer
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -33,6 +36,15 @@ class DartLanguageServer(SolidLanguageServer):
         super().__init__(
             config, repository_root_path, ProcessLaunchInfo(cmd=executable_path, cwd=repository_root_path), "dart", solidlsp_settings
         )
+
+    @override
+    def _document_symbols_cache_fingerprint(self) -> Hashable:
+        normalize_symbol_name_version = 1
+        return normalize_symbol_name_version
+
+    @override
+    def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
+        return symbol["name"].rsplit(".", 1)[-1]
 
     @classmethod
     def _setup_runtime_dependencies(cls, solidlsp_settings: SolidLSPSettings) -> str:

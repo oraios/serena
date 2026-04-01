@@ -10,6 +10,7 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
 @pytest.mark.lua
@@ -253,3 +254,21 @@ class TestLuaLanguageServer:
         # The test file should have some content that references calculator
         symbol_list = test_symbols[0] if isinstance(test_symbols, tuple) else test_symbols
         assert len(symbol_list) > 0, "test_calculator.lua should have symbols"
+
+    @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(
+                s,
+                whitespace_allowed=s["name"] == " ",
+                period_allowed="." in s["name"],
+                colon_allowed=":" in s["name"],
+            ):
+                malformed_symbols.append(s)
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )

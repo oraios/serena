@@ -15,6 +15,10 @@ type DemoStruct struct {
     Field int
 }
 
+func (d *DemoStruct) Value() int {
+    return d.Field
+}
+
 func UsingHelper() {
     Helper()
 }

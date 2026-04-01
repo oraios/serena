@@ -1013,9 +1013,18 @@ class ALLanguageServer(SolidLanguageServer):
         original_name = symbol["name"]
         normalized_name = self._extract_al_display_name(original_name)
 
-        # Store original name if it was normalized (for hover injection)
+        if symbol.get("kind") in (SymbolKind.Function, SymbolKind.Method) and "(" in normalized_name:
+            normalized_name = normalized_name.split("(", 1)[0].strip()
+
+        if symbol.get("kind") == SymbolKind.Method and normalized_name.lower().startswith("action "):
+            normalized_name = normalized_name.split(None, 1)[-1].strip()
+
+        if symbol.get("kind") == SymbolKind.Field and ":" in normalized_name:
+            normalized_name = normalized_name.split(":", 1)[0].strip()
+
+        # Store original name if it was normalized for an AL object declaration
         # Only store if we have valid position data to avoid false matches at (0, 0)
-        if original_name != normalized_name:
+        if original_name != normalized_name and self._AL_OBJECT_NAME_PATTERN.match(original_name):
             sel_range = symbol.get("selectionRange")
             if sel_range:
                 start = sel_range.get("start")  # type: ignore
@@ -1025,6 +1034,11 @@ class ALLanguageServer(SolidLanguageServer):
                     self._al_original_names[(relative_file_path, line, char)] = original_name
 
         return normalized_name
+
+    @override
+    def _document_symbols_cache_fingerprint(self) -> int:
+        normalize_symbol_name_version = 1
+        return normalize_symbol_name_version
 
     @override
     def request_hover(

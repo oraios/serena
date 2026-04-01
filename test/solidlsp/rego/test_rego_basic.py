@@ -1,14 +1,19 @@
 """Tests for Rego language server (Regal) functionality."""
 
 import os
+import shutil
 
 import pytest
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language
+from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
+from test.conftest import is_ci
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
+@pytest.mark.skipif(shutil.which("regal") is None and not is_ci, reason="Regal is not available")
 @pytest.mark.rego
 class TestRegoLanguageServer:
     """Test Regal language server functionality for Rego."""
@@ -132,3 +137,18 @@ class TestRegoLanguageServer:
         assert "validate_user_input" in symbol_names, "validate_user_input rule not found"
         assert "has_valid_credentials" in symbol_names, "has_valid_credentials function not found"
         assert "validate_request" in symbol_names, "validate_request rule not found"
+
+    @pytest.mark.parametrize("language_server", [Language.REGO], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if s["kind"] == SymbolKind.Package:
+                continue
+            if has_malformed_name(s):
+                malformed_symbols.append(s)
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )

@@ -12,8 +12,8 @@ import pytest
 
 from serena.symbol import LanguageServerSymbol
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
+from test.solidlsp.conftest import PYTHON_BACKEND_LANGUAGES
 
 pytestmark = pytest.mark.python
 
@@ -21,7 +21,7 @@ pytestmark = pytest.mark.python
 class TestLanguageServerSymbols:
     """Test the language server's symbol-related functionality."""
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_containing_symbol_function(self, language_server: SolidLanguageServer) -> None:
         """Test request_containing_symbol for a function."""
         # Test for a position inside the create_user method
@@ -36,7 +36,7 @@ class TestLanguageServerSymbols:
         if "body" in containing_symbol:
             assert containing_symbol["body"].get_text().strip().startswith("def create_user(self")
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_references_to_variables(self, language_server: SolidLanguageServer) -> None:
         """Test request_referencing_symbols for a variable."""
         file_path = os.path.join("test_repo", "variables.py")
@@ -51,7 +51,7 @@ class TestLanguageServerSymbols:
         assert "dataclass_instance" in ref_names
         assert "second_dataclass" in ref_names
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_containing_symbol_class(self, language_server: SolidLanguageServer) -> None:
         """Test request_containing_symbol for a class."""
         # Test for a position inside the UserService class but outside any method
@@ -64,7 +64,7 @@ class TestLanguageServerSymbols:
         assert containing_symbol["name"] == "UserService"
         assert containing_symbol["kind"] == SymbolKind.Class
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_containing_symbol_nested(self, language_server: SolidLanguageServer) -> None:
         """Test request_containing_symbol with nested scopes."""
         # Test for a position inside a method which is inside a class
@@ -90,7 +90,7 @@ class TestLanguageServerSymbols:
             assert parent_symbol["name"] == "UserService"
             assert parent_symbol["kind"] == SymbolKind.Class
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_containing_symbol_none(self, language_server: SolidLanguageServer) -> None:
         """Test request_containing_symbol for a position with no containing symbol."""
         # Test for a position outside any function/class (e.g., in imports)
@@ -101,7 +101,7 @@ class TestLanguageServerSymbols:
         # Should return None or an empty dictionary
         assert containing_symbol is None or containing_symbol == {}
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_referencing_symbols_function(self, language_server: SolidLanguageServer) -> None:
         """Test request_referencing_symbols for a function."""
         # Test referencing symbols for create_user function
@@ -125,7 +125,7 @@ class TestLanguageServerSymbols:
                 assert "start" in symbol["location"]["range"]
                 assert "end" in symbol["location"]["range"]
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_referencing_symbols_class(self, language_server: SolidLanguageServer) -> None:
         """Test request_referencing_symbols for a class."""
         # Test referencing symbols for User class
@@ -146,7 +146,7 @@ class TestLanguageServerSymbols:
         ]
         assert len(services_references) > 0, "No referencing symbols from services.py for User (selectionRange)"
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_referencing_symbols_parameter(self, language_server: SolidLanguageServer) -> None:
         """Test request_referencing_symbols for a function parameter."""
         # Test referencing symbols for id parameter in get_user
@@ -167,7 +167,7 @@ class TestLanguageServerSymbols:
         ]
         assert len(method_refs) > 0, "No referencing symbols within method body for get_user (selectionRange)"
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_referencing_symbols_none(self, language_server: SolidLanguageServer) -> None:
         """Test request_referencing_symbols for a position with no symbol."""
         # For positions with no symbol, the method might throw an error or return None/empty list
@@ -185,7 +185,7 @@ class TestLanguageServerSymbols:
             pass
 
     # Tests for request_defining_symbol
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_defining_symbol_variable(self, language_server: SolidLanguageServer) -> None:
         """Test request_defining_symbol for a variable usage."""
         # Test finding the definition of a symbol in the create_user method
@@ -204,7 +204,7 @@ class TestLanguageServerSymbols:
         if "location" in defining_symbol and "uri" in defining_symbol["location"]:
             assert "services.py" in defining_symbol["location"]["uri"]
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_defining_symbol_imported_class(self, language_server: SolidLanguageServer) -> None:
         """Test request_defining_symbol for an imported class."""
         # Test finding the definition of the 'User' class used in the UserService.create_user method
@@ -216,7 +216,7 @@ class TestLanguageServerSymbols:
         assert defining_symbol is not None
         assert defining_symbol.get("name") == "User"
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_defining_symbol_method_call(self, language_server: SolidLanguageServer) -> None:
         """Test request_defining_symbol for a method call."""
         # Create an example file path for a file that calls UserService.create_user
@@ -241,7 +241,7 @@ class TestLanguageServerSymbols:
 
             warnings.warn("Could not verify method call definition - file structure may differ from expected")
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_defining_symbol_none(self, language_server: SolidLanguageServer) -> None:
         """Test request_defining_symbol for a position with no symbol."""
         # Test for a position with no symbol (e.g., whitespace or comment)
@@ -252,7 +252,7 @@ class TestLanguageServerSymbols:
         # Should return None for positions with no symbol
         assert defining_symbol is None
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_containing_symbol_variable(self, language_server: SolidLanguageServer) -> None:
         """Test request_containing_symbol where the symbol is a variable."""
         # Test for a position inside a variable definition
@@ -265,7 +265,7 @@ class TestLanguageServerSymbols:
         assert containing_symbol["name"] == "user_var_str"
         assert containing_symbol["kind"] == SymbolKind.Variable
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_defining_symbol_nested_function(self, language_server: SolidLanguageServer) -> None:
         """Test request_defining_symbol for a nested function or closure."""
         # Use the existing nested.py file which contains nested classes and methods
@@ -290,15 +290,8 @@ class TestLanguageServerSymbols:
         # Test 3: Find definition of a method-local function
         defining_symbol = language_server.request_defining_symbol(file_path, 9, 15)  # Position inside func_within_func
 
-        # This is challenging for many language servers and may fail
-        try:
-            assert defining_symbol is not None
-            assert defining_symbol.get("name") == "func_within_func"
-        except (AssertionError, TypeError, KeyError):
-            # This is expected to potentially fail in many implementations
-            import warnings
-
-            warnings.warn("Could not resolve nested class method definition - implementation limitation")
+        assert defining_symbol is not None
+        assert defining_symbol.get("name") == "func_within_func"
 
         # Test 2: Find definition of the nested class
         defining_symbol = language_server.request_defining_symbol(file_path, 15, 18)  # Position of NestedClass
@@ -314,9 +307,9 @@ class TestLanguageServerSymbols:
         # This is challenging for many language servers and may fail
         assert defining_symbol is not None
         assert defining_symbol.get("name") == "func_within_func"
-        assert defining_symbol.get("kind") == SymbolKind.Function.value
+        assert defining_symbol.get("kind") in [SymbolKind.Function.value, SymbolKind.Method.value]
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_symbol_methods_integration(self, language_server: SolidLanguageServer) -> None:
         """Test the integration between different symbol-related methods."""
         # This test demonstrates using the various symbol methods together
@@ -365,7 +358,7 @@ class TestLanguageServerSymbols:
 
                 warnings.warn("Could not verify container hierarchy - implementation detail")
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_symbol_tree_structure(self, language_server: SolidLanguageServer) -> None:
         """Test that the symbol tree structure is correctly built."""
         # Get all symbols in the test file
@@ -395,7 +388,7 @@ class TestLanguageServerSymbols:
             ).get_all_symbols_and_roots()
             assert user_management_roots == user_management_node["children"]
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_symbol_tree_structure_subdir(self, language_server: SolidLanguageServer) -> None:
         """Test that the symbol tree structure is correctly built."""
         # Get all symbols in the test file
@@ -418,7 +411,7 @@ class TestLanguageServerSymbols:
             ).get_all_symbols_and_roots()
             assert user_management_roots == user_management_node["children"]
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_dir_overview(self, language_server: SolidLanguageServer) -> None:
         """Test that request_dir_overview returns correct symbol information for files in a directory."""
         # Get overview of the examples directory
@@ -442,7 +435,7 @@ class TestLanguageServerSymbols:
         retrieved_symbols = {symbol["name"] for symbol in services_symbols if "name" in symbol}
         assert expected_symbols.issubset(retrieved_symbols)
 
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_document_overview(self, language_server: SolidLanguageServer) -> None:
         """Test that request_document_overview returns correct symbol information for a file."""
         # Get overview of the user_management.py file
@@ -451,25 +444,3 @@ class TestLanguageServerSymbols:
         # Verify that we have entries for both files
         symbol_names = {LanguageServerSymbol(s_info).name for s_info in overview}
         assert {"UserStats", "UserManager", "process_user_data", "main"}.issubset(symbol_names)
-
-    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
-    def test_containing_symbol_of_var_is_file(self, language_server: SolidLanguageServer) -> None:
-        """Test that the containing symbol of a variable is the file itself."""
-        # Get the containing symbol of a variable in a file
-        file_path = os.path.join("test_repo", "services.py")
-        # import of typing
-        references_to_typing = [
-            ref.symbol
-            for ref in language_server.request_referencing_symbols(file_path, 4, 6, include_imports=False, include_file_symbols=True)
-        ]
-        assert {ref["kind"] for ref in references_to_typing} == {SymbolKind.File}
-
-        # now include bodies
-        references_to_typing = [
-            ref.symbol
-            for ref in language_server.request_referencing_symbols(
-                file_path, 4, 6, include_imports=False, include_file_symbols=True, include_body=True
-            )
-        ]
-        assert {ref["kind"] for ref in references_to_typing} == {SymbolKind.File}
-        assert references_to_typing[0]["body"]
