@@ -230,16 +230,8 @@ class CodeEditor(Generic[TSymbol], ABC):
             edited_file.delete_text_between_positions(start_pos, end_pos)
 
     @abstractmethod
-    def rename_symbol(self, name_path: str | None, relative_path: str, new_name: str) -> str:
-        """
-        Renames a symbol, file, or directory throughout the codebase.
-
-        :param name_path: the name path of the symbol to rename
-        :param relative_path: if `name_path` is passed, the relative path of the file containing the symbol.
-            Otherwise, the path to the directory or file to rename.
-        :param new_name: the new name
-        :return: a status message
-        """
+    def rename_symbol(self, name_path: str, relative_path: str, new_name: str) -> str:
+        pass
 
 
 class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
@@ -348,9 +340,15 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
             operation.apply()
         return len(operations)
 
-    def rename_symbol(self, name_path: str | None, relative_path: str, new_name: str) -> str:
-        if name_path is None:
-            raise NotImplementedError("Renaming files/directories is not yet implemented for in the language server backend.")
+    def rename_symbol(self, name_path: str, relative_path: str, new_name: str) -> str:
+        """
+        Renames a symbol, file, or directory throughout the codebase.
+
+        :param name_path: the name path of the symbol to rename
+        :param relative_path: the relative path of the file containing the symbol.
+        :param new_name: the new name
+        :return: a status message
+        """
         symbol = self._find_unique_symbol(name_path, relative_path)
         if not symbol.location.has_position_in_file():
             raise ValueError(f"Symbol '{name_path}' does not have a valid position in file for renaming")
@@ -429,6 +427,15 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
             return JetBrainsSymbol(symbols[0], self._project)
 
     def rename_symbol(self, name_path: str | None, relative_path: str, new_name: str) -> str:
+        """
+        Renames a code symbol, file, or directory throughout the codebase.
+
+        :param name_path: the name path of the symbol to rename. Set to None for renaming a file or directory.
+        :param relative_path: if `name_path` is passed, the relative path of the file containing the symbol.
+            Otherwise, the path to the directory or file to rename.
+        :param new_name: the new name
+        :return: a status message
+        """
         with JetBrainsPluginClient.from_project(self._project) as client:
             client.rename_symbol(
                 name_path=name_path,

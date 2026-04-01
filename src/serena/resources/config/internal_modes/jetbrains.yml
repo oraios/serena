@@ -10,6 +10,7 @@ excluded_tools:
   - get_symbols_overview
   - restart_language_server
   - safe_delete_symbol
+  - rename_symbol
 included_optional_tools:
   - jet_brains_find_symbol
   - jet_brains_find_referencing_symbols
@@ -18,3 +19,4 @@ included_optional_tools:
   - jet_brains_type_hierarchy
   - jet_brains_safe_delete
   - jet_brains_inline_symbol
+  - jet_brains_rename

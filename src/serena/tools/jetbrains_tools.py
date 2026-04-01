@@ -3,6 +3,7 @@ from collections import Counter
 from typing import Any, Literal
 
 import serena.jetbrains.jetbrains_types as jb
+from serena.code_editor import JetBrainsCodeEditor
 from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
 from serena.jetbrains.jetbrains_types import SymbolDTO
 from serena.symbol import JetBrainsSymbolDictGrouper
@@ -468,3 +469,19 @@ class JetBrainsFindImplementationsTool(Tool, ToolMarkerSymbolicRead):
             )
         result = self._to_json(symbol_collection)
         return result
+
+
+class JetBrainsRenameTool(Tool, ToolMarkerSymbolicEdit):
+    def apply(self, relative_path: str, new_name: str, name_path: str | None = None) -> str:
+        """
+        Renames a symbol, file, or directory throughout the codebase.
+
+        :param relative_path: if `name_path` is passed, the relative path of the file containing the symbol.
+            Otherwise, the path to the directory or file to rename.
+        :param new_name: the new name
+        :param name_path: the name path of the symbol to rename or None if renaming a file or directory.
+        :return: a status message
+        """
+        code_editor = JetBrainsCodeEditor(self.project)
+        result = code_editor.rename_symbol(name_path=name_path, relative_path=relative_path, new_name=new_name)
+        return self._to_json(result)
