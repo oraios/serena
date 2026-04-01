@@ -28,6 +28,10 @@ class ClangdLanguageServer(SolidLanguageServer):
           ``compile_commands.json`` if needed.
         - clangd_version: Override the pinned Clangd version downloaded by Serena
           (default: the bundled Serena version).
+        - ls_extra_args: Extra arguments appended to the default clangd launch command
+          (e.g. ``["--query-driver=/usr/bin/arm-none-eabi-gcc"]``).
+        - ls_args: Fully replace the default clangd arguments (executable path is kept).
+          Use when you need complete control over the argument list.
     """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
