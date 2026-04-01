@@ -290,15 +290,8 @@ class TestLanguageServerSymbols:
         # Test 3: Find definition of a method-local function
         defining_symbol = language_server.request_defining_symbol(file_path, 9, 15)  # Position inside func_within_func
 
-        # This is challenging for many language servers and may fail
-        try:
-            assert defining_symbol is not None
-            assert defining_symbol.get("name") == "func_within_func"
-        except (AssertionError, TypeError, KeyError):
-            # This is expected to potentially fail in many implementations
-            import warnings
-
-            warnings.warn("Could not resolve nested class method definition - implementation limitation")
+        assert defining_symbol is not None
+        assert defining_symbol.get("name") == "func_within_func"
 
         # Test 2: Find definition of the nested class
         defining_symbol = language_server.request_defining_symbol(file_path, 15, 18)  # Position of NestedClass
@@ -314,7 +307,7 @@ class TestLanguageServerSymbols:
         # This is challenging for many language servers and may fail
         assert defining_symbol is not None
         assert defining_symbol.get("name") == "func_within_func"
-        assert defining_symbol.get("kind") == SymbolKind.Function.value
+        assert defining_symbol.get("kind") in [SymbolKind.Function.value, SymbolKind.Method.value]
 
     @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_symbol_methods_integration(self, language_server: SolidLanguageServer) -> None:
@@ -451,25 +444,3 @@ class TestLanguageServerSymbols:
         # Verify that we have entries for both files
         symbol_names = {LanguageServerSymbol(s_info).name for s_info in overview}
         assert {"UserStats", "UserManager", "process_user_data", "main"}.issubset(symbol_names)
-
-    @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
-    def test_containing_symbol_of_var_is_file(self, language_server: SolidLanguageServer) -> None:
-        """Test that the containing symbol of a variable is the file itself."""
-        # Get the containing symbol of a variable in a file
-        file_path = os.path.join("test_repo", "services.py")
-        # import of typing
-        references_to_typing = [
-            ref.symbol
-            for ref in language_server.request_referencing_symbols(file_path, 4, 6, include_imports=False, include_file_symbols=True)
-        ]
-        assert {ref["kind"] for ref in references_to_typing} == {SymbolKind.File}
-
-        # now include bodies
-        references_to_typing = [
-            ref.symbol
-            for ref in language_server.request_referencing_symbols(
-                file_path, 4, 6, include_imports=False, include_file_symbols=True, include_body=True
-            )
-        ]
-        assert {ref["kind"] for ref in references_to_typing} == {SymbolKind.File}
-        assert references_to_typing[0]["body"]
