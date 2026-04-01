@@ -2,17 +2,16 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
-import multiprocessing
 import os
 import platform
 import subprocess
 import sys
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
+from datetime import datetime
 from logging import Logger
 from typing import TYPE_CHECKING, Optional, TypeVar
 
-import webview
 from sensai.util import logging
 from sensai.util.logging import LogTime
 from sensai.util.string import dict_string
@@ -30,7 +29,7 @@ from serena.config.serena_config import (
     SerenaPaths,
     ToolInclusionDefinition,
 )
-from serena.dashboard import SerenaDashboardAPI, SerenaDashboardViewer
+from serena.dashboard import SerenaDashboardAPI, SerenaDashboardTrayManager
 from serena.ls_manager import LanguageServerManager
 from serena.project import MemoriesManager, Project
 from serena.prompt_factory import SerenaPromptFactory
@@ -364,6 +363,10 @@ class SerenaAgent:
         self._active_tools: AvailableTools
         self._update_active_tools()
 
+        # record the agent start time (used for tray manager registration)
+        self._agent_started_at = datetime.now().isoformat(timespec="seconds")
+        self._dashboard_port: int | None = None
+
         # start the dashboard (web frontend), registering its log handler
         # should be the last thing to happen in the initialization since the dashboard
         # may access various parts of the agent
@@ -371,13 +374,14 @@ class SerenaAgent:
             self._dashboard_thread, port = SerenaDashboardAPI(
                 get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats
             ).run_in_thread(host=self.serena_config.web_dashboard_listen_address)
+            self._dashboard_port = port
             dashboard_host = self.serena_config.web_dashboard_listen_address
             if dashboard_host == "0.0.0.0":
                 dashboard_host = "localhost"
             dashboard_url = f"http://{dashboard_host}:{port}/dashboard/index.html"
             self._dashboard_url = dashboard_url
             log.info("Serena web dashboard started at %s", dashboard_url)
-            self._start_dashboard_viewer(minimized=not self.serena_config.web_dashboard_open_on_launch)
+            self._ensure_tray_manager_and_register(open_on_launch=self.serena_config.web_dashboard_open_on_launch)
             # inform the GUI window (if any)
             if self._gui_log_viewer is not None:
                 self._gui_log_viewer.set_dashboard_url(dashboard_url)
@@ -520,39 +524,42 @@ class SerenaAgent:
         """
         return self._dashboard_url
 
-    @staticmethod
-    def _start_dashboard_viewer_process_function(url: str, minimized: bool) -> None:
+    def _ensure_tray_manager_and_register(self, open_on_launch: bool) -> None:
         """
-        Main function of the subprocess for starting the dashboard viewer
-        """
-        try:
-            SerenaDashboardViewer(url, start_minimized=minimized).run()
-        except webview.errors.WebViewException as e:
-            log.warning(f"Could not open Serena Dashboard viewer. Cause:\n{e}")
-            # Fall back to opening the browser window if the window was supposed to be shown directly
-            if not minimized:
-                SerenaAgent._open_dashboard_in_browser(url)
+        Ensure the tray manager is running and register this dashboard instance with it.
 
-    def _start_dashboard_viewer(self, minimized: bool) -> None:
-        """
-        Starts the dashboard viewer (in a separate process) or, if the current platform does not support it,
-        opens the dashboard in the default web browser.
+        If the current platform supports the native tray manager, this method starts
+        the manager (if not already running) and registers the instance. Otherwise,
+        it falls back to opening the dashboard in the default web browser.
 
-        :param minimized: whether the dashboard viewer should be started minimized (if supported on the current platform).
-            If the viewer is not supported on the current platform, then this controls whether to open the browser window.
+        :param open_on_launch: whether the dashboard should be opened immediately
         """
         if not system_has_usable_display():
-            log.info("Not starting the Serena dashboard viewer because no usable display was detected.")
+            log.info("Not starting the Serena tray manager because no usable display was detected.")
             return
 
         url = self.get_dashboard_url()
         assert url is not None
-        if SerenaDashboardViewer.is_current_platform_supported():
-            process = multiprocessing.Process(target=self._start_dashboard_viewer_process_function, args=(url, minimized), daemon=True)
-            process.start()
+        assert self._dashboard_port is not None
+
+        if SerenaDashboardTrayManager.is_current_platform_supported():
+            # ensure the singleton tray manager process is running
+            SerenaDashboardTrayManager.ensure_running()
+
+            # determine the current project name (if any)
+            project_name = self._active_project.project_name if self._active_project is not None else None
+
+            # register this instance with the tray manager, optionally opening a viewer
+            SerenaDashboardTrayManager.register_instance(
+                port=self._dashboard_port,
+                dashboard_url=url,
+                project=project_name,
+                started_at=self._agent_started_at,
+                open_viewer=open_on_launch,
+            )
         else:
-            log.info("Not starting Serena dashboard viewer because the current platform does not support it; using browser-based fallback")
-            if not minimized:
+            log.info("Not starting Serena tray manager because the current platform does not support it; using browser-based fallback")
+            if open_on_launch:
                 self._open_dashboard_in_browser(url)
 
     def open_dashboard(self) -> bool:
@@ -765,6 +772,11 @@ class SerenaAgent:
         if self._project_activation_callback is not None:
             self._project_activation_callback()
 
+        # notify the tray manager of the project change (if the dashboard is running)
+        dashboard_port = getattr(self, "_dashboard_port", None)
+        if dashboard_port is not None and SerenaDashboardTrayManager.is_current_platform_supported():
+            SerenaDashboardTrayManager.update_project(dashboard_port, project.project_name)
+
     def activate_project_from_path_or_name(
         self, project_root_or_name: str, update_active_modes: bool = True, update_active_tools: bool = True
     ) -> Project:
@@ -890,14 +902,19 @@ class SerenaAgent:
         """
         Shuts down the agent, freeing resources and stopping background tasks.
         """
-        # guard against __del__ being called on a partially constructed instance
-        if not hasattr(self, "_active_project"):
-            return
         log.info("SerenaAgent is shutting down ...")
-        if self._active_project is not None:
+
+        # NOTE: This is called from __del__, so the instance may not be fully initialized (exception during __init__)
+
+        if hasattr(self, "_dashboard_port"):
+            if self._dashboard_port is not None and SerenaDashboardTrayManager.is_current_platform_supported():
+                SerenaDashboardTrayManager.unregister_instance(self._dashboard_port)
+
+        if hasattr(self, "_active_project") and self._active_project is not None:
             self._active_project.shutdown(timeout=timeout)
             self._active_project = None
-        if self._gui_log_viewer:
+
+        if hasattr(self, "_gui_log_viewer") and self._gui_log_viewer is not None:
             log.info("Stopping the GUI log window ...")
             self._gui_log_viewer.stop()
             self._gui_log_viewer = None

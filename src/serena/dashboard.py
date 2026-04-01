@@ -1,8 +1,13 @@
+import json
 import os
 import socket
+import subprocess
 import sys
 import threading
+import time
+import urllib.request
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
@@ -683,42 +688,34 @@ class SerenaDashboardAPI:
 
 class SerenaDashboardViewer:
     """
-    Minimal pywebview wrapper with optional system tray.
+    Minimal pywebview wrapper that opens a dashboard in a native window.
+
+    The viewer is a plain window without a system tray icon. Tray management
+    is handled separately by :class:`SerenaDashboardTrayManager`.
     """
 
     def __init__(
         self,
         url: str,
         *,
-        start_minimized: bool = False,
         width: int = 1400,
         height: int = 900,
     ):
         self.url = url
-        # Use system tray to allow hiding to tray and intercepting close to hide instead of quit
-        self.tray = True
         self.title = "Serena Dashboard"
         self.width = width
         self.height = height
-        self.start_minimized = start_minimized
-
-        self.window: webview.Window
-        self._tray_icon: Any
-        self._quitting = False
-        self._app_icon_path: str | None = None
 
     @staticmethod
     def is_current_platform_supported() -> bool:
         """
-        :return: whether the current platform supports the dashboard viewer
+        :return: whether the current platform supports the native dashboard viewer (and tray manager).
         """
-        # The dashboard viewer (with system tray) is technically supported only on Windows and macOS.
-        # Linux support is problematic; see https://github.com/oraios/serena/pull/1117#issuecomment-4128753943
+        # supported on Windows and macOS; Linux support is problematic
+        # (see https://github.com/oraios/serena/pull/1117#issuecomment-4128753943)
         supported_platforms = [
             "win32",
-            # NOTE: Disabling macOS support for now, because the tray behaviour is suboptimal (too many icons when
-            #   subagents are spawned, etc.)
-            # "darwin"
+            "darwin",
         ]
         return sys.platform in supported_platforms
 
@@ -733,145 +730,364 @@ class SerenaDashboardViewer:
         # .ico is Windows-only; macOS expects a PNG for the window/dock icon.
         icon_filename = "serena.ico" if sys.platform == "win32" else "serena-icon-1024-mac.png"
         icon_path = str(dashboard_path / icon_filename)
-        self._app_icon_path = icon_path
 
-        # Create hidden to avoid flash; show/restore/minimize in start callback.
         window = webview.create_window(
             self.title,
             self.url,
             width=self.width,
             height=self.height,
-            hidden=self.start_minimized,
         )
         assert window is not None
-        self.window = window
 
-        if self.tray:
-            self.window.events.closing += self._on_closing
-            self._start_tray()
+        webview.start(icon=icon_path)
 
-        def _start_callback() -> None:
-            if self.start_minimized:
-                self._hide_window()
-            else:
-                self._show_window()
 
-        webview.start(_start_callback, icon=icon_path)
+@dataclass
+class TrayManagedInstance:
+    """A registered Serena dashboard instance managed by the tray manager."""
 
-    def _show_window(self) -> None:
-        if not self.window:
-            return
+    port: int
+    """the port on which the dashboard API is listening"""
 
-        if sys.platform == "darwin":
-            from PyObjCTools.AppHelper import callAfter
+    dashboard_url: str
+    """the full URL to the dashboard frontend"""
 
-            callAfter(self._show_window_on_macos)
-        else:
-            self.window.show()
-            self.window.restore()
+    project: str | None
+    """the name of the active project, or None if no project is activated"""
 
-    def _hide_window(self) -> None:
-        if not self.window:
-            return
+    started_at: str
+    """ISO 8601 timestamp of when the agent instance was started"""
 
-        if sys.platform == "darwin":
-            from PyObjCTools.AppHelper import callAfter
 
-            callAfter(self._hide_window_on_macos)
-        else:
-            self.window.hide()
+class SerenaDashboardTrayManager:
+    """
+    Singleton process managing a system tray icon for all Serena dashboard instances.
 
-    def _show_window_on_macos(self) -> None:
-        from AppKit import (
-            NSApplication,
-            NSApplicationActivationPolicyRegular,
-        )
-        from PyObjCTools.AppHelper import callLater
+    Runs a Flask backend on a fixed port and displays a single tray icon that
+    aggregates all running Serena instances. Individual dashboard viewers are
+    spawned on demand when the user clicks a menu item.
 
-        ns_app = NSApplication.sharedApplication()
-        ns_app.setActivationPolicy_(NSApplicationActivationPolicyRegular)
-        self._set_macos_app_icon(ns_app)
-        ns_app.unhide_(None)
-        ns_app.activateIgnoringOtherApps_(True)
-        # Give the status item menu a beat to close before restoring the window.
-        callLater(0.1, self._restore_window_on_macos)
+    The manager is started as a detached process by the first Serena agent that
+    needs it and terminates automatically when no dashboard instances remain.
+    """
 
-    def _restore_window_on_macos(self) -> None:
-        self.window.show()
-        self.window.restore()
+    PORT = 0x5ED8
+    """fixed port for the tray manager (dashboard base port 0x5EDA minus 2)"""
 
-    def _hide_window_on_macos(self) -> None:
-        from AppKit import (
-            NSApplication,
-            NSApplicationActivationPolicyAccessory,
-        )
+    HOST = "127.0.0.1"
+    """listen address (local only)"""
 
-        self.window.hide()
-        NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+    ALIVE_CHECK_INTERVAL_SECONDS = 15
+    """interval in seconds between alive checks of registered instances"""
 
-    def _set_macos_app_icon(self, ns_app: Any) -> None:
-        if not self._app_icon_path:
-            return
+    def __init__(self) -> None:
+        self._instances: dict[int, TrayManagedInstance] = {}
+        self._lock = threading.Lock()
+        self._tray_icon: Any = None
+        self._app = Flask(__name__)
+        self._setup_routes()
 
-        from AppKit import NSImage
+    def _setup_routes(self) -> None:
+        @self._app.route("/health", methods=["GET"])
+        def health() -> dict[str, str]:
+            return {"status": "alive"}
 
-        ns_image = NSImage.alloc().initByReferencingFile_(self._app_icon_path)
-        if ns_image is not None:
-            ns_app.setApplicationIconImage_(ns_image)
+        @self._app.route("/register", methods=["POST"])
+        def register() -> dict[str, str]:
+            data = request.get_json()
+            instance = TrayManagedInstance(
+                port=data["port"],
+                dashboard_url=data["dashboard_url"],
+                project=data.get("project"),
+                started_at=data["started_at"],
+            )
+            with self._lock:
+                self._instances[instance.port] = instance
+            log.info("Registered instance on port %d (project=%s)", instance.port, instance.project)
 
-    def _on_closing(self) -> bool:
-        """Intercept window close: hide window instead of quitting (macOS standard behavior)."""
-        if self._quitting:
-            return True
-        self._hide_window()
-        return False  # prevent the window from actually closing
+            # open a viewer immediately if requested
+            if data.get("open_viewer", False):
+                self._open_viewer(instance)
 
-    def _start_tray(self) -> None:
-        # import pystray locally, because the import fails when there is no display!
-        import pystray
+            return {"status": "registered"}
+
+        @self._app.route("/update_project", methods=["POST"])
+        def update_project() -> dict[str, str]:
+            data = request.get_json()
+            port = data["port"]
+            project = data.get("project")
+            with self._lock:
+                if port in self._instances:
+                    self._instances[port].project = project
+            log.info("Updated project for instance on port %d to '%s'", port, project)
+            return {"status": "updated"}
+
+        @self._app.route("/unregister", methods=["POST"])
+        def unregister() -> dict[str, str]:
+            data = request.get_json()
+            port = data["port"]
+            with self._lock:
+                self._instances.pop(port, None)
+            log.info("Unregistered instance on port %d", port)
+            return {"status": "unregistered"}
+
+    def _build_menu_items(self) -> tuple[Any, ...]:
+        """
+        Callable that returns the current tray menu items.
+
+        Invoked dynamically by pystray each time the menu is shown.
+        When there is exactly one instance, it is marked as the default action
+        so that a left-click on the tray icon opens the viewer immediately.
+        When there are multiple instances, a hidden default item forces the menu
+        to appear on left-click (Windows only; macOS always shows the menu).
+        """
         from pystray import MenuItem as Item
-        from pystray._base import Icon as TrayIcon
+
+        with self._lock:
+            instances = list(self._instances.values())
+
+        if not instances:
+            return (Item("No instances", None, enabled=False),)
+
+        # determine whether a single-instance shortcut applies
+        is_single = len(instances) == 1
+
+        items: list[Any] = []
+
+        # for multi-instance: add a hidden default item that opens the menu on left-click
+        if not is_single:
+
+            def _force_show_menu(icon: Any, _item: Any) -> None:
+                if hasattr(icon, "_show_menu"):
+                    icon._show_menu()
+
+            items.append(Item("Instances", _force_show_menu, default=True, visible=False))
+
+        for inst in sorted(instances, key=lambda i: i.started_at):
+            label = f"{inst.project or 'SerenaAgent'} ({inst.started_at})"
+
+            # closure to capture the current instance
+            def _make_callback(instance: TrayManagedInstance) -> Callable:
+                def _callback(_icon: Any, _item: Any) -> None:
+                    self._open_viewer(instance)
+
+                return _callback
+
+            items.append(Item(label, _make_callback(inst), default=is_single))
+
+        return tuple(items)
+
+    def _open_viewer(self, instance: TrayManagedInstance) -> None:
+        """Spawn a dashboard viewer window for the given instance in a new subprocess."""
+        url = instance.dashboard_url
+
+        kwargs: dict[str, Any] = {
+            "stdin": subprocess.DEVNULL,
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+        }
+        if sys.platform == "win32":
+            CREATE_NO_WINDOW = 0x08000000
+            kwargs["creationflags"] = CREATE_NO_WINDOW
+
+        subprocess.Popen(
+            [sys.executable, "-c", f"from serena.dashboard import SerenaDashboardViewer; SerenaDashboardViewer({url!r}).run()"],
+            **kwargs,
+        )
+
+    def _alive_check_loop(self) -> None:
+        """Periodically check whether registered instances are still reachable.
+
+        Removes unreachable instances and terminates the manager when none remain.
+        """
+        while True:
+            time.sleep(self.ALIVE_CHECK_INTERVAL_SECONDS)
+
+            # collect ports to check
+            with self._lock:
+                ports_to_check = list(self._instances.keys())
+
+            # probe each instance
+            dead_ports: list[int] = []
+            for port in ports_to_check:
+                try:
+                    url = f"http://127.0.0.1:{port}/heartbeat"
+                    req = urllib.request.Request(url, method="GET")
+                    urllib.request.urlopen(req, timeout=3)
+                except Exception:
+                    dead_ports.append(port)
+
+            # remove dead instances
+            if dead_ports:
+                with self._lock:
+                    for port in dead_ports:
+                        self._instances.pop(port, None)
+                        log.info("Removed unreachable instance on port %d", port)
+
+            # terminate if no instances remain
+            with self._lock:
+                remaining = len(self._instances)
+            if remaining == 0:
+                log.info("No dashboard instances remaining; shutting down tray manager")
+                if self._tray_icon is not None:
+                    self._tray_icon.stop()
+                return
+
+    def run(self) -> None:
+        """Run the tray manager (blocking). Starts Flask, alive-check thread, and tray icon."""
+        import pystray
 
         dashboard_path = Path(SERENA_DASHBOARD_DIR)
 
-        # macOS menu bar icons are displayed at 16pt; 32px covers Retina (@2x).
-        # Windows/Linux tray icons are larger, so 48px is the better fit there.
+        # select the appropriate icon for the platform
         icon_filename = "serena-icon-tray-mac.png" if sys.platform == "darwin" else "serena-icon-48.png"
         icon_img = Image.open(dashboard_path / icon_filename)
 
-        def show(_icon: TrayIcon, _item: Item) -> None:
-            self._show_window()
-
-        def hide(_icon: TrayIcon, _item: Item) -> None:
-            self._hide_window()
-
-        def quit_app(_icon: TrayIcon, _item: Item) -> None:
-            self._quitting = True
-            try:
-                _icon.stop()
-            finally:
-                if self.window:
-                    self.window.destroy()
-
-        menu = pystray.Menu(
-            Item("Open", show, default=True),
-            Item("Hide", hide),
-            Item("Quit", quit_app),
+        # start Flask in a background thread
+        flask_thread = threading.Thread(
+            target=lambda: self._app.run(host=self.HOST, port=self.PORT, debug=False, use_reloader=False, threaded=True),
+            daemon=True,
         )
+        flask_thread.start()
 
+        # start alive-check in a background thread
+        alive_thread = threading.Thread(target=self._alive_check_loop, daemon=True)
+        alive_thread.start()
+
+        # set up tray icon with a dynamic menu (callable returns items on each open)
         kwargs: dict[str, Any] = {}
         if sys.platform == "darwin":
-            # Passing darwin_nsapplication integrates pystray with the NSApplication
-            # run loop that webview.start() is about to enter.  sharedApplication()
-            # is idempotent; pywebview will reuse the same singleton.
             from AppKit import NSApplication
 
             kwargs["darwin_nsapplication"] = NSApplication.sharedApplication()
 
-        self._tray_icon = pystray.Icon("dashboard_viewer", icon_img, self.title, menu, **kwargs)
+        self._tray_icon = pystray.Icon(
+            "serena_tray_manager",
+            icon_img,
+            "Serena",
+            menu=pystray.Menu(self._build_menu_items),
+            **kwargs,
+        )
 
-        # On Windows/Linux, run_detached spawns pystray's own internal thread and
-        # returns immediately.  On macOS it hooks into the NSApplication run loop
-        # that webview.start() is about to enter (run_detached is always called
-        # before webview.start() on macOS — see run()).
-        self._tray_icon.run_detached()
+        # blocks until stop() is called
+        self._tray_icon.run()
+
+    # ------------------------------------------------------------------
+    # Class-level helpers (used by agents to interact with the manager)
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def is_current_platform_supported(cls) -> bool:
+        """
+        :return: whether the current platform supports the tray manager
+        """
+        supported_platforms = ["win32", "darwin"]
+        return sys.platform in supported_platforms
+
+    @classmethod
+    def is_running(cls) -> bool:
+        """
+        :return: True if a tray manager process is already listening on the fixed port
+        """
+        try:
+            url = f"http://{cls.HOST}:{cls.PORT}/health"
+            req = urllib.request.Request(url, method="GET")
+            urllib.request.urlopen(req, timeout=2)
+            return True
+        except Exception:
+            return False
+
+    @classmethod
+    def ensure_running(cls) -> None:
+        """Ensure a tray manager process is running, starting one if necessary."""
+        log.info("Ensuring dashboard tray manager availability")
+        if cls.is_running():
+            log.info("Dashboard tray manager is already running")
+            return
+
+        # spawn a detached process
+        log.info("Starting new dashboard tray manager process")
+        cmd = [
+            sys.executable,
+            "-c",
+            "from serena.dashboard import SerenaDashboardTrayManager; SerenaDashboardTrayManager().run()",
+        ]
+        kwargs: dict[str, Any] = {
+            "stdin": subprocess.DEVNULL,
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+        }
+        if sys.platform == "win32":
+            # CREATE_NO_WINDOW suppresses the console; CREATE_NEW_PROCESS_GROUP
+            # isolates the child from the parent's Ctrl+C group.
+            # Note: DETACHED_PROCESS must NOT be combined with CREATE_NO_WINDOW.
+            CREATE_NEW_PROCESS_GROUP = 0x00000200
+            CREATE_NO_WINDOW = 0x08000000
+            kwargs["creationflags"] = CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
+        else:
+            kwargs["start_new_session"] = True
+
+        subprocess.Popen(cmd, **kwargs)
+
+        # wait for the manager to become available
+        for _ in range(30):
+            time.sleep(0.1)
+            if cls.is_running():
+                log.info("Dashboard tray manager started successfully")
+                return
+        log.warning("Dashboard tray manager did not start within the expected time")
+
+    @classmethod
+    def register_instance(cls, port: int, dashboard_url: str, project: str | None, started_at: str, open_viewer: bool = False) -> None:
+        """Register a dashboard instance with the running tray manager.
+
+        :param port: the port of the dashboard API (used for alive checks)
+        :param dashboard_url: the full URL to the dashboard frontend
+        :param project: the currently active project name, or None
+        :param started_at: ISO 8601 timestamp of when the agent was started
+        :param open_viewer: whether the tray manager should immediately open a viewer for this instance
+        """
+        url = f"http://{cls.HOST}:{cls.PORT}/register"
+        data = json.dumps(
+            {
+                "port": port,
+                "dashboard_url": dashboard_url,
+                "project": project,
+                "started_at": started_at,
+                "open_viewer": open_viewer,
+            }
+        ).encode()
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            urllib.request.urlopen(req, timeout=2)
+        except Exception as e:
+            log.warning("Failed to register with tray manager: %s", e)
+
+    @classmethod
+    def update_project(cls, port: int, project: str | None) -> None:
+        """Notify the tray manager of a project change for the given instance.
+
+        :param port: the port of the dashboard API
+        :param project: the new active project name, or None
+        """
+        url = f"http://{cls.HOST}:{cls.PORT}/update_project"
+        data = json.dumps({"port": port, "project": project}).encode()
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            urllib.request.urlopen(req, timeout=2)
+        except Exception as e:
+            log.warning("Failed to update project with tray manager: %s", e)
+
+    @classmethod
+    def unregister_instance(cls, port: int) -> None:
+        """Unregister a dashboard instance from the tray manager.
+
+        :param port: the port of the dashboard API to unregister
+        """
+        url = f"http://{cls.HOST}:{cls.PORT}/unregister"
+        data = json.dumps({"port": port}).encode()
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            urllib.request.urlopen(req, timeout=2)
+        except Exception as e:
+            log.warning("Failed to unregister from tray manager: %s", e)

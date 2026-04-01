@@ -415,11 +415,10 @@ class TopLevelCommands(AutoRegisteringGroup):
     @click.argument("url", type=str)
     @click.option("--width", type=int, default=1400, show_default=True, help="Window width.")
     @click.option("--height", type=int, default=900, show_default=True, help="Window height.")
-    @click.option("--minimized", is_flag=True, default=False, help="Whether to start minimized/in tray.")
-    def dashboard_viewer(url: str, width: int, height: int, minimized: bool) -> None:
+    def dashboard_viewer(url: str, width: int, height: int) -> None:
         from serena.dashboard import SerenaDashboardViewer
 
-        viewer = SerenaDashboardViewer(url, start_minimized=minimized, width=width, height=height)
+        viewer = SerenaDashboardViewer(url, width=width, height=height)
         viewer.run()
 
 
