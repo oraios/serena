@@ -47,6 +47,7 @@ dependencies = [
   "filelock==3.25.2",
   "cryptography==46.0.6",
   "regex==2026.2.28",
+  "pythonnet==3.1.0-rc0 ; sys_platform == 'win32'",
 ]
 
 [tool.uv.sources]
