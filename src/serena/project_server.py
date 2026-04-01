@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sensai.util.logging import LogTime
 
 from serena.config.serena_config import LanguageBackend, SerenaConfig
-from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
+from serena.constants import SerenaPorts
 
 if TYPE_CHECKING:
     from serena.project import Project
@@ -42,7 +42,7 @@ class ProjectServer:
     :class:`~serena.tools.query_project_tools.QueryProjectTool`.
     """
 
-    PORT = JetBrainsPluginClient.BASE_PORT - 1
+    PORT = SerenaPorts.PROJECT_SERVER_PORT
 
     def __init__(self) -> None:
         from serena.agent import SerenaAgent

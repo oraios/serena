@@ -19,7 +19,7 @@ from sensai.util import logging
 
 from serena.analytics import ToolUsageStats
 from serena.config.serena_config import SerenaConfig, SerenaPaths
-from serena.constants import SERENA_DASHBOARD_DIR
+from serena.constants import SERENA_DASHBOARD_DIR, SerenaPorts
 from serena.task_executor import TaskExecutor
 from serena.util.logging import MemoryLogHandler
 
@@ -133,6 +133,8 @@ class QueuedExecution(BaseModel):
 
 
 class SerenaDashboardAPI:
+    BASE_PORT = SerenaPorts.DASHBOARD_API_BASE_PORT
+
     log = logging.getLogger(__qualname__)
 
     def __init__(
@@ -679,7 +681,7 @@ class SerenaDashboardAPI:
         return port
 
     def run_in_thread(self, host: str) -> tuple[threading.Thread, int]:
-        port = self._find_first_free_port(0x5EDA, host)
+        port = self._find_first_free_port(self.BASE_PORT, host)
         log.info("Starting dashboard (listen_address=%s, port=%d)", host, port)
         thread = threading.Thread(target=lambda: self.run(host=host, port=port), daemon=True)
         thread.start()
@@ -771,8 +773,7 @@ class SerenaDashboardTrayManager:
     needs it and terminates automatically when no dashboard instances remain.
     """
 
-    PORT = 0x5ED8
-    """fixed port for the tray manager (dashboard base port 0x5EDA minus 2)"""
+    PORT = SerenaPorts.TRAY_MANAGER_PORT
 
     HOST = "127.0.0.1"
     """listen address (local only)"""
