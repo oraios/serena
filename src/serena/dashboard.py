@@ -695,10 +695,8 @@ class SerenaDashboardViewer:
         height: int = 900,
     ):
         self.url = url
+        # Use system tray to allow hiding to tray and intercepting close to hide instead of quit
         self.tray = True
-        """
-        whether we use the system tray to allow minimizing to tray and intercepting the close event to hide to tray instead of quitting.
-        """
         self.title = "Serena Dashboard"
         self.width = width
         self.height = height
@@ -706,7 +704,10 @@ class SerenaDashboardViewer:
 
         self.window: webview.Window
         self._tray_icon: Any
+        self._app_delegate: Any = None
         self._quitting = False
+        self._window_hidden_to_tray = start_minimized
+        self._suppress_next_activate_reopen = start_minimized
 
     @staticmethod
     def is_current_platform_supported() -> bool:
@@ -730,69 +731,105 @@ class SerenaDashboardViewer:
         icon_path = str(dashboard_path / icon_filename)
 
         # Create hidden to avoid flash; show/restore/minimize in start callback.
-        # When tray is enabled, confirm_close allows us to intercept the X button.
         window = webview.create_window(
             self.title,
             self.url,
             width=self.width,
             height=self.height,
             hidden=self.start_minimized,
-            confirm_close=False,
         )
         assert window is not None
         self.window = window
 
         if self.tray:
             self.window.events.closing += self._on_closing
-
-        if self.tray:
             self._start_tray()
-            self._set_dock_icon_visible(not self.start_minimized)
 
         def _start_callback() -> None:
+            # pywebview installs its own NSApplication delegate during startup,
+            # so on macOS we need to wrap that final delegate here instead of
+            # earlier in run(), or the dock reopen handler gets overwritten.
+            if sys.platform == "darwin" and self.tray:
+                from PyObjCTools.AppHelper import callAfter
+
+                callAfter(self._setup_macos_dock_handler)
             if self.start_minimized:
                 self.window.minimize()
             else:
-                self.window.show()
-                self.window.restore()
+                self._show_window()
 
         webview.start(_start_callback, icon=icon_path)
 
-    def _on_closing(self) -> bool:
-        """Intercept window close: hide to tray instead of quitting."""
-        if self._quitting:
-            return True
+    def _show_window(self) -> None:
+        if self.window:
+            self.window.show()
+            self.window.restore()
+            self._window_hidden_to_tray = False
+            self._suppress_next_activate_reopen = False
+
+    def _hide_window(self) -> None:
         if self.window:
             self.window.hide()
-            if sys.platform == "darwin":
-                # setActivationPolicy_ must run on the main thread; _on_closing
-                # may be called from a pywebview background thread.
-                from PyObjCTools.AppHelper import callAfter
+            self._window_hidden_to_tray = True
 
-                callAfter(self._set_dock_icon_visible, False)
+    def _setup_macos_dock_handler(self) -> None:
+        """Set up handler for dock icon clicks on macOS."""
+        from AppKit import NSApplication, NSObject
+        from objc import python_method  # type: ignore[import-untyped]
+
+        viewer = self
+
+        class SerenaDockDelegate(NSObject):
+            """Wraps pywebview's delegate to handle dock icon clicks."""
+
+            @python_method
+            def initWithOriginalDelegate_(self, original: Any) -> Any:
+                obj = self.init()
+                if obj is not None:
+                    obj._original = original
+                return obj
+
+            @python_method
+            def _forward(self, method: str, *args: Any) -> Any:
+                """Forward method call to original delegate if it has the method."""
+                orig = getattr(self, "_original", None)
+                if orig and hasattr(orig, method):
+                    return getattr(orig, method)(*args)
+                return None
+
+            def applicationShouldHandleReopen_hasVisibleWindows_(self, sender: Any, has_visible_windows: bool) -> bool:
+                """Called when dock icon is clicked."""
+                if not has_visible_windows:
+                    viewer._show_window()
+                result = self._forward("applicationShouldHandleReopen_hasVisibleWindows_", sender, has_visible_windows)
+                return result if result is not None else True
+
+            def applicationDidBecomeActive_(self, notification: Any) -> None:
+                """Fallback for dock activation paths that do not invoke reopen."""
+                if viewer._suppress_next_activate_reopen:
+                    viewer._suppress_next_activate_reopen = False
+                elif viewer._window_hidden_to_tray:
+                    viewer._show_window()
+                self._forward("applicationDidBecomeActive_", notification)
+
+            def forwardingTargetForSelector_(self, selector: Any) -> Any:
+                """Forward unknown selectors to original delegate."""
+                orig = getattr(self, "_original", None)
+                return orig if orig and orig.respondsToSelector_(selector) else None
+
+        ns_app = NSApplication.sharedApplication()
+        original_delegate = ns_app.delegate()
+        if original_delegate is self._app_delegate:
+            return
+        self._app_delegate = SerenaDockDelegate.alloc().initWithOriginalDelegate_(original_delegate)
+        ns_app.setDelegate_(self._app_delegate)
+
+    def _on_closing(self) -> bool:
+        """Intercept window close: hide window instead of quitting (macOS standard behavior)."""
+        if self._quitting:
+            return True
+        self._hide_window()
         return False  # prevent the window from actually closing
-
-    def _set_dock_icon_visible(self, visible: bool) -> None:
-        """macOS-only; toggles the dock icon.
-
-        Sets the NSApplication activation policy to Regular (shows in dock) or
-        Accessory (hides from dock).  No-op on other platforms.
-        """
-        if sys.platform == "darwin":
-            from AppKit import (
-                NSApplication,
-                NSApplicationActivationPolicyAccessory,
-                NSApplicationActivationPolicyRegular,
-            )
-
-            ns_app = NSApplication.sharedApplication()
-            policy = NSApplicationActivationPolicyRegular if visible else NSApplicationActivationPolicyAccessory
-            ns_app.setActivationPolicy_(policy)
-            if visible:
-                # setActivationPolicy_ alone is not enough at runtime; unhide_ fires
-                # the full applicationWillUnhide:/applicationDidUnhide: cycle, which
-                # is what actually restores the dock icon and brings windows forward.
-                ns_app.unhide_(None)
 
     def _start_tray(self) -> None:
         # import pystray locally, because the import fails when there is no display!
@@ -808,15 +845,10 @@ class SerenaDashboardViewer:
         icon_img = Image.open(dashboard_path / icon_filename)
 
         def show(_icon: TrayIcon, _item: Item) -> None:
-            if self.window:
-                self._set_dock_icon_visible(True)
-                self.window.show()
-                self.window.restore()
+            self._show_window()
 
         def hide(_icon: TrayIcon, _item: Item) -> None:
-            if self.window:
-                self.window.hide()
-                self._set_dock_icon_visible(False)
+            self._hide_window()
 
         def quit_app(_icon: TrayIcon, _item: Item) -> None:
             self._quitting = True
