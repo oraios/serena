@@ -1,0 +1,19 @@
+<div class="news-item">
+    <h3>Update Your Launch Commands!</h3>
+    <p class="date">April 1, 2026</p>
+    <p>
+        Users who run Serena via uvx (i.e. most users) are encouraged to update their launch commands.
+        Unfortunately, uvx does not honour the Python version that is specified in our project file (see <a target="_blank" href="https://github.com/astral-sh/uv/issues/8206">uv GitHub issue</a>),
+        which can result in a random Python version being used when launching Serena.
+    </p>
+    <p>
+        Specifically, add the parameters `-p 3.13` at the beginning of your command to ensure that Serena is run with Python 3.13.
+    </p>
+    <p>
+        Relevant user guide entries:
+    </p>
+    <ul>
+        <li><a target="_blank" href="https://oraios.github.io/serena/02-usage/020_running.html">Running Serena</a></li>
+        <li><a target="_blank" href="https://oraios.github.io/serena/02-usage/030_clients.html">Connecting Your MCP Client</a></li>
+    </ul>
+</div>
