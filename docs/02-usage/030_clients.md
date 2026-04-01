@@ -79,7 +79,7 @@ Serena is a great way to make Claude Code both cheaper and more powerful!
 use this command:
 
 ```shell
-claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context claude-code --project "$(pwd)"
+claude mcp add serena -- uvx -p 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server --context claude-code --project "$(pwd)"
 ```
 
 Note:
@@ -92,7 +92,7 @@ Note:
 **Global Configuration**. Alternatively, use `--project-from-cwd` for user-level configuration that works across all projects:
 
 ```shell
-claude mcp add --scope user serena -- uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context=claude-code --project-from-cwd
+claude mcp add --scope user serena -- uvx -p 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server --context=claude-code --project-from-cwd
 ```
 
 Whenever you start Claude Code, Serena will search up from the current directory for `.serena/project.yml` or `.git` markers,
@@ -128,6 +128,8 @@ While serena can be directly installed from the GitHub MCP server registry, we r
       "type": "stdio",
       "command": "uvx",
       "args": [
+        "-p",
+        "3.13",
         "--from",
         "git+https://github.com/oraios/serena",
         "serena",
@@ -154,7 +156,7 @@ For example, when using `uvx`, add the following section:
 ```toml
 [mcp_servers.serena]
 command = "uvx"
-args = ["--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server", "--context", "codex"]
+args = ["-p", "3.13", "--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server", "--context", "codex"]
 ```
 
 After codex has started, you need to activate the project, which you can do by saying:
@@ -189,6 +191,8 @@ Add the `serena` MCP server configuration
     "serena": {
       "command": "uvx",
       "args": [
+        "-p",
+        "3.13",
         "--from",
         "git+https://github.com/oraios/serena",
         "serena",
@@ -225,6 +229,8 @@ MCP server configuration:
     "serena": {
       "command": "uvx",
       "args": [
+        "-p",
+        "3.13",
         "--from",
         "git+https://github.com/oraios/serena",
         "serena",
@@ -253,6 +259,8 @@ Go to Settings / Tools / AI Assistant / MCP and add a new **local** configuratio
     "serena": {
       "command": "uvx",
       "args": [
+        "-p",
+        "3.13",
         "--from",
         "git+https://github.com/oraios/serena",
         "serena",
@@ -279,6 +287,8 @@ Add this configuration:
     "serena": {
       "command": "uvx",
       "args": [
+        "-p",
+        "3.13",
         "--from",
         "git+https://github.com/oraios/serena",
         "serena",
