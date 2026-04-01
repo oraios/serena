@@ -695,10 +695,8 @@ class SerenaDashboardViewer:
         height: int = 900,
     ):
         self.url = url
+        # Use system tray to allow hiding to tray and intercepting close to hide instead of quit
         self.tray = True
-        """
-        whether we use the system tray to allow minimizing to tray and intercepting the close event to hide to tray instead of quitting.
-        """
         self.title = "Serena Dashboard"
         self.width = width
         self.height = height
@@ -733,22 +731,18 @@ class SerenaDashboardViewer:
         icon_path = str(dashboard_path / icon_filename)
 
         # Create hidden to avoid flash; show/restore/minimize in start callback.
-        # When tray is enabled, confirm_close allows us to intercept the X button.
         window = webview.create_window(
             self.title,
             self.url,
             width=self.width,
             height=self.height,
             hidden=self.start_minimized,
-            confirm_close=False,
         )
         assert window is not None
         self.window = window
 
         if self.tray:
             self.window.events.closing += self._on_closing
-
-        if self.tray:
             self._start_tray()
 
         def _start_callback() -> None:
@@ -783,26 +777,32 @@ class SerenaDashboardViewer:
         from AppKit import NSApplication, NSObject
         from objc import python_method  # type: ignore[import-untyped]
 
-        viewer = self  # capture reference for the delegate
+        viewer = self
 
-        # Use a unique class name to avoid conflict with pywebview's AppDelegate
         class SerenaDockDelegate(NSObject):
+            """Wraps pywebview's delegate to handle dock icon clicks."""
+
             @python_method
             def initWithOriginalDelegate_(self, original: Any) -> Any:
                 obj = self.init()
                 if obj is not None:
-                    obj._original_delegate = original
+                    obj._original = original
                 return obj
+
+            @python_method
+            def _forward(self, method: str, *args: Any) -> Any:
+                """Forward method call to original delegate if it has the method."""
+                orig = getattr(self, "_original", None)
+                if orig and hasattr(orig, method):
+                    return getattr(orig, method)(*args)
+                return None
 
             def applicationShouldHandleReopen_hasVisibleWindows_(self, sender: Any, has_visible_windows: bool) -> bool:
                 """Called when dock icon is clicked."""
-                if not has_visible_windows and viewer.window:
+                if not has_visible_windows:
                     viewer._show_window()
-                # Forward to original delegate if it exists and has this method
-                if hasattr(self, "_original_delegate") and self._original_delegate is not None:
-                    if hasattr(self._original_delegate, "applicationShouldHandleReopen_hasVisibleWindows_"):
-                        return self._original_delegate.applicationShouldHandleReopen_hasVisibleWindows_(sender, has_visible_windows)
-                return True
+                result = self._forward("applicationShouldHandleReopen_hasVisibleWindows_", sender, has_visible_windows)
+                return result if result is not None else True
 
             def applicationDidBecomeActive_(self, notification: Any) -> None:
                 """Fallback for dock activation paths that do not invoke reopen."""
@@ -810,21 +810,16 @@ class SerenaDashboardViewer:
                     viewer._suppress_next_activate_reopen = False
                 elif viewer._window_hidden_to_tray:
                     viewer._show_window()
-                # Forward to original delegate if it exists and has this method
-                if hasattr(self, "_original_delegate") and self._original_delegate is not None:
-                    if hasattr(self._original_delegate, "applicationDidBecomeActive_"):
-                        self._original_delegate.applicationDidBecomeActive_(notification)
+                self._forward("applicationDidBecomeActive_", notification)
 
             def forwardingTargetForSelector_(self, selector: Any) -> Any:
                 """Forward unknown selectors to original delegate."""
-                if hasattr(self, "_original_delegate") and self._original_delegate is not None:
-                    if self._original_delegate.respondsToSelector_(selector):
-                        return self._original_delegate
-                return None
+                orig = getattr(self, "_original", None)
+                return orig if orig and orig.respondsToSelector_(selector) else None
 
         ns_app = NSApplication.sharedApplication()
         original_delegate = ns_app.delegate()
-        if original_delegate is getattr(self, "_app_delegate", None):
+        if original_delegate is self._app_delegate:
             return
         self._app_delegate = SerenaDockDelegate.alloc().initWithOriginalDelegate_(original_delegate)
         ns_app.setDelegate_(self._app_delegate)
