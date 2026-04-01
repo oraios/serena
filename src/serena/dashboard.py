@@ -830,7 +830,7 @@ class SerenaDashboardViewer:
 
         # macOS menu bar icons are displayed at 16pt; 32px covers Retina (@2x).
         # Windows/Linux tray icons are larger, so 48px is the better fit there.
-        icon_filename = "serena-icon-32.png" if sys.platform == "darwin" else "serena-icon-48.png"
+        icon_filename = "serena-icon-tray-mac.png" if sys.platform == "darwin" else "serena-icon-48.png"
         icon_img = Image.open(dashboard_path / icon_filename)
 
         def show(_icon: TrayIcon, _item: Item) -> None:
