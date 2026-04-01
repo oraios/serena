@@ -879,22 +879,20 @@ class SerenaDashboardTrayManager:
         return tuple(items)
 
     def _open_viewer(self, instance: TrayManagedInstance) -> None:
-        """Spawn a dashboard viewer window for the given instance in a new subprocess."""
-        url = instance.dashboard_url
+        """Spawn a dashboard viewer window for the given instance in a new process."""
+        import multiprocessing
 
-        kwargs: dict[str, Any] = {
-            "stdin": subprocess.DEVNULL,
-            "stdout": subprocess.DEVNULL,
-            "stderr": subprocess.DEVNULL,
-        }
-        if sys.platform == "win32":
-            CREATE_NO_WINDOW = 0x08000000
-            kwargs["creationflags"] = CREATE_NO_WINDOW
-
-        subprocess.Popen(
-            [sys.executable, "-c", f"from serena.dashboard import SerenaDashboardViewer; SerenaDashboardViewer({url!r}).run()"],
-            **kwargs,
+        process = multiprocessing.Process(
+            target=self._run_viewer,
+            args=(instance.dashboard_url,),
+            daemon=True,
         )
+        process.start()
+
+    @staticmethod
+    def _run_viewer(url: str) -> None:
+        """Process target for running a dashboard viewer window."""
+        SerenaDashboardViewer(url).run()
 
     def _alive_check_loop(self) -> None:
         """Periodically check whether registered instances are still reachable.
