@@ -350,8 +350,8 @@ class TestZigLanguageServer:
         for s in all_symbols:
             if has_malformed_name(s, whitespace_allowed=True):
                 malformed_symbols.append(s)
-            if malformed_symbols:
-                pytest.fail(
-                    f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
-                    pytrace=False,
-                )
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )

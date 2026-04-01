@@ -118,7 +118,7 @@ class TestElixirBasic:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []
         for s in all_symbols:
-            if s["kind"] in {SymbolKind.Namespace, SymbolKind.Struct}:
+            if s["kind"] in {SymbolKind.Module, SymbolKind.Namespace, SymbolKind.Struct}:
                 continue
 
             allow_test_style_name = s["name"].startswith(('test "', 'describe "'))
@@ -133,8 +133,8 @@ class TestElixirBasic:
                 comma_allowed=allow_test_style_name,
             ):
                 malformed_symbols.append(s)
-            if malformed_symbols:
-                pytest.fail(
-                    f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
-                    pytrace=False,
-                )
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )

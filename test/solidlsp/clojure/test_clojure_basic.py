@@ -236,8 +236,8 @@ class TestProjectBasics:
                 continue
             if has_malformed_name(s):
                 malformed_symbols.append(s)
-            if malformed_symbols:
-                pytest.fail(
-                    f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
-                    pytrace=False,
-                )
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )

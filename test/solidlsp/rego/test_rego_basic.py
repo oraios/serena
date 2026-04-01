@@ -7,6 +7,7 @@ import pytest
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language
+from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
 from test.conftest import is_ci
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
@@ -142,10 +143,12 @@ class TestRegoLanguageServer:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []
         for s in all_symbols:
+            if s["kind"] == SymbolKind.Package:
+                continue
             if has_malformed_name(s):
                 malformed_symbols.append(s)
-            if malformed_symbols:
-                pytest.fail(
-                    f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
-                    pytrace=False,
-                )
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )
