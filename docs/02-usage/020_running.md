@@ -21,7 +21,7 @@ In general, to get help, append `--help` to the command, i.e.
 
 `uvx` is part of `uv`. It can be used to run the latest version of Serena directly from the repository, without an explicit local installation.
 
-    uvx --from git+https://github.com/oraios/serena serena 
+    uvx -p 3.13 --from git+https://github.com/oraios/serena serena 
 
 Explore the CLI to see some of the customization options that serena provides (more info on them below).
 
@@ -124,7 +124,7 @@ case, you can simply run the `start-mcp-server` command without any additional o
 
 For example, to run the server in stdio mode via `uvx`, you would run:
 
-    uvx --from git+https://github.com/oraios/serena serena start-mcp-server 
+    uvx -p 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server 
  
 See the section ["Configuring Your MCP Client"](030_clients) for specific information on how to configure your MCP client (e.g. Claude Code, Codex, Cursor, etc.)
 to use such a launch command.
@@ -143,7 +143,7 @@ via the `--port` option.
 For example, to run the Serena MCP server in streamable HTTP mode on port 9121 using uvx,
 you would run
 
-    uvx --from git+https://github.com/oraios/serena serena start-mcp-server --transport streamable-http --port 9121
+    uvx -p 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server --transport streamable-http --port 9121
 
 and then configure your client to connect to `http://localhost:9121/mcp`.
 
