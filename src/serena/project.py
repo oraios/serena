@@ -310,35 +310,42 @@ class Project(ToStringMixin):
         threading.Thread(name=f"gather-ignorespec[{self.project_config.project_name}]", target=self._gather_ignorespec, daemon=True).start()
 
     def _gather_ignorespec(self) -> None:
-        with LogTime(f"Gathering ignore spec for project {self.project_config.project_name}", logger=log):
-            # gather ignored paths from the global configuration, project configuration, and gitignore files
-            global_ignored_paths = self.serena_config.ignored_paths
-            ignored_patterns = list(global_ignored_paths) + list(self.project_config.ignored_paths)
-            if len(global_ignored_paths) > 0:
-                log.info(f"Using {len(global_ignored_paths)} ignored paths from the global configuration.")
-                log.debug(f"Global ignored paths: {list(global_ignored_paths)}")
-            if len(self.project_config.ignored_paths) > 0:
-                log.info(f"Using {len(self.project_config.ignored_paths)} ignored paths from the project configuration.")
-                log.debug(f"Project ignored paths: {self.project_config.ignored_paths}")
-            log.debug(f"Combined ignored patterns: {ignored_patterns}")
-            if self.project_config.ignore_all_files_in_gitignore:
-                gitignore_parser = GitignoreParser(self.project_root)
-                for spec in gitignore_parser.get_ignore_specs():
-                    log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
-                    ignored_patterns.extend(spec.patterns)
-            self.__ignored_patterns = ignored_patterns
+        try:
+            with LogTime(f"Gathering ignore spec for project {self.project_config.project_name}", logger=log):
+                # gather ignored paths from the global configuration, project configuration, and gitignore files
+                global_ignored_paths = self.serena_config.ignored_paths
+                ignored_patterns = list(global_ignored_paths) + list(self.project_config.ignored_paths)
+                if len(global_ignored_paths) > 0:
+                    log.info(f"Using {len(global_ignored_paths)} ignored paths from the global configuration.")
+                    log.debug(f"Global ignored paths: {list(global_ignored_paths)}")
+                if len(self.project_config.ignored_paths) > 0:
+                    log.info(f"Using {len(self.project_config.ignored_paths)} ignored paths from the project configuration.")
+                    log.debug(f"Project ignored paths: {self.project_config.ignored_paths}")
+                log.debug(f"Combined ignored patterns: {ignored_patterns}")
+                if self.project_config.ignore_all_files_in_gitignore:
+                    gitignore_parser = GitignoreParser(self.project_root)
+                    for spec in gitignore_parser.get_ignore_specs():
+                        log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
+                        ignored_patterns.extend(spec.patterns)
+                self.__ignored_patterns = ignored_patterns
 
-            # Set up the pathspec matcher for the ignored paths
-            # for all absolute paths in ignored_paths, convert them to relative paths
-            processed_patterns = []
-            for pattern in ignored_patterns:
-                # Normalize separators (pathspec expects forward slashes)
-                pattern = pattern.replace(os.path.sep, "/")
-                processed_patterns.append(pattern)
-            log.debug(f"Processing {len(processed_patterns)} ignored paths")
-            self.__ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
-
-        self._ignore_spec_available.set()
+                # Set up the pathspec matcher for the ignored paths
+                # for all absolute paths in ignored_paths, convert them to relative paths
+                processed_patterns = []
+                for pattern in ignored_patterns:
+                    # Normalize separators (pathspec expects forward slashes)
+                    pattern = pattern.replace(os.path.sep, "/")
+                    processed_patterns.append(pattern)
+                log.debug(f"Processing {len(processed_patterns)} ignored paths")
+                self.__ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
+        except Exception:
+            log.exception(
+                f"Failed to gather ignore spec for project {self.project_config.project_name}; proceeding with empty ignore patterns"
+            )
+            self.__ignored_patterns = list(self.serena_config.ignored_paths) + list(self.project_config.ignored_paths)
+            self.__ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, [])
+        finally:
+            self._ignore_spec_available.set()
 
     def _tostring_includes(self) -> list[str]:
         return []
