@@ -153,25 +153,18 @@ For example, when using `uvx`, add the following section:
 
 ```toml
 [mcp_servers.serena]
+startup_timeout_sec = 25
 command = "uvx"
-args = ["--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server", "--context", "codex"]
+args = ["--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server", "--project-from-cwd", "--context", "codex"]
 ```
 
-After codex has started, you need to activate the project, which you can do by saying:
+The larger startup timeout is to permit uvx to download the necessary dependencies. Once downloaded, the startup time is much faster.
 
-> Call serena.activate_project, serena.check_onboarding_performed and serena.initial_instructions
-
-**If you don't activate the project, you will not be able to use Serena's tools!**
-
-It is recommend to set this prompt as a [custom prompt](https://developers.openai.com/codex/custom-prompts), so you don't need to type this every time.
-
-That's it! Have a look at `~/.codex/log/codex-tui.log` to see if any errors occurred.
-
-Serena's dashboard will run if you have not disabled it in the configuration, but due to Codex's sandboxing, the web browser
-may not open automatically. You can open it manually by going to `http://localhost:24282/dashboard/index.html` (or a higher port, if
-that was already taken).
-
-> Codex will often show the tools as `failed` even though they are successfully executed. This is not a problem, seems to be a bug in Codex. Despite the error message, everything works as expected.
+:::{attention}
+Codex currently ignores the [instructions](https://blog.modelcontextprotocol.io/posts/2025-11-03-using-server-instructions/) 
+property of MCP servers, so it is recommended to prompt the agent to 
+"read initial instructions for Serena" when starting your session, e.g. by mentioning this in your `AGENT.md`.
+:::
 
 ## Claude Desktop
 
