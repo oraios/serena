@@ -114,6 +114,10 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
 
 
 class JetBrainsMoveSymbolTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
+    """
+    Moves a symbol, file or directory to a new location using the JetBrains backend, updating all references
+    """
+
     def apply(
         self,
         name_path: str | None = None,
@@ -131,7 +135,6 @@ class JetBrainsMoveSymbolTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
             If None, the symbol is moved to the top level of the target file.
         :param target_relative_path: the relative path to the target file. If None, the symbol
             is moved within the same file.
-        :return: JSON string with the result of the operation.
         """
         with JetBrainsPluginClient.from_project(self.project) as client:
             response_dict = client.move_symbol(
@@ -144,6 +147,10 @@ class JetBrainsMoveSymbolTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
 
 
 class JetBrainsSafeDeleteTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
+    """
+    Safely deletes a symbol using the JetBrains backend, checking for remaining usages first
+    """
+
     def apply(
         self,
         relative_path: str,
@@ -162,7 +169,6 @@ class JetBrainsSafeDeleteTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
             Default is False (safe mode: will report usages instead of deleting).
         :param propagate: whether to propagate the deletion to usages of the symbol and also
             remove symbols that become unused after the deletion. Default is False.
-        :return: JSON string with the result of the operation.
         """
         with JetBrainsPluginClient.from_project(self.project) as client:
             response_dict = client.safe_delete(
@@ -175,6 +181,10 @@ class JetBrainsSafeDeleteTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
 
 
 class JetBrainsInlineSymbol(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
+    """
+    Inlines a symbol using the JetBrains backend, replacing all call sites with the symbol's body
+    """
+
     def apply(
         self,
         name_path: str,
@@ -182,16 +192,14 @@ class JetBrainsInlineSymbol(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
         keep_definition: bool = False,
     ) -> str:
         """
-        Inlines a symbol (usually method, but also classes may be amenable to inlining,
+        Inlines a symbol (usually a method/function, but also classes may be amenable to inlining,
         which turns invocation into anonymous class creation),
-        replacing all call sites with the method's body.
-        An error is raised when requested on a symbol that cannot be inlined.
+        replacing all call sites with the symbol's body.
 
-        :param name_path: the name path of the method to inline.
-        :param relative_path: the relative path to the file containing the method to inline.
+        :param name_path: the name path of the symbol to inline.
+        :param relative_path: the relative path to the file containing the symbol to inline.
         :param keep_definition: whether to keep the original method definition after inlining all call sites.
-            May be ignored in some cases (e.g., when inlining a class)..
-        :return: JSON string with the result of the operation.
+            May be ignored in some cases (e.g. when inlining a class).
         """
         with JetBrainsPluginClient.from_project(self.project) as client:
             response_dict = client.inline_symbol(
@@ -217,14 +225,12 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
         max_answer_chars: int = -1,
     ) -> str:
         """
-        Finds symbols that reference the symbol at the given `name_path`.
+        Finds symbols that reference the symbol at the specified symbol, i.e. returns symbols whose definitions (e.g. a function body) contain a reference to the given symbol.
         The result will contain metadata about the referencing symbols.
 
-        :param name_path: name path of the symbol for which to find references; matching logic as described in find symbol tool.
-        :param relative_path: the relative path to the file containing the symbol for which to find references.
-            Note that here you can't pass a directory but must pass a file.
+        :param name_path: name path of the symbol for which to find references
+        :param relative_path: the relative path to the file containing the symbol (must be a file, not a directory)
         :param max_answer_chars: max characters for the result (-1 for default). If exceeded, no content/a shortened result is returned.
-        :return: a list of JSON objects with the symbols referencing the requested symbol
         """
         with JetBrainsPluginClient.from_project(self.project) as client:
             response_dict = client.find_references(
@@ -279,7 +285,6 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
         :param depth: depth up to which descendants shall be retrieved (e.g., use 1 to also retrieve immediate children).
         :param max_answer_chars: max characters for the result (-1 for default). If exceeded, no content/a shortened result is returned.
         :param include_file_documentation: whether to include the file's docstring. Default False.
-        :return: a JSON object containing the symbols grouped by kind in a compact format.
         """
         with JetBrainsPluginClient.from_project(self.project) as client:
             symbol_overview = client.get_symbols_overview(
@@ -420,7 +425,7 @@ class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptiona
         return self._limit_length(result, max_answer_chars)
 
 
-class JetBrainsFindDeclarationTool(Tool, ToolMarkerSymbolicRead):
+class JetBrainsFindDeclarationTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
     """
     Finds the declaration of a symbol using the JetBrains backend
     """
@@ -449,7 +454,7 @@ class JetBrainsFindDeclarationTool(Tool, ToolMarkerSymbolicRead):
         return result
 
 
-class JetBrainsFindImplementationsTool(Tool, ToolMarkerSymbolicRead):
+class JetBrainsFindImplementationsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
     """
     Finds the implementations of a symbol using the JetBrains backend
     """
@@ -471,10 +476,14 @@ class JetBrainsFindImplementationsTool(Tool, ToolMarkerSymbolicRead):
         return result
 
 
-class JetBrainsRenameTool(Tool, ToolMarkerSymbolicEdit):
+class JetBrainsRenameTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
+    """
+    Renames a symbol, file or directory throughout the codebase using the JetBrains backend.
+    """
+
     def apply(self, relative_path: str, new_name: str, name_path: str | None = None) -> str:
         """
-        Renames a symbol, file, or directory throughout the codebase.
+        Renames a symbol, file or directory throughout the codebase.
 
         :param relative_path: if `name_path` is passed, the relative path of the file containing the symbol.
             Otherwise, the path to the directory or file to rename.
