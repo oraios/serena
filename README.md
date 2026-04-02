@@ -5,7 +5,6 @@
 
 <h3 align="center">
     Serena is the IDE for your coding agent.
-  </span>
 </h3>
 
 * Serena provides essential **semantic code retrieval, editing and refactoring tools** that are akin to an IDE's capabilities,
