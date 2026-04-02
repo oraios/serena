@@ -1,0 +1,29 @@
+{
+  "name": "serena",
+  "version": "0.1.0",
+  "description": "Semantic code retrieval and editing toolkit for Codex",
+  "author": {
+    "name": "oraios/serena",
+    "url": "https://github.com/oraios/serena"
+  },
+  "homepage": "https://github.com/oraios/serena",
+  "repository": "https://github.com/oraios/serena",
+  "keywords": [
+    "mcp",
+    "codex",
+    "serena"
+  ],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Serena",
+    "shortDescription": "Semantic code retrieval and editing toolkit for Codex",
+    "longDescription": "Serena provides semantic code retrieval and editing tools that turn an LLM into a fully-featured coding agent working directly on your codebase.",
+    "category": "Coding",
+    "capabilities": [
+      "Read",
+      "Write",
+      "Interactive"
+    ],
+    "websiteURL": "https://github.com/oraios/serena"
+  }
+}

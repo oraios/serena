@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "serena": {
+      "command": "uvx",
+      "args": [
+        "serena-mcp-server"
+      ]
+    }
+  }
+}
