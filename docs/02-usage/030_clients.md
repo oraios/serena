@@ -128,6 +128,8 @@ While serena can be directly installed from the GitHub MCP server registry, we r
       "type": "stdio",
       "command": "uvx",
       "args": [
+        "-p",
+        "3.13",
         "--from",
         "git+https://github.com/oraios/serena",
         "serena",
@@ -155,7 +157,7 @@ For example, when using `uvx`, add the following section:
 [mcp_servers.serena]
 startup_timeout_sec = 25
 command = "uvx"
-args = ["--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server", "--project-from-cwd", "--context", "codex"]
+args = ["-p", "3.13", "--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server", "--project-from-cwd", "--context", "codex"]
 ```
 
 The larger startup timeout is to permit uvx to download the necessary dependencies. Once downloaded, the startup time is much faster.
@@ -182,6 +184,8 @@ Add the `serena` MCP server configuration
     "serena": {
       "command": "uvx",
       "args": [
+        "-p",
+        "3.13",
         "--from",
         "git+https://github.com/oraios/serena",
         "serena",
@@ -218,6 +222,8 @@ MCP server configuration:
     "serena": {
       "command": "uvx",
       "args": [
+        "-p",
+        "3.13",
         "--from",
         "git+https://github.com/oraios/serena",
         "serena",
@@ -246,6 +252,8 @@ Go to Settings / Tools / AI Assistant / MCP and add a new **local** configuratio
     "serena": {
       "command": "uvx",
       "args": [
+        "-p",
+        "3.13",
         "--from",
         "git+https://github.com/oraios/serena",
         "serena",
@@ -272,6 +280,8 @@ Add this configuration:
     "serena": {
       "command": "uvx",
       "args": [
+        "-p",
+        "3.13",
         "--from",
         "git+https://github.com/oraios/serena",
         "serena",
