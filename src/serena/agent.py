@@ -239,6 +239,13 @@ class ActiveModes:
             self._active_modes.append(mode)
         return self._active_modes
 
+    # TODO: apply caching like in get_modes
+    def get_default_modes(self) -> Sequence[SerenaAgentMode]:
+        return [SerenaAgentMode.load(mode_name) for mode_name in self._default_modes or []]
+
+    def get_base_modes(self) -> Sequence[SerenaAgentMode]:
+        return [SerenaAgentMode.load(mode_name) for mode_name in self._base_modes or []]
+
 
 class SerenaAgent:
     def __init__(
@@ -371,7 +378,7 @@ class SerenaAgent:
             self.serena_config, self._language_backend, self._context, self._active_modes, self._active_project
         )
         self._exposed_tools = self._base_toolset.to_available_tools(self._all_tools)
-        log.info(f"Number of exposed tools: {len(self._exposed_tools)}")
+        log.info(f"Number of exposed tools: {len(self._exposed_tools)}. Exposed tools: {self._exposed_tools.tool_names}")
 
         # update the active tools (considering the active project, if any)
         self._active_tools: AvailableTools
@@ -427,11 +434,20 @@ class SerenaAgent:
 
         # consider modes
         # Since modes can be dynamically turned on and off, we don't include their definitions directly,
-        # but for the initially active modes, we make sure that the tools they enable are included.
-        for mode in modes.get_modes():
+        # For the initially active dynamic modes, we make sure that the tools they enable are included.
+        for mode in modes.get_default_modes():
             tool_inclusion_definitions.append(
                 NamedToolInclusionDefinition(
-                    name=f"InitialModeInclusions[{mode.name}]", included_optional_tools=mode.included_optional_tools
+                    name=f"InitialDynamicModeInclusions[{mode.name}]", included_optional_tools=mode.included_optional_tools
+                )
+            )
+        # For the base modes, we also apply the tool exclusions, since they apply throughout the entire session
+        for base_mode in modes.get_base_modes():
+            tool_inclusion_definitions.append(
+                NamedToolInclusionDefinition(
+                    name=f"BaseMode[{base_mode.name}]",
+                    included_optional_tools=base_mode.included_optional_tools,
+                    excluded_tools=base_mode.excluded_tools,
                 )
             )
 
