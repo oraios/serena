@@ -110,6 +110,12 @@ class ToolMarkerSymbolicEdit(ToolMarkerCanEdit):
     """
 
 
+class ToolMarkerBeta(ToolMarker):
+    """
+    Marker for tools that are considered beta features (may not be fully robust)
+    """
+
+
 class ApplyMethodProtocol(Protocol):
     """Callable protocol for the apply method of a tool."""
 
@@ -407,6 +413,7 @@ class EditedFileContext:
 class RegisteredTool:
     tool_class: type[Tool]
     is_optional: bool
+    is_beta: bool
     tool_name: str
 
     @property
@@ -429,10 +436,11 @@ class ToolRegistry:
             if not any(cls.__module__.startswith(pkg) for pkg in tool_packages):
                 continue
             is_optional = issubclass(cls, ToolMarkerOptional)
+            is_beta = issubclass(cls, ToolMarkerBeta)
             name = cls.get_name_from_cls()
             if name in self._tool_dict:
                 raise ValueError(f"Duplicate tool name found: {name}. Tool classes must have unique names.")
-            self._tool_dict[name] = RegisteredTool(tool_class=cls, is_optional=is_optional, tool_name=name)
+            self._tool_dict[name] = RegisteredTool(tool_class=cls, is_optional=is_optional, tool_name=name, is_beta=is_beta)
 
     def get_registered_tools_by_module(self) -> dict[str, list[RegisteredTool]]:
         """

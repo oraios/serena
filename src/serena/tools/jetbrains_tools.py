@@ -7,7 +7,7 @@ from serena.code_editor import JetBrainsCodeEditor
 from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
 from serena.jetbrains.jetbrains_types import SymbolDTO
 from serena.symbol import JetBrainsSymbolDictGrouper
-from serena.tools import Tool, ToolMarkerOptional, ToolMarkerSymbolicEdit, ToolMarkerSymbolicRead
+from serena.tools import Tool, ToolMarkerBeta, ToolMarkerOptional, ToolMarkerSymbolicEdit, ToolMarkerSymbolicRead
 from serena.util.text_utils import find_text_coordinates
 
 log = logging.getLogger(__name__)
@@ -113,7 +113,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         return self._limit_length(result, max_answer_chars, shortened_result_factories=[create_shortened_result])
 
 
-class JetBrainsMoveTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
+class JetBrainsMoveTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMarkerBeta):
     """
     Moves a symbol, file or directory to a new location using the JetBrains backend, updating all references
     """
@@ -155,7 +155,7 @@ class JetBrainsMoveTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
         return self._to_json(response_dict)
 
 
-class JetBrainsSafeDeleteTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
+class JetBrainsSafeDeleteTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMarkerBeta):
     """
     Safely deletes a symbol using the JetBrains backend, checking for remaining usages first
     """
@@ -189,7 +189,7 @@ class JetBrainsSafeDeleteTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
         return self._to_json(response_dict)
 
 
-class JetBrainsInlineSymbol(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
+class JetBrainsInlineSymbol(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMarkerBeta):
     """
     Inlines a symbol using the JetBrains backend, replacing all call sites with the symbol's body
     """
