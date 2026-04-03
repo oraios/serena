@@ -2,6 +2,7 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
+import json
 import multiprocessing
 import os
 import platform
@@ -35,7 +36,16 @@ from serena.ls_manager import LanguageServerManager
 from serena.project import MemoriesManager, Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.task_executor import TaskExecutor
-from serena.tools import ActivateProjectTool, GetCurrentConfigTool, OpenDashboardTool, ReplaceContentTool, Tool, ToolMarker, ToolRegistry
+from serena.tools import (
+    ActivateProjectTool,
+    GetCurrentConfigTool,
+    OpenDashboardTool,
+    ReadMemoryTool,
+    ReplaceContentTool,
+    Tool,
+    ToolMarker,
+    ToolRegistry,
+)
 from serena.util.gui import system_has_usable_display
 from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
@@ -80,6 +90,9 @@ class AvailableTools:
 
     def contains_tool_name(self, tool_name: str) -> bool:
         return tool_name in self._tool_name_set
+
+    def contains_tool_class(self, tool_class: type[Tool]) -> bool:
+        return self.contains_tool_name(tool_class.get_name_from_cls())
 
 
 class ToolSet:
@@ -648,10 +661,38 @@ class SerenaAgent:
 
         # If a project is active at startup, append its activation message
         if self._active_project is not None:
-            system_prompt += "\n\n" + self._active_project.get_activation_message()
+            system_prompt += "\n\n" + self.get_project_activation_message()
 
         log.info("System prompt:\n%s", system_prompt)
         return system_prompt
+
+    def get_project_activation_message(self) -> str:
+        """
+        :return: a message providing information about the project upon activation (e.g. programming language, memories, initial prompt)
+        :raise: AssertionError if no project is active
+        """
+        proj = self._active_project
+        assert proj is not None, "A project must be active before calling this."
+        if proj.is_newly_created:
+            msg = f"Created and activated a new project with name '{proj.project_name}' at {proj.project_root}. "
+        else:
+            msg = f"The project with name '{proj.project_name}' at {proj.project_root} is activated."
+        if self._language_backend == LanguageBackend.LSP:
+            languages_str = ", ".join([lang.value for lang in proj.project_config.languages])
+            msg += f"\nProgramming languages: {languages_str}."
+        msg += "File encoding: {proj.project_config.encoding}."
+
+        include_memories = self._active_tools.contains_tool_class(ReadMemoryTool)
+        if include_memories:
+            project_memories = proj.memories_manager.list_project_memories()
+            if project_memories:
+                msg += (
+                    f"\n{json.dumps(project_memories.to_dict())}\n"
+                    + "Use the `read_memory` tool to read these memories later if they are relevant to the task."
+                )
+        if proj.project_config.initial_prompt:
+            msg += f"\nAdditional project-specific instructions:\n {proj.project_config.initial_prompt}"
+        return msg
 
     def _update_active_modes(self) -> None:
         """
