@@ -3,7 +3,6 @@
 # is encouraged (via the tool description) to call at the beginning of the conversation.
 prompts:
   system_prompt: |
-    You are a professional coding agent. 
     You have access to semantic coding tools upon which you rely heavily for all your work.
     You operate in a resource-efficient and intelligent manner, always keeping in mind to not read or generate
     content that is not needed for the task at hand.
