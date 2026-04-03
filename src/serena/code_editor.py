@@ -426,7 +426,14 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
                 )
             return JetBrainsSymbol(symbols[0], self._project)
 
-    def rename_symbol(self, name_path: str | None, relative_path: str, new_name: str) -> str:
+    def rename_symbol(
+        self,
+        name_path: str | None,
+        relative_path: str,
+        new_name: str,
+        rename_in_comments: bool = False,
+        rename_in_text_occurrences: bool = False,
+    ) -> str:
         """
         Renames a code symbol, file, or directory throughout the codebase.
 
@@ -434,6 +441,8 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
         :param relative_path: if `name_path` is passed, the relative path of the file containing the symbol.
             Otherwise, the path to the directory or file to rename.
         :param new_name: the new name
+        :param rename_in_comments: whether to rename occurrences of the symbol in comments
+        :param rename_in_text_occurrences: whether to rename occurrences of the symbol in text
         :return: a status message
         """
         with JetBrainsPluginClient.from_project(self._project) as client:
@@ -441,7 +450,7 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
                 name_path=name_path,
                 relative_path=relative_path,
                 new_name=new_name,
-                rename_in_comments=False,
-                rename_in_text_occurrences=False,
+                rename_in_comments=rename_in_comments,
+                rename_in_text_occurrences=rename_in_text_occurrences,
             )
             return "Success"
