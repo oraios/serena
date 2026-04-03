@@ -742,6 +742,9 @@ class SerenaDashboardViewer:
             width=self.width,
             height=self.height,
             hidden=self.start_minimized,
+            text_select=True,
+            zoomable=True,
+
         )
         assert window is not None
         self.window = window
