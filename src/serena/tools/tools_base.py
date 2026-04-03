@@ -21,7 +21,7 @@ from solidlsp.ls_exceptions import SolidLSPException
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
-    from serena.code_editor import CodeEditor
+    from serena.code_editor import CodeEditor, LanguageServerCodeEditor
     from serena.symbol import LanguageServerSymbolRetriever
 
 log = logging.getLogger(__name__)
@@ -58,15 +58,22 @@ class Component(ABC):
         return self.agent.get_active_project_or_raise()
 
     def create_code_editor(self) -> "CodeEditor":
-        from ..code_editor import JetBrainsCodeEditor, LanguageServerCodeEditor
+        from ..code_editor import JetBrainsCodeEditor
 
         match self.agent.get_language_backend():
             case LanguageBackend.LSP:
-                return LanguageServerCodeEditor(self.create_language_server_symbol_retriever())
+                return self.create_ls_code_editor()
             case LanguageBackend.JETBRAINS:
                 return JetBrainsCodeEditor(project=self.project)
             case _:
                 raise ValueError
+
+    def create_ls_code_editor(self) -> "LanguageServerCodeEditor":
+        from ..code_editor import LanguageServerCodeEditor
+
+        if not self.agent.is_using_language_server():
+            raise Exception("Cannot create LanguageServerCodeEditor; agent is not in language server mode.")
+        return LanguageServerCodeEditor(self.create_language_server_symbol_retriever())
 
 
 class ToolMarker:
@@ -100,6 +107,12 @@ class ToolMarkerSymbolicRead(ToolMarker):
 class ToolMarkerSymbolicEdit(ToolMarkerCanEdit):
     """
     Marker class for tools that perform symbolic edit operations.
+    """
+
+
+class ToolMarkerBeta(ToolMarker):
+    """
+    Marker for tools that are considered beta features (may not be fully robust)
     """
 
 
@@ -400,6 +413,7 @@ class EditedFileContext:
 class RegisteredTool:
     tool_class: type[Tool]
     is_optional: bool
+    is_beta: bool
     tool_name: str
 
     @property
@@ -422,10 +436,11 @@ class ToolRegistry:
             if not any(cls.__module__.startswith(pkg) for pkg in tool_packages):
                 continue
             is_optional = issubclass(cls, ToolMarkerOptional)
+            is_beta = issubclass(cls, ToolMarkerBeta)
             name = cls.get_name_from_cls()
             if name in self._tool_dict:
                 raise ValueError(f"Duplicate tool name found: {name}. Tool classes must have unique names.")
-            self._tool_dict[name] = RegisteredTool(tool_class=cls, is_optional=is_optional, tool_name=name)
+            self._tool_dict[name] = RegisteredTool(tool_class=cls, is_optional=is_optional, tool_name=name, is_beta=is_beta)
 
     def get_registered_tools_by_module(self) -> dict[str, list[RegisteredTool]]:
         """

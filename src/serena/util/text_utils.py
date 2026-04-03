@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 from joblib import Parallel, delayed
 
 from serena.constants import DEFAULT_SOURCE_FILE_ENCODING
+from solidlsp.ls_utils import TextUtils
 
 log = logging.getLogger(__name__)
 
@@ -537,21 +538,29 @@ class TextCoords:
     """
 
 
-def find_text_coordinates(content: str, regex: str) -> TextCoords | None:
+def find_text_coordinates(content: str, regex: str, require_unique: bool = False) -> TextCoords | None:
     """
     Finds the line and column number of the first match of a regex pattern in the given content.
 
     :param content: the text content to search through
     :param regex: the regular expression pattern to search for; it must match part of a single line,
         and contain exactly one group that captures the position of interest (e.g., the exact variable name to find the coordinates of)
-    :return: a tuple of (line_number, column_number) for the first match found, both 0-based, or None if no match is found
+    :param require_unique: if True, raises an error if not exactly one match is found;
+        if False, returns None if no match is found, and returns the coordinates of the first match if multiple matches are found
+    :return: the coordinates of the match or None
     """
-    pattern = re.compile(regex)
-    for line_number, line in enumerate(content.splitlines()):
-        match = pattern.search(line)
-        if match:
-            if len(match.groups()) != 1:
-                raise ValueError(f"Regex must contain exactly one group to capture the position, but found {len(match.groups())} groups.")
-            column_number = match.start(1)
-            return TextCoords(line_number, column_number)
-    return None
+    pattern = re.compile(regex, flags=re.MULTILINE | re.DOTALL)
+    matches = list(pattern.finditer(content))
+    if len(matches) == 0:
+        if require_unique:
+            raise ValueError(f"No match found for regex: {regex}")
+        return None
+    else:
+        if require_unique and len(matches) > 1:
+            raise ValueError(f"Match must be unique; found {len(matches)} matches for regex: {regex}")
+        match = matches[0]
+        if len(match.groups()) != 1:
+            raise ValueError(f"Regex must contain exactly one group to capture the position, but found {len(match.groups())} groups.")
+        index_in_content = match.start(1)
+        line, col = TextUtils.get_line_col_from_index(content, index_in_content)
+        return TextCoords(line, col)
