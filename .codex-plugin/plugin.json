@@ -20,5 +20,6 @@
     "longDescription": "Serena provides semantic code retrieval and editing tools that turn an LLM into a fully-featured coding agent working directly on your codebase.",
     "category": "Coding",
     "websiteURL": "https://github.com/oraios/serena"
-  }
+  },
+  "skills": "./skills/"
 }
