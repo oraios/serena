@@ -592,7 +592,7 @@ class SerenaAgent:
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            start_new_session=True,  # Detach from parent process
+            start_new_session=False,
         )
 
     def get_exposed_tool_instances(self) -> list["Tool"]:
