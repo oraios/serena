@@ -120,32 +120,30 @@ class JetBrainsMoveTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
 
     def apply(
         self,
-        relative_path: str | None = None,
+        relative_path: str,
         name_path: str | None = None,
         target_relative_path: str | None = None,
         target_parent_name_path: str | None = None,
     ) -> str:
         """
-        Moves a symbol, file or directory to a different location. The target location is the new "parent"
+        Moves a symbol, file or directory to a different location. The target location is the new parent
         of the symbol, i.e. the moved entity is never renamed by the operation, only moved.
         References to affected symbols are automatically updated.
 
         Valid moves:
         - Symbol:
-           * (relative_path, name_path) -> new parent symbol (relative path + name path)
+           * (relative_path, name_path) -> new parent symbol (target_relative_path, target_parent_name_path)
            * (relative_path, name_path) -> top level of target file or directory (target_relative_path)
              Always consider the concrete language-specific semantics!
-             - file: valid for languages like Python, where files are modules
-             - directory: valid for languages like Java, where directories are packages and can contain classes
+             - target is a file: valid for languages like Python, where files are modules
+             - target is a directory: valid for languages like Java, where directories are packages and can contain classes
         - File or directory:
            * relative_path -> new parent directory (target_relative_path)
 
         :param relative_path: the relative path to the file containing the symbol to move.
-        :param name_path: the name path of the symbol to move (e.g. "MyClass/my_method").
-        :param target_relative_path: the relative path to the target file. If None, the symbol
-            is moved within the same file.
-        :param target_parent_name_path: the name path of the target parent symbol (e.g. "TargetClass").
-            If None, the symbol is moved to the top level of the target file.
+        :param name_path: the name path of the symbol to move (empty for moving file or dir).
+        :param target_relative_path: the relative path of the target directory or file.
+        :param target_parent_name_path: the name path of the target parent symbol.
         """
         with JetBrainsPluginClient.from_project(self.project) as client:
             response_dict = client.move_symbol(
