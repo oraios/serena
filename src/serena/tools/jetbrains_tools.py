@@ -446,8 +446,8 @@ class JetBrainsFindDeclarationTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptio
         :param relative_path: the relative path to the source file containing the symbol for which to find the declaration.
         :param regex: a regular expression with one group, where the group matches the symbol for which to perform the lookup.
             For example, to find the declaration of the `process` method in a call like `obj.process()`,
-            pass an expression like "obj\.(process)\(\)".
-            Provide as much context as necessary to render the regex unambiguous.
+            pass an expression like "obj\.(process)\(process_input_arg=37\)".
+            Prefer regexes with sufficiently large context around the group to render the match unambiguous.
             Uses Python syntax with MULTILINE and DOTALL flags enabled.
         :param include_body: whether to include the symbol's body in the result. Default False.
         """
