@@ -14,14 +14,14 @@ leverage the powerful code analysis and editing capabilities of your JetBrains I
 We recommend the JetBrains plugin as the preferred way of using Serena,
 especially for users of JetBrains IDEs.
 
+How it works:
+1. Install the plugin in your JetBrains IDE
+2. Configure Serena to use the JetBrains language backend (see [below](configure-jetbrains))
+3. Open the project you want to work on in your JetBrains IDE and activate it in Serena (see [below](jetbrains-workflow))
+4. Start coding via your MCP client as usual
+
 **Purchasing the JetBrains Plugin supports the Serena project.**
 The proceeds from plugin sales allow us to dedicate more resources to further developing and improving Serena.
-
-How it works:
- 1. Install the plugin in your JetBrains IDE
- 2. Configure Serena to use the JetBrains language backend (see [below](configure-jetbrains))
- 3. Open the project you want to work on in your JetBrains IDE and activate it in Serena (see [below](jetbrains-workflow))
- 4. Start coding via your MCP client as usual 
 
 ## Advantages of the JetBrains Plugin
 
@@ -39,6 +39,12 @@ There are multiple features that are only available when using the JetBrains plu
 
 We are also working on additional features like debugging and advanced introspection capabilities, which
 will be available exclusively through the JetBrains plugin.
+
+:::{note}
+With Serena's JetBrains tools, we try to offer the latest features.
+As a result, some of them are considered as beta features (see [tool list](../01-about/035_tools)), which may have some quirks.
+Please report your experience with these tools if they do not work as expected. 
+:::
 
 (configure-jetbrains)=
 ## Configuring Serena to Use the JetBrains Plugin
