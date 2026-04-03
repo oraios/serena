@@ -146,7 +146,7 @@ class JetBrainsMoveTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMa
         :param target_parent_name_path: the name path of the target parent symbol.
         """
         with JetBrainsPluginClient.from_project(self.project) as client:
-            response_dict = client.move_symbol(
+            response_dict = client.move(
                 name_path=name_path,
                 relative_path=relative_path,
                 target_parent_name_path=target_parent_name_path,

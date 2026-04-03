@@ -425,13 +425,14 @@ class JetBrainsPluginClient(ToStringMixin):
         self._postprocess_symbol_collection_response(symbol_collection)
         return symbol_collection
 
-    def move_symbol(
+    def move(
         self,
         name_path: str | None,
         relative_path: str | None,
         target_parent_name_path: str | None,
         target_relative_path: str | None,
     ) -> dict[str, Any]:
+        self._require_version_at_least(2023, 2, 14)
         request_data = {
             "namePath": name_path,
             "relativePath": relative_path,
@@ -527,6 +528,7 @@ class JetBrainsPluginClient(ToStringMixin):
         :param relative_path: the relative path to the file containing the symbol
         :param delete_even_if_used: if True, delete the symbol even if it has usages
         """
+        self._require_version_at_least(2023, 2, 14)
         request_data = {
             "namePath": name_path,
             "relativePath": relative_path,
@@ -548,6 +550,7 @@ class JetBrainsPluginClient(ToStringMixin):
         :param relative_path: the relative path to the file containing the method
         :param keep_definition: if True, keep the original method definition after inlining
         """
+        self._require_version_at_least(2023, 2, 14)
         request_data = {
             "namePath": name_path,
             "relativePath": relative_path,
@@ -599,6 +602,7 @@ class JetBrainsPluginClient(ToStringMixin):
         :param include_body: whether to include the symbol body
         :param include_quick_info: whether to include quick info about the symbol
         """
+        self._require_version_at_least(2023, 2, 14)
         request_data = {
             "relativePath": relative_path,
             "line": line,
@@ -618,6 +622,7 @@ class JetBrainsPluginClient(ToStringMixin):
         :param name_path: the name path of the symbol
         :param include_quick_info: whether to include quick info about the symbol
         """
+        self._require_version_at_least(2023, 2, 14)
         request_data = {
             "relativePath": relative_path,
             "namePath": name_path,
