@@ -28,7 +28,7 @@ We currently provide direct, out-of-the-box support for the programming language
 Some languages require additional installations or setup steps, as noted.
 
 * **AL**
-* **Ansible**
+* **Ansible**  
   (experimental; requires Node.js and npm; automatically installs `@ansible/ansible-language-server`;
   must be explicitly specified in the `languages` entry in the `project.yml`; requires `ansible` in PATH for full functionality)
   the upstream `@ansible/ansible-language-server@1.2.3` supports hover, completion, definition,
@@ -58,9 +58,9 @@ Some languages require additional installations or setup steps, as noted.
   (requires installation of `gopls`)
 * **Groovy**  
   (requires local groovy-language-server.jar setup via `GROOVY_LS_JAR_PATH` or configuration)
-* **Haskell**
+* **Haskell**  
   (automatically locates HLS via ghcup, stack, or system PATH; supports Stack and Cabal projects)
-* **HLSL / GLSL / WGSL**
+* **HLSL / GLSL / WGSL**  
   (uses [shader-language-server](https://github.com/antaalt/shader-sense) (language `hlsl`); automatically downloaded;
   on macOS, requires Rust toolchain for building from source;
   note: reference search is not supported by this language server)
@@ -97,7 +97,7 @@ Some languages require additional installations or setup steps, as noted.
   (requires [rustup](https://rustup.rs/) - uses rust-analyzer from your toolchain)
 * **Scala**  
   (requires some [manual setup](../03-special-guides/scala_setup_guide_for_serena); uses Metals LSP)
-* **Solidity**
+* **Solidity**  
   (experimental; requires Node.js and npm; automatically installs `@nomicfoundation/solidity-language-server`;
   works best with a `foundry.toml` or `hardhat.config.js` in the project root)
 * **Swift**

@@ -178,7 +178,7 @@ https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
 **Prerequisites**. Serena is managed by *uv*. If you don’t already have it, you need to [install uv](https://docs.astral.sh/uv/getting-started/installation/) before proceeding.
 
 > [!NOTE]
-> Some language servers require additional dependencies to be installed; see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
+> When using the language server backend, some additional dependencies to be installed for certain languages; see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
 
 **Starting the MCP Server**. The easiest way to start the Serena MCP server is by running the latest version from GitHub using uvx.  
 Issue this command to see available options:
