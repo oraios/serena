@@ -194,7 +194,7 @@ def autogen_about_intro_features():
         f.write(autogen_info)
         f.write("# About Serena\n\n")
         f.write(f"**{tagline}**\n\n")
-        about_text = about_text.replace("resources/serena-block-diagram.png", "https://raw.githubusercontent.com/oraios/serena/main/resources/serena-block-diagram.svg")
+        about_text = about_text.replace("resources/serena-block-diagram.svg", "https://raw.githubusercontent.com/oraios/serena/main/resources/serena-block-diagram.svg")
         about_text = re.subn(r"^See the \[Quick Start.*?$", r"", about_text, flags=re.MULTILINE)[0]
         f.write(f"{about_text}\n\n")
 
