@@ -1,6 +1,11 @@
-# Latest
+# Unreleased (main)
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
+
+* Fixes:
+  - Fix reactivation of the same project restarting language servers #1280
+
+# 1.0.0
 
 * Memories:
     * Add `ignored_memory_patterns` configuration option (regex-based) to completely exclude

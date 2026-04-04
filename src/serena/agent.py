@@ -783,10 +783,17 @@ class SerenaAgent:
         """
         return self._language_backend == LanguageBackend.LSP
 
-    def _activate_project(self, project: Project, update_active_modes: bool = True, update_active_tools: bool = True) -> None:
+    def _activate_project(self, project: Project, update_active_modes: bool = True, update_active_tools: bool = True) -> bool:
+        """
+        :return: True if the project was newly activated, False if it was already active
+        """
+        # check if the project is already active
+        if self._active_project is not None and self._active_project.project_root == project.project_root:
+            return False
+
         log.info(f"Activating {project.project_name} at {project.project_root}")
 
-        # Check if the project requires a different language backend than the one initialized at startup
+        # check if the project requires a different language backend than the one initialized at startup
         project_backend = project.project_config.language_backend
         if project_backend is not None and project_backend != self._language_backend:
             raise ValueError(
@@ -822,14 +829,18 @@ class SerenaAgent:
         if self._project_activation_callback is not None:
             self._project_activation_callback()
 
+        return True
+
     def activate_project_from_path_or_name(
         self, project_root_or_name: str, update_active_modes: bool = True, update_active_tools: bool = True
-    ) -> Project:
+    ) -> bool:
         """
         Activate a project from a path or a name.
         If the project was already registered, it will just be activated.
         If the argument is a path at which no Serena project previously existed, the project will be created beforehand.
         Raises ProjectNotFoundError if the project could neither be found nor created.
+
+        :return: True if the project was newly activated, False if it was already active
         """
         project_instance: Project | None = self.serena_config.get_project(project_root_or_name)
         if project_instance is not None:
@@ -844,9 +855,7 @@ class SerenaAgent:
                 f"Existing project names: {self.serena_config.project_names}"
             )
 
-        self._activate_project(project_instance, update_active_modes=update_active_modes, update_active_tools=update_active_tools)
-
-        return project_instance
+        return self._activate_project(project_instance, update_active_modes=update_active_modes, update_active_tools=update_active_tools)
 
     def get_active_tool_names(self) -> list[str]:
         """

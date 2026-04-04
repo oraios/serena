@@ -28,7 +28,9 @@ class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
 
         :param project: the name of a registered project to activate or a path to a project directory
         """
-        self.agent.activate_project_from_path_or_name(project)
+        is_new_activation = self.agent.activate_project_from_path_or_name(project)
+        if not is_new_activation:
+            return "Project was already active."
         result = self.agent.get_project_activation_message()
         result += "\nIMPORTANT: If you have not yet read the 'Serena Instructions Manual', do it now before continuing!"
         return result
