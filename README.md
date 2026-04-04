@@ -137,6 +137,9 @@ To achieve this, Serena offers multiple levels of (composable) configuration:
 
 ## Serena in Action
 
+<details>
+<summary>Demonstrations</summary>
+
 #### Demonstration 1: Efficient Operation in Claude Code
 
 A demonstration of Serena efficiently retrieving and editing code within Claude Code, thereby saving tokens and time. Efficient operations are not only useful for saving costs, but also for generally improving the generated code's quality. This effect may be less pronounced in very small projects, but often becomes of crucial importance in larger ones.
@@ -149,6 +152,7 @@ A demonstration of Serena implementing a small feature for itself (a better log 
 Note how Serena's tools enable Claude to find and edit the right symbols.
 
 https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
+</details>
 
 ## Quick Start
 
