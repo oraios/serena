@@ -26,12 +26,12 @@ Serena can extend the functionality of your existing AI client via the **model c
 Most modern AI chat clients directly support MCP, including
 * terminal-based clients like Claude Code, Codex, OpenCode, or Gemini-CLI,
 * IDEs and IDE assistant plugins for VSCode, Cursor and JetBrains IDEs,
-* desktop and local web clients like Claude Desktop or OpenWebUI
+* desktop and web clients like Claude Desktop or OpenWebUI.
 
 <img src="resources/serena-block-diagram.png">
 
-To connect the Serena MCP server to your client, you typically
-  * provide the client with a launch command that starts the MCP server, or
+To connect the Serena MCP server to your client, you either
+  * provide the client with a launch command that allows it to start the MCP server, or
   * start the Serena MCP server yourself in HTTP mode and provide the client with the URL.
 
 See the [Quick Start](#quick-start) section below for information on how to get started.
@@ -40,7 +40,7 @@ See the [Quick Start](#quick-start) section below for information on how to get 
 
 Serena provides a set of versatile code querying and editing functionalities
 based on symbolic understanding of the code.
-Equipped with these capabilities, Serena discovers and edits code just like a seasoned developer
+Equipped with these capabilities, your agent discovers and edits code just like a seasoned developer
 making use of an IDE's capabilities would.
 Serena can efficiently find the right context and do the right thing even in very large and
 complex projects!
@@ -48,19 +48,22 @@ complex projects!
 There are two alternative technologies powering these capabilities:
 
 * **Language servers** implementing the language server Protocol (LSP) — the free/open-source alternative.
-* **The Serena JetBrains Plugin**, which leverages the powerful code analysis and editing
-  capabilities of your JetBrains IDE.
+* The **Serena JetBrains Plugin**, which leverages the powerful code analysis and editing
+  capabilities of your JetBrains IDE (paid plugin; free trial available).
 
 You can choose either of these backends depending on your preferences and requirements.
 
 ### Language Servers
 
+Serena incorporates a powerful abstraction layer for the integration of language servers that implement the language server protocol (LSP). 
+The underlying language servers are typically open-source projects or at least freely available for use.
+
 When using Serena's language server backend, we provide **support for over 40 programming languages**, including
-AL, Ansible, Bash, C#, C/C++, Clojure, Dart, Elixir, Elm, Erlang, Fortran, F# (currently with some bugs), GLSL, Go, Groovy (partial support), Haskell, HLSL, Java, Javascript, Julia, Kotlin, Lean 4, Lua, Luau, Markdown, MATLAB, Nix, OCaml, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Scala, Solidity, Swift, TOML, TypeScript, WGSL, YAML, and Zig.
+AL, Ansible, Bash, C#, C/C++, Clojure, Dart, Elixir, Elm, Erlang, Fortran, F#, GLSL, Go, Groovy, Haskell, HLSL, Java, JavaScript, Julia, Kotlin, Lean 4, Lua, Luau, Markdown, MATLAB, Nix, OCaml, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Scala, Solidity, Swift, TOML, TypeScript, WGSL, YAML, and Zig.
 
 ### The Serena JetBrains Plugin
 
-The [Serena JetBrains Plugin](https://plugins.jetbrains.com/plugin/28946-serena/)
+The paid Serena JetBrains Plugin (free trial available)
 leverages the powerful code analysis capabilities of your JetBrains IDE.
 The plugin naturally supports all programming languages and frameworks that are supported by JetBrains IDEs,
 including IntelliJ IDEA, PyCharm, Android Studio, WebStorm, PhpStorm, RubyMine, GoLand, and potentially others (Rider and CLion are unsupported though).
@@ -177,7 +180,7 @@ https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
 > [!NOTE]
 > Some language servers require additional dependencies to be installed; see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
 
-**Starting the MCP Server**. The easiest way to start the Serena MCP server is by running the latest version from GitHub using uvx.
+**Starting the MCP Server**. The easiest way to start the Serena MCP server is by running the latest version from GitHub using uvx.  
 Issue this command to see available options:
 
 ```bash
