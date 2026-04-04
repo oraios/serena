@@ -14,7 +14,15 @@ leverage the powerful code analysis and editing capabilities of your JetBrains I
 We recommend the JetBrains plugin as the preferred way of using Serena,
 especially for users of JetBrains IDEs.
 
-How it works:
+```{admonition} *Note:* The plugin is a language intelligence backend for the Serena MCP server. 
+:class: note
+It is *not* a UI extension for direct agent interaction (like Copilot) or anything of the sort.    
+You still interact with your regular client – be it external to your IDE (like Claude Code) or internal (like JetBrains AI Assistant) –
+and connect it to the Serena MCP server.  
+The plugin simply enables the Serena MCP server to directly leverage capabilities of your JetBrains IDE!
+```
+
+**How it works:**
 1. Install the plugin in your JetBrains IDE
 2. Configure Serena to use the JetBrains language backend (see [below](configure-jetbrains))
 3. Open the project you want to work on in your JetBrains IDE and activate it in Serena (see [below](jetbrains-workflow))
