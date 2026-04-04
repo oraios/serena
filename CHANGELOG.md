@@ -7,20 +7,6 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 # 1.0.0
 
-* Memories:
-    * Add `ignored_memory_patterns` configuration option (regex-based) to completely exclude
-      matching memories from listing, reading, and writing. Configurable at both global
-      (`serena_config.yml`) and project (`project.yml`) level, merged additively.
-      Useful for projects with large numbers of archived memory files that inflate
-      `activate_project` output.
-
-* New language support:
-    * Add Solidity language server support (`Language.SOLIDITY`) using the
-      Nomic Foundation `@nomicfoundation/solidity-language-server`. Automatically
-      installed via npm. Supports `.sol` files with go-to-definition, find references,
-      document symbols, hover, and diagnostics. Works best with a `foundry.toml` or
-      `hardhat.config.js` in the project root.
-
 * General:
     * Add monorepo/multi-language support
         * Project configuration files (`project.yml`) can now define multiple languages.
@@ -43,9 +29,9 @@ Status of the `main` branch. Changes prior to the next official version change w
         * Log page now has save (downloads a snapshot) and clear (resets log view) buttons alongside the existing copy button
     * Language server backend:
         * New two-tier caching of language server document symbols and considerable performance improvements surrounding symbol retrieval/indexing
-        * Allow passing language server specific settings through `ls_specific_settings` field (in `serena_config.yml`)
+        * Allow passing language server-specific settings through `ls_specific_settings` field (in `serena_config.yml`)
     * Add the JetBrains language backend as an alternative to language servers
-    * Improve management of the Serena projects
+    * Improve management of Serena projects
         * Facilitate project activation based on the current directory (through the `--project-from-cwd` parameter)
         * Add notion of a "single-project context" (flag `single_project`), allowing user-defined contexts to behave
           like the built-in `ide-assistant` context (where the available tools are restricted to ones required by the active
@@ -54,16 +40,19 @@ Status of the `main` branch. Changes prior to the next official version change w
           locations outside of the project folder, thus improving support for read-only projects.
         * Add support for `project.local.yml` for local overrides that should not be versioned 
     * Various fixes related to indexing, special paths and determination of ignored paths
-
-* Client support:
-    * New mode `oaicompat-agent` and extensions enhancing OpenAI tool compatibility, permitting Serena to work with llama.cpp
+    * Memories:
+        * Add support for global memories (shared across projects) 
+        * Add `read_only_memory_patterns` configuration option
+        * Add `ignored_memory_patterns` configuration option
+    * Improved client support, e.g. new mode `oaicompat-agent` and extensions enhancing OpenAI tool compatibility
 
 * Tools:
-  * Symbol information (hover, docstring, quick-info) is now provided as part of `find_symbol` and related tool responses.
+  * Additional symbol meta-information (hover, docstring, quick-info) is now provided as part of `find_symbol` and related tool responses.
   * Added `QueryProjectTool` and `ListQueryableProjectTool` (see above)
   * Added `RenameSymbolTool` for renaming symbols across the codebase (if LS supports this operation).
   * Replaced `ReplaceRegexTool` with `ReplaceContentTool`, which supports both plain text and regex-based replacements
-    (and which requires no escaping in the replacement text, making it more robust) 
+    (and which requires no escaping in the replacement text, making it more robust)
+  * Add JetBrains tools which leverage the corresponding JetBrains language backend through our plugin
   * Decreased `TOOL_DEFAULT_MAX_ANSWER_LENGTH` to be in accordance with (below) typical max-tokens configurations
 
 * Language support:
@@ -95,7 +84,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   * **Add support for MATLAB** via the official MathWorks MATLAB Language Server. Requires MATLAB R2021b or later and Node.js. Set `MATLAB_PATH` environment variable or configure `matlab_path` in `ls_specific_settings`. Supports .m, .mlx, and .mlapp files with code completion, diagnostics, go-to-definition, find references, document symbols, formatting, and rename.
   * **Add support for Pascal** via the official Pascal Language Server.
   * **C/C++ alternate LS (ccls)**: Add experimental, opt-in support for ccls as an alternative backend to clangd. Enable via `cpp_ccls` in project configuration. Requires `ccls` installed and ideally a `compile_commands.json` at repo root.
-
+  * **Add support for Solidity** via the Nomic Foundation `@nomicfoundation/solidity-language-server` (automatically installed via npm)
 
 # 0.1.4
 
