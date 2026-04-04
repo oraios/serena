@@ -1,7 +1,11 @@
 # The Serena JetBrains Plugin
 
-The [JetBrains Plugin](https://plugins.jetbrains.com/plugin/28946-serena/) allows Serena to
+The [JetBrains Plugin](https://plugins.jetbrains.com/plugin/28946-serena/) allows the Serena MCP server to
 leverage the powerful code analysis and editing capabilities of your JetBrains IDE.
+This page explains how to install the plugin and how to configure Serena for using it. 
+You will still need to set up the Serena MCP server 
+itself, so make sure to follow the [installation instructions](020_running.md) and connect the MCP server to your 
+LLM-based client as described in [client setup](030_clients.md) in addition to following the instructions below.
 
 ```{raw} html
 <p>
@@ -61,9 +65,18 @@ After installing the plugin, you need to configure Serena to use it.
 
 **Central Configuration**.
 
-Edit the global Serena configuration file located at `~/.serena/serena_config.yml` 
+If you ever executed Serena before, you will have the global Serena configuration file located at `~/.serena/serena_config.yml` 
 (`%USERPROFILE%\.serena\serena_config.yml` on Windows).
-Change the `language_backend` setting as follows:
+
+If the configuration file does not exist, run
+
+```shell
+uvx -p 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server
+```
+
+(see [running Serena](020_running.md) for alternative options) to install all dependencies and create configuration files. Terminate the server with `Ctrl+C` after it has started.
+
+In your configuration, change the `language_backend` setting as follows:
 
 ```yaml
 language_backend: JetBrains

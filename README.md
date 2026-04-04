@@ -47,7 +47,8 @@ complex projects!
 
 There are two alternative technologies powering these capabilities:
 
-* **Language servers** implementing the language server Protocol (LSP) — the free/open-source alternative.
+* **Language servers** implementing the language server Protocol (LSP) — the free/open-source alternative 
+  which is used by default.
 * The **Serena JetBrains Plugin**, which leverages the powerful code analysis and editing
   capabilities of your JetBrains IDE (paid plugin; free trial available).
 
@@ -180,15 +181,20 @@ https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
 > [!NOTE]
 > When using the language server backend, some additional dependencies to be installed for certain languages; see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
 
-**Starting the MCP Server**. The easiest way to start the Serena MCP server is by running the latest version from GitHub using uvx.  
-Issue this command to see available options:
+**Starting the MCP Server**. The easiest way to start the Serena MCP server is by running the latest version from GitHub using uvx:
 
 ```bash
-uvx -p 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server --help
+uvx -p 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server
 ```
+
+If this is the first time you are starting Serena, the necessary configuration files will be created, and 
+you should see the Serena dashboard appear. You can terminate the server by pressing Ctrl+C (multiple times, if necessary).
 
 **Configuring Your Client**. To connect Serena to your preferred MCP client, you typically need to [configure a launch command in your client](https://oraios.github.io/serena/02-usage/030_clients.html).
 Follow the link for specific instructions on how to set up Serena for Claude Code, Codex, Claude Desktop, MCP-enabled IDEs and other clients (such as local and web-based GUIs). 
+
+**Switching to the JetBrains Backend**. The default code intelligence backend for Serena is the free LSP backend.
+For using the more powerful JetBrains backend, follow the instructions on the [JetBrains Plugin page](https://oraios.github.io/serena/02-usage/025_jetbrains_plugin.html).
 
 > [!TIP]
 > While getting started quickly is easy, Serena is a powerful toolkit with many configuration options.

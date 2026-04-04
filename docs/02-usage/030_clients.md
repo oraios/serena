@@ -147,7 +147,7 @@ While serena can be directly installed from the GitHub MCP server registry, we r
 
 ## Codex
 
-Serena works with OpenAI's Codex CLI out of the box, but you have to use the `codex` context for it to work properly. (The technical reason is that Codex doesn't fully support the MCP specifications, so some massaging of tools is required.).
+Serena works with OpenAI's Codex CLI and app out of the box, but you have to use the `codex` context for it to work properly. (The technical reason is that Codex doesn't fully support the MCP specifications, so some massaging of tools is required.).
 
 Add a [run command](020_running) to `~/.codex/config.toml` to configure Serena for all Codex sessions;
 create the file if it does not exist.
@@ -161,6 +161,12 @@ args = ["-p", "3.13", "--from", "git+https://github.com/oraios/serena", "serena"
 ```
 
 The larger startup timeout is to permit uvx to download the necessary dependencies. Once downloaded, the startup time is much faster.
+
+:::{note}
+The codex app does not start a session in the project's directory, so when using the app, you will have to 
+ask Codex to "Activate the current dir as project using serena" at the start of each session. 
+This is not necessary when using the codex CLI.
+:::
 
 :::{attention}
 Codex currently ignores the [instructions](https://blog.modelcontextprotocol.io/posts/2025-11-03-using-server-instructions/) 
