@@ -28,7 +28,7 @@ Most modern AI chat clients directly support MCP, including
 * IDEs and IDE assistant plugins for VSCode, Cursor and JetBrains IDEs,
 * desktop and web clients like Claude Desktop or OpenWebUI.
 
-<img src="resources/serena-block-diagram.png">
+<img src="resources/serena-block-diagram.svg">
 
 To connect the Serena MCP server to your client, you either
   * provide the client with a launch command that allows it to start the MCP server, or
