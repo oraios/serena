@@ -13,7 +13,7 @@ There are two alternative technologies powering these capabilities:
 * **The Serena JetBrains Plugin**, which leverages the powerful code analysis and editing
   capabilities of your JetBrains IDE.
 
-See the [Features](005_features) section for a detailed comparison of the capabilities provided by the JetBrains Plugin vs. language servers.
+See the [Features](025_features) section for a detailed comparison of the capabilities provided by the JetBrains Plugin vs. language servers.
 
 ## Language Servers
 
@@ -121,7 +121,7 @@ work in a JetBrains IDE, this means Serena seamlessly integrates with the IDE in
 requiring no additional setup or configuration beyond the plugin itself.
 
 * See the [JetBrains Plugin documentation](../02-usage/025_jetbrains_plugin) for a high-level overview of its benefits and usage details.
-* See the [Features](005_features) section for a detailed comparison of the capabilities provided by the JetBrains Plugin vs. language servers.
+* See the [Features](025_features) section for a detailed comparison of the capabilities provided by the JetBrains Plugin vs. language servers.
 
 ```{raw} html
 <p>
