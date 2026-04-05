@@ -144,7 +144,8 @@ class RubyLsp(SolidLanguageServer):
             bundle_cmd = ["asdf", "exec", "bundle"]
             log.info(f"Using asdf-managed Ruby (found {tool_versions_file})")
         elif use_rvm:
-            raw_version = open(ruby_version_file).read().strip()
+            with open(ruby_version_file) as _f:
+                raw_version = _f.read().strip()
             rvm_ruby_version = raw_version if raw_version.startswith("ruby-") else f"ruby-{raw_version}"
             ruby_cmd = [rvm_exec_path, rvm_ruby_version, "ruby"]
             bundle_cmd = [rvm_exec_path, rvm_ruby_version, "bundle"]
