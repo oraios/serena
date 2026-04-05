@@ -637,6 +637,8 @@ class Dashboard {
 
             let html = '<div class="config-grid">';
 
+            html += '<div class="config-label">Version:</div><div class="config-value">' + config.serena_version + '</div>';
+
             // Project info
             html += '<div class="config-label">Active Project:</div>';
             if (config.active_project.name && config.active_project.path) {

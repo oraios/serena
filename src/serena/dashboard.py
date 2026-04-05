@@ -60,6 +60,7 @@ class ResponseConfigOverview(BaseModel):
     languages: list[str]
     encoding: str | None
     current_client: str | None
+    serena_version: str
 
 
 class ResponseAvailableLanguages(BaseModel):
@@ -537,6 +538,7 @@ class SerenaDashboardAPI:
             languages=languages,
             encoding=encoding,
             current_client=Tool.get_last_tool_call_client_str(),
+            serena_version=self._agent.version,
         )
 
     def _shutdown(self) -> None:

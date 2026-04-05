@@ -269,6 +269,8 @@ class SerenaAgent:
         :param memory_log_handler: a MemoryLogHandler instance from which to read log messages; if None, a new one will be created
             if necessary.
         """
+        self.version = serena_version()
+
         # obtain serena configuration using the decoupled factory function
         self.serena_config = serena_config or SerenaConfig.from_config_file()
 
@@ -334,7 +336,7 @@ class SerenaAgent:
 
         # log fundamental information
         log.info(
-            f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()}; "
+            f"Starting Serena server (version={self.version}, process id={os.getpid()}, parent process id={os.getppid()}; "
             f"language backend={self.serena_config.language_backend.name}); Python version={platform.python_version()}, platform={platform.platform()}"
         )
         log.info("Configuration file: %s", self.serena_config.config_file_path)
@@ -875,7 +877,7 @@ class SerenaAgent:
         :return: a string overview of the current configuration, including the active and available configuration options
         """
         result_str = "Current configuration:\n"
-        result_str += f"Serena version: {serena_version()}\n"
+        result_str += f"Serena version: {self.version}\n"
         result_str += f"Loglevel: {self.serena_config.log_level}, trace_lsp_communication={self.serena_config.trace_lsp_communication}\n"
         if self._active_project is not None:
             result_str += f"Active project: {self._active_project.project_name}\n"
