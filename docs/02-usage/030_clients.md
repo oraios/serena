@@ -79,7 +79,7 @@ Serena is a great way to make Claude Code both cheaper and more powerful!
 use this command:
 
 ```shell
-claude mcp add serena -- uvx -p 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server --context claude-code --project "$(pwd)"
+claude mcp add serena -- uvx --python 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server --context claude-code --project "$(pwd)"
 ```
 
 Note:
