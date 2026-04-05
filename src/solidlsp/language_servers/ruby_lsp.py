@@ -129,13 +129,7 @@ class RubyLsp(SolidLanguageServer):
         use_rbenv = os.path.exists(ruby_version_file) and shutil.which("rbenv") is not None
         use_mise = os.path.exists(ruby_version_file) and not use_rbenv and shutil.which("mise") is not None
         use_asdf = os.path.exists(tool_versions_file) and not use_rbenv and not use_mise and shutil.which("asdf") is not None
-        use_rvm = (
-            os.path.exists(ruby_version_file)
-            and not use_rbenv
-            and not use_mise
-            and not use_asdf
-            and os.path.exists(rvm_exec_path)
-        )
+        use_rvm = os.path.exists(ruby_version_file) and not use_rbenv and not use_mise and not use_asdf and os.path.exists(rvm_exec_path)
 
         if use_rbenv:
             ruby_cmd = ["rbenv", "exec", "ruby"]
