@@ -270,10 +270,10 @@ class TestEffectiveLanguageBackend:
 
         # Add a second project that requires JetBrains
         jb_project = Project(
-            project_root=str(Path(__file__).parent.parent / "resources" / "repos" / "python" / "test_repo"),
+            project_root=str(Path(__file__).parent.parent / "resources" / "repos" / "java" / "test_repo"),
             project_config=ProjectConfig(
                 project_name="jb_proj",
-                languages=[Language.PYTHON],
+                languages=[Language.JAVA],
                 language_backend=LanguageBackend.JETBRAINS,
             ),
             serena_config=config,
