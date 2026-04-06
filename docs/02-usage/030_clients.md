@@ -90,11 +90,23 @@ Confirm that Claude Code is connected to Serena by running the `/mcp` command an
 claude mcp add --scope user serena -- uvx --python 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server --context=claude-code --project-from-cwd
 ```
 
+You can also let Serena run this command for you:
+
+```shell
+serena setup claude-code
+```
+
 **Per-Project Configuration.** Alternatively, to add Serena only for the current project in the current directory, 
 use the command:
 
 ```shell
 claude mcp add serena -- uvx --python 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server --context claude-code --project "$(pwd)"
+```
+
+Or run:
+
+```shell
+serena setup claude-code --scope project
 ```
 
 Note:
@@ -167,6 +179,12 @@ For example, when using `uvx`, add the following section:
 startup_timeout_sec = 25
 command = "uvx"
 args = ["-p", "3.13", "--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server", "--project-from-cwd", "--context", "codex"]
+```
+
+To let Serena update the Codex config for you, run:
+
+```shell
+serena setup codex
 ```
 
 The larger startup timeout is to permit uvx to download the necessary dependencies. Once downloaded, the startup time is much faster.

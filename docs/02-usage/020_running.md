@@ -223,6 +223,15 @@ Here are some examples of commands you might find useful:
 # check if a path is ignored by the project
 <serena> project is_ignored_path path/to/check
 
+# set up Serena for Claude Code globally
+<serena> setup claude-code
+
+# set up Serena for Claude Code only for the current project
+<serena> setup claude-code --scope project
+
+# set up Serena for Codex
+<serena> setup codex
+
 # edit Serena's configuration file
 <serena> config edit
 

@@ -2,10 +2,12 @@ import collections
 import glob
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import time
+import tomllib
 from collections.abc import Iterator, Sequence
 from logging import Logger
 from pathlib import Path
@@ -109,6 +111,69 @@ def _open_in_editor(path: str) -> None:
             subprocess.run(["xdg-open", path], check=False, **run_kwargs)
     except Exception as e:
         print(f"Failed to open {path}: {e}")
+
+
+def _build_claude_code_setup_command(scope: Literal["user", "project"], project_path: str | None = None) -> list[str]:
+    command = [
+        "claude",
+        "mcp",
+        "add",
+    ]
+    if scope == "user":
+        command.extend(["--scope", "user"])
+    command.extend(
+        [
+            "serena",
+            "--",
+            "uvx",
+            "--python",
+            "3.13",
+            "--from",
+            "git+https://github.com/oraios/serena",
+            "serena",
+            "start-mcp-server",
+        ]
+    )
+    if scope == "user":
+        command.extend(["--context=claude-code", "--project-from-cwd"])
+    else:
+        if project_path is None:
+            raise ValueError("project_path must be provided for project-scoped Claude Code setup")
+        command.extend(["--context", "claude-code", "--project", project_path])
+    return command
+
+
+_CODEX_SERENA_CONFIG_SECTION = """[mcp_servers.serena]
+startup_timeout_sec = 25
+command = "uvx"
+args = ["-p", "3.13", "--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server", "--project-from-cwd", "--context", "codex"]
+"""
+
+
+def _validate_toml(content: str, path: Path) -> None:
+    if not content.strip():
+        return
+    try:
+        tomllib.loads(content)
+    except tomllib.TOMLDecodeError as e:
+        raise click.ClickException(f"Invalid TOML in {path}: {e}") from e
+
+
+def _upsert_toml_table(content: str, table_name: str, table_body: str) -> str:
+    pattern = re.compile(rf"(?ms)^\[{re.escape(table_name)}\]\n.*?(?=^\[|\Z)")
+    replacement = table_body.rstrip() + "\n"
+    if pattern.search(content):
+        return pattern.sub(replacement, content, count=1)
+
+    if re.search(r"(?m)^\s*mcp_servers\s*=", content):
+        raise click.ClickException("Codex config defines `mcp_servers` as an inline value; please update it manually.")
+
+    normalized = content
+    if normalized and not normalized.endswith("\n"):
+        normalized += "\n"
+    if normalized.strip():
+        normalized += "\n"
+    return normalized + replacement
 
 
 class ProjectType(click.ParamType):
@@ -442,6 +507,73 @@ class TopLevelCommands(AutoRegisteringGroup):
 
         viewer = SerenaDashboardViewer(url, start_minimized=minimized, width=width, height=height)
         viewer.run()
+
+
+class SetupCommands(AutoRegisteringGroup):
+    """Group for 'setup' subcommands."""
+
+    def __init__(self) -> None:
+        super().__init__(name="setup", help="Set up Serena for supported MCP clients.")
+
+    @staticmethod
+    @click.command(
+        "claude-code",
+        help="Configure Serena for Claude Code by calling the Claude CLI.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.option(
+        "--scope",
+        type=click.Choice(["user", "project"]),
+        default="user",
+        show_default=True,
+        help="Whether to install Serena for all Claude Code sessions or only for a single project.",
+    )
+    @click.option(
+        "--project",
+        type=click.Path(exists=True, file_okay=False, path_type=Path),
+        default=None,
+        help="Project directory to configure when using --scope project. Defaults to the current working directory.",
+    )
+    def claude_code(scope: Literal["user", "project"], project: Path | None) -> None:
+        if scope == "project":
+            project_path = str((project or Path.cwd()).resolve())
+        elif project is not None:
+            raise click.UsageError("--project can only be used with --scope project")
+        else:
+            project_path = None
+
+        try:
+            subprocess.run(_build_claude_code_setup_command(scope, project_path), check=True, **subprocess_kwargs())
+        except FileNotFoundError as e:
+            raise click.ClickException("Claude CLI not found. Please install `claude` and try again.") from e
+        except subprocess.CalledProcessError as e:
+            raise click.ClickException(f"Claude Code setup failed with exit code {e.returncode}.") from e
+
+        click.echo("Configured Serena for Claude Code.")
+
+    @staticmethod
+    @click.command(
+        "codex",
+        help="Configure Serena for Codex by updating the Codex config TOML file.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.option(
+        "--config-path",
+        type=click.Path(dir_okay=False, path_type=Path),
+        default=None,
+        help="Path to the Codex config TOML file. Defaults to ~/.codex/config.toml.",
+    )
+    def codex(config_path: Path | None) -> None:
+        target_path = (config_path or Path.home() / ".codex" / "config.toml").expanduser()
+        content = target_path.read_text(encoding="utf-8") if target_path.exists() else ""
+        _validate_toml(content, target_path)
+        updated_content = _upsert_toml_table(content, "mcp_servers.serena", _CODEX_SERENA_CONFIG_SECTION)
+        _validate_toml(updated_content, target_path)
+
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_text(updated_content, encoding="utf-8")
+
+        click.echo(f"Configured Serena for Codex in {target_path}.")
 
 
 class ModeCommands(AutoRegisteringGroup):
@@ -1131,6 +1263,7 @@ class PromptCommands(AutoRegisteringGroup):
 
 
 _mode = ModeCommands()
+_setup = SetupCommands()
 _context = ContextCommands()
 _project = ProjectCommands()
 _config = SerenaConfigCommands()
@@ -1141,5 +1274,5 @@ _prompts = PromptCommands()
 top_level = TopLevelCommands()
 
 # needed for the help script to work - register all subcommands to the top-level group
-for subgroup in (_mode, _context, _project, _config, _tools, _prompts):
+for subgroup in (_mode, _setup, _context, _project, _config, _tools, _prompts):
     top_level.add_command(subgroup)
