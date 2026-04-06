@@ -176,24 +176,21 @@ https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
 
 ## Quick Start
 
-**Prerequisites**. Serena is managed by *uv*. If you don’t already have it, you need to [install uv](https://docs.astral.sh/uv/getting-started/installation/) before proceeding.
+**Prerequisites**. Serena is managed by *uv*, and [installing uv](https://docs.astral.sh/uv/getting-started/installation/) is the only required prerequisite for running Serena.
 
-**Initialize Serena**. To initialize Serena, simply run:
+> [!NOTE]
+> When using the language server backend, some additional dependencies may need to be installed to support certain languages;
+> see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
+
+**Initialise Serena**. To initialise Serena and verify that your setup works correctly, simply run:
 
 ```bash
 uvx -p 3.13 --from git+https://github.com/oraios/serena serena init
 ```
 
-This will create the global configuration file `~/.serena/config.yaml`.
-
-The default code intelligence backend for Serena is the free LSP backend. You can add `-b JetBrains` to the `init` command
-to set up the JetBrains as the default code intelligence backend instead, see [JetBrains Plugin page](https://oraios.github.io/serena/02-usage/025_jetbrains_plugin.html) for more details.
-
-
-> [!NOTE]
-> When using the language server backend, some additional dependencies to be installed for certain languages; 
-> see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
-
+By default, this will set up Serena to use the language server backend. To use the JetBrains backend instead, add the parameters `-b JetBrains` 
+(see the [JetBrains Plugin documentation page](https://oraios.github.io/serena/02-usage/025_jetbrains_plugin.html) for additional usage details).  
+Either way, you should receive a success message indicating that Serena has been initialised successfully.
 
 **Configuring Your Client**. To connect Serena to your preferred MCP client, you typically need to [configure a launch command in your client](https://oraios.github.io/serena/02-usage/030_clients.html).
 Follow the link for specific instructions on how to set up Serena for Claude Code, Codex, Claude Desktop, MCP-enabled IDEs and other clients (such as local and web-based GUIs). 
