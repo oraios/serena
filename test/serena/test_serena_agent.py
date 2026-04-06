@@ -110,7 +110,7 @@ def serena_agent(request: pytest.FixtureRequest, serena_config) -> Iterator[Sere
     yield agent
 
     # explicitly shut down to free resources
-    agent.shutdown(timeout=5)
+    agent.on_shutdown(timeout=5)
 
 
 class TestSerenaAgent:

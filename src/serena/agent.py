@@ -6,6 +6,7 @@ import json
 import multiprocessing
 import os
 import platform
+import signal
 import subprocess
 import sys
 from collections.abc import Callable, Iterator, Sequence
@@ -269,6 +270,10 @@ class SerenaAgent:
         :param memory_log_handler: a MemoryLogHandler instance from which to read log messages; if None, a new one will be created
             if necessary.
         """
+        self._active_project: Project | None = None
+        self._gui_log_viewer: Optional["GuiLogViewer"] = None
+        self._dashboard_viewer_process: multiprocessing.Process | None = None
+
         self.version = serena_version()
 
         # obtain serena configuration using the decoupled factory function
@@ -276,9 +281,6 @@ class SerenaAgent:
 
         # propagate configuration to other components
         self.serena_config.propagate_settings()
-
-        # project-specific instances, which will be initialized upon project activation
-        self._active_project: Project | None = None
 
         # determine registered project to be activated (if any)
         registered_project_to_activate: RegisteredProject | None = (
@@ -302,7 +304,6 @@ class SerenaAgent:
             return memory_log_handler
 
         # open GUI log window if enabled
-        self._gui_log_viewer: Optional["GuiLogViewer"] = None
         if self.serena_config.gui_log_window:
             log.info("Opening GUI window")
             if platform.system() == "Darwin":
@@ -312,7 +313,12 @@ class SerenaAgent:
                 # which uv used as a base, unfortunately)
                 from serena.gui_log_viewer import GuiLogViewer
 
-                self._gui_log_viewer = GuiLogViewer("dashboard", title="Serena Logs", memory_log_handler=get_memory_log_handler())
+                self._gui_log_viewer = GuiLogViewer(
+                    "dashboard",
+                    title="Serena Logs",
+                    memory_log_handler=get_memory_log_handler(),
+                    shutdown_handler=lambda: self.shutdown(),
+                )
                 self._gui_log_viewer.start()
         else:
             log.debug("GUI window is disabled")
@@ -579,8 +585,10 @@ class SerenaAgent:
         url = self.get_dashboard_url()
         assert url is not None
         if SerenaDashboardViewer.is_current_platform_supported():
-            process = multiprocessing.Process(target=self._start_dashboard_viewer_process_function, args=(url, minimized), daemon=True)
-            process.start()
+            self._dashboard_viewer_process = multiprocessing.Process(
+                target=self._start_dashboard_viewer_process_function, args=(url, minimized), daemon=True
+            )
+            self._dashboard_viewer_process.start()
         else:
             log.info("Not starting Serena dashboard viewer because the current platform does not support it; using browser-based fallback")
             if not minimized:
@@ -952,23 +960,35 @@ class SerenaAgent:
         ToolRegistry().print_tool_overview(self._active_tools.tools)
 
     def __del__(self) -> None:
-        self.shutdown()
+        self.on_shutdown()
 
-    def shutdown(self, timeout: float = 2.0) -> None:
+    def on_shutdown(self, timeout: float = 2.0) -> None:
         """
-        Shuts down the agent, freeing resources and stopping background tasks.
+        Shutdown handler of the agent, freeing resources and stopping background tasks.
         """
-        # guard against __del__ being called on a partially constructed instance
-        if not hasattr(self, "_active_project"):
-            return
         log.info("SerenaAgent is shutting down ...")
         if self._active_project is not None:
+            log.info(f"Shutting down active project '{self._active_project.project_name}' ...")
             self._active_project.shutdown(timeout=timeout)
             self._active_project = None
         if self._gui_log_viewer:
             log.info("Stopping the GUI log window ...")
             self._gui_log_viewer.stop()
             self._gui_log_viewer = None
+        if self._dashboard_viewer_process:
+            log.info("Stopping the dashboard viewer process ...")
+            self._dashboard_viewer_process.terminate()
+            self._dashboard_viewer_process = None
+
+    def shutdown(self) -> None:
+        """
+        Triggers a hard shutdown of the agent, freeing resources and signalling the process to terminate
+        """
+        # perform clean-up right away, because kill does not result in normal deletion of the object
+        self.on_shutdown()
+
+        # signal process termination
+        os.kill(os.getpid(), signal.SIGTERM)
 
     def get_tool_by_name(self, tool_name: str) -> Tool:
         tool_class = ToolRegistry().get_tool_class_by_name(tool_name)
