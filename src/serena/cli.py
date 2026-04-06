@@ -17,6 +17,7 @@ from sensai.util.logging import FileLoggerContext, datetime_tag
 from sensai.util.string import dict_string
 from tqdm import tqdm
 
+from serena import serena_version
 from serena.agent import SerenaAgent
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import (
@@ -88,9 +89,6 @@ def find_project_root(root: str | Path | None = None) -> str | None:
             return str(directory)
 
     return None
-
-
-# --------------------- Utilities -------------------------------------
 
 
 def _open_in_editor(path: str) -> None:
@@ -169,13 +167,14 @@ class TopLevelCommands(AutoRegisteringGroup):
         show_default=True,
         help="Default code intelligence backend (can be overridden in the project config).",
     )
-    def init(language_backend: Literal["LSP", "JetBrains"] = "LSP"):
+    def init(language_backend: Literal["LSP", "JetBrains"] = "LSP") -> None:
+        click.echo(f"\nSerena version: {serena_version()}\n")
         serena_config = SerenaConfig.from_config_file()
         serena_config.language_backend = LanguageBackend(language_backend)
         serena_config.save()
-        click.echo(
-            f"Initialized Serena with default backend: {language_backend}.\nFind the global Serena config in:\n   {serena_config.config_file_path}"
-        )
+        click.echo(f"Configuration file: {serena_config.config_file_path}")
+        click.echo(f"Language backend: {language_backend}")
+        click.echo("\nSerena has been initialised successfully.\n")
 
     @staticmethod
     @click.command("start-mcp-server", help="Starts the Serena MCP server.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
