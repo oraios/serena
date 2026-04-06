@@ -2,8 +2,12 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Dashboard:
+  - Add version display 
+
 * Fixes:
   - Fix reactivation of the same project restarting language servers #1280
+  - Fix git commit id in version
 
 # 1.0.0
 
