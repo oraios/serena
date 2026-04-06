@@ -45,7 +45,7 @@ from solidlsp.util.subprocess_util import subprocess_kwargs
 
 log = logging.getLogger(__name__)
 
-_MAX_CONTENT_WIDTH = 100
+_MAX_CONTENT_WIDTH = 200
 _MODES_EXPLANATION = f"""\b\nBuilt-in mode names or paths to custom mode YAMLs with which to 
 override the default modes defined in the global Serena configuration or 
 the active project.
@@ -154,6 +154,28 @@ class TopLevelCommands(AutoRegisteringGroup):
 
     def __init__(self) -> None:
         super().__init__(name="serena", help="Serena CLI commands. You can run `<command> --help` for more info on each command.")
+
+    @staticmethod
+    @click.command(
+        "init",
+        help="Initialize Serena by creating a global config file with the specified default language backend.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.option(
+        "--language-backend",
+        "-b",
+        type=click.Choice([b.value for b in LanguageBackend]),
+        default=LanguageBackend.LSP.value,
+        show_default=True,
+        help="Default code intelligence backend (can be overridden in the project config).",
+    )
+    def init(language_backend: Literal["LSP", "JetBrains"] = "LSP"):
+        serena_config = SerenaConfig.from_config_file()
+        serena_config.language_backend = LanguageBackend(language_backend)
+        serena_config.save()
+        click.echo(
+            f"Initialized Serena with default backend: {language_backend}.\nFind the global Serena config in:\n   {serena_config.config_file_path}"
+        )
 
     @staticmethod
     @click.command("start-mcp-server", help="Starts the Serena MCP server.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
@@ -1109,23 +1131,16 @@ class PromptCommands(AutoRegisteringGroup):
         click.echo(f"Deleted override file '{prompt_yaml_name}'.")
 
 
-# Expose groups so we can reference them in pyproject.toml
-mode = ModeCommands()
-context = ContextCommands()
-project = ProjectCommands()
-config = SerenaConfigCommands()
-tools = ToolCommands()
-prompts = PromptCommands()
+_mode = ModeCommands()
+_context = ContextCommands()
+_project = ProjectCommands()
+_config = SerenaConfigCommands()
+_tools = ToolCommands()
+_prompts = PromptCommands()
 
-# Expose toplevel commands for the same reason
+# Expose so we can use this as an entrypoint
 top_level = TopLevelCommands()
-start_mcp_server = top_level.start_mcp_server
 
 # needed for the help script to work - register all subcommands to the top-level group
-for subgroup in (mode, context, project, config, tools, prompts):
+for subgroup in (_mode, _context, _project, _config, _tools, _prompts):
     top_level.add_command(subgroup)
-
-
-def get_help() -> str:
-    """Retrieve the help text for the top-level Serena CLI."""
-    return top_level.get_help(click.Context(top_level, info_name="serena"))

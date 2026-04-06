@@ -65,24 +65,22 @@ After installing the plugin, you need to configure Serena to use it.
 
 **Central Configuration**.
 
-If you ever executed Serena before, you will have the global Serena configuration file located at `~/.serena/serena_config.yml` 
-(`%USERPROFILE%\.serena\serena_config.yml` on Windows).
-
-If the configuration file does not exist, run
+You can run
 
 ```shell
-uvx -p 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server
+uvx -p 3.13 --from git+https://github.com/oraios/serena serena init -b JetBrains
 ```
 
-(see [running Serena](020_running.md) for alternative options) to install all dependencies and create configuration files. Terminate the server with `Ctrl+C` after it has started.
+to set the default code intelligence backend to JetBrains in the global Serena configuration file.
 
-In your configuration, change the `language_backend` setting as follows:
+Alternatively, you can also manually edit the configuration file  `~/.serena/serena_config.yml` 
+(`%USERPROFILE%\.serena\serena_config.yml` on Windows) and set
 
 ```yaml
 language_backend: JetBrains
 ```
 
-*Note*: you can also use the button `Edit Global Serena Config` in the Serena MCP dashboard to open the config file in your default editor.
+Note that the file might not exist yet if you never executed Serena before.
 
 **Per-Instance Configuration**.
 The configuration setting in the global config file can be overridden on a

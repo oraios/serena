@@ -2,6 +2,9 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Added `serena init` command  
+
 * Dashboard:
   - Add version display 
 
