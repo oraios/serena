@@ -743,6 +743,9 @@ class SerenaConfig(SharedConfig):
         creation_timestamp = os.stat(config_file_path).st_ctime
         return datetime.fromtimestamp(creation_timestamp, UTC)
 
+    def get_config_file_path(self) -> str | None:
+        return self._config_file_path
+
     @property
     def config_file_path(self) -> str | None:
         return self._config_file_path

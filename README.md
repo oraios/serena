@@ -181,14 +181,12 @@ https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
 > [!NOTE]
 > When using the language server backend, some additional dependencies to be installed for certain languages; see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
 
-**Starting the MCP Server**. The easiest way to start the Serena MCP server is by running the latest version from GitHub using uvx:
+**Starting the MCP Server**. The easiest way to start the Serena MCP server is by running the latest version from GitHub using uvx.  
+Issue this command to see available options and to verify that your setup is working:
 
 ```bash
-uvx -p 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server
+uvx -p 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server --help
 ```
-
-If this is the first time you are starting Serena, the necessary configuration files will be created, and 
-you should see the Serena dashboard appear. You can terminate the server by pressing Ctrl+C (multiple times, if necessary).
 
 **Configuring Your Client**. To connect Serena to your preferred MCP client, you typically need to [configure a launch command in your client](https://oraios.github.io/serena/02-usage/030_clients.html).
 Follow the link for specific instructions on how to set up Serena for Claude Code, Codex, Claude Desktop, MCP-enabled IDEs and other clients (such as local and web-based GUIs). 

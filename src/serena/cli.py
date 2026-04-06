@@ -17,6 +17,7 @@ from sensai.util.logging import FileLoggerContext, datetime_tag
 from sensai.util.string import dict_string
 from tqdm import tqdm
 
+from serena import serena_version
 from serena.agent import SerenaAgent
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import (
@@ -90,7 +91,10 @@ def find_project_root(root: str | Path | None = None) -> str | None:
     return None
 
 
-# --------------------- Utilities -------------------------------------
+def serena_init():
+    click.echo("Serena version: " + serena_version())
+    serena_config = SerenaConfig.from_config_file(generate_if_missing=True)
+    click.echo(f"Configuration file: {serena_config.get_config_file_path()}\n")
 
 
 def _open_in_editor(path: str) -> None:
@@ -232,6 +236,12 @@ class TopLevelCommands(AutoRegisteringGroup):
         default=False,
         help="Auto-detect project from current working directory (searches for .serena/project.yml or .git, falls back to CWD). Intended for CLI-based agents like Claude Code, Gemini and Codex.",
     )
+    @click.option(
+        "--help",
+        is_flag=True,
+        default=False,
+        help="Whether to display this help message",
+    )
     def start_mcp_server(
         project: str | None,
         project_file_arg: str | None,
@@ -248,7 +258,15 @@ class TopLevelCommands(AutoRegisteringGroup):
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None,
         trace_lsp_communication: bool | None,
         tool_timeout: float | None,
+        help: bool,
     ) -> None:
+        if help:
+            # we want help to initialise Serena, because we use the help command as the very first command issued by users
+            serena_init()
+            ctx = click.get_current_context()
+            click.echo(ctx.get_help())
+            return
+
         # initialize logging, using INFO level initially (will later be adjusted by SerenaAgent according to the config)
         #   * memory log handler (for use by GUI/Dashboard)
         #   * stream handler for stderr (for direct console output, which will also be captured by clients like Claude Desktop)
@@ -421,6 +439,14 @@ class TopLevelCommands(AutoRegisteringGroup):
 
         viewer = SerenaDashboardViewer(url, start_minimized=minimized, width=width, height=height)
         viewer.run()
+
+    @staticmethod
+    @click.command(
+        "init",
+        help="Initialises Serena.",
+    )
+    def init() -> None:
+        serena_init()
 
 
 class ModeCommands(AutoRegisteringGroup):
