@@ -169,7 +169,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         show_default=True,
         help="Default code intelligence backend (can be overridden in the project config).",
     )
-    def init(language_backend: Literal["LSP", "JetBrains"] = "LSP"):
+    def init(language_backend: Literal["LSP", "JetBrains"] = "LSP") -> None:
         serena_config = SerenaConfig.from_config_file()
         serena_config.language_backend = LanguageBackend(language_backend)
         serena_config.save()

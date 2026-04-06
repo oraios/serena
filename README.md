@@ -187,7 +187,7 @@ uvx -p 3.13 --from git+https://github.com/oraios/serena serena init
 This will create the global configuration file `~/.serena/config.yaml`.
 
 The default code intelligence backend for Serena is the free LSP backend. You can add `-b JetBrains` to the `init` command
-to set up the JetBrains as the default code intelligence backend instead, see [JetBrains Plugin page](https://oraios.github.io/serena/02-usage/025_jetbrains_plugin.html) for more details.
+to set up the JetBrains plugin as the default code intelligence backend instead, see [JetBrains Plugin page](https://oraios.github.io/serena/02-usage/025_jetbrains_plugin.html) for more details.
 
 
 > [!NOTE]
