@@ -2,7 +2,6 @@
 
 import subprocess
 import tomllib
-from pathlib import Path
 
 from click.testing import CliRunner
 
