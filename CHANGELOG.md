@@ -4,8 +4,14 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * General:
   - Added `serena init` command  
+
+* Dashboard:
+  - Add version display 
+
 * Fixes:
   - Fix reactivation of the same project restarting language servers #1280
+  - Fix git commit id in version
+  - Fix manual shutdown triggered by GUI tool/dashboard not cleaning everything up.
 
 # 1.0.0
 

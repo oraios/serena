@@ -2,7 +2,6 @@ import os
 import socket
 import sys
 import threading
-from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
@@ -136,13 +135,11 @@ class SerenaDashboardAPI:
         memory_log_handler: MemoryLogHandler,
         tool_names: list[str],
         agent: "SerenaAgent",
-        shutdown_callback: Callable[[], None] | None = None,
         tool_usage_stats: ToolUsageStats | None = None,
     ) -> None:
         self._memory_log_handler = memory_log_handler
         self._tool_names = tool_names
         self._agent = agent
-        self._shutdown_callback = shutdown_callback
         self._app = Flask(__name__)
         self._tool_usage_stats = tool_usage_stats
         self._setup_routes()
@@ -214,7 +211,7 @@ class SerenaDashboardAPI:
 
         @self._app.route("/shutdown", methods=["PUT"])
         def shutdown() -> dict[str, str]:
-            self._shutdown()
+            self._agent.shutdown()
             return {"status": "shutting down"}
 
         @self._app.route("/get_available_languages", methods=["GET"])
@@ -540,15 +537,6 @@ class SerenaDashboardAPI:
             current_client=Tool.get_last_tool_call_client_str(),
             serena_version=self._agent.version,
         )
-
-    def _shutdown(self) -> None:
-        log.info("Shutting down Serena")
-        if self._shutdown_callback:
-            self._shutdown_callback()
-        else:
-            # noinspection PyProtectedMember
-            # noinspection PyUnresolvedReferences
-            os._exit(0)
 
     def _get_available_languages(self) -> ResponseAvailableLanguages:
         from solidlsp.ls_config import Language
