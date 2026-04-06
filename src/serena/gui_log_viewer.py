@@ -1,11 +1,11 @@
 # mypy: ignore-errors
 import logging
-import os
 import queue
 import sys
 import threading
 import tkinter as tk
 import traceback
+from collections.abc import Callable
 from enum import Enum, auto
 from pathlib import Path
 from typing import Literal
@@ -38,6 +38,7 @@ class GuiLogViewer:
         memory_log_handler: MemoryLogHandler | None = None,
         width=800,
         height=600,
+        shutdown_handler: Callable[[], None] | None = None,
     ):
         """
         :param mode: the mode; if "dashboard", run a dashboard with logs and some control options; if "error", run
@@ -57,6 +58,7 @@ class GuiLogViewer:
         self.log_thread = None
         self.menubar: tk.Menu | None = None
         self.tool_names = []  # List to store tool names for highlighting
+        self.shutdown_handler = shutdown_handler
 
         # Define colors for different log levels
         self.log_colors = {
@@ -320,10 +322,8 @@ class GuiLogViewer:
             self.running = False
 
     def _shutdown_server(self) -> None:
-        log.info("Shutting down Serena")
-        # noinspection PyUnresolvedReferences
-        # noinspection PyProtectedMember
-        os._exit(0)
+        if self.shutdown_handler is not None:
+            self.shutdown_handler()
 
 
 class GuiLogViewerHandler(logging.Handler):

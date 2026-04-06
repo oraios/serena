@@ -178,7 +178,7 @@ if __name__ == "__main__":
         run_lsp_tools(lsp_agent)
         run_backend_independent_tools(lsp_agent)
     finally:
-        lsp_agent.shutdown()
+        lsp_agent.on_shutdown()
 
     # JetBrains backend (requires a running IDE)
     try:
@@ -186,6 +186,6 @@ if __name__ == "__main__":
         try:
             run_jb_tools(jb_agent)
         finally:
-            jb_agent.shutdown()
+            jb_agent.on_shutdown()
     except Exception as e:
         print(f"\nJetBrains backend not available, skipping: {e}")
