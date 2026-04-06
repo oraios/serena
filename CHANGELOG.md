@@ -2,6 +2,8 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Added `serena init` command  
 * Fixes:
   - Fix reactivation of the same project restarting language servers #1280
 

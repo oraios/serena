@@ -178,23 +178,25 @@ https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
 
 **Prerequisites**. Serena is managed by *uv*. If you don’t already have it, you need to [install uv](https://docs.astral.sh/uv/getting-started/installation/) before proceeding.
 
-> [!NOTE]
-> When using the language server backend, some additional dependencies to be installed for certain languages; see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
-
-**Starting the MCP Server**. The easiest way to start the Serena MCP server is by running the latest version from GitHub using uvx:
+**Initialize Serena**. To initialize Serena, simply run:
 
 ```bash
-uvx -p 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server
+uvx -p 3.13 --from git+https://github.com/oraios/serena serena init
 ```
 
-If this is the first time you are starting Serena, the necessary configuration files will be created, and 
-you should see the Serena dashboard appear. You can terminate the server by pressing Ctrl+C (multiple times, if necessary).
+This will create the global configuration file `~/.serena/config.yaml`.
+
+The default code intelligence backend for Serena is the free LSP backend. You can add `-b JetBrains` to the `init` command
+to set up the JetBrains as the default code intelligence backend instead, see [JetBrains Plugin page](https://oraios.github.io/serena/02-usage/025_jetbrains_plugin.html) for more details.
+
+
+> [!NOTE]
+> When using the language server backend, some additional dependencies to be installed for certain languages; 
+> see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
+
 
 **Configuring Your Client**. To connect Serena to your preferred MCP client, you typically need to [configure a launch command in your client](https://oraios.github.io/serena/02-usage/030_clients.html).
 Follow the link for specific instructions on how to set up Serena for Claude Code, Codex, Claude Desktop, MCP-enabled IDEs and other clients (such as local and web-based GUIs). 
-
-**Switching to the JetBrains Backend**. The default code intelligence backend for Serena is the free LSP backend.
-For using the more powerful JetBrains backend, follow the instructions on the [JetBrains Plugin page](https://oraios.github.io/serena/02-usage/025_jetbrains_plugin.html).
 
 > [!TIP]
 > While getting started quickly is easy, Serena is a powerful toolkit with many configuration options.
