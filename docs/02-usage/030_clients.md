@@ -75,8 +75,23 @@ object, e.g.
 
 Serena is a great way to make Claude Code both cheaper and more powerful!
 
-**Per-Project Configuration.** To add the Serena MCP server to the current project in the current directory, 
-use this command:
+:::{note}
+Serena might take some time to start up, especially on the first run.
+To make sure that enough time is available for the server to start,
+set `MCP_TIMEOUT` to a sufficiently high value (e.g. by adding `export MCP_TIMEOUT=60000` to your shell profile)
+before starting Claude Code.
+
+Confirm that Claude Code is connected to Serena by running the `/mcp` command and by reconnecting, if necessary.
+:::
+
+**Global Configuration**. To add the Serena MCP server for all your projects, use the user-level configuration of claude code and the `--project-from-cwd` flag:
+
+```shell
+claude mcp add --scope user serena -- uvx --python 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server --context=claude-code --project-from-cwd
+```
+
+**Per-Project Configuration.** Alternatively, to add Serena only for the current project in the current directory, 
+use the command:
 
 ```shell
 claude mcp add serena -- uvx --python 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server --context claude-code --project "$(pwd)"
@@ -88,12 +103,6 @@ Note:
   * We specify the current directory as the project directory with `--project "$(pwd)"`, such 
     that Serena is configured to work on the current project from the get-go, following 
     Claude Code's mode of operation.
-
-**Global Configuration**. Alternatively, use `--project-from-cwd` for user-level configuration that works across all projects:
-
-```shell
-claude mcp add --scope user serena -- uvx -p 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server --context=claude-code --project-from-cwd
-```
 
 Whenever you start Claude Code, Serena will search up from the current directory for `.serena/project.yml` or `.git` markers,
 activating the containing directory as the project (if any). 
