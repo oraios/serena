@@ -81,6 +81,7 @@ dev = [
   # docs
   "sphinx==7.4.7",
   "sphinx_rtd_theme==2.0.0",
+  "sphinx_book_theme==1.1.4",
   "sphinx-toolbox==3.7.0",
   "jupyter-book==1.0.4.post1",
   "nbsphinx==0.9.7",

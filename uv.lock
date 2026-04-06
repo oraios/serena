@@ -2104,20 +2104,21 @@ wheels = [
 
 [[package]]
 name = "pydata-sphinx-theme"
-version = "0.16.1"
+version = "0.15.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "accessible-pygments" },
     { name = "babel" },
     { name = "beautifulsoup4" },
     { name = "docutils" },
+    { name = "packaging" },
     { name = "pygments" },
     { name = "sphinx" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/00/20/bb50f9de3a6de69e6abd6b087b52fa2418a0418b19597601605f855ad044/pydata_sphinx_theme-0.16.1.tar.gz", hash = "sha256:a08b7f0b7f70387219dc659bff0893a7554d5eb39b59d3b8ef37b8401b7642d7", size = 2412693, upload-time = "2024-12-17T10:53:39.537Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/67/ea/3ab478cccacc2e8ef69892c42c44ae547bae089f356c4b47caf61730958d/pydata_sphinx_theme-0.15.4.tar.gz", hash = "sha256:7762ec0ac59df3acecf49fd2f889e1b4565dbce8b88b2e29ee06fdd90645a06d", size = 2400673, upload-time = "2024-06-25T19:28:45.041Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e2/0d/8ba33fa83a7dcde13eb3c1c2a0c1cc29950a048bfed6d9b0d8b6bd710b4c/pydata_sphinx_theme-0.16.1-py3-none-any.whl", hash = "sha256:225331e8ac4b32682c18fcac5a57a6f717c4e632cea5dd0e247b55155faeccde", size = 6723264, upload-time = "2024-12-17T10:53:35.645Z" },
+    { url = "https://files.pythonhosted.org/packages/e7/d3/c622950d87a2ffd1654208733b5bd1c5645930014abed8f4c0d74863988b/pydata_sphinx_theme-0.15.4-py3-none-any.whl", hash = "sha256:2136ad0e9500d0949f96167e63f3e298620040aea8f9c74621959eda5d4cf8e6", size = 4640157, upload-time = "2024-06-25T19:28:42.383Z" },
 ]
 
 [[package]]
@@ -2963,6 +2964,7 @@ dev = [
     { name = "pytest-xdist" },
     { name = "ruff" },
     { name = "sphinx" },
+    { name = "sphinx-book-theme" },
     { name = "sphinx-rtd-theme" },
     { name = "sphinx-toolbox" },
     { name = "syrupy" },
@@ -3020,6 +3022,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.12.5" },
     { name = "sensai-utils", specifier = "==1.5.0" },
     { name = "sphinx", marker = "extra == 'dev'", specifier = "==7.4.7" },
+    { name = "sphinx-book-theme", marker = "extra == 'dev'", specifier = "==1.1.4" },
     { name = "sphinx-rtd-theme", marker = "extra == 'dev'", specifier = "==2.0.0" },
     { name = "sphinx-toolbox", marker = "extra == 'dev'", specifier = "==3.7.0" },
     { name = "sqlalchemy", marker = "extra == 'agno'", specifier = "==2.0.41" },
@@ -3142,15 +3145,15 @@ wheels = [
 
 [[package]]
 name = "sphinx-book-theme"
-version = "1.2.0"
+version = "1.1.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydata-sphinx-theme" },
     { name = "sphinx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/eb/f7/154786f3cfb7692cd7acc24b6dfe4dcd1146b66f376b17df9e47125555e9/sphinx_book_theme-1.2.0.tar.gz", hash = "sha256:4a7ebfc7da4395309ac942ddfc38fbec5c5254c3be22195e99ad12586fbda9e3", size = 443962, upload-time = "2026-03-09T23:20:30.442Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/45/19/d002ed96bdc7738c15847c730e1e88282d738263deac705d5713b4d8fa94/sphinx_book_theme-1.1.4.tar.gz", hash = "sha256:73efe28af871d0a89bd05856d300e61edce0d5b2fbb7984e84454be0fedfe9ed", size = 439188, upload-time = "2025-02-20T16:32:32.581Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/02/bf/6f506a37c7f8ecc4576caf9486e303c7af249f6d70447bb51dde9d78cb99/sphinx_book_theme-1.2.0-py3-none-any.whl", hash = "sha256:709605d308e1991c5ef0cf19c481dbe9084b62852e317fafab74382a0ee7ccfa", size = 455936, upload-time = "2026-03-09T23:20:28.788Z" },
+    { url = "https://files.pythonhosted.org/packages/51/9e/c41d68be04eef5b6202b468e0f90faf0c469f3a03353f2a218fd78279710/sphinx_book_theme-1.1.4-py3-none-any.whl", hash = "sha256:843b3f5c8684640f4a2d01abd298beb66452d1b2394cd9ef5be5ebd5640ea0e1", size = 433952, upload-time = "2025-02-20T16:32:31.009Z" },
 ]
 
 [[package]]
