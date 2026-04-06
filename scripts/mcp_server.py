@@ -1,4 +1,4 @@
-from serena.cli import start_mcp_server
+from serena.cli import top_level
 
 if __name__ == "__main__":
-    start_mcp_server()
+    top_level.start_mcp_server()

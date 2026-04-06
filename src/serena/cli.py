@@ -1109,23 +1109,16 @@ class PromptCommands(AutoRegisteringGroup):
         click.echo(f"Deleted override file '{prompt_yaml_name}'.")
 
 
-# Expose groups so we can reference them in pyproject.toml
-mode = ModeCommands()
-context = ContextCommands()
-project = ProjectCommands()
-config = SerenaConfigCommands()
-tools = ToolCommands()
-prompts = PromptCommands()
+_mode = ModeCommands()
+_context = ContextCommands()
+_project = ProjectCommands()
+_config = SerenaConfigCommands()
+_tools = ToolCommands()
+_prompts = PromptCommands()
 
-# Expose toplevel commands for the same reason
+# Expose so we can use this as an entrypoint
 top_level = TopLevelCommands()
-start_mcp_server = top_level.start_mcp_server
 
 # needed for the help script to work - register all subcommands to the top-level group
-for subgroup in (mode, context, project, config, tools, prompts):
+for subgroup in (_mode, _context, _project, _config, _tools, _prompts):
     top_level.add_command(subgroup)
-
-
-def get_help() -> str:
-    """Retrieve the help text for the top-level Serena CLI."""
-    return top_level.get_help(click.Context(top_level, info_name="serena"))
