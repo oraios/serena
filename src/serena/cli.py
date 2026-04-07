@@ -175,6 +175,19 @@ class TopLevelCommands(AutoRegisteringGroup):
         serena_config.save()
         click.echo(f"Configuration file: {serena_config.config_file_path}")
         click.echo(f"Language backend: {language_backend}")
+
+        # check for auto-configurable clients
+        applicable_setup_handlers = []
+        for setup_handler in client_setup_handlers:
+            if setup_handler.is_applicable():
+                applicable_setup_handlers.append(setup_handler)
+        if len(applicable_setup_handlers) > 0:
+            click.echo(
+                "\nAuto-configurable clients detected.\nApply the following commands to configure the Serena MCP server (in a default configuration):"
+            )
+            for setup_handler in applicable_setup_handlers:
+                click.echo(f"  serena setup {setup_handler.name}")
+
         click.echo("\nSerena has been initialised successfully.\n")
 
     @staticmethod

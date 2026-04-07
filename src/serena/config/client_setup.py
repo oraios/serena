@@ -29,7 +29,7 @@ class ClientSetupHandler(ABC):
 
 class ClientSetupHandlerClaudeCode(ClientSetupHandler):
     def __init__(self) -> None:
-        super().__init__("ClaudeCode")
+        super().__init__("claude-code")
 
     def is_applicable(self) -> bool:
         result = execute_shell_command("claude --version")
@@ -43,9 +43,13 @@ class ClientSetupHandlerClaudeCode(ClientSetupHandler):
         return result.return_code == 0
 
 
-class ClientSetupHandlerCodexCLI(ClientSetupHandler):
+class ClientSetupHandlerCodex(ClientSetupHandler):
+    """
+    Setup for Codex CLI and Codex App (shared config)
+    """
+
     def __init__(self) -> None:
-        super().__init__("CodexCLI")
+        super().__init__("codex")
 
     def is_applicable(self) -> bool:
         result = execute_shell_command("codex --version")
@@ -59,4 +63,4 @@ class ClientSetupHandlerCodexCLI(ClientSetupHandler):
         return result.return_code == 0
 
 
-client_setup_handlers = [ClientSetupHandlerClaudeCode(), ClientSetupHandlerCodexCLI()]
+client_setup_handlers = [ClientSetupHandlerClaudeCode(), ClientSetupHandlerCodex()]
