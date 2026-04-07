@@ -628,7 +628,9 @@ class SerenaDashboardAPI:
     # ===== Remote News Methods =====
 
     # The branch from which news are fetched. Change to a feature branch for testing.
-    _NEWS_JSON_URL = "https://raw.githubusercontent.com/oraios/serena/main/news/news.json"
+    _NEWS_JSON_URL = (
+        "https://raw.githubusercontent.com/oraios/serena/release/added_fetch_news_mechanism_and_bump_version_script/news/news.json"
+    )
 
     def _fetch_news(self) -> None:
         """Fetch news.json from GitHub using ETag-based caching and store in memory. Silently ignores network errors."""
