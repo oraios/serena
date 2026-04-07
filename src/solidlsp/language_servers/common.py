@@ -119,6 +119,7 @@ class RuntimeDependencyCollection:
             shell=True,
             check=False,
             cwd=cwd,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             **kwargs,
