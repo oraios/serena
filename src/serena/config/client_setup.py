@@ -43,4 +43,20 @@ class ClientSetupHandlerClaudeCode(ClientSetupHandler):
         return result.return_code == 0
 
 
-client_setup_handlers = [ClientSetupHandlerClaudeCode()]
+class ClientSetupHandlerCodexCLI(ClientSetupHandler):
+    def __init__(self) -> None:
+        super().__init__("CodexCLI")
+
+    def is_applicable(self) -> bool:
+        result = execute_shell_command("codex --version")
+        return result.return_code == 0 and "codex-cli" in result.stdout
+
+    def get_mcp_server_options(self) -> list[str]:
+        return ["--context=codex", "--project-from-cwd"]
+
+    def apply(self) -> bool:
+        result = execute_shell_command(f"codex mcp add serena -- {self.get_mcp_server_command()}")
+        return result.return_code == 0
+
+
+client_setup_handlers = [ClientSetupHandlerClaudeCode(), ClientSetupHandlerCodexCLI()]
