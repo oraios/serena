@@ -176,16 +176,24 @@ https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
 
 ## Quick Start
 
-**Prerequisites**. Serena is managed by *uv*, and [installing uv](https://docs.astral.sh/uv/getting-started/installation/) is the only required prerequisite for running Serena.
+**Prerequisites**. Serena is managed by *uv*, and [installing uv](https://docs.astral.sh/uv/getting-started/installation/) is the only required prerequisite.
 
 > [!NOTE]
 > When using the language server backend, some additional dependencies may need to be installed to support certain languages;
 > see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
 
+**Install Serena**. Serena is installed via uv as follows:
+
+```bash
+uv tool install -p 3.13 serena-agent@latest --prerelease=allow
+```
+
+After successful installation, the command `serena` should be available in your shell.
+
 **Initialise Serena**. To initialise Serena and verify that your setup works correctly, simply run:
 
 ```bash
-uvx -p 3.13 --from git+https://github.com/oraios/serena serena init
+serena init
 ```
 
 By default, this will set up Serena to use the language server backend. To use the JetBrains backend instead, add the parameters `-b JetBrains` 

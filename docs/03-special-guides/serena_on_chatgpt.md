@@ -17,7 +17,6 @@ Run the following command to launch Serena as http server (assuming port 8000):
 
 ```bash
 uvx mcpo --port 8000 --api-key <YOUR_SECRET_KEY> -- \
-  uvx -p 3.13 --from git+https://github.com/oraios/serena \
   serena start-mcp-server --context chatgpt --project $(pwd)
 ```
 
@@ -28,7 +27,7 @@ You can also use other options, and you don't have to pass `--project` if you wa
 or want to activate it later. See 
 
 ```shell
-uvx -p 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server --help
+serena start-mcp-server --help
 ```
 
 ---

@@ -25,11 +25,7 @@ You can create a project either
 
 To explicitly create a project, use the following command while in the project directory:
 
-    <serena> project create [options]
-
-For instance, when using `uvx`, run
-
-    uvx -p 3.13 --from git+https://github.com/oraios/serena serena project create [options]
+    serena project create [options]
 
  * For an empty project, you will need to specify the programming language
    (e.g., `--language python`). 
@@ -197,11 +193,8 @@ Depending on the language backend being used, the management of resources for th
 
   To start the server, run
 
-      <serena> start-project-server
+      serena start-project-server
 
-  where `<serena>` is your way of running Serena. For example, when using `uvx`, run
-
-      uvx -p 3.13 --from git+https://github.com/oraios/serena serena start-project-server
 
 ### Multiple Agents Accessing a Single Serena Instance
 

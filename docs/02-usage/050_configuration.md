@@ -51,10 +51,8 @@ You can access it
   * using the command
 
     ```shell
-    <serena> config edit
+    serena config edit
     ```
-
-    where `<serena>` is [your way of running Serena](020_running).
 
 ## Modes and Contexts
 
@@ -95,13 +93,12 @@ If you are using a local server (such as Llama.cpp) which requires you to use Op
 
 You can manage contexts using the `context` command,
 
-    <serena> context --help
-    <serena> context list
-    <serena> context create <context-name>
-    <serena> context edit <context-name>
-    <serena> context delete <context-name>
+    serena context --help
+    serena context list
+    serena context create <context-name>
+    serena context edit <context-name>
+    serena context delete <context-name>
 
-where `<serena>` is [your way of running Serena](020_running).
 
 (modes)=
 ### Modes
@@ -159,13 +156,11 @@ Serena currently does not prevent incompatible combinations; it is up to the use
 
 You can manage modes using the `mode` command,
 
-    <serena> mode --help
-    <serena> mode list
-    <serena> mode create <mode-name>
-    <serena> mode edit <mode-name>
-    <serena> mode delete <mode-name>
-
-where `<serena>` is [your way of running Serena](020_running).
+    serena mode --help
+    serena mode list
+    serena mode create <mode-name>
+    serena mode edit <mode-name>
+    serena mode delete <mode-name>
 
 ## Advanced Configuration
 
