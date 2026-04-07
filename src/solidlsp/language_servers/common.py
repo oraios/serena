@@ -114,18 +114,38 @@ class RuntimeDependencyCollection:
 
         log.info("Running command %s in '%s'", f"'{command}'" if isinstance(command, str) else command, cwd)
 
-        completed_process = subprocess.run(
-            command,
-            shell=True,
-            check=False,
-            cwd=cwd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            **kwargs,
-        )  # type: ignore
+        if is_windows:
+            # On Windows, child processes inherit the parent's stdin pipe handle.
+            # When Serena runs as an MCP server with piped stdin, node.exe inherits
+            # that pipe and its event loop never sees EOF, so it hangs indefinitely.
+            # Giving the child its own stdin pipe (immediately closed) fixes this.
+            stdin_r, stdin_w = os.pipe()
+            os.close(stdin_w)
+            completed_process = subprocess.run(
+                command,
+                shell=True,
+                check=False,
+                cwd=cwd,
+                stdin=stdin_r,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                **kwargs,
+            )  # type: ignore
+            os.close(stdin_r)
+        else:
+            completed_process = subprocess.run(
+                command,
+                shell=True,
+                check=False,
+                cwd=cwd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                **kwargs,
+            )  # type: ignore
         if completed_process.returncode != 0:
             log.warning("Command '%s' failed with return code %d", command, completed_process.returncode)
-            log.warning("Command output:\n%s", completed_process.stdout)
+            if completed_process.stdout:
+                log.warning("Command output:\n%s", completed_process.stdout)
             raise subprocess.CalledProcessError(completed_process.returncode, command, completed_process.stdout)
         log.info("Command completed successfully")
 
