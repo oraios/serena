@@ -19,6 +19,7 @@ from tqdm import tqdm
 
 from serena import serena_version
 from serena.agent import SerenaAgent
+from serena.config.client_setup import client_setup_handlers
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import (
     LanguageBackend,
@@ -175,6 +176,32 @@ class TopLevelCommands(AutoRegisteringGroup):
         click.echo(f"Configuration file: {serena_config.config_file_path}")
         click.echo(f"Language backend: {language_backend}")
         click.echo("\nSerena has been initialised successfully.\n")
+
+    @staticmethod
+    @click.command(
+        "setup",
+        help="Set up Serena for use with a specific client by registering it as an MCP server.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument(
+        "client",
+        type=click.Choice([h.name for h in client_setup_handlers]),
+    )
+    def setup(client: str) -> None:
+        # find the matching handler
+        handler = next(h for h in client_setup_handlers if h.name == client)
+
+        # check applicability
+        if not handler.is_applicable():
+            click.echo(f"\nCannot apply setup for client '{client}' (not found or not functional).\n")
+            raise SystemExit(1)
+
+        # apply the setup
+        if handler.apply():
+            click.echo(f"\nSerena has been successfully set up for {client}.\n")
+        else:
+            click.echo(f"\nFailed to set up Serena for {client}.\n")
+            raise SystemExit(1)
 
     @staticmethod
     @click.command("start-mcp-server", help="Starts the Serena MCP server.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
