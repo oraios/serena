@@ -42,9 +42,11 @@ def execute_shell_command(command: str, cwd: str | None = None, capture_stderr: 
     return ShellCommandResult(stdout=stdout, stderr=stderr, return_code=process.returncode, cwd=cwd)
 
 
-def subprocess_check_output(args: list[str], encoding: str = "utf-8", strip: bool = True, timeout: float | None = None) -> str:
+def subprocess_check_output(
+    args: list[str], encoding: str = "utf-8", strip: bool = True, timeout: float | None = None, cwd: str | None = None
+) -> str:
     output = subprocess.check_output(
-        args, stdin=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=timeout, env=os.environ.copy(), **subprocess_kwargs()
+        args, stdin=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=timeout, env=os.environ.copy(), cwd=cwd, **subprocess_kwargs()
     ).decode(encoding)  # type: ignore
     if strip:
         output = output.strip()

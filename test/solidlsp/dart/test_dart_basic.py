@@ -3,10 +3,12 @@ from pathlib import Path
 
 import pytest
 
+from serena.util.text_utils import find_text_coordinates
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
 @pytest.mark.dart
@@ -243,8 +245,12 @@ class TestDartLanguageServer:
     def test_request_defining_symbol_variable(self, language_server: SolidLanguageServer) -> None:
         """Test request_defining_symbol for a variable usage."""
         file_path = os.path.join("lib", "main.dart")
-        # Line 14 contains 'final result = a + b;' - test position on 'result'
-        defining_symbol = language_server.request_defining_symbol(file_path, 13, 10)
+
+        # Find coordinates of 'final result = a + b;' - test position on 'result'
+        with language_server.open_file(file_path, open_in_ls=False) as f:
+            pos = find_text_coordinates(f.contents, r"final (result) = a \+ b;")
+
+        defining_symbol = language_server.request_defining_symbol(file_path, pos.line, pos.col)
 
         # The defining symbol might be the variable itself or the containing method
         # This is acceptable behavior - different language servers handle this differently
@@ -356,3 +362,16 @@ class TestDartLanguageServer:
             if main_dart_refs:
                 for ref in main_dart_refs:
                     assert "range" in ref or "location" in ref
+
+    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s):
+                malformed_symbols.append(s)
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )

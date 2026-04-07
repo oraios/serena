@@ -21,6 +21,8 @@ class RuntimeDependency:
     id: str
     platform_id: str | None = None
     url: str | None = None
+    sha256: str | None = None
+    allowed_hosts: tuple[str, ...] | list[str] | None = None
     archive_type: str | None = None
     binary_name: str | None = None
     command: str | list[str] | None = None
@@ -115,7 +117,7 @@ class RuntimeDependencyCollection:
         completed_process = subprocess.run(
             command,
             shell=True,
-            check=True,
+            check=False,
             cwd=cwd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -124,10 +126,8 @@ class RuntimeDependencyCollection:
         if completed_process.returncode != 0:
             log.warning("Command '%s' failed with return code %d", command, completed_process.returncode)
             log.warning("Command output:\n%s", completed_process.stdout)
-        else:
-            log.info(
-                "Command completed successfully",
-            )
+            raise subprocess.CalledProcessError(completed_process.returncode, command, completed_process.stdout)
+        log.info("Command completed successfully")
 
     @staticmethod
     def _install_from_url(dep: RuntimeDependency, target_dir: str) -> None:
@@ -136,9 +136,30 @@ class RuntimeDependencyCollection:
 
         if dep.archive_type in ("gz", "binary") and dep.binary_name:
             dest = os.path.join(target_dir, dep.binary_name)
-            FileUtils.download_and_extract_archive(dep.url, dest, dep.archive_type)
+            FileUtils.download_and_extract_archive_verified(
+                dep.url,
+                dest,
+                dep.archive_type,
+                expected_sha256=dep.sha256,
+                allowed_hosts=dep.allowed_hosts,
+            )
         else:
-            FileUtils.download_and_extract_archive(dep.url, target_dir, dep.archive_type or "zip")
+            FileUtils.download_and_extract_archive_verified(
+                dep.url,
+                target_dir,
+                dep.archive_type or "zip",
+                expected_sha256=dep.sha256,
+                allowed_hosts=dep.allowed_hosts,
+            )
+
+
+def build_npm_install_command(package_name: str, version: str, registry: str | None = None) -> list[str]:
+    """Build a pinned npm install command for a package in a Serena-managed install directory."""
+    command = ["npm", "install", "--prefix", "./"]
+    if registry:
+        command.extend(["--registry", registry])
+    command.append(f"{package_name}@{version}")
+    return command
 
 
 def quote_windows_path(path: str) -> str:

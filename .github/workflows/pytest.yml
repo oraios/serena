@@ -566,7 +566,7 @@ jobs:
           df -h
       - name: Test with pytest
         shell: bash
-        run: uv run poe test
+        run: uv run poe test -q --tb=short
       - name: Type-checking with mypy
         shell: bash
         run: uv run poe type-check

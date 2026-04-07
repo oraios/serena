@@ -15,13 +15,13 @@ from typing import Any
 from overrides import override
 
 from solidlsp import ls_types
-from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
+from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
 from solidlsp.language_servers.typescript_language_server import (
     TypeScriptLanguageServer,
     prefer_non_node_modules_definition,
 )
 from solidlsp.ls import LSPFileBuffer, SolidLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_types import Location
 from solidlsp.ls_utils import PathUtils
@@ -46,6 +46,11 @@ class VueTypeScriptServer(TypeScriptLanguageServer):
         with the TypeScript language server infrastructure.
         """
         return Language.TYPESCRIPT
+
+    def get_source_fn_matcher(self) -> FilenameMatcher:
+        # must override with Vue-specific matcher to ensure .vue files are included (as they can be discovered via references,
+        # for instance; otherwise, we may find references in .vue files but then filter the results out, because .vue files are ignored.)
+        return Language.VUE.get_source_fn_matcher()
 
     class DependencyProvider(TypeScriptLanguageServer.DependencyProvider):
         override_ts_ls_executable: str | None = None
@@ -407,31 +412,26 @@ class VueLanguageServer(SolidLanguageServer):
         typescript_language_server_version = typescript_config.get("typescript_language_server_version", "5.1.3")
         vue_config = solidlsp_settings.get_ls_specific_settings(Language.VUE)
         vue_language_server_version = vue_config.get("vue_language_server_version", "3.1.5")
+        npm_registry = vue_config.get("npm_registry", typescript_config.get("npm_registry"))
 
         deps = RuntimeDependencyCollection(
             [
                 RuntimeDependency(
                     id="vue-language-server",
                     description="Vue language server package (Volar)",
-                    command=["npm", "install", "--prefix", "./", f"@vue/language-server@{vue_language_server_version}"],
+                    command=build_npm_install_command("@vue/language-server", vue_language_server_version, npm_registry),
                     platform_id="any",
                 ),
                 RuntimeDependency(
                     id="typescript",
                     description="TypeScript (required for tsdk)",
-                    command=["npm", "install", "--prefix", "./", f"typescript@{typescript_version}"],
+                    command=build_npm_install_command("typescript", typescript_version, npm_registry),
                     platform_id="any",
                 ),
                 RuntimeDependency(
                     id="typescript-language-server",
                     description="TypeScript language server (for Vue LS 3.x tsserver forwarding)",
-                    command=[
-                        "npm",
-                        "install",
-                        "--prefix",
-                        "./",
-                        f"typescript-language-server@{typescript_language_server_version}",
-                    ],
+                    command=build_npm_install_command("typescript-language-server", typescript_language_server_version, npm_registry),
                     platform_id="any",
                 ),
             ]

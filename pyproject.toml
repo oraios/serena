@@ -4,7 +4,7 @@ requires = ["hatchling"]
 
 [project]
 name = "serena-agent"
-version = "0.1.4"
+version = "1.0.0"
 description = ""
 authors = [{ name = "Oraios AI", email = "info@oraios-ai.de" }]
 readme = "README.md"
@@ -14,13 +14,13 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
-  "requests==2.32.5",
+  "requests==2.33.0",
   "pyright==1.1.403",
   "fortls==3.2.2",
   "overrides==7.7.0",
   "python-dotenv==1.2.1",
   "mcp==1.26.0",
-  "flask==3.1.3",  # bumped from 3.1.1 for CVE fix (also fixes werkzeug alert)
+  "flask==3.1.3", # bumped from 3.1.1 for CVE fix (also fixes werkzeug alert)
   "sensai-utils==1.5.0",
   "pydantic==2.12.5",
   "types-pyyaml==6.0.12.20250516",
@@ -36,6 +36,8 @@ dependencies = [
   "tiktoken==0.12.0",
   "anthropic==0.59.0",
   "beautifulsoup4==4.14.2",
+  "pywebview",
+  "pystray==0.19.5",
   # Transitive deps pinned for security (dependabot alerts).
   # Exact pins because uvx installs from git, ignoring the lock file.
   "urllib3==2.6.3",
@@ -43,8 +45,13 @@ dependencies = [
   "starlette==1.0.0",
   "python-multipart==0.0.22",
   "filelock==3.25.2",
-  "cryptography==46.0.5",
+  "cryptography==46.0.6",
+  "regex==2026.2.28",
+  "pythonnet==3.1.0-rc0 ; sys_platform == 'win32'",
 ]
+
+[tool.uv.sources]
+pywebview = { git = "https://github.com/r0x0r/pywebview", rev = "345596c1f4fd59fd26c7aa02d4176c5362bcbabe" }
 
 [[tool.uv.index]]
 name = "testpypi"
@@ -54,8 +61,6 @@ explicit = true
 
 [project.scripts]
 serena = "serena.cli:top_level"
-serena-mcp-server = "serena.cli:start_mcp_server"
-index-project = "serena.cli:index_project"        # deprecated
 
 [project.license]
 text = "MIT"
@@ -76,6 +81,7 @@ dev = [
   # docs
   "sphinx==7.4.7",
   "sphinx_rtd_theme==2.0.0",
+  "sphinx_book_theme==1.1.4",
   "sphinx-toolbox==3.7.0",
   "jupyter-book==1.0.4.post1",
   "nbsphinx==0.9.7",
@@ -87,7 +93,7 @@ dev = [
   "nbconvert==7.17.0",
   "wheel==0.46.3",
   "pyasn1==0.6.3",
-  "PyJWT==2.10.1",
+  "PyJWT==2.12.0",
 ]
 agno = ["agno==2.5.10", "sqlalchemy==2.0.41"]  # agno bumped for session state overwrite CVE
 google = ["google-genai==1.27.0"]
@@ -161,7 +167,7 @@ doc-build = ["doc-clean", "doc-generate-files", "_sphinx_build"]
 [tool.ruff]
 target-version = "py311"
 line-length = 140
-exclude = ["src/solidlsp/language_servers/**/static", "src/multilspy"]
+exclude = ["src/solidlsp/language_servers/**/static", "src/multilspy", "test/resources/repos"]
 
 [tool.ruff.format]
 quote-style = "double"

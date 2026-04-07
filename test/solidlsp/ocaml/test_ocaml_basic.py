@@ -1,12 +1,16 @@
 import os
+import shutil
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
+from test.conftest import is_ci
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
+@pytest.mark.skipif(shutil.which("opam") is None and not is_ci, reason="OPAM is not available")
 @pytest.mark.ocaml
 class TestOCamlLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
@@ -49,8 +53,6 @@ class TestOCamlLanguageServer:
 
     def test_reason_file_patterns(self) -> None:
         """Test that OCaml language configuration recognizes Reason file extensions"""
-        from solidlsp.ls_config import Language
-
         ocaml_lang = Language.OCAML
         file_matcher = ocaml_lang.get_source_fn_matcher()
 
@@ -150,3 +152,19 @@ class TestOCamlLanguageServer:
         file_path = os.path.join("bin", "main.ml")
         symbols, _roots = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         assert len(symbols) > 0, "Should find symbols in main.ml that use opened modules"
+
+    @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            # happens for lambdas a la let () = ...
+            if s["name"] == "()":
+                continue
+            if has_malformed_name(s):
+                malformed_symbols.append(s)
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )

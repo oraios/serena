@@ -2,8 +2,11 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
+import json
+import multiprocessing
 import os
 import platform
+import signal
 import subprocess
 import sys
 from collections.abc import Callable, Iterator, Sequence
@@ -11,6 +14,7 @@ from contextlib import contextmanager
 from logging import Logger
 from typing import TYPE_CHECKING, Optional, TypeVar
 
+import webview
 from sensai.util import logging
 from sensai.util.logging import LogTime
 from sensai.util.string import dict_string
@@ -28,12 +32,21 @@ from serena.config.serena_config import (
     SerenaPaths,
     ToolInclusionDefinition,
 )
-from serena.dashboard import SerenaDashboardAPI
+from serena.dashboard import SerenaDashboardAPI, SerenaDashboardViewer
 from serena.ls_manager import LanguageServerManager
 from serena.project import MemoriesManager, Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.task_executor import TaskExecutor
-from serena.tools import ActivateProjectTool, GetCurrentConfigTool, OpenDashboardTool, ReplaceContentTool, Tool, ToolMarker, ToolRegistry
+from serena.tools import (
+    ActivateProjectTool,
+    GetCurrentConfigTool,
+    OpenDashboardTool,
+    ReadMemoryTool,
+    ReplaceContentTool,
+    Tool,
+    ToolMarker,
+    ToolRegistry,
+)
 from serena.util.gui import system_has_usable_display
 from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
@@ -78,6 +91,9 @@ class AvailableTools:
 
     def contains_tool_name(self, tool_name: str) -> bool:
         return tool_name in self._tool_name_set
+
+    def contains_tool_class(self, tool_class: type[Tool]) -> bool:
+        return self.contains_tool_name(tool_class.get_name_from_cls())
 
 
 class ToolSet:
@@ -224,6 +240,13 @@ class ActiveModes:
             self._active_modes.append(mode)
         return self._active_modes
 
+    # TODO: apply caching like in get_modes
+    def get_default_modes(self) -> Sequence[SerenaAgentMode]:
+        return [SerenaAgentMode.load(mode_name) for mode_name in self._default_modes or []]
+
+    def get_base_modes(self) -> Sequence[SerenaAgentMode]:
+        return [SerenaAgentMode.load(mode_name) for mode_name in self._base_modes or []]
+
 
 class SerenaAgent:
     def __init__(
@@ -247,14 +270,17 @@ class SerenaAgent:
         :param memory_log_handler: a MemoryLogHandler instance from which to read log messages; if None, a new one will be created
             if necessary.
         """
+        self._active_project: Project | None = None
+        self._gui_log_viewer: Optional["GuiLogViewer"] = None
+        self._dashboard_viewer_process: multiprocessing.Process | None = None
+
+        self.version = serena_version()
+
         # obtain serena configuration using the decoupled factory function
         self.serena_config = serena_config or SerenaConfig.from_config_file()
 
         # propagate configuration to other components
         self.serena_config.propagate_settings()
-
-        # project-specific instances, which will be initialized upon project activation
-        self._active_project: Project | None = None
 
         # determine registered project to be activated (if any)
         registered_project_to_activate: RegisteredProject | None = (
@@ -278,7 +304,6 @@ class SerenaAgent:
             return memory_log_handler
 
         # open GUI log window if enabled
-        self._gui_log_viewer: Optional["GuiLogViewer"] = None
         if self.serena_config.gui_log_window:
             log.info("Opening GUI window")
             if platform.system() == "Darwin":
@@ -288,7 +313,12 @@ class SerenaAgent:
                 # which uv used as a base, unfortunately)
                 from serena.gui_log_viewer import GuiLogViewer
 
-                self._gui_log_viewer = GuiLogViewer("dashboard", title="Serena Logs", memory_log_handler=get_memory_log_handler())
+                self._gui_log_viewer = GuiLogViewer(
+                    "dashboard",
+                    title="Serena Logs",
+                    memory_log_handler=get_memory_log_handler(),
+                    shutdown_handler=lambda: self.shutdown(),
+                )
                 self._gui_log_viewer.start()
         else:
             log.debug("GUI window is disabled")
@@ -312,7 +342,7 @@ class SerenaAgent:
 
         # log fundamental information
         log.info(
-            f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()}; "
+            f"Starting Serena server (version={self.version}, process id={os.getpid()}, parent process id={os.getppid()}; "
             f"language backend={self.serena_config.language_backend.name}); Python version={platform.python_version()}, platform={platform.platform()}"
         )
         log.info("Configuration file: %s", self.serena_config.config_file_path)
@@ -356,7 +386,7 @@ class SerenaAgent:
             self.serena_config, self._language_backend, self._context, self._active_modes, self._active_project
         )
         self._exposed_tools = self._base_toolset.to_available_tools(self._all_tools)
-        log.info(f"Number of exposed tools: {len(self._exposed_tools)}")
+        log.info(f"Number of exposed tools: {len(self._exposed_tools)}. Exposed tools: {self._exposed_tools.tool_names}")
 
         # update the active tools (considering the active project, if any)
         self._active_tools: AvailableTools
@@ -375,8 +405,7 @@ class SerenaAgent:
             dashboard_url = f"http://{dashboard_host}:{port}/dashboard/index.html"
             self._dashboard_url = dashboard_url
             log.info("Serena web dashboard started at %s", dashboard_url)
-            if self.serena_config.web_dashboard_open_on_launch:
-                self.open_dashboard()
+            self._start_dashboard_viewer(minimized=not self.serena_config.web_dashboard_open_on_launch)
             # inform the GUI window (if any)
             if self._gui_log_viewer is not None:
                 self._gui_log_viewer.set_dashboard_url(dashboard_url)
@@ -413,11 +442,20 @@ class SerenaAgent:
 
         # consider modes
         # Since modes can be dynamically turned on and off, we don't include their definitions directly,
-        # but for the initially active modes, we make sure that the tools they enable are included.
-        for mode in modes.get_modes():
+        # For the initially active dynamic modes, we make sure that the tools they enable are included.
+        for mode in modes.get_default_modes():
             tool_inclusion_definitions.append(
                 NamedToolInclusionDefinition(
-                    name=f"InitialModeInclusions[{mode.name}]", included_optional_tools=mode.included_optional_tools
+                    name=f"InitialDynamicModeInclusions[{mode.name}]", included_optional_tools=mode.included_optional_tools
+                )
+            )
+        # For the base modes, we also apply the tool exclusions, since they apply throughout the entire session
+        for base_mode in modes.get_base_modes():
+            tool_inclusion_definitions.append(
+                NamedToolInclusionDefinition(
+                    name=f"BaseMode[{base_mode.name}]",
+                    included_optional_tools=base_mode.included_optional_tools,
+                    excluded_tools=base_mode.excluded_tools,
                 )
             )
 
@@ -519,11 +557,48 @@ class SerenaAgent:
         """
         return self._dashboard_url
 
+    @staticmethod
+    def _start_dashboard_viewer_process_function(url: str, minimized: bool) -> None:
+        """
+        Main function of the subprocess for starting the dashboard viewer
+        """
+        try:
+            SerenaDashboardViewer(url, start_minimized=minimized).run()
+        except webview.errors.WebViewException as e:
+            log.warning(f"Could not open Serena Dashboard viewer. Cause:\n{e}")
+            # Fall back to opening the browser window if the window was supposed to be shown directly
+            if not minimized:
+                SerenaAgent._open_dashboard_in_browser(url)
+
+    def _start_dashboard_viewer(self, minimized: bool) -> None:
+        """
+        Starts the dashboard viewer (in a separate process) or, if the current platform does not support it,
+        opens the dashboard in the default web browser.
+
+        :param minimized: whether the dashboard viewer should be started minimized (if supported on the current platform).
+            If the viewer is not supported on the current platform, then this controls whether to open the browser window.
+        """
+        if not system_has_usable_display():
+            log.info("Not starting the Serena dashboard viewer because no usable display was detected.")
+            return
+
+        url = self.get_dashboard_url()
+        assert url is not None
+        if SerenaDashboardViewer.is_current_platform_supported():
+            self._dashboard_viewer_process = multiprocessing.Process(
+                target=self._start_dashboard_viewer_process_function, args=(url, minimized), daemon=True
+            )
+            self._dashboard_viewer_process.start()
+        else:
+            log.info("Not starting Serena dashboard viewer because the current platform does not support it; using browser-based fallback")
+            if not minimized:
+                self._open_dashboard_in_browser(url)
+
     def open_dashboard(self) -> bool:
         """
-        Opens the Serena web dashboard in the default web browser.
+        Opens the Serena dashboard (for on-demand usage as triggered by the user, e.g. via a tool)
 
-        :return: a message indicating success or failure
+        :return: True if the dashboard was opened, False if it could not be opened
         """
         if self._dashboard_url is None:
             raise Exception("Dashboard is not running.")
@@ -532,15 +607,19 @@ class SerenaAgent:
             log.warning("Not opening the Serena web dashboard because no usable display was detected.")
             return False
 
+        self._open_dashboard_in_browser(self._dashboard_url)
+        return True
+
+    @staticmethod
+    def _open_dashboard_in_browser(url: str) -> None:
         # Use a subprocess to avoid any output from webbrowser.open being written to stdout
         subprocess.Popen(
-            [sys.executable, "-c", f"import webbrowser; webbrowser.open({self._dashboard_url!r})"],
+            [sys.executable, "-c", f"import webbrowser; webbrowser.open({url!r})"],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            start_new_session=True,  # Detach from parent process
+            start_new_session=False,
         )
-        return True
 
     def get_exposed_tool_instances(self) -> list["Tool"]:
         """
@@ -608,10 +687,38 @@ class SerenaAgent:
 
         # If a project is active at startup, append its activation message
         if self._active_project is not None:
-            system_prompt += "\n\n" + self._active_project.get_activation_message()
+            system_prompt += "\n\n" + self.get_project_activation_message()
 
         log.info("System prompt:\n%s", system_prompt)
         return system_prompt
+
+    def get_project_activation_message(self) -> str:
+        """
+        :return: a message providing information about the project upon activation (e.g. programming language, memories, initial prompt)
+        :raise: AssertionError if no project is active
+        """
+        proj = self._active_project
+        assert proj is not None, "A project must be active before calling this."
+        if proj.is_newly_created:
+            msg = f"Created and activated a new project with name '{proj.project_name}' at {proj.project_root}. "
+        else:
+            msg = f"The project with name '{proj.project_name}' at {proj.project_root} is activated."
+        if self._language_backend == LanguageBackend.LSP:
+            languages_str = ", ".join([lang.value for lang in proj.project_config.languages])
+            msg += f"\nProgramming languages: {languages_str}."
+        msg += "File encoding: {proj.project_config.encoding}."
+
+        include_memories = self._active_tools.contains_tool_class(ReadMemoryTool)
+        if include_memories:
+            project_memories = proj.memories_manager.list_project_memories()
+            if project_memories:
+                msg += (
+                    f"\n{json.dumps(project_memories.to_dict())}\n"
+                    + "Use the `read_memory` tool to read these memories later if they are relevant to the task."
+                )
+        if proj.project_config.initial_prompt:
+            msg += f"\nAdditional project-specific instructions:\n {proj.project_config.initial_prompt}"
+        return msg
 
     def _update_active_modes(self) -> None:
         """
@@ -686,10 +793,17 @@ class SerenaAgent:
         """
         return self._language_backend == LanguageBackend.LSP
 
-    def _activate_project(self, project: Project, update_active_modes: bool = True, update_active_tools: bool = True) -> None:
+    def _activate_project(self, project: Project, update_active_modes: bool = True, update_active_tools: bool = True) -> bool:
+        """
+        :return: True if the project was newly activated, False if it was already active
+        """
+        # check if the project is already active
+        if self._active_project is not None and self._active_project.project_root == project.project_root:
+            return False
+
         log.info(f"Activating {project.project_name} at {project.project_root}")
 
-        # Check if the project requires a different language backend than the one initialized at startup
+        # check if the project requires a different language backend than the one initialized at startup
         project_backend = project.project_config.language_backend
         if project_backend is not None and project_backend != self._language_backend:
             raise ValueError(
@@ -725,14 +839,18 @@ class SerenaAgent:
         if self._project_activation_callback is not None:
             self._project_activation_callback()
 
+        return True
+
     def activate_project_from_path_or_name(
         self, project_root_or_name: str, update_active_modes: bool = True, update_active_tools: bool = True
-    ) -> Project:
+    ) -> bool:
         """
         Activate a project from a path or a name.
         If the project was already registered, it will just be activated.
         If the argument is a path at which no Serena project previously existed, the project will be created beforehand.
         Raises ProjectNotFoundError if the project could neither be found nor created.
+
+        :return: True if the project was newly activated, False if it was already active
         """
         project_instance: Project | None = self.serena_config.get_project(project_root_or_name)
         if project_instance is not None:
@@ -747,9 +865,7 @@ class SerenaAgent:
                 f"Existing project names: {self.serena_config.project_names}"
             )
 
-        self._activate_project(project_instance, update_active_modes=update_active_modes, update_active_tools=update_active_tools)
-
-        return project_instance
+        return self._activate_project(project_instance, update_active_modes=update_active_modes, update_active_tools=update_active_tools)
 
     def get_active_tool_names(self) -> list[str]:
         """
@@ -769,7 +885,7 @@ class SerenaAgent:
         :return: a string overview of the current configuration, including the active and available configuration options
         """
         result_str = "Current configuration:\n"
-        result_str += f"Serena version: {serena_version()}\n"
+        result_str += f"Serena version: {self.version}\n"
         result_str += f"Loglevel: {self.serena_config.log_level}, trace_lsp_communication={self.serena_config.trace_lsp_communication}\n"
         if self._active_project is not None:
             result_str += f"Active project: {self._active_project.project_name}\n"
@@ -844,23 +960,35 @@ class SerenaAgent:
         ToolRegistry().print_tool_overview(self._active_tools.tools)
 
     def __del__(self) -> None:
-        self.shutdown()
+        self.on_shutdown()
 
-    def shutdown(self, timeout: float = 2.0) -> None:
+    def on_shutdown(self, timeout: float = 2.0) -> None:
         """
-        Shuts down the agent, freeing resources and stopping background tasks.
+        Shutdown handler of the agent, freeing resources and stopping background tasks.
         """
-        # guard against __del__ being called on a partially constructed instance
-        if not hasattr(self, "_active_project"):
-            return
         log.info("SerenaAgent is shutting down ...")
         if self._active_project is not None:
+            log.info(f"Shutting down active project '{self._active_project.project_name}' ...")
             self._active_project.shutdown(timeout=timeout)
             self._active_project = None
         if self._gui_log_viewer:
             log.info("Stopping the GUI log window ...")
             self._gui_log_viewer.stop()
             self._gui_log_viewer = None
+        if self._dashboard_viewer_process:
+            log.info("Stopping the dashboard viewer process ...")
+            self._dashboard_viewer_process.terminate()
+            self._dashboard_viewer_process = None
+
+    def shutdown(self) -> None:
+        """
+        Triggers a hard shutdown of the agent, freeing resources and signalling the process to terminate
+        """
+        # perform clean-up right away, because kill does not result in normal deletion of the object
+        self.on_shutdown()
+
+        # signal process termination
+        os.kill(os.getpid(), signal.SIGTERM)
 
     def get_tool_by_name(self, tool_name: str) -> Tool:
         tool_class = ToolRegistry().get_tool_class_by_name(tool_name)

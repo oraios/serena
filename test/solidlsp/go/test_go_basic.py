@@ -3,9 +3,11 @@ from pathlib import Path
 
 import pytest
 
+from serena.symbol import LanguageServerSymbol
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
 @pytest.mark.go
@@ -16,6 +18,20 @@ class TestGoLanguageServer:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "main"), "main function not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Helper"), "Helper function not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "DemoStruct"), "DemoStruct not found in symbol tree"
+
+    @pytest.mark.parametrize("language_server", [Language.GO], indirect=True)
+    def test_find_symbol_matches_go_method_by_bare_name(self, language_server: SolidLanguageServer) -> None:
+        symbols = language_server.request_full_symbol_tree(within_relative_path="main.go")
+
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "Value"), "Expected Go method name to be normalized to bare name"
+        assert not SymbolUtils.symbol_tree_contains_name(symbols, "(*DemoStruct).Value"), (
+            "Expected receiver-qualified Go method name to be normalized away"
+        )
+
+        bare_name_matches = [match for root in symbols for match in LanguageServerSymbol(root).find("Value")]
+
+        assert bare_name_matches, "Expected a Go method to match by bare name"
+        assert all(match.name == "Value" for match in bare_name_matches)
 
     @pytest.mark.parametrize("language_server", [Language.GO], indirect=True)
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
@@ -192,3 +208,16 @@ class TestGoBuildTags:
 
             # A cache miss should repopulate and mark caches modified.
             _assert_caches_modified(ls_foo)
+
+    @pytest.mark.parametrize("language_server", [Language.GO], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s):
+                malformed_symbols.append(s)
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )
