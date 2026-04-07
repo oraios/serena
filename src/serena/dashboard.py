@@ -1,7 +1,10 @@
+import json
 import os
 import socket
 import sys
 import threading
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
@@ -143,6 +146,8 @@ class SerenaDashboardAPI:
         self._app = Flask(__name__)
         self._tool_usage_stats = tool_usage_stats
         self._setup_routes()
+        # Fetch remote news in background on startup (non-blocking)
+        threading.Thread(target=self._fetch_news, daemon=True).start()
 
     @property
     def memory_log_handler(self) -> MemoryLogHandler:
@@ -346,12 +351,11 @@ class SerenaDashboardAPI:
             except Exception as e:
                 return {"status": "error", "message": str(e)}
 
-        @self._app.route("/news_snippet_ids", methods=["GET"])
-        def get_news_snippet_ids() -> dict[str, str | list[int]]:
-            def _get_unread_news_ids() -> list[int]:
-                all_news_files = (Path(SERENA_DASHBOARD_DIR) / "news").glob("*.html")
-                all_news_ids = [int(f.stem) for f in all_news_files]
-                """News ids are ints of format YYYYMMDD (publication dates)"""
+        @self._app.route("/fetch_unread_news", methods=["GET"])
+        def fetch_unread_news() -> dict[str, dict[str, str] | str]:
+            def _fetch_unread_news() -> dict[str, str]:
+                """News ids are strings of format YYYYMMDD (publication dates)"""
+                all_news = self._fetch_news()
 
                 # Filter news items by installation date
                 serena_config_creation_date = SerenaConfig.get_config_file_creation_date()
@@ -359,23 +363,23 @@ class SerenaDashboardAPI:
                     # should not normally happen, since config file should exist when the dashboard is started
                     # We assume a fresh installation in this case
                     log.error("Serena config file not found when starting the dashboard")
-                    return []
-                serena_config_creation_date_int = int(serena_config_creation_date.strftime("%Y%m%d"))
+                    return {}
+                serena_config_creation_date = serena_config_creation_date.strftime("%Y%m%d")
                 # Only include news items published on or after the installation date
-                post_installation_news_ids = [news_id for news_id in all_news_ids if news_id >= serena_config_creation_date_int]
+                post_installation_news = {k: v for k, v in all_news.items() if k >= serena_config_creation_date}
 
                 news_snippet_id_file = SerenaPaths().news_snippet_id_file
                 if not os.path.exists(news_snippet_id_file):
-                    return post_installation_news_ids
+                    return post_installation_news
                 with open(news_snippet_id_file, encoding="utf-8") as f:
-                    last_read_news_id = int(f.read().strip())
-                    if last_read_news_id == 20262103:
-                        last_read_news_id = 20260321  # fix originally misnamed file
-                return [news_id for news_id in post_installation_news_ids if news_id > last_read_news_id]
+                    last_read_news_id = f.read().strip()
+                    if last_read_news_id == "20262103":
+                        last_read_news_id = "20260321"  # fix originally misnamed news id
+                return {k: v for k, v in post_installation_news.items() if k > last_read_news_id}
 
             try:
-                unread_news_ids = _get_unread_news_ids()
-                return {"news_snippet_ids": unread_news_ids, "status": "success"}
+                unread_news = _fetch_unread_news()
+                return {"news": unread_news, "status": "success"}
             except Exception as e:
                 return {"status": "error", "message": str(e)}
 
@@ -383,10 +387,10 @@ class SerenaDashboardAPI:
         def mark_news_snippet_as_read() -> dict[str, str]:
             try:
                 request_data = request.get_json()
-                news_snippet_id = int(request_data.get("news_snippet_id"))
+                news_snippet_id = str(request_data.get("news_snippet_id"))
                 news_snippet_id_file = SerenaPaths().news_snippet_id_file
                 with open(news_snippet_id_file, "w", encoding="utf-8") as f:
-                    f.write(str(news_snippet_id))
+                    f.write(news_snippet_id)
                 return {"status": "success", "message": f"Marked news snippet {news_snippet_id} as read"}
             except Exception as e:
                 return {"status": "error", "message": str(e)}
@@ -617,6 +621,73 @@ class SerenaDashboardAPI:
                 f.write(request_save_config.content)
 
         self._agent.execute_task(run, logged=True, name="SaveSerenaConfig")
+
+    # ===== Remote News Methods =====
+
+    # The branch from which news are fetched. Change to a feature branch for testing.
+    _NEWS_JSON_URL = "https://raw.githubusercontent.com/oraios/serena/main/news/news.json"
+
+    def _fetch_news(self) -> dict[str, str]:
+        """Fetch news.json from GitHub using ETag-based caching. Silently ignores network errors."""
+        paths = SerenaPaths()
+
+        headers: dict[str, str] = {}
+        # Load stored ETag if available
+        if os.path.exists(paths.news_etag_file) and os.path.exists(paths.news_cache_file):
+            try:
+                with open(paths.news_etag_file, encoding="utf-8") as f:
+                    stored_etag = f.read().strip()
+                if stored_etag:
+                    headers["If-None-Match"] = stored_etag
+            except Exception:
+                pass
+
+        fetched_news_dict = None
+        try:
+            req = urllib.request.Request(self._NEWS_JSON_URL, headers=headers)
+            with urllib.request.urlopen(req, timeout=10) as response:
+                etag = response.headers.get("ETag", "")
+                body = response.read().decode("utf-8")
+                # Validate JSON
+                fetched_news_dict = json.loads(body)
+                # Store cache and ETag
+                with open(paths.news_cache_file, "w", encoding="utf-8") as f:
+                    f.write(body)
+                if etag:
+                    with open(paths.news_etag_file, "w", encoding="utf-8") as f:
+                        f.write(etag)
+                log.info("Remote news updated from %s", self._NEWS_JSON_URL)
+        except urllib.error.HTTPError as e:
+            if e.code == 304:
+                log.debug("Remote news unchanged (304 Not Modified)")
+            else:
+                log.warning("Failed to fetch remote news (HTTP %d): %s", e.code, e.reason)
+        except Exception as e:
+            log.warning("Failed to fetch remote news: %s", e)
+        if fetched_news_dict is None:
+            fetched_news_dict = self._load_previously_fetched_news_data()  # fallback to existing local files
+        return fetched_news_dict
+
+    @staticmethod
+    def _load_previously_fetched_news_data() -> dict[str, str]:
+        """Return the news data dict. Uses local cache if available, otherwise falls back to local news files."""
+        paths = SerenaPaths()
+
+        if os.path.exists(paths.news_cache_file):
+            with open(paths.news_cache_file, encoding="utf-8") as f:
+                return json.loads(f.read())
+        return {}
+
+    def _get_all_news_ids(self) -> list[int]:
+        """Return all available news IDs from the news data."""
+        news_data = self._load_previously_fetched_news_data()
+        result: list[int] = []
+        for key in news_data:
+            try:
+                result.append(int(key))
+            except ValueError:
+                pass
+        return result
 
     def _add_language(self, request_add_language: RequestAddLanguage) -> None:
         from solidlsp.ls_config import Language
