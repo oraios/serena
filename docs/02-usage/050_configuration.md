@@ -145,10 +145,6 @@ If you want to keep certain modes as always active, regardless of command-line p
 define them as *base modes* in the global or project configuration.
 :::
 
-Modes can also be _switched dynamically_ during a session. 
-You can instruct the LLM to use the `switch_modes` tool to activate a different set of modes (e.g., "Switch to planning and one-shot modes").
-Like command-line parameters, this only affects default modes, not base modes (which remain active).
-
 :::{note}
 **Mode Compatibility**: While you can combine modes, some may be semantically incompatible (e.g., `interactive` and `one-shot`). 
 Serena currently does not prevent incompatible combinations; it is up to the user to choose sensible mode configurations.

@@ -51,27 +51,6 @@ class RemoveProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerO
         return f"Successfully removed project '{project_name}' from configuration."
 
 
-class SwitchModesTool(Tool, ToolMarkerOptional):
-    """
-    Activates modes by providing a list of their names
-    """
-
-    def apply(self, modes: list[str]) -> str:
-        """
-        Activates the desired modes, like ["editing", "interactive"] or ["planning", "one-shot"]
-
-        :param modes: the names of the modes to activate
-        """
-        self.agent.set_modes(modes)
-
-        # Inform the Agent about the activated modes and the currently active tools
-        mode_instances = self.agent.get_active_modes()
-        result_str = f"Active modes: {', '.join([mode.name for mode in mode_instances])}" + "\n"
-        result_str += "\n".join([mode_instance.prompt for mode_instance in mode_instances]) + "\n"
-        result_str += f"Currently active tools: {', '.join(self.agent.get_active_tool_names())}"
-        return result_str
-
-
 class GetCurrentConfigTool(Tool):
     """
     Prints the current configuration of the agent, including the active and available projects, tools, contexts, and modes.

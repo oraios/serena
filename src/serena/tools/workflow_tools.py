@@ -4,7 +4,7 @@ Tools supporting the general workflow of the agent
 
 import platform
 
-from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional
+from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject
 
 
 class CheckOnboardingPerformedTool(Tool):
@@ -48,74 +48,6 @@ class OnboardingTool(Tool):
         """
         system = platform.system()
         return self.prompt_factory.create_onboarding_prompt(system=system)
-
-
-class ThinkAboutCollectedInformationTool(Tool, ToolMarkerOptional):
-    """
-    Thinking tool for pondering the completeness of collected information.
-    """
-
-    def apply(self) -> str:
-        """
-        Think about the collected information and whether it is sufficient and relevant.
-        This tool should ALWAYS be called after you have completed a non-trivial sequence of searching steps like
-        find_symbol, find_referencing_symbols, search_files_for_pattern, read_file, etc.
-        """
-        return self.prompt_factory.create_think_about_collected_information()
-
-
-class ThinkAboutTaskAdherenceTool(Tool, ToolMarkerOptional):
-    """
-    Thinking tool for determining whether the agent is still on track with the current task.
-    """
-
-    def apply(self) -> str:
-        """
-        Think about the task at hand and whether you are still on track.
-        Especially important if the conversation has been going on for a while and there
-        has been a lot of back and forth.
-
-        This tool should ALWAYS be called before you insert, replace, or delete code.
-        """
-        return self.prompt_factory.create_think_about_task_adherence()
-
-
-class ThinkAboutWhetherYouAreDoneTool(Tool, ToolMarkerOptional):
-    """
-    Thinking tool for determining whether the task is truly completed.
-    """
-
-    def apply(self) -> str:
-        """
-        Whenever you feel that you are done with what the user has asked for, it is important to call this tool.
-        """
-        return self.prompt_factory.create_think_about_whether_you_are_done()
-
-
-class SummarizeChangesTool(Tool, ToolMarkerOptional):
-    """
-    Provides instructions for summarizing the changes made to the codebase.
-    """
-
-    def apply(self) -> str:
-        """
-        Summarize the changes you have made to the codebase.
-        This tool should always be called after you have fully completed any non-trivial coding task,
-        but only after the think_about_whether_you_are_done call.
-        """
-        return self.prompt_factory.create_summarize_changes()
-
-
-class PrepareForNewConversationTool(Tool):
-    """
-    Provides instructions for preparing for a new conversation (in order to continue with the necessary context).
-    """
-
-    def apply(self) -> str:
-        """
-        Instructions for preparing for a new conversation. This tool should only be called on explicit user request.
-        """
-        return self.prompt_factory.create_prepare_for_new_conversation()
 
 
 class InitialInstructionsTool(Tool, ToolMarkerDoesNotRequireActiveProject):

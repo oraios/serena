@@ -69,40 +69,41 @@ read_only: false
 # To make sure you have the latest list of tools, and to view their descriptions, 
 # execute `uv run scripts/print_tool_overview.py`.
 #
-#  * `activate_project`: Activates a project by name.
+#  * `activate_project`: Activates a project based on the project name or path.
 #  * `check_onboarding_performed`: Checks whether project onboarding was already performed.
 #  * `create_text_file`: Creates/overwrites a file in the project directory.
-#  * `delete_lines`: Deletes a range of lines within a file.
-#  * `delete_memory`: Deletes a memory from Serena's project-specific memory store.
+#  * `delete_memory`: Delete a memory file. Should only happen if a user asks for it explicitly,
+#       for example by saying that the information retrieved from a memory file is no longer correct
+#       or no longer relevant for the project.
+#  * `edit_memory`: Replaces content matching a regular expression in a memory.
 #  * `execute_shell_command`: Executes a shell command.
-#  * `find_referencing_code_snippets`: Finds code snippets in which the symbol at the given location is referenced.
-#  * `find_referencing_symbols`: Finds symbols that reference the symbol at the given location (optionally filtered by type).
-#  * `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
+#  * `find_file`: Finds files in the given relative paths
+#  * `find_referencing_symbols`: Finds symbols that reference the given symbol using the language server backend
+#  * `find_symbol`: Performs a global (or local) search using the language server backend.
 #  * `get_current_config`: Prints the current configuration of the agent, including the active and available projects, tools, contexts, and modes.
 #  * `get_symbols_overview`: Gets an overview of the top-level symbols defined in a given file.
-#  * `initial_instructions`: Gets the initial instructions for the current project.
-#     Should only be used in settings where the system prompt cannot be set,
-#     e.g. in clients you have no control over, like Claude Desktop.
+#  * `initial_instructions`: Provides instructions Serena usage (i.e. the 'Serena Instructions Manual')
+#       for clients that do not read the initial instructions when the MCP server is connected.
 #  * `insert_after_symbol`: Inserts content after the end of the definition of a given symbol.
-#  * `insert_at_line`: Inserts content at a given line in a file.
 #  * `insert_before_symbol`: Inserts content before the beginning of the definition of a given symbol.
 #  * `list_dir`: Lists files and directories in the given directory (optionally with recursion).
-#  * `list_memories`: Lists memories in Serena's project-specific memory store.
+#  * `list_memories`: List available memories. Any memory can be read using the `read_memory` tool.
 #  * `onboarding`: Performs onboarding (identifying the project structure and essential tasks, e.g. for testing or building).
-#  * `prepare_for_new_conversation`: Provides instructions for preparing for a new conversation (in order to continue with the necessary context).
 #  * `read_file`: Reads a file within the project directory.
-#  * `read_memory`: Reads the memory with the given name from Serena's project-specific memory store.
-#  * `remove_project`: Removes a project from the Serena configuration.
-#  * `replace_lines`: Replaces a range of lines within a file with new content.
-#  * `replace_symbol_body`: Replaces the full definition of a symbol.
-#  * `restart_language_server`: Restarts the language server, may be necessary when edits not through Serena happen.
+#  * `read_memory`: Read the content of a memory file. This tool should only be used if the information
+#       is relevant to the current task. You can infer whether the information
+#       is relevant from the memory file name.
+#       You should not read the same memory file multiple times in the same conversation.
+#  * `rename_memory`: Renames or moves a memory. Moving between project and global scope is supported
+#       (e.g., renaming "global/foo" to "bar" moves it from global to project scope).
+#  * `rename_symbol`: Renames a symbol throughout the codebase using language server refactoring capabilities.
+#       For JB, we use a separate tool.
+#  * `replace_content`: Replaces content in a file (optionally using regular expressions).
+#  * `replace_symbol_body`: Replaces the full definition of a symbol using the language server backend.
+#  * `safe_delete_symbol`:
 #  * `search_for_pattern`: Performs a search for a pattern in the project.
-#  * `summarize_changes`: Provides instructions for summarizing the changes made to the codebase.
-#  * `switch_modes`: Activates modes by providing a list of their names
-#  * `think_about_collected_information`: Thinking tool for pondering the completeness of collected information.
-#  * `think_about_task_adherence`: Thinking tool for determining whether the agent is still on track with the current task.
-#  * `think_about_whether_you_are_done`: Thinking tool for determining whether the task is truly completed.
-#  * `write_memory`: Writes a named memory (for future reference) to Serena's project-specific memory store.
+#  * `write_memory`: Write some information (utf-8-encoded) about this project that can be useful for future tasks to a memory in md format.
+#       The memory name should be meaningful.
 excluded_tools: []
 
 # list of tools to include that would otherwise be disabled (particularly optional tools that are disabled by default).
