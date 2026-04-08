@@ -18,15 +18,17 @@ import os
 import pathlib
 import shutil
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import cast
 
 from overrides import override
 
 from solidlsp import ls_types
-from solidlsp.ls import LanguageServerDependencyProviderSinglePath, SolidLanguageServer
-from solidlsp.ls_utils import PathUtils
+from solidlsp.ls import LanguageServerDependencyProviderSinglePath, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.lsp_protocol_handler import lsp_types
+from solidlsp.ls_process import ProcessLaunchInfo
+from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
@@ -72,16 +74,16 @@ class HaxeLanguageServer(SolidLanguageServer):
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
     @override
-    def _create_process_launch_info(self) -> "ProcessLaunchInfo":
+    def _create_process_launch_info(self) -> ProcessLaunchInfo:
         """Override to use _haxe_cwd as the process working directory."""
-        from solidlsp.ls_process import ProcessLaunchInfo
         assert self._dependency_provider is not None
         cmd = self._dependency_provider.create_launch_command()
         env = self._dependency_provider.create_launch_command_env()
         return ProcessLaunchInfo(cmd=cmd, cwd=self._haxe_cwd, env=env)
 
+    @contextmanager
     @override
-    def open_file(self, relative_file_path: str, open_in_ls: bool = True) -> "Iterator[LSPFileBuffer]":
+    def open_file(self, relative_file_path: str, open_in_ls: bool = True) -> Iterator[LSPFileBuffer]:
         """Override to never send didOpen to the Haxe LS.
 
         The Haxe LS triggers a recompilation on didOpen, which causes subsequent
@@ -89,7 +91,8 @@ class HaxeLanguageServer(SolidLanguageServer):
         requests without files being opened — it uses its own file system access.
         We still read the file locally for serena's caching and symbol parsing.
         """
-        return super().open_file(relative_file_path, open_in_ls=False)
+        with super().open_file(relative_file_path, open_in_ls=False) as fb:
+            yield fb
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -248,10 +251,9 @@ class HaxeLanguageServer(SolidLanguageServer):
             return []
         visited.add(hxml_abs)
 
-        hxml_dir = os.path.dirname(hxml_abs)
         classpaths: list[str] = []
 
-        with open(hxml_abs, "r", encoding="utf-8") as f:
+        with open(hxml_abs, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line.startswith("#") or not line:
@@ -311,9 +313,7 @@ class HaxeLanguageServer(SolidLanguageServer):
         # Remove paths that are subdirectories of other external paths to avoid duplicate scanning
         filtered: list[str] = []
         for path in external:
-            is_subdir = any(
-                pathlib.Path(path).is_relative_to(other) for other in external if other != path
-            )
+            is_subdir = any(pathlib.Path(path).is_relative_to(other) for other in external if other != path)
             if not is_subdir:
                 filtered.append(path)
 
@@ -322,9 +322,7 @@ class HaxeLanguageServer(SolidLanguageServer):
         return filtered
 
     @override
-    def request_full_symbol_tree(
-        self, within_relative_path: str | None = None
-    ) -> list["ls_types.UnifiedSymbolInformation"]:
+    def request_full_symbol_tree(self, within_relative_path: str | None = None) -> list["ls_types.UnifiedSymbolInformation"]:
         """Override to also scan external classpath directories for symbols.
 
         The base class only walks files under the repository root. For Haxe projects,
@@ -656,13 +654,13 @@ class HaxeLanguageServer(SolidLanguageServer):
             new_item = dict(item)
             new_item["absolutePath"] = str(abs_path)
             new_item["relativePath"] = str(rel_path)
-            ret.append(ls_types.Location(**new_item))
+            ret.append(ls_types.Location(**new_item))  # type: ignore
         return ret
 
     @override
     def request_hover(
-        self, relative_file_path: str, line: int, column: int, file_buffer=None
-    ) -> "ls_types.Hover | None":
+        self, relative_file_path: str, line: int, column: int, file_buffer: LSPFileBuffer | None = None
+    ) -> ls_types.Hover | None:
         """Override to skip opening the file before sending hover request.
 
         Same issue as references: sending didOpen triggers a recompilation that
@@ -696,4 +694,4 @@ class HaxeLanguageServer(SolidLanguageServer):
             return None
         if isinstance(contents, dict) and not contents.get("value"):
             return None
-        return ls_types.Hover(**response)
+        return ls_types.Hover(**response)  # type: ignore
