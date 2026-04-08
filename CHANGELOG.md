@@ -3,7 +3,8 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
-  - Added `serena init` command  
+  - Added `serena init` command
+  - Added Crystal language support (uses [Crystalline](https://github.com/elbywan/crystalline) language server)  
 
 * Dashboard:
   - Add version display 
