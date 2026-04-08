@@ -5,7 +5,7 @@ from typing import Any, Literal
 import serena.jetbrains.jetbrains_types as jb
 from serena.code_editor import JetBrainsCodeEditor
 from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
-from serena.jetbrains.jetbrains_types import SymbolDTO
+from serena.jetbrains.jetbrains_types import SymbolDTO, SymbolDTOUtil
 from serena.symbol import JetBrainsSymbolDictGrouper
 from serena.tools import Tool, ToolMarkerBeta, ToolMarkerOptional, ToolMarkerSymbolicEdit, ToolMarkerSymbolicRead
 from serena.util.text_utils import find_text_coordinates
@@ -259,7 +259,19 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
             )
         symbol_dicts = response_dict["symbols"]
 
-        # capture file paths before grouping, which mutates the dicts
+        # replace reference line number (if present) by actual line/context
+        for symbol_dict in symbol_dicts:
+            if "reference_line_no" in symbol_dict:
+                ref_line = symbol_dict["reference_line_no"]
+                ref_relative_path = symbol_dict["relative_path"]
+                if not SymbolDTOUtil.is_external_symbol(symbol_dict) and ref_line is not None and ref_line >= 0:
+                    content_around_ref = self.project.retrieve_content_around_line(
+                        relative_file_path=ref_relative_path, line=ref_line, context_lines_before=1, context_lines_after=1
+                    )
+                    symbol_dict["context"] = content_around_ref.to_display_string()
+                    del symbol_dict["reference_line_no"]
+
+        # capture file paths before grouping
         ref_paths = [s.get("relative_path", "unknown") for s in symbol_dicts]
 
         result = self.symbol_dict_grouper.group(symbol_dicts)
