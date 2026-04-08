@@ -332,7 +332,14 @@ class SerenaMCPFactory:
         # retain only FASTMCP_ prefix for already set environment variables.
         Settings.model_config = SettingsConfigDict(env_prefix="FASTMCP_")
         instructions = self._get_initial_instructions()
-        mcp = FastMCP(lifespan=self.server_lifespan, host=host, port=port, instructions=instructions)
+        mcp = FastMCP(
+            name="Serena",
+            lifespan=self.server_lifespan,
+            website_url="https://oraios.github.io/serena",
+            host=host,
+            port=port,
+            instructions=instructions,
+        )
         return mcp
 
     @asynccontextmanager
