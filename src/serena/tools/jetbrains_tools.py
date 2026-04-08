@@ -126,9 +126,13 @@ class JetBrainsMoveTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMa
         target_parent_name_path: str | None = None,
     ) -> str:
         """
-        Moves a symbol, file or directory to a different location. The target location is the new parent
-        of the symbol, i.e. the moved entity is never renamed by the operation, only moved.
-        References to affected symbols are automatically updated.
+        Moves a symbol, file or directory to a different location and automatically update all references to affected symbols.
+        **Important**: this tool should always be preferred to naive moving (e.g. via file system operations or edits)
+        as it is much more reliable and efficient. It is always safe to use this tool. For some symbols, moving may not be applicable,
+        and will result in no edits and a suitable error message.
+        The target location is the new parent of the symbol,
+        i.e. the moved entity is never renamed by the operation, only moved.
+
 
         Valid moves:
         - Symbol:
@@ -168,12 +172,16 @@ class JetBrainsSafeDeleteTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, 
         propagate: bool = False,
     ) -> str:
         """
-        Safely deletes a symbol, checking for usages first. It is also
-        possible to request deleting of usages and cleaning up of unused code.
+        Safely deletes a symbol, file, or directory, checking for usages first and propagating deletion, if desired.
+        Propagation means it is possible to request deleting of usages and cleaning up of unused code.
+        Propagation is powerful for cleaning up code but should be used with care, and only when you are sure that
+        **Important**: this tool should always be preferred to naive deleting (e.g. via file system operations or edits).
+        When using it, you don't have to search for usages first, as the tool will do it for you.
 
         :param relative_path: the relative path to the file containing the symbol to delete.
         :param name_path: the name path of the symbol to delete.
             A name path identifies a symbol within a source file, e.g. "MyClass/my_method".
+            Omit for deleting a file or directory.
         :param delete_even_if_used: whether to force deletion even if the symbol still has usages.
             Default is False (safe mode: will report usages instead of deleting).
         :param propagate: whether to propagate the deletion to usages of the symbol and also
@@ -204,6 +212,8 @@ class JetBrainsInlineSymbol(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, To
         Inlines a symbol (usually a method/function, but also classes may be amenable to inlining,
         which turns invocation into anonymous class creation),
         replacing all call sites with the symbol's body.
+        **Important**: this tool should always be preferred to naive inlining (e.g. via searching for references and
+        editing them).
 
         :param name_path: the name path of the symbol to inline.
         :param relative_path: the relative path to the file containing the symbol to inline.
