@@ -5,6 +5,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Added `serena init` command
   - Added Crystal language support (uses [Crystalline](https://github.com/elbywan/crystalline) language server)  
+  - Added Haxe language support (uses [haxe-language-server](https://github.com/vshaxe/haxe-language-server); requires Node.js and Haxe compiler 3.4.0+)
 
 * Dashboard:
   - Add version display 
@@ -94,7 +95,6 @@ Status of the `main` branch. Changes prior to the next official version change w
   * **Add support for Pascal** via the official Pascal Language Server.
   * **C/C++ alternate LS (ccls)**: Add experimental, opt-in support for ccls as an alternative backend to clangd. Enable via `cpp_ccls` in project configuration. Requires `ccls` installed and ideally a `compile_commands.json` at repo root.
   * **Add support for Solidity** via the Nomic Foundation `@nomicfoundation/solidity-language-server` (automatically installed via npm)
-  * **Add support for Haxe** using the [vshaxe/haxe-language-server](https://github.com/vshaxe/haxe-language-server). Requires Node.js and Haxe compiler (3.4.0+). Supports `.hx` files with go-to-definition, find references, document symbols, hover, and completion. Set `build_file` in `ls_specific_settings` to specify the `.hxml` build configuration for full cross-file support. The server binary (`server.js`) can be provided via `ls_path`, discovered from the VS Code extension, or built from source.
 
 # 0.1.4
 
