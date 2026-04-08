@@ -25,7 +25,7 @@ _UNRELEASED_HEADER = "# Unreleased (main)\n"
 @click.command()
 @click.option("--major", "major", is_flag=True, help="Bump the major version and reset minor and patch to 0.")
 @click.option("--minor", "minor", is_flag=True, help="Bump the minor version and reset patch to 0.")
-@click.option("--patch", "patch", is_flag=True, help="Bump the patch version (default).")
+@click.option("--patch", "patch", is_flag=True, help="Bump the patch version.")
 @click.option("--version", "-v", "target_version", metavar="X.Y.Z", help="Set an explicit version instead of bumping.")
 @click.option("--dry-run", is_flag=True, help="Show what would change without writing any files.")
 def bump_version(major: bool, minor: bool, patch: bool, target_version: str | None, dry_run: bool) -> None:
@@ -67,7 +67,9 @@ def resolve_version_selection(*, major: bool, minor: bool, patch: bool, target_v
         return "major"
     if minor:
         return "minor"
-    return "patch"
+    if patch:
+        return "patch"
+    raise click.ClickException("No version bump selected. Use --major, --minor, --patch or --version.")
 
 
 def bump_repo_version(repo_root: Path, *, version_part: VersionPart | None, target_version: str | None, dry_run: bool = False) -> str:
