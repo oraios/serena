@@ -44,6 +44,9 @@ Some languages require additional installations or setup steps, as noted.
   for best results, provide a `compile_commands.json` at the repository root;
   see the [C/C++ Setup Guide](../03-special-guides/cpp_setup) for details.)
 * **Clojure**
+* **Crystal**  
+  (requires [Crystalline](https://github.com/elbywan/crystalline) language server to be installed and available on PATH;
+  note: Crystalline has limited go-to-definition support and does not support find-references)
 * **Dart**
 * **Elixir**  
   (requires Elixir installation; Expert language server is downloaded automatically)
