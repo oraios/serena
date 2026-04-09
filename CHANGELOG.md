@@ -5,6 +5,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Added `serena init` command
   - Added Crystal language support (uses [Crystalline](https://github.com/elbywan/crystalline) language server)  
+  - `JetBrainsFindReferencingSymbolTool`: Include context lines (when using plugin version 2023.2.15+)
 
 * Dashboard:
   - Add version display 
@@ -12,7 +13,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Fixes:
   - Fix reactivation of the same project restarting language servers #1280
   - Fix git commit id in version
-  - Fix manual shutdown triggered by GUI tool/dashboard not cleaning everything up.
+  - Fix manual server shutdown triggered by GUI tool/dashboard not cleaning everything up.
 
 # 1.0.0
 
