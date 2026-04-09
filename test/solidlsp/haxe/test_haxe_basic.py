@@ -5,9 +5,14 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
+from test.conftest import language_tests_enabled
+
+pytestmark = [
+    pytest.mark.haxe,
+    pytest.mark.skipif(not language_tests_enabled(Language.HAXE), reason="Haxe tests disabled (haxe or node not found)"),
+]
 
 
-@pytest.mark.haxe
 class TestHaxeLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.HAXE], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:

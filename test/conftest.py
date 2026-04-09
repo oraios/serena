@@ -309,6 +309,11 @@ def _determine_disabled_languages() -> list[Language]:
     if not php_tests_enabled:
         result.append(Language.PHP_PHPACTOR)
 
+    # Disable Haxe tests if haxe or node is not available
+    haxe_tests_enabled = _sh.which("haxe") is not None and _sh.which("node") is not None
+    if not haxe_tests_enabled:
+        result.append(Language.HAXE)
+
     al_tests_enabled = True
     if not al_tests_enabled:
         result.append(Language.AL)
