@@ -12,7 +12,14 @@ import pytest
 from serena.agent import SerenaAgent
 from serena.config.serena_config import ProjectConfig, RegisteredProject, SerenaConfig
 from serena.project import Project
-from serena.tools import SUCCESS_RESULT, FindReferencingSymbolsTool, FindSymbolTool, ReplaceContentTool, ReplaceSymbolBodyTool
+from serena.tools import (
+    SUCCESS_RESULT,
+    FindReferencingSymbolsTool,
+    FindSymbolTool,
+    ReplaceContentTool,
+    ReplaceSymbolBodyTool,
+    SafeDeleteSymbol,
+)
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
 from test.conftest import get_repo_path, is_ci, language_tests_enabled
@@ -103,7 +110,7 @@ def serena_agent(request: pytest.FixtureRequest, serena_config) -> Iterator[Sere
     yield agent
 
     # explicitly shut down to free resources
-    agent.shutdown(timeout=5)
+    agent.on_shutdown(timeout=5)
 
 
 class TestSerenaAgent:
@@ -139,9 +146,9 @@ class TestSerenaAgent:
                 continue
             symbol_info = s.get("info")
             assert symbol_info, f"Expected symbol info to be present for symbol: {s}"
-            assert (
-                symbol_name in s["info"]
-            ), f"[{serena_agent.get_active_lsp_languages()[0]}] Expected symbol info to contain symbol name {symbol_name}. Info: {s['info']}"
+            assert symbol_name in s["info"], (
+                f"[{serena_agent.get_active_lsp_languages()[0]}] Expected symbol info to contain symbol name {symbol_name}. Info: {s['info']}"
+            )
             # special additional test for Java, since Eclipse returns hover in a complex format and we want to make sure to get it right
             if s["kind"] == SymbolKind.Class.name and serena_agent.get_active_lsp_languages() == [Language.JAVA]:
                 assert "A simple model class" in symbol_info, f"Java class docstring not found in symbol info: {s}"
@@ -166,9 +173,9 @@ class TestSerenaAgent:
             f"Expected to find Dog/greet in {sample_php} but got empty result. "
             "This may indicate that find_symbol is not routing to the PHP language server for PHP files."
         )
-        assert any(
-            "greet" in s["name_path"] and sample_php in s["relative_path"] for s in symbols
-        ), f"Dog/greet not found in {sample_php}. Symbols: {symbols}"
+        assert any("greet" in s["name_path"] and sample_php in s["relative_path"] for s in symbols), (
+            f"Dog/greet not found in {sample_php}. Symbols: {symbols}"
+        )
 
     @pytest.mark.parametrize(
         "serena_agent,symbol_name,expected_kind,expected_file",
@@ -187,7 +194,7 @@ class TestSerenaAgent:
             pytest.param(Language.PHP, "helperFunction", "Function", "helper.php", marks=pytest.mark.php),
             pytest.param(Language.CLOJURE, "greet", "Function", clj.CORE_PATH, marks=pytest.mark.clojure),
             pytest.param(Language.CSHARP, "Calculator", "Class", "Program.cs", marks=pytest.mark.csharp),
-            pytest.param(Language.POWERSHELL, "function Greet-User ()", "Function", "main.ps1", marks=pytest.mark.powershell),
+            pytest.param(Language.POWERSHELL, "Greet-User", "Function", "main.ps1", marks=pytest.mark.powershell),
             pytest.param(Language.CPP_CCLS, "add", "Function", "b.cpp", marks=pytest.mark.cpp),
             pytest.param(Language.LEAN4, "add", "Method", "Helper.lean", marks=pytest.mark.lean4),
         ],
@@ -288,7 +295,7 @@ class TestSerenaAgent:
                 marks=pytest.mark.clojure,
             ),
             pytest.param(Language.CSHARP, "Calculator", "Program.cs", "Program.cs", marks=pytest.mark.csharp),
-            pytest.param(Language.POWERSHELL, "function Greet-User ()", "main.ps1", "main.ps1", marks=pytest.mark.powershell),
+            pytest.param(Language.POWERSHELL, "Greet-User", "main.ps1", "main.ps1", marks=pytest.mark.powershell),
             pytest.param(Language.CPP_CCLS, "add", "b.cpp", "a.cpp", marks=pytest.mark.cpp),
             pytest.param(Language.LEAN4, "add", "Helper.lean", "Main.lean", marks=pytest.mark.lean4),
         ],
@@ -478,9 +485,9 @@ class TestSerenaAgent:
         )
 
         symbols = json.loads(result)
-        assert (
-            len(symbols) == num_expected
-        ), f"Expected to find {num_expected} symbols for overloaded function {name_path}. Symbols found: {symbols}"
+        assert len(symbols) == num_expected, (
+            f"Expected to find {num_expected} symbols for overloaded function {name_path}. Symbols found: {symbols}"
+        )
 
     @pytest.mark.parametrize(
         "serena_agent,name_path,relative_path",
@@ -588,4 +595,93 @@ class TestSerenaAgent:
                 repl='catch(error) { console.log("Never mind"); }',
                 relative_path="ws_manager.js",
                 mode="regex",
+            )
+
+    @pytest.mark.parametrize(
+        "serena_agent,name_path,relative_path",
+        [
+            pytest.param(
+                Language.PYTHON,
+                "User",
+                os.path.join("test_repo", "models.py"),
+                marks=pytest.mark.python,
+            ),
+            pytest.param(
+                Language.JAVA,
+                "Model",
+                os.path.join("src", "main", "java", "test_repo", "Model.java"),
+                marks=pytest.mark.java,
+            ),
+            pytest.param(
+                Language.KOTLIN,
+                "Model",
+                os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
+                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+            ),
+            pytest.param(
+                Language.TYPESCRIPT,
+                "helperFunction",
+                "index.ts",
+                marks=pytest.mark.typescript,
+            ),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_safe_delete_symbol_blocked_by_references(self, serena_agent: SerenaAgent, name_path: str, relative_path: str):
+        """
+        Tests that SafeDeleteSymbol refuses to delete a symbol that is referenced elsewhere
+        and returns a message listing the referencing files.
+        """
+        # wrap in modification context as a safety net: if the tool has a bug and deletes anyway,
+        # the file will be restored, preventing corruption of test resources
+        with project_file_modification_context(serena_agent, relative_path):
+            safe_delete_tool = serena_agent.get_tool(SafeDeleteSymbol)
+            result = safe_delete_tool.apply(name_path_pattern=name_path, relative_path=relative_path)
+            assert "Cannot delete" in result, f"Expected deletion to be blocked due to existing references, but got: {result}"
+            assert "referenced in" in result, f"Expected reference information in result, but got: {result}"
+
+    @pytest.mark.parametrize(
+        "serena_agent,name_path,relative_path",
+        [
+            pytest.param(
+                Language.PYTHON,
+                "Timer",
+                os.path.join("test_repo", "utils.py"),
+                marks=pytest.mark.python,
+            ),
+            pytest.param(
+                Language.JAVA,
+                "ModelUser",
+                os.path.join("src", "main", "java", "test_repo", "ModelUser.java"),
+                marks=pytest.mark.java,
+            ),
+            pytest.param(
+                Language.KOTLIN,
+                "ModelUser",
+                os.path.join("src", "main", "kotlin", "test_repo", "ModelUser.kt"),
+                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+            ),
+            pytest.param(
+                Language.TYPESCRIPT,
+                "unusedStandaloneFunction",
+                "index.ts",
+                marks=pytest.mark.typescript,
+            ),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_safe_delete_symbol_succeeds_when_no_references(self, serena_agent: SerenaAgent, name_path: str, relative_path: str):
+        """
+        Tests that SafeDeleteSymbol successfully deletes a symbol that has no references
+        and that the symbol is actually removed from the file.
+        """
+        with project_file_modification_context(serena_agent, relative_path):
+            safe_delete_tool = serena_agent.get_tool(SafeDeleteSymbol)
+            result = safe_delete_tool.apply(name_path_pattern=name_path, relative_path=relative_path)
+            assert result == SUCCESS_RESULT, f"Expected successful deletion, but got: {result}"
+
+            # verify the symbol was actually removed from the file
+            file_content = read_project_file(serena_agent.get_active_project(), relative_path)
+            assert name_path not in file_content, (
+                f"Expected symbol {name_path} to be removed from {relative_path}, but it still appears in the file content"
             )

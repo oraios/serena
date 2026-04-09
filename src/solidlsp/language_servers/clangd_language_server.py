@@ -14,12 +14,20 @@ from .common import RuntimeDependency, RuntimeDependencyCollection
 
 log = logging.getLogger(__name__)
 
+CLANGD_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
+
 
 class ClangdLanguageServer(SolidLanguageServer):
     """
     Provides C/C++ specific instantiation of the LanguageServer class. Contains various configurations and settings specific to C/C++.
     As the project gets bigger in size, building index will take time. Try running clangd multiple times to ensure index is built properly.
     Also make sure compile_commands.json is created at root of the source directory. Check clangd test case for example.
+
+    You can pass the following entries in ``ls_specific_settings["cpp"]``:
+        - compile_commands_dir: Directory where Serena writes its transformed
+          ``compile_commands.json`` if needed.
+        - clangd_version: Override the pinned Clangd version downloaded by Serena
+          (default: the bundled Serena version).
     """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
@@ -125,39 +133,50 @@ class ClangdLanguageServer(SolidLanguageServer):
             """
             import shutil
 
+            clangd_version = self._custom_settings.get("clangd_version", "19.1.2")
+            default_version = clangd_version == "19.1.2"
+
             deps = RuntimeDependencyCollection(
                 [
                     RuntimeDependency(
                         id="Clangd",
                         description="Clangd for Linux (x64)",
-                        url="https://github.com/clangd/clangd/releases/download/19.1.2/clangd-linux-19.1.2.zip",
+                        url=f"https://github.com/clangd/clangd/releases/download/{clangd_version}/clangd-linux-{clangd_version}.zip",
                         platform_id="linux-x64",
                         archive_type="zip",
-                        binary_name="clangd_19.1.2/bin/clangd",
+                        binary_name=f"clangd_{clangd_version}/bin/clangd",
+                        sha256="7c09614eff857d590e4502ef516f035ff94cfb8b795de14ece5afbc53a206caf" if default_version else None,
+                        allowed_hosts=CLANGD_ALLOWED_HOSTS,
                     ),
                     RuntimeDependency(
                         id="Clangd",
                         description="Clangd for Windows (x64)",
-                        url="https://github.com/clangd/clangd/releases/download/19.1.2/clangd-windows-19.1.2.zip",
+                        url=f"https://github.com/clangd/clangd/releases/download/{clangd_version}/clangd-windows-{clangd_version}.zip",
                         platform_id="win-x64",
                         archive_type="zip",
-                        binary_name="clangd_19.1.2/bin/clangd.exe",
+                        binary_name=f"clangd_{clangd_version}/bin/clangd.exe",
+                        sha256="5b6ceb0f85d63fa0c2c9aab31c29bebd41dc11da1f160ef21bc2fea93270a20d" if default_version else None,
+                        allowed_hosts=CLANGD_ALLOWED_HOSTS,
                     ),
                     RuntimeDependency(
                         id="Clangd",
                         description="Clangd for macOS (x64)",
-                        url="https://github.com/clangd/clangd/releases/download/19.1.2/clangd-mac-19.1.2.zip",
+                        url=f"https://github.com/clangd/clangd/releases/download/{clangd_version}/clangd-mac-{clangd_version}.zip",
                         platform_id="osx-x64",
                         archive_type="zip",
-                        binary_name="clangd_19.1.2/bin/clangd",
+                        binary_name=f"clangd_{clangd_version}/bin/clangd",
+                        sha256="d3b329b3f58602c57ca6501d255147af1bccad3691b1cb0c12c258fcd2da1be3" if default_version else None,
+                        allowed_hosts=CLANGD_ALLOWED_HOSTS,
                     ),
                     RuntimeDependency(
                         id="Clangd",
                         description="Clangd for macOS (Arm64)",
-                        url="https://github.com/clangd/clangd/releases/download/19.1.2/clangd-mac-19.1.2.zip",
+                        url=f"https://github.com/clangd/clangd/releases/download/{clangd_version}/clangd-mac-{clangd_version}.zip",
                         platform_id="osx-arm64",
                         archive_type="zip",
-                        binary_name="clangd_19.1.2/bin/clangd",
+                        binary_name=f"clangd_{clangd_version}/bin/clangd",
+                        sha256="d3b329b3f58602c57ca6501d255147af1bccad3691b1cb0c12c258fcd2da1be3" if default_version else None,
+                        allowed_hosts=CLANGD_ALLOWED_HOSTS,
                     ),
                 ]
             )
@@ -228,7 +247,7 @@ class ClangdLanguageServer(SolidLanguageServer):
             "workspaceFolders": [
                 {
                     "uri": root_uri,
-                    "name": "$name",
+                    "name": os.path.basename(repository_absolute_path),
                 }
             ],
         }

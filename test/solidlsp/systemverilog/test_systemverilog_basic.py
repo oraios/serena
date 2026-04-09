@@ -5,6 +5,7 @@ This module tests Language.SYSTEMVERILOG using verible-verilog-ls.
 Tests are skipped if the language server is not available.
 """
 
+import shutil
 from typing import Any
 
 import pytest
@@ -12,6 +13,7 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
 def _find_symbol_by_name(language_server: SolidLanguageServer, file_path: str, name: str) -> dict[str, Any] | None:
@@ -69,9 +71,9 @@ class TestSystemVerilogDefinition:
         assert len(definitions) >= 1, f"Expected at least 1 definition, got {len(definitions)}"
         def_in_counter = [d for d in definitions if "counter.sv" in (d.get("relativePath") or "")]
         assert len(def_in_counter) >= 1, f"Expected definition in counter.sv, got: {[d.get('relativePath') for d in definitions]}"
-        assert (
-            def_in_counter[0]["range"]["start"]["line"] == 7
-        ), f"Expected definition at line 7 (output port count), got line {def_in_counter[0]['range']['start']['line']}"
+        assert def_in_counter[0]["range"]["start"]["line"] == 7, (
+            f"Expected definition at line 7 (output port count), got line {def_in_counter[0]['range']['start']['line']}"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
     def test_goto_definition_cross_file(self, language_server: SolidLanguageServer) -> None:
@@ -87,9 +89,9 @@ class TestSystemVerilogDefinition:
         def_paths = [d.get("relativePath", "") for d in definitions]
         assert any("counter.sv" in p for p in def_paths), f"Expected definition in counter.sv, got: {def_paths}"
         counter_defs = [d for d in definitions if "counter.sv" in (d.get("relativePath") or "")]
-        assert (
-            counter_defs[0]["range"]["start"]["line"] == 1
-        ), f"Expected definition at line 1 (module counter), got line {counter_defs[0]['range']['start']['line']}"
+        assert counter_defs[0]["range"]["start"]["line"] == 1, (
+            f"Expected definition at line 1 (module counter), got line {counter_defs[0]['range']['start']['line']}"
+        )
 
 
 @pytest.mark.systemverilog
@@ -129,9 +131,9 @@ class TestSystemVerilogReferences:
         assert any("top.sv" in p for p in ref_paths), f"Expected reference from top.sv, got: {ref_paths}"
         refs_in_top = [r for r in references if "top.sv" in (r.get("relativePath") or "")]
         # top.sv line 17 (0-indexed: 16): "    counter #(.WIDTH(8)) u_counter ("
-        assert (
-            refs_in_top[0]["range"]["start"]["line"] == 16
-        ), f"Expected cross-file reference at line 16 (counter instantiation), got line {refs_in_top[0]['range']['start']['line']}"
+        assert refs_in_top[0]["range"]["start"]["line"] == 16, (
+            f"Expected cross-file reference at line 16 (counter instantiation), got line {refs_in_top[0]['range']['start']['line']}"
+        )
 
 
 def _extract_hover_text(hover_info: dict[str, Any]) -> str:
@@ -256,9 +258,23 @@ class TestSystemVerilogRename:
         edit_lines = sorted(e["range"]["start"]["line"] for e in edits)
         assert 1 in edit_lines, f"Expected edit at line 1 (module declaration), got lines: {edit_lines}"
         decl_edits = [e for e in edits if e["range"]["start"]["line"] == 1]
-        assert (
-            decl_edits[0]["range"]["start"]["character"] == 7
-        ), f"Expected edit at char 7, got char {decl_edits[0]['range']['start']['character']}"
+        assert decl_edits[0]["range"]["start"]["character"] == 7, (
+            f"Expected edit at char 7, got char {decl_edits[0]['range']['start']['character']}"
+        )
         for uri, file_edits in changes.items():
             for edit in file_edits:
                 assert edit["newText"] == "my_counter", f"Expected 'my_counter', got {edit['newText']}"
+
+    @pytest.mark.skipif(shutil.which("verible-verilog-ls") is None, reason="verible-verilog-ls is not available")
+    @pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s):
+                malformed_symbols.append(s)
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )

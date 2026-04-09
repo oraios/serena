@@ -4,39 +4,54 @@ requires = ["hatchling"]
 
 [project]
 name = "serena-agent"
-version = "0.1.4"
+version = "1.0.0"
 description = ""
 authors = [{ name = "Oraios AI", email = "info@oraios-ai.de" }]
 readme = "README.md"
-requires-python = ">=3.11, <3.12"
+requires-python = ">=3.11, <3.15"
 classifiers = [
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
-  "requests>=2.32.3,<3",
-  "pyright>=1.1.396,<2",
-  "fortls>=3.2.2",
-  "overrides>=7.7.0,<8",
-  "python-dotenv>=1.0.0, <2",
-  "mcp==1.23.0",
-  "flask>=3.0.0",
-  "sensai-utils>=1.5.0",
-  "pydantic>=2.10.6",
-  "types-pyyaml>=6.0.12.20241230",
-  "pyyaml>=6.0.2",
+  "requests==2.33.0",
+  "pyright==1.1.403",
+  "fortls==3.2.2",
+  "overrides==7.7.0",
+  "python-dotenv==1.2.1",
+  "mcp==1.26.0",
+  "flask==3.1.3", # bumped from 3.1.1 for CVE fix (also fixes werkzeug alert)
+  "sensai-utils==1.5.0",
+  "pydantic==2.12.5",
+  "types-pyyaml==6.0.12.20250516",
+  "pyyaml==6.0.2",
   "ruamel.yaml==0.18.14",
-  "jinja2>=3.1.6",
-  "dotenv>=0.9.9",
-  "pathspec>=0.12.1",
-  "psutil>=7.0.0",
-  "docstring_parser>=0.16",
-  "joblib>=1.5.1",
-  "tqdm>=4.67.1",
-  "tiktoken>=0.9.0",
-  "anthropic>=0.54.0",
-  "beautifulsoup4>=4.14.2",
+  "jinja2==3.1.6",
+  "dotenv==0.9.9",
+  "pathspec==0.12.1",
+  "psutil==7.0.0",
+  "docstring_parser==0.17.0",
+  "joblib==1.5.1",
+  "tqdm==4.67.1",
+  "tiktoken==0.12.0",
+  "anthropic==0.59.0",
+  "beautifulsoup4==4.14.2",
+  "pywebview",
+  "pystray==0.19.5",
+  # Transitive deps pinned for security (dependabot alerts).
+  # Exact pins because uvx installs from git, ignoring the lock file.
+  "urllib3==2.6.3",
+  "werkzeug==3.1.7",
+  "starlette==1.0.0",
+  "python-multipart==0.0.22",
+  "filelock==3.25.2",
+  "cryptography==46.0.6",
+  "regex==2026.2.28",
+  "pythonnet==3.1.0-rc0 ; sys_platform == 'win32'",
 ]
+
+[tool.uv.sources]
+pywebview = { git = "https://github.com/r0x0r/pywebview", rev = "345596c1f4fd59fd26c7aa02d4176c5362bcbabe" }
 
 [[tool.uv.index]]
 name = "testpypi"
@@ -46,52 +61,48 @@ explicit = true
 
 [project.scripts]
 serena = "serena.cli:top_level"
-serena-mcp-server = "serena.cli:start_mcp_server"
-index-project = "serena.cli:index_project"        # deprecated
 
 [project.license]
 text = "MIT"
 
 [project.optional-dependencies]
 dev = [
-  "black[jupyter]>=23.7.0, <26",  # black 26 is incompatible with our pathspec version
-  "jinja2",
+  "jinja2==3.1.6",
   # In version 1.0.4 we get a NoneType error related to some config conversion (yml_analytics is None and should be a list)
-  "mypy>=1.16.1",
-  "poethepoet>=0.20.0",
-  "pytest>=8.0.2",
-  "pytest-xdist>=3.5.0",
+  "mypy==1.17.0",
+  "poethepoet==0.36.0",
+  "pytest==8.4.1",
+  "pytest-xdist==3.8.0",
   "ruff==0.12.5",
-  "toml-sort>=0.24.2",
-  "types-pyyaml>=6.0.12.20241230",
-  "syrupy>=4.9.1",
-  "types-requests>=2.32.4.20241230",
+  "toml-sort==0.24.2",
+  "types-pyyaml==6.0.12.20250516",
+  "syrupy==4.9.1",
+  "types-requests==2.32.4.20250809",
   # docs
-  "sphinx>=7,<8",
-  "sphinx_rtd_theme>=0.5.1",
+  "sphinx==7.4.7",
+  "sphinx_rtd_theme==2.0.0",
+  "sphinx_book_theme==1.1.4",
   "sphinx-toolbox==3.7.0",
-  "jupyter-book>=1,<2",
-  "nbsphinx",
-  "pyinstrument",
-  "pytest-timeout>=2.4.0",
+  "jupyter-book==1.0.4.post1",
+  "nbsphinx==0.9.7",
+  "pyinstrument==5.1.1",
+  "pytest-timeout==2.4.0",
+  # Transitive dev deps pinned for security (dependabot alerts).
+  # Exact pins because uvx installs from git, ignoring the lock file.
+  "tornado==6.5.5",
+  "nbconvert==7.17.0",
+  "wheel==0.46.3",
+  "pyasn1==0.6.3",
+  "PyJWT==2.12.0",
 ]
-agno = ["agno>=2.2.1", "sqlalchemy>=2.0.40"]
-google = ["google-genai>=1.8.0"]
+agno = ["agno==2.5.10", "sqlalchemy==2.0.41"]  # agno bumped for session state overwrite CVE
+google = ["google-genai==1.27.0"]
 
 [project.urls]
 Homepage = "https://github.com/oraios/serena"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/serena", "src/interprompt", "src/solidlsp"]
-
-[tool.black]
-line-length = 140
-target-version = ["py311"]
-exclude = '''
-/(
-    src/solidlsp/language_servers/.*/static|src/multilspy
-)/
-'''
 
 [tool.doc8]
 max-line-length = 1000
@@ -135,12 +146,12 @@ type = "simple"
 # For custom markers, one can either adjust the env var or just use -m option in the command line,
 # as the second -m option will override the first one.
 test = "pytest test -vv"
-_black_check = "black --check src scripts test"
 _ruff_check = "ruff check src scripts test"
-_black_format = "black src scripts test"
-_ruff_format = "ruff check --fix src scripts test"
-lint = ["_black_check", "_ruff_check"]
-format = ["_ruff_format", "_black_format"]
+_ruff_format_check = "ruff format --check src scripts test"
+_ruff_fix = "ruff check --fix src scripts test"
+_ruff_format = "ruff format src scripts test"
+lint = ["_ruff_format_check", "_ruff_check"]
+format = ["_ruff_fix", "_ruff_format"]
 _mypy_core = "mypy src/serena src/solidlsp"
 _mypy_test = "mypy --disable-error-code no-untyped-def test"
 type-check = ["_mypy_core", "_mypy_test"]
@@ -156,7 +167,7 @@ doc-build = ["doc-clean", "doc-generate-files", "_sphinx_build"]
 [tool.ruff]
 target-version = "py311"
 line-length = 140
-exclude = ["src/solidlsp/language_servers/**/static", "src/multilspy"]
+exclude = ["src/solidlsp/language_servers/**/static", "src/multilspy", "test/resources/repos"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -286,6 +297,7 @@ max-complexity = 20
 addopts = "--snapshot-patch-pycharm-diff"
 markers = [
   "clojure: language server running for Clojure",
+  "crystal: language server running for Crystal",
   "python: language server running for Python",
   "go: language server running for Go",
   "java: language server running for Java",

@@ -6,6 +6,7 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from test.conftest import start_ls_context
+from test.solidlsp.conftest import PYTHON_BACKEND_LANGUAGES
 
 # This mark will be applied to all tests in this module
 pytestmark = pytest.mark.python
@@ -19,7 +20,7 @@ def ls_with_ignored_dirs() -> Generator[SolidLanguageServer, None, None]:
         yield ls
 
 
-@pytest.mark.parametrize("ls_with_ignored_dirs", [Language.PYTHON], indirect=True)
+@pytest.mark.parametrize("ls_with_ignored_dirs", PYTHON_BACKEND_LANGUAGES, indirect=True)
 def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     """Tests that request_full_symbol_tree ignores the configured directory."""
     root = ls_with_ignored_dirs.request_full_symbol_tree()[0]
@@ -28,7 +29,7 @@ def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     assert children_names == {"test_repo", "examples"}
 
 
-@pytest.mark.parametrize("ls_with_ignored_dirs", [Language.PYTHON], indirect=True)
+@pytest.mark.parametrize("ls_with_ignored_dirs", PYTHON_BACKEND_LANGUAGES, indirect=True)
 def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     """Tests that find_references ignores the configured directory."""
     # Location of Item, which is referenced in scripts
@@ -42,7 +43,7 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     assert not any("scripts" in ref["relativePath"] for ref in references)
 
 
-@pytest.mark.parametrize("repo_path", [Language.PYTHON], indirect=True)
+@pytest.mark.parametrize("repo_path", PYTHON_BACKEND_LANGUAGES, indirect=True)
 def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
     """Tests that refs and symbols with glob patterns are ignored."""
     ignored_paths = ["*ipts", "custom_t*"]

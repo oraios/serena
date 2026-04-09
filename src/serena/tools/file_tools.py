@@ -68,9 +68,9 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
         if will_overwrite_existing:
             self.project.validate_relative_path(relative_path, require_not_ignored=True)
         else:
-            assert abs_path.is_relative_to(
-                self.get_project_root()
-            ), f"Cannot create file outside of the project directory, got {relative_path=}"
+            assert abs_path.is_relative_to(self.get_project_root()), (
+                f"Cannot create file outside of the project directory, got {relative_path=}"
+            )
 
         abs_path.parent.mkdir(parents=True, exist_ok=True)
         abs_path.write_text(content, encoding=self.project.project_config.encoding, newline=self.project.line_ending.newline_str)
@@ -404,6 +404,8 @@ class SearchForPatternTool(Tool):
             matches = search_files(
                 rel_paths_to_search,
                 substring_pattern,
+                context_lines_before=context_lines_before,
+                context_lines_after=context_lines_after,
                 file_reader=self.project.read_file,
                 root_path=self.get_project_root(),
                 paths_include_glob=paths_include_glob,
@@ -414,5 +416,26 @@ class SearchForPatternTool(Tool):
         for match in matches:
             assert match.source_file_path is not None
             file_to_matches[match.source_file_path].append(match.to_display_string())
+
+        # capture lightweight match data for shortening before serialization
+        match_lines_by_file: dict[str, list[int]] = defaultdict(list)
+        for match in matches:
+            assert match.source_file_path is not None
+            match_lines_by_file[match.source_file_path].append(match.matched_lines[0].line_number)
+
+        # shortened result closures, from least to most aggressive shortening
+        def make_lines_only() -> str:
+            """Match locations without surrounding context"""
+            return f"Match lines per file:\n{self._to_json(match_lines_by_file)}"
+
+        def make_per_file_counts() -> str:
+            counts = {path: len(lines) for path, lines in match_lines_by_file.items()}
+            return f"Match counts per file:\n{self._to_json(counts)}"
+
+        def make_summary() -> str:
+            return f"Found {len(matches)} matches in {len(match_lines_by_file)} files."
+
         result = self._to_json(file_to_matches)
-        return self._limit_length(result, max_answer_chars)
+        return self._limit_length(
+            result, max_answer_chars, shortened_result_factories=[make_lines_only, make_per_file_counts, make_summary]
+        )

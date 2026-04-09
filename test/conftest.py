@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from _pytest.mark import Mark, MarkDecorator
 from sensai.util.logging import configure
 
 from serena.config.serena_config import SerenaConfig, SerenaPaths
@@ -42,6 +43,7 @@ _LANGUAGE_REPO_ALIASES: dict[Language, Language] = {
     Language.PHP_PHPACTOR: Language.PHP,
     Language.PYTHON_JEDI: Language.PYTHON,
     Language.RUBY_SOLARGRAPH: Language.RUBY,
+    Language.PYTHON_TY: Language.PYTHON,
 }
 
 
@@ -242,6 +244,39 @@ Flag indicating whether the tests are running in the GitHub CI environment.
 """
 
 is_windows = platform.system() == "Windows"
+
+
+_LANGUAGE_PYTEST_MARKERS: dict[Language, list[MarkDecorator | Mark]] = {
+    Language.CLOJURE: [
+        pytest.mark.clojure,
+        pytest.mark.skipif(not is_clojure_cli_available(), reason="clojure CLI is not installed"),
+    ],
+    Language.CPP: [pytest.mark.cpp],
+    Language.CPP_CCLS: [pytest.mark.cpp],
+    Language.CSHARP: [pytest.mark.csharp],
+    Language.FSHARP: [pytest.mark.fsharp],
+    Language.GO: [pytest.mark.go],
+    Language.JAVA: [pytest.mark.java],
+    Language.KOTLIN: [pytest.mark.kotlin, pytest.mark.skipif(is_ci, reason="Kotlin LSP JVM crashes on restart in CI")],
+    Language.LEAN4: [pytest.mark.lean4, pytest.mark.skipif(_sh.which("lean") is None, reason="Lean is not installed")],
+    Language.PHP: [pytest.mark.php],
+    Language.PHP_PHPACTOR: [pytest.mark.php],
+    Language.POWERSHELL: [pytest.mark.powershell],
+    Language.PYTHON: [pytest.mark.python],
+    Language.PYTHON_JEDI: [pytest.mark.python],
+    Language.PYTHON_TY: [pytest.mark.python],
+    Language.RUST: [pytest.mark.rust],
+    Language.TYPESCRIPT: [pytest.mark.typescript],
+}
+
+
+def get_pytest_markers(language: Language) -> list[MarkDecorator | Mark]:
+    """Pytest markers for a language.
+
+    The returned list contains the primary language marker and any
+    environment-dependent skip markers shared across the test suite.
+    """
+    return _LANGUAGE_PYTEST_MARKERS[language]
 
 
 def _determine_disabled_languages() -> list[Language]:

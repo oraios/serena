@@ -213,8 +213,10 @@ This ensures backward compatibility: existing projects that already have a `.ser
 Most users will not need to adjust these settings.
 :::
 
-Under the key `ls_specific_settings` in `serena_config.yml`, you can you pass per-language, 
-language server-specific configuration.
+Under the key `ls_specific_settings` in `serena_config.yml`, you can you pass global per-language, 
+language server-specific configuration. You can use the same key in the project configuration files (`project.yml`
+and `project.local.yml` ) to override or extend the global settings for a specific project.
+The settings are merged on top-level, meaning that project-level settings for a language will replace global settings for the same language.
 
 Structure:
 
@@ -224,15 +226,10 @@ ls_specific_settings:
     # language-server-specific keys
 ```
 
-:::{attention}
-Most settings are currently undocumented. Please refer to the 
-[source code of the respective language server](https://github.com/oraios/serena/tree/main/src/solidlsp/language_servers) 
-implementation to determine supported settings.
-:::
-
+(override-ls-path)=
 #### Overriding the Language Server Path
 
-Some language servers, particularly those that use a single core path for the language server (e.g. the main executable),
+Most of Serena's language servers, particularly those that use a single core path for the language server (e.g. the main executable),
 support overriding that path via the `ls_path` setting.
 Therefore, if you have installed the language server yourself and want to use your installation 
 instead of Serena's managed installation, you can set the `ls_path` setting as follows:
@@ -243,9 +240,87 @@ ls_specific_settings:
     ls_path: "/path/to/language-server"
 ```
 
-This is supported by all language servers deriving their dependency provider from  `LanguageServerDependencyProviderSinglePath`.
-Currently, this includes the following languages: `bash`, `clojure`, `cpp`, `kotlin`, `markdown`, `php`, `php_phpactor`, `python`, `rust`, `toml`, `typescript`, `yaml`.
-We will add support for more languages over time.
+This is supported by all language servers deriving their dependency provider from `LanguageServerDependencyProviderSinglePath`,
+and by some additional wrappers that explicitly expose `ls_path`.
+Common examples include: `ansible`, `bash`, `clojure`, `cpp`, `cpp_ccls`, `hlsl`, `kotlin`, `lean4`, `luau`, `markdown`, `php`,
+`php_phpactor`, `python`, `rust`, `solidity`, `systemverilog`, `toml`, `typescript`, and `yaml`.
+
+If a language server supports `ls_path`, setting it bypasses Serena's managed download or install for that server.
+In that case, any server-specific version or registry settings only apply when `ls_path` is not set.
+
+#### AL
+
+Serena uses the AL language server bundled in the Microsoft Dynamics 365 Business Central VS Code extension.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `al_extension_version` | `18.0.2242655` | Override the AL VS Code extension version Serena downloads from the VS Code Marketplace. |
+
+#### Ansible
+
+Serena uses `@ansible/ansible-language-server` for the `ansible` language key.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed install | Override the `ansible-language-server` executable path. |
+| `ansible_language_server_version` | `1.2.3` | Override the npm package version Serena installs when `ls_path` is not set. |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
+| `ansible_path` | `"ansible"` | Path to the `ansible` executable forwarded to the language server. |
+| `ansible_settings` | `null` | Full Ansible LS settings dict, deep-merged on top of Serena's defaults. |
+| `lint_enabled` | `false` | Enable `ansible-lint` integration. |
+| `lint_path` | `"ansible-lint"` | Path to the `ansible-lint` executable. |
+| `python_interpreter_path` | `"python3"` | Python interpreter path forwarded to the language server. |
+| `python_activation_script` | `""` | Virtualenv activation script forwarded to the language server. |
+
+#### Bash
+
+Serena uses `bash-language-server` for Bash support.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed install | Override the `bash-language-server` executable path. |
+| `bash_language_server_version` | `5.6.0` | Override the npm package version Serena installs when `ls_path` is not set. |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
+
+#### Clojure
+
+Serena uses `clojure-lsp` for Clojure support.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed download | Override the `clojure-lsp` executable path. |
+| `clojure_lsp_version` | `2026.02.20-16.08.58` | Override the `clojure-lsp` release version Serena downloads when `ls_path` is not set. |
+
+#### C/C++ (`clangd`)
+
+Serena uses `clangd` for the `cpp` language key.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed download | Override the `clangd` executable path. |
+| `compile_commands_dir` | `.serena` | Directory where Serena writes a transformed `compile_commands.json` if the project's original database uses relative `directory` entries. |
+| `clangd_version` | `19.1.2` | Override the `clangd` version Serena downloads when `ls_path` is not set. |
+
+#### C/C++ via `ccls`
+
+Serena uses the `cpp_ccls` language key for `ccls`.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | `ccls` from PATH | Override the `ccls` executable path. Serena does not manage `ccls` downloads or installs. |
+
 
 #### C# (Roslyn Language Server)
 
@@ -263,12 +338,14 @@ Automatic download is supported for: Windows (x64, ARM64), macOS (x64, ARM64), L
 **Configuration:**
 
 The `runtime_dependencies` setting allows you to override the download URLs for the Roslyn Language Server. This is useful if you need to use a private package mirror or a specific version.
+For the common case of changing only the package version, use `csharp_language_server_version`.
 
 Example configuration to override the language server download URL:
 
 ```yaml
 ls_specific_settings:
   csharp:
+    csharp_language_server_version: "5.5.0-2.26078.4"
     runtime_dependencies:
       - id: "CSharpLanguageServer"
         platform_id: "linux-x64"  # or win-x64, win-arm64, osx-x64, osx-arm64, linux-arm64
@@ -290,6 +367,59 @@ Notes:
 - Only specify the platforms you want to override; others will use the defaults.
 - The language server package is a `.nupkg` file (ZIP format) downloaded from NuGet.org by default.
 - If you have .NET 10+ already installed, Serena will use your system installation.
+
+#### C# (`OmniSharp`)
+
+Serena uses the `csharp_omnisharp` language key for OmniSharp.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `omnisharp_version` | `1.39.10` | Override the OmniSharp version Serena downloads. |
+| `razor_omnisharp_version` | `7.0.0-preview.23363.1` | Override the Razor OmniSharp plugin version Serena downloads. |
+
+#### Dart
+
+Serena uses the Dart SDK's built-in language server for Dart support.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `dart_sdk_version` | `3.7.1` | Override the Dart SDK version Serena downloads. |
+
+#### Elixir
+
+Serena uses [Expert](https://github.com/elixir-lang/expert) for Elixir support.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `expert_version` | `v0.1.0-rc.6` | Override the Expert version Serena downloads when it does not use an `expert` executable already found in PATH. |
+
+#### Elm
+
+Serena uses `@elm-tooling/elm-language-server` for Elm support.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `elm_language_server_version` | `2.8.0` | Override the npm package version Serena installs when no system `elm-language-server` is found. |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
+
+#### F#
+
+Serena uses FsAutoComplete (Ionide LSP) for F# support.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `fsautocomplete_version` | `0.83.0` | Override the FsAutoComplete version Serena installs as a .NET tool. |
+
 
 #### Go (`gopls`)
 
@@ -315,6 +445,45 @@ Notes:
 - `GOFLAGS` (from the environment you start Serena in) may also affect the Go build context. Prefer `buildFlags` for tags.
 - Build context changes are only picked up when `gopls` starts. After changing `gopls_settings` (or relevant env vars like `GOFLAGS`), restart the Serena process (or server) that hosts the Go language server, or use your client's "Restart language server" action if it causes `gopls` to restart.
 
+#### Groovy
+
+Serena uses a user-provided Groovy Language Server JAR for Groovy support. If `ls_java_home_path` is not set, Serena downloads
+a bundled Java runtime for launching that JAR.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_jar_path` | required | Path to the Groovy Language Server JAR |
+| `ls_java_home_path` | `null` | Path to a Java installation to use instead of Serena's managed runtime |
+| `ls_jar_options` | `""` | Additional options passed when launching the Groovy LS JAR |
+| `vscode_java_version` | `1.42.0-561` | Override the bundled Java runtime bundle version Serena downloads by default |
+
+Note:
+- When overriding `vscode_java_version`, Serena still assumes that the downloaded runtime bundle keeps the same internal
+  directory layout and file names as the bundled default version.
+
+Example:
+
+```yaml
+ls_specific_settings:
+  groovy:
+    ls_jar_path: "/path/to/groovy-language-server-all.jar"
+    vscode_java_version: "1.42.0-561"
+```
+
+#### HLSL
+
+Serena uses `shader-language-server` for the `hlsl` language key.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed install or build | Override the `shader-language-server` executable path. |
+| `version` | `1.3.0` | Override the bundled version Serena downloads, or builds from source on macOS, when `ls_path` is not set. |
+
+
 #### Java (`eclipse.jdt.ls`)
 
 The following settings are supported for the Java language server:
@@ -326,6 +495,17 @@ The following settings are supported for the Java language server:
 | `gradle_wrapper_enabled` | `false` | Use the project's Gradle wrapper (`gradlew`) instead of the bundled Gradle distribution. Enable this for projects with custom plugins or repositories. |
 | `gradle_java_home` | `null` | Path to the JDK used by Gradle. When unset, Gradle uses the bundled JRE. |
 | `use_system_java_home` | `false` | Use the system's `JAVA_HOME` environment variable for JDTLS itself. Enable this if your project requires a specific JDK vendor or version for Gradle's JDK checks. |
+| `gradle_version` | `8.14.2` | Override the Gradle distribution version Serena downloads by default. |
+| `vscode_java_version` | `1.42.0-561` | Override the bundled `vscode-java` runtime bundle version Serena downloads by default. |
+| `intellicode_version` | `1.2.30` | Override the IntelliCode VSIX version Serena downloads by default. |
+| `jdtls_xmx` | `3G` | Maximum heap size for the JDTLS server JVM. |
+| `jdtls_xms` | `100m` | Initial heap size for the JDTLS server JVM. |
+| `intellicode_xmx` | `1G` | Maximum heap size for the IntelliCode embedded JVM. |
+| `intellicode_xms` | `100m` | Initial heap size for the IntelliCode embedded JVM. |
+
+Note:
+- When overriding `vscode_java_version`, Serena still assumes that the downloaded runtime bundle keeps the same internal
+  directory layout and file names as the bundled default version.
 
 Example for a project with custom Gradle plugins and JDK requirements:
 
@@ -340,20 +520,43 @@ ls_specific_settings:
 
 Serena uses [JetBrains' Kotlin Language Server](https://github.com/Kotlin/kotlin-lsp) for Kotlin support.
 
-**Runtime Requirements:**
+Supported settings:
 
-- Java 21 or higher is required. If not found, Serena automatically downloads an appropriate JRE.
-- The Kotlin Language Server is automatically downloaded from JetBrains' CDN.
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed download | Override the Kotlin Language Server executable path. |
+| `kotlin_lsp_version` | `261.13587.0` | Override the Kotlin Language Server version Serena downloads when `ls_path` is not set. |
+| `jvm_options` | `-Xmx2G` | Value assigned to `JAVA_TOOL_OPTIONS` for the Kotlin LS process. Set to `""` to disable JVM options entirely. |
 
-**Configuration:**
+Example:
 
 ```yaml
 ls_specific_settings:
   kotlin:
-    ls_path: "/path/to/kotlin-lsp.sh"        # Override the Kotlin Language Server executable
-    kotlin_lsp_version: "261.13587.0"         # Override the Kotlin Language Server version
-    jvm_options: "-Xmx4G -XX:+UseG1GC"       # JVM options (default: -Xmx2G). Set to "" to disable.
+    kotlin_lsp_version: "261.13587.0"
+    jvm_options: "-Xmx4G -XX:+UseG1GC"
 ```
+
+#### Lean 4
+
+Serena uses `lean --server` for Lean 4 support.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | `lean` from PATH | Override the `lean` executable path. Serena does not manage Lean downloads. |
+
+#### Lua
+
+Serena uses `lua-language-server` for Lua support.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `lua_language_server_version` | `3.15.0` | Override the bundled `lua-language-server` version Serena downloads when it cannot use an existing installation from PATH or common install locations. |
+
 
 #### Luau
 
@@ -370,6 +573,7 @@ Serena uses [`luau-lsp`](https://github.com/JohnnyMorganz/luau-lsp) for Luau sup
 ls_specific_settings:
   luau:
     ls_path: "/path/to/luau-lsp"            # Optional: override the language server executable
+    luau_lsp_version: "1.63.0"              # Optional: override the bundled luau-lsp version
     platform: "roblox"                      # "roblox" (default) or "standard"
     roblox_security_level: "PluginSecurity" # Roblox only: None, PluginSecurity, LocalUserSecurity, RobloxScriptSecurity
 ```
@@ -377,6 +581,29 @@ ls_specific_settings:
 Notes:
 - In `roblox` mode, Serena downloads Roblox definitions and Roblox API docs and passes them to `luau-lsp`.
 - In `standard` mode, Serena skips Roblox definitions and only downloads the standard Luau docs bundle.
+
+#### Markdown
+
+Serena uses [Marksman](https://github.com/artempyanykh/marksman) for the `markdown` language key.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed download | Override the `marksman` executable path. |
+| `marksman_version` | `2024-12-18` | Override the Marksman release tag Serena downloads when `ls_path` is not set. |
+
+#### MATLAB
+
+Serena uses the official MathWorks MATLAB language server from the VS Code extension.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `matlab_path` | auto-detected | Path to the MATLAB installation. This overrides `MATLAB_PATH` and auto-detection, but not Serena's managed extension download. |
+| `matlab_extension_version` | `1.3.9` | Override the MathWorks VS Code extension version Serena downloads. |
+
 
 #### Pascal (`pasls`)
 
@@ -402,6 +629,7 @@ Configure pasls via `ls_specific_settings.pascal` in `serena_config.yml`:
 
 | Setting          | Description                                                                 |
 | ---------------- | --------------------------------------------------------------------------- |
+| `pasls_version`  | Override the pinned pasls version Serena downloads by default               |
 | `pp`             | Path to FPC compiler driver (must be `fpc` or `fpc.exe`, not `ppc386.exe`)  |
 | `fpcdir`         | Path to FPC source directory                                                |
 | `lazarusdir`     | Path to Lazarus directory (required for LCL projects)                       |
@@ -422,6 +650,183 @@ Notes:
 - The `pp` setting is the most important for hover and navigation to work correctly.
 - Use the FPC compiler driver (`fpc`/`fpc.exe`), not backend compilers like `ppc386.exe`.
 - These settings are passed as environment variables to the pasls process.
+
+#### PHP (`Intelephense`)
+
+Serena uses Intelephense for the `php` language key.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed install | Override the `intelephense` executable path. |
+| `intelephense_version` | `1.14.4` | Override the npm package version Serena installs when `ls_path` is not set. |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
+| `ignore_vendor` | `true` | Ignore directories named `vendor` while indexing the project. |
+| `maxFileSize` | unset | Forwarded as `intelephense.files.maxSize` in `initializationOptions`. |
+| `maxMemory` | unset | Forwarded as `intelephense.maxMemory` in `initializationOptions`. |
+
+#### PHP (`Phpactor`)
+
+Serena uses the `php_phpactor` language key for Phpactor.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed download | Override the Phpactor PHAR path. |
+| `phpactor_version` | `2025.12.21.1` | Override the Phpactor PHAR version Serena downloads when `ls_path` is not set. |
+| `ignore_vendor` | `true` | Ignore directories named `vendor` while indexing the project. |
+
+#### PowerShell
+
+Serena uses PowerShell Editor Services for PowerShell support.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `pses_version` | `4.4.0` | Override the PowerShell Editor Services version Serena downloads. Serena still requires `pwsh` to be available locally. |
+
+#### Python
+
+Serena uses Pyright for the `python` language key.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | current Python executable | Override the Python interpreter Serena uses to run `-m pyright.langserver`. |
+
+Note:
+- There is currently no separate `python_ty` language key in Serena's current SolidLSP implementation.
+
+#### Ruby
+
+Serena uses Shopify's `ruby-lsp` for Ruby support.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ruby_lsp_version` | `0.26.8` | Override the `ruby-lsp` gem version Serena installs when no project-local or global `ruby-lsp` is already available. |
+
+#### Rust
+
+Serena uses `rust-analyzer` for Rust support.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | auto-detected | Override the `rust-analyzer` executable path. Without `ls_path`, Serena prefers `rustup which rust-analyzer`, then `rustup component add rust-analyzer`, then PATH/common install locations. |
+
+#### Scala
+
+Serena uses Metals for Scala support.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `metals_version` | `1.6.4` | Override the Metals version Serena bootstraps. |
+| `client_name` | `Serena` | Client identifier sent to Metals. |
+| `on_stale_lock` | `auto-clean` | How Serena handles stale Metals H2 database locks. Supported values: `auto-clean`, `warn`, `fail`. |
+| `log_multi_instance_notice` | `true` | Log a notice when another Metals instance is detected. |
+
+#### Solidity
+
+Serena uses `@nomicfoundation/solidity-language-server` for Solidity support.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed install | Override the Solidity language server executable path. |
+| `solidity_language_server_version` | `0.8.4` | Override the npm package version Serena installs when `ls_path` is not set. |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
+
+#### SystemVerilog
+
+Serena uses `verible-verilog-ls` for SystemVerilog support.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | system PATH or managed download | Override the `verible-verilog-ls` executable path. |
+| `verible_version` | `v0.0-4051-g9fdb4057` | Override the Verible release Serena downloads when `ls_path` is not set and no system installation is found. |
+
+#### Terraform
+
+Serena uses `terraform-ls` for Terraform support.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `terraform_ls_version` | `0.36.5` | Override the `terraform-ls` version Serena downloads. Terraform itself must still be installed and available in PATH. |
+
+#### TOML
+
+Serena uses [Taplo](https://github.com/tamasfe/taplo) for the `toml` language key.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed download | Override the `taplo` executable path. |
+| `taplo_version` | `0.10.0` | Override the Taplo version Serena downloads when `ls_path` is not set. |
+
+#### TypeScript
+
+Serena uses `typescript-language-server` for the `typescript` language key.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed install | Override the `typescript-language-server` executable path. |
+| `typescript_version` | `5.9.3` | Override the bundled `typescript` npm package version Serena installs when `ls_path` is not set. |
+| `typescript_language_server_version` | `5.1.3` | Override the bundled `typescript-language-server` npm package version Serena installs when `ls_path` is not set. |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
+
+#### TypeScript via `vtsls`
+
+The actual configuration key for vtsls is `typescript_vts`, not `vts`.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `vtsls_version` | `0.2.9` | Override the `@vtsls/language-server` npm package version Serena installs. |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
+
+#### Vue
+
+Serena uses `@vue/language-server` (Volar) for the `vue` language key, together with a companion TypeScript language server.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `vue_language_server_version` | `3.1.5` | Override the bundled `@vue/language-server` npm package version Serena installs. |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. If unset on `vue`, Serena falls back to `ls_specific_settings.typescript.npm_registry`. |
+
+Notes:
+- `typescript_version` and `typescript_language_server_version` are read from `ls_specific_settings.typescript`, not from `ls_specific_settings.vue`.
+
+#### YAML
+
+Serena uses `yaml-language-server` for the `yaml` language key.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed install | Override the `yaml-language-server` executable path. |
+| `yaml_language_server_version` | `1.19.2` | Override the npm package version Serena installs when `ls_path` is not set. |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
 
 ### Custom Prompts
 

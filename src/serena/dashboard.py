@@ -1,11 +1,16 @@
+import json
 import os
 import socket
+import sys
 import threading
-from collections.abc import Callable
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
-from flask import Flask, Response, request, send_from_directory
+import webview
+from flask import Flask, Response, redirect, request, send_from_directory
+from PIL import Image
 from pydantic import BaseModel
 from sensai.util import logging
 
@@ -57,6 +62,7 @@ class ResponseConfigOverview(BaseModel):
     languages: list[str]
     encoding: str | None
     current_client: str | None
+    serena_version: str
 
 
 class ResponseAvailableLanguages(BaseModel):
@@ -132,22 +138,28 @@ class SerenaDashboardAPI:
         memory_log_handler: MemoryLogHandler,
         tool_names: list[str],
         agent: "SerenaAgent",
-        shutdown_callback: Callable[[], None] | None = None,
         tool_usage_stats: ToolUsageStats | None = None,
     ) -> None:
         self._memory_log_handler = memory_log_handler
         self._tool_names = tool_names
         self._agent = agent
-        self._shutdown_callback = shutdown_callback
         self._app = Flask(__name__)
         self._tool_usage_stats = tool_usage_stats
+        self._loaded_news: dict[str, str] = {}
+        self._news_ready = threading.Event()
         self._setup_routes()
+        # Fetch remote news in background on startup (non-blocking)
+        threading.Thread(target=self._fetch_news, daemon=True).start()
 
     @property
     def memory_log_handler(self) -> MemoryLogHandler:
         return self._memory_log_handler
 
     def _setup_routes(self) -> None:
+        @self._app.route("/")
+        def redirect_to_dashboard() -> Response:
+            return redirect("/dashboard/")  # type: ignore[return-value]
+
         # Static files
         @self._app.route("/dashboard/<path:filename>")
         def serve_dashboard(filename: str) -> Response:
@@ -206,7 +218,7 @@ class SerenaDashboardAPI:
 
         @self._app.route("/shutdown", methods=["PUT"])
         def shutdown() -> dict[str, str]:
-            self._shutdown()
+            self._agent.shutdown()
             return {"status": "shutting down"}
 
         @self._app.route("/get_available_languages", methods=["GET"])
@@ -341,12 +353,12 @@ class SerenaDashboardAPI:
             except Exception as e:
                 return {"status": "error", "message": str(e)}
 
-        @self._app.route("/news_snippet_ids", methods=["GET"])
-        def get_news_snippet_ids() -> dict[str, str | list[int]]:
-            def _get_unread_news_ids() -> list[int]:
-                all_news_files = (Path(SERENA_DASHBOARD_DIR) / "news").glob("*.html")
-                all_news_ids = [int(f.stem) for f in all_news_files]
-                """News ids are ints of format YYYYMMDD (publication dates)"""
+        @self._app.route("/fetch_unread_news", methods=["GET"])
+        def fetch_unread_news() -> dict[str, dict[str, str] | str]:
+            def _fetch_unread_news() -> dict[str, str]:
+                """News ids are strings of format YYYYMMDD (publication dates)"""
+                self._news_ready.wait()
+                all_news = self._loaded_news
 
                 # Filter news items by installation date
                 serena_config_creation_date = SerenaConfig.get_config_file_creation_date()
@@ -354,21 +366,23 @@ class SerenaDashboardAPI:
                     # should not normally happen, since config file should exist when the dashboard is started
                     # We assume a fresh installation in this case
                     log.error("Serena config file not found when starting the dashboard")
-                    return []
-                serena_config_creation_date_int = int(serena_config_creation_date.strftime("%Y%m%d"))
+                    return {}
+                serena_config_creation_date = serena_config_creation_date.strftime("%Y%m%d")
                 # Only include news items published on or after the installation date
-                post_installation_news_ids = [news_id for news_id in all_news_ids if news_id >= serena_config_creation_date_int]
+                post_installation_news = {k: v for k, v in all_news.items() if k >= serena_config_creation_date}
 
                 news_snippet_id_file = SerenaPaths().news_snippet_id_file
                 if not os.path.exists(news_snippet_id_file):
-                    return post_installation_news_ids
+                    return post_installation_news
                 with open(news_snippet_id_file, encoding="utf-8") as f:
-                    last_read_news_id = int(f.read().strip())
-                return [news_id for news_id in post_installation_news_ids if news_id > last_read_news_id]
+                    last_read_news_id = f.read().strip()
+                    if last_read_news_id == "20262103":
+                        last_read_news_id = "20260321"  # fix originally misnamed news id
+                return {k: v for k, v in post_installation_news.items() if k > last_read_news_id}
 
             try:
-                unread_news_ids = _get_unread_news_ids()
-                return {"news_snippet_ids": unread_news_ids, "status": "success"}
+                unread_news = _fetch_unread_news()
+                return {"news": unread_news, "status": "success"}
             except Exception as e:
                 return {"status": "error", "message": str(e)}
 
@@ -376,10 +390,10 @@ class SerenaDashboardAPI:
         def mark_news_snippet_as_read() -> dict[str, str]:
             try:
                 request_data = request.get_json()
-                news_snippet_id = int(request_data.get("news_snippet_id"))
+                news_snippet_id = str(request_data.get("news_snippet_id"))
                 news_snippet_id_file = SerenaPaths().news_snippet_id_file
                 with open(news_snippet_id_file, "w", encoding="utf-8") as f:
-                    f.write(str(news_snippet_id))
+                    f.write(news_snippet_id)
                 return {"status": "success", "message": f"Marked news snippet {news_snippet_id} as read"}
             except Exception as e:
                 return {"status": "error", "message": str(e)}
@@ -528,22 +542,14 @@ class SerenaDashboardAPI:
             languages=languages,
             encoding=encoding,
             current_client=Tool.get_last_tool_call_client_str(),
+            serena_version=self._agent.version,
         )
-
-    def _shutdown(self) -> None:
-        log.info("Shutting down Serena")
-        if self._shutdown_callback:
-            self._shutdown_callback()
-        else:
-            # noinspection PyProtectedMember
-            # noinspection PyUnresolvedReferences
-            os._exit(0)
 
     def _get_available_languages(self) -> ResponseAvailableLanguages:
         from solidlsp.ls_config import Language
 
         def run() -> ResponseAvailableLanguages:
-            all_languages = [lang.value for lang in Language.iter_all(include_experimental=False)]
+            all_languages = [lang.value for lang in Language.iter_all(include_experimental=True)]
 
             # Filter out already added languages for the active project
             project = self._agent.get_active_project()
@@ -619,6 +625,66 @@ class SerenaDashboardAPI:
 
         self._agent.execute_task(run, logged=True, name="SaveSerenaConfig")
 
+    # ===== Remote News Methods =====
+
+    # The branch from which news are fetched. Change to a feature branch for testing.
+    _NEWS_JSON_URL = "https://raw.githubusercontent.com/oraios/serena/main/news/news.json"
+
+    def _fetch_news(self) -> None:
+        """Fetch news.json from GitHub using ETag-based caching and store in memory. Silently ignores network errors."""
+        paths = SerenaPaths()
+
+        headers: dict[str, str] = {}
+        # Load stored ETag if available
+        if os.path.exists(paths.news_etag_file) and os.path.exists(paths.news_file):
+            try:
+                with open(paths.news_etag_file, encoding="utf-8") as f:
+                    stored_etag = f.read().strip()
+                if stored_etag:
+                    headers["If-None-Match"] = stored_etag
+            except Exception:
+                log.warning("Failed to read stored news ETag at %s, proceeding without it", paths.news_etag_file, exc_info=True)
+
+        fetched_news_dict = None
+        try:
+            req = urllib.request.Request(self._NEWS_JSON_URL, headers=headers)
+            with urllib.request.urlopen(req, timeout=10) as response:
+                etag = response.headers.get("ETag", "")
+                body = response.read().decode("utf-8")
+                # Validate JSON
+                fetched_news_dict = json.loads(body)
+                # Store news content and ETag
+                with open(paths.news_file, "w", encoding="utf-8") as f:
+                    f.write(body)
+                if etag:
+                    with open(paths.news_etag_file, "w", encoding="utf-8") as f:
+                        f.write(etag)
+                log.info("Remote news updated from %s", self._NEWS_JSON_URL)
+        except urllib.error.HTTPError as e:
+            if e.code == 304:
+                log.debug("Remote news unchanged (304 Not Modified)")
+            else:
+                log.warning("Failed to fetch remote news (HTTP %d): %s", e.code, e.reason)
+        except Exception as e:
+            log.warning("Failed to fetch remote news: %s", e)
+        if fetched_news_dict is None:
+            fetched_news_dict = self._load_previously_fetched_news_data()
+        self._loaded_news = fetched_news_dict
+        self._news_ready.set()
+
+    @staticmethod
+    def _load_previously_fetched_news_data() -> dict[str, str]:
+        """Return the news data dict. Uses local cache if available, otherwise falls back to local news files."""
+        paths = SerenaPaths()
+
+        if os.path.exists(paths.news_file):
+            try:
+                with open(paths.news_file, encoding="utf-8") as f:
+                    return json.loads(f.read())
+            except Exception:
+                log.warning("Failed to read cached news data from %s", paths.news_file)
+        return {}
+
     def _add_language(self, request_add_language: RequestAddLanguage) -> None:
         from solidlsp.ls_config import Language
 
@@ -670,3 +736,201 @@ class SerenaDashboardAPI:
         thread = threading.Thread(target=lambda: self.run(host=host, port=port), daemon=True)
         thread.start()
         return thread, port
+
+
+class SerenaDashboardViewer:
+    """
+    Minimal pywebview wrapper with optional system tray.
+    """
+
+    def __init__(
+        self,
+        url: str,
+        *,
+        start_minimized: bool = False,
+        width: int = 1400,
+        height: int = 900,
+    ):
+        self.url = url
+        # Use system tray to allow hiding to tray and intercepting close to hide instead of quit
+        self.tray = True
+        self.title = "Serena Dashboard"
+        self.width = width
+        self.height = height
+        self.start_minimized = start_minimized
+
+        self.window: webview.Window
+        self._tray_icon: Any
+        self._quitting = False
+        self._app_icon_path: str | None = None
+
+    @staticmethod
+    def is_current_platform_supported() -> bool:
+        """
+        :return: whether the current platform supports the dashboard viewer
+        """
+        # The dashboard viewer (with system tray) is technically supported only on Windows and macOS.
+        # Linux support is problematic; see https://github.com/oraios/serena/pull/1117#issuecomment-4128753943
+        supported_platforms = [
+            "win32",
+            # NOTE: Disabling macOS support for now, because the tray behaviour is suboptimal (too many icons when
+            #   subagents are spawned, etc.)
+            # "darwin"
+        ]
+        return sys.platform in supported_platforms
+
+    def run(self) -> None:
+        # set app id (avoid app being lumped together with other Python-based apps in Windows taskbar)
+        if sys.platform == "win32":
+            import ctypes
+
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("oraios.serena")
+
+        dashboard_path = Path(SERENA_DASHBOARD_DIR)
+        # .ico is Windows-only; macOS expects a PNG for the window/dock icon.
+        icon_filename = "serena.ico" if sys.platform == "win32" else "serena-icon-1024-mac.png"
+        icon_path = str(dashboard_path / icon_filename)
+        self._app_icon_path = icon_path
+
+        # Create hidden to avoid flash; show/restore/minimize in start callback.
+        window = webview.create_window(
+            self.title,
+            self.url,
+            width=self.width,
+            height=self.height,
+            hidden=self.start_minimized,
+            text_select=True,
+            zoomable=True,
+        )
+        assert window is not None
+        self.window = window
+
+        if self.tray:
+            self.window.events.closing += self._on_closing
+            self._start_tray()
+
+        def _start_callback() -> None:
+            if self.start_minimized:
+                self._hide_window()
+            else:
+                self._show_window()
+
+        webview.start(_start_callback, icon=icon_path)
+
+    def _show_window(self) -> None:
+        if not self.window:
+            return
+
+        if sys.platform == "darwin":
+            from PyObjCTools.AppHelper import callAfter
+
+            callAfter(self._show_window_on_macos)
+        else:
+            self.window.show()
+            self.window.restore()
+
+    def _hide_window(self) -> None:
+        if not self.window:
+            return
+
+        if sys.platform == "darwin":
+            from PyObjCTools.AppHelper import callAfter
+
+            callAfter(self._hide_window_on_macos)
+        else:
+            self.window.hide()
+
+    def _show_window_on_macos(self) -> None:
+        from AppKit import (
+            NSApplication,
+            NSApplicationActivationPolicyRegular,
+        )
+        from PyObjCTools.AppHelper import callLater
+
+        ns_app = NSApplication.sharedApplication()
+        ns_app.setActivationPolicy_(NSApplicationActivationPolicyRegular)
+        self._set_macos_app_icon(ns_app)
+        ns_app.unhide_(None)
+        ns_app.activateIgnoringOtherApps_(True)
+        # Give the status item menu a beat to close before restoring the window.
+        callLater(0.1, self._restore_window_on_macos)
+
+    def _restore_window_on_macos(self) -> None:
+        self.window.show()
+        self.window.restore()
+
+    def _hide_window_on_macos(self) -> None:
+        from AppKit import (
+            NSApplication,
+            NSApplicationActivationPolicyAccessory,
+        )
+
+        self.window.hide()
+        NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+
+    def _set_macos_app_icon(self, ns_app: Any) -> None:
+        if not self._app_icon_path:
+            return
+
+        from AppKit import NSImage
+
+        ns_image = NSImage.alloc().initByReferencingFile_(self._app_icon_path)
+        if ns_image is not None:
+            ns_app.setApplicationIconImage_(ns_image)
+
+    def _on_closing(self) -> bool:
+        """Intercept window close: hide window instead of quitting (macOS standard behavior)."""
+        if self._quitting:
+            return True
+        self._hide_window()
+        return False  # prevent the window from actually closing
+
+    def _start_tray(self) -> None:
+        # import pystray locally, because the import fails when there is no display!
+        import pystray
+        from pystray import MenuItem as Item
+        from pystray._base import Icon as TrayIcon
+
+        dashboard_path = Path(SERENA_DASHBOARD_DIR)
+
+        # macOS menu bar icons are displayed at 16pt; 32px covers Retina (@2x).
+        # Windows/Linux tray icons are larger, so 48px is the better fit there.
+        icon_filename = "serena-icon-tray-mac.png" if sys.platform == "darwin" else "serena-icon-48.png"
+        icon_img = Image.open(dashboard_path / icon_filename)
+
+        def show(_icon: TrayIcon, _item: Item) -> None:
+            self._show_window()
+
+        def hide(_icon: TrayIcon, _item: Item) -> None:
+            self._hide_window()
+
+        def quit_app(_icon: TrayIcon, _item: Item) -> None:
+            self._quitting = True
+            try:
+                _icon.stop()
+            finally:
+                if self.window:
+                    self.window.destroy()
+
+        menu = pystray.Menu(
+            Item("Open", show, default=True),
+            Item("Hide", hide),
+            Item("Quit", quit_app),
+        )
+
+        kwargs: dict[str, Any] = {}
+        if sys.platform == "darwin":
+            # Passing darwin_nsapplication integrates pystray with the NSApplication
+            # run loop that webview.start() is about to enter.  sharedApplication()
+            # is idempotent; pywebview will reuse the same singleton.
+            from AppKit import NSApplication
+
+            kwargs["darwin_nsapplication"] = NSApplication.sharedApplication()
+
+        self._tray_icon = pystray.Icon("dashboard_viewer", icon_img, self.title, menu, **kwargs)
+
+        # On Windows/Linux, run_detached spawns pystray's own internal thread and
+        # returns immediately.  On macOS it hooks into the NSApplication run loop
+        # that webview.start() is about to enter (run_detached is always called
+        # before webview.start() on macOS — see run()).
+        self._tray_icon.run_detached()

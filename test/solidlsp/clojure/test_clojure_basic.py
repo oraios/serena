@@ -3,8 +3,9 @@ import pytest
 from serena.project import Project
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language
-from solidlsp.ls_types import UnifiedSymbolInformation
+from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
 from test.conftest import language_tests_enabled
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 from . import CORE_PATH, UTILS_PATH
 
@@ -187,6 +188,8 @@ class TestLanguageServerBasics:
         assert found_relevant_references, f"Should have found calculate-area referencing multiply, but got: {result}"
 
 
+@pytest.mark.skipif(not language_tests_enabled(Language.CLOJURE), reason="Clojure tests are disabled")
+@pytest.mark.clojure
 class TestProjectBasics:
     @pytest.mark.parametrize("project", [Language.CLOJURE], indirect=True)
     def test_retrieve_content_around_line(self, project: Project):
@@ -221,3 +224,20 @@ class TestProjectBasics:
         assert result is not None, "Should find require statements"
         utils_matches = [match for match in result if match.source_file_path and "utils.clj" in match.source_file_path]
         assert len(utils_matches) > 0, "Should find require statement in utils.clj"
+
+    @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            # clojure-lsp exposes namespace and dependency/container entries in addition to real vars/functions.
+            # Those qualified names are not the target of this regression check.
+            if s["kind"] in {SymbolKind.Namespace, SymbolKind.Struct}:
+                continue
+            if has_malformed_name(s):
+                malformed_symbols.append(s)
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )

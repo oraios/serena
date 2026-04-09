@@ -321,7 +321,7 @@ class LanguageServerProcess:
             if not chunk:
                 if process.poll() is not None:
                     raise LanguageServerTerminatedException(
-                        f"Process terminated while trying to read response (read {num_bytes} of {len(data)} bytes before termination)",
+                        f"Process terminated while trying to read response (read {len(data)} of {num_bytes} bytes before termination)",
                         language=self.language,
                     )
                 # Process still running but no data available yet, retry after a short delay

@@ -17,6 +17,15 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
+VSCODE_JAVA_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
+VSCODE_JAVA_SHA256_BY_PLATFORM = {
+    "win-x64": "ef195b45bd260976ad2e84618f4044b5d7248deed41d647573f0ee22c4233df3",
+    "linux-x64": "7660b7b527be6fda46a917966b34d828e7416d5cc84287b29b88e7b99c1737f9",
+    "linux-arm64": "e15bc9b2a665d3453203402621b5441062aa41b0ec2d140661f439326fd248c1",
+    "osx-x64": "03ae1db1a22c15561a620f1b722d6797d35d4faaa7c4666dbe6ca2715089852f",
+    "osx-arm64": "bc00c2699d4b8d478eb9a1621db9d6d3a12ea0dcc247a9cd8040e8ac19c03933",
+}
+
 
 @dataclasses.dataclass
 class GroovyRuntimeDependencyPaths:
@@ -34,6 +43,13 @@ class GroovyLanguageServer(SolidLanguageServer):
     """
     Provides Groovy specific instantiation of the LanguageServer class.
     Contains various configurations and settings specific to Groovy.
+
+    You can pass the following entries in ``ls_specific_settings["groovy"]``:
+        - ls_jar_path: Path to the Groovy Language Server JAR.
+        - ls_java_home_path: Optional Java home to use instead of Serena's managed JRE.
+        - ls_jar_options: Additional JVM/JAR options passed to the Groovy LS.
+        - vscode_java_version: Override the pinned vscode-java runtime bundle version
+          downloaded by Serena when it manages Java itself (default: the bundled Serena version).
     """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
@@ -76,11 +92,14 @@ class GroovyLanguageServer(SolidLanguageServer):
         Setup runtime dependencies for Groovy Language Server and return paths.
         """
         platform_id = PlatformUtils.get_platform_id()
+        groovy_settings = solidlsp_settings.get_ls_specific_settings(Language.GROOVY)
+        vscode_java_version = groovy_settings.get("vscode_java_version", "1.42.0-561")
+        vscode_java_tag = f"v{vscode_java_version.rsplit('-', 1)[0]}"
 
         # Verify platform support
-        assert (
-            platform_id.value.startswith("win-") or platform_id.value.startswith("linux-") or platform_id.value.startswith("osx-")
-        ), "Only Windows, Linux and macOS platforms are supported for Groovy in multilspy at the moment"
+        assert platform_id.value.startswith("win-") or platform_id.value.startswith("linux-") or platform_id.value.startswith("osx-"), (
+            "Only Windows, Linux and macOS platforms are supported for Groovy in multilspy at the moment"
+        )
 
         # Check if user specified custom Java home path
         java_home_path = None
@@ -105,39 +124,52 @@ class GroovyLanguageServer(SolidLanguageServer):
             runtime_dependencies = {
                 "java": {
                     "win-x64": {
-                        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-win32-x64-1.42.0-561.vsix",
+                        "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-win32-x64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "java_home_path": "extension/jre/21.0.7-win32-x86_64",
                         "java_path": "extension/jre/21.0.7-win32-x86_64/bin/java.exe",
+                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["win-x64"] if vscode_java_version == "1.42.0-561" else None,
                     },
                     "linux-x64": {
-                        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-x64-1.42.0-561.vsix",
+                        "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-linux-x64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "java_home_path": "extension/jre/21.0.7-linux-x86_64",
                         "java_path": "extension/jre/21.0.7-linux-x86_64/bin/java",
+                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["linux-x64"] if vscode_java_version == "1.42.0-561" else None,
                     },
                     "linux-arm64": {
-                        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-arm64-1.42.0-561.vsix",
+                        "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-linux-arm64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "java_home_path": "extension/jre/21.0.7-linux-aarch64",
                         "java_path": "extension/jre/21.0.7-linux-aarch64/bin/java",
+                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["linux-arm64"] if vscode_java_version == "1.42.0-561" else None,
                     },
                     "osx-x64": {
-                        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-x64-1.42.0-561.vsix",
+                        "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-darwin-x64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "java_home_path": "extension/jre/21.0.7-macosx-x86_64",
                         "java_path": "extension/jre/21.0.7-macosx-x86_64/bin/java",
+                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["osx-x64"] if vscode_java_version == "1.42.0-561" else None,
                     },
                     "osx-arm64": {
-                        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-arm64-1.42.0-561.vsix",
+                        "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-darwin-arm64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "java_home_path": "extension/jre/21.0.7-macosx-aarch64",
                         "java_path": "extension/jre/21.0.7-macosx-aarch64/bin/java",
+                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["osx-arm64"] if vscode_java_version == "1.42.0-561" else None,
                     },
                 },
             }
 
             java_dependency = runtime_dependencies["java"][platform_id.value]
+            java_home_relative_path = java_dependency["java_home_path"]
+            java_relative_path = java_dependency["java_path"]
+            java_download_url = java_dependency["url"]
+            java_archive_type = java_dependency["archiveType"]
+            assert java_home_relative_path is not None
+            assert java_relative_path is not None
+            assert java_download_url is not None
+            assert java_archive_type is not None
 
             static_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "groovy_language_server")
             os.makedirs(static_dir, exist_ok=True)
@@ -145,12 +177,18 @@ class GroovyLanguageServer(SolidLanguageServer):
             java_dir = os.path.join(static_dir, "java")
             os.makedirs(java_dir, exist_ok=True)
 
-            java_home_path = os.path.join(java_dir, java_dependency["java_home_path"])
-            java_path = os.path.join(java_dir, java_dependency["java_path"])
+            java_home_path = os.path.join(java_dir, java_home_relative_path)
+            java_path = os.path.join(java_dir, java_relative_path)
 
             if not os.path.exists(java_path):
                 log.info(f"Downloading Java for {platform_id.value}...")
-                FileUtils.download_and_extract_archive(java_dependency["url"], java_dir, java_dependency["archiveType"])
+                FileUtils.download_and_extract_archive_verified(
+                    java_download_url,
+                    java_dir,
+                    java_archive_type,
+                    expected_sha256=java_dependency["sha256"],
+                    allowed_hosts=VSCODE_JAVA_ALLOWED_HOSTS,
+                )
 
                 if not platform_id.value.startswith("win-"):
                     os.chmod(java_path, 0o755)

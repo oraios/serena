@@ -22,6 +22,8 @@ log = logging.getLogger(__name__)
 
 PHPACTOR_VERSION = "2025.12.21.1"
 PHPACTOR_PHAR_URL = f"https://github.com/phpactor/phpactor/releases/download/{PHPACTOR_VERSION}/phpactor.phar"
+PHPACTOR_PHAR_SHA256 = "53bbe9625cd9b5e9b394bc2f595fbad13dbbe6dfc96950c56dea3b5d9a246cc3"
+PHPACTOR_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
 
 
 class PhpactorServer(SolidLanguageServer):
@@ -33,6 +35,8 @@ class PhpactorServer(SolidLanguageServer):
 
     You can pass the following entries in ls_specific_settings["php_phpactor"]:
         - ignore_vendor: whether to ignore directories named "vendor" (default: true)
+        - phpactor_version: Override the pinned Phpactor PHAR version downloaded by
+          Serena (default: the bundled Serena version)
     """
 
     @override
@@ -44,11 +48,13 @@ class PhpactorServer(SolidLanguageServer):
             """
             Setup runtime dependencies for Phpactor and return the path to the PHAR file.
             """
+            phpactor_version = self._custom_settings.get("phpactor_version", PHPACTOR_VERSION)
+            phpactor_phar_url = f"https://github.com/phpactor/phpactor/releases/download/{phpactor_version}/phpactor.phar"
             # Verify PHP is installed
             php_path = shutil.which("php")
-            assert (
-                php_path is not None
-            ), "PHP is not installed or not found in PATH. Phpactor requires PHP 8.1+. Please install PHP and try again."
+            assert php_path is not None, (
+                "PHP is not installed or not found in PATH. Phpactor requires PHP 8.1+. Please install PHP and try again."
+            )
 
             # Check PHP version (Phpactor requires PHP 8.1+)
             result = subprocess.run(["php", "--version"], capture_output=True, text=True, check=False)
@@ -65,8 +71,14 @@ class PhpactorServer(SolidLanguageServer):
             phpactor_phar_path = os.path.join(self._ls_resources_dir, "phpactor.phar")
             if not os.path.exists(phpactor_phar_path):
                 os.makedirs(self._ls_resources_dir, exist_ok=True)
-                log.info(f"Downloading phpactor PHAR from {PHPACTOR_PHAR_URL}")
-                FileUtils.download_and_extract_archive(PHPACTOR_PHAR_URL, phpactor_phar_path, "binary")
+                log.info(f"Downloading phpactor PHAR from {phpactor_phar_url}")
+                FileUtils.download_and_extract_archive_verified(
+                    phpactor_phar_url,
+                    phpactor_phar_path,
+                    "binary",
+                    expected_sha256=PHPACTOR_PHAR_SHA256 if phpactor_version == PHPACTOR_VERSION else None,
+                    allowed_hosts=PHPACTOR_ALLOWED_HOSTS,
+                )
 
             assert os.path.exists(phpactor_phar_path), f"phpactor PHAR not found at {phpactor_phar_path}, download may have failed."
 

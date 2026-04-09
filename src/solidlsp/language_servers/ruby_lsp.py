@@ -1,6 +1,11 @@
 """
 Ruby LSP Language Server implementation using Shopify's ruby-lsp.
 Provides modern Ruby language server capabilities with improved performance.
+
+You can pass the following entries in ``ls_specific_settings["ruby"]``:
+    - ruby_lsp_version: Override the pinned ruby-lsp gem version installed by
+      Serena when no project-local or global ruby-lsp is already available
+      (default: the bundled Serena version).
 """
 
 import json
@@ -14,18 +19,21 @@ import threading
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams, InitializeResult
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
+RUBY_LSP_VERSION = "0.26.8"
+
 
 class RubyLsp(SolidLanguageServer):
     """
     Provides Ruby specific instantiation of the LanguageServer class using ruby-lsp.
     Contains various configurations and settings specific to Ruby with modern LSP features.
+    Supports overriding the bundled gem version via ``ruby_lsp_version``.
     """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
@@ -33,7 +41,7 @@ class RubyLsp(SolidLanguageServer):
         Creates a RubyLsp instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        ruby_lsp_executable = self._setup_runtime_dependencies(config, repository_root_path)
+        ruby_lsp_executable = self._setup_runtime_dependencies(config, repository_root_path, solidlsp_settings)
         super().__init__(
             config, repository_root_path, ProcessLaunchInfo(cmd=ruby_lsp_executable, cwd=repository_root_path), "ruby", solidlsp_settings
         )
@@ -92,44 +100,66 @@ class RubyLsp(SolidLanguageServer):
             return shutil.which(executable_name)
 
     @staticmethod
-    def _setup_runtime_dependencies(config: LanguageServerConfig, repository_root_path: str) -> list[str]:
+    def _setup_runtime_dependencies(
+        config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ) -> list[str]:
         """
         Setup runtime dependencies for ruby-lsp and return the command list to start the server.
-        Installation strategy: Bundler project > global ruby-lsp > gem install ruby-lsp
+        Installation strategy: Bundler project > global ruby-lsp > gem install ruby-lsp at the pinned version
         """
-        # Detect rbenv-managed Ruby environment
-        # When .ruby-version exists, it indicates the project uses rbenv for version management.
-        # rbenv automatically reads .ruby-version to determine which Ruby version to use.
-        # Using "rbenv exec" ensures commands run with the correct Ruby version and its gems.
+        ls_specific_settings = solidlsp_settings.get_ls_specific_settings(Language.RUBY)
+        ruby_lsp_version = ls_specific_settings.get("ruby_lsp_version", RUBY_LSP_VERSION)
+        # Detect Ruby version manager environment
+        # Using the version manager's exec wrapper ensures commands run with the correct Ruby version
+        # and its gems.
         #
-        # Why rbenv is preferred over system Ruby:
-        # - Respects project-specific Ruby versions
-        # - Avoids bundler version mismatches between system and project
-        # - Ensures consistent environment across developers
-        #
-        # Fallback behavior:
-        # If .ruby-version doesn't exist or rbenv isn't installed, we fall back to system Ruby.
-        # This may cause issues if:
-        # - System Ruby version differs from what the project expects
-        # - System bundler version is incompatible with Gemfile.lock
-        # - Project gems aren't installed in system Ruby
+        # Priority order:
+        # 1. rbenv  - .ruby-version + rbenv binary; uses "rbenv exec <cmd>"
+        # 2. mise   - .ruby-version + mise binary; uses "mise exec ruby -- <cmd>" (scoped to ruby
+        #             tool only, avoids activating unrelated tools in .tool-versions)
+        # 3. asdf   - .tool-versions + asdf binary; uses "asdf exec <cmd>"
+        # 4. RVM    - .ruby-version + rvm-exec binary; uses "rvm-exec ruby-X.Y.Z <cmd>"
+        #             rvm-exec requires the version string as first arg (e.g. "ruby-3.2.0");
+        #             may live at ~/.rvm/bin/rvm-exec if not on PATH
+        # 5. system Ruby - fallback, may cause version/gem mismatches
         ruby_version_file = os.path.join(repository_root_path, ".ruby-version")
+        tool_versions_file = os.path.join(repository_root_path, ".tool-versions")
+        rvm_exec_path = shutil.which("rvm-exec") or os.path.join(os.path.expanduser("~"), ".rvm", "bin", "rvm-exec")
+
         use_rbenv = os.path.exists(ruby_version_file) and shutil.which("rbenv") is not None
+        use_mise = os.path.exists(ruby_version_file) and not use_rbenv and shutil.which("mise") is not None
+        use_asdf = os.path.exists(tool_versions_file) and not use_rbenv and not use_mise and shutil.which("asdf") is not None
+        use_rvm = os.path.exists(ruby_version_file) and not use_rbenv and not use_mise and not use_asdf and os.path.exists(rvm_exec_path)
 
         if use_rbenv:
             ruby_cmd = ["rbenv", "exec", "ruby"]
             bundle_cmd = ["rbenv", "exec", "bundle"]
             log.info(f"Using rbenv-managed Ruby (found {ruby_version_file})")
+        elif use_mise:
+            ruby_cmd = ["mise", "exec", "ruby", "--", "ruby"]
+            bundle_cmd = ["mise", "exec", "ruby", "--", "bundle"]
+            log.info(f"Using mise-managed Ruby (found {ruby_version_file})")
+        elif use_asdf:
+            ruby_cmd = ["asdf", "exec", "ruby"]
+            bundle_cmd = ["asdf", "exec", "bundle"]
+            log.info(f"Using asdf-managed Ruby (found {tool_versions_file})")
+        elif use_rvm:
+            with open(ruby_version_file) as _f:
+                raw_version = _f.read().strip()
+            rvm_ruby_version = raw_version if raw_version.startswith("ruby-") else f"ruby-{raw_version}"
+            ruby_cmd = [rvm_exec_path, rvm_ruby_version, "ruby"]
+            bundle_cmd = [rvm_exec_path, rvm_ruby_version, "bundle"]
+            log.info(f"Using RVM-managed Ruby (found {ruby_version_file}, version={rvm_ruby_version})")
         else:
             ruby_cmd = ["ruby"]
             bundle_cmd = ["bundle"]
-            if os.path.exists(ruby_version_file):
+            if os.path.exists(ruby_version_file) or os.path.exists(tool_versions_file):
                 log.warning(
-                    f"Found {ruby_version_file} but rbenv is not installed. "
-                    "Using system Ruby. Consider installing rbenv for better version management: https://github.com/rbenv/rbenv",
+                    "Found Ruby version file but no supported version manager (rbenv, mise, asdf, rvm) detected. "
+                    "Using system Ruby. Consider installing mise: https://mise.jdx.dev",
                 )
             else:
-                log.info("No .ruby-version file found, using system Ruby")
+                log.info("No Ruby version file found, using system Ruby")
 
         # Check if Ruby is installed
         try:
@@ -154,9 +184,10 @@ class RubyLsp(SolidLanguageServer):
         except FileNotFoundError as e:
             raise RuntimeError(
                 "Ruby is not installed or not found in PATH. Please install Ruby using one of these methods:\n"
+                "  - Using mise:  mise install ruby && mise use ruby  (https://mise.jdx.dev)\n"
                 "  - Using rbenv: rbenv install 3.0.0 && rbenv global 3.0.0\n"
-                "  - Using RVM: rvm install 3.0.0 && rvm use 3.0.0 --default\n"
-                "  - Using asdf: asdf install ruby 3.0.0 && asdf global ruby 3.0.0\n"
+                "  - Using asdf:  asdf install ruby 3.0.0 && asdf global ruby 3.0.0\n"
+                "  - Using RVM:   rvm install 3.0.0 && rvm use 3.0.0 --default\n"
                 "  - System package manager (brew install ruby, apt install ruby, etc.)"
             ) from e
 
@@ -215,7 +246,12 @@ class RubyLsp(SolidLanguageServer):
         # Try to install ruby-lsp globally
         log.info("ruby-lsp not found, attempting to install globally...")
         try:
-            subprocess.run(["gem", "install", "ruby-lsp"], check=True, capture_output=True, cwd=repository_root_path)
+            subprocess.run(
+                ["gem", "install", "ruby-lsp", "-v", ruby_lsp_version],
+                check=True,
+                capture_output=True,
+                cwd=repository_root_path,
+            )
             log.info("Successfully installed ruby-lsp globally")
             # Find the newly installed ruby-lsp executable
             ruby_lsp_path = RubyLsp._find_executable_with_extensions("ruby-lsp")
@@ -226,9 +262,11 @@ class RubyLsp(SolidLanguageServer):
                 raise RuntimeError(
                     f"Failed to install ruby-lsp globally: {error_msg}\n"
                     "For Bundler projects, please add 'gem \"ruby-lsp\"' to your Gemfile and run 'bundle install'.\n"
-                    "Alternatively, install globally: gem install ruby-lsp"
+                    f"Alternatively, install globally: gem install ruby-lsp -v {ruby_lsp_version}"
                 ) from e
-            raise RuntimeError(f"Failed to install ruby-lsp: {error_msg}\nPlease try installing manually: gem install ruby-lsp") from e
+            raise RuntimeError(
+                f"Failed to install ruby-lsp: {error_msg}\nPlease try installing manually: gem install ruby-lsp -v {ruby_lsp_version}"
+            ) from e
 
     @staticmethod
     def _detect_rails_project(repository_root_path: str) -> bool:

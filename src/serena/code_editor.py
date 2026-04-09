@@ -57,6 +57,16 @@ class CodeEditor(Generic[TSymbol], ABC):
         """
         raise NotImplementedError("This method must be overridden for each subclass")
 
+    def read_file(self, relative_path: str) -> str:
+        """
+        Reads the content of a file.
+
+        :param relative_path: the relative path of the file to read
+        :return: the content of the file
+        """
+        with self._open_file_context(relative_path) as file:
+            return file.get_contents()
+
     @contextmanager
     def edited_file_context(self, relative_path: str) -> Iterator["CodeEditor.EditedFile"]:
         """
@@ -220,15 +230,8 @@ class CodeEditor(Generic[TSymbol], ABC):
             edited_file.delete_text_between_positions(start_pos, end_pos)
 
     @abstractmethod
-    def rename_symbol(self, name_path: str, relative_file_path: str, new_name: str) -> str:
-        """
-        Renames the symbol with the given name throughout the codebase.
-
-        :param name_path: the name path of the symbol to rename
-        :param relative_file_path: the relative path of the file containing the symbol
-        :param new_name: the new name for the symbol
-        :return: a status message
-        """
+    def rename_symbol(self, name_path: str, relative_path: str, new_name: str) -> str:
+        pass
 
 
 class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
@@ -337,8 +340,16 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
             operation.apply()
         return len(operations)
 
-    def rename_symbol(self, name_path: str, relative_file_path: str, new_name: str) -> str:
-        symbol = self._find_unique_symbol(name_path, relative_file_path)
+    def rename_symbol(self, name_path: str, relative_path: str, new_name: str) -> str:
+        """
+        Renames a symbol, file, or directory throughout the codebase.
+
+        :param name_path: the name path of the symbol to rename
+        :param relative_path: the relative path of the file containing the symbol.
+        :param new_name: the new name
+        :return: a status message
+        """
+        symbol = self._find_unique_symbol(name_path, relative_path)
         if not symbol.location.has_position_in_file():
             raise ValueError(f"Symbol '{name_path}' does not have a valid position in file for renaming")
 
@@ -346,9 +357,9 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         assert symbol.location.line is not None
         assert symbol.location.column is not None
 
-        lang_server = self._get_language_server(relative_file_path)
+        lang_server = self._get_language_server(relative_path)
         rename_result = lang_server.request_rename_symbol_edit(
-            relative_file_path=relative_file_path, line=symbol.location.line, column=symbol.location.column, new_name=new_name
+            relative_file_path=relative_path, line=symbol.location.line, column=symbol.location.column, new_name=new_name
         )
         if rename_result is None:
             raise ValueError(
@@ -415,13 +426,31 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
                 )
             return JetBrainsSymbol(symbols[0], self._project)
 
-    def rename_symbol(self, name_path: str, relative_file_path: str, new_name: str) -> str:
+    def rename_symbol(
+        self,
+        name_path: str | None,
+        relative_path: str,
+        new_name: str,
+        rename_in_comments: bool = False,
+        rename_in_text_occurrences: bool = False,
+    ) -> str:
+        """
+        Renames a code symbol, file, or directory throughout the codebase.
+
+        :param name_path: the name path of the symbol to rename. Set to None for renaming a file or directory.
+        :param relative_path: if `name_path` is passed, the relative path of the file containing the symbol.
+            Otherwise, the path to the directory or file to rename.
+        :param new_name: the new name
+        :param rename_in_comments: whether to rename occurrences of the symbol in comments
+        :param rename_in_text_occurrences: whether to rename occurrences of the symbol in text
+        :return: a status message
+        """
         with JetBrainsPluginClient.from_project(self._project) as client:
             client.rename_symbol(
                 name_path=name_path,
-                relative_path=relative_file_path,
+                relative_path=relative_path,
                 new_name=new_name,
-                rename_in_comments=False,
-                rename_in_text_occurrences=False,
+                rename_in_comments=rename_in_comments,
+                rename_in_text_occurrences=rename_in_text_occurrences,
             )
             return "Success"

@@ -87,6 +87,18 @@ class SerenaPaths:
         """
         file containing the ID of the last read news snippet
         """
+        self.news_etag_file: str = os.path.join(self.serena_user_home_dir, "news_etag.txt")
+        """
+        file containing the ETag of the last fetched remote news JSON
+        """
+        self.news_file: str = os.path.join(self.serena_user_home_dir, "news.json")
+        """
+        local cache of the remote news JSON file
+        """
+        self.news_dir: str = os.path.join(REPO_ROOT, "news")
+        """
+        repository news directory containing the source HTML snippets and generated news.json
+        """
         global_memories_path = Path(os.path.join(self.serena_user_home_dir, "memories", "global"))
         global_memories_path.mkdir(parents=True, exist_ok=True)
         self.global_memories_path = global_memories_path
@@ -222,6 +234,9 @@ class SharedConfig(ModeSelectionDefinition, ToolInclusionDefinition, ToStringMix
     language_backend: LanguageBackend | None = None
     line_ending: LineEnding | None = None
     read_only_memory_patterns: list[str] = field(default_factory=list)
+    ignored_memory_patterns: list[str] = field(default_factory=list)
+    ls_specific_settings: dict = field(default_factory=dict)
+    """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""
 
 
 class SerenaConfigError(Exception):
@@ -451,6 +466,7 @@ class ProjectConfig(SharedConfig):
             included_optional_tools=data["included_optional_tools"],
             read_only=data["read_only"],
             read_only_memory_patterns=data.get("read_only_memory_patterns", []),
+            ignored_memory_patterns=data.get("ignored_memory_patterns", []),
             ignore_all_files_in_gitignore=data["ignore_all_files_in_gitignore"],
             initial_prompt=data["initial_prompt"],
             encoding=data["encoding"],
@@ -459,6 +475,7 @@ class ProjectConfig(SharedConfig):
             base_modes=data["base_modes"],
             default_modes=data["default_modes"],
             symbol_info_budget=symbol_info_budget,
+            ls_specific_settings=data.get("ls_specific_settings", {}),
             _local_override_keys=local_override_keys,
         )
 
@@ -560,7 +577,7 @@ class ProjectConfig(SharedConfig):
 
         # transfer missing comments from the template file
         template_config, _ = self._load_yaml_dict(PROJECT_TEMPLATE_FILE, self.YAML_COMMENT_NORMALISATION)
-        transfer_missing_yaml_comments(template_config, config_with_comments, self.YAML_COMMENT_NORMALISATION)
+        transfer_missing_yaml_comments(template_config, config_with_comments, self.YAML_COMMENT_NORMALISATION, force_update_all=True)
 
         # save project.yml
         save_yaml(config_path, config_with_comments)
@@ -678,8 +695,6 @@ class SerenaConfig(SharedConfig):
     Even though the value of the max_answer_chars can be changed when calling the tool, it may make sense to adjust this default 
     through the global configuration.
     """
-    ls_specific_settings: dict = field(default_factory=dict)
-    """Advanced configuration option allowing to configure language server implementation specific options, see SolidLSPSettings for more info."""
 
     ignored_paths: list[str] = field(default_factory=list)
     """List of paths to ignore across all projects. Same syntax as gitignore, so you can use * and **.
@@ -1044,7 +1059,7 @@ class SerenaConfig(SharedConfig):
         # For some keys, we force updates, because old comments are problematic/misleading.
         normalise_yaml_comments(commented_yaml, YamlCommentNormalisation.LEADING_WITH_CONVERSION_FROM_TRAILING)
         template_yaml = load_yaml(SERENA_CONFIG_TEMPLATE_FILE, comment_normalisation=YamlCommentNormalisation.LEADING)
-        transfer_missing_yaml_comments(template_yaml, commented_yaml, YamlCommentNormalisation.LEADING, forced_update_keys=["projects"])
+        transfer_missing_yaml_comments(template_yaml, commented_yaml, YamlCommentNormalisation.LEADING, force_update_all=True)
 
         save_yaml(self.config_file_path, commented_yaml)
 

@@ -12,6 +12,7 @@ import os
 
 import pytest
 
+from serena.util.text_utils import find_text_coordinates
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
@@ -33,9 +34,9 @@ class TestRubyLanguageServerSymbols:
         # Verify that we found the containing symbol
         assert containing_symbol is not None, "Should find containing symbol for method position"
         assert containing_symbol["name"] == "create_user", f"Expected 'create_user', got '{containing_symbol['name']}'"
-        assert (
-            containing_symbol["kind"] == SymbolKind.Method.value
-        ), f"Expected Method kind ({SymbolKind.Method.value}), got {containing_symbol['kind']}"
+        assert containing_symbol["kind"] == SymbolKind.Method.value, (
+            f"Expected Method kind ({SymbolKind.Method.value}), got {containing_symbol['kind']}"
+        )
 
         # Verify location information
         assert "location" in containing_symbol, "Containing symbol should have location information"
@@ -68,9 +69,9 @@ class TestRubyLanguageServerSymbols:
         # Verify that we found the containing symbol
         assert containing_symbol is not None, "Should find containing symbol for class position"
         assert containing_symbol["name"] == "UserService", f"Expected 'UserService', got '{containing_symbol['name']}'"
-        assert (
-            containing_symbol["kind"] == SymbolKind.Class.value
-        ), f"Expected Class kind ({SymbolKind.Class.value}), got {containing_symbol['kind']}"
+        assert containing_symbol["kind"] == SymbolKind.Class.value, (
+            f"Expected Class kind ({SymbolKind.Class.value}), got {containing_symbol['kind']}"
+        )
 
         # Verify location information exists
         assert "location" in containing_symbol, "Class symbol should have location information"
@@ -80,9 +81,9 @@ class TestRubyLanguageServerSymbols:
 
         # Verify the class is properly nested in the Services module
         if "containerName" in containing_symbol:
-            assert (
-                containing_symbol["containerName"] == "Services"
-            ), f"Expected 'Services' as container, got '{containing_symbol['containerName']}'"
+            assert containing_symbol["containerName"] == "Services", (
+                f"Expected 'Services' as container, got '{containing_symbol['containerName']}'"
+            )
 
     @pytest.mark.parametrize("language_server", [Language.RUBY], indirect=True)
     def test_request_containing_symbol_module(self, language_server: SolidLanguageServer) -> None:
@@ -411,9 +412,9 @@ class TestRubyLanguageServerSymbols:
 
             except Exception as e:
                 # Some language servers throw exceptions for invalid positions, which is acceptable
-                assert (
-                    "symbol" in str(e).lower() or "position" in str(e).lower() or "reference" in str(e).lower()
-                ), f"Exception should be related to symbol/position/reference issues, got: {e}"
+                assert "symbol" in str(e).lower() or "position" in str(e).lower() or "reference" in str(e).lower(), (
+                    f"Exception should be related to symbol/position/reference issues, got: {e}"
+                )
 
     @pytest.mark.parametrize("language_server", [Language.RUBY], indirect=True)
     def test_request_dir_overview(self, language_server: SolidLanguageServer) -> None:
@@ -492,9 +493,9 @@ class TestRubyLanguageServerSymbols:
             assert "kind" in containing_symbol, "Containing symbol should have a kind"
             # The containing symbol should be a method, class, or similar construct
             expected_kinds = [SymbolKind.Method, SymbolKind.Class, SymbolKind.Function, SymbolKind.Constructor]
-            assert containing_symbol["kind"] in [
-                k.value for k in expected_kinds
-            ], f"Expected containing symbol to be method/class/function, got kind: {containing_symbol['kind']}"
+            assert containing_symbol["kind"] in [k.value for k in expected_kinds], (
+                f"Expected containing symbol to be method/class/function, got kind: {containing_symbol['kind']}"
+            )
 
     @pytest.mark.parametrize("language_server", [Language.RUBY], indirect=True)
     def test_request_containing_symbol_function(self, language_server: SolidLanguageServer) -> None:
@@ -553,9 +554,9 @@ class TestRubyLanguageServerSymbols:
                                 child_names = [c.get("name") for c in child["children"]]
                                 expected_names = ["UserStats", "UserManager", "process_user_data"]
                                 found_expected = [name for name in expected_names if name in child_names]
-                                assert (
-                                    len(found_expected) > 0
-                                ), f"Should find symbols in user_management, expected {expected_names}, found {child_names}"
+                                assert len(found_expected) > 0, (
+                                    f"Should find symbols in user_management, expected {expected_names}, found {child_names}"
+                                )
                             break
 
             if not found_user_management:
@@ -583,15 +584,17 @@ class TestRubyLanguageServerSymbols:
         """Test request_defining_symbol for a method call."""
         # Test finding the definition of a method being called
         file_path = os.path.join("examples", "user_management.rb")
-        # Position at a method call like create_user
-        defining_symbol = language_server.request_defining_symbol(file_path, 30, 15)
 
-        # Verify that we can find method definitions
-        if defining_symbol is not None:
-            assert "name" in defining_symbol
-            assert "kind" in defining_symbol
-            # Should be a method or constructor
-            assert defining_symbol.get("kind") in [SymbolKind.Method.value, SymbolKind.Constructor.value, SymbolKind.Function.value]
+        # Position at a method call like create_user
+        with language_server.open_file(file_path, open_in_ls=False) as fb:
+            pos = find_text_coordinates(fb.contents, r"user = @service\.(create_user)")
+
+        # Verify that we can find the method definition
+        defining_symbol = language_server.request_defining_symbol(file_path, pos.line, pos.col)
+        assert "name" in defining_symbol
+        assert "kind" in defining_symbol
+        assert defining_symbol.get("name") == "create_user"
+        assert defining_symbol.get("kind") == SymbolKind.Method.value
 
     @pytest.mark.parametrize("language_server", [Language.RUBY], indirect=True)
     def test_request_defining_symbol_nested_function(self, language_server: SolidLanguageServer) -> None:

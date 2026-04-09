@@ -637,6 +637,8 @@ class Dashboard {
 
             let html = '<div class="config-grid">';
 
+            html += '<div class="config-label">Version:</div><div class="config-value">' + config.serena_version + '</div>';
+
             // Project info
             html += '<div class="config-label">Active Project:</div>';
             if (config.active_project.name && config.active_project.path) {
@@ -701,10 +703,6 @@ class Dashboard {
             // File Encoding info
             html += '<div class="config-label">File Encoding:</div>';
             html += '<div class="config-value">' + (config.encoding || 'N/A') + '</div>';
-
-            // Current Client info
-            html += '<div class="config-label">Current Client:</div>';
-            html += '<div class="config-value">' + (config.current_client || 'None') + '</div>';
 
             html += '</div>';
 
@@ -2073,31 +2071,36 @@ class Dashboard {
         let self = this;
         console.log('Loading news...');
         $.ajax({
-            url: '/news_snippet_ids',
+            url: '/fetch_unread_news',
             type: 'GET',
             success: function(response) {
-                console.log('News snippet IDs response:', response);
-                if (response.status === 'success' && response.news_snippet_ids && response.news_snippet_ids.length > 0) {
-                    console.log('Displaying news with IDs:', response.news_snippet_ids);
-                    self.displayNews(response.news_snippet_ids);
+                console.log('Unread news response:', response);
+                if (response.status === 'success' && response.news && Object.keys(response.news).length > 0) {
+                    const newsIds = Object.keys(response.news);
+                    self.displayNews(newsIds, response.news);
                 } else {
                     console.log('No unread news, hiding section');
                     self.$newsSection.hide();
                 }
             },
             error: function(xhr, status, error) {
-                console.error('Error loading news snippet IDs:', error);
+                console.error('Error loading news:', error);
                 self.$newsSection.hide();
             }
         });
     }
 
-    displayNews(newsIds) {
+    /**
+     * Display news items given unread IDs and the full news data mapping.
+     * @param {number[]} newsIds - array of unread news IDs
+     * @param {Object} newsData - mapping of news ID strings to HTML content
+     */
+    displayNews(newsIds, newsData) {
         let self = this;
         console.log('displayNews called with:', newsIds);
         // Sort newest first (descending order)
         newsIds.sort((a, b) => b - a);
-        
+
         if (newsIds.length === 0) {
             console.log('No news items to display.');
             self.$newsSection.hide();
@@ -2106,40 +2109,32 @@ class Dashboard {
         self.$newsSection.show();
         self.$newsDisplay.empty();
         console.log('Displaying ' + newsIds.length + ' news items.');
-        // Load each news snippet HTML
-        let loadedCount = 0;
-        newsIds.forEach(function(newsId) {
-            $.ajax({
-                url: '/dashboard/news/' + newsId + '.html',
-                type: 'GET',
-                success: function(html) {
-                    // Wrap the HTML in a container with a button
-                    let $newsContainer = $('<div class="news-container">').attr('data-news-id', newsId);
-                    let $newsContent = $(html);
-                    
-                    // Add button for marking as read
-                    let $markRead = $('<div class="news-mark-read">');
-                    let $button = $('<button class="news-mark-read-btn">').attr('data-news-id', newsId).text('Mark as read');
 
-                    $markRead.append($button);
-                    $newsContent.append($markRead);
-                    
-                    $newsContainer.append($newsContent);
-                    self.$newsDisplay.append($newsContainer);
-                    
-                    // Bind button click event
-                    $button.on('click', function() {
-                        const btn = $(this);
-                        btn.prop('disabled', true).text('Marking...');
-                        self.markNewsAsRead(newsId);
-                    });
-                    
-                    loadedCount++;
-                },
-                error: function(xhr, status, error) {
-                    console.error('Error loading news snippet ' + newsId + ':', error);
-                    loadedCount++;
-                }
+        newsIds.forEach(function(newsId) {
+            const html = newsData[String(newsId)];
+            if (!html) {
+                console.warn('No news content found for ID ' + newsId);
+                return;
+            }
+            // Wrap the HTML in a container with a button
+            let $newsContainer = $('<div class="news-container">').attr('data-news-id', newsId);
+            let $newsContent = $(html);
+
+            // Add button for marking as read
+            let $markRead = $('<div class="news-mark-read">');
+            let $button = $('<button class="news-mark-read-btn">').attr('data-news-id', newsId).text('Mark as read');
+
+            $markRead.append($button);
+            $newsContent.append($markRead);
+
+            $newsContainer.append($newsContent);
+            self.$newsDisplay.append($newsContainer);
+
+            // Bind button click event
+            $button.on('click', function() {
+                const btn = $(this);
+                btn.prop('disabled', true).text('Marking...');
+                self.markNewsAsRead(newsId);
             });
         });
     }
