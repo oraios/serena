@@ -38,6 +38,7 @@ class LanguageParamRequest:
 
 _LANGUAGE_REPO_ALIASES: dict[Language, Language] = {
     Language.CPP_CCLS: Language.CPP,
+    Language.OPENTOFU: Language.TERRAFORM,
     Language.PHP_PHPACTOR: Language.PHP,
     Language.PYTHON_JEDI: Language.PYTHON,
     Language.RUBY_SOLARGRAPH: Language.RUBY,

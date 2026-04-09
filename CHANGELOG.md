@@ -56,6 +56,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Language support:
 
+  * **Add support for OpenTofu** via the existing Terraform language server integration, with CLI discovery for both `tofu` and `terraform`
   * **Add support for Lean 4** via built-in `lean --server` with cross-file reference support (requires `lean` and `lake` via [elan](https://github.com/leanprover/elan))
   * **Add support for OCaml** via ocaml-lsp-server with cross-file reference support on OCaml 5.2+ (requires opam; see [setup guide](docs/03-special-guides/ocaml_setup_guide_for_serena.md))
   * **Add Phpactor as alternative PHP language server** (specify `php_phpactor` as language; requires PHP 8.1+)
