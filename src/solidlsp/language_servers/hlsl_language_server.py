@@ -7,13 +7,22 @@ import logging
 import os
 import pathlib
 import shutil
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any, cast
 
 import psutil
 from overrides import override
 
-from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
+from solidlsp.ls import (
+    LanguageServerDependencyProvider,
+    LanguageServerDependencyProviderSinglePath,
+    LSPFileBuffer,
+    SolidLanguageServer,
+)
 from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
@@ -267,6 +276,92 @@ class HlslLanguageServer(SolidLanguageServer):
             except Exception as e:
                 log.debug(f"Error cleaning up shader-language-server process tree: {e}")
         super().stop(shutdown_timeout)
+
+    @contextmanager
+    def open_file(self, relative_file_path: str, open_in_ls: bool = True) -> Iterator[LSPFileBuffer]:
+        """Open a file for LSP, preserving on-disk CRLF line endings.
+
+        Workaround for an upstream bug in shader-language-server
+        (antaalt/shader-sense) where `watch_main_file` replaces an already-cached
+        module's content without re-parsing the tree-sitter tree. When a file is
+        first pulled into the server's cache via an `#include` from another
+        shader (where it's read via `std::fs::read_to_string`, preserving CRLF),
+        and then later opened directly via `textDocument/didOpen` with the
+        client-normalized LF text, the stored tree still references byte offsets
+        into the longer CRLF content. The next symbol query slices the new
+        (shorter) content with stale offsets and panics with
+        `byte index N is out of bounds` in `shader-sense/src/symbols/symbol_parser.rs`.
+
+        The root-cause fix belongs upstream (the server should call
+        `update_module` instead of assigning `content` raw). Until then, we
+        ensure the text we send in `didOpen` matches byte-for-byte what the
+        server reads from disk by preloading the file buffer with a
+        CRLF-preserving read before the LSP notification is sent.
+
+        This is the only place in Serena that overrides `open_file`; the fix is
+        deliberately scoped to the HLSL language server. It mirrors the base
+        class logic in `SolidLanguageServer.open_file` verbatim except for the
+        buffer construction branch, where creation is deferred (`open_in_ls=False`)
+        so the buffer's contents can be preloaded before `ensure_open_in_ls` runs.
+        """
+        if not self.server_started:
+            log.error("open_file called before Language Server started")
+            raise SolidLSPException("Language Server not started")
+
+        absolute_file_path = Path(self.repository_root_path, relative_file_path)
+        uri = absolute_file_path.as_uri()
+
+        if uri in self.open_file_buffers:
+            fb = self.open_file_buffers[uri]
+            assert fb.uri == uri
+            assert fb.ref_count >= 1
+
+            fb.ref_count += 1
+            if open_in_ls:
+                fb.ensure_open_in_ls()
+            yield fb
+            fb.ref_count -= 1
+        else:
+            version = 0
+            language_id = self._get_language_id_for_file(relative_file_path)
+            # Defer the didOpen so we can preload CRLF-preserved content first.
+            fb = LSPFileBuffer(
+                abs_path=absolute_file_path,
+                uri=uri,
+                encoding=self._encoding,
+                version=version,
+                language_id=language_id,
+                ref_count=1,
+                language_server=self,
+                open_in_ls=False,
+            )
+            self._preload_crlf_content(fb)
+            self.open_file_buffers[uri] = fb
+            if open_in_ls:
+                fb.ensure_open_in_ls()
+            yield fb
+            fb.ref_count -= 1
+
+        if self.open_file_buffers[uri].ref_count == 0:
+            self.open_file_buffers[uri].close()
+            del self.open_file_buffers[uri]
+
+    def _preload_crlf_content(self, fb: LSPFileBuffer) -> None:
+        """Populate an LSPFileBuffer with a CRLF-preserving read of its backing file.
+
+        Python's default text-mode open applies universal-newlines translation
+        (CRLF -> LF), which would desync the client's `didOpen` text from the
+        server-side `std::fs::read_to_string` view that parsed the dependency
+        tree. Passing `newline=""` disables the translation so bytes match.
+        """
+        with open(fb.abs_path, encoding=fb.encoding, newline="") as f:
+            raw = f.read()
+        # Set the buffer's cached state directly: the contents, the mtime
+        # (required by the contents property's staleness check), and clear the
+        # hash so it's recomputed against the new bytes.
+        fb._contents = raw
+        fb._read_file_modified_date = fb.abs_path.stat().st_mtime
+        fb._content_hash = None
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
