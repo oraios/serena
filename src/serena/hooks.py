@@ -1,0 +1,251 @@
+import json
+import os
+import pickle
+import shutil
+import sys
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Literal, Self
+
+import click
+
+from serena.util.cli_util import AutoRegisteringGroup
+
+# copied from serena_config.py, we don't want to import anything here to keep the hook commands fast
+serena_home_dir = os.getenv("SERENA_HOME", "").strip() or str(Path.home() / ".serena")
+
+
+class HookClient(Enum):
+    """The client application that triggered the hook."""
+
+    CLAUDE_CODE = "claude-code"
+    VSCODE = "vscode"
+    CODEX = "codex"
+
+
+class Hook(ABC):
+    def __init__(self, client: HookClient):
+        raw = sys.stdin.read()
+        input_data = json.loads(raw)
+        self._input_data = input_data
+        self._client = client
+
+        session_id = input_data.get("session_id") or input_data.get("sessionId")
+        if not session_id:
+            raise ValueError("Session ID is required in the hook input data")
+        self._session_id = str(session_id)
+        self.session_persistence_dir = os.path.join(serena_home_dir, "hook_data", self._session_id)
+        # tool input has a timestamp but using now is enough
+        self.triggered_at_timestamp = datetime.now()
+
+    @abstractmethod
+    def execute(self) -> None:
+        pass
+
+
+class PreToolUseRemindAboutSerenaHook(Hook):
+    """Pre-tool-use hook that nudges the agent toward Serena's symbolic tools.
+
+    Tracks consecutive uses of grep and read-file tools via a persisted
+    :class:`ToolUseCounter`. When the number of recent calls reaches the
+    configured threshold, a deny response is emitted with a reminder to
+    use symbolic alternatives. The counter resets whenever a Serena tool
+    is invoked or a deny is emitted, so the agent is only reminded after
+    sustained non-symbolic tool use without intermittent Serena calls.
+    """
+
+    @dataclass
+    class OutputData:
+        permission_decision: Literal["deny", "allow"]
+        permission_decision_reason: str
+        additional_context: str
+
+        def to_json_string(self) -> str:
+            hook_output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": self.permission_decision,
+                    "permissionDecisionReason": self.permission_decision_reason,
+                    "additionalContext": self.additional_context,
+                }
+            }
+            return json.dumps(hook_output)
+
+    @dataclass
+    class ToolUseCounter:
+        _FILE_NAME = "tool_use_counter.pkl"
+        _GREP_USES_THRESHOLD = 3
+        _READ_FILE_USES_THRESHOLD = 3
+
+        _PERIOD_TO_RESET_COUNTERS_SECONDS = 10
+
+        n_recent_read_file_uses: int = 0
+        n_recent_grep_uses: int = 0
+        last_grep_use_timestamp: datetime | None = None
+        last_read_file_use_timestamp: datetime | None = None
+
+        def too_many_recent_reads(self) -> bool:
+            return self.n_recent_read_file_uses >= self._READ_FILE_USES_THRESHOLD
+
+        def too_many_recent_greps(self) -> bool:
+            return self.n_recent_grep_uses >= self._GREP_USES_THRESHOLD
+
+        @classmethod
+        def _get_persistence_path(cls, hook: Hook) -> Path:
+            return Path(hook.session_persistence_dir) / cls._FILE_NAME
+
+        @classmethod
+        def load(cls, hook: Hook) -> Self:
+            path = cls._get_persistence_path(hook)
+            try:
+                with open(path, "rb") as f:
+                    return pickle.load(f)
+            except Exception:
+                return cls()
+
+        def save(self, hook: Hook) -> None:
+            path = self._get_persistence_path(hook)
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with open(path, "wb") as f:
+                    pickle.dump(self, f)
+            except Exception:
+                pass
+
+        def update(self, hook: "PreToolUseRemindAboutSerenaHook") -> None:
+            if hook.is_serena_tool():
+                self.reset()
+                return
+
+            now = hook.triggered_at_timestamp
+            period = self._PERIOD_TO_RESET_COUNTERS_SECONDS
+
+            # update grep counter
+            if hook.is_grep_tool():
+                if self.last_grep_use_timestamp is not None and (now - self.last_grep_use_timestamp).total_seconds() <= period:
+                    self.n_recent_grep_uses += 1
+                else:
+                    self.n_recent_grep_uses = 1
+                self.last_grep_use_timestamp = now
+
+            # update read file counter
+            if hook.is_read_file_tool():
+                if self.last_read_file_use_timestamp is not None and (now - self.last_read_file_use_timestamp).total_seconds() <= period:
+                    self.n_recent_read_file_uses += 1
+                else:
+                    self.n_recent_read_file_uses = 1
+                self.last_read_file_use_timestamp = now
+
+        def reset(self) -> None:
+            self.n_recent_read_file_uses = 0
+            self.n_recent_grep_uses = 0
+            self.last_grep_use_timestamp = None
+            self.last_read_file_use_timestamp = None
+
+    def __init__(self, client: HookClient):
+        super().__init__(client)
+        _tool_name = self._input_data.get("tool_name") or self._input_data.get("toolName", "") or ""
+        _tool_name = str(_tool_name).lower().strip()
+        if not _tool_name:
+            raise ValueError("Tool name is required in the hook input data")
+        self._tool_name = _tool_name
+        self._tool_input: dict | None = self._input_data.get("tool_input") or self._input_data.get("toolInput")
+        self._tool_call_counter = self.ToolUseCounter.load(self)
+
+    def is_grep_tool(self) -> bool:
+        if self._client == HookClient.CLAUDE_CODE:
+            return self._tool_name == "grep"
+        return "grep" in self._tool_name
+
+    def is_read_file_tool(self) -> bool:
+        if self._client == HookClient.CLAUDE_CODE:
+            return self._tool_name == "read"
+        return "read" in self._tool_name and "file" in self._tool_name
+
+    def is_serena_tool(self) -> bool:
+        return "serena" in self._tool_name
+
+    def execute(self) -> None:
+        self._tool_call_counter.update(self)
+        output_data = None
+        if self._tool_call_counter.too_many_recent_greps():
+            output_data = self.OutputData(
+                permission_decision="deny",
+                permission_decision_reason="Not using symbolic tools. You can continue using grep now if needed, the counter was reset.",
+                additional_context="You were using many grep calls recently. Consider using Serena's symbolic search tools instead.",
+            )
+        if self._tool_call_counter.too_many_recent_reads():
+            output_data = self.OutputData(
+                permission_decision="deny",
+                permission_decision_reason="Not using symbolic tools. You can continue using read now if needed, the counter was reset.",
+                additional_context="You were using many read file calls recently. Consider using Serena's symbolic overview and search instead.",
+            )
+        if output_data is not None:
+            self._tool_call_counter.reset()
+            click.echo(output_data.to_json_string())
+        self._tool_call_counter.save(self)
+
+
+class SessionStartActivateProjectHook(Hook):
+    def execute(self) -> None:
+        message = (
+            "**IMPORTANT**: Activate the current working directory as project using Serena's tools. "
+            "If you haven't read Serena Instructions Manual yet, do so. "
+            "Follow this instruction before doing anything else."
+        )
+        result = {
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": message,
+            }
+        }
+        click.echo(json.dumps(result))
+
+
+class SessionEndCleanupHook(Hook):
+    def execute(self) -> None:
+        shutil.rmtree(self.session_persistence_dir, ignore_errors=True)
+
+
+_client_option = click.option(
+    "--client",
+    type=click.Choice([e.value for e in HookClient], case_sensitive=False),
+    default=HookClient.CLAUDE_CODE.value,
+    show_default=True,
+    help="The client application that triggered the hook.",
+)
+
+
+class HookCommands(AutoRegisteringGroup):
+    def __init__(self) -> None:
+        super().__init__(name="serena-hook", help="Commands that send reminders to agents when appropriate, to be used in hooks.")
+
+    @staticmethod
+    @click.command(
+        "activate",
+        help="Set this as hook at session startup to prompt the agent to activate the project at the start of the session and read Serena's instructions",
+    )
+    @_client_option
+    def activate(client: str) -> None:
+        SessionStartActivateProjectHook(HookClient(client)).execute()
+
+    @staticmethod
+    @click.command("cleanup", help="Set this as hook at session end all hook data for the current session")
+    @_client_option
+    def cleanup(client: str) -> None:
+        SessionEndCleanupHook(HookClient(client)).execute()
+
+    @staticmethod
+    @click.command(
+        "remind",
+        help="Set this as hook at PreToolUse to remind the agent to use Serena's tools instead of overrelying on read_file and grep",
+    )
+    @_client_option
+    def remind(client: str) -> None:
+        PreToolUseRemindAboutSerenaHook(HookClient(client)).execute()
+
+
+hook_commands = HookCommands()

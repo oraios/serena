@@ -39,6 +39,7 @@ from serena.constants import (
 from serena.mcp import SerenaMCPFactory
 from serena.project import Project
 from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsOverviewTool, SearchForPatternTool, ToolRegistry
+from serena.util.cli_util import AutoRegisteringGroup
 from serena.util.dataclass import get_dataclass_default
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
@@ -127,32 +128,16 @@ class ProjectType(click.ParamType):
 PROJECT_TYPE = ProjectType()
 
 
-class AutoRegisteringGroup(click.Group):
-    """
-    A click.Group subclass that automatically registers any click.Command
-    attributes defined on the class into the group.
-
-    After initialization, it inspects its own class for attributes that are
-    instances of click.Command (typically created via @click.command) and
-    calls self.add_command(cmd) on each. This lets you define your commands
-    as static methods on the subclass for IDE-friendly organization without
-    manual registration.
-    """
-
-    def __init__(self, name: str, help: str):
-        super().__init__(name=name, help=help)
-        # Scan class attributes for click.Command instances and register them.
-        for attr in dir(self.__class__):
-            cmd = getattr(self.__class__, attr)
-            if isinstance(cmd, click.Command):
-                self.add_command(cmd)
-
-
 class TopLevelCommands(AutoRegisteringGroup):
     """Root CLI group containing the core Serena commands."""
 
     def __init__(self) -> None:
-        super().__init__(name="serena", help="Serena CLI commands. You can run `<command> --help` for more info on each command.")
+        super().__init__(
+            name="serena",
+            help="Main serena CLI commands. "
+            "Note that you also have access to `serena-hooks` CLI commands which are kept under "
+            "that separate entrypoint for performance reasons, see `serena-hooks --help`. You can run `<command> --help` for more info on each command.",
+        )
 
     @staticmethod
     @click.command(

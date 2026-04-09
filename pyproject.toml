@@ -61,6 +61,7 @@ explicit = true
 
 [project.scripts]
 serena = "serena.cli:top_level"
+serena-hooks = "serena.hooks:hook_commands"
 
 [project.license]
 text = "MIT"
