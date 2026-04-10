@@ -9,7 +9,7 @@ from test.conftest import language_tests_enabled
 
 pytestmark = [
     pytest.mark.haxe,
-    pytest.mark.skipif(not language_tests_enabled(Language.HAXE), reason="Haxe tests disabled (haxe or node not found)"),
+    pytest.mark.skipif(not language_tests_enabled(Language.HAXE), reason="Haxe tests disabled (node not found)"),
 ]
 
 

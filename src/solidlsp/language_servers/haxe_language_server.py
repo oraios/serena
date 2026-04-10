@@ -32,8 +32,6 @@ from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
-from .common import RuntimeDependency, RuntimeDependencyCollection
-
 log = logging.getLogger(__name__)
 
 
@@ -104,32 +102,37 @@ class HaxeLanguageServer(SolidLanguageServer):
         ]
 
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
+        # URL for the vshaxe VS Code extension package (contains pre-built server.js)
+        _VSHAXE_VSIX_URL = (
+            "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/nadako/vsextensions/vshaxe/latest/vspackage"
+        )
+
         def _get_or_install_core_dependency(self) -> str:
             """
-            Locate or build the Haxe Language Server (server.js).
+            Locate or download the Haxe Language Server (server.js).
 
             Resolution order:
             1. User-provided ls_path (handled by base class)
-            2. Previously built server.js in the resources directory
-            3. server.js bundled with the VS Code extension (nadako.vshaxe)
-            4. Build from source (requires Haxe + lix + Node.js)
+            2. Previously downloaded server.js in the resources directory
+            3. server.js bundled with the VS Code extension (nadako.vshaxe) on disk
+            4. Download pre-built server.js from the VS Code marketplace
             """
-            # Check if already built in resources dir
+            # Check if already present in resources dir
             haxe_ls_dir = os.path.join(self._ls_resources_dir, "haxe-lsp")
-            server_js_path = os.path.join(haxe_ls_dir, "haxe-language-server", "bin", "server.js")
+            server_js_path = os.path.join(haxe_ls_dir, "server.js")
 
             if os.path.exists(server_js_path):
                 log.info(f"Found existing Haxe Language Server at {server_js_path}")
                 return server_js_path
 
-            # Try to find server.js from the VS Code extension
+            # Try to find server.js from a locally installed VS Code extension
             vscode_server = self._find_vscode_extension_server()
             if vscode_server:
                 log.info(f"Found Haxe Language Server from VS Code extension at {vscode_server}")
                 return vscode_server
 
-            # Build from source
-            return self._build_from_source(haxe_ls_dir, server_js_path)
+            # Download pre-built server.js from VS Code marketplace
+            return self._download_from_marketplace(haxe_ls_dir, server_js_path)
 
         @staticmethod
         def _find_vscode_extension_server() -> str | None:
@@ -144,90 +147,59 @@ class HaxeLanguageServer(SolidLanguageServer):
                 if matches:
                     # Use the most recent version (sorted alphabetically, last is newest)
                     matches.sort()
-                    server_path = os.path.join(matches[-1], "bin", "server.js")
+                    # The extension stores the LS at server/bin/server.js (not bin/server.js)
+                    server_path = os.path.join(matches[-1], "server", "bin", "server.js")
                     if os.path.exists(server_path):
                         return server_path
             return None
 
-        @staticmethod
-        def _build_from_source(haxe_ls_dir: str, server_js_path: str) -> str:
-            """Clone and build the Haxe Language Server from source."""
+        @classmethod
+        def _download_from_marketplace(cls, haxe_ls_dir: str, server_js_path: str) -> str:
+            """Download pre-built server.js from the VS Code marketplace.
+
+            The vshaxe extension (.vsix) is a gzip-compressed zip archive containing
+            the pre-built language server at extension/server/bin/server.js.
+            """
+            import gzip
+            import io
+            import urllib.request
+            import zipfile
+
             is_node_installed = shutil.which("node") is not None
             assert is_node_installed, "node is not installed or isn't in PATH. Please install Node.js and try again."
-            is_npm_installed = shutil.which("npm") is not None
-            assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
-            is_haxe_installed = shutil.which("haxe") is not None
-            assert is_haxe_installed, (
-                "haxe is not installed or isn't in PATH. "
-                "The Haxe Language Server requires the Haxe compiler (3.4.0+). "
-                "Please install Haxe (https://haxe.org/download/) and try again, "
-                "or provide the path to a pre-built server.js via ls_path in ls_specific_settings."
-            )
 
-            repo_dir = os.path.join(haxe_ls_dir, "haxe-language-server")
+            os.makedirs(haxe_ls_dir, exist_ok=True)
 
-            deps = RuntimeDependencyCollection(
-                [
-                    RuntimeDependency(
-                        id="haxe-language-server-clone",
-                        description="Clone haxe-language-server repository",
-                        command=["git", "clone", "--depth", "1", "https://github.com/vshaxe/haxe-language-server.git", repo_dir],
-                        platform_id="any",
-                    ),
-                ]
-            )
+            log.info("Downloading Haxe Language Server from VS Code marketplace...")
+            try:
+                with urllib.request.urlopen(cls._VSHAXE_VSIX_URL, timeout=60) as response:
+                    vsix_gz_data = response.read()
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to download Haxe Language Server from VS Code marketplace: {e}. "
+                    "You can provide a pre-built server.js via ls_path in ls_specific_settings."
+                ) from e
 
-            if not os.path.isdir(repo_dir):
-                log.info("Cloning haxe-language-server repository...")
-                deps.install(haxe_ls_dir)
+            # The marketplace returns a gzip-compressed vsix (which is a zip)
+            try:
+                vsix_data = gzip.decompress(vsix_gz_data)
+            except gzip.BadGzipFile:
+                # Sometimes the response is not gzipped
+                vsix_data = vsix_gz_data
 
-            install_deps = RuntimeDependencyCollection(
-                [
-                    RuntimeDependency(
-                        id="haxe-language-server-npm-install",
-                        description="Install npm dependencies (without postinstall scripts)",
-                        command=["npm", "install", "--ignore-scripts"],
-                        platform_id="any",
-                    ),
-                ]
-            )
+            with zipfile.ZipFile(io.BytesIO(vsix_data)) as zf:
+                server_entry = "extension/server/bin/server.js"
+                if server_entry not in zf.namelist():
+                    raise FileNotFoundError(
+                        f"server.js not found in vshaxe extension package (looked for {server_entry}). "
+                        "The extension format may have changed."
+                    )
+                server_js_content = zf.read(server_entry)
 
-            lix_download_deps = RuntimeDependencyCollection(
-                [
-                    RuntimeDependency(
-                        id="haxe-language-server-lix-download",
-                        description="Download Haxe libraries via lix",
-                        command=["npx", "lix", "download"],
-                        platform_id="any",
-                    ),
-                ]
-            )
+            with open(server_js_path, "wb") as f:
+                f.write(server_js_content)
 
-            build_deps = RuntimeDependencyCollection(
-                [
-                    RuntimeDependency(
-                        id="haxe-language-server-build",
-                        description="Build haxe-language-server",
-                        command=["npx", "lix", "run", "vshaxe-build", "-t", "language-server"],
-                        platform_id="any",
-                    ),
-                ]
-            )
-
-            log.info("Installing npm dependencies for haxe-language-server...")
-            install_deps.install(repo_dir)
-            log.info("Downloading Haxe libraries via lix...")
-            lix_download_deps.install(repo_dir)
-            log.info("Building haxe-language-server...")
-            build_deps.install(repo_dir)
-
-            if not os.path.exists(server_js_path):
-                raise FileNotFoundError(
-                    f"haxe-language-server server.js not found at {server_js_path} after build. "
-                    "The build may have failed. You can provide a pre-built server.js via ls_path in ls_specific_settings."
-                )
-
-            log.info(f"Haxe Language Server built successfully at {server_js_path}")
+            log.info(f"Haxe Language Server downloaded to {server_js_path}")
             return server_js_path
 
         def _create_launch_command(self, core_path: str) -> list[str]:
@@ -601,6 +573,7 @@ class HaxeLanguageServer(SolidLanguageServer):
 
         # Wait for dynamic capability registration (references, etc.)
         # This is fast (~1s) — the LS registers capabilities right after initialization.
+        # Skip if references was already reported as a static capability.
         if capabilities_ready.wait(timeout=self.READY_TIMEOUT):
             log.info("Haxe server dynamic capabilities registered")
         else:
@@ -640,6 +613,13 @@ class HaxeLanguageServer(SolidLanguageServer):
         """
         if not self.server_started:
             raise Exception("Language Server not started")
+
+        # Wait for the compiler to finish its initial compilation before sending references.
+        # The display server must be ready for references to work — without this, the LS
+        # responds with "Unhandled method" since references are provided by the display server.
+        if not self._refactor_cache_ready.is_set():
+            log.info("Waiting for Haxe compiler before references request...")
+            self._refactor_cache_ready.wait(timeout=self.COMPILER_READY_TIMEOUT)
 
         # Send references request directly WITHOUT opening the file
         original_timeout = self.server._request_timeout

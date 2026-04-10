@@ -44,10 +44,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
-      - name: Set up Haxe
-        uses: krdlab/setup-haxe@v2
-        with:
-          haxe-version: '4.3.7'
       - name: Ensure cached directory exist before calling cache-related actions
         shell: bash
         run: |
