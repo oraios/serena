@@ -186,7 +186,7 @@ class HaxeLanguageServer(SolidLanguageServer):
                     RuntimeDependency(
                         id="haxe-language-server-npm-install",
                         description="Install npm dependencies",
-                        command=["npm", "ci"],
+                        command=["npm", "install"],
                         platform_id="any",
                     ),
                 ]
