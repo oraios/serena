@@ -180,14 +180,18 @@ Explore the full set of commands and options using the CLI itself!
 
 Depending on your requirements, you may want to run Serena in different ways.
 When applying one of these approaches, replace `serena` in commands mentioned throughout the documentation
-with the respective command and options.
+with the respective command and options. The same applies to `serena-hooks` commands.
 
 ### Using uvx to Run the Latest Source Version
-
+    
 `uvx` is part of `uv`. It can be used to run the latest version of Serena directly from the repository, without an explicit local installation.
 
     uvx -p 3.13 --from git+https://github.com/oraios/serena serena 
 
+This was previously the main way of running Serena.
+Since this has the downside that every new commit in the repository will trigger a (potentially slow) re-synchronization, an [installation](010_installation) of Serena should usually be preferred.
+If you should experience timeouts when connecting the MCP server, consider switching.  
+If, however, the synchronisation is fast enough for you, this is still a good option.
 
 ### Running from Cloned Source
 
