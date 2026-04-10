@@ -309,10 +309,10 @@ def _determine_disabled_languages() -> list[Language]:
     if not php_tests_enabled:
         result.append(Language.PHP_PHPACTOR)
 
-    # Disable Haxe tests if node is not available (only when running locally, not in CI).
-    # The Haxe compiler is NOT required — the LS is downloaded pre-built from VS Code marketplace.
+    # Disable Haxe tests if haxe or node is not available (only when running locally, not in CI).
+    # Node.js runs the LS (downloaded pre-built), Haxe compiler is needed for code analysis.
     if not is_ci:
-        haxe_tests_enabled = _sh.which("node") is not None
+        haxe_tests_enabled = _sh.which("haxe") is not None and _sh.which("node") is not None
         if not haxe_tests_enabled:
             result.append(Language.HAXE)
 
