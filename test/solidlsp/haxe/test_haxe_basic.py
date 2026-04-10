@@ -247,3 +247,31 @@ class TestHaxeLanguageServer:
         for s in overview:
             assert s.get("name"), "Symbol missing 'name' field"
             assert s.get("kind"), "Symbol missing 'kind' field"
+
+    @pytest.mark.parametrize("language_server", [Language.HAXE], indirect=True)
+    def test_rapid_successive_requests(self, language_server: SolidLanguageServer) -> None:
+        """Verify that rapid successive requests don't return empty results.
+
+        The Haxe LS triggers a recompilation on didOpen. Without suppression,
+        subsequent requests during recompilation may return empty results.
+        """
+        main_path = os.path.join("src", "Main.hx")
+        helper_path = os.path.join("src", "utils", "Helper.hx")
+
+        # First request: hover on greet in Main.hx (line 22 is the greet method definition)
+        hover1 = language_server.request_hover(main_path, 22, 20)
+
+        # Second request: references in a different file (triggers another didOpen)
+        all_symbols, _ = language_server.request_document_symbols(helper_path).get_all_symbols_and_roots()
+        add_numbers = next((s for s in all_symbols if s.get("name") == "addNumbers"), None)
+        assert add_numbers is not None
+        sel_start = add_numbers["selectionRange"]["start"]
+        refs = language_server.request_references(helper_path, sel_start["line"], sel_start["character"])
+
+        # Third request: back to Main.hx hover (would be affected by recompilation)
+        hover2 = language_server.request_hover(main_path, 22, 20)
+
+        # All three should return non-empty results
+        assert hover1 is not None, "First hover returned None"
+        assert refs, "References returned empty after switching files"
+        assert hover2 is not None, "Second hover returned None after file switching"

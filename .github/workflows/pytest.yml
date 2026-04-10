@@ -387,6 +387,8 @@ jobs:
         shell: bash
         run: uv run pip install ansible-core ansible-lint
       - name: Install Haxe
+        # The Haxe LS binary (server.js) is auto-downloaded and runs on Node.js,
+        # but it delegates to the Haxe compiler for code analysis at runtime.
         uses: krdlab/setup-haxe@v2
         with:
           haxe-version: 4.3.7

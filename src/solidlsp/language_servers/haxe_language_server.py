@@ -6,7 +6,10 @@ import logging
 import os
 import pathlib
 import shutil
+import tempfile
 import threading
+import urllib.request
+import zipfile
 
 from overrides import override
 
@@ -55,9 +58,8 @@ class HaxeLanguageServer(SolidLanguageServer):
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
         # Downloaded from Open VSX (not the VS Code Marketplace) because Open VSX
         # provides stable versioned URLs and SHA256 checksums for integrity verification.
-        _VSHAXE_VERSION = "2.34.2"
-        _VSHAXE_SHA256 = "104d785e3f7b57a7f3debf520d9751f7e7abf3a7e78d203db1a8ff3dc7ca30e2"
-        _VSHAXE_DOWNLOAD_URL = f"https://open-vsx.org/api/nadako/vshaxe/{_VSHAXE_VERSION}/file/nadako.vshaxe-{_VSHAXE_VERSION}.vsix"
+        _DEFAULT_VSHAXE_VERSION = "2.34.2"
+        _DEFAULT_VSHAXE_SHA256 = "104d785e3f7b57a7f3debf520d9751f7e7abf3a7e78d203db1a8ff3dc7ca30e2"
 
         @override
         def _get_or_install_core_dependency(self) -> str:
@@ -90,7 +92,8 @@ class HaxeLanguageServer(SolidLanguageServer):
                     "  3. Set ls_path in serena_config.yml under ls_specific_settings.haxe"
                 )
 
-            downloaded_path = self._download_from_open_vsx(haxe_ls_dir)
+            version = self._custom_settings.get("version", self._DEFAULT_VSHAXE_VERSION)
+            downloaded_path = self._download_from_open_vsx(haxe_ls_dir, version)
             if downloaded_path:
                 return downloaded_path
 
@@ -116,32 +119,31 @@ class HaxeLanguageServer(SolidLanguageServer):
             return None
 
         @classmethod
-        def _download_from_open_vsx(cls, target_dir: str) -> str | None:
-            """Download a pinned vshaxe VSIX from Open VSX and extract server.js.
-            Verifies the download against a hardcoded SHA256 checksum.
+        def _download_from_open_vsx(cls, target_dir: str, version: str) -> str | None:
+            """Download a vshaxe VSIX from Open VSX and extract server.js.
+            Verifies the download against a hardcoded SHA256 checksum when using the default version.
             """
-            import tempfile
-            import zipfile
-
             try:
-                import urllib.request
-
-                log.info("Downloading Haxe Language Server v%s from Open VSX...", cls._VSHAXE_VERSION)
+                download_url = f"https://open-vsx.org/api/nadako/vshaxe/{version}/file/nadako.vshaxe-{version}.vsix"
+                log.info("Downloading Haxe Language Server v%s from Open VSX...", version)
                 vsix_path = os.path.join(tempfile.gettempdir(), "vshaxe.vsix")
-                urllib.request.urlretrieve(cls._VSHAXE_DOWNLOAD_URL, vsix_path)
+                urllib.request.urlretrieve(download_url, vsix_path)
 
-                # Verify SHA256 checksum
-                sha256 = hashlib.sha256()
-                with open(vsix_path, "rb") as f:
-                    for chunk in iter(lambda: f.read(8192), b""):
-                        sha256.update(chunk)
-                if sha256.hexdigest().lower() != cls._VSHAXE_SHA256:
-                    os.remove(vsix_path)
-                    raise RuntimeError(
-                        f"SHA256 checksum mismatch for vshaxe VSIX. Expected {cls._VSHAXE_SHA256}, "
-                        f"got {sha256.hexdigest()}. The file may be corrupted or tampered with."
-                    )
-                log.info("SHA256 checksum verified")
+                # Verify SHA256 checksum only for the default (pinned) version
+                if version == cls._DEFAULT_VSHAXE_VERSION:
+                    sha256 = hashlib.sha256()
+                    with open(vsix_path, "rb") as f:
+                        for chunk in iter(lambda: f.read(8192), b""):
+                            sha256.update(chunk)
+                    if sha256.hexdigest().lower() != cls._DEFAULT_VSHAXE_SHA256:
+                        os.remove(vsix_path)
+                        raise RuntimeError(
+                            f"SHA256 checksum mismatch for vshaxe VSIX. Expected {cls._DEFAULT_VSHAXE_SHA256}, "
+                            f"got {sha256.hexdigest()}. The file may be corrupted or tampered with."
+                        )
+                    log.info("SHA256 checksum verified")
+                else:
+                    log.info("Using custom version %s — skipping SHA256 verification", version)
 
                 # VSIX files are ZIP archives — extract bin/ contents
                 bin_dir = os.path.join(target_dir, "bin")
@@ -160,7 +162,7 @@ class HaxeLanguageServer(SolidLanguageServer):
 
                 server_js_path = os.path.join(bin_dir, "server.js")
                 if os.path.exists(server_js_path):
-                    log.info(f"Haxe Language Server v{cls._VSHAXE_VERSION} installed to {server_js_path}")
+                    log.info(f"Haxe Language Server v{version} installed to {server_js_path}")
                     return server_js_path
 
                 log.error("Downloaded VSIX but server.js not found after extraction")
@@ -204,6 +206,10 @@ class HaxeLanguageServer(SolidLanguageServer):
         rename_source_folders = self._custom_settings.get("renameSourceFolders")
         if rename_source_folders:
             init_options["renameSourceFolders"] = rename_source_folders
+
+        haxe_path = self._custom_settings.get("haxePath")
+        if haxe_path:
+            init_options["haxePath"] = haxe_path
 
         initialize_params = {
             "locale": "en",
@@ -357,7 +363,11 @@ class HaxeLanguageServer(SolidLanguageServer):
         self.server.notify.initialized({})
 
         # LS doesn't properly initialise without a workspace_did_change_configuration notification here.
-        self.server.notify.workspace_did_change_configuration({"settings": {}})
+        config_settings: dict = {}
+        haxe_path = self._custom_settings.get("haxePath")
+        if haxe_path:
+            config_settings["haxePath"] = haxe_path
+        self.server.notify.workspace_did_change_configuration({"settings": config_settings})
 
         log.info("Waiting for Haxe LSP compilation to complete...")
         if self._server_ready.wait(timeout=self._COMPILATION_TIMEOUT):
