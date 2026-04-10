@@ -3,7 +3,9 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
-  - Added `serena init` command
+  - Added `serena init` and `serena setup` commands
+  - **Major**: added commands for hooks and documentation on recommended setup. Consider setting up the [recommended hooks](https://oraios.github.io/serena/02-usage/030_clients.html) !
+  - Reworked installation instructions, switching to releases on pypi for distribution. Please update your mcp startup commands!
 
 * Language Servers:
   - Added Crystal language support (uses [Crystalline](https://github.com/elbywan/crystalline) language server)  
