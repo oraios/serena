@@ -28,6 +28,14 @@ You can install a virtual environment with the required as follows
     * On Windows outside of Git Bash: `.venv\Scripts\activate.bat` (in cmd/ps) or `source .venv/Scripts/activate` (in git-bash) 
 3. Install the required packages with all extras: `uv sync --extra dev`
 
+## Local Installation as Tool
+
+To install Serena as a local tool, run
+
+```shell
+uv tool install --reinstall -p 3.13 .
+```
+
 ## Poe Tasks
 
 We use poe to execute development tasks:
