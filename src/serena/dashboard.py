@@ -3,11 +3,13 @@ import os
 import socket
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
+import psutil
 import webview
 from flask import Flask, Response, redirect, request, send_from_directory
 from PIL import Image
@@ -743,6 +745,8 @@ class SerenaDashboardViewer:
     Minimal pywebview wrapper with optional system tray.
     """
 
+    DEBUG = False
+
     def __init__(
         self,
         url: str,
@@ -750,6 +754,7 @@ class SerenaDashboardViewer:
         start_minimized: bool = False,
         width: int = 1400,
         height: int = 900,
+        parent_process_id: int | None = None,
     ):
         self.url = url
         # Use system tray to allow hiding to tray and intercepting close to hide instead of quit
@@ -758,6 +763,7 @@ class SerenaDashboardViewer:
         self.width = width
         self.height = height
         self.start_minimized = start_minimized
+        self.parent_process_id = parent_process_id
 
         self.window: webview.Window
         self._tray_icon: Any
@@ -785,6 +791,10 @@ class SerenaDashboardViewer:
             import ctypes
 
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("oraios.serena")
+
+        if self.DEBUG:
+            logging.configure(level=logging.DEBUG)
+            logging.add_file_logger(SerenaPaths().get_next_log_file_path("dashboard-viewer"))
 
         dashboard_path = Path(SERENA_DASHBOARD_DIR)
         # .ico is Windows-only; macOS expects a PNG for the window/dock icon.
@@ -815,7 +825,26 @@ class SerenaDashboardViewer:
             else:
                 self._show_window()
 
+        # start a thread to monitor the parent process
+        if self.parent_process_id is not None:
+            threading.Thread(target=self._monitor_parent_process, daemon=True).start()
+
         webview.start(_start_callback, icon=icon_path)
+
+    def _monitor_parent_process(self) -> None:
+        """
+        Monitors the parent process and shuts down the dashboard viewer if the parent process exits.
+        """
+        pid = self.parent_process_id
+        log.info("Starting parent process monitor thread (parent_pid=%d, pid=%s)", pid, os.getpid())
+        try:
+            parent_process = psutil.Process(pid)
+            while parent_process.is_running():
+                time.sleep(1)
+        except psutil.NoSuchProcess:
+            pass  # Parent process already exited
+        log.info("Parent process (pid=%d) has exited, shutting down dashboard viewer", pid)
+        self._terminate()
 
     def _show_window(self) -> None:
         if not self.window:
@@ -885,6 +914,18 @@ class SerenaDashboardViewer:
         self._hide_window()
         return False  # prevent the window from actually closing
 
+    def _terminate(self) -> None:
+        """
+        Terminates the viewer application and the tray icon
+        """
+        self._quitting = True
+        try:
+            if self._tray_icon:
+                self._tray_icon.stop()
+        finally:
+            if self.window:
+                self.window.destroy()
+
     def _start_tray(self) -> None:
         # import pystray locally, because the import fails when there is no display!
         import pystray
@@ -905,12 +946,7 @@ class SerenaDashboardViewer:
             self._hide_window()
 
         def quit_app(_icon: TrayIcon, _item: Item) -> None:
-            self._quitting = True
-            try:
-                _icon.stop()
-            finally:
-                if self.window:
-                    self.window.destroy()
+            self._terminate()
 
         menu = pystray.Menu(
             Item("Open", show, default=True),
