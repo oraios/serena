@@ -554,12 +554,12 @@ class SerenaAgent:
         return self._dashboard_url
 
     @staticmethod
-    def _start_dashboard_viewer_process_function(url: str, minimized: bool) -> None:
+    def _start_dashboard_viewer_process_function(url: str, minimized: bool, parent_process_id: int) -> None:
         """
         Main function of the subprocess for starting the dashboard viewer
         """
         try:
-            SerenaDashboardViewer(url, start_minimized=minimized).run()
+            SerenaDashboardViewer(url, start_minimized=minimized, parent_process_id=parent_process_id).run()
         except webview.errors.WebViewException as e:
             log.warning(f"Could not open Serena Dashboard viewer. Cause:\n{e}")
             # Fall back to opening the browser window if the window was supposed to be shown directly
@@ -582,7 +582,7 @@ class SerenaAgent:
         assert url is not None
         if SerenaDashboardViewer.is_current_platform_supported():
             self._dashboard_viewer_process = multiprocessing.Process(
-                target=self._start_dashboard_viewer_process_function, args=(url, minimized), daemon=True
+                target=self._start_dashboard_viewer_process_function, args=(url, minimized, os.getpid()), daemon=True
             )
             self._dashboard_viewer_process.start()
         else:
