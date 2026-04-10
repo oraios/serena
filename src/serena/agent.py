@@ -409,7 +409,7 @@ class SerenaAgent:
 
         self._send_usage_info()
 
-    def _send_usage_info(self):
+    def _send_usage_info(self) -> None:
         is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
         if is_ci:
             return
