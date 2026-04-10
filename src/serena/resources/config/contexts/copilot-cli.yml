@@ -13,8 +13,6 @@ excluded_tools:
   - read_file
   - execute_shell_command
   - replace_content
-  - find_file
-  - list_dir
 
 tool_description_overrides: {}
 
