@@ -17,6 +17,9 @@ approaches that rely on low-level concepts like line numbers or primitive search
 Practically, this means that your agent operates **faster, more efficiently and more reliably**, especially in larger and
 more complex codebases.
 
+> [!IMPORTANT]
+> Don't install Serena via an MCP or plugin marketplace! They contain outdated and suboptimal installation commands. Instead, follow our [Quick Start](#quick-start) instructions.
+
 ## How Serena Works
 
 Serena provides the necessary [tools](https://oraios.github.io/serena/01-about/035_tools.html) for coding workflows, 
