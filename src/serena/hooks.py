@@ -87,9 +87,27 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
     Tracks consecutive uses of grep and read-file tools via a persisted
     :class:`ToolUseCounter`. When the number of recent calls reaches the
     configured threshold, a deny response is emitted with a reminder to
-    use symbolic alternatives. The counter resets whenever a Serena tool
-    is invoked or a deny is emitted, so the agent is only reminded after
-    sustained non-symbolic tool use without intermittent Serena calls.
+    use symbolic alternatives.
+
+    The counter for a given tool type is reset whenever
+
+    * a Serena tool is invoked (both counters are reset),
+    * a deny is emitted (the acting counter is reset so the next retry starts fresh),
+    * or the configured reset period elapses *between two consecutive calls of that
+      same tool type* — i.e. the period gates the gap between successive calls, not
+      an absolute sliding window. Three grep calls at t=0, t=9, t=18 therefore count
+      as a burst of three, even though the total span (18s) exceeds the 10s grep
+      period; only an individual pair that is more than 10s apart resets the counter.
+
+    Non-tracked tools (Edit, Write, Bash, etc.) are deliberately neutral: they neither
+    increment nor reset counters, so they also do not mask bursts by pushing the last
+    timestamp forward.
+
+    Deny emissions are additionally rate-limited to at most one per
+    :attr:`ToolUseCounter._MIN_DENY_INTERVAL_SECONDS` (one minute): once a deny has
+    been emitted, subsequent bursts detected within that window still reset the
+    counters but do not produce further nudges, so the agent is not swamped with
+    reminders during a sustained non-symbolic-tool burst.
     """
 
     @dataclass
@@ -97,20 +115,49 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
         _FILE_NAME = "tool_use_counter.pkl"
         _GREP_USES_THRESHOLD = 3
         _READ_FILE_USES_THRESHOLD = 3
+        # threshold for the combined "non-symbolic" counter that catches mixed sequences of grep+read
+        _NON_SYMBOLIC_USES_THRESHOLD = 4
 
-        _GREP_RESET_PERIOD_SECONDS = 10
-        _READ_FILE_RESET_PERIOD_SECONDS = 20
+        # The following periods are set to essentially infinity since we neglect the per-tool reset periods for them
+        _READ_FILE_RESET_PERIOD_SECONDS = 1000
+        _GREP_RESET_PERIOD_SECONDS = 1000
+        # reset period for the combined counter
+        _NON_SYMBOLIC_RESET_PERIOD_SECONDS = 2000
+
+        # minimum seconds between two emitted denies; rate-limits reminder nudges so
+        # a single sustained burst triggers at most one deny per minute
+        _MIN_DENY_INTERVAL_SECONDS = 120
 
         n_recent_read_file_uses: int = 0
         n_recent_grep_uses: int = 0
+        n_recent_non_symbolic_uses: int = 0
         last_grep_use_timestamp: datetime | None = None
         last_read_file_use_timestamp: datetime | None = None
+        last_non_symbolic_use_timestamp: datetime | None = None
+        # timestamp of the most recently emitted deny; deliberately not cleared by
+        # :meth:`reset` so the rate limit survives counter resets (e.g. Serena tool use)
+        last_deny_timestamp: datetime | None = None
 
         def too_many_recent_reads(self) -> bool:
             return self.n_recent_read_file_uses >= self._READ_FILE_USES_THRESHOLD
 
         def too_many_recent_greps(self) -> bool:
             return self.n_recent_grep_uses >= self._GREP_USES_THRESHOLD
+
+        def too_many_recent_non_symbolic(self) -> bool:
+            return self.n_recent_non_symbolic_uses >= self._NON_SYMBOLIC_USES_THRESHOLD
+
+        def can_emit_deny(self, now: datetime) -> bool:
+            """:return: whether enough time has elapsed since the last emitted deny
+            to allow another one. A value of ``True`` is also returned when no
+            deny has been emitted yet in this session. The rate limit prevents
+            the agent from being nudged more than once per
+            :attr:`_MIN_DENY_INTERVAL_SECONDS`, even if further bursts are
+            detected in the meantime.
+            """
+            if self.last_deny_timestamp is None:
+                return True
+            return (now - self.last_deny_timestamp).total_seconds() >= self._MIN_DENY_INTERVAL_SECONDS
 
         @classmethod
         def _get_persistence_path(cls, hook: Hook) -> Path:
@@ -140,9 +187,11 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
                 return
 
             now = hook.triggered_at_timestamp
+            is_grep = hook.is_grep_tool()
+            is_read = hook.is_read_file_tool()
 
             # update grep counter
-            if hook.is_grep_tool():
+            if is_grep:
                 grep_period = self._GREP_RESET_PERIOD_SECONDS
                 if self.last_grep_use_timestamp is not None and (now - self.last_grep_use_timestamp).total_seconds() <= grep_period:
                     self.n_recent_grep_uses += 1
@@ -151,7 +200,7 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
                 self.last_grep_use_timestamp = now
 
             # update read file counter
-            if hook.is_read_file_tool():
+            if is_read:
                 read_period = self._READ_FILE_RESET_PERIOD_SECONDS
                 if (
                     self.last_read_file_use_timestamp is not None
@@ -162,11 +211,34 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
                     self.n_recent_read_file_uses = 1
                 self.last_read_file_use_timestamp = now
 
+            # update combined non-symbolic counter — catches mixed bursts (e.g.
+            # alternating grep/read) that neither per-tool counter would trip
+            if is_grep or is_read:
+                combined_period = self._NON_SYMBOLIC_RESET_PERIOD_SECONDS
+                if (
+                    self.last_non_symbolic_use_timestamp is not None
+                    and (now - self.last_non_symbolic_use_timestamp).total_seconds() <= combined_period
+                ):
+                    self.n_recent_non_symbolic_uses += 1
+                else:
+                    self.n_recent_non_symbolic_uses = 1
+                self.last_non_symbolic_use_timestamp = now
+
         def reset(self) -> None:
             self.n_recent_read_file_uses = 0
             self.n_recent_grep_uses = 0
+            self.n_recent_non_symbolic_uses = 0
             self.last_grep_use_timestamp = None
             self.last_read_file_use_timestamp = None
+            self.last_non_symbolic_use_timestamp = None
+
+    #: substrings that, combined with ``"file"`` in the tool name, identify a
+    #: read-file tool for non-Claude-Code clients (whose tool names vary across
+    #: editors/agents). Lowercase because :attr:`_tool_name` is lowercased on
+    #: ingest. Conservative on purpose: only verbs that strongly imply *reading*
+    #: a file, never *modifying* one — so ``view_file``/``open_file``/``show_file``
+    #: are caught alongside ``read_file``, while ``write_file``/``edit_file`` are not.
+    _READ_FILE_VERB_SUBSTRINGS: tuple[str, ...] = ("read", "view", "open", "show")
 
     def __init__(self, client: HookClient):
         super().__init__(client)
@@ -180,27 +252,79 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
     def is_read_file_tool(self) -> bool:
         if self._client == HookClient.CLAUDE_CODE:
             return self._tool_name == "read"
-        return "read" in self._tool_name and "file" in self._tool_name
+        name = self._tool_name
+        if "file" not in name:
+            return False
+        return any(verb in name for verb in self._READ_FILE_VERB_SUBSTRINGS)
 
     def execute(self) -> None:
         self._tool_call_counter.update(self)
-        output_data = None
-        if self._tool_call_counter.too_many_recent_greps():
-            output_data = self.OutputData(
-                permission_decision="deny",
-                permission_decision_reason="Too many consecutive grep calls without using symbolic tools.",
-                additional_context="You were using many grep calls recently. Consider using Serena's symbolic search tools instead. You can continue using grep now if needed, the counter was reset.",
-            )
-        if self._tool_call_counter.too_many_recent_reads():
-            output_data = self.OutputData(
-                permission_decision="deny",
-                permission_decision_reason="Too many consecutive read calls without using symbolic tools.",
-                additional_context="You were using many read file calls recently. Consider using Serena's symbolic overview and search instead. You can continue using read now if needed, the counter was reset",
-            )
+
+        # pick the deny that matches the current call first, so the emitted message lines up
+        # with the tool the agent just invoked; fall back to the other per-tool counter only
+        # if the current call did not itself trip a threshold (e.g. stale state loaded from
+        # pickle). The combined non-symbolic deny is checked last — it only fires when neither
+        # per-tool counter tripped, which is exactly the mixed-burst case (alternating grep/read).
+        too_many_greps = self._tool_call_counter.too_many_recent_greps()
+        too_many_reads = self._tool_call_counter.too_many_recent_reads()
+        too_many_non_symbolic = self._tool_call_counter.too_many_recent_non_symbolic()
+
+        output_data: PreToolUseHook.OutputData | None = None
+        if self.is_grep_tool() and too_many_greps:
+            output_data = self._build_grep_deny()
+        elif self.is_read_file_tool() and too_many_reads:
+            output_data = self._build_read_deny()
+        elif too_many_greps:
+            output_data = self._build_grep_deny()
+        elif too_many_reads:
+            output_data = self._build_read_deny()
+        elif too_many_non_symbolic:
+            output_data = self._build_non_symbolic_deny()
+
         if output_data is not None:
+            # reset first so burst detection starts fresh regardless of whether the
+            # deny is actually emitted; the rate limit only gates *emission*, not
+            # detection
             self._tool_call_counter.reset()
-            click.echo(output_data.to_json_string())
+            if self._tool_call_counter.can_emit_deny(self.triggered_at_timestamp):
+                self._tool_call_counter.last_deny_timestamp = self.triggered_at_timestamp
+                click.echo(output_data.to_json_string())
         self._tool_call_counter.save(self)
+
+    def _build_grep_deny(self) -> "PreToolUseHook.OutputData":
+        return self.OutputData(
+            permission_decision="deny",
+            permission_decision_reason="Too many consecutive grep calls without using symbolic tools. "
+            "You can continue using grep now if needed, the counter was reset.",
+            additional_context=(
+                "You were using many grep calls recently. Consider using Serena's symbolic "
+                "mcp tools instead for more code-centric search. You can continue using grep now if needed, the counter was reset."
+            ),
+        )
+
+    def _build_read_deny(self) -> "PreToolUseHook.OutputData":
+        return self.OutputData(
+            permission_decision="deny",
+            permission_decision_reason="Too many consecutive read calls without using symbolic tools. "
+            "You can continue using read now if needed, the counter was reset.",
+            additional_context=(
+                "You were using many read file calls recently. Consider using Serena's symbolic "
+                "mcp tools instead for more targeted reads. You can continue using read now if needed, the counter was reset."
+            ),
+        )
+
+    def _build_non_symbolic_deny(self) -> "PreToolUseHook.OutputData":
+        return self.OutputData(
+            permission_decision="deny",
+            permission_decision_reason="Too many consecutive non-symbolic tool calls (mixed grep and read). "
+            "You can continue using these tools now if needed, the counter was reset.",
+            additional_context=(
+                "You were alternating between grep and read file calls recently without using "
+                "Serena's symbolic mcp tools. Consider using symbolic search and targeted symbol "
+                "reads instead for more code-centric exploration. You can continue using these tools "
+                "now if needed, the counter was reset."
+            ),
+        )
 
 
 class SessionStartActivateProjectHook(Hook):

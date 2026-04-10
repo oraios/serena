@@ -85,8 +85,22 @@ class TestPreToolUseRemindAboutSerenaHook:
             assert hook.is_read_file_tool() == expected, f"is_read_file_tool() wrong for {name} (claude-code)"
 
     def test_read_file_tool_detection_non_claude_code(self, tmp_path: Path):
-        """Non-Claude-Code clients fall back to substring matching requiring both ``read`` and ``file``."""
-        for name, expected in [("read_file", True), ("readFile", True), ("grep_search", False), ("file_writer", False)]:
+        """Non-Claude-Code clients accept any read-style verb (``read``/``view``/``open``/``show``) combined with ``file``."""
+        cases = [
+            # canonical names
+            ("read_file", True),
+            ("readFile", True),
+            # alternative read verbs used by other agents/editors
+            ("view_file", True),
+            ("open_file", True),
+            ("show_file", True),
+            # negatives: no "file", or "file" without a read verb, or modifying verbs
+            ("grep_search", False),
+            ("file_writer", False),
+            ("write_file", False),
+            ("edit_file", False),
+        ]
+        for name, expected in cases:
             with patch("sys.stdin", _make_stdin(_base_input(tool_name=name))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
                 hook = PreToolUseRemindAboutSerenaHook(HookClient.VSCODE)
             assert hook.is_read_file_tool() == expected, f"is_read_file_tool() wrong for {name} (vscode)"
@@ -165,6 +179,79 @@ class TestPreToolUseRemindAboutSerenaHook:
             PreToolUseRemindAboutSerenaHook(HookClient.CLAUDE_CODE).execute()
 
         assert capsys.readouterr().out == ""
+
+    def test_rate_limit_suppresses_second_deny_within_interval(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """A second burst detected within the minimum deny interval must not emit a deny."""
+        # first burst: should emit a deny
+        for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
+            with patch("sys.stdin", _make_stdin(_base_input("grep"))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+                PreToolUseRemindAboutSerenaHook(HookClient.CLAUDE_CODE).execute()
+        first_output = capsys.readouterr().out.strip()
+        assert first_output, "first burst should have emitted a deny"
+
+        # second burst immediately after: within the 1-minute window, must be suppressed
+        for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
+            with patch("sys.stdin", _make_stdin(_base_input("grep"))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+                PreToolUseRemindAboutSerenaHook(HookClient.CLAUDE_CODE).execute()
+
+        assert capsys.readouterr().out == ""
+
+    def test_rate_limit_allows_deny_after_interval(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """Once the minimum deny interval has elapsed, a fresh burst emits a deny again."""
+        # first burst: emits a deny
+        for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
+            with patch("sys.stdin", _make_stdin(_base_input("grep"))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+                PreToolUseRemindAboutSerenaHook(HookClient.CLAUDE_CODE).execute()
+        capsys.readouterr()
+
+        # backdate the persisted last_deny_timestamp so the rate-limit window has expired
+        stub_for_path = object.__new__(PreToolUseRemindAboutSerenaHook)
+        stub_for_path.session_persistence_dir = str(tmp_path / "hook_data" / _base_input()["session_id"])
+        counter = ToolUseCounter.load(stub_for_path)
+        assert counter.last_deny_timestamp is not None
+        counter.last_deny_timestamp -= timedelta(seconds=ToolUseCounter._MIN_DENY_INTERVAL_SECONDS + 1)
+        counter.save(stub_for_path)
+
+        # second burst should now emit a deny again
+        for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
+            with patch("sys.stdin", _make_stdin(_base_input("grep"))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+                PreToolUseRemindAboutSerenaHook(HookClient.CLAUDE_CODE).execute()
+
+        second_output = capsys.readouterr().out.strip()
+        assert second_output, "after the rate-limit window elapsed, a new burst should emit a deny"
+        result = json.loads(second_output)
+        assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_non_symbolic_deny_emitted_when_combined_threshold_tripped(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """Pre-populated state trips only the combined non-symbolic counter (not per-tool ones)
+        so execute() must fall through to the _build_non_symbolic_deny branch.
+        """
+        # pre-populate the pickle so only the combined counter is over threshold
+        session_dir = tmp_path / "hook_data" / _base_input()["session_id"]
+        session_dir.mkdir(parents=True)
+        counter = ToolUseCounter(
+            n_recent_grep_uses=ToolUseCounter._GREP_USES_THRESHOLD - 1,
+            n_recent_read_file_uses=ToolUseCounter._READ_FILE_USES_THRESHOLD - 1,
+            n_recent_non_symbolic_uses=ToolUseCounter._NON_SYMBOLIC_USES_THRESHOLD,
+            last_grep_use_timestamp=datetime.now(),
+            last_read_file_use_timestamp=datetime.now(),
+            last_non_symbolic_use_timestamp=datetime.now(),
+        )
+        stub_for_path = object.__new__(PreToolUseRemindAboutSerenaHook)
+        stub_for_path.session_persistence_dir = str(session_dir)
+        counter.save(stub_for_path)
+
+        # invoke execute with a neutral (non-grep, non-read, non-serena) tool so that
+        # update() leaves the counters untouched and the fall-through branch is taken
+        with patch("sys.stdin", _make_stdin(_base_input("Edit"))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            PreToolUseRemindAboutSerenaHook(HookClient.CLAUDE_CODE).execute()
+
+        output = capsys.readouterr().out.strip()
+        assert output, "expected a non-symbolic deny to be emitted"
+        result = json.loads(output)
+        hook_output = result["hookSpecificOutput"]
+        assert hook_output["permissionDecision"] == "deny"
+        assert "symbolic" in hook_output["additionalContext"].lower()
 
 
 class TestToolUseCounter:
@@ -260,6 +347,40 @@ class TestToolUseCounter:
         path.write_bytes(b"not a pickle")
         loaded = ToolUseCounter.load(hook_stub)  # type: ignore[arg-type]
         assert loaded == ToolUseCounter()
+
+    def test_can_emit_deny_respects_min_interval(self):
+        """:meth:`can_emit_deny` returns False within the minimum interval, True outside it."""
+        counter = ToolUseCounter()
+        base = datetime.now()
+
+        # no prior deny → always allowed
+        assert counter.can_emit_deny(base)
+
+        # within the interval → rate-limited
+        counter.last_deny_timestamp = base
+        interval = ToolUseCounter._MIN_DENY_INTERVAL_SECONDS
+        assert not counter.can_emit_deny(base + timedelta(seconds=interval - 1))
+        assert not counter.can_emit_deny(base)
+
+        # at/after the interval → allowed again
+        assert counter.can_emit_deny(base + timedelta(seconds=interval))
+        assert counter.can_emit_deny(base + timedelta(seconds=interval + 1))
+
+    def test_reset_preserves_last_deny_timestamp(self):
+        """``reset`` clears burst counters but must keep ``last_deny_timestamp`` intact."""
+        counter = ToolUseCounter()
+        base = datetime.now()
+        counter.last_deny_timestamp = base
+        counter.n_recent_grep_uses = 5
+        counter.n_recent_read_file_uses = 4
+        counter.n_recent_non_symbolic_uses = 7
+
+        counter.reset()
+
+        assert counter.n_recent_grep_uses == 0
+        assert counter.n_recent_read_file_uses == 0
+        assert counter.n_recent_non_symbolic_uses == 0
+        assert counter.last_deny_timestamp == base
 
     @staticmethod
     def _make_hook_stub(tool_name: str, timestamp: datetime) -> PreToolUseRemindAboutSerenaHook:
