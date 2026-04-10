@@ -3,7 +3,8 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
-  - Added `serena init` command
+  - Add `serena init` command
+  - Add minimal usage data collection on startup (only Serena version, language backend, OS, dashboard enabled status; no personally identifiable information)
 
 * Language Servers:
   - Added Crystal language support (uses [Crystalline](https://github.com/elbywan/crystalline) language server)  
