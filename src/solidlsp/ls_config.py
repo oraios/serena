@@ -49,6 +49,7 @@ class Language(str, Enum):
     ELIXIR = "elixir"
     ELM = "elm"
     TERRAFORM = "terraform"
+    OPENTOFU = "opentofu"
     SWIFT = "swift"
     BASH = "bash"
     CRYSTAL = "crystal"
@@ -231,8 +232,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.ex", "*.exs")
             case self.ELM:
                 return FilenameMatcher("*.elm")
-            case self.TERRAFORM:
-                return FilenameMatcher("*.tf", "*.tfvars", "*.tfstate")
+            case self.TERRAFORM | self.OPENTOFU:
+                return FilenameMatcher("*.tf")
             case self.SWIFT:
                 return FilenameMatcher("*.swift")
             case self.BASH:
@@ -411,7 +412,7 @@ class Language(str, Enum):
                 from solidlsp.language_servers.elm_language_server import ElmLanguageServer
 
                 return ElmLanguageServer
-            case self.TERRAFORM:
+            case self.TERRAFORM | self.OPENTOFU:
                 from solidlsp.language_servers.terraform_ls import TerraformLS
 
                 return TerraformLS

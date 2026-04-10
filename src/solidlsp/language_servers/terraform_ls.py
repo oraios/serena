@@ -21,7 +21,7 @@ TERRAFORM_LS_ALLOWED_HOSTS = ("releases.hashicorp.com",)
 
 class TerraformLS(SolidLanguageServer):
     """
-    Provides Terraform specific instantiation of the LanguageServer class using terraform-ls.
+    Provides Terraform/OpenTofu specific instantiation of the LanguageServer class using terraform-ls.
 
     You can pass the following entries in ``ls_specific_settings["terraform"]``:
         - terraform_ls_version: Override the pinned terraform-ls version downloaded
@@ -62,33 +62,41 @@ class TerraformLS(SolidLanguageServer):
 
     @staticmethod
     def _ensure_tf_command_available() -> None:
-        log.debug("Starting terraform version detection...")
+        log.debug("Starting Terraform/OpenTofu CLI detection...")
 
-        # 1. Try to find terraform using shutil.which
-        terraform_cmd = shutil.which("terraform")
+        # 1. Try standard CLI names from PATH
+        for binary_name in ["terraform", "tofu"]:
+            cli_cmd = shutil.which(binary_name)
+            if cli_cmd is not None:
+                log.debug(f"Found {binary_name} via shutil.which: {cli_cmd}")
+                return
+
+        terraform_cmd = None
+
+        # 2. Fallback to explicitly configured CLI paths
+        for env_var_name, binary_name in [("TOFU_CLI_PATH", "tofu"), ("TERRAFORM_CLI_PATH", "terraform")]:
+            cli_path = os.environ.get(env_var_name)
+            if not cli_path:
+                continue
+
+            log.debug(f"Trying {env_var_name}: {cli_path}")
+            if os.name == "nt":
+                cli_binary = os.path.join(cli_path, f"{binary_name}.exe")
+            else:
+                cli_binary = os.path.join(cli_path, binary_name)
+
+            if os.path.exists(cli_binary):
+                terraform_cmd = cli_binary
+                log.debug(f"Found {binary_name} via {env_var_name}: {terraform_cmd}")
+                return
+
         if terraform_cmd is not None:
-            log.debug(f"Found terraform via shutil.which: {terraform_cmd}")
             return
 
-        # TODO: is this needed?
-        # 2. Fallback to TERRAFORM_CLI_PATH (set by hashicorp/setup-terraform action)
-        if not terraform_cmd:
-            terraform_cli_path = os.environ.get("TERRAFORM_CLI_PATH")
-            if terraform_cli_path:
-                log.debug(f"Trying TERRAFORM_CLI_PATH: {terraform_cli_path}")
-                # TODO: use binary name from runtime dependencies if we keep this code
-                if os.name == "nt":
-                    terraform_binary = os.path.join(terraform_cli_path, "terraform.exe")
-                else:
-                    terraform_binary = os.path.join(terraform_cli_path, "terraform")
-                if os.path.exists(terraform_binary):
-                    terraform_cmd = terraform_binary
-                    log.debug(f"Found terraform via TERRAFORM_CLI_PATH: {terraform_cmd}")
-                    return
-
         raise RuntimeError(
-            "Terraform executable not found, please ensure Terraform is installed."
-            "See https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli for instructions."
+            "Terraform/OpenTofu executable not found, please ensure Terraform or OpenTofu is installed."
+            "See https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli"
+            " or https://opentofu.org/docs/intro/install/ for instructions."
         )
 
     @classmethod

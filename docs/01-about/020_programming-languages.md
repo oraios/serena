@@ -84,6 +84,8 @@ Some languages require additional installations or setup steps, as noted.
   (requires nixd installation)
 * **OCaml**
   (requires opam and ocaml-lsp-server to be installed manually; see the [OCaml Setup Guide](../03-special-guides/ocaml_setup_guide_for_serena.md))
+* **OpenTofu**
+  (language `opentofu`; uses the Terraform language server and supports repositories that have `tofu` or `terraform` installed)
 * **Pascal**  
   (uses Pascal/Lazarus, which is automatically downloaded; set `PP` and `FPCDIR` environment variables for source navigation)
 * **Perl**  

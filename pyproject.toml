@@ -312,6 +312,7 @@ markers = [
   "elixir: language server running for Elixir",
   "elm: language server running for Elm",
   "terraform: language server running for Terraform",
+  "opentofu: language server running for OpenTofu",
   "swift: language server running for Swift",
   "bash: language server running for Bash",
   "r: language server running for R",

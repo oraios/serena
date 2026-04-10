@@ -21,6 +21,19 @@ from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name,
 class TestLanguageServerBasics:
     """Test basic functionality of the Terraform language server."""
 
+    def test_source_matcher_excludes_tfvars_and_tfstate(self) -> None:
+        """Test that indexing targets only Terraform source files."""
+        terraform_matcher = Language.TERRAFORM.get_source_fn_matcher()
+        opentofu_matcher = Language.OPENTOFU.get_source_fn_matcher()
+
+        assert terraform_matcher.is_relevant_filename("main.tf")
+        assert opentofu_matcher.is_relevant_filename("main.tf")
+
+        assert not terraform_matcher.is_relevant_filename("terraform.tfvars")
+        assert not terraform_matcher.is_relevant_filename("terraform.tfstate")
+        assert not opentofu_matcher.is_relevant_filename("terraform.tfvars")
+        assert not opentofu_matcher.is_relevant_filename("terraform.tfstate")
+
     @pytest.mark.parametrize("language_server", [Language.TERRAFORM], indirect=True)
     def test_basic_definition(self, language_server: SolidLanguageServer) -> None:
         """Test basic definition lookup functionality."""

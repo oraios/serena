@@ -56,11 +56,12 @@ You can choose either of these backends depending on your preferences and requir
 
 ### Language Servers
 
-Serena incorporates a powerful abstraction layer for the integration of language servers that implement the language server protocol (LSP). 
-The underlying language servers are typically open-source projects or at least freely available for use.
+Serena incorporates a powerful abstraction layer for the integration of language servers
+that implement the language server protocol (LSP).
+The underlying language servers are typically open-source projects (like Serena) or at least freely available for use.
 
 When using Serena's language server backend, we provide **support for over 40 programming languages**, including
-AL, Ansible, Bash, C#, C/C++, Clojure, Crystal, Dart, Elixir, Elm, Erlang, Fortran, F#, GLSL, Go, Groovy, Haskell, HLSL, Java, JavaScript, Julia, Kotlin, Lean 4, Lua, Luau, Markdown, MATLAB, Nix, OCaml, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Scala, Solidity, Swift, TOML, TypeScript, WGSL, YAML, and Zig.
+AL, Ansible, Bash, C#, C/C++, Clojure, Crystal, Dart, Elixir, Elm, Erlang, Fortran, F#, GLSL, Go, Groovy, Haskell, HLSL, Java, JavaScript, Julia, Kotlin, Lean 4, Lua, Luau, Markdown, MATLAB, Nix, OCaml, OpenTofu Perl, PHP, PowerShell, Python, R, Ruby, Rust, Scala, Solidity, Swift, TOML, TypeScript, WGSL, YAML, and Zig.
 
 ### The Serena JetBrains Plugin
 
