@@ -7,9 +7,11 @@ Status of the `main` branch. Changes prior to the next official version change w
   - **Major**: added commands for hooks and documentation on recommended setup. Consider setting up the [recommended hooks](https://oraios.github.io/serena/02-usage/030_clients.html) !
   - Reworked installation instructions, switching to releases on pypi for distribution. Please update your mcp startup commands!
   - Add minimal usage data collection on startup (only Serena version, language backend, OS, dashboard enabled status; no personally identifiable information)
+  - Fix: git commit id in Serena version strings was incorrect
 
 * Language Servers:
   - Added Crystal language support (uses [Crystalline](https://github.com/elbywan/crystalline) language server)
+  - Fix: Reactivation of the same project restarted language servers #1280
 
 * JetBrains:
   - `JetBrainsFindReferencingSymbolTool`: Include context lines (when using plugin version 2023.2.15+)
@@ -18,11 +20,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add version display
   - Dashboard viewer (Windows): Add a parent monitoring thread to ensure termination.
     Some clients would terminate the MCP server in a way that did not ensure proper termination.
-
-* Fixes:
-  - Fix reactivation of the same project restarting language servers #1280
-  - Fix git commit id in version string
-  - Fix manual server shutdown triggered by GUI tool/dashboard not cleaning everything up.
+  - Fix: Manual server shutdown triggered by GUI tool/dashboard not cleaning everything up.
 
 # 1.0.0
 
