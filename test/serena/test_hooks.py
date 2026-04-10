@@ -180,8 +180,10 @@ class TestPreToolUseRemindAboutSerenaHook:
 
         assert capsys.readouterr().out == ""
 
-    def test_rate_limit_suppresses_second_deny_within_interval(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        """A second burst detected within the minimum deny interval must not emit a deny."""
+    def test_rate_limit_gates_entire_hook_within_interval(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """While within the rate-limit window, the entire hook must be a no-op:
+        no deny is emitted, AND the persisted counters must remain untouched.
+        """
         # first burst: should emit a deny
         for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
             with patch("sys.stdin", _make_stdin(_base_input("grep"))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
@@ -189,12 +191,21 @@ class TestPreToolUseRemindAboutSerenaHook:
         first_output = capsys.readouterr().out.strip()
         assert first_output, "first burst should have emitted a deny"
 
-        # second burst immediately after: within the 1-minute window, must be suppressed
+        # snapshot the persisted counter immediately after the deny was emitted
+        stub_for_path = object.__new__(PreToolUseRemindAboutSerenaHook)
+        stub_for_path.session_persistence_dir = str(tmp_path / "hook_data" / _base_input()["session_id"])
+        counter_before = ToolUseCounter.load(stub_for_path)
+
+        # second burst immediately after: within the rate-limit window, the entire
+        # hook must short-circuit — no deny output and no counter mutation
         for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
             with patch("sys.stdin", _make_stdin(_base_input("grep"))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
                 PreToolUseRemindAboutSerenaHook(HookClient.CLAUDE_CODE).execute()
 
         assert capsys.readouterr().out == ""
+
+        counter_after = ToolUseCounter.load(stub_for_path)
+        assert counter_after == counter_before, "gated hook must not mutate the persisted counter"
 
     def test_rate_limit_allows_deny_after_interval(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
         """Once the minimum deny interval has elapsed, a fresh burst emits a deny again."""
@@ -348,23 +359,23 @@ class TestToolUseCounter:
         loaded = ToolUseCounter.load(hook_stub)  # type: ignore[arg-type]
         assert loaded == ToolUseCounter()
 
-    def test_can_emit_deny_respects_min_interval(self):
-        """:meth:`can_emit_deny` returns False within the minimum interval, True outside it."""
+    def test_is_hook_active_respects_min_interval(self):
+        """:meth:`is_hook_active` returns False within the minimum interval, True outside it."""
         counter = ToolUseCounter()
         base = datetime.now()
 
-        # no prior deny → always allowed
-        assert counter.can_emit_deny(base)
+        # no prior deny → hook is always active
+        assert counter.is_hook_active(base)
 
-        # within the interval → rate-limited
+        # within the interval → hook gated
         counter.last_deny_timestamp = base
         interval = ToolUseCounter._MIN_DENY_INTERVAL_SECONDS
-        assert not counter.can_emit_deny(base + timedelta(seconds=interval - 1))
-        assert not counter.can_emit_deny(base)
+        assert not counter.is_hook_active(base + timedelta(seconds=interval - 1))
+        assert not counter.is_hook_active(base)
 
-        # at/after the interval → allowed again
-        assert counter.can_emit_deny(base + timedelta(seconds=interval))
-        assert counter.can_emit_deny(base + timedelta(seconds=interval + 1))
+        # at/after the interval → hook active again
+        assert counter.is_hook_active(base + timedelta(seconds=interval))
+        assert counter.is_hook_active(base + timedelta(seconds=interval + 1))
 
     def test_reset_preserves_last_deny_timestamp(self):
         """``reset`` clears burst counters but must keep ``last_deny_timestamp`` intact."""

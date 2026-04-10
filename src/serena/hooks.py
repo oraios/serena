@@ -103,11 +103,13 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
     increment nor reset counters, so they also do not mask bursts by pushing the last
     timestamp forward.
 
-    Deny emissions are additionally rate-limited to at most one per
-    :attr:`ToolUseCounter._MIN_DENY_INTERVAL_SECONDS` (one minute): once a deny has
-    been emitted, subsequent bursts detected within that window still reset the
-    counters but do not produce further nudges, so the agent is not swamped with
-    reminders during a sustained non-symbolic-tool burst.
+    The hook is additionally gated by :attr:`ToolUseCounter._MIN_DENY_INTERVAL_SECONDS`
+    (two minutes by default): once a deny has been emitted, *every* subsequent
+    invocation of this hook is a no-op until the window has elapsed — neither the
+    counters are updated nor any further deny is produced. This prevents the agent
+    from being nudged more than once per window during a sustained non-symbolic-tool
+    burst, and also avoids surprising the user with reminders that were already
+    counted up under stale state.
     """
 
     @dataclass
@@ -124,8 +126,9 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
         # reset period for the combined counter
         _NON_SYMBOLIC_RESET_PERIOD_SECONDS = 2000
 
-        # minimum seconds between two emitted denies; rate-limits reminder nudges so
-        # a single sustained burst triggers at most one deny per minute
+        # minimum seconds between two engagements of the hook after a deny; the entire
+        # hook (counter updates included) is a no-op while this window is active, so a
+        # single sustained burst triggers at most one nudge per window
         _MIN_DENY_INTERVAL_SECONDS = 120
 
         n_recent_read_file_uses: int = 0
@@ -147,13 +150,13 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
         def too_many_recent_non_symbolic(self) -> bool:
             return self.n_recent_non_symbolic_uses >= self._NON_SYMBOLIC_USES_THRESHOLD
 
-        def can_emit_deny(self, now: datetime) -> bool:
-            """:return: whether enough time has elapsed since the last emitted deny
-            to allow another one. A value of ``True`` is also returned when no
-            deny has been emitted yet in this session. The rate limit prevents
-            the agent from being nudged more than once per
-            :attr:`_MIN_DENY_INTERVAL_SECONDS`, even if further bursts are
-            detected in the meantime.
+        def is_hook_active(self, now: datetime) -> bool:
+            """:return: whether the hook should engage at all at ``now``. Returns
+            ``False`` while we are still within :attr:`_MIN_DENY_INTERVAL_SECONDS`
+            of the most recent emitted deny — in that case the entire hook is
+            short-circuited (no counter updates, no deny). Returns ``True`` when
+            no deny has been emitted yet in this session, or when the window has
+            elapsed.
             """
             if self.last_deny_timestamp is None:
                 return True
@@ -258,6 +261,13 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
         return any(verb in name for verb in self._READ_FILE_VERB_SUBSTRINGS)
 
     def execute(self) -> None:
+        # gate the entire hook on the rate-limit window: while we are within
+        # _MIN_DENY_INTERVAL_SECONDS of the last emitted deny, no counter
+        # updates and no deny detection happen at all. The pickle is left
+        # untouched so state survives the gating window unchanged.
+        if not self._tool_call_counter.is_hook_active(self.triggered_at_timestamp):
+            return
+
         self._tool_call_counter.update(self)
 
         # pick the deny that matches the current call first, so the emitted message lines up
@@ -282,13 +292,12 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
             output_data = self._build_non_symbolic_deny()
 
         if output_data is not None:
-            # reset first so burst detection starts fresh regardless of whether the
-            # deny is actually emitted; the rate limit only gates *emission*, not
-            # detection
+            # reset burst counters so the next interval starts fresh, then record
+            # the deny timestamp and emit. The is_hook_active() guard at the top
+            # ensures we never reach this branch within the rate-limit window.
             self._tool_call_counter.reset()
-            if self._tool_call_counter.can_emit_deny(self.triggered_at_timestamp):
-                self._tool_call_counter.last_deny_timestamp = self.triggered_at_timestamp
-                click.echo(output_data.to_json_string())
+            self._tool_call_counter.last_deny_timestamp = self.triggered_at_timestamp
+            click.echo(output_data.to_json_string())
         self._tool_call_counter.save(self)
 
     def _build_grep_deny(self) -> "PreToolUseHook.OutputData":
