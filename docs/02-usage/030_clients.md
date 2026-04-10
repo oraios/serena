@@ -89,6 +89,10 @@ Confirm that Claude Code is connected to Serena by running the `/mcp` command an
 ```shell
 claude mcp add --scope user serena -- uvx --python 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server --context=claude-code --project-from-cwd
 ```
+On Windows (Powershell):
+```shell
+claude mcp add --scope user serena -- "uvx --python 3.13 --from git+https://github.com/oraios/serena serena start-mcp-server --context=claude-code --project-from-cwd"
+```
 
 **Per-Project Configuration.** Alternatively, to add Serena only for the current project in the current directory, 
 use the command:
