@@ -185,8 +185,19 @@ class HaxeLanguageServer(SolidLanguageServer):
                 [
                     RuntimeDependency(
                         id="haxe-language-server-npm-install",
-                        description="Install npm dependencies",
-                        command=["npm", "install"],
+                        description="Install npm dependencies (without postinstall scripts)",
+                        command=["npm", "install", "--ignore-scripts"],
+                        platform_id="any",
+                    ),
+                ]
+            )
+
+            lix_download_deps = RuntimeDependencyCollection(
+                [
+                    RuntimeDependency(
+                        id="haxe-language-server-lix-download",
+                        description="Download Haxe libraries via lix",
+                        command=["npx", "lix", "download"],
                         platform_id="any",
                     ),
                 ]
@@ -205,6 +216,8 @@ class HaxeLanguageServer(SolidLanguageServer):
 
             log.info("Installing npm dependencies for haxe-language-server...")
             install_deps.install(repo_dir)
+            log.info("Downloading Haxe libraries via lix...")
+            lix_download_deps.install(repo_dir)
             log.info("Building haxe-language-server...")
             build_deps.install(repo_dir)
 
