@@ -4,7 +4,7 @@ Tools supporting the general workflow of the agent
 
 import platform
 
-from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject
+from serena.tools import ReadMemoryTool, Tool, ToolMarkerDoesNotRequireActiveProject, WriteMemoryTool
 
 
 class CheckOnboardingPerformedTool(Tool):
@@ -17,12 +17,16 @@ class CheckOnboardingPerformedTool(Tool):
         Checks whether project onboarding was already performed.
         You should always call this tool before beginning to actually work on the project/after activating a project.
         """
+        read_memory_tool_available = self.agent.tool_is_exposed(ReadMemoryTool.get_name_from_cls())
+        perform_onboarding_tool_available = self.agent.tool_is_exposed(OnboardingTool.get_name_from_cls())
+
+        if not read_memory_tool_available:
+            return "Memory reading tool not activated, skipping onboarding check."
         project_memories = self.memories_manager.list_project_memories()
         if len(project_memories) == 0:
-            msg = (
-                "Onboarding not performed yet (no memories available). "
-                "You should perform onboarding by calling the `onboarding` tool before proceeding with the task. "
-            )
+            msg = "Onboarding not performed yet (no memories available). "
+            if perform_onboarding_tool_available:
+                msg += "You should perform onboarding by calling the `onboarding` tool before proceeding with the task. "
         else:
             # Not reporting the list of memories here, as they were already reported at project activation
             # (with the system prompt if the project was activated at startup)
@@ -46,6 +50,9 @@ class OnboardingTool(Tool):
 
         :return: instructions on how to create the onboarding information
         """
+        write_memory_tool_available = self.agent.tool_is_exposed(WriteMemoryTool.get_name_from_cls())
+        if not write_memory_tool_available:
+            return "Memory writing tool not activated, skipping onboarding."
         system = platform.system()
         return self.prompt_factory.create_onboarding_prompt(system=system)
 

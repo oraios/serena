@@ -134,14 +134,13 @@ set ENABLE_TOOL_SEARCH=true && claude
 in Windows CMD to launch Claude Code.
 
 **Hooks.**
-Claude Code's agent can sometimes drift away from using MCP tools during long sessions, falling back
-to built-in tools or forgetting to load Serena's instructions. Serena provides hook commands that
-automatically remind the agent to use Serena's tools when appropriate.
+Due to recent changes (especially dynamic tool loading) in Claude Code, the agent will often fail to make proper use
+of Serena's tools, either by failing to load them in the beginning or by forgetting the instructions in a long session
+(a behavior known as agent drift). To counteract this, we provide reminder hooks. We **strongly recommend** setting
+up the hooks as below (or a variation thereof) for optimal performance of Serena in Claude Code.
 
 :::{note}
-Hooks are an **alpha feature** that we provide to overcome context drift in several agent harnesses
-(where agents, especially those powered by Anthropic models, may forget to load and use MCP tools or
-fail to read MCP instructions).
+While recommended, hooks are an **alpha feature**. Provide feedback via the [GitHub issue tracker](https://github.com/serenadeai/serenade/issues) if you encounter any issues.
 :::
 
 To set up hooks, add the following to your Claude Code settings file
@@ -235,15 +234,11 @@ In both cases, proceed to enter Serena as the name, then select either global or
 You should be able to see Serena in the tools overview in the AI Chat window.
 
 **Hooks.**
-VSCode's Copilot agent can sometimes over-rely on basic tools like `read_file` and `grep_search` instead of
-using Serena's more efficient symbolic tools. You can use Serena's hook commands to automatically correct
-for this — the hooks will simply remind the agent to use Serena's tools when appropriate.
+Due to recent changes (especially dynamic tool loading) in VSCode, the agent will often fail to make proper use
+of Serena's tools, either by failing to load them in the beginning or by forgetting the instructions in a long session
+(a behaviour known as agent drift). To counteract this, we provide reminder hooks. We **strongly recommend** setting
+up the hooks as below (or a variation thereof) for optimal performance of Serena in VSCode.
 
-:::{note}
-Hooks are an **alpha feature** that we provide to overcome context drift in several agent harnesses
-(where agents, especially those powered by Anthropic models, may forget to load and use MCP tools or
-fail to read MCP instructions).
-:::
 
 The hooks will:
 
@@ -300,6 +295,10 @@ Run the `/mcp` command and verify that Serena is connected.
 The Codex app does not start a session in the project's directory, so when using the app, we recommend
 asking Codex to "Activate the current dir as project using serena" at the start of each session (though Codex might
 do this automatically).
+
+**Hooks.** The Codex hook system is less refined than of VSCode or Claude Code, but Codex also displays less drift
+and is better in using Serena's tools out of the box. If you use the Codex app, you can consider setting up the 
+SessionStart hook (see above) to remind the agent to activate the project directory.
 
 ## Claude Desktop
 

@@ -4,11 +4,12 @@ prompt: |
   as well as shell commands are handled by your own, internal tools.
   
   If Serena's tools can be used to achieve your task, you should prioritize them.
-  **IMPORTANT**: If you haven't seen Serena's tools yet, you should use the tool search tool to explore them.
-  Avoid reading entire source code files unless it is strictly necessary!
+  **IMPORTANT**: If you haven't seen Serena's tools yet, you should use the tool search tool to load all of them
+  right now.
   For exploring and reading code in a token-efficient manner, use Serena's code-centric overview and symbolic search tools.
   For edits, where it makes sense, use Serena's editing tools since they are more token efficient.
   Use your own editing tools only if Serena's editing tools would be suboptimal.
+  **IMPORTANT**: Never use a tool before reading its schema via the tool-search tool!
   
 
 excluded_tools:
@@ -18,6 +19,7 @@ excluded_tools:
   - replace_content
   - find_file
   - list_dir
+  - search_for_pattern
 
 tool_description_overrides: {}
 
