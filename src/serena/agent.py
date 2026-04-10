@@ -876,6 +876,13 @@ class SerenaAgent:
         """
         return self._active_tools.contains_tool_name(tool_name)
 
+    def tool_is_exposed(self, tool_name: str) -> bool:
+        """
+        :param tool_name: the name of the tool to check
+        :return: True if the tool is in the exposed tool set, False otherwise
+        """
+        return self._exposed_tools.contains_tool_name(tool_name)
+
     def get_current_config_overview(self) -> str:
         """
         :return: a string overview of the current configuration, including the active and available configuration options
