@@ -4,10 +4,14 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * General:
   - Added `serena init` command
+
+* Language Servers:
   - Added Crystal language support (uses [Crystalline](https://github.com/elbywan/crystalline) language server)  
 
 * Dashboard:
-  - Add version display 
+  - Add version display
+  - Dashboard viewer (Windows): Add a parent monitoring thread to ensure termination.
+    Some clients would terminate the MCP server in a way that did not ensure proper termination.
 
 * Fixes:
   - Fix reactivation of the same project restarting language servers #1280
