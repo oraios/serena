@@ -46,22 +46,25 @@ class Hook(ABC):
         pass
 
 
-class PreToolUseRemindAboutSerenaHook(Hook):
-    """Pre-tool-use hook that nudges the agent toward Serena's symbolic tools.
+class PreToolUseHook(Hook, ABC):
+    def __init__(self, client: HookClient):
+        super().__init__(client)
+        _tool_name = self._input_data.get("tool_name") or self._input_data.get("toolName", "") or ""
+        _tool_name = str(_tool_name).lower().strip()
+        if not _tool_name:
+            raise ValueError("Tool name is required in the hook input data")
+        self._tool_name = _tool_name
+        self._tool_input: dict | None = self._input_data.get("tool_input") or self._input_data.get("toolInput")
 
-    Tracks consecutive uses of grep and read-file tools via a persisted
-    :class:`ToolUseCounter`. When the number of recent calls reaches the
-    configured threshold, a deny response is emitted with a reminder to
-    use symbolic alternatives. The counter resets whenever a Serena tool
-    is invoked or a deny is emitted, so the agent is only reminded after
-    sustained non-symbolic tool use without intermittent Serena calls.
-    """
+        # only relevant in claude code at the moment, (not all events include this field; default to empty string)
+        raw_permission_mode = self._input_data.get("permission_mode") or self._input_data.get("permissionMode") or ""
+        self._permission_mode = str(raw_permission_mode).strip()
 
     @dataclass
     class OutputData:
         permission_decision: Literal["deny", "allow"]
         permission_decision_reason: str
-        additional_context: str
+        additional_context: str = ""
 
         def to_json_string(self) -> str:
             hook_output = {
@@ -74,13 +77,29 @@ class PreToolUseRemindAboutSerenaHook(Hook):
             }
             return json.dumps(hook_output)
 
+    def is_serena_tool(self) -> bool:
+        return "serena" in self._tool_name
+
+
+class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
+    """Pre-tool-use hook that nudges the agent toward Serena's symbolic tools.
+
+    Tracks consecutive uses of grep and read-file tools via a persisted
+    :class:`ToolUseCounter`. When the number of recent calls reaches the
+    configured threshold, a deny response is emitted with a reminder to
+    use symbolic alternatives. The counter resets whenever a Serena tool
+    is invoked or a deny is emitted, so the agent is only reminded after
+    sustained non-symbolic tool use without intermittent Serena calls.
+    """
+
     @dataclass
     class ToolUseCounter:
         _FILE_NAME = "tool_use_counter.pkl"
         _GREP_USES_THRESHOLD = 3
         _READ_FILE_USES_THRESHOLD = 3
 
-        _PERIOD_TO_RESET_COUNTERS_SECONDS = 10
+        _GREP_RESET_PERIOD_SECONDS = 10
+        _READ_FILE_RESET_PERIOD_SECONDS = 20
 
         n_recent_read_file_uses: int = 0
         n_recent_grep_uses: int = 0
@@ -121,11 +140,11 @@ class PreToolUseRemindAboutSerenaHook(Hook):
                 return
 
             now = hook.triggered_at_timestamp
-            period = self._PERIOD_TO_RESET_COUNTERS_SECONDS
 
             # update grep counter
             if hook.is_grep_tool():
-                if self.last_grep_use_timestamp is not None and (now - self.last_grep_use_timestamp).total_seconds() <= period:
+                grep_period = self._GREP_RESET_PERIOD_SECONDS
+                if self.last_grep_use_timestamp is not None and (now - self.last_grep_use_timestamp).total_seconds() <= grep_period:
                     self.n_recent_grep_uses += 1
                 else:
                     self.n_recent_grep_uses = 1
@@ -133,7 +152,11 @@ class PreToolUseRemindAboutSerenaHook(Hook):
 
             # update read file counter
             if hook.is_read_file_tool():
-                if self.last_read_file_use_timestamp is not None and (now - self.last_read_file_use_timestamp).total_seconds() <= period:
+                read_period = self._READ_FILE_RESET_PERIOD_SECONDS
+                if (
+                    self.last_read_file_use_timestamp is not None
+                    and (now - self.last_read_file_use_timestamp).total_seconds() <= read_period
+                ):
                     self.n_recent_read_file_uses += 1
                 else:
                     self.n_recent_read_file_uses = 1
@@ -147,12 +170,6 @@ class PreToolUseRemindAboutSerenaHook(Hook):
 
     def __init__(self, client: HookClient):
         super().__init__(client)
-        _tool_name = self._input_data.get("tool_name") or self._input_data.get("toolName", "") or ""
-        _tool_name = str(_tool_name).lower().strip()
-        if not _tool_name:
-            raise ValueError("Tool name is required in the hook input data")
-        self._tool_name = _tool_name
-        self._tool_input: dict | None = self._input_data.get("tool_input") or self._input_data.get("toolInput")
         self._tool_call_counter = self.ToolUseCounter.load(self)
 
     def is_grep_tool(self) -> bool:
@@ -165,23 +182,20 @@ class PreToolUseRemindAboutSerenaHook(Hook):
             return self._tool_name == "read"
         return "read" in self._tool_name and "file" in self._tool_name
 
-    def is_serena_tool(self) -> bool:
-        return "serena" in self._tool_name
-
     def execute(self) -> None:
         self._tool_call_counter.update(self)
         output_data = None
         if self._tool_call_counter.too_many_recent_greps():
             output_data = self.OutputData(
                 permission_decision="deny",
-                permission_decision_reason="Not using symbolic tools. You can continue using grep now if needed, the counter was reset.",
-                additional_context="You were using many grep calls recently. Consider using Serena's symbolic search tools instead.",
+                permission_decision_reason="Too many consecutive grep calls without using symbolic tools.",
+                additional_context="You were using many grep calls recently. Consider using Serena's symbolic search tools instead. You can continue using grep now if needed, the counter was reset.",
             )
         if self._tool_call_counter.too_many_recent_reads():
             output_data = self.OutputData(
                 permission_decision="deny",
-                permission_decision_reason="Not using symbolic tools. You can continue using read now if needed, the counter was reset.",
-                additional_context="You were using many read file calls recently. Consider using Serena's symbolic overview and search instead.",
+                permission_decision_reason="Too many consecutive read calls without using symbolic tools.",
+                additional_context="You were using many read file calls recently. Consider using Serena's symbolic overview and search instead. You can continue using read now if needed, the counter was reset",
             )
         if output_data is not None:
             self._tool_call_counter.reset()
@@ -192,7 +206,7 @@ class PreToolUseRemindAboutSerenaHook(Hook):
 class SessionStartActivateProjectHook(Hook):
     def execute(self) -> None:
         message = (
-            "**IMPORTANT**: Activate the current working directory as project using Serena's tools. "
+            "**IMPORTANT**: Activate the current working directory as project using Serena's tools if not already done. "
             "If you haven't read Serena Instructions Manual yet, do so. "
             "Follow this instruction before doing anything else."
         )
@@ -208,6 +222,34 @@ class SessionStartActivateProjectHook(Hook):
 class SessionEndCleanupHook(Hook):
     def execute(self) -> None:
         shutil.rmtree(self.session_persistence_dir, ignore_errors=True)
+
+
+class PreToolUseAutoApproveSerenaHook(PreToolUseHook):
+    """Pre-tool-use hook that auto-approves Serena tool calls while the client is in accept-edits mode.
+
+    Claude Code's ``acceptEdits`` permission mode only applies to its built-in editing tools;
+    Serena's destructive tools (e.g. ``replace_symbol_body`` or ``rename_symbol``) would still
+    prompt the user on every call. This hook emits an ``allow`` decision for any Serena MCP
+    tool call whenever the client reports ``acceptEdits`` as the active permission mode, so
+    blanket edit approvals also cover Serena's tools. In all other situations it stays silent,
+    preserving the default approval flow.
+    """
+
+    _ACCEPT_EDITS_MODE = "acceptEdits"
+
+    def is_accept_edits_mode(self) -> bool:
+        return self._permission_mode == self._ACCEPT_EDITS_MODE
+
+    def execute(self) -> None:
+        # only emit a decision when both the tool and the mode match; stay silent otherwise
+        if not self.is_serena_tool() or not self.is_accept_edits_mode():
+            return
+
+        output_data = self.OutputData(
+            permission_decision="allow",
+            permission_decision_reason="Auto-approved: Serena tool call while client is in acceptEdits mode.",
+        )
+        click.echo(output_data.to_json_string())
 
 
 _client_option = click.option(
@@ -246,6 +288,15 @@ class HookCommands(AutoRegisteringGroup):
     @_client_option
     def remind(client: str) -> None:
         PreToolUseRemindAboutSerenaHook(HookClient(client)).execute()
+
+    @staticmethod
+    @click.command(
+        "auto-approve",
+        help="Set this as hook at PreToolUse to auto-approve Serena tool calls while the client is in acceptEdits mode (Claude Code).",
+    )
+    @_client_option
+    def auto_approve(client: str) -> None:
+        PreToolUseAutoApproveSerenaHook(HookClient(client)).execute()
 
 
 hook_commands = HookCommands()
