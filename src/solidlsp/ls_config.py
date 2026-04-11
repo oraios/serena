@@ -69,6 +69,11 @@ class Language(str, Enum):
     JULIA = "julia"
     FORTRAN = "fortran"
     HASKELL = "haskell"
+    HAXE = "haxe"
+    """Haxe language server using vshaxe/haxe-language-server.
+    Requires Haxe compiler (3.4.0+) and Node.js.
+    Discovered from system PATH or vshaxe VSCode extension, otherwise downloaded from Open VSX.
+    """
     LEAN4 = "lean4"
     GROOVY = "groovy"
     VUE = "vue"
@@ -279,6 +284,8 @@ class Language(str, Enum):
                 )
             case self.HASKELL:
                 return FilenameMatcher("*.hs", "*.lhs")
+            case self.HAXE:
+                return FilenameMatcher("*.hx")
             case self.LEAN4:
                 return FilenameMatcher("*.lean")
             case self.VUE:
@@ -501,6 +508,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.haskell_language_server import HaskellLanguageServer
 
                 return HaskellLanguageServer
+            case self.HAXE:
+                from solidlsp.language_servers.haxe_language_server import HaxeLanguageServer
+
+                return HaxeLanguageServer
             case self.LEAN4:
                 from solidlsp.language_servers.lean4_language_server import Lean4LanguageServer
 

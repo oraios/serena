@@ -1,0 +1,3 @@
+-cp src
+-main Main
+--no-output
