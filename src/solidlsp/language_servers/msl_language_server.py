@@ -75,9 +75,7 @@ class MslLanguageServer(SolidLanguageServer):
                 log.info("mSL language server setup complete")
 
             if not os.path.exists(msl_lsp_script):
-                raise FileNotFoundError(
-                    f"mSL LSP script not found at {msl_lsp_script}, something went wrong with the installation."
-                )
+                raise FileNotFoundError(f"mSL LSP script not found at {msl_lsp_script}, something went wrong with the installation.")
 
             return venv_python
 
