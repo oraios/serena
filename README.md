@@ -18,7 +18,8 @@ Practically, this means that your agent operates **faster, more efficiently and 
 more complex codebases.
 
 > [!IMPORTANT]
-> Don't install Serena via an MCP or plugin marketplace! They contain outdated and suboptimal installation commands. Instead, follow our Quick Start instructions.
+> Do not install Serena via an MCP or plugin marketplace! They contain outdated and suboptimal installation commands. 
+> Instead, follow our [Quick Start](quick-start) instructions.
 
 ## How Serena Works
 
@@ -37,7 +38,7 @@ To connect the Serena MCP server to your client, you either
   * provide the client with a launch command that allows it to start the MCP server, or
   * start the Serena MCP server yourself in HTTP mode and provide the client with the URL.
 
-See the Quick Start section below for information on how to get started.
+See the [Quick Start](quick-start) section below for information on how to get started.
 
 ## Programming Language Support & Semantic Analysis Capabilities
 
