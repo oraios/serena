@@ -14,6 +14,7 @@ from contextlib import contextmanager
 from logging import Logger
 from typing import TYPE_CHECKING, Optional, TypeVar
 
+import requests
 import webview
 from sensai.util import logging
 from sensai.util.logging import LogTime
@@ -405,6 +406,23 @@ class SerenaAgent:
             # inform the GUI window (if any)
             if self._gui_log_viewer is not None:
                 self._gui_log_viewer.set_dashboard_url(dashboard_url)
+
+        self._send_usage_info()
+
+    def _send_usage_info(self) -> None:
+        is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
+        if is_ci:
+            return
+        params = {
+            "os": platform.system(),
+            "dashboard": int(self.serena_config.web_dashboard),
+            "version": self.version,
+            "backend": self._language_backend.value,
+        }
+        try:
+            requests.get("https://www.oraios-software.de/serena_usage.php", params=params, timeout=1, verify=False)
+        except Exception as e:
+            log.debug(f"Failed to send usage info: {e}")
 
     @classmethod
     def _create_base_toolset(
