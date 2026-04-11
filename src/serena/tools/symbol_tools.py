@@ -290,7 +290,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
                 ref_dict["content_around_reference"] = content_around_ref.to_display_string()
             reference_dicts.append(ref_dict)
 
-        # capture lightweight reference data before grouping, which mutates the dicts
+        # capture lightweight reference data before grouping
         ref_summaries = []
         for ref, d in zip(references_in_symbols, reference_dicts, strict=True):
             ref_summaries.append(

@@ -2,22 +2,30 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+# 1.1.0
+
 * General:
-  - Added `serena init` command
+  - Add `serena init` and `serena setup` commands
+  - **Major**: Add commands for hooks and documentation of recommended setup. Consider setting up the [recommended hooks](https://oraios.github.io/serena/02-usage/030_clients.html) !
+  - Rework installation instructions, switching to releases on pypi for distribution. Please update your mcp startup commands!
+  - Add minimal usage data collection on startup (only Serena version, language backend, OS, dashboard enabled status; no personally identifiable information)
+  - Fix: git commit id in Serena version strings was incorrect
 
 * Language Servers:
   - Added Crystal language support (uses [Crystalline](https://github.com/elbywan/crystalline) language server)  
   - Added mSL (mIRC Scripting Language) support (custom pygls-based language server)
+  - Add support for Haxe via vshaxe/haxe-language-server. Requires Haxe compiler 3.4.0+ and Node.js. Auto-discovered from the vshaxe VSCode extension or configurable via `ls_path` in `ls_specific_settings`.
+  - Add Crystal language support (uses [Crystalline](https://github.com/elbywan/crystalline) language server)
+  - Fix: Reactivation of the same project restarted language servers #1280
+
+* JetBrains:
+  - `JetBrainsFindReferencingSymbolTool`: Include context lines (when using plugin version 2023.2.15+)
 
 * Dashboard:
   - Add version display
-  - Dashboard viewer (Windows): Add a parent monitoring thread to ensure termination.
+  - Fix: Dashboard viewer (Windows): Add a parent monitoring thread to ensure termination.
     Some clients would terminate the MCP server in a way that did not ensure proper termination.
-
-* Fixes:
-  - Fix reactivation of the same project restarting language servers #1280
-  - Fix git commit id in version
-  - Fix manual shutdown triggered by GUI tool/dashboard not cleaning everything up.
+  - Fix: Manual server shutdown triggered by GUI tool/dashboard not cleaning everything up.
 
 # 1.0.0
 
@@ -74,7 +82,6 @@ Status of the `main` branch. Changes prior to the next official version change w
   * **Add support for Lean 4** via built-in `lean --server` with cross-file reference support (requires `lean` and `lake` via [elan](https://github.com/leanprover/elan))
   * **Add support for OCaml** via ocaml-lsp-server with cross-file reference support on OCaml 5.2+ (requires opam; see [setup guide](docs/03-special-guides/ocaml_setup_guide_for_serena.md))
   * **Add Phpactor as alternative PHP language server** (specify `php_phpactor` as language; requires PHP 8.1+)
-  * **Add support for Haxe** via vshaxe/haxe-language-server. Requires Haxe compiler 3.4.0+ and Node.js. Auto-discovered from the vshaxe VSCode extension or configurable via `ls_path` in `ls_specific_settings`.
   * **Add support for Fortran** via fortls language server (requires `pip install fortls`)
   * **Add partial support for Groovy** requires user-provided Groovy language server JAR (see [setup guide](docs/03-special-guides/groovy_setup_guide_for_serena.md))
   * **Add support for Julia** via LanguageServer.jl

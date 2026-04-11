@@ -33,7 +33,7 @@ prompts:
     to read the desired methods with `include_body=True`.
     You can understand relationships between symbols by using the `find_referencing_symbols` tool.
     {% endif %}
-
+    
     {% if 'read_memory' in available_tools -%}
     You generally have access to memories and it may be useful for you to read them.
     You infer whether memories are relevant based on their names.

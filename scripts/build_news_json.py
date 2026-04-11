@@ -9,6 +9,7 @@ This reads all .html files from the `news/` directory and creates
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -41,4 +42,14 @@ def build_news_json() -> None:
 
 
 if __name__ == "__main__":
+    deploy = False
+    for arg in sys.argv[1:]:
+        if arg == "--deploy":
+            deploy = True
+
     build_news_json()
+
+    if deploy:
+        user = os.getenv("HADES_USER")
+        assert user, "HADES_USER environment variable must be set to deploy news.json to Hades"
+        os.system(f"scp news/news.json {user}@hades:/var/www/html/oraios-software/serena_news.json")

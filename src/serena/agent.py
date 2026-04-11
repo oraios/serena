@@ -14,6 +14,7 @@ from contextlib import contextmanager
 from logging import Logger
 from typing import TYPE_CHECKING, Optional, TypeVar
 
+import requests
 import webview
 from sensai.util import logging
 from sensai.util.logging import LogTime
@@ -146,24 +147,20 @@ class ToolSet:
                 tool_names = set()
                 for fixed_tool in definition.fixed_tools:
                     fixed_tool = get_updated_tool_name(fixed_tool)
-                    if not registry.is_valid_tool_name(fixed_tool):
-                        raise ValueError(f"Invalid tool name '{fixed_tool}' provided for fixed tool set")
-                    tool_names.add(fixed_tool)
+                    if registry.check_valid_tool_name(fixed_tool, " (in fixed tools set)"):
+                        tool_names.add(fixed_tool)
                 log.info(f"{definition} defined a fixed tool set with {len(tool_names)} tools: {', '.join(tool_names)}")
             else:
                 included_tools = []
                 excluded_tools = []
                 for included_tool in definition.included_optional_tools:
                     included_tool = get_updated_tool_name(included_tool)
-                    if not registry.is_valid_tool_name(included_tool):
-                        raise ValueError(f"Invalid tool name '{included_tool}' provided for inclusion")
-                    if included_tool not in tool_names:
+                    if registry.check_valid_tool_name(included_tool, " (in included optional tools)") and included_tool not in tool_names:
                         tool_names.add(included_tool)
                         included_tools.append(included_tool)
                 for excluded_tool in definition.excluded_tools:
                     excluded_tool = get_updated_tool_name(excluded_tool)
-                    if not registry.is_valid_tool_name(excluded_tool):
-                        raise ValueError(f"Invalid tool name '{excluded_tool}' provided for exclusion")
+                    registry.check_valid_tool_name(excluded_tool, " (in excluded tools)")
                     if excluded_tool in tool_names:
                         tool_names.remove(excluded_tool)
                         excluded_tools.append(excluded_tool)
@@ -409,6 +406,23 @@ class SerenaAgent:
             # inform the GUI window (if any)
             if self._gui_log_viewer is not None:
                 self._gui_log_viewer.set_dashboard_url(dashboard_url)
+
+        self._send_usage_info()
+
+    def _send_usage_info(self) -> None:
+        is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
+        if is_ci:
+            return
+        params = {
+            "os": platform.system(),
+            "dashboard": int(self.serena_config.web_dashboard),
+            "version": self.version,
+            "backend": self._language_backend.value,
+        }
+        try:
+            requests.get("https://www.oraios-software.de/serena_usage.php", params=params, timeout=1, verify=False)
+        except Exception as e:
+            log.debug(f"Failed to send usage info: {e}")
 
     @classmethod
     def _create_base_toolset(
@@ -879,6 +893,13 @@ class SerenaAgent:
         :return: True if the tool is active, False otherwise
         """
         return self._active_tools.contains_tool_name(tool_name)
+
+    def tool_is_exposed(self, tool_name: str) -> bool:
+        """
+        :param tool_name: the name of the tool to check
+        :return: True if the tool is in the exposed tool set, False otherwise
+        """
+        return self._exposed_tools.contains_tool_name(tool_name)
 
     def get_current_config_overview(self) -> str:
         """

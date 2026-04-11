@@ -1,22 +1,33 @@
 name: Publish Python Package
 
 on:
-  release:
-    types: [created]
-
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag name for the release (e.g., v0.1.0)'
-        required: true
-        default: 'v0.1.0'
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
 
 env:
-  # Set this to true manually in the GitHub workflow UI if you want to publish to PyPI
-  # Will always publish to testpypi
   PUBLISH_TO_PYPI: true
 
 jobs:
+  build:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: |
+            See [change log](https://github.com/oraios/serena/blob/main/CHANGELOG.md)
+          draft: false
+          prerelease: false
   publish:
     name: Publish the serena-agent package
     runs-on: ubuntu-latest

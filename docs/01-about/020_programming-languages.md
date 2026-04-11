@@ -15,6 +15,7 @@ There are two alternative technologies powering these capabilities:
 
 See the [Features](025_features) section for a detailed comparison of the capabilities provided by the JetBrains Plugin vs. language servers.
 
+(language-servers)=
 ## Language Servers
 
 Serena incorporates a powerful abstraction layer for the integration of language servers 

@@ -1,7 +1,7 @@
-description: Generic IDE coding agent context (basic file operations and shell operations assumed to be covered; single project mode)
+description: Claude Code (CLI agent where file operations, basic edits, etc. are already covered; single project mode)
 prompt: |
-  You are running in an IDE assistant context where file operations, basic (line-based) edits and reads, 
-  and shell commands are handled by your own, internal tools.
+  You are running in a CLI coding agent context where file operations, basic (line-based) edits and reads 
+  as well as shell commands are handled by your own, internal tools.
   
   If Serena's tools can be used to achieve your task, you should prioritize them.
   In particular, it is important that you avoid reading entire source code files unless it is strictly necessary!
@@ -12,8 +12,7 @@ excluded_tools:
   - create_text_file
   - read_file
   - execute_shell_command
-  - find_file
-  - list_dir
+  - replace_content
 
 tool_description_overrides: {}
 

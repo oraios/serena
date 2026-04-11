@@ -51,10 +51,8 @@ You can access it
   * using the command
 
     ```shell
-    <serena> config edit
+    serena config edit
     ```
-
-    where `<serena>` is [your way of running Serena](020_running).
 
 ## Modes and Contexts
 
@@ -95,13 +93,12 @@ If you are using a local server (such as Llama.cpp) which requires you to use Op
 
 You can manage contexts using the `context` command,
 
-    <serena> context --help
-    <serena> context list
-    <serena> context create <context-name>
-    <serena> context edit <context-name>
-    <serena> context delete <context-name>
+    serena context --help
+    serena context list
+    serena context create <context-name>
+    serena context edit <context-name>
+    serena context delete <context-name>
 
-where `<serena>` is [your way of running Serena](020_running).
 
 (modes)=
 ### Modes
@@ -148,10 +145,6 @@ If you want to keep certain modes as always active, regardless of command-line p
 define them as *base modes* in the global or project configuration.
 :::
 
-Modes can also be _switched dynamically_ during a session. 
-You can instruct the LLM to use the `switch_modes` tool to activate a different set of modes (e.g., "Switch to planning and one-shot modes").
-Like command-line parameters, this only affects default modes, not base modes (which remain active).
-
 :::{note}
 **Mode Compatibility**: While you can combine modes, some may be semantically incompatible (e.g., `interactive` and `one-shot`). 
 Serena currently does not prevent incompatible combinations; it is up to the user to choose sensible mode configurations.
@@ -159,13 +152,11 @@ Serena currently does not prevent incompatible combinations; it is up to the use
 
 You can manage modes using the `mode` command,
 
-    <serena> mode --help
-    <serena> mode list
-    <serena> mode create <mode-name>
-    <serena> mode edit <mode-name>
-    <serena> mode delete <mode-name>
-
-where `<serena>` is [your way of running Serena](020_running).
+    serena mode --help
+    serena mode list
+    serena mode create <mode-name>
+    serena mode edit <mode-name>
+    serena mode delete <mode-name>
 
 ## Advanced Configuration
 

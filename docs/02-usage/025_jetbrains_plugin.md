@@ -68,12 +68,12 @@ After installing the plugin, you need to configure Serena to use it.
 You can run
 
 ```shell
-uvx -p 3.13 --from git+https://github.com/oraios/serena serena init -b JetBrains
+serena init -b JetBrains
 ```
 
 to set the default code intelligence backend to JetBrains in the global Serena configuration file.
 
-Alternatively, you can also manually edit the configuration file  `~/.serena/serena_config.yml` 
+Alternatively, manually edit the configuration file  `~/.serena/serena_config.yml` 
 (`%USERPROFILE%\.serena\serena_config.yml` on Windows) and set
 
 ```yaml
