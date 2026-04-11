@@ -341,20 +341,6 @@ def workspace_symbol(params: lsp.WorkspaceSymbolParams) -> List[lsp.SymbolInform
     return results
 
 
-@server.feature(lsp.INITIALIZE)
-def initialize(params: lsp.InitializeParams) -> lsp.InitializeResult:
-    return lsp.InitializeResult(
-        capabilities=lsp.ServerCapabilities(
-            text_document_sync=lsp.TextDocumentSyncOptions(
-                open_close=True, change=lsp.TextDocumentSyncKind.Full
-            ),
-            document_symbol_provider=True,
-            workspace_symbol_provider=True,
-        ),
-        server_info=lsp.ServerInfo(name="msl-lsp", version="0.1.0"),
-    )
-
-
 if __name__ == "__main__":
     server.start_io()
 '''
