@@ -10,6 +10,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: git commit id in Serena version strings was incorrect
 
 * Language Servers:
+  - Add support for Haxe via vshaxe/haxe-language-server. Requires Haxe compiler 3.4.0+ and Node.js. Auto-discovered from the vshaxe VSCode extension or configurable via `ls_path` in `ls_specific_settings`.
   - Add Crystal language support (uses [Crystalline](https://github.com/elbywan/crystalline) language server)
   - Fix: Reactivation of the same project restarted language servers #1280
 
