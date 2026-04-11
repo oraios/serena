@@ -2,6 +2,9 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Language Servers:
+  - Fix Dart LSP returning only symbol name as body instead of full method body
+
 # 1.1.0
 
 * General:
