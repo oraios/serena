@@ -332,6 +332,7 @@ markers = [
   "julia: Julia language server tests",
   "fortran: language server running for Fortran",
   "haskell: Haskell language server tests",
+  "haxe: Haxe language server tests",
   "yaml: language server running for YAML",
   "powershell: language server running for PowerShell",
   "pascal: language server running for Pascal (Free Pascal/Lazarus)",

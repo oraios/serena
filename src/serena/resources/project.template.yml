@@ -6,7 +6,8 @@ project_name: "project_name"
 #   al                  bash                clojure             cpp                 csharp
 #   csharp_omnisharp    dart                elixir              elm                 erlang
 #   fortran             fsharp              go                  groovy              haskell
-#   java                julia               kotlin              lua                 markdown
+#   haxe                java                julia               kotlin              lua
+#   markdown
 #   matlab              nix                 pascal              perl                php
 #   php_phpactor        powershell          python              python_jedi         r
 #   rego                ruby                ruby_solargraph     rust                scala

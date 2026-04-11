@@ -484,6 +484,33 @@ Supported settings:
 | `version` | `1.3.0` | Override the bundled version Serena downloads, or builds from source on macOS, when `ls_path` is not set. |
 
 
+#### Haxe
+
+Serena uses the [vshaxe/haxe-language-server](https://github.com/vshaxe/haxe-language-server) for Haxe support.
+Requires Haxe compiler (3.4.0+) and Node.js.
+
+The server is discovered in order: user-configured `ls_path`, system PATH, vshaxe VSCode extension, auto-download from Open VSX.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | auto-discovered | Path to the Haxe language server binary (e.g., `/path/to/server.js`). |
+| `version` | `2.34.2` | Override the vshaxe extension version downloaded from Open VSX. SHA256 verification is only performed for the default version. |
+| `buildFile` | auto-discovered `.hxml` | Relative path to the `.hxml` build file used for compilation (e.g., `build/debug.hxml`). If not set, Serena searches the project for `.hxml` files (max depth 5, skipping dependency directories). |
+| `haxePath` | `haxe` from PATH | Path to the Haxe compiler executable. The LS delegates to this for code analysis. Useful when multiple Haxe versions are installed or when `haxe` is not on the PATH. |
+| `renameSourceFolders` | not set (LS default) | List of source directories for scoping rename operations (e.g., `["src", "lib"]`). If not set, the Haxe LS uses its own defaults. |
+
+Example (typically in `project.yml`, since these are project-specific):
+
+```yaml
+ls_specific_settings:
+  haxe:
+    buildFile: "build/debug.hxml"
+    haxePath: "/usr/local/bin/haxe"
+    renameSourceFolders: ["src", "lib"]
+```
+
 #### Java (`eclipse.jdt.ls`)
 
 The following settings are supported for the Java language server:
