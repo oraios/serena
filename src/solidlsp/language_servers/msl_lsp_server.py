@@ -240,10 +240,7 @@ def references(params: lsp.ReferenceParams) -> list[lsp.Location]:
 
         # For alias symbols, search for call sites across all .mrc files
         # For events/menus/dialogs, only return the definition location
-        is_alias = not any(
-            symbol_name.startswith(prefix)
-            for prefix in ("on ", "raw ", "menu ", "dialog ", "ctcp ")
-        )
+        is_alias = not any(symbol_name.startswith(prefix) for prefix in ("on ", "raw ", "menu ", "dialog ", "ctcp "))
 
         for uri, ws_doc in server.workspace.text_documents.items():
             if not uri.endswith(".mrc"):
