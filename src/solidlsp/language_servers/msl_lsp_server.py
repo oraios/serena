@@ -1,13 +1,15 @@
 """mSL (mIRC Scripting Language) Language Server.
 
 A minimal LSP implementation for mIRC scripting language (.mrc files).
-Provides document symbols, references, go-to-definition, and workspace symbols
+Provides document symbols, hover, references, go-to-definition, and workspace symbols
 for aliases, events, menus, dialogs, and CTCP handlers.
 
 Launched as a subprocess by MslLanguageServer. Communicates via stdio.
 """
 
 import logging
+import os
+import pathlib
 import re
 
 from lsprotocol import types as lsp
@@ -124,30 +126,87 @@ def parse_symbols(text: str) -> list[lsp.DocumentSymbol]:
     return symbols
 
 
-@server.feature(lsp.TEXT_DOCUMENT_DID_OPEN)
-def did_open(params: lsp.DidOpenTextDocumentParams) -> None:
-    pass
+def _get_workspace_roots() -> list[str]:
+    """Get workspace root paths from the server's workspace object.
 
+    After initialization, pygls populates ``server.workspace`` with the
+    root URI/path and any workspace folders sent by the client.
+    """
+    from pygls.uris import to_fs_path
 
-@server.feature(lsp.TEXT_DOCUMENT_DID_CHANGE)
-def did_change(params: lsp.DidChangeTextDocumentParams) -> None:
-    pass
-
-
-@server.feature(lsp.TEXT_DOCUMENT_DID_CLOSE)
-def did_close(params: lsp.DidCloseTextDocumentParams) -> None:
-    pass
-
-
-@server.feature(lsp.TEXT_DOCUMENT_DOCUMENT_SYMBOL)
-def document_symbol(params: lsp.DocumentSymbolParams) -> list[lsp.DocumentSymbol]:
-    """Return document symbols for the given document."""
+    roots: list[str] = []
     try:
-        doc = server.workspace.get_text_document(params.text_document.uri)
-        return parse_symbols(doc.source)
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        return []
+        ws = server.workspace
+    except (RuntimeError, AttributeError):
+        return roots
+
+    # workspace.folders is a dict of {uri_string: WorkspaceFolder}
+    if hasattr(ws, "folders") and ws.folders:
+        for folder_uri in ws.folders:
+            fs_path = to_fs_path(folder_uri)
+            if fs_path:
+                # resolve() normalizes drive letter casing on Windows
+                fs_path = str(pathlib.Path(fs_path).resolve())
+                if os.path.isdir(fs_path):
+                    roots.append(fs_path)
+
+    # Fall back to root_path
+    if not roots and hasattr(ws, "root_path") and ws.root_path:
+        root = str(pathlib.Path(ws.root_path).resolve())
+        if os.path.isdir(root):
+            roots.append(root)
+
+    return roots
+
+
+def _path_to_uri(path: str) -> str:
+    """Convert a filesystem path to a file URI."""
+    return pathlib.Path(path).as_uri()
+
+
+def _get_all_mrc_files() -> list[tuple[str, str, str]]:
+    """Scan workspace roots for all .mrc files.
+
+    Returns list of (uri, file_path, source_text) tuples.
+    Prefers content from already-opened documents over disk reads.
+    """
+    results: list[tuple[str, str, str]] = []
+    seen_paths: set[str] = set()
+
+    # First, include all files currently open in the workspace
+    try:
+        for uri, doc in server.workspace.text_documents.items():
+            if uri.endswith(".mrc"):
+                # Resolve the filesystem path from the URI
+                from pygls.uris import to_fs_path
+
+                file_path = to_fs_path(uri) or uri
+                norm = os.path.normcase(os.path.normpath(file_path))
+                seen_paths.add(norm)
+                results.append((uri, file_path, doc.source))
+    except (RuntimeError, AttributeError):
+        pass
+
+    # Then scan workspace roots for any .mrc files not yet opened
+    for root in _get_workspace_roots():
+        for dirpath, _dirnames, filenames in os.walk(root):
+            for fname in filenames:
+                if not fname.endswith(".mrc"):
+                    continue
+                full_path = os.path.join(dirpath, fname)
+                norm = os.path.normcase(os.path.normpath(full_path))
+                if norm in seen_paths:
+                    continue
+                seen_paths.add(norm)
+                try:
+                    with open(full_path, encoding="utf-8", errors="replace") as f:
+                        source = f.read()
+                    uri = _path_to_uri(full_path)
+                    results.append((uri, full_path, source))
+                except OSError:
+                    pass
+
+    return results
 
 
 def _find_symbol_at_position(text: str, line: int, character: int) -> str | None:
@@ -213,7 +272,20 @@ def _find_symbol_at_position(text: str, line: int, character: int) -> str | None
     return None
 
 
-# Pattern to find alias call sites: bare name or $name at word boundary
+def _get_symbol_detail(text: str, symbol_name: str) -> str | None:
+    """Get detail/documentation text for a symbol by finding its definition and extracting context."""
+    for sym in parse_symbols(text):
+        if sym.name == symbol_name:
+            # Extract the definition line and a few lines of body for hover
+            text_lines = text.split("\n")
+            start_line = sym.range.start.line
+            end_line = min(sym.range.end.line, start_line + 5)
+            snippet_lines = text_lines[start_line : end_line + 1]
+            snippet = "\n".join(snippet_lines)
+            return f"```msl\n{snippet}\n```\n\n**Kind**: {sym.detail}"
+    return None
+
+
 def _build_call_pattern(alias_name: str) -> re.Pattern[str]:
     """Build a regex that matches calls to an alias (both as command and as $identifier)."""
     escaped = re.escape(alias_name)
@@ -221,6 +293,58 @@ def _build_call_pattern(alias_name: str) -> re.Pattern[str]:
         rf"(?<![.\w])(?:\$)?{escaped}(?![.\w])",
         re.MULTILINE | re.IGNORECASE,
     )
+
+
+@server.feature(lsp.TEXT_DOCUMENT_DID_OPEN)
+def did_open(params: lsp.DidOpenTextDocumentParams) -> None:
+    pass
+
+
+@server.feature(lsp.TEXT_DOCUMENT_DID_CHANGE)
+def did_change(params: lsp.DidChangeTextDocumentParams) -> None:
+    pass
+
+
+@server.feature(lsp.TEXT_DOCUMENT_DID_CLOSE)
+def did_close(params: lsp.DidCloseTextDocumentParams) -> None:
+    pass
+
+
+@server.feature(lsp.TEXT_DOCUMENT_DOCUMENT_SYMBOL)
+def document_symbol(params: lsp.DocumentSymbolParams) -> list[lsp.DocumentSymbol]:
+    """Return document symbols for the given document."""
+    try:
+        doc = server.workspace.get_text_document(params.text_document.uri)
+        return parse_symbols(doc.source)
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        return []
+
+
+@server.feature(lsp.TEXT_DOCUMENT_HOVER)
+def hover(params: lsp.HoverParams) -> lsp.Hover | None:
+    """Return hover information for the symbol at the given position."""
+    try:
+        doc = server.workspace.get_text_document(params.text_document.uri)
+        symbol_name = _find_symbol_at_position(doc.source, params.position.line, params.position.character)
+        if not symbol_name:
+            return None
+
+        # Search all files for the symbol definition to get its detail
+        for _uri, _path, source in _get_all_mrc_files():
+            detail = _get_symbol_detail(source, symbol_name)
+            if detail:
+                return lsp.Hover(
+                    contents=lsp.MarkupContent(kind=lsp.MarkupKind.Markdown, value=detail),
+                )
+
+        # Fallback: return the symbol name itself
+        return lsp.Hover(
+            contents=lsp.MarkupContent(kind=lsp.MarkupKind.Markdown, value=f"**{symbol_name}**"),
+        )
+    except Exception as e:
+        logger.error(f"Error in hover: {e}")
+        return None
 
 
 @server.feature(lsp.TEXT_DOCUMENT_REFERENCES)
@@ -242,15 +366,11 @@ def references(params: lsp.ReferenceParams) -> list[lsp.Location]:
         # For events/menus/dialogs, only return the definition location
         is_alias = not any(symbol_name.startswith(prefix) for prefix in ("on ", "raw ", "menu ", "dialog ", "ctcp "))
 
-        for uri, ws_doc in server.workspace.text_documents.items():
-            if not uri.endswith(".mrc"):
-                continue
-            text = ws_doc.source
-
+        for uri, _path, source in _get_all_mrc_files():
             if is_alias:
                 call_pattern = _build_call_pattern(symbol_name)
-                for m in call_pattern.finditer(text):
-                    ref_line, ref_col = _get_line_col(text, m.start())
+                for m in call_pattern.finditer(source):
+                    ref_line, ref_col = _get_line_col(source, m.start())
                     results.append(
                         lsp.Location(
                             uri=uri,
@@ -262,7 +382,7 @@ def references(params: lsp.ReferenceParams) -> list[lsp.Location]:
                     )
             else:
                 # For non-alias symbols, find the definition
-                for sym in parse_symbols(text):
+                for sym in parse_symbols(source):
                     if sym.name == symbol_name:
                         results.append(lsp.Location(uri=uri, range=sym.range))
 
@@ -286,10 +406,8 @@ def definition(params: lsp.DefinitionParams) -> list[lsp.Location]:
             return []
 
         results: list[lsp.Location] = []
-        for uri, ws_doc in server.workspace.text_documents.items():
-            if not uri.endswith(".mrc"):
-                continue
-            for sym in parse_symbols(ws_doc.source):
+        for uri, _path, source in _get_all_mrc_files():
+            for sym in parse_symbols(source):
                 if sym.name == symbol_name:
                     results.append(lsp.Location(uri=uri, range=sym.selection_range))
         return results
@@ -303,10 +421,8 @@ def workspace_symbol(params: lsp.WorkspaceSymbolParams) -> list[lsp.SymbolInform
     """Search for symbols across the workspace."""
     query = params.query.lower()
     results = []
-    for uri, doc in server.workspace.text_documents.items():
-        if not uri.endswith(".mrc"):
-            continue
-        for sym in parse_symbols(doc.source):
+    for uri, _path, source in _get_all_mrc_files():
+        for sym in parse_symbols(source):
             if query in sym.name.lower():
                 results.append(
                     lsp.SymbolInformation(

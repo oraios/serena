@@ -77,6 +77,7 @@ class MslLanguageServer(SolidLanguageServer):
                         "hierarchicalDocumentSymbolSupport": True,
                         "symbolKind": {"valueSet": list(range(1, 27))},
                     },
+                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
                     "references": {"dynamicRegistration": True},
                     "definition": {"dynamicRegistration": True},
                 },
