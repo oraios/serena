@@ -270,3 +270,5 @@ cabal.project.local*
 
 zz-misc/
 vue-implementation/
+
+news/news.json

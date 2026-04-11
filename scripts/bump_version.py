@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Literal
@@ -8,6 +9,7 @@ from typing import Literal
 import click
 
 from serena.constants import REPO_ROOT
+from serena.util.git import get_git_status
 
 log = logging.getLogger(__name__)
 
@@ -23,10 +25,14 @@ _UNRELEASED_HEADER = "# Unreleased (main)\n"
 @click.command()
 @click.option("--major", "major", is_flag=True, help="Bump the major version and reset minor and patch to 0.")
 @click.option("--minor", "minor", is_flag=True, help="Bump the minor version and reset patch to 0.")
-@click.option("--patch", "patch", is_flag=True, help="Bump the patch version (default).")
+@click.option("--patch", "patch", is_flag=True, help="Bump the patch version.")
 @click.option("--version", "-v", "target_version", metavar="X.Y.Z", help="Set an explicit version instead of bumping.")
 @click.option("--dry-run", is_flag=True, help="Show what would change without writing any files.")
 def bump_version(major: bool, minor: bool, patch: bool, target_version: str | None, dry_run: bool) -> None:
+    git_status = get_git_status()
+    if not git_status.is_clean:
+        raise click.ClickException("Working directory is not clean. Please commit or stash your changes first.")
+
     log.info("bump_version called: major=%s, minor=%s, patch=%s, target_version=%s", major, minor, patch, target_version)
     version_part = resolve_version_selection(major=major, minor=minor, patch=patch, target_version=target_version)
     log.info("Resolved version_part=%s", version_part)
@@ -39,6 +45,9 @@ def bump_version(major: bool, minor: bool, patch: bool, target_version: str | No
         click.echo(f"Dry run complete. Version would be bumped to {new_version}")
     else:
         click.echo(f"Bumped version to {new_version}")
+        os.system("git add -u")
+        os.system(f'git commit -m "Release v{new_version}"')
+        os.system(f"git tag v{new_version}")
 
 
 def find_repo_root() -> Path:
@@ -58,7 +67,9 @@ def resolve_version_selection(*, major: bool, minor: bool, patch: bool, target_v
         return "major"
     if minor:
         return "minor"
-    return "patch"
+    if patch:
+        return "patch"
+    raise click.ClickException("No version bump selected. Use --major, --minor, --patch or --version.")
 
 
 def bump_repo_version(repo_root: Path, *, version_part: VersionPart | None, target_version: str | None, dry_run: bool = False) -> str:

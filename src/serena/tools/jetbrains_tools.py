@@ -5,7 +5,7 @@ from typing import Any, Literal
 import serena.jetbrains.jetbrains_types as jb
 from serena.code_editor import JetBrainsCodeEditor
 from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
-from serena.jetbrains.jetbrains_types import SymbolDTO
+from serena.jetbrains.jetbrains_types import SymbolDTO, SymbolDTOUtil
 from serena.symbol import JetBrainsSymbolDictGrouper
 from serena.tools import Tool, ToolMarkerBeta, ToolMarkerOptional, ToolMarkerSymbolicEdit, ToolMarkerSymbolicRead
 from serena.util.text_utils import find_text_coordinates
@@ -126,9 +126,13 @@ class JetBrainsMoveTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMa
         target_parent_name_path: str | None = None,
     ) -> str:
         """
-        Moves a symbol, file or directory to a different location. The target location is the new parent
-        of the symbol, i.e. the moved entity is never renamed by the operation, only moved.
-        References to affected symbols are automatically updated.
+        Moves a symbol, file or directory to a different location and automatically update all references to affected symbols.
+        **Important**: this tool should always be preferred to naive moving (e.g. via file system operations or edits)
+        as it is much more reliable and efficient. It is always safe to use this tool. For some symbols, moving may not be applicable,
+        and will result in no edits and a suitable error message.
+        The target location is the new parent of the symbol,
+        i.e. the moved entity is never renamed by the operation, only moved.
+
 
         Valid moves:
         - Symbol:
@@ -168,12 +172,16 @@ class JetBrainsSafeDeleteTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, 
         propagate: bool = False,
     ) -> str:
         """
-        Safely deletes a symbol, checking for usages first. It is also
-        possible to request deleting of usages and cleaning up of unused code.
+        Safely deletes a symbol, file, or directory, checking for usages first and propagating deletion, if desired.
+        Propagation means it is possible to request deleting of usages and cleaning up of unused code.
+        Propagation is powerful for cleaning up code but should be used with care, and only when you are sure that
+        **Important**: this tool should always be preferred to naive deleting (e.g. via file system operations or edits).
+        When using it, you don't have to search for usages first, as the tool will do it for you.
 
         :param relative_path: the relative path to the file containing the symbol to delete.
         :param name_path: the name path of the symbol to delete.
             A name path identifies a symbol within a source file, e.g. "MyClass/my_method".
+            Omit for deleting a file or directory.
         :param delete_even_if_used: whether to force deletion even if the symbol still has usages.
             Default is False (safe mode: will report usages instead of deleting).
         :param propagate: whether to propagate the deletion to usages of the symbol and also
@@ -204,6 +212,8 @@ class JetBrainsInlineSymbol(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, To
         Inlines a symbol (usually a method/function, but also classes may be amenable to inlining,
         which turns invocation into anonymous class creation),
         replacing all call sites with the symbol's body.
+        **Important**: this tool should always be preferred to naive inlining (e.g. via searching for references and
+        editing them).
 
         :param name_path: the name path of the symbol to inline.
         :param relative_path: the relative path to the file containing the symbol to inline.
@@ -249,7 +259,19 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
             )
         symbol_dicts = response_dict["symbols"]
 
-        # capture file paths before grouping, which mutates the dicts
+        # replace reference line number (if present) by actual line/context
+        for symbol_dict in symbol_dicts:
+            if "reference_line_no" in symbol_dict:
+                ref_line = symbol_dict["reference_line_no"]
+                ref_relative_path = symbol_dict["relative_path"]
+                if not SymbolDTOUtil.is_external_symbol(symbol_dict) and ref_line is not None and ref_line >= 0:
+                    content_around_ref = self.project.retrieve_content_around_line(
+                        relative_file_path=ref_relative_path, line=ref_line, context_lines_before=1, context_lines_after=1
+                    )
+                    symbol_dict["context"] = content_around_ref.to_display_string()
+                    del symbol_dict["reference_line_no"]
+
+        # capture file paths before grouping
         ref_paths = [s.get("relative_path", "unknown") for s in symbol_dicts]
 
         result = self.symbol_dict_grouper.group(symbol_dicts)

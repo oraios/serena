@@ -4,7 +4,7 @@ requires = ["hatchling"]
 
 [project]
 name = "serena-agent"
-version = "1.0.0"
+version = "1.1.0"
 description = ""
 authors = [{ name = "Oraios AI", email = "info@oraios-ai.de" }]
 readme = "README.md"
@@ -36,7 +36,7 @@ dependencies = [
   "tiktoken==0.12.0",
   "anthropic==0.59.0",
   "beautifulsoup4==4.14.2",
-  "pywebview",
+  "oraios-pywebview==6.2",
   "pystray==0.19.5",
   # Transitive deps pinned for security (dependabot alerts).
   # Exact pins because uvx installs from git, ignoring the lock file.
@@ -52,8 +52,6 @@ dependencies = [
   "lsprotocol>=2023.0.0",
 ]
 
-[tool.uv.sources]
-pywebview = { git = "https://github.com/r0x0r/pywebview", rev = "345596c1f4fd59fd26c7aa02d4176c5362bcbabe" }
 
 [[tool.uv.index]]
 name = "testpypi"
@@ -63,6 +61,7 @@ explicit = true
 
 [project.scripts]
 serena = "serena.cli:top_level"
+serena-hooks = "serena.hooks:hook_commands"
 
 [project.license]
 text = "MIT"
