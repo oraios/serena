@@ -80,6 +80,8 @@ Some languages require additional installations or setup steps, as noted.
 * **Luau**
 * **Markdown**  
   (must explicitly enable language `markdown`, primarily useful for documentation-heavy projects)
+* **mSL** (mIRC Scripting Language)  
+  (auto-installed; no external dependencies required — the LSP server and its Python dependencies are automatically installed in an isolated virtual environment on first use)
 * **Nix**  
   (requires nixd installation)
 * **OCaml**

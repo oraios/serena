@@ -7,6 +7,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Language Servers:
   - Added Crystal language support (uses [Crystalline](https://github.com/elbywan/crystalline) language server)  
+  - Added mSL (mIRC Scripting Language) support (custom pygls-based language server)
 
 * Dashboard:
   - Add version display
