@@ -7,7 +7,7 @@ what works well and what doesn't.
 
 ### Separate Tool Logic From MCP Implementation
 
-MCP is just another protocol, one should let the details of it creep into the application logic.
+MCP is just another protocol, one should not let the details of it creep into the application logic.
 The official docs suggest using function annotations to define tools and prompts. While that may be
 useful for small projects to get going fast, it is not wise for more serious projects. In Serena,
 all tools are defined independently and then converted to instances of `MCPTool` using our `make_tool`
