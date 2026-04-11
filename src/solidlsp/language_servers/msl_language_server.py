@@ -87,7 +87,7 @@ class MslLanguageServer(SolidLanguageServer):
     @staticmethod
     def _create_msl_lsp_files(msl_ls_dir: str) -> None:
         """Create the mSL LSP server files in the given directory."""
-        requirements_content = "pygls>=1.3.0\nlsprotocol>=2023.0.0\n"
+        requirements_content = "pygls>=2.0.0\nlsprotocol>=2023.0.0\n"
         with open(os.path.join(msl_ls_dir, "requirements.txt"), "w") as f:
             f.write(requirements_content)
 
@@ -162,7 +162,7 @@ _MSL_LSP_SCRIPT = r'''#!/usr/bin/env python3
 A minimal LSP implementation for mIRC scripting language (.mrc files).
 Provides document symbols (aliases, events, menus, dialogs) for Serena integration.
 
-Dependencies: pygls >= 1.3.0, lsprotocol >= 2023.0.0
+Dependencies: pygls >= 2.0.0, lsprotocol >= 2023.0.0
 """
 
 import re
@@ -170,7 +170,7 @@ import logging
 from typing import List
 
 from lsprotocol import types as lsp
-from pygls.server import LanguageServer
+from pygls.lsp.server import LanguageServer
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
