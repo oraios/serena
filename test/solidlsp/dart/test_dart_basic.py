@@ -375,3 +375,54 @@ class TestDartLanguageServer:
                 f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
                 pytrace=False,
             )
+
+    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
+    def test_symbol_body_contains_full_method(self, language_server: SolidLanguageServer) -> None:
+        """Test that document symbols return the full method body range, not just the identifier.
+
+        Regression test: when hierarchicalDocumentSymbolSupport was not declared in client
+        capabilities, the Dart LSP returned SymbolInformation[] (flat format) where
+        location.range only covered the identifier name (single line), causing find_symbol
+        with include_body=True to return just the symbol name instead of its implementation.
+        """
+        file_path = os.path.join("lib", "main.dart")
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
+        symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+
+        # Find the 'add' method — defined across multiple lines in main.dart:
+        #   int add(int a, int b) {
+        #     final result = a + b;
+        #     _history.add('$a + $b = $result');
+        #     return result;
+        #   }
+        add_symbol = None
+        for sym in symbol_list:
+            if sym.get("name") == "add":
+                add_symbol = sym
+                break
+            if sym.get("name") == "Calculator" and "children" in sym:
+                for child in sym["children"]:
+                    if child.get("name") == "add":
+                        add_symbol = child
+                        break
+                if add_symbol:
+                    break
+
+        assert add_symbol is not None, "Could not find 'add' method symbol in main.dart"
+
+        # The body range must span multiple lines (not just the identifier line).
+        # With hierarchicalDocumentSymbolSupport declared, the Dart LSP returns
+        # DocumentSymbol[] where range covers the full method body.
+        body_start = add_symbol["location"]["range"]["start"]["line"]
+        body_end = add_symbol["location"]["range"]["end"]["line"]
+        assert body_end > body_start, (
+            f"Expected multi-line body range for 'add' method, got start={body_start}, end={body_end}. "
+            f"This likely means hierarchicalDocumentSymbolSupport is not declared in client capabilities."
+        )
+
+        # The body text must contain the method implementation, not just the name.
+        if add_symbol.get("body"):
+            body_text = add_symbol["body"].get_text()
+            assert "return result" in body_text, (
+                f"Expected method body to contain implementation, got: {body_text!r}"
+            )
