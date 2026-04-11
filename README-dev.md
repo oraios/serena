@@ -16,4 +16,5 @@ and tools for formatting and type checking.
    This also creates the git tag.
 3. Push to GitHub, triggering the release process.
 
+       git push
        git push --tags
