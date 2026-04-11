@@ -341,6 +341,9 @@ def match_path(relative_path: str, path_spec: PathSpec, root_path: str = "") -> 
     :param root_path: the root path from which the relative path is derived
     :return:
     """
+    if str(relative_path) in {"", "."}:
+        return False
+
     normalized_path = str(relative_path).replace(os.path.sep, "/")
 
     # We can have patterns like /src/..., which would only match corresponding paths from the repo root
