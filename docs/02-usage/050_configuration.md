@@ -472,7 +472,7 @@ Supported settings:
 | Setting | Default | Description |
 |---|---|---|
 | `ls_path` | managed install or build | Override the `shader-language-server` executable path. |
-| `version` | `1.3.0` | Override the bundled version Serena downloads, or builds from source on macOS, when `ls_path` is not set. |
+| `version` | `1.3.1` | Override the bundled version Serena downloads, or builds from source on macOS, when `ls_path` is not set. |
 
 
 #### Haxe
