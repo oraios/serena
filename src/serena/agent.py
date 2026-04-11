@@ -410,10 +410,9 @@ class SerenaAgent:
         self._send_usage_info()
 
     def _send_usage_info(self) -> None:
-        is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
-        if is_ci:
+        if os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("SERENA_USAGE_REPORTING") == "false":
             return
-        params = {
+        params: dict[str, str | int] = {
             "os": platform.system(),
             "dashboard": int(self.serena_config.web_dashboard),
             "version": self.version,
