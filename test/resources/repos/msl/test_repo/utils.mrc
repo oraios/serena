@@ -9,6 +9,11 @@ alias is.admin {
   return $false
 }
 
+alias welcome.message {
+  greet $1
+  msg $chan You have $format.coins(100) to start with!
+}
+
 dialog settings {
   title "Game Settings"
   size -1 -1 200 150

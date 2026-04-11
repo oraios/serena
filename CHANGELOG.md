@@ -3,7 +3,7 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * Language Servers:
-  - Added mSL (mIRC Scripting Language) support (custom pygls-based language server)
+  - Added mSL (mIRC Scripting Language) support (custom pygls-based language server; symbols, references, definitions)
 
 # 1.1.0
 

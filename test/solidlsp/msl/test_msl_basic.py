@@ -1,9 +1,11 @@
 """
 Basic integration tests for the mSL (mIRC Scripting Language) language server.
 
-Tests validate document symbols for aliases, events, raw events, menus,
-dialogs, and CTCP handlers using the mSL test repository.
+Tests validate document symbols, references, and definitions for aliases, events,
+raw events, menus, dialogs, and CTCP handlers using the mSL test repository.
 """
+
+import os
 
 import pytest
 
@@ -31,6 +33,7 @@ class TestMslDocumentSymbols:
         symbol_names = [s.get("name") for s in all_symbols if s.get("name")]
         assert "greet" in symbol_names, f"greet alias not found. Found: {symbol_names}"
         assert "calculate.doubloons" in symbol_names, f"calculate.doubloons alias not found. Found: {symbol_names}"
+        assert "show.player.info" in symbol_names, f"show.player.info alias not found. Found: {symbol_names}"
 
     @pytest.mark.parametrize("language_server", [Language.MSL], indirect=True)
     def test_document_symbols_events(self, language_server: SolidLanguageServer) -> None:
@@ -58,6 +61,7 @@ class TestMslDocumentSymbols:
         symbol_names = [s.get("name") for s in all_symbols if s.get("name")]
         assert "format.coins" in symbol_names, f"format.coins alias not found. Found: {symbol_names}"
         assert "is.admin" in symbol_names, f"is.admin alias not found. Found: {symbol_names}"
+        assert "welcome.message" in symbol_names, f"welcome.message alias not found. Found: {symbol_names}"
 
     @pytest.mark.parametrize("language_server", [Language.MSL], indirect=True)
     def test_document_symbols_dialog_and_ctcp(self, language_server: SolidLanguageServer) -> None:
@@ -79,6 +83,7 @@ class TestMslDocumentSymbols:
         symbols = language_server.request_full_symbol_tree()
         assert SymbolUtils.symbol_tree_contains_name(symbols, "greet"), "greet not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "format.coins"), "format.coins not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "show.player.info"), "show.player.info not found in symbol tree"
 
     @pytest.mark.parametrize("language_server", [Language.MSL], indirect=True)
     def test_bare_symbol_names(self, language_server: SolidLanguageServer) -> None:
@@ -95,3 +100,62 @@ class TestMslDocumentSymbols:
                 f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
                 pytrace=False,
             )
+
+    @pytest.mark.parametrize("language_server", [Language.MSL], indirect=True)
+    def test_find_references_within_file(self, language_server: SolidLanguageServer) -> None:
+        """Test that references to 'greet' are found within main.mrc."""
+        file_path = "main.mrc"
+        all_symbols, _ = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
+        greet_symbol = next((s for s in all_symbols if s.get("name") == "greet"), None)
+        assert greet_symbol is not None, "Could not find 'greet' symbol in main.mrc"
+
+        sel_start = greet_symbol["selectionRange"]["start"]
+        refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
+
+        assert refs, f"Expected non-empty references for greet but got {refs=}"
+
+        actual_locations = [
+            {
+                "uri_suffix": os.path.basename(ref.get("relativePath", ref.get("uri", ""))),
+                "line": ref["range"]["start"]["line"],
+            }
+            for ref in refs
+        ]
+
+        # greet is called on line 13 (0-indexed) in main.mrc: `greet $nick`
+        call_site = {"uri_suffix": "main.mrc", "line": 13}
+        assert call_site in actual_locations, f"Expected reference to greet at line 13 in main.mrc, got {actual_locations}"
+
+    @pytest.mark.parametrize("language_server", [Language.MSL], indirect=True)
+    def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:
+        """Test that references to 'format.coins' are found across main.mrc and utils.mrc."""
+        # format.coins is defined in utils.mrc but called in both main.mrc and utils.mrc
+        file_path = "utils.mrc"
+        all_symbols, _ = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
+        fc_symbol = next((s for s in all_symbols if s.get("name") == "format.coins"), None)
+        assert fc_symbol is not None, "Could not find 'format.coins' symbol in utils.mrc"
+
+        sel_start = fc_symbol["selectionRange"]["start"]
+        refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
+
+        assert refs, f"Expected non-empty references for format.coins but got {refs=}"
+
+        actual_locations = [
+            {
+                "uri_suffix": os.path.basename(ref.get("relativePath", ref.get("uri", ""))),
+                "line": ref["range"]["start"]["line"],
+            }
+            for ref in refs
+        ]
+
+        # Verify cross-file: at least one reference is in main.mrc (different file from definition)
+        main_refs = [loc for loc in actual_locations if loc["uri_suffix"] == "main.mrc"]
+        assert len(main_refs) >= 1, f"Expected at least 1 reference in main.mrc, got {main_refs}"
+
+    @pytest.mark.parametrize("language_server", [Language.MSL], indirect=True)
+    def test_workspace_symbol(self, language_server: SolidLanguageServer) -> None:
+        """Test that workspace symbol search returns results."""
+        result = language_server.request_workspace_symbol("greet")
+        assert result is not None, "Workspace symbol search returned None"
+        assert len(result) > 0, "Workspace symbol search returned no results"
+        assert any("greet" in str(s.get("name", "")) for s in result), f"Expected at least one result containing 'greet', got {result}"

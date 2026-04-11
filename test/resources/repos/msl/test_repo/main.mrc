@@ -16,6 +16,8 @@ on *:TEXT:!hello*:#: {
 
 on *:JOIN:#: {
   .timer 1 3 greet $nick
+  var %coins = $format.coins(100)
+  msg $chan You have %coins
 }
 
 raw 319:*: {
@@ -27,4 +29,10 @@ menu channel {
   Pirates Game
   .Start Game:/start
   .End Game:/stop
+}
+
+alias show.player.info {
+  if ($is.admin($nick)) {
+    msg $chan $nick is an admin with $format.coins(500)
+  }
 }

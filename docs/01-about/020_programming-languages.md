@@ -85,7 +85,8 @@ Some languages require additional installations or setup steps, as noted.
 * **Markdown**  
   (must explicitly enable language `markdown`, primarily useful for documentation-heavy projects)
 * **mSL** (mIRC Scripting Language)  
-  (auto-installed; no external dependencies required — the LSP server and its Python dependencies are automatically installed in an isolated virtual environment on first use)
+  (auto-installed; no external dependencies required — uses a custom pygls-based LSP server shipped with Serena;
+  supports document symbols, workspace symbols, references, and go-to-definition for aliases, events, menus, dialogs, and CTCP handlers in `.mrc` files)
 * **Nix**  
   (requires nixd installation)
 * **OCaml**

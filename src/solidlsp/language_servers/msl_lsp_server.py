@@ -1,7 +1,8 @@
 """mSL (mIRC Scripting Language) Language Server.
 
 A minimal LSP implementation for mIRC scripting language (.mrc files).
-Provides document symbols (aliases, events, menus, dialogs) for Serena integration.
+Provides document symbols, references, go-to-definition, and workspace symbols
+for aliases, events, menus, dialogs, and CTCP handlers.
 
 Launched as a subprocess by MslLanguageServer. Communicates via stdio.
 """
@@ -146,6 +147,157 @@ def document_symbol(params: lsp.DocumentSymbolParams) -> list[lsp.DocumentSymbol
         return parse_symbols(doc.source)
     except Exception as e:
         logger.error(f"Error: {e}")
+        return []
+
+
+def _find_symbol_at_position(text: str, line: int, character: int) -> str | None:
+    """Find the symbol name at the given position in the text."""
+    lines = text.split("\n")
+    if line >= len(lines):
+        return None
+    line_text = lines[line]
+
+    # Check if position is within an alias definition
+    for m in ALIAS_PATTERN.finditer(text):
+        sl, _ = _get_line_col(text, m.start())
+        if sl == line:
+            return m.group(1)
+
+    # Check if position is within an event definition
+    for m in EVENT_PATTERN.finditer(text):
+        sl, _ = _get_line_col(text, m.start())
+        if sl == line:
+            pat = m.group(3).strip().rstrip(":")
+            return f"on {m.group(1)}:{m.group(2)}" + (f":{pat}" if pat else "")
+
+    # Check if position is within a raw event
+    for m in RAW_EVENT_PATTERN.finditer(text):
+        sl, _ = _get_line_col(text, m.start())
+        if sl == line:
+            pat = m.group(2).strip().rstrip(":")
+            return f"raw {m.group(1)}" + (f":{pat}" if pat else "")
+
+    # Check if position is within a menu
+    for m in MENU_PATTERN.finditer(text):
+        sl, _ = _get_line_col(text, m.start())
+        if sl == line:
+            return f"menu {m.group(1)}"
+
+    # Check if position is within a dialog
+    for m in DIALOG_PATTERN.finditer(text):
+        sl, _ = _get_line_col(text, m.start())
+        if sl == line:
+            return f"dialog {m.group(2)}"
+
+    # Check if position is within a CTCP handler
+    for m in CTCP_PATTERN.finditer(text):
+        sl, _ = _get_line_col(text, m.start())
+        if sl == line:
+            return f"ctcp {m.group(1)}:{m.group(2)}"
+
+    # Fall back: extract word at position (for alias call sites)
+    if character < len(line_text):
+        pos = character
+        # Skip leading $ if cursor is on it (e.g., $format.coins)
+        if pos < len(line_text) and line_text[pos] == "$":
+            pos += 1
+        start = pos
+        while start > 0 and (line_text[start - 1].isalnum() or line_text[start - 1] in "_."):
+            start -= 1
+        end = pos
+        while end < len(line_text) and (line_text[end].isalnum() or line_text[end] in "_."):
+            end += 1
+        word = line_text[start:end]
+        if word:
+            return word
+    return None
+
+
+# Pattern to find alias call sites: bare name or $name at word boundary
+def _build_call_pattern(alias_name: str) -> re.Pattern[str]:
+    """Build a regex that matches calls to an alias (both as command and as $identifier)."""
+    escaped = re.escape(alias_name)
+    return re.compile(
+        rf"(?<![.\w])(?:\$)?{escaped}(?![.\w])",
+        re.MULTILINE | re.IGNORECASE,
+    )
+
+
+@server.feature(lsp.TEXT_DOCUMENT_REFERENCES)
+def references(params: lsp.ReferenceParams) -> list[lsp.Location]:
+    """Find all references to the symbol at the given position across the workspace."""
+    try:
+        doc = server.workspace.get_text_document(params.text_document.uri)
+        symbol_name = _find_symbol_at_position(
+            doc.source,
+            params.position.line,
+            params.position.character,
+        )
+        if not symbol_name:
+            return []
+
+        results: list[lsp.Location] = []
+
+        # For alias symbols, search for call sites across all .mrc files
+        # For events/menus/dialogs, only return the definition location
+        is_alias = not any(
+            symbol_name.startswith(prefix)
+            for prefix in ("on ", "raw ", "menu ", "dialog ", "ctcp ")
+        )
+
+        for uri, ws_doc in server.workspace.text_documents.items():
+            if not uri.endswith(".mrc"):
+                continue
+            text = ws_doc.source
+
+            if is_alias:
+                call_pattern = _build_call_pattern(symbol_name)
+                for m in call_pattern.finditer(text):
+                    ref_line, ref_col = _get_line_col(text, m.start())
+                    results.append(
+                        lsp.Location(
+                            uri=uri,
+                            range=lsp.Range(
+                                lsp.Position(ref_line, ref_col),
+                                lsp.Position(ref_line, ref_col + len(m.group(0))),
+                            ),
+                        )
+                    )
+            else:
+                # For non-alias symbols, find the definition
+                for sym in parse_symbols(text):
+                    if sym.name == symbol_name:
+                        results.append(lsp.Location(uri=uri, range=sym.range))
+
+        return results
+    except Exception as e:
+        logger.error(f"Error finding references: {e}")
+        return []
+
+
+@server.feature(lsp.TEXT_DOCUMENT_DEFINITION)
+def definition(params: lsp.DefinitionParams) -> list[lsp.Location]:
+    """Go to definition of the symbol at the given position."""
+    try:
+        doc = server.workspace.get_text_document(params.text_document.uri)
+        symbol_name = _find_symbol_at_position(
+            doc.source,
+            params.position.line,
+            params.position.character,
+        )
+        if not symbol_name:
+            return []
+
+        results: list[lsp.Location] = []
+        for uri, ws_doc in server.workspace.text_documents.items():
+            if not uri.endswith(".mrc"):
+                continue
+            for sym in parse_symbols(ws_doc.source):
+                if sym.name == symbol_name:
+                    results.append(lsp.Location(uri=uri, range=sym.selection_range))
+        return results
+    except Exception as e:
+        logger.error(f"Error finding definition: {e}")
         return []
 
 

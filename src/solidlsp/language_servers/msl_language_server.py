@@ -77,6 +77,8 @@ class MslLanguageServer(SolidLanguageServer):
                         "hierarchicalDocumentSymbolSupport": True,
                         "symbolKind": {"valueSet": list(range(1, 27))},
                     },
+                    "references": {"dynamicRegistration": True},
+                    "definition": {"dynamicRegistration": True},
                 },
                 "workspace": {
                     "workspaceFolders": True,

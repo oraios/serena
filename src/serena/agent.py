@@ -413,7 +413,7 @@ class SerenaAgent:
         is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
         if is_ci:
             return
-        params = {
+        params: dict[str, str | int] = {
             "os": platform.system(),
             "dashboard": int(self.serena_config.web_dashboard),
             "version": self.version,
