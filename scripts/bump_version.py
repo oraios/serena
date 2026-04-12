@@ -44,6 +44,7 @@ def bump_version(major: bool, minor: bool, patch: bool, target_version: str | No
     if dry_run:
         click.echo(f"Dry run complete. Version would be bumped to {new_version}")
     else:
+        os.system("uv lock")
         click.echo(f"Bumped version to {new_version}")
         os.system("git add -u")
         os.system(f'git commit -m "Release v{new_version}"')
