@@ -2,6 +2,9 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Support environment variable `SERENA_USAGE_REPORTING` (set to `false` to disable usage reporting)
+
 # 1.1.1
 
 * General:
