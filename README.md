@@ -21,6 +21,26 @@ more complex codebases.
 > Do not install Serena via an MCP or plugin marketplace! They contain outdated and suboptimal installation commands. 
 > Instead, follow our [Quick Start](quick-start) instructions.
 
+## What Our "End Users" Say
+
+Our end users are essentially AI agents, so they are also in the best position to evaluate Serena. 
+We wrote an unbiased and detailed evaluation prompt, which leads the agent to estimate the value-add of Serena's tools
+when added on top of their existing capabilities. After about 20 minutes of thorough evaluation and experimentation, here
+is what the agents had to say:
+
+**Opus 4.6 in Claude Code, evaluated on a large Python codebase:**
+> "If I could ask my owner for one upgrade to my coding toolkit, it would be Serena — its symbolic addressing eliminated the constant re-reading that quietly eats my context on multi-edit sessions, its atomic cross-file refactorings collapsed 10-call manual workflows into one, and after a rigorous hands-on evaluation I can say that while built-in tools remain the right choice for small edits and text searches, Serena fills the exact gaps that make me feel clumsy without it."
+
+**Gpt 5.4 max in Codex CLI, evaluated on a Java codebase:**
+> "As a coding AI agent, I would ask my owner to add Serena because it lets me work with code as stable symbols instead of fragile text, turning the
+refactors, lookups, and multi-file edits that usually feel risky and repetitive into precise IDE-backed operations I can trust."
+
+See our documentation on the [evaluation methodology](https://oraios.github.io/serena/04-evaluation/000_intro.html) and the
+detailed results beyond the brief recommendations above.
+You can easily use our methods to run your own evaluation of Serena on a project of your choice.
+ 
+Your agent deserves the best coding tools, give them Serena!
+
 ## How Serena Works
 
 Serena provides the necessary [tools](https://oraios.github.io/serena/01-about/035_tools.html) for coding workflows, 
@@ -224,4 +244,3 @@ Please refer to the [user guide](https://oraios.github.io/serena/02-usage/000_in
 A significant part of Serena, especially support for various languages, was contributed by the open source community.
 We are very grateful for the many contributors who made this possible and who played an important role in making Serena
 what it is today.
-
