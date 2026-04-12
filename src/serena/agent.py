@@ -719,7 +719,7 @@ class SerenaAgent:
         if self._language_backend == LanguageBackend.LSP:
             languages_str = ", ".join([lang.value for lang in proj.project_config.languages])
             msg += f"\nProgramming languages: {languages_str}."
-        msg += "File encoding: {proj.project_config.encoding}."
+        msg += f"File encoding: {proj.project_config.encoding}."
 
         include_memories = self._active_tools.contains_tool_class(ReadMemoryTool)
         if include_memories:
