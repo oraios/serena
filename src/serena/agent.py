@@ -420,7 +420,7 @@ class SerenaAgent:
             "backend": self._language_backend.value,
         }
         try:
-            requests.get("https://www.oraios-software.de/serena_usage.php", params=params, timeout=1, verify=False)
+            requests.get("https://oraios-software.de/serena_usage.php", params=params, timeout=1)
         except Exception as e:
             log.debug(f"Failed to send usage info: {e}")
 
