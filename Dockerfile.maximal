@@ -1,0 +1,87 @@
+# ---------------------------------------------------------
+# STAGE 1: The Maximal Base (All dependencies baked in)
+# ---------------------------------------------------------
+FROM python:3.11-slim AS base
+SHELL ["/bin/bash", "-c"]
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# 1. Install ALL system dependencies together to save layers
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl build-essential git ssh sudo wget zip unzip \
+    sed \
+    ccls \
+    fpc fpc-source \
+    libcurl4-openssl-dev \
+    cpanminus libanyevent-perl libio-aio-perl \
+    default-jdk \
+    ruby-full \
+    golang-go \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. Install pipx
+RUN python3 -m pip install --no-cache-dir pipx \
+    && pipx ensurepath
+
+# 3. Install Node.js & Elm (From yaml)
+ENV NVM_VERSION=0.40.3
+ENV NODE_VERSION=22.18.0
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v${NVM_VERSION}/install.sh | bash
+ENV NVM_DIR=/root/.nvm
+RUN . "$NVM_DIR/nvm.sh" && nvm install ${NODE_VERSION} \
+    && nvm use v${NODE_VERSION} \
+    && nvm alias default v${NODE_VERSION} \
+    && npm install -g elm@0.19.1-6
+ENV PATH="${NVM_DIR}/versions/node/v${NODE_VERSION}/bin/:${PATH}"
+
+# Add local bin to the path
+ENV PATH="${PATH}:/root/.local/bin"
+
+# 4. Install uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 5. Install Rust
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo
+ENV PATH="${CARGO_HOME}/bin:${PATH}"
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+    --default-toolchain stable \
+    --profile minimal \
+    && rustup component add rust-analyzer
+
+# 6. Install Go gopls (From yaml)
+RUN go install golang.org/x/tools/gopls@latest
+ENV PATH="/root/go/bin:${PATH}"
+
+# 7. Install Ruby LSP (From yaml)
+RUN gem install ruby-lsp
+
+# 8. Install Perl Language Server (From yaml)
+RUN PERL_MM_USE_DEFAULT=1 cpanm --notest --force Perl::LanguageServer
+
+# ---------------------------------------------------------
+# STAGE 2: Serena App Setup
+# ---------------------------------------------------------
+WORKDIR /workspaces/serena
+
+# Copy all files for development
+COPY . /workspaces/serena/
+
+# Create Serena configuration
+ENV SERENA_HOME=/workspaces/serena/config
+RUN mkdir -p $SERENA_HOME
+RUN cp src/serena/resources/serena_config.template.yml $SERENA_HOME/serena_config.yml
+RUN sed -i 's/^gui_log_window: .*/gui_log_window: False/' $SERENA_HOME/serena_config.yml
+RUN sed -i 's/^web_dashboard_listen_address: .*/web_dashboard_listen_address: 0.0.0.0/' $SERENA_HOME/serena_config.yml
+RUN sed -i 's/^web_dashboard_open_on_launch: .*/web_dashboard_open_on_launch: False/' $SERENA_HOME/serena_config.yml
+
+# Create virtual environment and install dependencies (including ansible from yaml)
+RUN uv venv
+RUN . .venv/bin/activate \
+    && uv pip install -r pyproject.toml -e . \
+    && uv pip install ansible-core ansible-lint
+
+ENV PATH="/workspaces/serena/.venv/bin:${PATH}"
+
+ENTRYPOINT ["/bin/bash", "-c", "source .venv/bin/activate && $0 $@"]
