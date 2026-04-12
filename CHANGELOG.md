@@ -2,6 +2,8 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+# 1.1.1
+
 * General:
   - Enable cert verification for HTTPS request to oraios-software.de #1320
 
