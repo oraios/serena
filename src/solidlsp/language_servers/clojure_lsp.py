@@ -10,6 +10,8 @@ import subprocess
 import threading
 from typing import cast
 
+from overrides import override
+
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
@@ -58,6 +60,11 @@ class ClojureLSP(SolidLanguageServer):
 
     CLOJURE_LSP_VERSION = CLOJURE_LSP_VERSION
     CLOJURE_LSP_ALLOWED_HOSTS = CLOJURE_LSP_ALLOWED_HOSTS
+
+    @override
+    def is_ignored_dirname(self, dirname: str) -> bool:
+        ignored_dirs = [".clj-kondo", ".lsp", ".cpcache"]
+        return super().is_ignored_dirname(dirname) or dirname in ignored_dirs
 
     @classmethod
     def _runtime_dependencies(cls, version: str) -> RuntimeDependencyCollection:
