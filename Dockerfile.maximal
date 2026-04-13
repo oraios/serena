@@ -1,4 +1,9 @@
 # ---------------------------------------------------------
+# STAGE 0: Fetch Julia Natively (Bypasses OS bugs completely)
+# ---------------------------------------------------------
+FROM julia:1.10.4 AS julia-base
+
+# ---------------------------------------------------------
 # STAGE 1: The Maximal Base (All dependencies baked in)
 # ---------------------------------------------------------
 FROM python:3.11-slim AS base
@@ -27,16 +32,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python3 -m pip install --no-cache-dir pipx
 ENV PATH="/root/.local/bin:${PATH}"
 
-# 3. Force-install execstack from archives, setup Julia, clear flag, and cleanup
-RUN curl -L https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-1.10.4-linux-x86_64.tar.gz -o julia.tar.gz \
-    && mkdir -p /opt/julia \
-    && tar -xzf julia.tar.gz -C /opt/julia --strip-components=1 \
-    && rm julia.tar.gz \
-    && curl -O http://ftp.us.debian.org/debian/pool/main/p/prelink/execstack_0.0.20131005-1+b10_amd64.deb \
-    && dpkg -i execstack*.deb \
-    && rm execstack*.deb \
-    && execstack -c /opt/julia/lib/julia/libopenlibm.so \
-    && ln -s /opt/julia/bin/julia /usr/local/bin/julia \
+# 3. Copy Julia from official image and install Language Server
+COPY --from=julia-base /usr/local/julia /opt/julia
+RUN ln -s /opt/julia/bin/julia /usr/local/bin/julia \
     && julia -e 'using Pkg; Pkg.add("LanguageServer")'
 
 # 4. Install R Language Server
