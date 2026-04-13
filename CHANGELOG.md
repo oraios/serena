@@ -6,6 +6,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Support environment variable `SERENA_USAGE_REPORTING` (set to `false` to disable usage reporting)
   - Extended the list of always ignored directories (by language servers) with common cases.
 
+JetBrains: 
+  - Minor fixes in handling `relative_path` for external dependencies.
+
 * Language Servers:
   - Add mSL (mIRC Scripting Language) support (custom pygls-based language server; symbols, references, definitions)
 
@@ -16,7 +19,6 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * JetBrains:
   - `JetBrainsRenameTool` can now also rename occurrences in comments and text.
-  - Minor fixes in handling `relative_path` for external dependencies.
 
 * Language Servers:
   - Fix Dart LSP returning only symbol name as body instead of full method body.
