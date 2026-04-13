@@ -75,13 +75,21 @@ RUN apt-get update && apt-get install -y r-base \
     && Rscript -e "install.packages('languageserver', repos='https://cloud.r-project.org')" \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Julia and Julia Language Server in an isolated directory
-RUN curl -L https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-1.10.0-linux-x86_64.tar.gz -o julia.tar.gz \
+# ---------------------------------------------------------
+# Install execstack, configure Julia, and install Language Server.
+# The execstack tool is used to clear the executable stack flag from 
+# libopenlibm.so to bypass strict Docker security policies.
+# ---------------------------------------------------------
+RUN apt-get update && apt-get install -y execstack \
+    && curl -L https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-1.10.0-linux-x86_64.tar.gz -o julia.tar.gz \
     && mkdir -p /opt/julia \
     && tar -xzf julia.tar.gz -C /opt/julia --strip-components=1 \
     && rm julia.tar.gz \
+    && execstack -c /opt/julia/lib/julia/libopenlibm.so \
     && ln -s /opt/julia/bin/julia /usr/local/bin/julia \
-    && julia -e 'using Pkg; Pkg.add("LanguageServer")'
+    && julia -e 'using Pkg; Pkg.add("LanguageServer")' \
+    && apt-get remove -y execstack \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Zig and ZLS (Zig Language Server)
 RUN wget https://github.com/zigtools/zls/releases/download/0.14.0/zls-x86_64-linux.tar.xz \
