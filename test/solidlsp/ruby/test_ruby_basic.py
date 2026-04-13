@@ -6,6 +6,7 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
 @pytest.mark.ruby
@@ -37,8 +38,36 @@ class TestRubyLanguageServer:
             str(repo_path / "main.rb"), 16, 17
         )  # add method at line 17 (0-indexed 16), position 17
 
-        assert len(definition_location_list) == 1
-        definition_location = definition_location_list[0]
+        unique_locations = {
+            (
+                location["relativePath"],
+                location["range"]["start"]["line"],
+                location["range"]["start"]["character"],
+                location["range"]["end"]["line"],
+                location["range"]["end"]["character"],
+            ): location
+            for location in definition_location_list
+        }
+
+        assert len(unique_locations) == 1
+        definition_location = next(iter(unique_locations.values()))
         print(f"Found definition: {definition_location}")
         assert definition_location["uri"].endswith("lib.rb")
         assert definition_location["range"]["start"]["line"] == 1  # add method on line 2 (0-indexed 1)
+
+    @pytest.mark.parametrize("language_server", [Language.RUBY], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(
+                s,
+                whitespace_allowed=s["name"] == "<< self",
+                period_allowed=s["name"].startswith("self."),
+            ):
+                malformed_symbols.append(s)
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )

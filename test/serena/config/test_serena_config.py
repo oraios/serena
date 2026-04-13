@@ -236,7 +236,7 @@ class TestEffectiveLanguageBackend:
         try:
             assert agent.get_language_backend().is_lsp()
         finally:
-            agent.shutdown(timeout=5)
+            agent.on_shutdown(timeout=5)
 
     def test_project_overrides_global_backend(self):
         """When startup project has language_backend set, it overrides the global."""
@@ -247,7 +247,7 @@ class TestEffectiveLanguageBackend:
         try:
             assert agent.get_language_backend().is_jetbrains()
         finally:
-            agent.shutdown(timeout=5)
+            agent.on_shutdown(timeout=5)
 
     def test_no_project_uses_global_backend(self):
         """When no startup project is provided, effective backend is the global one."""
@@ -261,7 +261,7 @@ class TestEffectiveLanguageBackend:
         try:
             assert agent.get_language_backend() == LanguageBackend.LSP
         finally:
-            agent.shutdown(timeout=5)
+            agent.on_shutdown(timeout=5)
 
     def test_activate_project_rejects_backend_mismatch(self):
         """Post-init activation of a project with mismatched backend raises ValueError."""
@@ -270,10 +270,10 @@ class TestEffectiveLanguageBackend:
 
         # Add a second project that requires JetBrains
         jb_project = Project(
-            project_root=str(Path(__file__).parent.parent / "resources" / "repos" / "python" / "test_repo"),
+            project_root=str(Path(__file__).parent.parent / "resources" / "repos" / "java" / "test_repo"),
             project_config=ProjectConfig(
                 project_name="jb_proj",
-                languages=[Language.PYTHON],
+                languages=[Language.JAVA],
                 language_backend=LanguageBackend.JETBRAINS,
             ),
             serena_config=config,
@@ -285,7 +285,7 @@ class TestEffectiveLanguageBackend:
             with pytest.raises(ValueError, match="Cannot activate project"):
                 agent.activate_project_from_path_or_name("jb_proj")
         finally:
-            agent.shutdown(timeout=5)
+            agent.on_shutdown(timeout=5)
 
     def test_activate_project_allows_matching_backend(self):
         """Post-init activation of a project with matching backend succeeds."""
@@ -308,7 +308,7 @@ class TestEffectiveLanguageBackend:
             # Should not raise
             agent.activate_project_from_path_or_name("lsp_proj2")
         finally:
-            agent.shutdown(timeout=5)
+            agent.on_shutdown(timeout=5)
 
     def test_activate_project_allows_none_backend(self):
         """Post-init activation of a project with no backend override succeeds."""
@@ -331,7 +331,7 @@ class TestEffectiveLanguageBackend:
             # Should not raise — None means "inherit session backend"
             agent.activate_project_from_path_or_name("proj2")
         finally:
-            agent.shutdown(timeout=5)
+            agent.on_shutdown(timeout=5)
 
 
 class TestGetConfiguredProjectSerenaFolder:

@@ -1,7 +1,7 @@
 # Language Support
 
 Serena provides a set of versatile code querying and editing functionalities
-based on symbolic understanding of the code.
+based on symbolic understanding of the code across a wide range of programming languages.
 Equipped with these capabilities, Serena discovers and edits code just like a seasoned developer
 making use of an IDE's capabilities would.
 Serena can efficiently find the right context and do the right thing even in very large and
@@ -13,8 +13,9 @@ There are two alternative technologies powering these capabilities:
 * **The Serena JetBrains Plugin**, which leverages the powerful code analysis and editing
   capabilities of your JetBrains IDE.
 
-You can choose either of these backends depending on your preferences and requirements.
+See the [Features](025_features) section for a detailed comparison of the capabilities provided by the JetBrains Plugin vs. language servers.
 
+(language-servers)=
 ## Language Servers
 
 Serena incorporates a powerful abstraction layer for the integration of language servers 
@@ -28,7 +29,7 @@ We currently provide direct, out-of-the-box support for the programming language
 Some languages require additional installations or setup steps, as noted.
 
 * **AL**
-* **Ansible**
+* **Ansible**  
   (experimental; requires Node.js and npm; automatically installs `@ansible/ansible-language-server`;
   must be explicitly specified in the `languages` entry in the `project.yml`; requires `ansible` in PATH for full functionality)
   the upstream `@ansible/ansible-language-server@1.2.3` supports hover, completion, definition,
@@ -43,6 +44,9 @@ Some languages require additional installations or setup steps, as noted.
   for best results, provide a `compile_commands.json` at the repository root;
   see the [C/C++ Setup Guide](../03-special-guides/cpp_setup) for details.)
 * **Clojure**
+* **Crystal**  
+  (requires [Crystalline](https://github.com/elbywan/crystalline) language server to be installed and available on PATH;
+  note: Crystalline has limited go-to-definition support and does not support find-references)
 * **Dart**
 * **Elixir**  
   (requires Elixir installation; Expert language server is downloaded automatically)
@@ -58,8 +62,11 @@ Some languages require additional installations or setup steps, as noted.
   (requires installation of `gopls`)
 * **Groovy**  
   (requires local groovy-language-server.jar setup via `GROOVY_LS_JAR_PATH` or configuration)
-* **Haskell**
+* **Haskell**  
   (automatically locates HLS via ghcup, stack, or system PATH; supports Stack and Cabal projects)
+* **Haxe**
+  (requires Haxe compiler 3.4.0+ and Node.js; uses the [vshaxe language server](https://github.com/vshaxe/haxe-language-server);
+  automatically downloaded from Open VSX, or discovered from the vshaxe VSCode extension)
 * **HLSL / GLSL / WGSL**
   (uses [shader-language-server](https://github.com/antaalt/shader-sense) (language `hlsl`); automatically downloaded;
   on macOS, requires Rust toolchain for building from source;
@@ -77,6 +84,9 @@ Some languages require additional installations or setup steps, as noted.
 * **Luau**
 * **Markdown**  
   (must explicitly enable language `markdown`, primarily useful for documentation-heavy projects)
+* **mSL** (mIRC Scripting Language)  
+  (auto-installed; no external dependencies required — uses a custom pygls-based LSP server shipped with Serena;
+  supports document symbols, workspace symbols, references, and go-to-definition for aliases, events, menus, dialogs, and CTCP handlers in `.mrc` files)
 * **Nix**  
   (requires nixd installation)
 * **OCaml**
@@ -97,7 +107,7 @@ Some languages require additional installations or setup steps, as noted.
   (requires [rustup](https://rustup.rs/) - uses rust-analyzer from your toolchain)
 * **Scala**  
   (requires some [manual setup](../03-special-guides/scala_setup_guide_for_serena); uses Metals LSP)
-* **Solidity**
+* **Solidity**  
   (experimental; requires Node.js and npm; automatically installs `@nomicfoundation/solidity-language-server`;
   works best with a `foundry.toml` or `hardhat.config.js` in the project root)
 * **Swift**
@@ -113,25 +123,15 @@ see Serena's [memory on that](https://github.com/oraios/serena/blob/main/.serena
 
 ## The Serena JetBrains Plugin
 
-As an alternative to language servers, the [Serena JetBrains Plugin](https://plugins.jetbrains.com/plugin/28946-serena/)
-leverages the powerful code analysis capabilities of JetBrains IDEs. 
-The plugin naturally supports all programming languages and frameworks that are supported by JetBrains IDEs, 
-including IntelliJ IDEA, PyCharm, Android Studio, WebStorm, PhpStorm, RubyMine, GoLand, and potentially others 
-(Rider and CLion are unsupported though).
+The [Serena JetBrains Plugin](https://plugins.jetbrains.com/plugin/28946-serena/) leverages the powerful code analysis capabilities of JetBrains IDEs. 
+The plugin naturally supports all programming languages and frameworks that are supported by JetBrains IDEs.
 
 When using the plugin, Serena connects to an instance of your JetBrains IDE via the plugin. For users who already
 work in a JetBrains IDE, this means Serena seamlessly integrates with the IDE instance you typically have open anyway,
-requiring no additional setup or configuration beyond the plugin itself. This approach offers several key advantages:
+requiring no additional setup or configuration beyond the plugin itself.
 
-* **External library indexing**: Dependencies and libraries are fully indexed and accessible to Serena
-* **No additional setup**: No need to download or configure separate language servers
-* **Enhanced performance**: Faster tool execution thanks to optimized IDE integration
-* **Multi-language excellence**: First-class support for polyglot projects with multiple languages and frameworks
-
-Even if you prefer to work in a different code editor, you can still benefit from the JetBrains plugin by running 
-a JetBrains IDE instance (most have free community editions) alongside your preferred editor with your project 
-opened and indexed. Serena will connect to the IDE for code analysis while you continue working in your editor 
-of choice.
+* See the [JetBrains Plugin documentation](../02-usage/025_jetbrains_plugin) for a high-level overview of its benefits and usage details.
+* See the [Features](025_features) section for a detailed comparison of the capabilities provided by the JetBrains Plugin vs. language servers.
 
 ```{raw} html
 <p>
@@ -140,5 +140,3 @@ of choice.
 </a>
 </p>
 ```
-
-See the [JetBrains Plugin documentation](../02-usage/025_jetbrains_plugin) for usage details.

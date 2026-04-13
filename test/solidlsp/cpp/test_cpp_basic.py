@@ -15,6 +15,7 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
 def _ccls_available() -> bool:
@@ -135,10 +136,23 @@ int use_add() {
             ref_files = [ref.get("relativePath", "") for ref in refs]
 
             # Should find reference in the newly written file
-            assert any(
-                "temp_new_file.cpp" in ref_file for ref_file in ref_files
-            ), f"Should find reference in newly written temp_new_file.cpp, {ref_files=}"
+            assert any("temp_new_file.cpp" in ref_file for ref_file in ref_files), (
+                f"Should find reference in newly written temp_new_file.cpp, {ref_files=}"
+            )
         finally:
             # Clean up the new file
             if os.path.exists(new_file_abs_path):
                 os.remove(new_file_abs_path)
+
+    @pytest.mark.parametrize("language_server", _cpp_servers, indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s):
+                malformed_symbols.append(s)
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )

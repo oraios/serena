@@ -12,7 +12,7 @@ import threading
 from time import sleep
 from typing import Any
 
-from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
+from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
@@ -69,13 +69,19 @@ class SolidityLanguageServer(SolidLanguageServer):
             assert is_node_installed, "node is not installed or isn't in PATH. Please install Node.js and try again."
             is_npm_installed = shutil.which("npm") is not None
             assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
+            solidity_language_server_version = self._custom_settings.get("solidity_language_server_version", "0.8.4")
+            npm_registry = self._custom_settings.get("npm_registry")
 
             deps = RuntimeDependencyCollection(
                 [
                     RuntimeDependency(
                         id="solidity-language-server",
                         description="Nomic Foundation Solidity Language Server",
-                        command="npm install --prefix ./ @nomicfoundation/solidity-language-server@0.8.4",
+                        command=build_npm_install_command(
+                            "@nomicfoundation/solidity-language-server",
+                            solidity_language_server_version,
+                            npm_registry,
+                        ),
                         platform_id="any",
                     ),
                 ]

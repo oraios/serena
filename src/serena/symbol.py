@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import os
@@ -409,8 +410,23 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         string representation of the symbol kind (name attribute of the `SymbolKind` enum item)
         """
         children: NotRequired[list["LanguageServerSymbol.OutputDict"]]
+        content_around_reference: NotRequired[str]
+        """set by :class:`FindReferencingSymbolsTool` when including surrounding code lines"""
+        reference_line: NotRequired[int]
+        """line number of the reference, set by :class:`FindReferencingSymbolsTool`"""
 
-    OutputDictKey = Literal["name", "name_path", "relative_path", "location", "body_location", "body", "kind", "children"]
+    OutputDictKey = Literal[
+        "name",
+        "name_path",
+        "relative_path",
+        "location",
+        "body_location",
+        "body",
+        "kind",
+        "children",
+        "content_around_reference",
+        "reference_line",
+    ]
 
     def to_dict(
         self,
@@ -423,6 +439,8 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         body: bool = False,
         body_location: bool = False,
         children_body: bool = False,
+        children_name_path: bool | None = None,
+        children_name: bool | None = None,
         relative_path: bool = False,
         child_inclusion_predicate: Callable[[Self], bool] | None = None,
     ) -> OutputDict:
@@ -439,6 +457,8 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
             Note that the body of the children is part of the body of the parent symbol,
             so there is usually no need to set this to True unless you want process the output
             and pass the children without passing the parent body to the LM.
+        :param children_name_path: whether to include the name path of the children; if None, defaults to the value of `name_path`
+        :param children_name: whether to include the name of the children; if None, defaults to the value of `name`
         :param relative_path: whether to include the relative path of the symbol.
             If `location` is True, this defines whether to include the path in the location entry.
             If `location` is False, this defines whether to include the relative path as a top-level entry.
@@ -448,6 +468,11 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         :return: a dictionary representation of the symbol
         """
         result: LanguageServerSymbol.OutputDict = {}
+
+        if children_name_path is None:
+            children_name_path = name_path
+        if children_name is None:
+            children_name = name
 
         if name_path:
             result["name_path"] = self.get_name_path()
@@ -479,8 +504,8 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
                     continue
                 children.append(
                     c.to_dict(
-                        name_path=name_path,
-                        name=name,
+                        name_path=children_name_path,
+                        name=children_name,
                         kind=kind,
                         location=location,
                         body_location=body_location,
@@ -941,35 +966,42 @@ class SymbolDictGrouper(Generic[TSymbolDict], ABC):
         self._group_children_keys = group_children_keys
         self._collapse_singleton = collapse_singleton
 
-    def _group_by(self, l: list[dict], keys: list[str], children_keys: list[str]) -> dict[str, Any]:
-        assert len(keys) > 0, "keys must not be empty"
-        # group by the first key
-        grouped: dict[str, Any] = {}
-        for item in l:
-            key_value = item.pop(keys[0], "unknown")
-            if key_value not in grouped:
-                grouped[key_value] = []
-            grouped[key_value].append(item)
-        if len(keys) > 1:
+    def _group_by(self, l: list[dict], keys: list[str], children_keys: list[str], is_children: bool) -> dict[str, Any] | list[Any]:
+        """
+        :param l: the list of symbol dictionaries to group
+        :param keys: the keys to group by
+        :param children_keys: the keys to group the children by
+        :param is_children: whether this is a children grouping operation
+        :return: the (grouped) symbols
+        """
+        if len(keys) > 0:
+            # group by the first key
+            grouped: dict[str, Any] = {}
+            for item in l:
+                key_value = item.pop(keys[0], "unknown")
+                if key_value not in grouped:
+                    grouped[key_value] = []
+                grouped[key_value].append(item)
             # continue grouping by the remaining keys
             for k, group in grouped.items():
-                grouped[k] = self._group_by(group, keys[1:], children_keys)
+                grouped[k] = self._group_by(group, keys[1:], children_keys, is_children=is_children)
+            return grouped
         else:
             # grouping is complete; now group the children if necessary
-            if children_keys:
-                for k, group in grouped.items():
-                    for item in group:
-                        if self._children_key in item:
-                            children = item[self._children_key]
-                            item[self._children_key] = self._group_by(children, children_keys, children_keys)
-            # post-process final group items
-            grouped = {k: [self._transform_item(i) for i in v] for k, v in grouped.items()}
-        return grouped
+            for item in l:
+                if self._children_key in item:
+                    children = item[self._children_key]
+                    item[self._children_key] = self._group_by(children, children_keys, children_keys, is_children=True)
+            # post-process final items
+            return [self._transform_item(item, is_children) for item in l]
 
-    def _transform_item(self, item: dict) -> dict:
+    def _transform_item(self, item: dict, is_child: bool) -> dict:
         """
         Post-processes a final group item (which has been regrouped, i.e. some keys may have been removed),
         collapsing singleton items (and items containing only a single non-children key)
+
+        :param item: the item to post-process
+        :param is_child: whether the item is a child item
         """
         if self._collapse_singleton:
             if len(item) == 1:
@@ -985,12 +1017,15 @@ class SymbolDictGrouper(Generic[TSymbolDict], ABC):
                 return new_item
         return item
 
-    def group(self, symbols: list[TSymbolDict]) -> GroupedSymbolDict:
+    def group(self, symbols: list[TSymbolDict]) -> GroupedSymbolDict | list:
         """
         :param symbols: the symbols to group
-        :return: dictionary with the symbols grouped as defined at construction
+        :return: dictionary with the symbols grouped as defined at construction if at least one key was used for grouping,
+            otherwise the list of symbols (potentially transformed)
         """
-        return self._group_by(symbols, self._group_keys, self._group_children_keys)  # type: ignore
+        # avoid side effects by working on a deep-copy
+        symbols_copy = copy.deepcopy(symbols)
+        return self._group_by(symbols_copy, self._group_keys, self._group_children_keys, is_children=False)  # type: ignore
 
 
 class LanguageServerSymbolDictGrouper(SymbolDictGrouper[LanguageServerSymbol.OutputDict]):
@@ -1011,16 +1046,22 @@ class JetBrainsSymbolDictGrouper(SymbolDictGrouper[jb.SymbolDTO]):
         collapse_singleton: bool = False,
         map_name_path_to_name: bool = False,
     ) -> None:
+        """
+        :param group_keys: keys to group main symbols by
+        :param group_children_keys: keys to group child symbols by
+        :param collapse_singleton: whether to collapse singleton symbol dictionaries
+        :param map_name_path_to_name: whether to transform the "name_path" key of child symbols to the bare "name"
+        """
         super().__init__(jb.SymbolDTO, "children", group_keys, group_children_keys, collapse_singleton)
         self._map_name_path_to_name = map_name_path_to_name
 
-    def _transform_item(self, item: dict) -> dict:
-        if self._map_name_path_to_name:
+    def _transform_item(self, item: dict, is_child: bool) -> dict:
+        if self._map_name_path_to_name and is_child:
             # {"name_path: "Class/myMethod"} -> {"name: "myMethod"}
             new_item = dict(item)
             if "name_path" in item:
                 name_path = new_item.pop("name_path")
                 new_item["name"] = name_path.split("/")[-1]
-            return super()._transform_item(new_item)
+            return super()._transform_item(new_item, is_child)
         else:
-            return super()._transform_item(item)
+            return super()._transform_item(item, is_child)

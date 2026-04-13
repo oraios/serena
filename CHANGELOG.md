@@ -1,13 +1,49 @@
-# Latest
+# Unreleased (main)
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
-* New language support:
-    * Add Solidity language server support (`Language.SOLIDITY`) using the
-      Nomic Foundation `@nomicfoundation/solidity-language-server`. Automatically
-      installed via npm. Supports `.sol` files with go-to-definition, find references,
-      document symbols, hover, and diagnostics. Works best with a `foundry.toml` or
-      `hardhat.config.js` in the project root.
+* General:
+  - Support environment variable `SERENA_USAGE_REPORTING` (set to `false` to disable usage reporting)
+
+* Language Servers:
+  - Add mSL (mIRC Scripting Language) support (custom pygls-based language server; symbols, references, definitions)
+
+# 1.1.1
+
+* General:
+  - Enable cert verification for HTTPS request to oraios-software.de #1320
+
+* JetBrains:
+  - `JetBrainsRenameTool` can now also rename occurrences in comments and text.
+
+* Language Servers:
+  - Fix Dart LSP returning only symbol name as body instead of full method body.
+
+
+# 1.1.0
+
+* General:
+  - **Major**: Add commands for hooks and documentation of recommended setup. Consider setting up the [recommended hooks](https://oraios.github.io/serena/02-usage/030_clients.html) !
+  - Add `serena init` and `serena setup` commands
+  - Rework installation instructions, switching to releases on pypi for distribution. Please update your mcp startup commands!
+  - Add minimal usage data collection on startup (only Serena version, language backend, OS, dashboard enabled status; no personally identifiable information)
+  - Fix: git commit id in Serena version strings was incorrect
+
+* Language Servers:
+  - Add support for Haxe via vshaxe/haxe-language-server. Requires Haxe compiler 3.4.0+ and Node.js. Auto-discovered from the vshaxe VSCode extension or configurable via `ls_path` in `ls_specific_settings`.
+  - Add Crystal language support (uses [Crystalline](https://github.com/elbywan/crystalline) language server)
+  - Fix: Reactivation of the same project restarted language servers #1280
+
+* JetBrains:
+  - `JetBrainsFindReferencingSymbolTool`: Include context lines (when using plugin version 2023.2.15+)
+
+* Dashboard:
+  - Add version display
+  - Fix: Dashboard viewer (Windows): Add a parent monitoring thread to ensure termination.
+    Some clients would terminate the MCP server in a way that did not ensure proper termination.
+  - Fix: Manual server shutdown triggered by GUI tool/dashboard not cleaning everything up.
+
+# 1.0.0
 
 * General:
     * Add monorepo/multi-language support
@@ -31,9 +67,9 @@ Status of the `main` branch. Changes prior to the next official version change w
         * Log page now has save (downloads a snapshot) and clear (resets log view) buttons alongside the existing copy button
     * Language server backend:
         * New two-tier caching of language server document symbols and considerable performance improvements surrounding symbol retrieval/indexing
-        * Allow passing language server specific settings through `ls_specific_settings` field (in `serena_config.yml`)
+        * Allow passing language server-specific settings through `ls_specific_settings` field (in `serena_config.yml`)
     * Add the JetBrains language backend as an alternative to language servers
-    * Improve management of the Serena projects
+    * Improve management of Serena projects
         * Facilitate project activation based on the current directory (through the `--project-from-cwd` parameter)
         * Add notion of a "single-project context" (flag `single_project`), allowing user-defined contexts to behave
           like the built-in `ide-assistant` context (where the available tools are restricted to ones required by the active
@@ -42,16 +78,19 @@ Status of the `main` branch. Changes prior to the next official version change w
           locations outside of the project folder, thus improving support for read-only projects.
         * Add support for `project.local.yml` for local overrides that should not be versioned 
     * Various fixes related to indexing, special paths and determination of ignored paths
-
-* Client support:
-    * New mode `oaicompat-agent` and extensions enhancing OpenAI tool compatibility, permitting Serena to work with llama.cpp
+    * Memories:
+        * Add support for global memories (shared across projects) 
+        * Add `read_only_memory_patterns` configuration option
+        * Add `ignored_memory_patterns` configuration option
+    * Improved client support, e.g. new mode `oaicompat-agent` and extensions enhancing OpenAI tool compatibility
 
 * Tools:
-  * Symbol information (hover, docstring, quick-info) is now provided as part of `find_symbol` and related tool responses.
+  * Additional symbol meta-information (hover, docstring, quick-info) is now provided as part of `find_symbol` and related tool responses.
   * Added `QueryProjectTool` and `ListQueryableProjectTool` (see above)
   * Added `RenameSymbolTool` for renaming symbols across the codebase (if LS supports this operation).
   * Replaced `ReplaceRegexTool` with `ReplaceContentTool`, which supports both plain text and regex-based replacements
-    (and which requires no escaping in the replacement text, making it more robust) 
+    (and which requires no escaping in the replacement text, making it more robust)
+  * Add JetBrains tools which leverage the corresponding JetBrains language backend through our plugin
   * Decreased `TOOL_DEFAULT_MAX_ANSWER_LENGTH` to be in accordance with (below) typical max-tokens configurations
 
 * Language support:
@@ -83,7 +122,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   * **Add support for MATLAB** via the official MathWorks MATLAB Language Server. Requires MATLAB R2021b or later and Node.js. Set `MATLAB_PATH` environment variable or configure `matlab_path` in `ls_specific_settings`. Supports .m, .mlx, and .mlapp files with code completion, diagnostics, go-to-definition, find references, document symbols, formatting, and rename.
   * **Add support for Pascal** via the official Pascal Language Server.
   * **C/C++ alternate LS (ccls)**: Add experimental, opt-in support for ccls as an alternative backend to clangd. Enable via `cpp_ccls` in project configuration. Requires `ccls` installed and ideally a `compile_commands.json` at repo root.
-
+  * **Add support for Solidity** via the Nomic Foundation `@nomicfoundation/solidity-language-server` (automatically installed via npm)
 
 # 0.1.4
 

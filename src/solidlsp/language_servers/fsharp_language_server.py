@@ -14,7 +14,7 @@ from overrides import override
 from serena.util.dotnet import DotNETUtil
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -22,11 +22,17 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
+FSAUTOCOMPLETE_VERSION = "0.83.0"
+
 
 class FSharpLanguageServer(SolidLanguageServer):
     """
     Provides F# specific instantiation of the LanguageServer class using Ionide LSP (FsAutoComplete).
     Contains various configurations and settings specific to F# development.
+
+    You can pass the following entries in ``ls_specific_settings["fsharp"]``:
+        - fsautocomplete_version: Override the pinned FsAutoComplete version
+          installed by Serena (default: the bundled Serena version).
     """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
@@ -62,6 +68,8 @@ class FSharpLanguageServer(SolidLanguageServer):
         """
         Setup runtime dependencies for F# Language Server and return the command to start the server.
         """
+        fsharp_settings = solidlsp_settings.get_ls_specific_settings(Language.FSHARP)
+        fsautocomplete_version = fsharp_settings.get("fsautocomplete_version", FSAUTOCOMPLETE_VERSION)
         dotnet_exe = DotNETUtil("8.0", allow_higher_version=True).get_dotnet_path_or_raise()
 
         RuntimeDependencyCollection(
@@ -69,7 +77,7 @@ class FSharpLanguageServer(SolidLanguageServer):
                 RuntimeDependency(
                     id="fsautocomplete",
                     description="FsAutoComplete (Ionide F# Language Server)",
-                    command="dotnet tool install --tool-path ./ fsautocomplete",
+                    command=f"dotnet tool install --tool-path ./ fsautocomplete --version {fsautocomplete_version}",
                     platform_id="any",
                 ),
             ]
@@ -94,7 +102,7 @@ class FSharpLanguageServer(SolidLanguageServer):
                 import subprocess
 
                 result = subprocess.run(
-                    [dotnet_exe, "tool", "install", "--tool-path", fsharp_ls_dir, "fsautocomplete"],
+                    [dotnet_exe, "tool", "install", "--tool-path", fsharp_ls_dir, "fsautocomplete", "--version", fsautocomplete_version],
                     cwd=fsharp_ls_dir,
                     capture_output=True,
                     text=True,
@@ -166,7 +174,7 @@ class FSharpLanguageServer(SolidLanguageServer):
                     "documentHighlight": {"dynamicRegistration": True},
                     "documentSymbol": {
                         "dynamicRegistration": True,
-                        "symbolKind": {"valueSet": list(range(1, 26))},  # All SymbolKind values
+                        "symbolKind": {"valueSet": list(range(1, 27))},  # All SymbolKind values (1-26)
                         "hierarchicalDocumentSymbolSupport": True,
                     },
                     "codeAction": {

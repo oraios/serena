@@ -216,12 +216,15 @@ tmp/
 .vscode/
 
 # Claude settings
-.claude/settings.local.json
+/.claude
 
 # Elixir
 /test/resources/repos/elixir/test_repo/deps
 # Exception: Don't ignore Elixir test repository lib directory (contains source code)
 !/test/resources/repos/elixir/test_repo/lib
+
+#Cpp
+/test/resources/repos/cpp/test_repo/.ccls-cache
 
 # Exception: Don't ignore Nix test repository lib directory (contains source code)
 !/test/resources/repos/nix/test_repo/lib
@@ -267,3 +270,5 @@ cabal.project.local*
 
 zz-misc/
 vue-implementation/
+
+news/news.json

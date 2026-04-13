@@ -137,9 +137,7 @@ class OcamlLanguageServer(SolidLanguageServer):
             )
         except subprocess.CalledProcessError as e:
             raise RuntimeError(
-                f"Failed to detect ocaml-lsp-server version: {e.stderr}\n"
-                "Please install ocaml-lsp-server:\n"
-                "  opam install ocaml-lsp-server"
+                f"Failed to detect ocaml-lsp-server version: {e.stderr}\nPlease install ocaml-lsp-server:\n  opam install ocaml-lsp-server"
             ) from e
         except FileNotFoundError as e:
             raise RuntimeError("opam not found. Please install opam:\n  https://opam.ocaml.org/doc/Install.html") from e

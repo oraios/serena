@@ -3,12 +3,12 @@ Provides Java specific instantiation of the LanguageServer class. Contains vario
 """
 
 import dataclasses
+import hashlib
 import logging
 import os
 import pathlib
 import shutil
 import threading
-import uuid
 from pathlib import PurePath
 from time import sleep
 from typing import cast
@@ -24,6 +24,23 @@ from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, InitializePa
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
+
+GRADLE_ALLOWED_HOSTS = ("services.gradle.org", "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
+GRADLE_SHA256 = "7197a12f450794931532469d4ff21a59ea2c1cd59a3ec3f89c035c3c420a6999"
+VSCODE_JAVA_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
+VSCODE_JAVA_SHA256_BY_PLATFORM = {
+    "osx-arm64": "bc00c2699d4b8d478eb9a1621db9d6d3a12ea0dcc247a9cd8040e8ac19c03933",
+    "osx-x64": "03ae1db1a22c15561a620f1b722d6797d35d4faaa7c4666dbe6ca2715089852f",
+    "linux-arm64": "e15bc9b2a665d3453203402621b5441062aa41b0ec2d140661f439326fd248c1",
+    "linux-x64": "7660b7b527be6fda46a917966b34d828e7416d5cc84287b29b88e7b99c1737f9",
+    "win-x64": "ef195b45bd260976ad2e84618f4044b5d7248deed41d647573f0ee22c4233df3",
+}
+INTELLICODE_ALLOWED_HOSTS = (
+    "visualstudioexptteam.gallery.vsassets.io",
+    "marketplace.visualstudio.com",
+    "download.visualstudio.microsoft.com",
+)
+INTELLICODE_SHA256 = "7f61a7f96d101cdf230f96821be3fddd8f890ebfefb3695d18beee43004ae251"
 
 
 @dataclasses.dataclass
@@ -52,6 +69,13 @@ class EclipseJDTLS(SolidLanguageServer):
         - gradle_wrapper_enabled: Whether to use the project's Gradle wrapper (default: false)
         - gradle_java_home: Path to JDK for Gradle (default: null, uses bundled JRE)
         - use_system_java_home: Whether to use the system's JAVA_HOME for JDTLS itself (default: false)
+        - jdtls_xmx: Maximum heap size for the JDTLS server JVM (default: "3G")
+        - jdtls_xms: Initial heap size for the JDTLS server JVM (default: "100m")
+        - intellicode_xmx: Maximum heap size for the IntelliCode embedded JVM (default: "1G")
+        - intellicode_xms: Initial heap size for the IntelliCode embedded JVM (default: "100m")
+        - gradle_version: Override the pinned Gradle distribution version downloaded by Serena
+        - vscode_java_version: Override the pinned vscode-java runtime bundle version downloaded by Serena
+        - intellicode_version: Override the pinned IntelliCode VSIX version downloaded by Serena
 
     Example configuration in ~/.serena/serena_config.yml:
     ```yaml
@@ -64,6 +88,13 @@ class EclipseJDTLS(SolidLanguageServer):
         gradle_wrapper_enabled: true  # set to true for projects with custom plugins/repositories
         gradle_java_home: "/path/to/jdk"  # set to override Gradle's JDK
         use_system_java_home: true  # set to true to use system JAVA_HOME for JDTLS
+        jdtls_xmx: "3G"  # maximum heap size for the JDTLS server JVM
+        jdtls_xms: "100m"  # initial heap size for the JDTLS server JVM
+        intellicode_xmx: "1G"  # maximum heap size for the IntelliCode embedded JVM
+        intellicode_xms: "100m"  # initial heap size for the IntelliCode embedded JVM
+        gradle_version: "8.14.2"
+        vscode_java_version: "1.42.0-561"
+        intellicode_version: "1.2.30"
     ```
     """
 
@@ -115,33 +146,48 @@ class EclipseJDTLS(SolidLanguageServer):
             super().__init__(custom_settings, ls_resources_dir)
             self._solidlsp_settings = solidlsp_settings
             self._repository_root_path = repository_root_path
-            self.runtime_dependency_paths = self._setup_runtime_dependencies(ls_resources_dir)
+            self.runtime_dependency_paths = self._setup_runtime_dependencies(ls_resources_dir, custom_settings)
 
-        @classmethod
-        def _setup_runtime_dependencies(cls, ls_resources_dir: str) -> RuntimeDependencyPaths:
+        @staticmethod
+        def _setup_runtime_dependencies(
+            ls_resources_dir: str, custom_settings: SolidLSPSettings.CustomLSSettings
+        ) -> RuntimeDependencyPaths:
             """
             Setup runtime dependencies for EclipseJDTLS and return the paths.
             """
             platformId = PlatformUtils.get_platform_id()
+            gradle_version = custom_settings.get("gradle_version", "8.14.2")
+            vscode_java_version = custom_settings.get("vscode_java_version", "1.42.0-561")
+            vscode_java_tag = f"v{vscode_java_version.rsplit('-', 1)[0]}"
+            intellicode_version = custom_settings.get("intellicode_version", "1.2.30")
+            default_gradle_version = gradle_version == "8.14.2"
+            default_vscode_java_version = vscode_java_version == "1.42.0-561"
+            default_intellicode_version = intellicode_version == "1.2.30"
 
-            runtime_dependencies = {
+            runtime_dependencies: dict[str, dict[str, dict[str, object]]] = {
                 "gradle": {
                     "platform-agnostic": {
-                        "url": "https://services.gradle.org/distributions/gradle-8.14.2-bin.zip",
+                        "url": f"https://services.gradle.org/distributions/gradle-{gradle_version}-bin.zip",
                         "archiveType": "zip",
                         "relative_extraction_path": ".",
+                        "sha256": GRADLE_SHA256 if default_gradle_version else None,
+                        "allowed_hosts": GRADLE_ALLOWED_HOSTS,
                     }
                 },
                 "vscode-java": {
                     "darwin-arm64": {
-                        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-arm64-1.42.0-561.vsix",
+                        "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-darwin-arm64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "relative_extraction_path": "vscode-java",
+                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["osx-arm64"] if default_vscode_java_version else None,
+                        "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                     },
                     "osx-arm64": {
-                        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-arm64-1.42.0-561.vsix",
+                        "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-darwin-arm64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "relative_extraction_path": "vscode-java",
+                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["osx-arm64"] if default_vscode_java_version else None,
+                        "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                         "jre_home_path": "extension/jre/21.0.7-macosx-aarch64",
                         "jre_path": "extension/jre/21.0.7-macosx-aarch64/bin/java",
                         "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
@@ -149,9 +195,11 @@ class EclipseJDTLS(SolidLanguageServer):
                         "jdtls_readonly_config_path": "extension/server/config_mac_arm",
                     },
                     "osx-x64": {
-                        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-darwin-x64-1.42.0-561.vsix",
+                        "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-darwin-x64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "relative_extraction_path": "vscode-java",
+                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["osx-x64"] if default_vscode_java_version else None,
+                        "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                         "jre_home_path": "extension/jre/21.0.7-macosx-x86_64",
                         "jre_path": "extension/jre/21.0.7-macosx-x86_64/bin/java",
                         "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
@@ -159,9 +207,11 @@ class EclipseJDTLS(SolidLanguageServer):
                         "jdtls_readonly_config_path": "extension/server/config_mac",
                     },
                     "linux-arm64": {
-                        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-arm64-1.42.0-561.vsix",
+                        "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-linux-arm64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "relative_extraction_path": "vscode-java",
+                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["linux-arm64"] if default_vscode_java_version else None,
+                        "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                         "jre_home_path": "extension/jre/21.0.7-linux-aarch64",
                         "jre_path": "extension/jre/21.0.7-linux-aarch64/bin/java",
                         "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
@@ -169,9 +219,11 @@ class EclipseJDTLS(SolidLanguageServer):
                         "jdtls_readonly_config_path": "extension/server/config_linux_arm",
                     },
                     "linux-x64": {
-                        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-linux-x64-1.42.0-561.vsix",
+                        "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-linux-x64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "relative_extraction_path": "vscode-java",
+                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["linux-x64"] if default_vscode_java_version else None,
+                        "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                         "jre_home_path": "extension/jre/21.0.7-linux-x86_64",
                         "jre_path": "extension/jre/21.0.7-linux-x86_64/bin/java",
                         "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
@@ -179,9 +231,11 @@ class EclipseJDTLS(SolidLanguageServer):
                         "jdtls_readonly_config_path": "extension/server/config_linux",
                     },
                     "win-x64": {
-                        "url": "https://github.com/redhat-developer/vscode-java/releases/download/v1.42.0/java-win32-x64-1.42.0-561.vsix",
+                        "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-win32-x64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "relative_extraction_path": "vscode-java",
+                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["win-x64"] if default_vscode_java_version else None,
+                        "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                         "jre_home_path": "extension/jre/21.0.7-win32-x86_64",
                         "jre_path": "extension/jre/21.0.7-win32-x86_64/bin/java.exe",
                         "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
@@ -191,10 +245,12 @@ class EclipseJDTLS(SolidLanguageServer):
                 },
                 "intellicode": {
                     "platform-agnostic": {
-                        "url": "https://VisualStudioExptTeam.gallery.vsassets.io/_apis/public/gallery/publisher/VisualStudioExptTeam/extension/vscodeintellicode/1.2.30/assetbyname/Microsoft.VisualStudio.Services.VSIXPackage",
-                        "alternate_url": "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/VisualStudioExptTeam/vsextensions/vscodeintellicode/1.2.30/vspackage",
+                        "url": f"https://VisualStudioExptTeam.gallery.vsassets.io/_apis/public/gallery/publisher/VisualStudioExptTeam/extension/vscodeintellicode/{intellicode_version}/assetbyname/Microsoft.VisualStudio.Services.VSIXPackage",
+                        "alternate_url": f"https://marketplace.visualstudio.com/_apis/public/gallery/publishers/VisualStudioExptTeam/vsextensions/vscodeintellicode/{intellicode_version}/vspackage",
                         "archiveType": "zip",
                         "relative_extraction_path": "intellicode",
+                        "sha256": INTELLICODE_SHA256 if default_intellicode_version else None,
+                        "allowed_hosts": INTELLICODE_ALLOWED_HOSTS,
                         "intellicode_jar_path": "extension/dist/com.microsoft.jdtls.intellicode.core-0.7.0.jar",
                         "intellisense_members_path": "extension/dist/bundledModels/java_intellisense-members",
                     }
@@ -204,27 +260,30 @@ class EclipseJDTLS(SolidLanguageServer):
             gradle_path = str(
                 PurePath(
                     ls_resources_dir,
-                    "gradle-8.14.2",
+                    f"gradle-{gradle_version}",
                 )
             )
 
             if not os.path.exists(gradle_path):
-                FileUtils.download_and_extract_archive(
-                    runtime_dependencies["gradle"]["platform-agnostic"]["url"],
+                gradle_dependency = runtime_dependencies["gradle"]["platform-agnostic"]
+                FileUtils.download_and_extract_archive_verified(
+                    cast(str, gradle_dependency["url"]),
                     str(PurePath(gradle_path).parent),
-                    runtime_dependencies["gradle"]["platform-agnostic"]["archiveType"],
+                    cast(str, gradle_dependency["archiveType"]),
+                    expected_sha256=cast(str | None, gradle_dependency["sha256"]),
+                    allowed_hosts=cast(tuple[str, ...], gradle_dependency["allowed_hosts"]),
                 )
 
             assert os.path.exists(gradle_path)
 
             dependency = runtime_dependencies["vscode-java"][platformId.value]
-            vscode_java_path = str(PurePath(ls_resources_dir, dependency["relative_extraction_path"]))
+            vscode_java_path = str(PurePath(ls_resources_dir, cast(str, dependency["relative_extraction_path"])))
             os.makedirs(vscode_java_path, exist_ok=True)
-            jre_home_path = str(PurePath(vscode_java_path, dependency["jre_home_path"]))
-            jre_path = str(PurePath(vscode_java_path, dependency["jre_path"]))
-            lombok_jar_path = str(PurePath(vscode_java_path, dependency["lombok_jar_path"]))
-            jdtls_launcher_jar_path = str(PurePath(vscode_java_path, dependency["jdtls_launcher_jar_path"]))
-            jdtls_readonly_config_path = str(PurePath(vscode_java_path, dependency["jdtls_readonly_config_path"]))
+            jre_home_path = str(PurePath(vscode_java_path, cast(str, dependency["jre_home_path"])))
+            jre_path = str(PurePath(vscode_java_path, cast(str, dependency["jre_path"])))
+            lombok_jar_path = str(PurePath(vscode_java_path, cast(str, dependency["lombok_jar_path"])))
+            jdtls_launcher_jar_path = str(PurePath(vscode_java_path, cast(str, dependency["jdtls_launcher_jar_path"])))
+            jdtls_readonly_config_path = str(PurePath(vscode_java_path, cast(str, dependency["jdtls_readonly_config_path"])))
             if not all(
                 [
                     os.path.exists(vscode_java_path),
@@ -235,7 +294,13 @@ class EclipseJDTLS(SolidLanguageServer):
                     os.path.exists(jdtls_readonly_config_path),
                 ]
             ):
-                FileUtils.download_and_extract_archive(dependency["url"], vscode_java_path, dependency["archiveType"])
+                FileUtils.download_and_extract_archive_verified(
+                    cast(str, dependency["url"]),
+                    vscode_java_path,
+                    cast(str, dependency["archiveType"]),
+                    expected_sha256=cast(str | None, dependency["sha256"]),
+                    allowed_hosts=cast(tuple[str, ...], dependency["allowed_hosts"]),
+                )
 
             os.chmod(jre_path, 0o755)
 
@@ -247,10 +312,10 @@ class EclipseJDTLS(SolidLanguageServer):
             assert os.path.exists(jdtls_readonly_config_path)
 
             dependency = runtime_dependencies["intellicode"]["platform-agnostic"]
-            intellicode_directory_path = str(PurePath(ls_resources_dir, dependency["relative_extraction_path"]))
+            intellicode_directory_path = str(PurePath(ls_resources_dir, cast(str, dependency["relative_extraction_path"])))
             os.makedirs(intellicode_directory_path, exist_ok=True)
-            intellicode_jar_path = str(PurePath(intellicode_directory_path, dependency["intellicode_jar_path"]))
-            intellisense_members_path = str(PurePath(intellicode_directory_path, dependency["intellisense_members_path"]))
+            intellicode_jar_path = str(PurePath(intellicode_directory_path, cast(str, dependency["intellicode_jar_path"])))
+            intellisense_members_path = str(PurePath(intellicode_directory_path, cast(str, dependency["intellisense_members_path"])))
             if not all(
                 [
                     os.path.exists(intellicode_directory_path),
@@ -258,7 +323,13 @@ class EclipseJDTLS(SolidLanguageServer):
                     os.path.exists(intellisense_members_path),
                 ]
             ):
-                FileUtils.download_and_extract_archive(dependency["url"], intellicode_directory_path, dependency["archiveType"])
+                FileUtils.download_and_extract_archive_verified(
+                    cast(str, dependency["url"]),
+                    intellicode_directory_path,
+                    cast(str, dependency["archiveType"]),
+                    expected_sha256=cast(str | None, dependency["sha256"]),
+                    allowed_hosts=cast(tuple[str, ...], dependency["allowed_hosts"]),
+                )
 
             assert os.path.exists(intellicode_directory_path)
             assert os.path.exists(intellicode_jar_path)
@@ -276,13 +347,16 @@ class EclipseJDTLS(SolidLanguageServer):
             )
 
         def create_launch_command(self) -> list[str]:
-            # ws_dir is the workspace directory for the EclipseJDTLS server
+            # ws_dir is the workspace directory for the EclipseJDTLS server.
+            # Use a deterministic hash of the project path so the workspace
+            # (and its cached index) can be reused across restarts.
+            project_hash = hashlib.md5(self._repository_root_path.encode()).hexdigest()
             ws_dir = str(
                 PurePath(
                     self._solidlsp_settings.ls_resources_dir,
                     "EclipseJDTLS",
                     "workspaces",
-                    uuid.uuid4().hex,
+                    project_hash,
                 )
             )
 
@@ -295,6 +369,8 @@ class EclipseJDTLS(SolidLanguageServer):
             lombok_jar_path = self.runtime_dependency_paths.lombok_jar_path
 
             jdtls_launcher_jar = self.runtime_dependency_paths.jdtls_launcher_jar_path
+            jdtls_xmx = self._custom_settings.get("jdtls_xmx", "3G")
+            jdtls_xms = self._custom_settings.get("jdtls_xms", "100m")
 
             data_dir = str(PurePath(ws_dir, "data_dir"))
             jdtls_config_path = str(PurePath(ws_dir, "config_path"))
@@ -333,8 +409,8 @@ class EclipseJDTLS(SolidLanguageServer):
                 "-XX:AdaptiveSizePolicyWeight=90",
                 "-Dsun.zip.disableMemoryMapping=true",
                 "-Djava.lsp.joinOnCompletion=true",
-                "-Xmx3G",
-                "-Xms100m",
+                f"-Xmx{jdtls_xmx}",
+                f"-Xms{jdtls_xms}",
                 "-Xlog:disable",
                 "-Dlog.level=ALL",
                 f"-javaagent:{lombok_jar_path}",
@@ -417,6 +493,10 @@ class EclipseJDTLS(SolidLanguageServer):
         else:
             gradle_user_home = None
             log.info(f"Gradle user home not found at default location ({default_gradle_home}), will use JDTLS defaults")
+
+        # IntelliCode JVM settings (used in vmargs for the embedded JVM)
+        intellicode_xmx = self._custom_settings.get("intellicode_xmx", "1G")
+        intellicode_xms = self._custom_settings.get("intellicode_xms", "100m")
 
         # Gradle wrapper: default to False to preserve existing behaviour
         gradle_wrapper_enabled = self._custom_settings.get("gradle_wrapper_enabled", False)
@@ -614,7 +694,7 @@ class EclipseJDTLS(SolidLanguageServer):
                         "jdt": {
                             "ls": {
                                 "java": {"home": None},
-                                "vmargs": "-XX:+UseParallelGC -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Dsun.zip.disableMemoryMapping=true -Xmx1G -Xms100m -Xlog:disable",
+                                "vmargs": f"-XX:+UseParallelGC -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Dsun.zip.disableMemoryMapping=true -Xmx{intellicode_xmx} -Xms{intellicode_xms} -Xlog:disable",
                                 "lombokSupport": {"enabled": True},
                                 "protobufSupport": {"enabled": True},
                                 "androidSupport": {"enabled": True},

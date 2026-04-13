@@ -15,6 +15,7 @@ from serena.util.text_utils import LineType
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from test.conftest import is_ci
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 # Skip Swift tests on Windows due to complex GitHub Actions configuration
 WINDOWS_SKIP = platform.system() == "Windows"
@@ -224,3 +225,16 @@ class TestSwiftProjectBasics:
         # Should find Status enum
         status_matches = [m for m in matches if "Status" in str(m)]
         assert len(status_matches) > 0, "Should find Status enum"
+
+    @pytest.mark.parametrize("language_server", [Language.SWIFT], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s):
+                malformed_symbols.append(s)
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )

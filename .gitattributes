@@ -1,0 +1,4 @@
+# Force LF line endings for Haxe files across platforms.
+# The Haxe language server cannot properly parse/index files with CRLF endings, causing it to fail on Windows without this.
+*.hxml text eol=lf
+*.hx text eol=lf

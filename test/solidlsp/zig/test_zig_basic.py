@@ -13,6 +13,7 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
 @pytest.mark.zig
@@ -193,9 +194,9 @@ class TestZigLanguageServer:
 
                     # Verify exact location in main.zig (line 8, 0-indexed: 7)
                     main_ref_line = main_refs[0]["range"]["start"]["line"]
-                    assert (
-                        main_ref_line == 7
-                    ), f"Calculator reference in main.zig should be at line 8 (0-indexed: 7), found at line {main_ref_line + 1}"
+                    assert main_ref_line == 7, (
+                        f"Calculator reference in main.zig should be at line 8 (0-indexed: 7), found at line {main_ref_line + 1}"
+                    )
 
     @pytest.mark.parametrize("language_server", [Language.ZIG], indirect=True)
     def test_cross_file_references_within_file(self, language_server: SolidLanguageServer) -> None:
@@ -341,3 +342,16 @@ class TestZigLanguageServer:
         root = symbols[0]
         assert isinstance(root, dict), "Root should be a dict"
         assert "name" in root, "Root should have a name"
+
+    @pytest.mark.parametrize("language_server", [Language.ZIG], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s, whitespace_allowed=True):
+                malformed_symbols.append(s)
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )

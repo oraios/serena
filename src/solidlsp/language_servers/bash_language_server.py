@@ -9,7 +9,7 @@ import pathlib
 import shutil
 import threading
 
-from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
+from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
 from solidlsp.ls import (
     DocumentSymbols,
     LanguageServerDependencyProvider,
@@ -58,13 +58,15 @@ class BashLanguageServer(SolidLanguageServer):
             assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
             is_npm_installed = shutil.which("npm") is not None
             assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
+            bash_language_server_version = self._custom_settings.get("bash_language_server_version", "5.6.0")
+            npm_registry = self._custom_settings.get("npm_registry")
 
             deps = RuntimeDependencyCollection(
                 [
                     RuntimeDependency(
                         id="bash-language-server",
                         description="bash-language-server package",
-                        command="npm install --prefix ./ bash-language-server@5.6.0",
+                        command=build_npm_install_command("bash-language-server", bash_language_server_version, npm_registry),
                         platform_id="any",
                     ),
                 ]

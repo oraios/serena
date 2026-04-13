@@ -2,7 +2,9 @@
 Language server-related tools
 """
 
+import copy
 import os
+from collections import Counter, defaultdict
 from collections.abc import Sequence
 
 from serena.symbol import LanguageServerSymbol, LanguageServerSymbolDictGrouper
@@ -49,9 +51,32 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
         :return: a JSON object containing symbols grouped by kind in a compact format.
         """
         result = self.get_symbol_overview(relative_path, depth=depth)
+
+        # capture kind names and depth-0 snapshots before grouping, which mutates the dicts
+        kind_names = [d.get("kind", "unknown") for d in result]
+        if depth > 0:
+            depth_0_result = [d.copy() for d in result]
+            for d in depth_0_result:
+                d.pop("children", None)
+
         compact_result = self.symbol_dict_grouper.group(result)
         result_json_str = self._to_json(compact_result)
-        return self._limit_length(result_json_str, max_answer_chars)
+
+        # shortened result closures
+        def make_kind_counts() -> str:
+            return f"Symbol counts by kind:\n{self._to_json(Counter(kind_names))}"
+
+        if depth == 0:
+            shortened_results = [make_kind_counts]
+        else:
+
+            def make_depth_0_result() -> str:
+                compact_depth_0_result = self.symbol_dict_grouper.group(depth_0_result)
+                return "Depth 0 overview:\n" + self._to_json(compact_depth_0_result)
+
+            shortened_results = [make_depth_0_result, make_kind_counts]
+
+        return self._limit_length(result_json_str, max_answer_chars, shortened_result_factories=shortened_results)
 
     def get_symbol_overview(self, relative_path: str, depth: int = 0) -> list[LanguageServerSymbol.OutputDict]:
         """
@@ -99,6 +124,10 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
     Performs a global (or local) search using the language server backend.
     """
 
+    # group children by kind, keeping just the name (the parent's name_path makes it unambiguous);
+    # we don't group the top-level result list because many tests rely on it being a flat list of symbol dicts
+    symbol_dict_grouper = LanguageServerSymbolDictGrouper([], ["kind"], collapse_singleton=True)
+
     # noinspection PyDefaultArgument
     def apply(
         self,
@@ -110,6 +139,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         include_kinds: list[int] = [],  # noqa: B006
         exclude_kinds: list[int] = [],  # noqa: B006
         substring_matching: bool = False,
+        max_matches: int = -1,
         max_answer_chars: int = -1,
     ) -> str:
         """
@@ -131,7 +161,8 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
 
         :param name_path_pattern: the name path matching pattern (see above)
         :param depth: depth up to which descendants shall be retrieved (e.g. use 1 to also retrieve immediate children;
-            for the case where the symbol is a class, this will return its methods). Default 0.
+            for the case where the symbol is a class, this will return its methods).
+            Ignored if `include_body=True`. Default 0.
         :param relative_path: Optional. Restrict search to this file or directory. If None, searches entire codebase.
             If a directory is passed, the search will be restricted to the files in that directory.
             If a file is passed, the search will be restricted to that file.
@@ -147,10 +178,15 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             If not provided, no kinds are excluded.
         :param substring_matching: If True, use substring matching for the last element of the pattern, such that
             "Foo/get" would match "Foo/getValue" and "Foo/getData".
+        :param max_matches: Maximum number of permitted matches. If exceeded, a shortened result is returned
+             which allows refining the search. -1 (default) means no limit. Set to 1 if you search for a single symbol.
         :param max_answer_chars: Max characters for the JSON result. If exceeded, no content is returned.
             -1 means the default value from the config will be used.
-        :return: a list of symbols (with locations) matching the name.
+        :return: symbols (with locations) matching the name.
         """
+        if include_body:
+            depth = 0  # ignore user-specified depth if include_body is True
+        assert max_matches != 0, "max_matches must be > 0 or equal to -1."
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
         symbol_retriever = self.create_language_server_symbol_retriever()
@@ -161,15 +197,43 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             substring_matching=substring_matching,
             within_relative_path=relative_path,
         )
-        symbol_dicts = [dict(s.to_dict(kind=True, relative_path=True, body_location=True, depth=depth, body=include_body)) for s in symbols]
+        n_matches = len(symbols)
+
+        def create_short_result_relative_path_to_name_paths() -> str:
+            relative_path_to_name_paths: defaultdict[str, list[str]] = defaultdict(list)
+            for s in symbols:
+                relative_path_to_name_paths[s.location.relative_path or "unknown"].append(s.get_name_path())
+            return f"Shortened result:\n{self._to_json(relative_path_to_name_paths)}"
+
+        if 0 < max_matches < n_matches:
+            return f"Matched {n_matches}>{max_matches=} symbols.\n" + create_short_result_relative_path_to_name_paths()
+
+        symbol_dicts = [
+            s.to_dict(
+                kind=True,
+                name_path=True,
+                name=False,
+                relative_path=True,
+                body_location=True,
+                depth=depth,
+                body=include_body,
+                children_name=True,
+                children_name_path=False,
+            )
+            for s in symbols
+        ]
         if not include_body and include_info:
             info_by_symbol = symbol_retriever.request_info_for_symbol_batch(symbols)
             for s, s_dict in zip(symbols, symbol_dicts, strict=True):
                 if symbol_info := info_by_symbol.get(s):
-                    s_dict["info"] = symbol_info
-                    s_dict.pop("name", None)  # name is included in the info
-        result = self._to_json(symbol_dicts)
-        return self._limit_length(result, max_answer_chars)
+                    # In python 3.15 we could specify extra_items=True in the TypedDict definition,
+                    # https://peps.python.org/pep-0728/
+                    # If we ever upgrade to 3.15, we can remove the type: ignore[typeddict-unknown-key]
+                    s_dict["info"] = symbol_info  # type: ignore[typeddict-unknown-key]
+
+        grouped_symbol_dicts = self.symbol_dict_grouper.group(symbol_dicts)
+        result = self._to_json(grouped_symbol_dicts)
+        return self._limit_length(result, max_answer_chars, shortened_result_factories=[create_short_result_relative_path_to_name_paths])
 
 
 class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
@@ -226,10 +290,37 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
                 ref_dict["content_around_reference"] = content_around_ref.to_display_string()
             reference_dicts.append(ref_dict)
 
+        # capture lightweight reference data before grouping
+        ref_summaries = []
+        for ref, d in zip(references_in_symbols, reference_dicts, strict=True):
+            ref_summaries.append(
+                {
+                    "name_path": d.get("name_path"),
+                    "kind": d.get("kind"),
+                    "relative_path": d.get("relative_path"),
+                    "reference_line": ref.line,
+                }
+            )
+
         result = self.symbol_dict_grouper.group(reference_dicts)  # type: ignore
 
+        # shortened result closures, from least to most aggressive shortening
+        def make_refs_without_context() -> str:
+            """References with name_path and reference line, without surrounding code lines"""
+            grouped = self.symbol_dict_grouper.group(copy.deepcopy(ref_summaries))  # type: ignore
+            return f"References without surrounding lines:\n{self._to_json(grouped)}"
+
+        def make_per_file_counts() -> str:
+            counts = Counter(str(r["relative_path"]) for r in ref_summaries)
+            return f"Reference counts per file:\n{self._to_json(counts)}"
+
+        def make_summary() -> str:
+            return f"Found {len(ref_summaries)} references."
+
+        shortened_results = [make_refs_without_context, make_per_file_counts, make_summary]
+
         result_json = self._to_json(result)
-        return self._limit_length(result_json, max_answer_chars)
+        return self._limit_length(result_json, max_answer_chars, shortened_result_factories=shortened_results)
 
 
 class ReplaceSymbolBodyTool(Tool, ToolMarkerSymbolicEdit):
@@ -318,6 +409,7 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerSymbolicEdit):
 class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
     """
     Renames a symbol throughout the codebase using language server refactoring capabilities.
+    For JB, we use a separate tool.
     """
 
     def apply(
@@ -336,6 +428,47 @@ class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
         :param new_name: the new name for the symbol
         :return: result summary indicating success or failure
         """
-        code_editor = self.create_code_editor()
-        status_message = code_editor.rename_symbol(name_path, relative_file_path=relative_path, new_name=new_name)
+        code_editor = self.create_ls_code_editor()
+        status_message = code_editor.rename_symbol(name_path, relative_path=relative_path, new_name=new_name)
         return status_message
+
+
+class SafeDeleteSymbol(Tool, ToolMarkerSymbolicEdit):
+    def apply(
+        self,
+        name_path_pattern: str,
+        relative_path: str,
+    ) -> str:
+        """
+        Deletes the symbol if it is safe to do so (i.e., if there are no references to it)
+        or returns a list of references to it.
+
+        :param name_path_pattern: name path of the symbol to delete (definitions in the `find_symbol` tool apply)
+        :param relative_path: the relative path to the file containing the symbol to delete
+        """
+        ls_symbol_retriever = self.create_language_server_symbol_retriever()
+        symbol = ls_symbol_retriever.find_unique(name_path_pattern, substring_matching=False, within_relative_path=relative_path)
+        symbol_rel_path = symbol.relative_path
+        assert symbol_rel_path is not None, f"Symbol {name_path_pattern} has no relative path, this is likely a bug."
+        assert symbol_rel_path == relative_path, f"Symbol {name_path_pattern} is not in the expected relative path {relative_path}."
+        symbol_name_path = symbol.get_name_path()
+
+        symbol_line = symbol.line
+        symbol_col = symbol.column
+        assert symbol_line is not None and symbol_col is not None, (
+            f"Symbol {name_path_pattern} has no identifier position, this is likely a bug."
+        )
+        lang_server = ls_symbol_retriever.get_language_server(symbol_rel_path)
+        references_locations = lang_server.request_references(symbol_rel_path, symbol_line, symbol_col)
+        file_to_lines: dict[str, list[int]] = defaultdict(list)
+        if references_locations:
+            for ref_loc in references_locations:
+                ref_relative_path = ref_loc.get("relativePath")
+                if ref_relative_path is None:
+                    continue
+                file_to_lines[ref_relative_path].append(ref_loc["range"]["start"]["line"])
+        if file_to_lines:
+            return f"Cannot delete, the symbol {symbol_name_path} is referenced in: {self._to_json(file_to_lines)}"
+        code_editor = self.create_ls_code_editor()
+        code_editor.delete_symbol(symbol_name_path, relative_file_path=symbol_rel_path)
+        return SUCCESS_RESULT

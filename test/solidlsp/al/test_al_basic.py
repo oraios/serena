@@ -6,8 +6,10 @@ from serena.symbol import LanguageServerSymbol
 from solidlsp import SolidLanguageServer
 from solidlsp.language_servers.al_language_server import ALLanguageServer
 from solidlsp.ls_config import Language
+from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
 from test.conftest import language_tests_enabled
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 pytestmark = [pytest.mark.al, pytest.mark.skipif(not language_tests_enabled(Language.AL), reason="AL tests are disabled")]
 
@@ -124,9 +126,9 @@ class TestALLanguageServer:
 
         # Check for codeunit symbols
         assert SymbolUtils.symbol_tree_contains_name(symbols, "CustomerMgt"), "CustomerMgt codeunit not found in symbol tree"
-        assert SymbolUtils.symbol_tree_contains_name(
-            symbols, "PaymentProcessorImpl"
-        ), "PaymentProcessorImpl codeunit not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "PaymentProcessorImpl"), (
+            "PaymentProcessorImpl codeunit not found in symbol tree"
+        )
 
         # Check for enum symbol
         assert SymbolUtils.symbol_tree_contains_name(symbols, "CustomerType"), "CustomerType enum not found in symbol tree"
@@ -209,14 +211,14 @@ class TestALLanguageServer:
             refs = language_server.request_references(table_file, sel_start["line"], sel_start["character"])
 
             # The Customer table should be referenced in CustomerMgt.Codeunit.al
-            assert any(
-                "CustomerMgt.Codeunit.al" in ref.get("relativePath", "") for ref in refs
-            ), "Customer table should be referenced in CustomerMgt.Codeunit.al"
+            assert any("CustomerMgt.Codeunit.al" in ref.get("relativePath", "") for ref in refs), (
+                "Customer table should be referenced in CustomerMgt.Codeunit.al"
+            )
 
             # It should also be referenced in CustomerCard.Page.al
-            assert any(
-                "CustomerCard.Page.al" in ref.get("relativePath", "") for ref in refs
-            ), "Customer table should be referenced in CustomerCard.Page.al"
+            assert any("CustomerCard.Page.al" in ref.get("relativePath", "") for ref in refs), (
+                "Customer table should be referenced in CustomerCard.Page.al"
+            )
 
     @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
     def test_cross_file_symbols(self, language_server: SolidLanguageServer) -> None:
@@ -392,9 +394,9 @@ class TestALHoverInjection:
 
             assert hover is not None, f"Hover should return a result for {symbol_name}"
             assert value is not None, f"Hover should have content for {symbol_name}"
-            assert (
-                f"**{expected_full_name}**" in value
-            ), f"Hover for {symbol_name} should contain '{expected_full_name}'. Got: {value[:200]}"
+            assert f"**{expected_full_name}**" in value, (
+                f"Hover for {symbol_name} should contain '{expected_full_name}'. Got: {value[:200]}"
+            )
 
     @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
     def test_hover_contains_separator_after_injection(self, language_server: SolidLanguageServer) -> None:
@@ -490,9 +492,9 @@ class TestALPathNormalization:
                 hover = language_server.request_hover(file_path_forward, line, char)
                 assert hover is not None, "Hover should return a result"
                 value = hover.get("contents", {}).get("value", "")
-                assert (
-                    '**Table 50000 "TEST Customer"**' in value
-                ), f"Hover injection should work with mixed path formats. Got: {value[:200]}"
+                assert '**Table 50000 "TEST Customer"**' in value, (
+                    f"Hover injection should work with mixed path formats. Got: {value[:200]}"
+                )
                 return
 
         pytest.fail("Could not find TEST Customer symbol")
@@ -517,9 +519,9 @@ class TestALPathNormalization:
                 hover = language_server.request_hover(file_path_backslash, line, char)
                 assert hover is not None, "Hover should return a result"
                 value = hover.get("contents", {}).get("value", "")
-                assert (
-                    '**Table 50000 "TEST Customer"**' in value
-                ), f"Hover injection should work with mixed path formats. Got: {value[:200]}"
+                assert '**Table 50000 "TEST Customer"**' in value, (
+                    f"Hover injection should work with mixed path formats. Got: {value[:200]}"
+                )
                 return
 
         pytest.fail("Could not find TEST Customer symbol")
@@ -552,7 +554,42 @@ class TestALPathNormalization:
                     hover = language_server.request_hover(hover_path, line, char)
                     assert hover is not None, f"Hover should return a result for {symbol_name}"
                     value = hover.get("contents", {}).get("value", "")
-                    assert (
-                        f"**{expected_injection}**" in value
-                    ), f"Hover for {symbol_name} should have injection with mixed paths. Got: {value[:200]}"
+                    assert f"**{expected_injection}**" in value, (
+                        f"Hover for {symbol_name} should have injection with mixed paths. Got: {value[:200]}"
+                    )
                     break
+
+    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            is_al_display_symbol = (
+                s["name"].endswith((".Codeunit", ".Page", ".Table", ".TableExt", ".Enum", ".Interface"))
+                or (s["name"].startswith('"') and s["name"].endswith('"'))
+                or s["name"].startswith(
+                    (
+                        "Enum Name ",
+                        "Area ",
+                        "Group ",
+                        "Field ",
+                        "Part ",
+                        "SystemPart ",
+                        "Repeater ",
+                        "ActionRef ",
+                        "Key ",
+                        "FieldGroup ",
+                    )
+                )
+                or ":" in s["name"]
+            )
+            if not is_al_display_symbol and has_malformed_name(
+                s,
+                whitespace_allowed=s["kind"] in {SymbolKind.Class, SymbolKind.Struct, SymbolKind.Interface, SymbolKind.Enum},
+            ):
+                malformed_symbols.append(s)
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )

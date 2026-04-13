@@ -15,8 +15,10 @@ from solidlsp.language_servers.csharp_language_server import (
     find_solution_or_project_file,
 )
 from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
 from solidlsp.settings import SolidLSPSettings
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
 @pytest.mark.csharp
@@ -63,9 +65,9 @@ class TestCSharpLanguageServer:
         assert add_symbol is not None, "Could not find 'Add' method symbol in Program.cs"
         sel_start = add_symbol["selectionRange"]["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
-        assert any(
-            "Program.cs" in ref.get("relativePath", "") for ref in refs
-        ), "Program.cs should reference Add method (tried all positions in selectionRange)"
+        assert any("Program.cs" in ref.get("relativePath", "") for ref in refs), (
+            "Program.cs should reference Add method (tried all positions in selectionRange)"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
     def test_nested_namespace_symbols(self, language_server: SolidLanguageServer) -> None:
@@ -121,9 +123,9 @@ class TestCSharpLanguageServer:
 
         # Check that we have reference in Models/Person.cs where Calculator.Subtract is called
         # Note: New Roslyn version doesn't include the definition itself as a reference (more correct behavior)
-        assert any(
-            os.path.join("Models", "Person.cs") in ref_file for ref_file in ref_files
-        ), "Should find reference in Models/Person.cs where Calculator.Subtract is called"
+        assert any(os.path.join("Models", "Person.cs") in ref_file for ref_file in ref_files), (
+            "Should find reference in Models/Person.cs where Calculator.Subtract is called"
+        )
         assert len(refs) > 0, "Should find at least one reference"
 
         # check for a second time, since the first call may trigger initialization and change the state of the LS
@@ -359,3 +361,16 @@ class TestCSharpSolutionProjectOpening:
 
         # Verify the file actually exists
         assert os.path.exists(result)
+
+    @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s, period_allowed=s["kind"] == SymbolKind.Namespace):
+                malformed_symbols.append(s)
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )

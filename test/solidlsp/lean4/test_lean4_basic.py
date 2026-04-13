@@ -82,9 +82,9 @@ class TestLean4LanguageServer:
         # Check that isPositive is referenced within Helper.lean at line 15 (absolute calls isPositive)
         ref_locations = [(ref["relativePath"], ref["range"]["start"]["line"]) for ref in references]
         helper_refs = [(path, line) for path, line in ref_locations if "Helper.lean" in path]
-        assert any(
-            line == 15 for _, line in helper_refs
-        ), f"Expected isPositive reference at Helper.lean:15 (in absolute), got: {ref_locations}"
+        assert any(line == 15 for _, line in helper_refs), (
+            f"Expected isPositive reference at Helper.lean:15 (in absolute), got: {ref_locations}"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.LEAN4], indirect=True)
     def test_cross_file_references_add(self, language_server: SolidLanguageServer) -> None:
@@ -104,9 +104,9 @@ class TestLean4LanguageServer:
         assert len(main_refs) >= 1, f"Expected at least 1 reference to add in Main.lean, got: {ref_locations}"
         main_ref_lines = {line for _, line in main_refs}
         # add is used in Main.lean line 7 (in calculate) and line 15 (in main)
-        assert (
-            7 in main_ref_lines or 15 in main_ref_lines
-        ), f"Expected add references at Main.lean lines 7 or 15, got lines: {main_ref_lines}"
+        assert 7 in main_ref_lines or 15 in main_ref_lines, (
+            f"Expected add references at Main.lean lines 7 or 15, got lines: {main_ref_lines}"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.LEAN4], indirect=True)
     def test_cross_file_references_calculator(self, language_server: SolidLanguageServer) -> None:
@@ -125,9 +125,9 @@ class TestLean4LanguageServer:
         assert len(main_refs) >= 1, f"Expected at least 1 reference to Calculator in Main.lean, got: {ref_locations}"
         main_ref_lines = {line for _, line in main_refs}
         # Calculator is used in Main.lean line 5 (calculate signature) and line 13 (let c : Calculator)
-        assert (
-            5 in main_ref_lines or 13 in main_ref_lines
-        ), f"Expected Calculator references at Main.lean lines 5 or 13, got lines: {main_ref_lines}"
+        assert 5 in main_ref_lines or 13 in main_ref_lines, (
+            f"Expected Calculator references at Main.lean lines 5 or 13, got lines: {main_ref_lines}"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.LEAN4], indirect=True)
     def test_go_to_definition_within_file(self, language_server: SolidLanguageServer) -> None:

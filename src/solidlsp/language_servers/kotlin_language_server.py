@@ -43,6 +43,14 @@ DEFAULT_KOTLIN_JVM_OPTIONS = "-Xmx2G"
 
 # Default Kotlin Language Server version (can be overridden via ls_specific_settings)
 DEFAULT_KOTLIN_LSP_VERSION = "261.13587.0"
+KOTLIN_LSP_ALLOWED_HOSTS = ("download-cdn.jetbrains.com",)
+KOTLIN_LSP_SHA256_BY_SUFFIX = {
+    "win-x64": "2806c2bd4810bd8e7ccc27d8c0ca4a5232a1c4f26ea1f4ba40e578b60860ccad",
+    "linux-x64": "dc0ed2e70cb0d61fdabb26aefce8299b7a75c0dcfffb9413715e92caec6e83ec",
+    "linux-aarch64": "d1dceb000fe06c5e2c30b95e7f4ab01d05101bd03ed448167feeb544a9f1d651",
+    "mac-x64": "a3972f27229eba2c226060e54baea1c958c82c326dfc971bf53f72a74d0564a3",
+    "mac-aarch64": "d4ea28b22b29cf906fe16d23698a8468f11646a6a66dcb15584f306aaefbee6c",
+}
 
 # Platform-specific Kotlin LSP download suffixes
 PLATFORM_KOTLIN_SUFFIX = {
@@ -85,7 +93,6 @@ class KotlinLanguageServer(SolidLanguageServer):
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
         def __init__(self, custom_settings: SolidLSPSettings.CustomLSSettings, ls_resources_dir: str):
             super().__init__(custom_settings, ls_resources_dir)
-            self._java_home_path: str | None = None
 
         def _get_or_install_core_dependency(self) -> str:
             """
@@ -94,9 +101,9 @@ class KotlinLanguageServer(SolidLanguageServer):
             platform_id = PlatformUtils.get_platform_id()
 
             # Verify platform support
-            assert (
-                platform_id.value.startswith("win-") or platform_id.value.startswith("linux-") or platform_id.value.startswith("osx-")
-            ), "Only Windows, Linux and macOS platforms are supported for Kotlin in multilspy at the moment"
+            assert platform_id.value.startswith("win-") or platform_id.value.startswith("linux-") or platform_id.value.startswith("osx-"), (
+                "Only Windows, Linux and macOS platforms are supported for Kotlin in multilspy at the moment"
+            )
 
             kotlin_suffix = PLATFORM_KOTLIN_SUFFIX.get(platform_id.value)
             assert kotlin_suffix, f"Unsupported platform for Kotlin LSP: {platform_id.value}"
@@ -112,8 +119,17 @@ class KotlinLanguageServer(SolidLanguageServer):
             if not os.path.exists(kotlin_script):
                 kotlin_lsp_version = self._custom_settings.get("kotlin_lsp_version", DEFAULT_KOTLIN_LSP_VERSION)
                 kotlin_url = f"https://download-cdn.jetbrains.com/kotlin-lsp/{kotlin_lsp_version}/kotlin-lsp-{kotlin_lsp_version}-{kotlin_suffix}.zip"
+                expected_sha256 = None
+                if kotlin_lsp_version == DEFAULT_KOTLIN_LSP_VERSION:
+                    expected_sha256 = KOTLIN_LSP_SHA256_BY_SUFFIX[kotlin_suffix]
                 log.info("Downloading Kotlin Language Server...")
-                FileUtils.download_and_extract_archive(kotlin_url, static_dir, "zip")
+                FileUtils.download_and_extract_archive_verified(
+                    kotlin_url,
+                    static_dir,
+                    "zip",
+                    expected_sha256=expected_sha256,
+                    allowed_hosts=KOTLIN_LSP_ALLOWED_HOSTS,
+                )
 
                 if os.path.exists(kotlin_script) and not platform_id.value.startswith("win-"):
                     os.chmod(
@@ -133,9 +149,6 @@ class KotlinLanguageServer(SolidLanguageServer):
         def create_launch_command_env(self) -> dict[str, str]:
             """Provides JAVA_HOME and JVM options for the Kotlin Language Server process."""
             env: dict[str, str] = {}
-
-            if self._java_home_path is not None:
-                env["JAVA_HOME"] = self._java_home_path
 
             # Get JVM options from settings or use default
             # Note: an explicit empty string means "no JVM options", which is distinct from not setting the key

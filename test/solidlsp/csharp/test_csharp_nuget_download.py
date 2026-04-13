@@ -1,6 +1,7 @@
 """Tests for C# language server NuGet package download from NuGet.org."""
 
 import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -15,7 +16,7 @@ class TestNuGetOrgDownload:
     """Test downloading Roslyn language server packages from NuGet.org."""
 
     def test_download_nuget_package_uses_direct_url(self):
-        """Test that _download_nuget_package uses the URL from RuntimeDependency directly."""
+        """Test that _download_nuget_package uses the URL and checksum from RuntimeDependency directly."""
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create a RuntimeDependency with a NuGet.org URL
             test_dependency = RuntimeDependency(
@@ -41,21 +42,38 @@ class TestNuGetOrgDownload:
                 repository_root_path="/fake/repo",
             )
 
-            # Mock urllib.request.urlretrieve to capture the URL being used
-            with patch("solidlsp.language_servers.csharp_language_server.urllib.request.urlretrieve") as mock_retrieve:
-                with patch("solidlsp.language_servers.csharp_language_server.SafeZipExtractor"):
-                    try:
-                        dependency_provider._download_nuget_package(test_dependency)
-                    except Exception:
-                        # Expected to fail since we're mocking, but we want to check the URL
-                        pass
+            captured_calls: list[tuple[str, str, str, str | None, tuple[str, ...] | list[str] | None]] = []
 
-                    # Verify that urlretrieve was called with the NuGet.org URL
-                    assert mock_retrieve.called, "urlretrieve should be called"
-                    called_url = mock_retrieve.call_args[0][0]
-                    assert called_url == test_dependency.url, f"Should use URL from RuntimeDependency: {test_dependency.url}"
-                    assert "nuget.org" in called_url, "Should use NuGet.org URL"
-                    assert "azure" not in called_url.lower(), "Should not use Azure feed"
+            def fake_download_and_extract(
+                url: str,
+                target_path: str,
+                archive_type: str,
+                expected_sha256: str | None = None,
+                allowed_hosts: tuple[str, ...] | list[str] | None = None,
+            ) -> None:
+                captured_calls.append((url, target_path, archive_type, expected_sha256, allowed_hosts))
+                Path(target_path).mkdir(parents=True, exist_ok=True)
+
+            with patch(
+                "solidlsp.language_servers.csharp_language_server.FileUtils.download_and_extract_archive_verified",
+                side_effect=fake_download_and_extract,
+            ):
+                package_dir = dependency_provider._download_nuget_package(test_dependency)
+
+            assert package_dir == Path(temp_dir) / "temp_downloads" / "roslyn-language-server.linux-x64.5.5.0-2.26078.4"
+            assert captured_calls == [
+                (
+                    test_dependency.url,
+                    str(package_dir),
+                    "zip",
+                    test_dependency.sha256,
+                    test_dependency.allowed_hosts,
+                )
+            ]
+            called_url = captured_calls[0][0]
+            assert called_url == test_dependency.url, f"Should use URL from RuntimeDependency: {test_dependency.url}"
+            assert "nuget.org" in called_url, "Should use NuGet.org URL"
+            assert "azure" not in called_url.lower(), "Should not use Azure feed"
 
     def test_runtime_dependencies_use_nuget_org_urls(self):
         """Test that _RUNTIME_DEPENDENCIES are configured with NuGet.org URLs."""
@@ -69,9 +87,9 @@ class TestNuGetOrgDownload:
         for dep in lang_server_deps:
             # Verify package name uses roslyn-language-server
             assert dep.package_name is not None, f"Package name should be set for {dep.platform_id}"
-            assert dep.package_name.startswith(
-                "roslyn-language-server."
-            ), f"Package name should start with 'roslyn-language-server.' but got: {dep.package_name}"
+            assert dep.package_name.startswith("roslyn-language-server."), (
+                f"Package name should start with 'roslyn-language-server.' but got: {dep.package_name}"
+            )
 
             # Verify version is the newer NuGet.org version
             assert dep.package_version == "5.5.0-2.26078.4", f"Should use NuGet.org version 5.5.0-2.26078.4, got: {dep.package_version}"
@@ -106,13 +124,7 @@ class TestNuGetOrgDownload:
             )
 
             # Mock urllib.request.urlopen to track if Azure feed is accessed
-            with patch("solidlsp.language_servers.csharp_language_server.urllib.request.urlopen") as mock_urlopen:
-                with patch("solidlsp.language_servers.csharp_language_server.urllib.request.urlretrieve"):
-                    with patch("solidlsp.language_servers.csharp_language_server.SafeZipExtractor"):
-                        try:
-                            dependency_provider._download_nuget_package(test_dependency)
-                        except Exception:
-                            pass
-
-                        # Verify that urlopen was NOT called (no service index lookup)
-                        assert not mock_urlopen.called, "Should not call urlopen for Azure service index lookup"
+            with patch(
+                "solidlsp.language_servers.csharp_language_server.FileUtils.download_and_extract_archive_verified",
+            ):
+                dependency_provider._download_nuget_package(test_dependency)

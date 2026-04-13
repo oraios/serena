@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import re
@@ -35,10 +34,18 @@ class MemoriesManager:
     GLOBAL_TOPIC = "global"
     _global_memory_dir = SerenaPaths().global_memories_path
 
-    def __init__(self, serena_data_folder: str | Path | None, read_only_memory_patterns: Sequence[str] = ()):
+    def __init__(
+        self,
+        serena_data_folder: str | Path | None,
+        read_only_memory_patterns: Sequence[str] = (),
+        ignored_memory_patterns: Sequence[str] = (),
+    ):
         """
         :param serena_data_folder: the absolute path to the project's .serena data folder
         :param read_only_memory_patterns: whether to allow writing global memories in tool execution contexts
+        :param ignored_memory_patterns: regex patterns for memories to completely exclude from listing, reading, and writing.
+            Matching memories will not appear in list_memories or activate_project output and cannot be accessed
+            via read_memory or write_memory. Use read_file on the raw path to access ignored memory files.
         """
         self._project_memory_dir: Path | None = None
         if serena_data_folder is not None:
@@ -46,12 +53,26 @@ class MemoriesManager:
             self._project_memory_dir.mkdir(parents=True, exist_ok=True)
         self._encoding = SERENA_FILE_ENCODING
         self._read_only_memory_patterns = [re.compile(pattern) for pattern in set(read_only_memory_patterns)]
+        self._ignored_memory_patterns = [re.compile(pattern) for pattern in set(ignored_memory_patterns)]
 
     def _is_read_only_memory(self, name: str) -> bool:
         for pattern in self._read_only_memory_patterns:
             if pattern.fullmatch(name):
                 return True
         return False
+
+    def _is_ignored_memory(self, name: str) -> bool:
+        for pattern in self._ignored_memory_patterns:
+            if pattern.fullmatch(name):
+                return True
+        return False
+
+    def _check_not_ignored(self, name: str) -> None:
+        if self._is_ignored_memory(name):
+            raise ValueError(
+                f"Memory '{name}' matches an ignored_memory_patterns pattern and cannot be accessed. "
+                f"Use the read_file tool on the raw file path instead."
+            )
 
     def _is_global(self, name: str) -> bool:
         return name == self.GLOBAL_TOPIC or name.startswith(self.GLOBAL_TOPIC + "/")
@@ -63,8 +84,7 @@ class MemoriesManager:
         if self._is_global(name):
             if name == self.GLOBAL_TOPIC:
                 raise ValueError(
-                    f'Bare "{self.GLOBAL_TOPIC}" is not a valid memory name. '
-                    f'Use "{self.GLOBAL_TOPIC}/<name>" to address a global memory.'
+                    f'Bare "{self.GLOBAL_TOPIC}" is not a valid memory name. Use "{self.GLOBAL_TOPIC}/<name>" to address a global memory.'
                 )
             # Strip "global/" prefix and resolve against global dir
             sub_name = name[len(self.GLOBAL_TOPIC) + 1 :]
@@ -95,6 +115,7 @@ class MemoriesManager:
             raise PermissionError(f"Attempted to write to read_only memory: '{name}')")
 
     def load_memory(self, name: str) -> str:
+        self._check_not_ignored(name)
         memory_file_path = self.get_memory_file_path(name)
         if not memory_file_path.exists():
             return f"Memory file {name} not found, consider creating it with the `write_memory` tool if you need it."
@@ -102,6 +123,7 @@ class MemoriesManager:
             return f.read()
 
     def save_memory(self, name: str, content: str, is_tool_context: bool) -> str:
+        self._check_not_ignored(name)
         self._check_write_access(name, is_tool_context)
         memory_file_path = self.get_memory_file_path(name)
         with open(memory_file_path, "w", encoding=self._encoding) as f:
@@ -144,6 +166,8 @@ class MemoriesManager:
         for md_file in search_dir.rglob("*.md"):
             rel = str(md_file.relative_to(base_dir).with_suffix("")).replace(os.sep, "/")
             memory_name = prefix + rel
+            if self._is_ignored_memory(memory_name):
+                continue
             result.add(memory_name, is_read_only=self._is_read_only_memory(memory_name))
         return result
 
@@ -181,6 +205,7 @@ class MemoriesManager:
         return memories
 
     def delete_memory(self, name: str, is_tool_context: bool) -> str:
+        self._check_not_ignored(name)
         self._check_write_access(name, is_tool_context)
         memory_file_path = self.get_memory_file_path(name)
         if not memory_file_path.exists():
@@ -193,6 +218,8 @@ class MemoriesManager:
         Rename or move a memory file.
         Moving between global and project scope (e.g. "global/foo" -> "bar") is supported.
         """
+        self._check_not_ignored(old_name)
+        self._check_not_ignored(new_name)
         self._check_write_access(new_name, is_tool_context)
 
         old_path = self.get_memory_file_path(old_name)
@@ -220,6 +247,7 @@ class MemoriesManager:
         :param mode: "literal" or "regex"
         :param allow_multiple_occurrences:
         """
+        self._check_not_ignored(name)
         self._check_write_access(name, is_tool_context)
         memory_file_path = self.get_memory_file_path(name)
         if not memory_file_path.exists():
@@ -250,14 +278,19 @@ class Project(ToStringMixin):
         log.info("Serena project data folder: %s", self._serena_data_folder)
 
         read_only_memory_patterns = serena_config.read_only_memory_patterns + project_config.read_only_memory_patterns
-        self.memories_manager = MemoriesManager(self._serena_data_folder, read_only_memory_patterns=read_only_memory_patterns)
+        ignored_memory_patterns = serena_config.ignored_memory_patterns + project_config.ignored_memory_patterns
+        self.memories_manager = MemoriesManager(
+            self._serena_data_folder,
+            read_only_memory_patterns=read_only_memory_patterns,
+            ignored_memory_patterns=ignored_memory_patterns,
+        )
 
         # resolve line ending (project -> global)
         self.line_ending = project_config.line_ending or serena_config.line_ending
 
         self.language_server_manager: LanguageServerManager | None = None
         self._language_server_manager_init_error: Exception | None = None
-        self._is_newly_created = is_newly_created
+        self.is_newly_created = is_newly_created
         self._agent: Optional["SerenaAgent"] = None
 
         # create .gitignore file in the project's Serena data folder if not yet present
@@ -277,7 +310,6 @@ class Project(ToStringMixin):
 
     def _gather_ignorespec(self) -> None:
         with LogTime(f"Gathering ignore spec for project {self.project_config.project_name}", logger=log):
-
             # gather ignored paths from the global configuration, project configuration, and gitignore files
             global_ignored_paths = self.serena_config.ignored_paths
             ignored_patterns = list(global_ignored_paths) + list(self.project_config.ignored_paths)
@@ -345,26 +377,6 @@ class Project(ToStringMixin):
 
     def path_to_project_yml(self) -> str:
         return self.serena_config.get_project_yml_location(self.project_root)
-
-    def get_activation_message(self) -> str:
-        """
-        :return: a message providing information about the project upon activation (e.g. programming language, memories, initial prompt)
-        """
-        if self._is_newly_created:
-            msg = f"Created and activated a new project with name '{self.project_name}' at {self.project_root}. "
-        else:
-            msg = f"The project with name '{self.project_name}' at {self.project_root} is activated."
-        languages_str = ", ".join([lang.value for lang in self.project_config.languages])
-        msg += f"\nProgramming languages: {languages_str}; file encoding: {self.project_config.encoding}"
-        project_memories = self.memories_manager.list_project_memories()
-        if project_memories:
-            msg += (
-                f"\nAvailable project memories: {json.dumps(project_memories.to_dict())}\n"
-                + "Use the `read_memory` tool to read these memories later if they are relevant to the task."
-            )
-        if self.project_config.initial_prompt:
-            msg += f"\nAdditional project-specific instructions:\n {self.project_config.initial_prompt}"
-        return msg
 
     def read_file(self, relative_path: str) -> str:
         """
@@ -624,13 +636,14 @@ class Project(ToStringMixin):
 
             log.info(f"Creating language server manager for {self.project_root}")
             self._language_server_manager_init_error = None
+            ls_specific_settings = {**self.serena_config.ls_specific_settings, **self.project_config.ls_specific_settings}
             factory = LanguageServerFactory(
                 project_root=self.project_root,
                 project_data_path=self._serena_data_folder,
                 encoding=self.project_config.encoding,
                 ignored_patterns=self._ignored_patterns,
                 ls_timeout=ls_timeout,
-                ls_specific_settings=self.serena_config.ls_specific_settings,
+                ls_specific_settings=ls_specific_settings,
                 trace_lsp_communication=self.serena_config.trace_lsp_communication,
             )
             self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory)

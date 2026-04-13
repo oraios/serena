@@ -346,9 +346,9 @@ class TestSearchFiles:
         actual_matched_files = sorted([result.source_file_path for result in results if result.source_file_path])
 
         # Assert that the matched files are exactly the ones expected
-        assert actual_matched_files == sorted(
-            expected_matched_files
-        ), f"Pattern '{paths_include_glob}' failed: expected {sorted(expected_matched_files)}, got {actual_matched_files}"
+        assert actual_matched_files == sorted(expected_matched_files), (
+            f"Pattern '{paths_include_glob}' failed: expected {sorted(expected_matched_files)}, got {actual_matched_files}"
+        )
 
         # Basic check on results structure if files were expected
         if expected_matched_files:
