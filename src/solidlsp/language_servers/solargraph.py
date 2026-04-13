@@ -67,6 +67,7 @@ class Solargraph(SolidLanguageServer):
             "doc",  # Generated documentation
             "node_modules",  # Node modules (for Rails with JS)
             "storage",  # Active Storage files (Rails)
+            ".ruby-lsp",
         ]
         return super().is_ignored_dirname(dirname) or dirname in ruby_ignored_dirs
 

@@ -5,6 +5,8 @@ import pathlib
 import threading
 from typing import Any, cast
 
+from overrides import override
+
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, ProcessLaunchInfo, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
@@ -39,6 +41,13 @@ class ClangdLanguageServer(SolidLanguageServer):
         self.service_ready_event = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
         self.resolve_main_method_available = threading.Event()
+
+    @override
+    def is_ignored_dirname(self, dirname: str) -> bool:
+        ignored_dirs = [
+            ".ccls-cache",
+        ]
+        return super().is_ignored_dirname(dirname) or dirname in ignored_dirs
 
     def _prepare_compile_commands(self) -> str | None:
         """

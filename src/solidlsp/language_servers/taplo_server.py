@@ -14,6 +14,8 @@ import shutil
 import stat
 from typing import Any
 
+from overrides import override
+
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_utils import FileUtils, PathUtils
@@ -266,6 +268,10 @@ class TaploServer(SolidLanguageServer):
 
         log.info("Taplo server initialization complete")
 
+    @override
     def is_ignored_dirname(self, dirname: str) -> bool:
-        """Define TOML-specific directories to ignore."""
-        return super().is_ignored_dirname(dirname) or dirname in ["target", ".cargo", "node_modules"]
+        if dirname == ".vscode":
+            # special case, one might want to analyze toml files in .vscode
+            return False
+        dirnames_to_ignore = ["target", ".cargo", "node_modules"]
+        return dirname in dirnames_to_ignore or super().is_ignored_dirname(dirname)

@@ -67,6 +67,7 @@ class RubyLsp(SolidLanguageServer):
             "public/packs",  # Webpacker output
             "public/webpack",  # Webpack output
             "public/assets",  # Rails compiled assets
+            ".ruby-lsp",
         ]
         return super().is_ignored_dirname(dirname) or dirname in ruby_ignored_dirs
 
