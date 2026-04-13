@@ -18,6 +18,7 @@ from serena.cursor import (
     NeighborSymbol,
 )
 from serena.symbol import LanguageServerSymbol, LanguageServerSymbolLocation
+from solidlsp.ls_exceptions import SolidLSPException
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -259,7 +260,7 @@ class TestCursorManagerLifecycle:
 class TestCursorManagerMove:
     @patch("serena.cursor.LanguageServerSymbolRetriever")
     def test_move_cursor_to_neighbor(self, mock_retriever_cls):
-        """When the target is a resolved neighbor, move uses it directly."""
+        """Move cursor to a symbol by name, falling back to global lookup when not in neighbors."""
         manager = _make_manager()
 
         sym_a = _make_symbol(name="ClassA", line=10)
@@ -496,8 +497,8 @@ class TestResolveNeighbors:
         children = [{"name": "child", "kind_name": "Method", "line": 12, "col": 4}]
         manager, cid, mock_ls = self._setup_manager_with_cursor(mock_retriever_cls, children=children)
 
-        mock_ls.request_definition.side_effect = Exception("LSP error")
-        mock_ls.request_referencing_symbols.side_effect = Exception("LSP error")
+        mock_ls.request_definition.side_effect = SolidLSPException("LSP error")
+        mock_ls.request_referencing_symbols.side_effect = SolidLSPException("LSP error")
 
         # Should still get contains neighbors despite reference errors
         neighbors = manager.resolve_neighbors(cid)

@@ -12,6 +12,7 @@ from enum import Enum
 
 from serena.project import Project
 from serena.symbol import LanguageServerSymbol, LanguageServerSymbolLocation, LanguageServerSymbolRetriever
+from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import (
     CallHierarchyItem,
@@ -148,6 +149,11 @@ class CursorManager:
 
         if cursor_id is None:
             cursor_id = self._generate_cursor_id()
+        elif cursor_id in self._cursors:
+            raise ValueError(
+                f"Cursor '{cursor_id}' already exists. Close it first or use a different ID. "
+                f"Active cursors: {list(self._cursors.keys())}"
+            )
 
         state = CursorState(
             cursor_id=cursor_id,
@@ -263,6 +269,7 @@ class CursorManager:
 
         retriever = self._retriever
         ls = retriever.get_language_server(rel_path)
+        failed_edge_types: list[EdgeType] = []
 
         # References: symbols that THIS symbol references (definitions it points to)
         if EdgeType.REFERENCES in state.active_edge_types:
@@ -287,8 +294,9 @@ class CursorManager:
                                 edge_type=EdgeType.REFERENCES,
                             )
                         )
-            except Exception as e:
+            except SolidLSPException as e:
                 log.debug(f"Failed to resolve definitions for cursor: {e}")
+                failed_edge_types.append(EdgeType.REFERENCES)
 
         # Referenced-by: symbols that reference THIS symbol
         if EdgeType.REFERENCED_BY in state.active_edge_types:
@@ -309,8 +317,9 @@ class CursorManager:
                             edge_type=EdgeType.REFERENCED_BY,
                         )
                     )
-            except Exception as e:
+            except SolidLSPException as e:
                 log.debug(f"Failed to resolve referencing symbols for cursor: {e}")
+                failed_edge_types.append(EdgeType.REFERENCED_BY)
 
         # Calls: symbols that this symbol calls (outgoing calls)
         if EdgeType.CALLS in state.active_edge_types:
@@ -319,8 +328,9 @@ class CursorManager:
                 for outgoing_call in outgoing:
                     target = outgoing_call["to"]
                     neighbors.append(self._neighbor_from_hierarchy_item(target, EdgeType.CALLS))
-            except Exception as e:
+            except SolidLSPException as e:
                 log.debug(f"Failed to resolve outgoing calls for cursor: {e}")
+                failed_edge_types.append(EdgeType.CALLS)
 
         # Called-by: symbols that call this symbol (incoming calls)
         if EdgeType.CALLED_BY in state.active_edge_types:
@@ -329,8 +339,9 @@ class CursorManager:
                 for incoming_call in incoming:
                     caller = incoming_call["from"]
                     neighbors.append(self._neighbor_from_hierarchy_item(caller, EdgeType.CALLED_BY))
-            except Exception as e:
+            except SolidLSPException as e:
                 log.debug(f"Failed to resolve incoming calls for cursor: {e}")
+                failed_edge_types.append(EdgeType.CALLED_BY)
 
         # Inherits: supertypes of the current symbol
         if EdgeType.INHERITS in state.active_edge_types:
@@ -338,8 +349,9 @@ class CursorManager:
                 supertypes = ls.request_type_hierarchy_supertypes(rel_path, line, col)
                 for item in supertypes:
                     neighbors.append(self._neighbor_from_type_hierarchy_item(item, EdgeType.INHERITS))
-            except Exception as e:
+            except SolidLSPException as e:
                 log.debug(f"Failed to resolve supertypes for cursor: {e}")
+                failed_edge_types.append(EdgeType.INHERITS)
 
         # Inherited-by: subtypes of the current symbol
         if EdgeType.INHERITED_BY in state.active_edge_types:
@@ -347,8 +359,13 @@ class CursorManager:
                 subtypes = ls.request_type_hierarchy_subtypes(rel_path, line, col)
                 for item in subtypes:
                     neighbors.append(self._neighbor_from_type_hierarchy_item(item, EdgeType.INHERITED_BY))
-            except Exception as e:
+            except SolidLSPException as e:
                 log.debug(f"Failed to resolve subtypes for cursor: {e}")
+                failed_edge_types.append(EdgeType.INHERITED_BY)
+
+        if failed_edge_types:
+            names = ", ".join(e.value for e in failed_edge_types)
+            log.warning(f"Cursor {cursor_id}: {len(failed_edge_types)} edge type(s) failed to resolve: {names}")
 
         return neighbors
 
@@ -360,8 +377,8 @@ class CursorManager:
             found = retriever.find_by_location(location)
             if found:
                 return found.name
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug(f"Could not resolve symbol name at {relative_path}:{line + 1}: {e}")
         return f"{os.path.basename(relative_path)}:{line + 1}"
 
     def _neighbor_from_hierarchy_item(

@@ -1,11 +1,12 @@
 """
 Tests for cursor-based code navigation.
 
-Tests CursorManager and the cursor MCP tools against the Python test repository.
-Uses the project_with_ls fixture for unit-level tests and serena_agent for integration tests.
+Tests CursorManager against a live Python LSP, and exercises the cursor MCP tools
+through SerenaAgent.get_tool() against the Python test repository.
 """
 
 import os
+import re
 
 import pytest
 
@@ -75,7 +76,7 @@ def python_serena_agent():
 
 
 # ===========================================================================
-# CursorManager Unit Tests
+# CursorManager Integration Tests (live Python LSP)
 # ===========================================================================
 
 
@@ -311,8 +312,17 @@ class TestNeighborSymbol:
 
 
 # ===========================================================================
-# Integration Tests via SerenaAgent + Cursor Tools
+# SerenaAgent Tool-Level Integration Tests
 # ===========================================================================
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_cursors(python_serena_agent: SerenaAgent) -> None:
+    """Close all cursors after each tool integration test."""
+    yield  # type: ignore[misc]
+    manager = python_serena_agent.get_cursor_manager()
+    for cid in list(manager.list_cursors()):
+        manager.close_cursor(cid)
 
 
 class TestCursorToolsIntegration:
@@ -330,8 +340,6 @@ class TestCursorToolsIntegration:
 
         # Extract cursor ID from result
         # Format: "  cursor: c1 | trail: 0 steps"
-        import re
-
         match = re.search(r"cursor: (\S+)", result)
         assert match, f"Could not find cursor ID in result: {result}"
         cid = match.group(1)
