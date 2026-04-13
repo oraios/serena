@@ -61,6 +61,51 @@ RUN gem install ruby-lsp
 RUN PERL_MM_USE_DEFAULT=1 cpanm --notest --force Perl::LanguageServer
 
 # ---------------------------------------------------------
+# STAGE 1.5: Additional Languages and Tools
+# ---------------------------------------------------------
+
+# Install Terraform
+RUN wget https://releases.hashicorp.com/terraform/1.5.0/terraform_1.5.0_linux_amd64.zip \
+    && unzip terraform_1.5.0_linux_amd64.zip \
+    && mv terraform /usr/local/bin/ \
+    && rm terraform_1.5.0_linux_amd64.zip
+
+# Install R and R Language Server
+RUN apt-get update && apt-get install -y r-base \
+    && Rscript -e "install.packages('languageserver', repos='https://cloud.r-project.org')" \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Julia and Julia Language Server
+RUN curl -L https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-1.10.0-linux-x86_64.tar.gz -o julia.tar.gz \
+    && tar -xzf julia.tar.gz -C /usr/local --strip-components=1 \
+    && rm julia.tar.gz \
+    && julia -e 'using Pkg; Pkg.add("LanguageServer")'
+
+# Install Zig and ZLS (Zig Language Server)
+RUN wget https://github.com/zigtools/zls/releases/download/0.14.0/zls-x86_64-linux.tar.xz \
+    && tar -xf zls-x86_64-linux.tar.xz \
+    && mv zls /usr/local/bin/ \
+    && rm zls-x86_64-linux.tar.xz \
+    && wget https://ziglang.org/download/0.14.0/zig-linux-x86_64-0.14.0.tar.xz \
+    && tar -xf zig-linux-x86_64-0.14.0.tar.xz -C /usr/local --strip-components=1 \
+    && rm zig-linux-x86_64-0.14.0.tar.xz
+
+# Install Lua Language Server
+ENV LUA_LS_VERSION="3.15.0"
+RUN mkdir -p /opt/lua-ls \
+    && wget https://github.com/LuaLS/lua-language-server/releases/download/${LUA_LS_VERSION}/lua-language-server-${LUA_LS_VERSION}-linux-x64.tar.gz \
+    && tar -xzf lua-language-server-${LUA_LS_VERSION}-linux-x64.tar.gz -C /opt/lua-ls \
+    && rm lua-language-server-${LUA_LS_VERSION}-linux-x64.tar.gz \
+    && chmod +x /opt/lua-ls/bin/lua-language-server \
+    && ln -s /opt/lua-ls/bin/lua-language-server /usr/local/bin/lua-language-server
+
+# Install Regal (Rego Language Server)
+ENV REGAL_VERSION="0.39.0"
+RUN curl -L -o regal https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Linux_x86_64 \
+    && chmod +x regal \
+    && mv regal /usr/local/bin/
+
+# ---------------------------------------------------------
 # STAGE 2: Serena App Setup
 # ---------------------------------------------------------
 WORKDIR /workspaces/serena
