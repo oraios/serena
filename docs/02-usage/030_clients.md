@@ -40,9 +40,14 @@ A key mechanism for this is to use the appropriate [context](#contexts) when sta
 (clients-common-pitfalls)=
 ### Common Pitfalls
 
-**Discoverability of the `serena`**.
+**Discoverability of the `serena` command**.
 Your client may not find the `serena` CLI command, even if it is on your system PATH.
 In this case, a workaround is to provide the full path to the `serena` executable.
+
+**Serena's tools not being used**.
+With some clients, you may experience that Serena's tools are not being used.
+This is mainly due to problems in the client itself (like a poorly implemented tool discovery). To counteract this,
+Serena comes with a set of commands that can be used in _hooks_. See the sections on hooks for Claude Code and VSCode below.
 
 **Environment Variables**.
 Some language servers may require additional environment variables to be set (e.g. F# on macOS with Homebrew),
@@ -116,22 +121,6 @@ claude mcp add serena -- serena start-mcp-server --context claude-code --project
 Confirm that Claude Code is connected to Serena by running the `/mcp` command and by reconnecting, if necessary.
 If Serena fails to start fast enough, you should set `MCP_TIMEOUT` to a sufficiently high value
 (e.g. by adding `export MCP_TIMEOUT=60000` to your shell profile)
-
-**Maximum Token Efficiency.** To maximize token efficiency, you may want to use Claude Code's 
-*on-demand tool loading* feature, which is supported since at least v2.0.74 of Claude Code.
-This feature avoids sending all tool descriptions to Claude upon startup, thus saving tokens.
-Instead, Claude will search for tools as needed (but there are no guarantees that it will 
-search optimally, of course).
-To enable this feature, set the environment variable `ENABLE_TOOL_SEARCH=true`.  
-Depending on your shell, you can also set this on a per-session basis, e.g. using
-```shell
-ENABLE_TOOL_SEARCH=true claude
-```
-in bash/zsh, or using
-```shell
-set ENABLE_TOOL_SEARCH=true && claude
-```
-in Windows CMD to launch Claude Code.
 
 **Hooks.**
 Due to recent changes (especially dynamic tool loading) in Claude Code, the agent will often fail to make proper use

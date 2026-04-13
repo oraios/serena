@@ -431,7 +431,6 @@ tool_packages = ["serena.tools"]
 class ToolRegistry:
     _deleted_tools: list[str] = [
         "think_about_collected_information",
-        "think_about_collected_information",
         "prepare_for_new_conversation",
         "summarize_changes",
         "think_about_whether_you_are_done",

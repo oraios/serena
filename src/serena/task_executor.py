@@ -80,7 +80,7 @@ class TaskExecutor:
 
             :param timeout: the maximum time to wait in seconds; if None, use the task's own timeout
                 (which may be None to wait indefinitely)
-            :return: True if the task is done, False if the timeout was reached
+            :return: the result of the task
             """
             return self.future.result(timeout=timeout)
 

@@ -7,10 +7,17 @@
     Serena is the IDE for your coding agent.
 </h3>
 
+<div align="center">
+  <a href="https://discord.com/invite/cVUNQmnV4r"><img src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&labelColor=0a0e14&logo=discord&logoColor=5865F2" alt="discord"></a>
+  <a href="https://github.com/oraios/serena/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-b0e8ff?style=flat-square&labelColor=0a0e14" alt="license"></a>
+</div>
+<br>
+
+
 * Serena provides essential **semantic code retrieval, editing and refactoring tools** that are akin to an IDE's capabilities,
   operating at the symbol level and exploiting relational structure.
 * It integrates with any client/LLM via the model context protocol (**MCP**).
-
+  
 Serena's **agent-first tool design** involves robust high-level abstractions, distinguishing it from
 approaches that rely on low-level concepts like line numbers or primitive search patterns.
 
@@ -19,7 +26,7 @@ more complex codebases.
 
 > [!IMPORTANT]
 > Do not install Serena via an MCP or plugin marketplace! They contain outdated and suboptimal installation commands. 
-> Instead, follow our [Quick Start](quick-start) instructions.
+> Instead, follow our [Quick Start](#quick-start) instructions.
 
 ## What Our "End Users" Say
 
@@ -58,7 +65,7 @@ To connect the Serena MCP server to your client, you either
   * provide the client with a launch command that allows it to start the MCP server, or
   * start the Serena MCP server yourself in HTTP mode and provide the client with the URL.
 
-See the [Quick Start](quick-start) section below for information on how to get started.
+See the [Quick Start](#quick-start) section below for information on how to get started.
 
 ## Programming Language Support & Semantic Analysis Capabilities
 
@@ -84,7 +91,7 @@ Serena incorporates a powerful abstraction layer for the integration of language
 The underlying language servers are typically open-source projects or at least freely available for use.
 
 When using Serena's language server backend, we provide **support for over 40 programming languages**, including
-AL, Ansible, Bash, C#, C/C++, Clojure, Crystal, Dart, Elixir, Elm, Erlang, Fortran, F#, GLSL, Go, Groovy, Haskell, Haxe, HLSL, Java, JavaScript, Julia, Kotlin, Lean 4, Lua, Luau, Markdown, MATLAB, Nix, OCaml, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Scala, Solidity, Swift, TOML, TypeScript, WGSL, YAML, and Zig.
+AL, Ansible, Bash, C#, C/C++, Clojure, Crystal, Dart, Elixir, Elm, Erlang, Fortran, F#, GLSL, Go, Groovy, Haskell, Haxe, HLSL, Java, JavaScript, Julia, Kotlin, Lean 4, Lua, Luau, Markdown, MATLAB, mSL, Nix, OCaml, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Scala, Solidity, Swift, TOML, TypeScript, WGSL, YAML, and Zig.
 
 ### The Serena JetBrains Plugin
 

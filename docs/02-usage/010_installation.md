@@ -43,3 +43,9 @@ To update Serena to the latest version, run:
 To keep informed about updates, make sure you regularly open [Serena's Dashboard](060_dashboard),
 where we will announce releases along with the new features and improvements they bring.
 :::
+
+## Uninstalling Serena
+
+Serena can be uninstalled with the following command:
+
+    uv tool uninstall serena-agent

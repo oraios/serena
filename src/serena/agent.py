@@ -410,17 +410,16 @@ class SerenaAgent:
         self._send_usage_info()
 
     def _send_usage_info(self) -> None:
-        is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
-        if is_ci:
+        if os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("SERENA_USAGE_REPORTING") == "false":
             return
-        params = {
+        params: dict[str, str | int] = {
             "os": platform.system(),
             "dashboard": int(self.serena_config.web_dashboard),
             "version": self.version,
             "backend": self._language_backend.value,
         }
         try:
-            requests.get("https://www.oraios-software.de/serena_usage.php", params=params, timeout=1, verify=False)
+            requests.get("https://oraios-software.de/serena_usage.php", params=params, timeout=1)
         except Exception as e:
             log.debug(f"Failed to send usage info: {e}")
 
@@ -720,7 +719,7 @@ class SerenaAgent:
         if self._language_backend == LanguageBackend.LSP:
             languages_str = ", ".join([lang.value for lang in proj.project_config.languages])
             msg += f"\nProgramming languages: {languages_str}."
-        msg += "File encoding: {proj.project_config.encoding}."
+        msg += f"File encoding: {proj.project_config.encoding}."
 
         include_memories = self._active_tools.contains_tool_class(ReadMemoryTool)
         if include_memories:

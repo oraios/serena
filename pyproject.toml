@@ -4,14 +4,17 @@ requires = ["hatchling"]
 
 [project]
 name = "serena-agent"
-version = "1.1.0"
-description = ""
+version = "1.1.1"
+description = "A powerful MCP toolkit for coding, providing semantic retrieval and editing capabilities - the IDE for your agent"
 authors = [{ name = "Oraios AI", email = "info@oraios-ai.de" }]
 readme = "README.md"
 requires-python = ">=3.11, <3.15"
 classifiers = [
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
   "requests==2.33.0",
@@ -38,6 +41,8 @@ dependencies = [
   "beautifulsoup4==4.14.2",
   "oraios-pywebview==6.2",
   "pystray==0.19.5",
+  "pygls==2.1.1", # used to implement an msl language server
+  "lsprotocol==2025.0.0",
   # Transitive deps pinned for security (dependabot alerts).
   # Exact pins because uvx installs from git, ignoring the lock file.
   "urllib3==2.6.3",
@@ -344,6 +349,7 @@ markers = [
   "lean4: language server running for Lean 4",
   "solidity: language server running for Solidity (uses @nomicfoundation/solidity-language-server)",
   "ansible: language server running for Ansible (uses @ansible/ansible-language-server)",
+  "msl: language server running for mSL (mIRC Scripting Language)",
 ]
 
 [tool.codespell]
