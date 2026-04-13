@@ -30,25 +30,24 @@ more complex codebases.
 
 ## What Our "End Users" Say
 
-While it is humans who download and set up Serena, our end users are essentially AI agents, 
-so they are also in the best position to evaluate Serena. 
-We crafted an unbiased and detailed prompt which leads the agent to estimate the value of adding Serena's tools
-to its built-in capabilities. The thorough evaluation usually takes around 25 minutes (per project) 
-and tests every single aspect of Serena. A summary of what the agents had to say:
+While it is humans who download and set up Serena, our end users are essentially AI agents,
+so they are also in the best position to evaluate Serena.
+We crafted an unbiased and detailed evaluation prompt
+that leads the agent to perform ~20 routine coding tasks, representative of everyday development work, using both Serena's tools and its own built-ins,
+measure the differences, and report the results. A one-sentence summary of what the agents had to say:
 
 **Opus 4.6 (high effort) in Claude Code on a large Python codebase:**
 > "Serena's IDE-backed semantic tools are the single most impactful addition to my toolkit — cross-file renames, moves, and reference lookups that
 would cost me 8–12 careful, error-prone steps collapse into one atomic call, and I would absolutely ask any developer I work with to set them up."
 
-**Gpt 5.4 (high) in Codex CLI on a Java codebase:**
+**GPT 5.4 (high) in Codex CLI on a Java codebase:**
 > "As a coding AI agent, I would ask my owner to add Serena because it gives me the missing IDE-level understanding of symbols, references, and
 refactorings, turning fragile text surgery into calmer, faster, more confident code changes where semantics matter."
 
-Your agent deserves the best coding tools, give them Serena!
+Give your agent the tools it's been asking for and add Serena MCP to your client!
 
-See the documentation on our [evaluation methods](https://oraios.github.io/serena/04-evaluation/000_intro.html) and the
-detailed results beyond the brief recommendations above. You can easily run your own evaluation of Serena on a project of your choice
-by reusing our methods or adapting them to your needs.
+See our [documentation](https://oraios.github.io/serena/04-evaluation/000_intro.html) for the full methodology and much more detailed evaluation results
+beyond these brief summaries, or run your own evaluation on a project of your choice.
  
 
 ## How Serena Works
@@ -81,7 +80,7 @@ complex projects!
 
 There are two alternative technologies powering these capabilities:
 
-* **Language servers** implementing the language server Protocol (LSP) — the free/open-source alternative 
+* **Language servers** implementing the language server protocol (LSP) — the free/open-source alternative 
   which is used by default.
 * The **Serena JetBrains Plugin**, which leverages the powerful code analysis and editing
   capabilities of your JetBrains IDE (paid plugin; free trial available).

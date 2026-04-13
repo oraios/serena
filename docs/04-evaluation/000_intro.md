@@ -7,7 +7,7 @@ built-in capabilities (file reads, text edits, grep, shell, etc.).
 Rather than a simple thumbs-up/thumbs-down, it produces a detailed, evidence-based report
 covering capabilities, efficiency and reliability.
 
-### Why Not Benchmarks?
+## Why Not Benchmarks?
 
 Standard coding benchmarks (SWE-bench, HumanEval, etc.) measure an agent's ability to solve
 predefined tasks with a known correct answer. They are valuable for comparing models and agents,
@@ -28,7 +28,7 @@ but they are a poor fit for evaluating a **tool augmentation layer** like Serena
   We wanted an evaluation that systematically covers the full surface area of Serena's capabilities
   without cherry-picking.
 
-### Design Goals
+## Design Goals
 
 Instead of benchmarks, we designed an evaluation methodology with three goals:
 
@@ -56,7 +56,7 @@ Instead of benchmarks, we designed an evaluation methodology with three goals:
    explicitly requires reporting negative deltas and cases where Serena offers no improvement,
    structurally counterbalancing any tendency to favour the tool being evaluated.
 
-### Method
+## Method
 
 We give an AI coding agent a single, detailed [evaluation prompt](010_evaluation-prompt) in a one-shot session.
 The prompt instructs the agent to perform approximately 20 hands-on tasks across five areas:
@@ -80,7 +80,7 @@ Only category (b) constitutes a neutral or negative finding; category (c) is con
 After the evaluation, a separate [follow-up prompt](011_followup-summary-prompt) asks the agent for a
 one-sentence, user-facing recommendation — the quotes shown on the [main page](https://github.com/oraios/serena).
 
-### Results
+## Results
 
 We performed evaluations using popular AI coding agents in representative scenarios — different
 agents, different programming languages, and different codebases — to show that the results are
@@ -96,7 +96,7 @@ evaluation can easily be repeated with the LSP-based backend to assess its subse
 You can run your own evaluation on a project of your choice by reusing our
 [evaluation prompt](010_evaluation-prompt) or adapting it to your needs.
 
-### Assessment of the Methodology
+## Assessment of the Methodology
 
 _The following assessment was written by Claude Opus 4.6 (high effort) after reading the full
 evaluation methodology, evaluation prompt, and all result documents._
@@ -144,7 +144,7 @@ One thing to watch for is whether agents that are less capable than Opus 4.6 or 
 meaningful evaluations — the prompt is quite demanding. But that is a question about the agent, not
 about the method.
 
-### Prompt Fairness
+## Prompt Fairness
 
 We put significant effort in crafting an unbiased, fair and objective evaluation prompt.
 The only "biased" aspects are some sentences about misuse of tools, which we consider irrelevant for the purpose of evaluation
