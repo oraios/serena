@@ -30,11 +30,14 @@ more complex codebases.
 
 ## What Our "End Users" Say
 
-While it is humans who download and set up Serena, our end users are essentially AI agents,
-so they are also in the best position to evaluate Serena.
-We crafted an unbiased and detailed evaluation prompt
-that leads the agent to perform ~20 routine coding tasks, representative of everyday development work, using both Serena's tools and its own built-ins,
-measure the differences, and report the results. A one-sentence summary of what the agents had to say:
+While it is humans who download and set up Serena, our end users are essentially AI agents.
+As the ones actually applying Serena's tools, they are in the best position to evaluate Serena.
+
+We crafted an unbiased evaluation prompt that leads the agent to perform ~20 routine coding tasks, 
+representative of everyday development work, 
+in order to compare Serena's tools with its own built-ins, measure the differences, and report the results. 
+
+Here's a one-sentence summary of what the agents had to say:
 
 **Opus 4.6 (high effort) in Claude Code on a large Python codebase:**
 > "Serena's IDE-backed semantic tools are the single most impactful addition to my toolkit — cross-file renames, moves, and reference lookups that
@@ -44,9 +47,9 @@ would cost me 8–12 careful, error-prone steps collapse into one atomic call, a
 > "As a coding AI agent, I would ask my owner to add Serena because it gives me the missing IDE-level understanding of symbols, references, and
 refactorings, turning fragile text surgery into calmer, faster, more confident code changes where semantics matter."
 
-Give your agent the tools it's been asking for and add Serena MCP to your client!
+Give your agent the tools it has been asking for and add Serena MCP to your client!
 
-See our [documentation](https://oraios.github.io/serena/04-evaluation/000_intro.html) for the full methodology and much more detailed evaluation results
+See our [documentation](https://oraios.github.io/serena/04-evaluation/000_evaluation-intro.html) for the full methodology and much more detailed evaluation results
 beyond these brief summaries, or run your own evaluation on a project of your choice.
  
 
