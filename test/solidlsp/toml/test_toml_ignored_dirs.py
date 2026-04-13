@@ -24,7 +24,7 @@ class TestTomlIgnoredDirectories:
         assert language_server.is_ignored_dirname(".cargo"), ".cargo should be ignored"
         assert language_server.is_ignored_dirname("node_modules"), "node_modules should be ignored"
 
-        # Directories starting with . are ignored by base class
+        # Infrastructure directories ignored by base class
         assert language_server.is_ignored_dirname(".git"), ".git should be ignored"
         assert language_server.is_ignored_dirname(".venv"), ".venv should be ignored"
 
@@ -49,12 +49,14 @@ class TestTomlIgnoredDirectories:
 
     def test_various_cache_directories(self, language_server: SolidLanguageServer) -> None:
         """Test various cache and temporary directories are ignored."""
-        # Directories starting with . are ignored by base class
+        # Cache directories ignored by base class
         assert language_server.is_ignored_dirname(".cache"), ".cache should be ignored"
 
-        # IDE directories (start with .)
+        # IDE internals
         assert language_server.is_ignored_dirname(".idea"), ".idea should be ignored"
-        assert language_server.is_ignored_dirname(".vscode"), ".vscode should be ignored"
+
+        # .vscode is intentionally NOT ignored — it contains user-facing config
+        assert not language_server.is_ignored_dirname(".vscode"), ".vscode should not be ignored"
 
         # Note: __pycache__ is NOT ignored by TOML server (only Python servers ignore it)
         assert not language_server.is_ignored_dirname("__pycache__"), "__pycache__ is not TOML-specific"
