@@ -1,136 +1,660 @@
-# Evaluation by Gpt 5.4 in Codex CLI
+# Evaluation: What Serena Adds Over Built-Ins
 
-## Final Recommendation
+**Evaluated by:** Gpt 5.4 (high) in Codex
 
-The recommendation is created with the [follow-up summary prompt](../011_followup-summary-prompt), everything else was created in one shot from the
-[evaluation prompt](../010_evaluation-prompt).
+This report compares Serena's JetBrains-backed semantic coding tools with built-in file, shell, search, and patch tools in this repository. The comparison assumes competent use of both toolsets: built-ins are used for text, file, shell, config, and small patch work; Serena is used where symbol identity, language semantics, or IDE refactoring semantics apply.
 
-> "As a coding AI agent, I would ask my owner to add Serena because it lets me work with code as stable symbols instead of fragile text, turning the
-refactors, lookups, and multi-file edits that usually feel risky and repetitive into precise IDE-backed operations I can trust."
+Method: I explored code first, avoided repo documentation and prior notes, ran real edits/refactors, and reverted after each experiment. After each edit/refactor experiment I checked `git status --short` and returned the tree to clean before moving on. Measurements are approximate, but call counts, diff sizes, and result shapes are from observed runs.
 
-## 1. Headline
+> **One-line summary:** As a coding agent, I would ask my owner to add Serena because it turns fragile text-and-line-number work into precise symbol-aware navigation and
+refactoring, which makes real code changes feel faster, safer, and far less blind.
 
-Serena's largest added value is stable semantic addressing and IDE-backed refactoring. In this Java plugin repo, that meant a method/class could be targeted as `Logger/warning[0]`, `Symbol/safeDelete`, or `ProjectUtil` without line numbers, and cross-file rename/move/inline/delete operations were delegated to IntelliJ's model.
+## 1. Headline: what Serena changes
 
-High value, common: symbol lookup, method-body retrieval, stable name paths, and reference search. Frequency: many times per coding session. Value per hit: usually saves 1-3 reads/searches and avoids loading whole files.
+Serena adds a semantic layer over the codebase. Its concrete delta is the ability to address and transform code by symbols: name paths, overload indexes, reference graphs, type hierarchies, external declarations, and JetBrains refactoring operations.
 
-High value, less frequent but large: cross-file rename, move, safe delete, inline. Frequency: a few times per feature/refactor. Value per hit: saves roughly 5-20 calls and reduces missed import/call-site risk.
+Tasks where Serena adds capability:
 
-Medium value: type hierarchy and external dependency declaration lookup. Frequency: occasional. Value per hit: turns "search and infer" into 1 semantic query; text search cannot truly reproduce transitive hierarchy or dependency source lookup without IDE/index/cache work.
+- Code-reference search: `find_referencing_symbols` for `Symbol/findReferences` returned 6 precise code usages grouped by containing symbols. `rg findReferences` also returned the declaration, the `/findReferences` route string, and comments.
+- Type hierarchy: one `type_hierarchy` call for `PostRequestHandler` returned 18 direct endpoint subclasses, a transitive `TypeHierarchyHandler -> GetSupertypesHandler/GetSubtypesHandler` branch, and the external `Object` supertype.
+- External dependency lookup: `find_declaration` resolved `ReferencesSearch.search(anchorElement)` to `<ext:ReferencesSearch.class|466808a0>`, and `find_symbol` returned the selected overload body. Built-in repo/cache grep found the import and call but not the dependency definition.
+- Cross-file refactors: semantic rename, symbol move, file move, safe delete, and inline executed real IDE refactors and updated files/usages/imports.
+- Stable addressing: a chained edit used `SymbolFinder/findFilesByName`, `SymbolFinder/getProject`, and `SymbolFinder/qualNameMatchesName` after earlier edits shifted line numbers.
 
-Low/no added value: config/docs/free-text search and tiny line edits. Frequency: common, but built-ins are already optimal. Value per hit for Serena: none or negative for small local edits.
+Tasks where Serena applies but offered little or no improvement:
 
-**Verdict:** Serena adds the most value whenever the task is about named code entities rather than text spans; the weighted daily win is stable symbol navigation, while the biggest per-hit win is IDE refactoring.
+- Tiny intra-method edits: a 1-line error-message change was smaller with a built-in patch; Serena body replacement required sending the whole method.
+- Simple one-file private rename: manual patch and semantic rename produced the same 2-line diff for `qualNameMatchesName -> qualifiedNameMatchesName`.
+- Method insertion at a known spot: both workflows produced the same 4-line diff; Serena's benefit was target stability, not smaller payload.
+- Whole-method rewrite: Serena targets the method boundary cleanly, but the full replacement body still has to be sent.
 
-## 2. Added Value By Area
+Tasks outside Serena's scope:
 
-- Stable symbol navigation: showed on `Symbol.java` and `UIControlUtil.java`. Frequency: every non-trivial coding session. Value: saves 1-3 calls per lookup and avoids full-file reads.
-- Symbol-scoped edits: `replace_symbol_body`, `insert_after_symbol`, and overload-specific targeting worked on `Logger/warning[0]`, `Logger/warning[1]`, and `Logger/logToToolWindow`. Frequency: several times per session. Value: small edits lose to text Edit, medium edits break even, whole-body edits save about 2x input payload.
-- Cross-file refactors: renaming `Logger` to `SerenaLogger` updated 10 files plus the Java file rename; moving `ProjectUtil` into `service.endpoint` updated the package and removed the now-local import. Frequency: occasional. Value: saves roughly 10-20 manual reads/edits/verifications.
-- Semantic relationships: `ToolWindowContent` references, `TypeHierarchy` subtypes, `SubtypeHierarchy` supertypes, and `Gson.fromJson` declaration came back as code entities. Frequency: occasional. Value: 1 call versus several searches plus inference.
-- Built-in text work remains essential: `build.gradle.kts`, `/findSymbol`, `127.0.0.1`, and `FORM_INIT_DELAY_MILLIS` were naturally handled by `Read`/`rg`. Frequency: large share of daily work. Value: Serena adds nothing there.
+- Reading config/non-code files such as `plugin.xml` and `build.gradle.kts`.
+- Free-text searches for URLs, endpoint strings, settings values, comments, and resources.
+- File inventory, line counts, shell commands, build/test execution, Git operations, and arbitrary text edits.
 
-**Verdict:** Serena's contribution is not blanket speed; it removes repeated code-entity bookkeeping from ordinary navigation and almost all bookkeeping from real refactors.
+Value-weighted summary:
 
-## 3. Detailed Evidence
+| Rank | Difference | Frequency | Value per hit | Delta |
+|---|---:|---:|---:|---|
+| 1 | Cross-file semantic refactors | Medium-high | High | Often avoids 5-20 manual edit/search/verify steps and reduces partial-update risk. |
+| 2 | Code usages vs text mentions | High | Medium-high | Removes noisy grep triage for "who uses this symbol?" |
+| 3 | Symbol overview/body retrieval | High | Medium | Avoids large reads and stale line targeting. |
+| 4 | Type hierarchy/implementations | Medium | High | Hard to reproduce correctly with text search, especially transitively. |
+| 5 | Stable addressing across edit chains | Medium | Medium | Reduces refresh work after line shifts. |
+| 6 | External dependency lookup | Low-medium | High | Needs IDE index; built-ins need source/decompiler infrastructure. |
+| 7 | Small local edits | High | Neutral/negative for Serena | Built-in patch/edit usually sends less. |
 
-### 3.1 Code Understanding
+**Verdict:** Serena materially changes symbol-centric exploration and refactoring; it does not replace built-ins for ordinary text, file, shell, config, or tiny local edits.
 
-Semantic overview of `Symbol.java` returned a class tree with fields, methods, inner classes, and overload indexes in 1 call. Text equivalent was `rg "class |...\\(" Symbol.java`, which returned 100+ signature/comment hits and needed filtering. Follow-up semantic read of `UIControlUtil/findButton` was 1 call returning only the 10-line body; text follow-up needed locating the line then reading a slice.
+## 2. Added value and differences by area
 
-Payloads: semantic overview sent path/depth only and returned about 900 tokens; text grep returned about 2,000+ tokens for `Symbol.java`. Semantic method read returned about 90 tokens; text slice returned similar body tokens but required a locator step.
+- Cross-file semantic refactoring changes both workflow and correctness. Frequency: medium-high. Value per hit: high. The observed class rename updated a file/class plus imports/usages; the nested-record move changed 4 existing files and created 1 new file; the file move updated package/imports across 3 paths. Built-ins can reproduce the result, but only through search, file moves, patches, import cleanup, and verification.
 
-**Verdict:** Use Serena for source structure and specific method bodies; use text only when the question is literally textual.
+- Semantic search separates code usage from text mention. Frequency: high. Value per hit: medium-high. Serena returned only code references for `Symbol/findReferences`; `rg` returned code, route strings, comments, and the declaration. Built-ins remain better for "mentioned anywhere."
 
-### 3.2 References, Hierarchy, Dependencies
+- Symbol overview/body retrieval cuts exploration payload. Frequency: high. Value per hit: medium. `get_symbols_overview` on `Symbol.java` returned fields, methods, nested classes, and overload indexes without reading the 1,000+ line file. Regex produced line-oriented candidates and still required manual scope interpretation.
 
-`find_referencing_symbols` on `ToolWindowContent` returned 4 code uses: two subclass declarations and two parameters. `rg "ToolWindowContent"` returned 5 lines including the definition. For "who uses this in code," Serena was higher precision; for "where is this string mentioned," `rg` was the right tool.
+- Type/dependency queries add capabilities not practically present in built-ins. Frequency: low-medium. Value per hit: high. Serena returned a transitive type graph and an external IntelliJ API method body; text tools needed iterative searches or extra source/decompiler setup.
 
-`type_hierarchy` on `TypeHierarchy` returned `SubtypeHierarchy` and `SupertypeHierarchy`; supertypes for `SubtypeHierarchy` returned `TypeHierarchy` and external `Object`. Text search found name matches plus false positives like `TypeHierarchyRequest`.
+- Small localized edits are not improved by symbol-body replacement. Frequency: high. Value per hit: neutral or negative for Serena. A one-line patch was smaller than replacing an 11-line method body.
 
-`find_declaration` on `gson.fromJson(requestBody, requestClass)` resolved external `Gson/fromJson[0]` and returned the source body. Built-ins needed finding the Gradle dependency, locating `~/.gradle/.../gson-2.10.1-sources.jar`, listing/extracting `Gson.java`, then searching inside it.
+- Some JetBrains refactors staged added/deleted files. Frequency: limited to class/file move/delete style operations. Value per hit: neutral operational tradeoff. Semantic value remains, but verification/revert must check the index as well as unstaged files.
 
-**Verdict:** Serena adds real semantic reach for "code relationships"; text search can find mentions, but not reliably answer relationship questions in one step.
+**Verdict:** Serena's highest-value differences are symbol identity, reference graphs, and IDE refactor execution; built-ins remain superior for simple text-local work.
 
-### 3.3 Edit Size Economics
+## 3. Detailed evidence, grouped by capability
 
-Small edit: rewriting `Logger.logToToolWindow` as an early return. Text patch sent a small old/new anchor, about 9 changed lines. Serena required sending the whole 11-line method body. Text was cheaper.
+### 3.1 Repository structure and entry points
 
-Medium edit: rewriting most of `UIControlUtil.tryHandleDialogs`. Text patch sent about 14 old lines plus 20 new lines. Serena sent the full method body, including its comment, about 26 lines. Roughly even.
+Attempted: identify top-level layout, packages, and entry points.
 
-Large edit: replacing `Symbol.safeDelete` implementation shape. With content-anchored Edit, a whole-body replacement would send old body plus new body, about 2x the new method payload. `replace_symbol_body` sent only the new body plus `Symbol/safeDelete`.
+Built-in call chain:
 
-**Verdict:** Use text Edit for 1-3 line changes, either tool for 10-30 line method rewrites, and Serena for whole-method replacements.
+1. `git status --short` -> clean.
+2. `rg --files -g '!*.md' -g '!docs/**' -g '!CLAUDE.md'` -> code/config/resource inventory.
+3. `Get-ChildItem -Force` -> top-level directories.
+4. `Get-Content src/main/resources/META-INF/plugin.xml` -> plugin entry points.
+5. `Get-Content build.gradle.kts -TotalCount 80` -> Gradle/IntelliJ platform setup.
 
-### 3.4 Refactors
+Serena call chain: not applicable for repository inventory and non-code config.
 
-Private rename: `Logger/logToToolWindow` to `appendToToolWindow` changed 7 occurrences in 1 semantic call plus optional `rg` verification. Manual path was `rg`, patch each occurrence, then `rg` verify: 3 calls and more payload.
+Observed structure:
 
-Multi-file rename: `Logger` to `SerenaLogger` changed 10 files and renamed the Java file. Manual path would be `rg`, read 10 files, rename/move file, edit imports/type names/constructors, verify with `rg`, and likely compile: roughly 14-20 calls.
+- `service`: backend service and request handling.
+- `service/endpoint`: endpoint handlers for symbol search, references, formatting, rename, move, safe delete, inline, inspections, and completions.
+- `symbol`: symbol model, symbol lookup, hierarchy, path matching, and move processors.
+- `util`: IDE/project/editor/UI helpers.
+- `ui`: tool window content.
+- `plugin.xml`: registers `PluginStartupActivity`, settings service/configurable, and a dummy test action.
 
-Move: moving `ProjectUtil` to `service.endpoint` moved the file, changed its package, and removed the import from `RefreshFileHandler` in 1 call. Manual path would coordinate filesystem move, package line, import removal/additions, and verification.
+Payloads: built-ins used 5 small shell/read calls and returned several KB of code/config context; Serena had no relevant semantic operation.
 
-Safe delete: `DebugUtil` had no references; safe delete returned `affected_references: []` and deleted it. Manual path is search, delete, verify. Inline: `ProjectUtil/getAbsolutePath` inlined into both call sites in 1 call.
+**Verdict:** Repository layout and non-code entry-point discovery are built-in work; Serena starts adding value once the target is code symbols.
 
-**Verdict:** Every multi-file or semantic refactor tested was a clear Serena win in call count, payload, and correctness surface.
+### 3.2 Large file structural overview
 
-### 3.5 Session Effects
+Attempted: compare structural overview on `src/main/java/de/oraios/serena/symbol/Symbol.java`.
 
-I chained three edits in `Logger.java`: rename helper, replace `Logger/warning[0]`, insert after `Logger/error[0]`. The name paths survived earlier edits; no line recalculation was needed. A built-in line/slice workflow would need refreshed context after insertions because line numbers and nearby anchors shift.
+Serena call chain:
 
-**Verdict:** Serena's stable identifiers compound across a session; the more edits you make in one file, the wider the gap gets.
+1. `get_symbols_overview(relative_path=Symbol.java, depth=1)`
+2. Next step: `find_symbol(Symbol/findReferences, include_body=true)`
 
-## 4. Token Efficiency
+Serena output: one top-level `Symbol` class; fields; nested `ChildrenCollector` and `DocumentationResolver`; methods including overload-indexed names such as `getLocationString[0]`, `getLocationString[1]`, `move[0]`, `move[1]`, `getDocumentation[0]`, and `getDocumentation[1]`.
 
-The crossover is size-dependent. Small edit: text wins because it sends only a tiny anchor. Medium rewrite: near parity. Whole-body rewrite: Serena wins because it sends new body only, while content-anchored Edit sends old body plus new body.
+Built-in call chain:
 
-Forced reads matter: `find_symbol(...include_body=true)` avoided reading 573 lines of `UIControlUtil.java` and 1,295 lines of `Symbol.java`. Stable outputs also have longer shelf life: `Logger/warning[0]` remains useful after unrelated edits; line 52 does not.
+1. `rg` for method-like declaration lines in `Symbol.java`.
+2. `rg` for class/interface/enum lines in `Symbol.java`.
+3. Next step: line-slice read around the selected method.
 
-**Verdict:** Token economics favor built-ins for tiny local text edits and Serena for symbol retrieval, chained work, and whole-symbol replacement.
+Built-in output: about 70 line-oriented method/class matches, including nested symbols, with no durable symbol identity beyond manual signature inspection.
 
-## 5. Reliability
+Payloads: Serena used 1 compact overview call plus a targeted follow-up. Built-ins used 2 regex searches plus a later line-range read.
 
-Semantic matching distinguished overloads: `Logger/warning[0]` was `warning(String,Object...)`; `Logger/warning[1]` was `warning(String,Throwable)`. `rg "warning\\("` returned both and left disambiguation to the caller.
+**Verdict:** Serena's overview is more actionable because its output feeds directly into stable symbol-addressed calls; regex outlines are useful but line-based.
 
-Atomicity matters: semantic rename/move run as IDE refactorings, so a failure is not a half-finished sequence of 10 manual edits. Both toolsets still report mechanical success only; semantic intent still needs diff/build review.
+### 3.3 Targeted method body retrieval
 
-Transitive queries are where text cannot compete directly: hierarchy and external declaration lookup depend on IDE indexes and dependency sources, not just strings.
+Attempted: retrieve `Symbol/findReferences` without reading surrounding file content.
 
-**Verdict:** Correctness weight favors Serena for code-entity scope and refactoring atomicity, while text remains correct for text questions.
+Serena call chain: `find_symbol(relative_path=Symbol.java, name_path_pattern=Symbol/findReferences, include_body=true)`.
 
-## 6. Workflow Effects
+Serena output: only the `public ArrayList<SymbolReference> findReferences()` body.
 
-Over a multi-step session, Serena's intermediate artifacts stay usable: symbol trees, name paths, reference lists, and hierarchy nodes survive edits outside those symbols. Text outputs are often ephemeral: line numbers and byte offsets decay immediately after insertions/deletions.
+Built-in call chain:
 
-The practical effect is not just fewer calls; it is fewer re-reads. In the chained `Logger.java` session, Serena needed three edit calls. A text workflow would normally require initial reads/searches, edits, and refreshed context before later insertions.
+1. `rg "findReferences\\(" src/main/java -n -C 2`
+2. `Get-Content Symbol.java` line slice around the declaration.
 
-**Verdict:** Serena's session-level multiplier comes from not having to rediscover where code moved after each edit.
+Built-in output: search context across multiple files, then the selected method slice.
 
-## 7. No Built-In Equivalent
+Payloads: Serena input was one path/name-path request and returned roughly 25 method lines. Built-ins required search output plus a separate slice read.
 
-- IDE semantic rename/move/inline/safe-delete: high value when refactoring, moderate frequency. Built-ins can approximate with many edits but cannot provide IDE refactoring semantics or atomicity.
-- Type hierarchy including external `Object`: medium value, occasional. Text can search `extends`, but cannot transitively resolve hierarchy with dependency/stub awareness in one call.
-- External dependency declaration resolution: medium value, occasional. Built-ins require build-file discovery and local source/cache spelunking.
-- Overload/name-path targeting: high value in typed code, frequent enough to matter. Text can match names but cannot address `warning[0]` as a distinct method without manual signature reasoning.
+**Verdict:** If the symbol is known, Serena retrieves the body in one precise call; built-ins need search plus line-targeted reading.
 
-**Verdict:** Serena's unique capabilities are concentrated in IDE-indexed code intelligence and refactoring operations, not general file manipulation.
+### 3.4 References: code usages vs mentions anywhere
 
-## 8. Built-Ins As Default
+Attempted: find all references to `Symbol/findReferences`.
 
-Use built-ins for non-code files, config, docs, and free text. `build.gradle.kts` was best read directly. `rg` was clearly right for `/findSymbol`, `127.0.0.1`, and `FORM_INIT_DELAY_MILLIS`.
+Serena call chain: `find_referencing_symbols(relative_path=Symbol.java, name_path=Symbol/findReferences)`.
 
-Use built-ins for tiny edits where a short unique anchor is obvious. Also always keep a post-refactor text sweep for comments, markdown, notebooks, generated files, and product strings; that is complementary verification, not a Serena weakness.
+Serena output:
 
-Estimated share: built-ins remain best for maybe 40-60% of daily interactions because much coding work is still file/text/config/search. Serena dominates the code-symbol subset.
+- `Symbol/formatReferenceLocations/references`
+- `Symbol/inline/refCountBefore`
+- `Symbol/verifyInlineResult/refCountAfter`
+- `SymbolDTO/Builder/buildDTO/references`
+- `RunInspectionsOnSymbolsHandler/handleRequest/refs`
+- `FindReferencesHandler/buildResponse/references`
 
-**Verdict:** Start with built-ins for text and config; switch to Serena as soon as the noun in your task is a symbol.
+Built-in call chain: `rg "findReferences" src/main/java -n -C 1`.
 
-## 9. Practical Rule
+Built-in output: same call sites plus the declaration, `/findReferences` route registration, and explanatory comments.
 
-Reach for Serena when the task says class, method, overload, implementation, reference, hierarchy, rename, move, inline, delete, or "insert after this method." Reach for `rg`/Read/Edit when the task says string, config, docs, log message, URL, generated text, or "change these two lines."
+Payloads: Serena returned a compact grouped usage list of about 500-700 characters. `rg` returned broader line context of about 1-2 KB and mixed code usages with text mentions.
 
-For edits: text Edit for 1-3 line tweaks; Serena `replace_symbol_body` for full methods/classes; semantic refactor tools for any rename/move/delete/inline that crosses call sites or imports.
+**Verdict:** Serena has higher precision for "who uses this symbol in code"; built-ins have higher recall for "where is this text mentioned anywhere."
 
-I restored all tracked edits after the experiments. The tracked working tree was clean after evaluation; the only baseline untracked entries were `.claude/` and `serena-evaluation-prompt.md`. I did not run the Gradle test suite because the task was an evaluation, not a product change.
+### 3.5 Type hierarchy
 
-**Verdict:** With both toolsets installed, use built-ins for text and Serena for code entities; that rule captures almost all of the measured value without overthinking each call.
+Attempted: list supertypes and subtypes transitively for `PostRequestHandler`.
+
+Serena call chain: `type_hierarchy(relative_path=PostRequestHandler.java, name_path=PostRequestHandler, hierarchy_type=both, depth=0)`.
+
+Serena output: external `Object` supertype; 18 direct endpoint subclasses; transitive nested branch `TypeHierarchyHandler` containing `GetSupertypesHandler` and `GetSubtypesHandler`.
+
+Built-in call chain:
+
+1. `rg "extends PostRequestHandler|extends TypeHierarchyHandler|class PostRequestHandler" src/main/java -n`
+2. Manually follow any discovered intermediate types.
+3. Repeat searches if deeper hierarchy exists.
+
+Payloads: Serena used 1 hierarchy query and returned structured JSON. Built-ins used pattern search and manual transitive grouping.
+
+**Verdict:** Serena turns hierarchy discovery into a semantic graph query; text search requires iterative pattern expansion and manual reasoning.
+
+### 3.6 External dependency symbol lookup
+
+Attempted: retrieve the IntelliJ dependency symbol behind `ReferencesSearch.search(anchorElement)`.
+
+Serena call chain:
+
+1. `find_declaration(relative_path=Symbol.java, regex="ReferencesSearch\\.(search)\\(anchorElement\\)")`
+2. `find_symbol(relative_path=<ext:ReferencesSearch.class|466808a0>, name_path_pattern=ReferencesSearch/search[0], include_body=true, search_deps=true)`
+
+Serena output: declaration `ReferencesSearch/search[0]` in an external class path and the overload body:
+
+```java
+public static @NotNull Query<PsiReference> search(@NotNull PsiElement element) {
+    return search(element, GlobalSearchScope.allScope(PsiUtilCore.getProjectInReadAction(element)), false);
+}
+```
+
+Built-in call chain:
+
+1. `rg "ReferencesSearch" src/main/java -n` -> import and local call.
+2. `rg` over repo, `.intellijPlatform`, and Gradle caches for `class ReferencesSearch` or matching method signatures -> no useful source hit.
+3. `Get-ChildItem` over Gradle/IntelliJ caches -> jar candidates but no direct definition.
+
+Infrastructure difference: Serena depends on the JetBrains IDE index; built-ins need source jars, decompiler tooling, or classpath-specific jar inspection.
+
+**Verdict:** External dependency lookup is a genuine Serena capability when IDE indexes are available; ordinary built-ins do not provide it.
+
+### 3.7 Single-file edits across edit sizes
+
+Small tweak attempted: change `"No symbol found for "` to `"No matching symbol found for "` in `SymbolFinder/findSymbolByNamePath`.
+
+Built-in call chain:
+
+1. Use existing search/body context.
+2. `apply_patch` one-line replacement.
+3. `git diff`, `git status --short`.
+4. Revert and clean check.
+
+Serena call chain:
+
+1. `replace_symbol_body(SymbolFinder/findSymbolByNamePath, full method body with changed string)`.
+2. `git diff`, `git status --short`.
+3. Revert and clean check.
+
+Observed diff: both produced the same 1-line change. Payload difference: built-in edit input was a tiny hunk; Serena input was the full 11-line method body.
+
+Medium rewrite attempted: rewrite `SymbolFinder/findFilesByName` from list accumulation to stream collection.
+
+Built-in call chain: `apply_patch` over the method body, then diff/status/revert/status.
+
+Serena call chain: `replace_symbol_body(SymbolFinder/findFilesByName, new method body)`, then diff/status/revert/status.
+
+Observed diff: both produced `10 +++-------`, 3 insertions and 7 deletions. Payload difference was small: a patch hunk versus an 8-line replacement method.
+
+Large/whole-body rewrite attempted: rewrite `InspectionRunner/collectResults` while preserving signature and behavior shape.
+
+Built-in call chain: `apply_patch` against the method body, then diff/status/revert/status.
+
+Serena call chain: `replace_symbol_body(InspectionRunner/collectResults, full symbol text including Javadoc and replacement body)`, then diff/status/revert/status.
+
+Observed diff: both produced `38 +++++++++++-----------`, 19 insertions and 19 deletions. Payload difference: built-in required a large contextual hunk; Serena required the full symbol text, about 70 lines including Javadoc/signature/body.
+
+**Verdict:** Serena is not automatically more token-efficient for edits; its edit advantage is stable symbol targeting, while built-ins are smaller for tiny local hunks.
+
+### 3.8 Insert method at structural location
+
+Attempted: insert `private Logger getLogger()` immediately after `SymbolFinder/getProject`.
+
+Built-in call chain:
+
+1. Search/read surrounding area.
+2. `apply_patch` with nearby context.
+3. Diff/status/revert/status.
+
+Serena call chain:
+
+1. `insert_after_symbol(relative_path=SymbolFinder.java, name_path=SymbolFinder/getProject, body=...)`
+2. Diff/status/revert/status.
+
+Observed diff: both produced the same 4-line insertion.
+
+Payloads: built-ins sent inserted body plus surrounding text context; Serena sent inserted body plus symbol target.
+
+**Verdict:** Structural insertion is a modest Serena improvement: same resulting diff, less dependence on line/context stability.
+
+### 3.9 Rename: private helper in one file
+
+Attempted: rename `SymbolFinder/qualNameMatchesName` to `qualifiedNameMatchesName`.
+
+Built-in call chain:
+
+1. `rg "qualNameMatchesName" SymbolFinder.java -n -C 2`
+2. `apply_patch` declaration and one call site.
+3. Diff/status/revert/status.
+
+Serena call chain:
+
+1. `find_referencing_symbols(SymbolFinder/qualNameMatchesName)` -> one referencing method.
+2. `rename(name_path=SymbolFinder/qualNameMatchesName, new_name=qualifiedNameMatchesName, rename_in_comments=true, rename_in_text_occurrences=true)`.
+3. Diff/status/revert/status.
+
+Observed result: Serena returned `"Success"`. Both produced the same 2-line diff.
+
+**Verdict:** Semantic rename has little advantage for a one-file helper with one call site, but it scales better than text edits as references spread or names become ambiguous.
+
+### 3.10 Rename: cross-file class including imports
+
+Attempted: rename `MoveOperationFailedException` to `MoveFailedException`.
+
+Serena call chain:
+
+1. `rename(relative_path=MoveOperationFailedException.java, name_path=MoveOperationFailedException, new_name=MoveFailedException, rename_in_comments=true, rename_in_text_occurrences=true)`.
+2. `git diff --stat`, `git diff`, `git diff --cached --stat`, `git status --short`.
+3. Restore staged rename and modified files; clean check.
+
+Serena result: `"Success"`.
+
+Observed edits:
+
+- Added/staged `MoveFailedException.java`.
+- Deleted/staged `MoveOperationFailedException.java`.
+- Updated import, Javadoc comment, and thrown class in `MoveProcessor.java`.
+
+Built-in equivalent chain:
+
+1. `rg "MoveOperationFailedException" src/main/java -n`.
+2. Rename/create/delete file.
+3. Patch class name and constructor.
+4. Patch imports and usages.
+5. Patch comments/text occurrences if desired.
+6. Verify no unintended old references remain.
+7. Compile/test for a permanent change.
+
+**Verdict:** Cross-file class renames are high-value Serena cases because file/class coupling, imports, usages, and optional comments are handled as one semantic refactor.
+
+### 3.11 Move symbol to another file context
+
+Attempted: move nested record `InspectionRunner/PendingFix` to a top-level file in the same package.
+
+Serena call chain:
+
+1. `move(relative_path=InspectionRunner.java, name_path=InspectionRunner/PendingFix, target_relative_path=src/main/java/de/oraios/serena/service/endpoint)`.
+2. Diff/status/cached-diff inspection.
+3. Restore staged new file and modified files; clean check.
+
+Serena result:
+
+```json
+{
+  "source_relative_path": "src/main/java/de/oraios/serena/service/endpoint/InspectionRunner.java",
+  "target_relative_path": "src/main/java/de/oraios/serena/service/endpoint",
+  "moved_symbol": {"name_path": "PendingFix", "type": "CLASS"}
+}
+```
+
+Observed edits:
+
+- Created/staged `PendingFix.java` with package and imports.
+- Removed nested record from `InspectionRunner.java`.
+- Updated 3 external references from `InspectionRunner.PendingFix` to `PendingFix`.
+- Removed unused imports in 2 files.
+
+Built-in equivalent chain: read nested record/import needs, add file, delete nested symbol, search usages, patch qualified usages, patch internal references if needed, remove imports, verify, compile/test.
+
+**Verdict:** Symbol move is a substantial Serena addition because the difficult part is reference/import repair, not copying text.
+
+### 3.12 Move file/package location
+
+Attempted: move `PluginUtil.java` from `util` to `service`.
+
+Serena call chain:
+
+1. `move(relative_path=src/main/java/de/oraios/serena/util/PluginUtil.java, target_relative_path=src/main/java/de/oraios/serena/service)`.
+2. Diff/status/cached-diff inspection.
+3. Restore staged rename and modified imports; clean check.
+
+Serena result:
+
+```json
+{
+  "source_relative_path": "src/main/java/de/oraios/serena/util/PluginUtil.java",
+  "target_relative_path": "src/main/java/de/oraios/serena/service"
+}
+```
+
+Observed edits:
+
+- Staged rename `util/PluginUtil.java -> service/PluginUtil.java`.
+- Changed package declaration to `de.oraios.serena.service`.
+- Updated import in `PluginStartupActivity`.
+- Removed now-unneeded same-package import in `SerenaBackendService`.
+
+Built-in equivalent chain: move file, patch package declaration, search `PluginUtil`, patch imports/usages, remove redundant imports, verify no old package import remains, compile/test.
+
+**Verdict:** File moves are high-value when packages/imports must change; built-ins can do them manually but require dependency repair steps.
+
+### 3.13 Safe delete and propagated delete
+
+Attempted: delete unused `DebugUtil`.
+
+Serena call chain:
+
+1. `safe_delete(relative_path=DebugUtil.java, name_path=DebugUtil, delete_even_if_used=false, propagate=false)`.
+2. `git diff --cached --stat`, `git status --short`.
+3. Restore staged deletion; clean check.
+
+Serena result:
+
+```json
+{
+  "deleted_symbol": "DebugUtil",
+  "relative_path": "src/main/java/de/oraios/serena/util/DebugUtil.java",
+  "affected_references": [],
+  "message": "Symbol deleted successfully with no affected references."
+}
+```
+
+Built-in equivalent chain: `rg "DebugUtil"`, inspect declaration vs usages, delete file/symbol, verify no remaining usages.
+
+Propagated deletion: no suitable correct-use candidate was found where JetBrains safe-delete propagation would meaningfully delete a used symbol and propagate deletion through call sites. For ordinary used-method deletion, correct safe delete reports usages or, if forced, deletes the symbol and reports affected references; that is not the same as arbitrary call-site deletion.
+
+**Verdict:** Safe delete adds an integrated usage check plus deletion operation; propagated deletion was not evaluated because this codebase did not provide a suitable candidate.
+
+### 3.14 Inline
+
+Attempted: inline `ProjectUtil/getAbsolutePath`, a single-expression helper.
+
+Serena call chain:
+
+1. `find_symbol(ProjectUtil/getAbsolutePath, include_body=true)`.
+2. `find_referencing_symbols(ProjectUtil/getAbsolutePath)` -> 2 references.
+3. `inline_symbol(relative_path=ProjectUtil.java, name_path=ProjectUtil/getAbsolutePath, keep_definition=false)`.
+4. Diff/status/revert/status.
+
+Serena result: `{"status": "SUCCESS"}`.
+
+Observed edits:
+
+- Removed `getAbsolutePath`.
+- Replaced internal call in `ProjectUtil/getVirtualFile`.
+- Replaced external call in `RefreshFileHandler`.
+
+Built-in equivalent chain: read helper body, `rg getAbsolutePath`, patch each call site with substituted expression, delete helper, verify no stale references, compile/test.
+
+**Verdict:** Inline is a strong Serena refactor for legally substitutable helpers; built-ins can reproduce it but must manually adapt each substitution.
+
+### 3.15 Scope precision and overload targeting
+
+Attempted: distinguish overloaded `Symbol/getLocationString` methods.
+
+Serena call chain:
+
+1. `find_symbol(Symbol/getLocationString[0], include_body=true)`.
+2. `find_symbol(Symbol/getLocationString[1], include_body=true)`.
+
+Serena output:
+
+- `[0]`: `public String getLocationString() { return getLocationString(element); }`
+- `[1]`: `private static String getLocationString(PsiElement element) { ... }`
+
+Built-in call chain: `rg "getLocationString" Symbol.java -n -C 1`, then manual signature inspection.
+
+**Verdict:** Serena's overload-indexed name paths provide precise symbol addressing that text search does not.
+
+### 3.16 Atomicity and success signals
+
+Observed Serena success signals:
+
+- `replace_symbol_body` -> `OK`
+- `insert_after_symbol` -> `OK`
+- `rename` -> `"Success"`
+- `move` -> JSON with source/target/moved symbol or paths
+- `safe_delete` -> JSON with deleted symbol, affected references, and message
+- `inline_symbol` -> `{"status": "SUCCESS"}`
+
+Built-in success signals:
+
+- `apply_patch` -> "Success. Updated the following files"
+- Shell/Git commands -> exit codes and textual output
+- Cross-file consistency -> user-driven diff/search/build verification
+
+Atomicity comparison: Serena refactors executed as single IDE operations. Built-in equivalents are chains of searches, file operations, and patches; a competent user can make them correct, but intermediate states can be partial.
+
+Tradeoff: class/file move/delete refactors staged added/deleted files in the Git index, so clean verification must check both staged and unstaged state.
+
+**Verdict:** Serena gives clearer semantic success signals and more atomic cross-file edits; built-ins require manual consistency management.
+
+### 3.17 Workflow effects across multiple edits
+
+Attempted: chain 3 edits in `SymbolFinder.java` without refreshing between them.
+
+Serena call chain:
+
+1. `replace_symbol_body(SymbolFinder/findFilesByName, ...)`.
+2. `insert_after_symbol(SymbolFinder/getProject, ...)`.
+3. `rename(SymbolFinder/qualNameMatchesName, ...)`.
+4. Diff/status/revert/status.
+
+Observed result: all edits applied after earlier edits shifted file positions. Final diff touched 18 lines with net 9 insertions and 9 deletions.
+
+Built-in equivalent chain: initial read/search, apply first patch, rely on robust patch context or refresh line numbers, apply second patch, refresh or search again, apply rename patch, verify.
+
+**Verdict:** Serena's name paths remain useful after line shifts, so its advantage compounds in multi-edit sessions.
+
+### 3.18 Non-code reads and free-text search
+
+Attempted: read config and search free text.
+
+Built-in call chain:
+
+1. `Get-Content plugin.xml`.
+2. `Get-Content build.gradle.kts -TotalCount 80`.
+3. `rg "http://|https://|localhost|127\\.0\\.0\\.1|8080|24282|SERENA|serena" src/main/java src/main/resources -n`.
+
+Serena call chain: not applicable.
+
+Observed result: built-ins exposed plugin registration, Gradle platform setup, URLs, IDs, settings defaults, and resource/text mentions.
+
+**Verdict:** Built-ins are natural and sufficient for config reading and free-text search; this is outside Serena's semantic-code scope.
+
+## 4. Token-efficiency analysis
+
+Payload differences across edit sizes:
+
+| Task | Built-in payload | Serena payload | More efficient |
+|---|---|---|---|
+| 1-line string tweak | Tiny patch hunk, 1 changed line | Full 11-line method body | Built-ins |
+| Medium method rewrite | 10-line diff hunk | Full 8-line replacement method | Roughly equal |
+| Large body rewrite | Large contextual patch, 38-line diff | Full symbol text, about 70 lines | Roughly equal; Serena has better target |
+| Insert method | Inserted body plus surrounding context | Inserted body plus name path | Serena slightly |
+| Private one-file rename | `rg` plus 2-line patch | optional refs query plus rename command | Roughly equal |
+| Cross-file rename/move/inline | Multiple searches, file operations, patches, verifications | One semantic refactor plus diff/status | Serena |
+
+Forced reads:
+
+- Built-ins commonly need a search before a precise read, then a line slice or full context before editing.
+- Serena can skip full-file reads when the symbol name path is known.
+- When the symbol is not known, Serena's `get_symbols_overview` and shallow `find_symbol` calls provide compact discovery rather than full-file reads.
+
+Output payload:
+
+- Serena exploration output is structured and scoped to symbols.
+- Built-in grep output can be larger because it includes declarations, comments, strings, and unrelated text mentions.
+- Built-ins can be extremely low-output for known-location small edits.
+
+Stable vs ephemeral addressing:
+
+- Built-ins address code by file paths, line numbers, text context, or byte positions. Line numbers and slices go stale after edits.
+- Serena addresses symbols by `relative_path + name_path`, with overload indexes where needed. The chained-edit experiment showed those targets survived line shifts.
+- Path-changing operations still require updated paths afterward, so symbol stability is strongest before moves/renames that alter file locations.
+
+**Verdict:** Serena saves tokens by avoiding broad reads/search triage and by collapsing multi-file edit chains; built-ins remain more token-efficient for tiny known-location hunks.
+
+## 5. Reliability & correctness under correct use
+
+Precision of matching:
+
+- Serena reference search returned code usages and excluded route strings/comments.
+- Built-in text search returned all mentions and therefore mixed true code usage with broader text hits.
+- Serena overload indexes targeted `Symbol/getLocationString[0]` and `[1]`; text search required manual signature inspection.
+
+Scope disambiguation:
+
+- Serena name paths encode class nesting and overload identity.
+- Built-ins can disambiguate with careful patterns and reads, but the disambiguation is manual.
+- In simple cases, such as a private helper with one call site, this semantic precision had little practical value. In overloaded, nested, or cross-file cases, it materially reduced ambiguity.
+
+Atomicity:
+
+- Serena refactors apply through JetBrains refactoring operations and produce one operation-level success signal.
+- Built-in equivalents are decomposed into separate searches, file moves, patches, and verification steps.
+- Competent users can verify either path, but Serena reduces the number of intermediate inconsistent states.
+
+Semantic queries vs text search:
+
+- `type_hierarchy` and dependency declaration lookup produced semantic information not available from ordinary grep.
+- `rg` remained better for broad mention searches and config/resource scans.
+
+External dependency limitations:
+
+- Serena's dependency lookup depends on IDE/language indexes and available dependency metadata.
+- Built-ins can match or exceed it only if paired with source jars, decompilers, or separate language-server tooling.
+
+Operational tradeoff:
+
+- Several Serena refactors staged created/deleted files. This is not a correctness problem, but it adds index-state verification to the cleanup workflow.
+
+**Verdict:** Serena improves correctness where symbol identity and cross-file semantics matter; built-ins remain reliable and simpler for text/file tasks.
+
+## 6. Workflow effects across a session
+
+Where Serena advantages compound:
+
+- Symbol overview results become inputs to body reads, reference searches, renames, moves, safe deletes, and inline operations.
+- Name paths remain useful after line shifts, reducing re-read/re-target work during multi-edit sessions.
+- Refactor-heavy sessions benefit because one semantic command replaces search/edit/verify loops across files.
+
+Where Serena advantages diminish:
+
+- After a full file has already been read, overview adds less incremental value.
+- If the task is a small textual substitution in a known place, symbolic body replacement can cost more payload than a tiny patch.
+- For non-code and free-text work, Serena has no role.
+
+Intermediate result durability:
+
+- Serena intermediate results such as `SymbolFinder/findFilesByName` or `Symbol/getLocationString[1]` remain meaningful as long as the file/symbol still exists.
+- Built-in line numbers became stale after insertions; robust textual patch context remained usable when surrounding lines did not change.
+
+Verification cost:
+
+- Both workflows still need `git diff`, build/test, and domain-specific verification for permanent changes.
+- Serena success signals reduce the need to inspect every call site manually, but not the need to inspect the intended diff.
+
+**Verdict:** Serena's advantages compound inside symbol-centric sessions and diminish once the work becomes plain text, config, shell, or already-loaded single-file editing.
+
+## 7. Unique capabilities
+
+Unique here means no practical built-in equivalent without adding separate language-server, IDE, source-index, or decompiler infrastructure.
+
+- Transitive type hierarchy. Frequency: medium. Impact: high when changing base classes, interfaces, or handler contracts. Built-ins can grep explicit `extends` clauses but do not produce a semantic transitive graph or external supertypes.
+
+- External dependency declaration/body lookup from a call site. Frequency: low-medium. Impact: high for API behavior questions. Serena resolved `ReferencesSearch.search` into an external class method body; ordinary built-ins did not.
+
+- IDE semantic move of a nested symbol to a top-level file with usage/import repair. Frequency: low-medium. Impact: high during refactors. Built-ins can reproduce this only as a manual multi-step refactor.
+
+- Safe delete with semantic usage check. Frequency: medium. Impact: medium-high. Built-ins can search and delete, but they do not provide an integrated safe-delete operation over code usages.
+
+- Inline refactor with call-site substitution. Frequency: low-medium. Impact: medium-high. Built-ins can patch substitutions manually, but expression adaptation and helper deletion are not primitive text operations.
+
+Not unique: reading files, listing files, grep, small patches, simple one-file renames, config/resource understanding, and shell/Git operations.
+
+**Verdict:** Serena's unique practical capabilities are hierarchy/dependency queries and IDE refactors; its non-unique areas are ordinary text and file operations.
+
+## 8. Tasks outside Serena's scope
+
+Built-in-only or built-in-natural tasks observed:
+
+- Repository inventory and top-level layout.
+- Reading `plugin.xml`, `build.gradle.kts`, scripts, resources, and generated artifacts.
+- Free-text search for URLs, settings strings, endpoint strings, magic constants, resource IDs, and comments.
+- Running shell commands, builds, tests, Git operations, and filesystem cleanup.
+- Small text edits where a one-line patch is the whole task.
+
+Estimated share of daily coding work:
+
+- About 30-50% of a normal coding session is built-in-natural: shell, tests, grep, config reads, small text patches, and Git checks.
+- Serena applies to much of the remaining 50-70% when the work is code navigation, symbol understanding, references, hierarchy, or refactoring.
+- Serena coverage rises in refactor-heavy sessions and falls in config/debug/test-log sessions.
+
+**Verdict:** Serena augments the semantic-code portion of development; built-ins still carry a large and necessary share of routine work.
+
+## 9. Practical usage rule
+
+Use Serena when the task can be stated as a code-symbol operation:
+
+- "What methods/classes are in this file?"
+- "Give me this method body."
+- "Who uses this symbol?"
+- "What implements/subclasses this?"
+- "Rename, move, delete, or inline this symbol and update usages."
+- "Find the declaration of this call, including dependency symbols."
+- "Apply several edits where line locations may shift."
+
+Use built-ins when the task is text, file, shell, config, or tiny local editing:
+
+- "List files."
+- "Read config."
+- "Search for this string anywhere."
+- "Change this one known line."
+- "Run tests/build."
+- "Inspect Git state."
+- "Edit markdown/resources/scripts."
+
+For mixed workflows:
+
+1. Use built-ins to find files/config and run verification.
+2. Use Serena to identify and transform code symbols.
+3. Use built-ins to inspect final diffs and run tests.
+4. Prefer built-ins for tiny local hunks after the symbol has already been located.
+5. Prefer Serena for any refactor that crosses file boundaries or depends on type/reference semantics.
+
+**Verdict:** Choose Serena for symbol identity and semantic refactoring; choose built-ins for text, shell, config, verification, and minimal local edits.

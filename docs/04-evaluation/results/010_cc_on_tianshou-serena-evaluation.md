@@ -1,339 +1,354 @@
-# Evaluation by Opus 4.6 in Claude Code
+# Evaluation Report: Serena's Tools vs Built-In Tools
 
-## Final Recommendation
+> **One-line summary:** Serena's IDE-backed semantic tools are the single most impactful addition to my toolkit — cross-file renames, moves, and reference lookups that would cost me 8–12 careful, error-prone steps collapse into one atomic call, and I would absolutely ask any developer I work with to set them up.
 
-The recommendation is created with the [follow-up summary prompt](../011_followup-summary-prompt), everything else was created in one shot from the
-[evaluation prompt](../010_evaluation-prompt).
-
-> "If I could ask my owner for one upgrade to my coding toolkit, it would be Serena — its symbolic addressing eliminated the constant re-reading
-that quietly eats my context on multi-edit sessions, its atomic cross-file refactorings collapsed 10-call manual workflows into one, and after a
-rigorous hands-on evaluation I can say that while built-in tools remain the right choice for small edits and text searches, Serena fills the exact
-gaps that make me feel clumsy without it."
-
-
-Ground-truth hands-on evaluation run on `tianshou` (Python, ~26 kLOC under `tianshou/`), focused on what Serena's tools add on top of `Read/Edit/Write/Glob/Grep` under correct use. Every measurement below comes from an actual tool call on this repo, not a thought experiment; edits were applied and reverted via `git checkout --` between experiments.
+**Evaluated by:** Claude Opus 4.6 (coding AI agent in Claude Code CLI)
+**Codebase:** [tianshou](https://github.com/thu-ml/tianshou) — a Python reinforcement learning library (~26K lines, 43 source files)
+**Method:** Hands-on, side-by-side execution of 20 tasks using both toolsets. All edits were applied to real files and verified via `git diff`, then reverted.
 
 ---
 
-## §1. Headline — what Serena adds
+## 1. Headline: What Serena Changes
 
-On a typical Python editing session, Serena contributes four things built-ins cannot reproduce cheaply or at all. Ranked by **frequency × value-per-hit**, highest first:
+Serena adds an IDE-backed semantic layer (powered by JetBrains) on top of the built-in text-level tools. The practical delta breaks down into three categories:
 
-**Tier A — touches almost every editing session**
+**(a) Tasks where Serena adds capability:**
+- **Cross-file refactoring** (rename, move symbol, move file): 1 atomic call vs. N×(Grep+Read+Edit) chains. This is Serena's strongest contribution — it collapses multi-file, import-aware operations into single calls that are atomic and semantically correct.
+- **Structural code navigation**: Symbol overviews, type hierarchies, and reference finding return structured, scope-disambiguated results that text search cannot produce without manual interpretation.
+- **External dependency introspection**: Serena can look up symbols in installed packages via the IDE index without requiring manual environment discovery.
 
-1. **Stable name-path addressing that survives intermediate edits.** Every Serena editing and querying tool is addressed by `ClassName/method_name`, which remains valid after inserts, deletes, and rewrites elsewhere in the same file. Grep/Read/Edit chain through line numbers or text anchors, both of which drift. **Frequency: every multi-edit session, which is most of them.** **Value per hit: saves one Read + one re-grep per subsequent edit in the same file (~400–800 bytes of re-sent content each time).** This is the quietest contribution and probably the largest in aggregate.
+**(b) Tasks where Serena applies but offers no improvement:**
+- **Single-file rename of a unique string**: `Edit` with `replace_all=true` achieves the same result in 1 call (after a Read), with comparable effort.
+- **Small edits (1–3 lines inside a method)**: Edit's substring matching is more efficient — less payload sent, no requirement to supply the full symbol body.
+- **Inserting new code at a known location**: Both approaches require ~1–2 calls. Edit can target by surrounding text; Serena targets by name path. The effort is comparable.
 
-2. **Payload asymmetry on medium-and-larger body rewrites.** `replace_symbol_body` sends `name_path + new_body`, while `Edit` sends `old_body + new_body`. Measured crossover is around 10–15 lines: below that, Edit's tiny anchor wins 5–10× on payload; above that, Serena wins ~2× at 20 lines and ~2.3× at 66 lines, and the gap keeps widening with body size. **Frequency: once per session you rewrite a non-trivial method body.** **Value per hit: 50% payload reduction on medium rewrites, climbing toward ~60% on large ones, plus no need for a prior Read to capture the exact anchor.**
+**(c) Tasks outside Serena's scope (built-in only):**
+- Non-code files (config, docs, notebooks, changelogs)
+- Free-text search across the repo
+- Shell commands, git operations, test execution
+- File creation from scratch
 
-**Tier B — rare per session but very high value when it fires**
-
-3. **Single-call cross-file refactorings with atomicity and automatic import cleanup.** `rename`, `move`, and `safe_delete` each collapse an 8–12-call manual workflow (grep → read-all-callers → edit each → verify → hand-clean unused imports) into one call, atomically. **Frequency: 0–3 times per session, depending on task type — zero on many days, constant on refactoring days.** **Value per hit: 5–10× call reduction plus correctness improvements that manual chains drop (I observed `move` auto-remove a `Categorical` import from the source file that a human refactorer would easily miss).**
-
-4. **Semantic navigation into third-party dependency source.** `find_symbol(search_deps=True)` / `find_declaration` resolves a type from its use site straight into `site-packages` or stub files, returning the full class body in one call. Built-ins would require: (a) reading the file to find the import, (b) locating the venv, (c) guessing the module path, (d) reading the file. **Frequency: a few times per session when debugging type errors or reviewing unfamiliar library APIs.** **Value per hit: 3–4 manual calls and a path-guessing step collapsed into one.**
-
-**Tier C — capability-level, not efficiency-level**
-
-5. **Transitive type hierarchy and reference graphs.** `type_hierarchy` returns the full super/sub chain — including into external stub files (`.pyi`) — in one call. `find_referencing_symbols` returns each reference *with its containing symbol* (the function/class that holds it), which Grep cannot produce. Built-ins can imitate single-level relationships with Grep but cannot chase override chains in one step. **Frequency: once or twice a session on unfamiliar code; close to never once you know the hierarchy.** **Value per hit: one call vs. N iterative Greps, plus recall into stub files.**
-
-**Verdict:** Serena's biggest practical contribution is the *quietest* one — stable symbolic addressing that survives in-file mutations — and its most *spectacular* one — single-call atomic cross-file refactorings — is rare but decisive when it fires; the middle-weight wins are payload asymmetry on body rewrites and cheap dependency navigation.
-
----
-
-## §2. Added value, by area
-
-Ordered by frequency × value-per-hit, not novelty.
-
-- **Stable identifiers across chained edits to one file.** Demonstrated in Task 17: three sequential edits to `CollectStats` (`insert_after refresh_len_stats`, `insert_after refresh_return_stats`, `replace_symbol_body refresh_std_array_stats`) all used the same kind of stable name-path address and worked without re-reading the file. An equivalent `Edit` chain after the first two inserts would have needed at least one intermediate `Read` because line numbers and some text anchors shift. **Frequency: every multi-edit session.** **Value: ~1 re-read (~400–800 bytes) saved per subsequent edit; compounds across a session.**
-
-- **Body replacement at medium/large sizes.** Measured in Tasks 7a/7b/7c on `collector.py`:
-  - 1-line change (7a): Edit `~120 B`, `replace_symbol_body` `~1200 B`. **Edit wins ~10×.**
-  - ~20-line rewrite (7b): Edit `~1430 B`, Serena `~715 B`. **Serena wins ~2×.**
-  - ~66-line rewrite (7c): Edit `~4700 B`, Serena `~2050 B`. **Serena wins ~2.3×.**
-  Crossover sits around 10–15 lines. **Frequency: once or twice per substantive editing session.** **Value: 50–60% payload cut on the edits where it applies; grows with body size.**
-
-- **Atomic cross-file operations.** Task 10 renamed `EpisodeRolloutHookMCReturn` across `collector.py` + `test_collector.py` in one `rename` call, and — importantly — *also* updated a Sphinx `:class:` cross-reference in a docstring that a pure `Edit` chain would only catch if the caller remembered to sweep docstrings separately. Task 11 moved `get_stddev_from_dist` from `collector.py` to `batch.py`: one call updated the target file, added the import at the source, updated a separate test file's import, *and* removed the now-unused `Categorical` import from the source. **Frequency: 0–3 times per session.** **Value per hit: 5–10 calls saved plus one or two automatic correctness wins the manual path tends to miss.**
-
-- **Dependency navigation.** Task 6 resolved `Distribution` from its use site in `collector.py` into the real `torch.distributions.distribution.Distribution` class body (~300 lines) with a single `find_declaration` call. The built-in path requires parsing imports, guessing the venv site-packages location, and reading the file by hand. **Frequency: a few times per session on unfamiliar code or type debugging.** **Value: 3–4 calls plus one guess collapsed to one.**
-
-- **Reference and hierarchy queries that distinguish "code usage" from "any text match".** Task 4 on `Collector`: `find_referencing_symbols` returned ~70 files with each reference tagged by containing symbol (`Py:IMPORT_ELEMENT`, `Py:FUNCTION_DECLARATION: ["test_dqn"]`), while `Grep \bCollector\b` returned 332 matches across 88 files including notebooks, SVGs, `CHANGELOG.md`, and `README.md`. These are answers to *different questions*, and each tool is naturally matched to one. **Frequency: several times per session; the right question determines the right tool.** **Value: precision saves a read of each false-positive file (~10–30 saved reads on a popular class).**
-
-- **Safe-delete with automatic usage check.** Task 12: `safe_delete` on `EpisodeRolloutHookMerged` succeeded silently (no usages); on `CollectStats` it refused with a 200+ line usage list grouped by enclosing symbol. The built-in equivalent is a `Grep` followed by manual discipline — same call count but no enforcement. **Frequency: rare (delete-by-name operations).** **Value: when it fires, it prevents the most expensive class of mistake (deleting a referenced symbol).**
-
-**Verdict:** The two highest-weighted contributions are the boring one (stable in-file addressing, every session) and the refactoring one (rare but 5–10× call reduction); Serena's more exotic capabilities (hierarchy, dependency navigation) are lower-frequency polish on top.
+**Verdict:** Serena's primary contribution is collapsing multi-file, semantically-aware operations (rename, move, reference-finding, type hierarchy) from multi-step manual processes into single atomic calls; for single-file text edits, it is comparable or slightly less efficient.
 
 ---
 
-## §3. Detailed evidence, grouped by capability
+## 2. Added Value and Differences by Area
 
-### §3.1 File structural overview
+**1. Cross-file rename/move (Serena: strong positive)**
+- Serena: 1 call updates definition + all imports + all usages across N files atomically.
+- Built-in: 1 Grep + N×(Read+Edit) = 2N+1 calls, non-atomic.
+- Frequency: Moderate (a few times per working session during refactoring work). Value per hit: High — saves 6–10+ calls and eliminates the risk of partial updates.
 
-**Task 2** — structural overview of `tianshou/data/collector.py` (1551 lines).
-- Serena `get_symbols_overview(depth=0)`: ~240 bytes returned; top-level classes + functions names only, no line numbers, no per-class method detail.
-- Serena `get_symbols_overview(depth=1)`: ~3200 bytes; classes with nested method and field lists.
-- Grep `^(class |def |    def )`: ~3300 bytes; identical structural information plus line numbers.
-- Output size is roughly equivalent at `depth=1`. The real difference shows up in the *follow-up* call:
-  - Serena follow-up (`find_symbol("Collector/_compute_action_policy_hidden", include_body=True)`): 1 call, returns body only, ~66 lines. Address `Collector/_compute_action_policy_hidden` remains stable across any edits to unrelated regions.
-  - Built-in follow-up (`Read offset=707 limit=66`): 1 call, returns body + line-number prefixes. Address (line 707) goes stale after any insert above that line.
-- The winner depends on what comes next: if you stop at reading, they tie; if you plan to edit the body next, Serena's address is the one that survives the subsequent mutation.
+**2. Structural overview / targeted symbol reading (Serena: moderate positive)**
+- `get_symbols_overview(depth=1)`: 1 call returns all classes, methods, and attributes in structured JSON, via the IDE's parser — language-agnostic and always correct. Built-in equivalent: `Grep` for a language-specific heuristic pattern like `^(class |def )`. This works for simple Python files but is inherently fragile: the pattern must be hand-tuned per language, misses decorated or multi-line declarations, and can match inside strings or comments. For non-Python languages, an entirely different regex would be needed.
+- `find_symbol(include_body=True)`: Retrieves a specific method body by name path without reading surrounding code. Built-in: requires knowing the line number (via Grep) then Read with offset — 2 calls.
+- Frequency: High (many times per session). Value per hit: Low-to-moderate — saves ~1 call and some context window tokens per navigation. The reliability advantage over heuristic Grep patterns is consistent across all languages.
 
-**Verdict (§3.1):** tie on the overview call alone; Serena wins on the full read-then-edit chain because of address stability.
+**3. Reference finding with structural context (Serena: moderate positive)**
+- `find_referencing_symbols`: Returns which *symbols* reference a target, with file grouping and usage type (import, call, type annotation). Built-in `Grep` returns all text matches including docs, comments, and string literals — same recall but lower precision.
+- Frequency: Moderate. Value per hit: Moderate — precision matters when planning refactors of widely-used symbols.
 
-### §3.2 Method body retrieval
+**4. Type hierarchy (Serena: positive, niche)**
+- 1 call returns full super/sub-type chains transitively. Built-in: requires iterative Grep for `class X(Y)` patterns, manual transitive closure.
+- Frequency: Low (occasional during architecture exploration). Value per hit: High per occurrence — several calls saved.
 
-**Task 3** — body of `Collector._compute_action_policy_hidden`.
-- Serena: 1 call (`find_symbol include_body`), ~1800 bytes of body-only output.
-- Built-ins: 1 call (`Read offset=707 limit=66`), ~1900 bytes including line prefixes.
-- Essentially equivalent on a cold cache; Serena's output is cleaner for machine consumption, built-ins' is cleaner for humans reviewing line locations.
+**5. Stable addressing across edits (Serena: moderate positive)**
+- Serena addresses symbols by name path (`CollectStats/refresh_return_stats`), which is invariant under edits elsewhere in the file. The built-in workflow is fundamentally line-number-mediated: Grep returns line numbers, Read takes line offsets — and both go stale after any edit to the file. Edit's text matching (`old_string`) is more resilient than line numbers, but it sits at the end of a chain that starts with position-based lookups. After an edit shifts lines, previously noted Grep results and Read offsets are invalid and must be re-acquired.
+- This means a multi-edit session with built-ins requires re-Grep or re-Read between edits to re-establish positions, while Serena's name paths remain valid throughout. In Task 17 (three chained edits), Serena needed 3 calls total; the built-in path needed 4 (1 Read + 3 Edits) only because the text anchors happened to be unique — but had any Edit failed uniqueness, a re-Read would have been required, pushing the count to 5–7.
+- Frequency: High (any session with multiple edits to the same file). Value per hit: Moderate — saves 1–2 re-read calls per edit chain, and eliminates the class of errors where stale line numbers cause edits to land in the wrong place.
 
-**Verdict (§3.2):** tie in isolation; Serena wins when followed by an edit.
+**6. Single-file small/medium edits (Serena: neutral to slight negative)**
+- For a 1-line change inside a 13-line method, Serena's `replace_symbol_body` requires sending the entire 13-line body. Edit sends just the changed line. The prerequisite cost differs: Serena needs `find_symbol(include_body=True)` to get the body; Edit needs `Read` of the relevant lines. Both are 1 prerequisite call + 1 edit call.
+- Frequency: Very high. Value per hit: Slightly negative for Serena — more payload for small changes.
 
-### §3.3 Reference search
-
-**Task 4** — who uses `Collector`?
-- Serena `find_referencing_symbols`: ~70 files, each reference annotated with its containing symbol. Precise to code usage. Missed docstring/README mentions almost entirely (except a few `FILE`-tagged entries).
-- Grep `\bCollector\b`: 332 occurrences across 88 files, includes `docs/*.ipynb`, `docs/*.md`, `structure.svg`, `CHANGELOG.md`, `README.md`.
-- Cost comparison for the question "every code file that *uses* this class":
-  - Serena: 1 call, answer usable directly.
-  - Grep: 1 call, answer needs filtering by extension and visual dedup.
-- Cost comparison for "anywhere this name appears in the repo, including docs":
-  - Serena: cannot answer directly.
-  - Grep: 1 call, answer usable directly.
-
-**Verdict (§3.3):** each toolset wins on its own question; pick by question shape, and do not penalize either for missing the other's answer.
-
-### §3.4 Type hierarchy and override chains
-
-**Task 5** — super/sub types of `BaseCollector`.
-- Serena `type_hierarchy(depth=0)`: 1 call, returns transitive hierarchy including `Collector → AsyncCollector` on the sub side and `ABC → object` on the super side — the super side is resolved into an external `<ext:abc.pyi>` stub file.
-- Grep `class \w+\(.*BaseCollector`: 1 call, returns exactly one hit (`Collector`). To find `AsyncCollector` I'd have to issue a second grep for `class \w+\(.*Collector`, and so on recursively. External supertypes cannot be reached at all.
-- **This is a capability delta, not a raw efficiency delta**: text search cannot cross an override chain in one step, and cannot reach `.pyi` stubs.
-
-**Verdict (§3.4):** clear Serena capability win; value grows with hierarchy depth and cross-file reach.
-
-### §3.5 Dependency navigation
-
-**Task 6** — resolve `Distribution` from its usage in `collector.py`.
-- Serena `find_declaration` with a regex anchored at the usage site: 1 call, returned the full 300-line body of `torch/distributions/distribution.py::Distribution`, including docstrings. Unambiguous — the tool used the import context to pick the right file out of 41 candidates named `Distribution` in the dependency tree.
-- Built-in equivalent: (a) Read `collector.py` imports, (b) map `from torch.distributions import Distribution` to `torch/distributions/distribution.py`, (c) locate the venv's site-packages path, (d) Read the file. 3–4 calls plus one implicit "where is the venv" step.
-
-**Verdict (§3.5):** clear Serena capability win whenever you need third-party source.
-
-### §3.6 Small edits (< ~10 lines)
-
-**Task 7a** — one-line error message change inside `BaseCollector._validate_buffer` (21-line body).
-- `Edit old_string=".. should be greater than 0." new_string=".. must be strictly positive."`: ~120 bytes on the wire, one call. Prerequisite: know the exact anchor (one prior Grep or Read, which I already had from earlier in the session).
-- `replace_symbol_body`: ~1200 bytes (whole 21-line body resent). Prerequisite: prior `find_symbol include_body` to see the current body.
-- Result diff identical in both cases (`1 insertion(+), 1 deletion(-)`).
-
-**Verdict (§3.6):** Edit wins ~10× on payload for ≤ 3-line changes; use Edit whenever the change is small and the anchor is obvious.
-
-### §3.7 Medium edits (~10–30 lines)
-
-**Task 7b** — rewrite ~20 lines inside `CollectStats.update_at_step_batch`.
-- Edit: ~750 B old anchor + ~680 B new body = ~1430 B on the wire.
-- `replace_symbol_body`: ~680 B new body + ~35 B name_path = ~715 B.
-- Both end with identical diffs.
-- Prerequisite is symmetric: both need to see the current body first (one `find_symbol` or one `Read`).
-
-**Verdict (§3.7):** crossover point — Serena pulls ahead around 15 lines and wins ~2× at 20.
-
-### §3.8 Large edits (50+ lines)
-
-**Task 7c** — whole-body rewrite of `Collector._compute_action_policy_hidden` (~66 lines).
-- Edit: ~2700 B old anchor + ~2000 B new body = ~4700 B.
-- `replace_symbol_body`: ~2000 B new body + name_path = ~2050 B.
-- Ratio ~2.3×. The asymmetry grows linearly with body size: Edit scales as `O(old + new)`, `replace_symbol_body` as `O(new)`.
-
-**Verdict (§3.8):** clear Serena win; reach for `replace_symbol_body` on any substantial method-body rewrite.
-
-### §3.9 Structural insertion
-
-**Task 8** — insert a new method right after `CollectStats.refresh_len_stats`.
-- Serena `insert_after_symbol` with `name_path="CollectStats/refresh_len_stats"` and body of the new method: ~150 B on the wire, unambiguous anchor, 1 call. Result: new method inserted cleanly between `refresh_len_stats` and `refresh_std_array_stats`.
-- Edit equivalent: old_string must capture the end of `refresh_len_stats` uniquely — roughly the last 5 lines of the method — then new_string replays those lines and appends the new method. Approximately 550 B on the wire.
-
-**Verdict (§3.9):** Serena wins ~3× on payload and on anchor stability for structural inserts.
-
-### §3.10 Single-file rename of a private helper
-
-**Task 9** — rename `_HACKY_create_info_batch` → `_create_info_batch_legacy` (2 occurrences, same file).
-- Serena `rename` via name_path: 1 call.
-- Edit with `replace_all=true`: 1 call. Both the declaration and the one call site get rewritten.
-- Both succeed; both leave a clean 2-line diff.
-
-**Verdict (§3.10):** tie — for single-file renames of a distinctive identifier, built-in `Edit(replace_all=true)` is competitive.
-
-### §3.11 Multi-file rename
-
-**Task 10** — rename `EpisodeRolloutHookMCReturn` → `EpisodeRolloutMCReturnHook` (5 sites across `tianshou/data/collector.py` and `test/base/test_collector.py`).
-- Serena `rename`: 1 call, atomic across both files. Also updated a Sphinx `:class:` docstring cross-reference at `collector.py:611` via the default `rename_in_comments=True`.
-- Built-in chain: `Grep` (1) → `Edit replace_all=true` on `collector.py` (1) → `Edit replace_all=true` on `test_collector.py` (1) → verification `Grep` (1). 4 calls minimum, 5–6 if I remember to hit the docstring reference. Not atomic across files.
-
-**Verdict (§3.11):** Serena wins ~4–5× on call count and catches the docstring reference by default.
-
-### §3.12 Cross-module move
-
-**Task 11** — move `get_stddev_from_dist` from `tianshou/data/collector.py` to `tianshou/data/batch.py`.
-- Serena `move`: 1 call. Final `git diff --stat`:
-  ```
-  test/base/test_stats.py    |  3 ++-
-  tianshou/data/batch.py     | 24 ++++++++++++++++++++++++
-  tianshou/data/collector.py | 27 ++-------------------------
-  ```
-  The tool:
-  1. Inserted the function into `batch.py`.
-  2. Removed it from `collector.py`.
-  3. Added `from tianshou.data.batch import get_stddev_from_dist` to `collector.py`.
-  4. Updated `test/base/test_stats.py`'s import of this function.
-  5. **Removed the now-unused `Categorical` import from `collector.py`**, because nothing else in that file referenced it.
-- Built-in chain (honestly planned): Grep for callers (1) → Read each caller to see current import form (≥ 3) → Edit collector.py to remove the function (1) → Edit batch.py to insert (1) → Edit each caller's import (≥ 2) → Edit collector.py to remove the now-unused `Categorical` import (1) → verification Grep (1). **Roughly 10 calls**, and the "unused import" cleanup is the kind of thing a distracted human misses.
-
-**Verdict (§3.12):** biggest call-count collapse in the evaluation — ~10× — with a correctness bonus.
-
-### §3.13 Safe deletion
-
-**Task 12** — two deletions.
-- `safe_delete(EpisodeRolloutHookMerged)` (unused): succeeded, removed the class cleanly, 38-line deletion.
-- `safe_delete(CollectStats)` (heavily used): refused with an explicit `SafeDeleteFailedException`, returning ~220 usage locations grouped by enclosing symbol.
-- Built-in equivalent: `Grep` for usages → visual inspection → `Edit` deletion. Same call count when the symbol is unused; similar when it isn't, but with no enforcement — a careless `Edit` would happily delete a used symbol and break the repo.
-
-**Verdict (§3.13):** same call count as manual, but the enforcement eliminates the worst mistake class.
-
-### §3.14 Inline helper
-
-**Task 13** — skipped. No legally inlinable helper (single-expression, side-effect-free, with call sites) found in a quick scan of `tianshou/`. Per the prompt, I did not contrive a broken input.
-
-**Verdict (§3.14):** no data; comparison not applicable on this codebase.
-
-### §3.15 Scope precision and disambiguation
-
-**Task 14** — find every `_collect` in `collector.py`.
-- `find_symbol("_collect")` returned three distinct hits with their full name paths (`BaseCollector/_collect`, `Collector/_collect`, `AsyncCollector/_collect`), plus inlined signatures for each. Each is addressable unambiguously — I can rename, replace-body, or reference exactly one of them.
-- `Grep "_collect\("` would return all three locations but with no structural distinction: to tell them apart I'd have to read surrounding context to see which class each `def` belongs to.
-
-**Verdict (§3.15):** Serena's addressing is precise by construction on override chains and overloads.
-
-### §3.16 Chained edits to one file
-
-**Task 17** — three successive edits on `CollectStats`:
-1. `insert_after_symbol("CollectStats/refresh_len_stats", ...)` — insert new `reset_len_stats` method.
-2. `insert_after_symbol("CollectStats/refresh_return_stats", ...)` — insert new `reset_return_stats` method.
-3. `replace_symbol_body("CollectStats/refresh_std_array_stats", ...)` — rewrite an existing method body.
-
-All three calls used the original name paths, unchanged; none required a re-Read between edits. Final `git diff` showed exactly the expected three-edit composite: two insertions plus one body rewrite, adjacent and clean. The first two inserts shifted line numbers between 8 and 16 lines, which would have invalidated any line-number addressing for the third target.
-
-An equivalent Edit chain would have survived this particular sequence (because the anchors were text, not line numbers), but it exposes the *general* pattern: name_paths are mutation-proof addresses, line numbers are not, and large text anchors become non-unique quickly.
-
-**Verdict (§3.16):** for any session with three or more edits to the same file, symbolic addressing is a systematic safety and efficiency win.
-
-### §3.17 Non-code files and free-text searches
-
-**Tasks 19/20** — state the applicability boundary and move on. Semantic tools don't apply to changelogs, notebooks, configs, or free-text searches for log strings; `Read` and `Grep` are the right tools.
-
-**Verdict (§3.17):** built-ins only; not a contest.
+**Verdict:** Serena's strongest contributions are in cross-file refactoring (high value, moderate frequency) and structured navigation (moderate value, high frequency); for small text edits, built-ins are slightly more efficient.
 
 ---
 
-## §4. Token-efficiency analysis
+## 3. Detailed Evidence, Grouped by Capability
 
-**Payload asymmetry by edit size** (measured on `collector.py`):
+### 3.1 Structural Overview (Task 2)
 
-| Edit size | Edit (old+new) | `replace_symbol_body` | Ratio |
+| Metric | Serena `get_symbols_overview(depth=1)` | Built-in `Grep` for class/def |
+|---|---|---|
+| Calls | 1 | 1 |
+| Output structure | JSON tree: 14 classes with nested methods + attributes | Flat list: 54 `class`/`def` lines with line numbers |
+| Nesting visible? | Yes — methods grouped under classes | No — indentation implies nesting but no grouping |
+| Attributes visible? | Yes | No |
+| Output size | ~2.5KB structured JSON | ~3KB flat text |
+| Correctness | Always correct — uses IDE parser, language-agnostic | Heuristic — the regex `^(class \|def \|    def )` is Python-specific and can miss decorated methods, multi-line signatures, or match inside strings/comments |
+| Language portability | Works unchanged for any language the IDE supports | Requires a new hand-tuned regex per language |
+| Next step | `find_symbol("ClassName/method", include_body=True)` — 1 call | `Read(file, offset=line, limit=N)` — 1 call |
+
+Both paths need 1 call for overview + 1 call for drill-down. Serena's output is more structured and reliably correct; Grep's is simpler but fragile. The Grep pattern used here happened to work well for this Python codebase, but would need to be rewritten for Java (`class|interface|enum`, brace-delimited), Rust (`fn|struct|impl|trait`), TypeScript (`class|function|interface`), etc. — and even within Python, it misses cases like `@overload`-decorated methods or methods whose `def` line is preceded by a long decorator stack that pushes `def` to a non-standard indentation.
+
+**Verdict:** Serena provides a reliably correct structural overview across languages; Grep-based overviews are heuristic approximations that work in simple cases but degrade for complex declarations or non-Python codebases.
+
+### 3.2 Targeted Method Retrieval (Task 3)
+
+| Metric | Serena | Built-in |
+|---|---|---|
+| Calls | 1 (`find_symbol` with `include_body=True`) | 2 (Grep to find line + Read with offset) |
+| Prerequisite | Know the name path | Know the method name |
+| Output | Method body only (no surrounding code) | Surrounding code included (must estimate limit) |
+
+For `Collector/_collect` (330 lines): Serena returned exactly 330 lines. Built-in Read returned 332 lines (including the next method's signature).
+
+**Verdict:** Serena saves 1 call and returns precisely the requested body; built-in is adequate but requires line-number discovery.
+
+### 3.3 Cross-File References (Task 4)
+
+| Metric | Serena `find_referencing_symbols` | Built-in `Grep` |
+|---|---|---|
+| Calls | 1 | 1 |
+| Files found | 63 (code files only, structured by symbol type) | 83 (includes docs, notebooks, changelogs, README) |
+| Output structure | Grouped by file, categorized (import, call, type annotation) | Flat file list |
+| Precision | Code-only references | All textual mentions |
+
+Grep finds 83 files including `README.md`, `CHANGELOG.md`, and `.ipynb` notebooks. Serena finds 63 code files. For the question "who uses this in code?", Serena's result is directly usable. For "where is this mentioned anywhere?", Grep is the right tool.
+
+**Verdict:** Serena provides higher-precision code-usage results; Grep provides broader text-level coverage. Different tools for different questions.
+
+### 3.4 Type Hierarchy (Task 5)
+
+| Metric | Serena `type_hierarchy` | Built-in |
+|---|---|---|
+| Calls | 1 | 2+ (Grep for `class X(BaseCollector` + Grep for `class Collector(` + potential transitive search) |
+| Result | `BaseCollector → ABC → object` (supers), `BaseCollector → Collector → AsyncCollector` (subs), with file locations | `class Collector(BaseCollector[TCollectStats], ...)` at line 551 — requires further reads for AsyncCollector's superclass |
+
+**Verdict:** Serena produces the full transitive hierarchy in 1 call; built-in requires iterative searches.
+
+### 3.5 External Dependency Lookup (Task 6)
+
+| Metric | Serena | Built-in |
+|---|---|---|
+| Can retrieve? | Yes — `find_declaration` + `search_deps=True` | Requires environment discovery: `python -c "import X; print(inspect.getfile(X))"` then `Read` |
+| Infrastructure | IDE index (pre-built) | Working Python environment, correct venv activated |
+| Result | Symbol location + documentation | Full source file (if env is set up) |
+
+In this session, the Python environment wasn't directly accessible from bash, so built-in lookup would have required additional setup. Serena retrieved `torch.distributions.Distribution`'s location and docstring via the IDE index.
+
+**Verdict:** Serena provides dependency introspection without environment setup; built-in requires a working interpreter.
+
+### 3.6 Small Edit — 1 Line Change (Task 7a)
+
+| Metric | Serena `replace_symbol_body` | Built-in `Edit` |
+|---|---|---|
+| Prerequisite calls | 1 (`find_symbol` with `include_body=True`) — already done in Task 3 | 1 (`Read` of ~15 lines) |
+| Edit call | 1 (send full 13-line body) | 1 (send 1-line old + 1-line new) |
+| Payload sent (edit call) | ~550 chars (full body) | ~120 chars (changed line only) |
+| Total calls | 1–2 | 2 |
+
+**Verdict:** For small changes, Edit sends ~4.5× less payload in the edit call. Total call count is the same.
+
+### 3.7 Medium Rewrite — ~19 Lines (Task 7b)
+
+| Metric | Serena | Built-in |
+|---|---|---|
+| Prerequisite | 1 `find_symbol` (already done) | 1 `Read` (~22 lines) |
+| Edit payload | ~550 chars (full body) | ~1000 chars (old 19 lines + new 20 lines) |
+| Total calls | 1–2 | 2 |
+
+At this scale, Serena's payload is actually *smaller* because Edit must send both old and new text, while Serena sends only the new body. The crossover point is approximately where the changed region exceeds half the method body.
+
+**Verdict:** At medium scale, payloads converge; Serena's is slightly smaller due to only sending the replacement.
+
+### 3.8 Large Rewrite — 55 Lines (Task 7c)
+
+| Metric | Serena | Built-in |
+|---|---|---|
+| Prerequisite | 1 `find_symbol` (already done) | 1 `Read` (~67 lines) |
+| Edit payload | ~2200 chars (new body) | ~4400 chars (old 63 lines + new 62 lines) |
+| Total calls | 1–2 | 2 |
+
+**Verdict:** For full-method rewrites, Serena sends ~50% less payload because it only sends the replacement, not the original.
+
+### 3.9 Cross-File Rename (Task 10)
+
+| Metric | Serena `rename` | Built-in chain |
+|---|---|---|
+| Calls | 1 | 1 Grep + 4 Read + 4 Edit = 9 |
+| Files affected | 4 (automatically discovered) | 4 (manually discovered via Grep) |
+| Import handling | Automatic | Manual — must identify and rewrite each import statement |
+| Atomicity | Atomic — all-or-nothing | Sequential — intermediate states are inconsistent |
+
+**Verdict:** Serena reduces a 9-call chain to 1 call for cross-file rename, with atomicity.
+
+### 3.10 Move Symbol Across Modules (Task 11)
+
+| Metric | Serena `move` | Built-in equivalent |
+|---|---|---|
+| Calls | 1 | ~8–12 (Read source, Edit source to remove, Edit target to add, Grep for imports, Read+Edit each import site) |
+| Import updates | Automatic | Manual — must rewrite `from X import Y` → `from Z import Y` in each file |
+| Dependency imports | Automatically adds needed imports to target file | Must manually inspect what the moved function imports and replicate |
+
+Moving `get_stddev_from_dist` from `collector.py` to `stats.py`: Serena updated 3 files (source, target, test) in 1 call, including adding necessary imports to the target module.
+
+**Verdict:** Move is Serena's highest-value single operation — it handles import graph updates that would be error-prone manually.
+
+### 3.11 Move File (Task 12a)
+
+| Metric | Serena `move` | Built-in equivalent |
+|---|---|---|
+| Calls | 1 | 1 `git mv` + 1 Grep + N×(Read+Edit) for import updates = ~12 |
+| Files updated | 5 import updates automatic | Must manually discover and rewrite |
+
+**Verdict:** Same pattern as symbol move — Serena collapses an N-step process.
+
+### 3.12 Safe Delete (Task 12b)
+
+Serena's `safe_delete` in safe mode (default):
+- Reports all usages before deleting — acts as a guard.
+- For unused symbols, deletes cleanly in 1 call.
+- For used symbols, refuses and lists usages.
+
+Built-in equivalent: Grep to check usages → if none found, Read + Edit to delete. 2–3 calls.
+
+**Verdict:** Safe delete adds a safety check that the built-in path must implement manually.
+
+### 3.13 Inline (Task 13)
+
+Serena's inline tool did not work for any Python function tested. The JetBrains backend does not support Python function inlining (this is a language-level limitation of the IDE's refactoring engine, not a Serena bug).
+
+**Verdict:** No candidate inlinable in this codebase; inline capability appears unavailable for Python.
+
+### 3.14 Scope Precision (Task 14)
+
+Three methods named `reset_env` exist in `collector.py` (in `BaseCollector`, `Collector`, `AsyncCollector`).
+
+- Serena: `find_symbol("Collector/reset_env")` returns exactly that override's body.
+- Grep: Returns 3 line numbers. Determining which belongs to which class requires reading surrounding context.
+
+**Verdict:** Serena's name-path addressing eliminates class-level disambiguation that Grep requires.
+
+### 3.15 Chained Edits (Task 17)
+
+Three consecutive edits to methods in `CollectStats`:
+- Serena: 3 `replace_symbol_body` calls, 0 intermediate reads. Name paths (`CollectStats/refresh_return_stats`, `CollectStats/refresh_len_stats`, `CollectStats/refresh_std_array_stats`) remained valid across all edits because they are structural identifiers, not positions.
+- Built-in: 1 Read + 3 Edit calls = 4 calls in the best case. The Read was required upfront (Edit enforces "must read before editing"). The 3 Edits succeeded without re-reads only because the `old_string` anchors happened to remain unique after each edit. But this is fragile: Edit also enforces a "file has been modified since read" check when external tools modify the file, forcing a re-Read. More fundamentally, if I had needed to *find* these methods first (the typical case when you don't already know the line numbers), each Grep result from before the first edit would have been stale after it — line 232 is no longer line 232 after inserting 2 lines above it.
+
+The core asymmetry: Serena's addressing is *structural* (survives edits by definition), while built-in addressing is *positional* (line numbers from Grep/Read go stale after any insertion or deletion). Edit's text matching partially mitigates this, but only for the final step — the discovery steps (Grep, Read with offset) remain position-dependent.
+
+**Verdict:** Serena's name-path stability eliminates the re-read/re-grep cycle between edits; built-in tools require re-acquiring positions after each edit that shifts line numbers.
+
+---
+
+## 4. Token-Efficiency Analysis
+
+### Payload by edit size
+
+| Edit scale | Serena payload (edit call) | Edit payload (edit call) | Winner |
 |---|---|---|---|
-| 1 line (in 21-line method) | ~120 B | ~1200 B | **Edit 10× smaller** |
-| ~20 lines rewritten | ~1430 B | ~715 B | **Serena 2× smaller** |
-| ~66 lines whole-body | ~4700 B | ~2050 B | **Serena 2.3× smaller** |
+| 1-line change in 13-line method | ~550 chars (full body) | ~120 chars | Edit (~4.5×) |
+| 19-line medium rewrite | ~550 chars | ~1000 chars | Serena (~1.8×) |
+| 55-line full rewrite | ~2200 chars | ~4400 chars | Serena (~2×) |
+| Cross-file rename (4 files) | ~100 chars | ~800 chars (4 Edit calls) | Serena (~8×) |
 
-Crossover is around 10–15 lines. Below it, Edit's per-change payload is dominated by the tiny anchor and wins by an order of magnitude. Above it, Edit pays once for the old body and again for the new, while `replace_symbol_body` pays only for the new body plus a ~30-character name_path; the gap grows linearly with body size. Structural inserts (`insert_after_symbol`) have similar asymmetry — the name_path replaces a multi-line text anchor.
+### Prerequisite reads
 
-**Forced reads.** Serena's overview tools return symbol names without bodies and its reference tools return containing-symbol metadata without snippets, so you control when to pull code into context. `find_symbol(include_body=False)` + `find_symbol(include_body=True, name_path=...)` is a two-step "browse, then fetch body" pattern that keeps context lean; the built-in equivalent is `Grep` (which does not return bodies) + `Read` with an offset/limit, which is about as lean but requires the caller to compute the limit by hand.
+- Serena: `find_symbol(include_body=True)` returns the symbol body. If you've already navigated to it during exploration, no additional call needed.
+- Built-in: `Read` with offset/limit. Always required before Edit (enforced by the tool).
 
-**Stable vs ephemeral addressing.** Name paths remain valid across edits to unrelated regions of the same file. Line numbers and byte offsets do not, and text anchors become ambiguous once a file grows. The output-size comparison has to account for *shelf life*: a slightly larger overview that stays useful across an entire session is cheaper than a slightly smaller one that has to be regenerated after each edit. In a five-edit session on one file, Serena's name-path overview is queried once; the line-number grep output is effectively refreshed after each edit that shifts upstream content — an O(edits × file_grep_cost) hidden tax that the one-call comparison misses.
+### Stable vs ephemeral addressing
 
-**Verdict (§4):** under ~10-line edits, built-in `Edit` is cheaper; above that threshold, symbolic body replacement wins on raw payload; across a multi-edit session, name-path addressing wins regardless of size because it doesn't decay.
+- Serena's name paths (`CollectStats/refresh_return_stats`) are stable identifiers — they survive any edit to surrounding code. No re-read or re-discovery needed between edits.
+- The built-in workflow uses ephemeral, position-based addresses at every stage: Grep returns line numbers, Read takes line offsets, and both are invalidated by any insertion or deletion above the target. Edit's `old_string` matching is content-based and more resilient, but it depends on the upstream position-based steps to know *what* to match. After an edit shifts line numbers, the entire Grep→Read→Edit chain must be re-executed from the top.
+- In a session with N edits to the same file, this costs up to N-1 additional Grep/Read round-trips with built-ins. With Serena, the cost is zero — the same name path works on the first and tenth edit.
 
----
-
-## §5. Reliability and correctness analysis (under correct use)
-
-**Precision of matching.** `find_referencing_symbols` on `Collector` returns ~70 code files and annotates each with the containing symbol that holds the reference. `Grep \bCollector\b` returns 332 hits across 88 files including notebooks, SVGs, and markdown. For the question "which Python files import and use this class?", Serena's output is directly usable and Grep's needs a filter pass. For the question "where is the name `Collector` mentioned anywhere in the repo, including docs, changelog, and diagrams?", Grep's output is directly usable and Serena's is incomplete by design. Each tool's precision is perfect *for its question*; the mistake is asking the wrong one.
-
-**Scope disambiguation across overrides.** `find_symbol("_collect")` returned three distinct name paths — `BaseCollector/_collect`, `Collector/_collect`, `AsyncCollector/_collect` — each independently addressable for rename or body replacement. Text search on `_collect(` returns three line locations with no structural annotation; the caller must read context to tell them apart, and any cross-file rename risks touching the wrong override if called carelessly.
-
-**Atomicity on real failures.** `move` of `get_stddev_from_dist` made coordinated changes across three files in one call. A five-step Edit chain replicating the same move would leave the repo in a half-renamed state if any intermediate step failed on disk-full, a permission error, or an interrupted process; a single-call atomic refactoring either completes or leaves the working tree clean. This matters less for local agent sessions (where the blast radius of a partial refactor is small and recoverable with `git checkout --`) and more for any workflow where a failed run is committed or pushed.
-
-**Transitive semantic queries.** `type_hierarchy` returned both the sub-chain (`Collector → AsyncCollector`) and the super-chain (`BaseCollector → ABC → object`, with `ABC` resolved into an external `.pyi` stub) in one call. No text-search workflow reaches into stub files or chains override relationships in one step.
-
-**Success signals (symmetric).** Both toolsets return only mechanical success: "the file was written," "the rename finished." Neither verifies that the new code still compiles, type-checks, or preserves semantics. Post-edit `git diff` review is the caller's responsibility on both sides.
-
-**Verdict (§5):** Serena's correctness edge is concentrated in questions that are semantic by nature — override chains, transitive type queries, cross-file atomic ops — and tied to Grep/Edit on questions that are textual by nature.
+**Verdict:** Serena is more token-efficient for medium-to-large edits and cross-file operations; Edit is more efficient for small, localized changes. Across multi-edit sessions, Serena's stable addressing avoids the re-read tax that compounds with each successive built-in edit.
 
 ---
 
-## §6. Workflow effects across a multi-step session
+## 5. Reliability & Correctness (Under Correct Use)
 
-The single biggest session-level effect is **identifier stability across edits**. A session that makes 5 edits to `collector.py` looks like:
+### Precision of matching
+- Serena: Exact symbol resolution via name paths. `Collector/reset_env` unambiguously selects one method.
+- Edit: Text matching. Unique strings match correctly; non-unique strings fail (and Edit reports the error).
 
-- With symbolic addressing: one `get_symbols_overview` at the start, five `replace_symbol_body`/`insert_after_symbol` calls by name path. The overview is consulted zero or one more times. No re-reads of the file between edits.
-- With line-number or large-text-anchor addressing: one `Grep class/def` at the start, one `Read offset+limit` before each edit (or a careful re-grep after any insert that shifts lines), five `Edit`s. The Grep/overview may need to be refreshed mid-session once line numbers drift.
+### Scope disambiguation
+- Serena distinguishes overrides, overloads (via indices), and nested classes by name path.
+- Grep/Edit cannot distinguish methods with the same name in different classes without reading surrounding context.
 
-The hidden cost of the built-in workflow is not in any single call — it's the compounding re-Reads and anchor recomputation across a session. A single Read of a 1500-line file is ~40 kB of context; doing it four extra times across a session is a ~160 kB invisible tax that never shows up in a one-call comparison.
+### Atomicity
+- Serena's cross-file operations (rename, move) are atomic — all files updated or none.
+- Built-in multi-file edits are sequential — a failure mid-chain leaves an inconsistent state (recoverable via `git checkout`).
 
-**Intermediate output survives.** The overview I pulled at the start of this evaluation, the reference list for `Collector`, the type hierarchy for `BaseCollector`, and the signature table for `_collect` all remain valid now that I'm writing the report — I never had to regenerate them. A workflow based on line numbers would have had to regenerate its intermediate output after each of the ~15 edits I applied and reverted during the experiments.
+### Semantic queries vs text search
+- `find_referencing_symbols` returns code-level references categorized by type. Grep returns all textual mentions.
+- `type_hierarchy` returns transitive sub/supertypes. No built-in equivalent without iterative search.
 
-**Verdict (§6):** session-level efficiency scales with mutation rate; the more edits you plan, the more decisively symbolic addressing wins, and the effect is invisible on any single-call benchmark.
+### External dependency lookup
+- Serena: Available via IDE index, no environment setup needed. Can retrieve symbol docs and location.
+- Built-in: Requires working Python environment, correct venv, and manual file discovery. More powerful when available (full source), but higher setup cost.
 
----
-
-## §7. Capabilities with no built-in equivalent
-
-1. **Cross-file atomic refactorings with automatic import maintenance.** `move` cleaned up an unused import in the source file as a side effect of moving the last user of that import. Built-ins have no equivalent — you'd have to notice. **Value: rare but high — this is the kind of cleanup that bit-rots across a large refactor.**
-
-2. **Resolution of third-party symbols from a usage site.** `find_declaration` + `find_symbol(search_deps=True)` reach into `site-packages` and `.pyi` stubs for the exact class used at a given line of code. **Value: a few times per session, saves 3–4 calls each.**
-
-3. **Transitive type hierarchy including external supertypes.** `type_hierarchy` returns sub- and super-chains in one call and crosses module boundaries and stub files. No text-search sequence can reproduce this in O(1). **Value: once or twice per unfamiliar codebase; near zero once you know it.**
-
-4. **Containing-symbol metadata on reference queries.** `find_referencing_symbols` returns each reference with its enclosing function/class name, making the result a navigation map rather than a line list. **Value: every time you need to understand *how* a symbol is used, not just *where*.**
-
-5. **Enforced safe-delete with usage-list refusal.** `safe_delete` refuses to remove a symbol that still has usages and returns the usage list. Built-ins cannot refuse — `Edit` applies whatever you send it. **Value: rare but prevents the worst-class mistake.**
-
-**Verdict (§7):** the capability deltas are real but concentrated in lower-frequency tasks; the one that shows up across *every* editing session is (1.5) — symbolic addressing as a property of the *editing* tools themselves, which I'm treating as the Tier-A efficiency win in §1 rather than a separate capability here.
+**Verdict:** Serena provides stronger correctness guarantees for symbol-level operations (scope, atomicity, semantic precision); built-in tools are reliable for text-level operations with the caveat that scope disambiguation requires manual effort.
 
 ---
 
-## §8. Where built-ins remain the right default
+## 6. Workflow Effects Across a Session
 
-- **Small anchored edits (≤ ~10 lines).** Task 7a: Edit's payload is ~10× smaller than `replace_symbol_body` for a one-line change because it sends only the two anchors, not the whole body. Frequency: extremely high — typo fixes, constant changes, error-message tweaks, single-line bug fixes. **Probably 30–50% of daily edits.**
+### Compound advantages
+- **Exploration → Edit without position re-acquisition**: Serena's overview tools produce name paths that are directly usable as edit targets. The built-in path produces line numbers (from Grep) that are consumed by Read — but after an edit, those line numbers are stale. In a typical explore-edit-explore-edit cycle, Serena's name paths remain valid throughout while built-in line numbers must be re-acquired after each edit. Over 3 explore+edit cycles, this saves ~3–6 intermediate Grep/Read calls.
+- **Chained edits without re-reads**: Name-path stability means no re-reads between edits to the same file. For N edits, this saves up to N-1 Read calls. Edit's text matching partially avoids this (if old_strings stay unique), but the upstream discovery steps (Grep line numbers, Read offsets) still go stale.
+- **Cross-file refactoring**: When a rename or move is part of a larger change, doing it atomically avoids the need to manually track "which files still need updating."
 
-- **Free-text search for strings, log messages, magic constants, URLs.** Task 20: `Grep` is the only tool that can find a bare string across the repo. Serena's symbolic search expects an identifier, not a phrase. **Frequency: multiple times per session.**
+### Diminishing returns
+- For purely exploratory sessions (reading code, no edits), Serena's advantage is modest — `Grep` and `Read` are nearly as fast for navigation, and Serena's structured output doesn't save many calls.
+- For sessions dominated by small text edits (config changes, log message tweaks), Serena adds no value.
 
-- **Non-code files** — changelogs, READMEs, YAML configs, notebooks. Task 19: `Read` is the tool. **Frequency: occasional but universal.**
+### Neutral findings
+- Both toolsets require similar total calls for single-file work. The difference is ~1 call per operation.
+- Output quality for code review (reading diffs, understanding changes) is identical — both require `git diff`.
 
-- **Doc and docstring sweeps after a code-level rename.** Serena's `rename_in_comments=True` catches Sphinx cross-references (verified in Task 10), but if your documentation lives outside of Python docstrings — `.md`, `.rst`, `.ipynb` — a text-based `Grep` sweep is the complementary step, not a Serena failure. **Frequency: every cross-file rename that touches a public API.**
-
-- **Single-file renames of distinctive identifiers.** Task 9: `Edit replace_all=true` is effectively tied with semantic rename; either works. **Frequency: common.**
-
-- **Quick one-shot explorations where you don't plan to edit the target.** If the workflow is "look at one function, answer a question, move on," `Read offset/limit` and `Grep` are as fast as semantic tools and don't require any address to be stable beyond the current call.
-
-These cases are not rare — collectively they probably cover more than half of the calls in a typical session, which is exactly why §1's weighting puts the quiet "addressing stability" win above the spectacular "cross-file refactoring" wins: the former touches every session, the latter touches a handful per week.
-
-**Verdict (§8):** built-ins are the right default for small edits, free-text search, non-code files, and docstring sweeps — roughly half of daily editing work.
+**Verdict:** Serena's advantages compound across multi-step refactoring sessions where each operation feeds into the next; for read-heavy or small-edit sessions, the advantage is marginal.
 
 ---
 
-## §9. Usage rule for a developer with both toolsets
+## 7. Unique Capabilities (No Practical Built-In Equivalent)
 
-Per-task decision rule, in priority order:
+1. **Atomic cross-file rename** — 1 call, all imports and usages updated, all-or-nothing. No built-in equivalent without scripting a multi-step chain. Frequency: moderate (refactoring sessions). Impact: high (saves 5–10 calls, eliminates partial-update risk).
 
-1. **Small edit (≤ ~10 lines), known text anchor** → `Edit`. Payload is ~10× smaller than symbolic body replacement at this size.
-2. **Medium or larger body rewrite, or structural insert** → `replace_symbol_body` / `insert_after_symbol`. 2–3× payload cut plus stable addressing for the next edit.
-3. **Cross-file rename, move, or delete of a symbol** → `rename` / `move` / `safe_delete`, then a complementary `Grep` sweep of `.md`/`.rst`/`.ipynb` for any text-only references. The semantic tool covers code and Python docstrings in one atomic step; the Grep sweep handles external docs.
-4. **Find callers of a class/function** → `find_referencing_symbols`.
-5. **Find any mention of a name across the repo including docs** → `Grep`.
-6. **Navigate into third-party library source** → `find_declaration` with a regex anchored at the use site, or `find_symbol(search_deps=True)`.
-7. **Understand a type hierarchy** → `type_hierarchy`.
-8. **Understand an unfamiliar file's structure** → `get_symbols_overview(depth=1)` for classes + methods, then `find_symbol(include_body=True)` for the methods you actually want to read.
-9. **Chained edits to one file** → address every edit by `name_path`; do not mix in line-number or large-text-anchor edits unless you plan to re-Read before each one.
-10. **Free-text search, non-code files, small single-line tweaks** → built-ins.
+2. **Atomic cross-file move** (symbol or file) with import rewriting — includes adding necessary imports to the target module. Frequency: low-to-moderate. Impact: very high per occurrence (saves 8–12 calls, handles import dependency graph).
 
-**Verdict (§9):** Edit for small changes, symbolic body replacement for larger ones, semantic multi-file refactoring tools with a Grep doc-sweep on top, Grep/Read for text and non-code; the one habit that matters most is defaulting to name-path addressing whenever you expect more than one edit to the same file.
+3. **Type hierarchy traversal** — transitive supertypes and subtypes in 1 call. Built-in requires iterative Grep with manual transitive closure. Frequency: low. Impact: moderate (saves 3–5 calls).
+
+4. **Safe delete with usage check** — reports all usages before deleting, with option to propagate. Built-in requires Grep + manual verification. Frequency: low. Impact: moderate (safety check is the value).
+
+5. **External dependency symbol lookup** via IDE index — no Python environment needed. Frequency: moderate. Impact: moderate (avoids environment setup friction).
+
+**Verdict:** Serena provides 3–5 capabilities with no practical built-in equivalent, concentrated in cross-file refactoring and semantic navigation.
+
+---
+
+## 8. Tasks Outside Serena's Scope (Built-In Only)
+
+- **Non-code file operations**: Reading/editing config files, docs, changelogs, notebooks → `Read`/`Edit`/`Write`
+- **Free-text search**: Finding log strings, URLs, magic constants → `Grep`
+- **Shell operations**: Running tests, builds, git commands, package management → `Bash`
+- **File creation**: New files from scratch → `Write`
+- **Glob-based file discovery**: Finding files by pattern → `Glob`
+- **Broad codebase search**: When you don't know what you're looking for → `Grep` with regex
+
+Estimated share of daily work: These tasks constitute roughly 40–60% of a typical coding session (reading docs, running tests, searching for patterns, editing config). Serena's augmentation covers the remaining 40–60% where code-level semantic operations apply.
+
+**Verdict:** Built-in tools handle roughly half of daily work that falls entirely outside Serena's scope; Serena augments the code-centric other half.
+
+---
+
+## 9. Practical Usage Rule
+
+| Task type | Use |
+|---|---|
+| Cross-file rename, move, delete | Serena (unique capability) |
+| Understanding class hierarchy or symbol relationships | Serena (1 call vs. iterative search) |
+| Getting a structural overview of a large file | Serena (richer structure) or Grep (simpler, faster) |
+| Reading a specific method body by name | Serena (direct) or Grep+Read (2 calls) |
+| Small edit (1–5 lines inside a method) | Edit (less payload) |
+| Full method rewrite | Serena `replace_symbol_body` (less payload, no re-read) |
+| Single-file rename of a unique identifier | Edit with `replace_all` (equivalent) |
+| Non-code files, config, docs | Built-in `Read`/`Edit` |
+| Text search, pattern matching | Built-in `Grep` |
+| Anything involving shell, git, tests | Built-in `Bash` |
+| External dependency inspection | Serena (no env setup needed) |
+
+**Verdict:** Use Serena for cross-file refactoring and semantic navigation; use built-ins for text-level edits, non-code files, and shell operations; for single-file code edits, choose based on edit size (Edit for small, Serena for full-body rewrites).
