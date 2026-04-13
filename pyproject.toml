@@ -53,6 +53,11 @@ dependencies = [
   "cryptography==46.0.7",
   "regex==2026.2.28",
   "pythonnet==3.1.0-rc0 ; sys_platform == 'win32'",
+  # Cloud sync (EXPERIMENTAL): S3/R2 via boto3, Azure via azure-storage-blob.
+  # azure-storage-blob is lazy-imported inside serena.cloud_sync.providers.azure
+  # so users on R2/S3 don't pay the import cost until they actively select Azure.
+  "boto3==1.40.54",
+  "azure-storage-blob==12.26.0",
 ]
 
 

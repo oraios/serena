@@ -1162,9 +1162,13 @@ _config = SerenaConfigCommands()
 _tools = ToolCommands()
 _prompts = PromptCommands()
 
+# Import the cloud-sync group lazily-compatible: the module itself only pulls
+# boto3 when a subcommand actually builds a provider (see factory.py).
+from serena.cloud_sync.cli import cloud_sync_group as _cloud_sync  # noqa: E402
+
 # Expose so we can use this as an entrypoint
 top_level = TopLevelCommands()
 
 # needed for the help script to work - register all subcommands to the top-level group
-for subgroup in (_mode, _context, _project, _config, _tools, _prompts):
+for subgroup in (_mode, _context, _project, _config, _tools, _prompts, _cloud_sync):
     top_level.add_command(subgroup)

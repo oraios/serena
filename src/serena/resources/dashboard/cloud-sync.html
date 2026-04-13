@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serena Cloud Sync</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="serena-icon-32.png">
+    <link rel="stylesheet" href="dashboard.css">
+    <link rel="stylesheet" href="cloud-sync.css">
+    <script src="jquery.min.js"></script>
+</head>
+<body>
+<div id="frame">
+    <header class="header">
+        <div class="header-left">
+            <div class="logo-container">
+                <img class="theme-aware-img" src="serena-logo.svg" alt="Serena">
+            </div>
+            <h1>Cloud Sync <span class="experimental-badge">EXPERIMENTAL</span></h1>
+        </div>
+        <nav class="header-nav">
+            <a href="/dashboard/">&larr; Dashboard</a>
+        </nav>
+    </header>
+
+    <main class="cs-main">
+        <section class="cs-card">
+            <h2>Provider</h2>
+            <label>Active provider
+                <select id="cs-provider">
+                    <option value="r2">Cloudflare R2</option>
+                    <option value="s3">Amazon S3 (or S3-compatible)</option>
+                    <option value="azure">Azure Blob Storage</option>
+                </select>
+            </label>
+            <label>Root prefix
+                <input id="cs-root-prefix" type="text" placeholder="serena-sync/">
+            </label>
+        </section>
+
+        <section class="cs-card cs-provider-r2">
+            <h2>R2 credentials</h2>
+            <label>Account ID <input id="cs-r2-account" type="text" autocomplete="off"></label>
+            <label>Access key ID <input id="cs-r2-akid" type="text" autocomplete="off"></label>
+            <label>Secret access key <input id="cs-r2-secret" type="password" autocomplete="off"></label>
+            <label>Bucket <input id="cs-r2-bucket" type="text" autocomplete="off"></label>
+            <label>Endpoint URL <small>(optional — derived from account ID if blank)</small>
+                <input id="cs-r2-endpoint" type="text" autocomplete="off">
+            </label>
+        </section>
+
+        <section class="cs-card cs-provider-s3" hidden>
+            <h2>S3 credentials</h2>
+            <label>Access key ID <input id="cs-s3-akid" type="text" autocomplete="off"></label>
+            <label>Secret access key <input id="cs-s3-secret" type="password" autocomplete="off"></label>
+            <label>Bucket <input id="cs-s3-bucket" type="text" autocomplete="off"></label>
+            <label>Region <input id="cs-s3-region" type="text" value="us-east-1" autocomplete="off"></label>
+            <label>Endpoint URL <small>(optional — for MinIO / Ceph / SeaweedFS)</small>
+                <input id="cs-s3-endpoint" type="text" autocomplete="off">
+            </label>
+        </section>
+
+        <section class="cs-card cs-provider-azure" hidden>
+            <h2>Azure credentials</h2>
+            <label>Storage account <input id="cs-az-account" type="text" autocomplete="off"></label>
+            <label>Account key <input id="cs-az-key" type="password" autocomplete="off"></label>
+            <label>Container <input id="cs-az-container" type="text" autocomplete="off"></label>
+            <label>Endpoint suffix <input id="cs-az-suffix" type="text" value="core.windows.net" autocomplete="off"></label>
+        </section>
+
+        <section class="cs-actions">
+            <button id="cs-save">Save</button>
+            <button id="cs-test">Test connection</button>
+            <span class="cs-env-path" id="cs-env-path"></span>
+        </section>
+
+        <section class="cs-card">
+            <h2>Sync</h2>
+            <label class="cs-inline">
+                <input type="checkbox" id="cs-include-local-yml">
+                Include <code>project.local.yml</code>
+                <small>may contain machine-specific values</small>
+            </label>
+            <label class="cs-inline">
+                <input type="checkbox" id="cs-byte-compare">
+                Paranoid byte-by-byte compare
+            </label>
+            <div class="cs-actions">
+                <button id="cs-plan-push">Dry-run Push</button>
+                <button id="cs-plan-pull">Dry-run Pull</button>
+                <button id="cs-push" class="primary">Push</button>
+                <button id="cs-pull" class="primary">Pull</button>
+            </div>
+            <p class="cs-hint">
+                Dry-run shows what would change. <b>Push</b> and <b>Pull</b> run
+                the plan; divergent files are preserved, never overwritten.
+            </p>
+        </section>
+
+        <section class="cs-card">
+            <h2>Status</h2>
+            <div id="cs-status-cards"></div>
+            <pre id="cs-plan-output"></pre>
+        </section>
+    </main>
+</div>
+
+<script src="cloud-sync.js"></script>
+</body>
+</html>

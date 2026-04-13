@@ -150,6 +150,14 @@ class SerenaDashboardAPI:
         self._loaded_news: dict[str, str] = {}
         self._news_ready = threading.Event()
         self._setup_routes()
+        # Register the cloud-sync API blueprint (EXPERIMENTAL). Import is deferred
+        # so that boto3 and azure-storage-blob are pulled in lazily only when a
+        # user actually opens the Cloud Sync panel or calls the CLI.
+        try:
+            from serena.cloud_sync.dashboard_routes import bp as _cloud_sync_bp
+            self._app.register_blueprint(_cloud_sync_bp)
+        except Exception as _exc:  # pragma: no cover - defensive
+            log.warning("cloud_sync blueprint not registered: %s", _exc)
         # Fetch remote news in background on startup (non-blocking)
         threading.Thread(target=self._fetch_news, daemon=True).start()
 

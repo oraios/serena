@@ -1,0 +1,151 @@
+.experimental-badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 6px;
+    background: var(--log-warning, #FF8C00);
+    color: #fff;
+    border-radius: 3px;
+    vertical-align: middle;
+    margin-left: 8px;
+}
+
+.cs-main {
+    max-width: 800px;
+    margin: 20px auto;
+    padding: 0 20px;
+}
+
+.cs-card {
+    background: var(--bg-secondary, #fff);
+    border: 1px solid var(--border-color, #ddd);
+    border-radius: var(--border-radius, 5px);
+    padding: 16px 20px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow, 0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.cs-card h2 {
+    margin: 0 0 12px;
+    font-size: 16px;
+    color: var(--text-primary, #000);
+}
+
+.cs-card label {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 13px;
+    color: var(--text-secondary, #333);
+}
+
+.cs-card label small {
+    color: var(--text-muted, #666);
+    font-weight: normal;
+    margin-left: 4px;
+}
+
+.cs-card input[type="text"],
+.cs-card input[type="password"],
+.cs-card select {
+    display: block;
+    width: 100%;
+    padding: 6px 8px;
+    margin-top: 4px;
+    border: 1px solid var(--border-color, #ddd);
+    border-radius: 3px;
+    font-size: 13px;
+    background: var(--bg-primary, #f5f5f5);
+    color: var(--text-primary, #000);
+    box-sizing: border-box;
+}
+
+.cs-inline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.cs-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 12px;
+}
+
+.cs-actions button {
+    padding: 6px 12px;
+    border: 1px solid var(--border-color, #ddd);
+    background: var(--bg-primary, #f5f5f5);
+    color: var(--text-primary, #000);
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.cs-actions button:hover {
+    background: var(--btn-hover, #dca662);
+    color: #fff;
+}
+
+.cs-actions button.primary {
+    background: var(--btn-primary, #eaa45d);
+    color: #fff;
+    border-color: var(--btn-primary, #eaa45d);
+}
+
+.cs-actions button:disabled {
+    background: var(--btn-disabled, #6c757d);
+    color: #ccc;
+    cursor: not-allowed;
+}
+
+.cs-env-path {
+    font-size: 11px;
+    color: var(--text-muted, #666);
+    font-family: monospace;
+}
+
+.cs-hint {
+    font-size: 12px;
+    color: var(--text-muted, #666);
+    margin: 8px 0 0;
+}
+
+#cs-status-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+#cs-status-cards .card {
+    background: var(--bg-primary, #f5f5f5);
+    border: 1px solid var(--border-color, #ddd);
+    padding: 10px;
+    border-radius: 4px;
+    text-align: center;
+}
+
+#cs-status-cards .card .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-muted, #666);
+}
+
+#cs-status-cards .card .value {
+    font-size: 22px;
+    font-weight: bold;
+    color: var(--text-primary, #000);
+}
+
+#cs-plan-output {
+    max-height: 350px;
+    overflow: auto;
+    background: var(--bg-primary, #f5f5f5);
+    border: 1px solid var(--border-color, #ddd);
+    padding: 10px;
+    font-size: 11px;
+    font-family: monospace;
+    white-space: pre-wrap;
+}
