@@ -1,46 +1,26 @@
-# Evaluation
+# Methodology
 
-In this section we describe how we evaluate the performance of Serena's tools.
+In this section we describe the methodology we applied in evaluating the performance of Serena's tools.
 
 The evaluation measures the **concrete delta** that Serena's tools provide on top of an agent's
 built-in capabilities (file reads, text edits, grep, shell, etc.).
 Rather than a simple thumbs-up/thumbs-down, it produces a detailed, evidence-based report
 covering capabilities, efficiency and reliability.
 
-## Why Not Benchmarks?
-
-Standard coding benchmarks (SWE-bench, HumanEval, etc.) measure an agent's ability to solve
-predefined tasks with a known correct answer. They are valuable for comparing models and agents,
-but they are a poor fit for evaluating a **tool augmentation layer** like Serena for several reasons:
-
-- **Benchmarks don't reflect real usage patterns.** Benchmark tasks are typically small, self-contained
-  problems that can be solved by reading and editing a handful of files. They rarely exercise the
-  workflows where Serena's tools shine — cross-file refactoring, navigating large codebases by symbol
-  structure, chaining multiple edits with stable addressing, or querying type hierarchies and
-  external dependencies. A benchmark score would mostly measure performance on tasks where Serena
-  is not expected to help.
-- **Results would not generalise to the user's project.** Serena's value depends on the codebase
-  (size, language, complexity), the agent (model, built-in tools), and the client harness
-  (Claude Code, Codex, IDE plugins, etc.). A fixed benchmark on a fixed codebase with a fixed
-  agent tells you little about what Serena would add to *your* setup.
-- **Predefined tasks bias the measurement.** Choosing specific tasks to evaluate inevitably
-  introduces selection bias — we would end up picking tasks that either favour or disfavour Serena.
-  We wanted an evaluation that systematically covers the full surface area of Serena's capabilities
-  without cherry-picking.
-
 ## Design Goals
 
-Instead of benchmarks, we designed an evaluation methodology with three goals:
+We designed an evaluation methodology with three goals:
 
-1. **Reproducible by any user, on any project, with any agent.**
+1. **Generality.** The evaluation mechanism should be broadly applicable and repeatable by any user, on any project, with any agent.
    The evaluation is a single prompt that you give to your agent of choice, pointed at your codebase
    of choice, in your client of choice. This means the results directly reflect the value Serena
    would add to your actual workflow — not to an artificial benchmark setup. There is nothing to
    install, configure, or script beyond what you already have.
 
 2. **The agent evaluates itself.**
-   We deliberately let the AI agent be both the executor and the evaluator. This may seem
-   counterintuitive, but it is the right design choice: the agent is the actual end user of the
+   We deliberately let the AI agent be both the executor and the evaluator.
+   Since most evaluations are strictly quantitative, this may seem unusual, but it is a reasonable choice:
+   The agent is the actual end user of the
    tools, so it is in the best position to judge whether a semantic tool improves its workflow
    compared to its built-in alternatives. It can measure call counts, payload sizes, and
    prerequisite steps from direct experience rather than from proxy metrics. It also avoids the
@@ -48,7 +28,7 @@ Instead of benchmarks, we designed an evaluation methodology with three goals:
    simply uses them and reports what it observes.
 
 3. **Comprehensive and unbiased by design.**
-   Rather than selecting specific tasks, the prompt defines **task categories** that systematically
+   Rather than selecting specific tasks, the prompt defines *task categories* that systematically
    span Serena's capabilities: codebase understanding, single-file edits of varying sizes, multi-file
    refactoring, reliability properties, and workflow effects. The agent picks concrete instances
    from the codebase at hand, performs each task using both toolsets side by side, and classifies
@@ -58,7 +38,7 @@ Instead of benchmarks, we designed an evaluation methodology with three goals:
 
 ## Method
 
-We give an AI coding agent a single, detailed [evaluation prompt](010_evaluation-prompt) in a one-shot session.
+We give an AI coding agent a single, detailed [evaluation prompt](020_prompts/010_evaluation-prompt.md) in a one-shot session.
 The prompt instructs the agent to perform approximately 20 hands-on tasks across five areas:
 
 1. **Codebase understanding** — structural overviews, targeted symbol retrieval, reference finding, type hierarchies, and external dependency lookup.
@@ -72,29 +52,15 @@ tools and its own built-in tools), applies real edits verified via `git diff`, a
 payload sizes and prerequisite steps. Edits are reverted after each experiment to keep the working tree clean.
 
 The resulting report classifies each finding into one of three categories:
-**(a)** tasks where Serena adds capability,
-**(b)** tasks where Serena applies but offers no improvement, and
-**(c)** tasks outside Serena's scope.
+
+* **(a)** tasks where Serena adds capability,
+* **(b)** tasks where Serena applies but offers no improvement, and
+* **(c)** tasks outside Serena's scope.
+
 Only category (b) constitutes a neutral or negative finding; category (c) is context, not a finding.
 
-After the evaluation, a separate [follow-up prompt](011_followup-summary-prompt) asks the agent for a
+After the evaluation, a separate [follow-up prompt](020_prompts/020_summary-prompt.md) asks the agent for a
 one-sentence, user-facing recommendation — the quotes shown on the [main page](https://github.com/oraios/serena).
-
-## Results
-
-We performed evaluations using popular AI coding agents in representative scenarios — different
-agents, different programming languages, and different codebases — to show that the results are
-not specific to a single setup.
-
-All evaluations were conducted using the **JetBrains-powered version** of Serena, as it is the
-more powerful backend with a broader set of refactoring and navigation capabilities. The
-evaluation can easily be repeated with the LSP-based backend to assess its subset of capabilities.
-
-- [Claude Code (Opus 4.6) on a large Python codebase](results/010_cc_on_tianshou-serena-evaluation) — tianshou, a reinforcement learning library (~26K lines).
-- [Codex (GPT 5.4) on a Java codebase](results/020_codex_on_jbplugin-serena-evaluation) — the Serena JetBrains plugin itself.
-
-You can run your own evaluation on a project of your choice by reusing our
-[evaluation prompt](010_evaluation-prompt) or adapting it to your needs.
 
 ## Assessment of the Methodology
 
@@ -144,14 +110,12 @@ One thing to watch for is whether agents that are less capable than Opus 4.6 or 
 meaningful evaluations — the prompt is quite demanding. But that is a question about the agent, not
 about the method.
 
-## Prompt Fairness
+### Prompt Fairness
 
-We put significant effort in crafting an unbiased, fair and objective evaluation prompt.
-The only "biased" aspects are some sentences about misuse of tools, which we consider irrelevant for the purpose of evaluation
-(sufficiently intelligent models use the tools correctly).
-Here is what Opus 4.6 thinks about our prompt:
+We put significant effort into crafting an unbiased, fair evaluation prompt.
+To assess the prompt's fairness, we asked Claude Opus 4.6 to evaluate the prompt itself.
 
-**Q**:
+**Prompt**:
 > The attached prompt is designed to evaluate the additive value of Serena as an augmentation layer on top of built-in tools 
 > (not to compare two competing alternatives). 
 > Is the methodology suitable for that goal, or does it introduce bias that would distort the measurement of what Serena adds? 
@@ -160,12 +124,37 @@ Here is what Opus 4.6 thinks about our prompt:
 > Do not question the validity of this assumption in your evaluation of the prompt. 
 > Give a brief answer, maximally two sentences.
 > 
-> \<Evalution prompt pasted here\>
+> \<evaluation prompt pasted here\>
 
-**Opus' Answer**:
+**Claude Opus' Answer**:
 > "The methodology is well-suited to its stated goal: by explicitly scoping to correct use, treating Serena as an
 > augmentation layer rather than a competitor, and classifying out-of-scope tasks as context rather than negative
 > findings, it avoids the most common biases that would distort a delta measurement. The one risk is that the "correct-use
 > rule" could subtly favor Serena by preemptively filtering out any scenario where its tools underperform — but the prompt
 > mitigates this by requiring category (b) findings (applies but no improvement) and explicitly demanding negative deltas
 > be reported, so the bias is acknowledged and structurally counterbalanced."
+
+According to Claude, the only "biased" aspects are some sentences about misuse of tools, which we consider irrelevant for the purpose of evaluation
+(sufficiently intelligent models use the tools correctly).
+
+
+## Why Not Benchmarks?
+
+Standard coding benchmarks (SWE-bench, HumanEval, etc.) measure an agent's ability to solve
+predefined tasks with a known correct answer. They are valuable for comparing models and agents,
+but they are a poor fit for evaluating a **tool augmentation layer** like Serena for several reasons:
+
+- **Benchmarks don't reflect real usage patterns.** Benchmark tasks are typically small, self-contained
+  problems that can be solved by reading and editing a handful of files. They rarely exercise the
+  workflows where Serena's tools shine — cross-file refactoring, navigating large codebases by symbol
+  structure, chaining multiple edits with stable addressing, or querying type hierarchies and
+  external dependencies. A benchmark score would mostly measure performance on tasks where Serena
+  is not expected to help.
+- **Results would not generalise to the user's project.** Serena's value depends on the codebase
+  (size, language, complexity), the agent (model, built-in tools), and the client harness
+  (Claude Code, Codex, IDE plugins, etc.). A fixed benchmark on a fixed codebase with a fixed
+  agent tells you little about what Serena would add to *your* setup.
+- **Predefined tasks bias the measurement.** Choosing specific tasks to evaluate inevitably
+  introduces selection bias — we would end up picking tasks that either favour or disfavour Serena.
+  We wanted an evaluation that systematically covers the full surface area of Serena's capabilities
+  without cherry-picking.
