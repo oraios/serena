@@ -151,8 +151,7 @@ class CursorManager:
             cursor_id = self._generate_cursor_id()
         elif cursor_id in self._cursors:
             raise ValueError(
-                f"Cursor '{cursor_id}' already exists. Close it first or use a different ID. "
-                f"Active cursors: {list(self._cursors.keys())}"
+                f"Cursor '{cursor_id}' already exists. Close it first or use a different ID. Active cursors: {list(self._cursors.keys())}"
             )
 
         state = CursorState(

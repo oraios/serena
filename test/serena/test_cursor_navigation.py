@@ -448,8 +448,7 @@ class TestCursorToolsIntegration:
         start_tool = python_serena_agent.get_tool(CursorStartTool)
         configure_tool = python_serena_agent.get_tool(CursorConfigureTool)
 
-        start_tool.apply(name_path="User", cursor_id="inherit-test",
-                         relative_path=os.path.join("test_repo", "models.py"))
+        start_tool.apply(name_path="User", cursor_id="inherit-test", relative_path=os.path.join("test_repo", "models.py"))
 
         # Configure to only show inheritance edges
         result = configure_tool.apply(
