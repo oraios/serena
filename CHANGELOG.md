@@ -5,6 +5,9 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Support environment variable `SERENA_USAGE_REPORTING` (set to `false` to disable usage reporting)
 
+* Language Servers:
+  - Add mSL (mIRC Scripting Language) support (custom pygls-based language server; symbols, references, definitions)
+
 # 1.1.1
 
 * General:
@@ -15,6 +18,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Language Servers:
   - Fix Dart LSP returning only symbol name as body instead of full method body.
+
 
 # 1.1.0
 

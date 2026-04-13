@@ -244,6 +244,19 @@ filecache = [
 ]
 
 [[package]]
+name = "cattrs"
+version = "26.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "attrs" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a0/ec/ba18945e7d6e55a58364d9fb2e46049c1c2998b3d805f19b703f14e81057/cattrs-26.1.0.tar.gz", hash = "sha256:fa239e0f0ec0715ba34852ce813986dfed1e12117e209b816ab87401271cdd40", size = 495672, upload-time = "2026-02-18T22:15:19.406Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/80/56/60547f7801b97c67e97491dc3d9ade9fbccbd0325058fd3dfcb2f5d98d90/cattrs-26.1.0-py3-none-any.whl", hash = "sha256:d1e0804c42639494d469d08d4f26d6b9de9b8ab26b446db7b5f8c2e97f7c3096", size = 73054, upload-time = "2026-02-18T22:15:17.958Z" },
+]
+
+[[package]]
 name = "certifi"
 version = "2026.2.25"
 source = { registry = "https://pypi.org/simple" }
@@ -1292,6 +1305,19 @@ wheels = [
 ]
 
 [[package]]
+name = "lsprotocol"
+version = "2025.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "attrs" },
+    { name = "cattrs" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e9/26/67b84e6ec1402f0e6764ef3d2a0aaf9a79522cc1d37738f4e5bb0b21521a/lsprotocol-2025.0.0.tar.gz", hash = "sha256:e879da2b9301e82cfc3e60d805630487ac2f7ab17492f4f5ba5aaba94fe56c29", size = 74896, upload-time = "2025-06-17T21:30:18.156Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7b/f0/92f2d609d6642b5f30cb50a885d2bf1483301c69d5786286500d15651ef2/lsprotocol-2025.0.0-py3-none-any.whl", hash = "sha256:f9d78f25221f2a60eaa4a96d3b4ffae011b107537facee61d3da3313880995c7", size = 76250, upload-time = "2025-06-17T21:30:19.455Z" },
+]
+
+[[package]]
 name = "markdown-it-py"
 version = "3.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2144,6 +2170,20 @@ wheels = [
 ]
 
 [[package]]
+name = "pygls"
+version = "2.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "attrs" },
+    { name = "cattrs" },
+    { name = "lsprotocol" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/da/2e/7bbe061d175c0baddde8fc9edb908a4c31ba5d9165b8c68e3439c3a9f138/pygls-2.1.1.tar.gz", hash = "sha256:1da03ba9053201bb337dcdd8d121df70feb2a91e1a0dcc74de5da79755b1a201", size = 55091, upload-time = "2026-03-25T11:19:10.541Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fd/1a/208293b6c350f5abea6941d5606080d4a492644052504f5312e5de30a902/pygls-2.1.1-py3-none-any.whl", hash = "sha256:510a6dea2476177230c7d851125e5948efdf3fdb9ebfd8543fc434972f8faed4", size = 68975, upload-time = "2026-03-25T11:19:11.374Z" },
+]
+
+[[package]]
 name = "pygments"
 version = "2.19.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2924,12 +2964,14 @@ dependencies = [
     { name = "fortls" },
     { name = "jinja2" },
     { name = "joblib" },
+    { name = "lsprotocol" },
     { name = "mcp" },
     { name = "oraios-pywebview" },
     { name = "overrides" },
     { name = "pathspec" },
     { name = "psutil" },
     { name = "pydantic" },
+    { name = "pygls" },
     { name = "pyright" },
     { name = "pystray" },
     { name = "python-dotenv" },
@@ -2998,6 +3040,7 @@ requires-dist = [
     { name = "jinja2", marker = "extra == 'dev'", specifier = "==3.1.6" },
     { name = "joblib", specifier = "==1.5.1" },
     { name = "jupyter-book", marker = "extra == 'dev'", specifier = "==1.0.4.post1" },
+    { name = "lsprotocol", specifier = "==2025.0.0" },
     { name = "mcp", specifier = "==1.26.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==1.17.0" },
     { name = "nbconvert", marker = "extra == 'dev'", specifier = "==7.17.0" },
@@ -3009,6 +3052,7 @@ requires-dist = [
     { name = "psutil", specifier = "==7.0.0" },
     { name = "pyasn1", marker = "extra == 'dev'", specifier = "==0.6.3" },
     { name = "pydantic", specifier = "==2.12.5" },
+    { name = "pygls", specifier = "==2.1.1" },
     { name = "pyinstrument", marker = "extra == 'dev'", specifier = "==5.1.1" },
     { name = "pyjwt", marker = "extra == 'dev'", specifier = "==2.12.0" },
     { name = "pyright", specifier = "==1.1.403" },
