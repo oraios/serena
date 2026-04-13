@@ -54,6 +54,7 @@ from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
 
 if TYPE_CHECKING:
+    from serena.cursor import CursorManager
     from serena.gui_log_viewer import GuiLogViewer
 
 log = logging.getLogger(__name__)
@@ -528,6 +529,18 @@ class SerenaAgent:
         active_project = self.get_active_project_or_raise()
         return active_project.get_language_server_manager_or_raise()
 
+    def get_cursor_manager(self) -> "CursorManager":
+        """Get or create the CursorManager for cursor-based code navigation."""
+        from serena.cursor import CursorManager
+
+        cursor_mgr: CursorManager | None = getattr(self, "_cursor_manager", None)
+        if cursor_mgr is None:
+            project = self.get_active_project_or_raise()
+            project.get_language_server_manager_or_raise()  # validate LSP is available
+            cursor_mgr = CursorManager(project)
+            self._cursor_manager = cursor_mgr  # type: ignore[assignment]
+        return cursor_mgr
+
     def get_log_inspection_instructions(self) -> str:
         if self.serena_config.web_dashboard:
             return f"Live logs can be inspected via the dashboard at {self.get_dashboard_url()}"
@@ -832,6 +845,7 @@ class SerenaAgent:
             self._active_project.shutdown()
 
         self._active_project = project
+        self._cursor_manager = None  # type: ignore[assignment]  # reset cursor manager on project switch
         project.set_agent(self)
 
         if update_active_modes:

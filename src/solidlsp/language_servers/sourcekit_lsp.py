@@ -47,7 +47,10 @@ class SourceKitLSP(SolidLanguageServer):
                 run_env = {**os.environ, **env_override} if env_override else None
                 result = subprocess.run(
                     ["xcrun", "--find", "sourcekit-lsp"],
-                    capture_output=True, text=True, check=False, timeout=10,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=10,
                     env=run_env,
                 )
                 if result.returncode == 0:
@@ -91,9 +94,7 @@ class SourceKitLSP(SolidLanguageServer):
         cmd = [sourcekit_path, "--scratch-path", scratch_path]
         log.info(f"sourcekit-lsp path: {sourcekit_path}, scratch path: {scratch_path}")
 
-        super().__init__(
-            config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "swift", solidlsp_settings
-        )
+        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "swift", solidlsp_settings)
         self.request_id = 0
         self._did_sleep_before_requesting_references = False
         self._initialization_timestamp: float | None = None
