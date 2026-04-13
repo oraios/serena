@@ -51,15 +51,16 @@ class SerenaMCPRequestContext:
 
 
 class SerenaFastMCPTool(FastMCPTool):
-    def __init__(self, tool: Tool, openai_tool_compatible: bool):
+    def __init__(self, tool: Tool, openai_tool_compatible: bool, structured_output: bool | None):
         """
         :param tool: the Serena tool
         :param openai_tool_compatible: whether to process the tool schema to be compatible with OpenAI tools
             (doesn't accept integer, needs number instead, etc.). This allows using Serena MCP within Codex.
+        :param structured_output: whether to use structured output for the tool (None = auto)
         """
         func_name = tool.get_name()
         func_doc = tool.get_apply_docstring() or ""
-        func_arg_metadata = tool.get_apply_fn_metadata()
+        func_arg_metadata = tool.get_apply_fn_metadata(structured_output=structured_output)
         is_async = False
         parameters = func_arg_metadata.arg_model.model_json_schema()
         if openai_tool_compatible:
@@ -275,27 +276,34 @@ class SerenaMCPFactory:
         return walk(s)
 
     @staticmethod
-    def make_mcp_tool(tool: Tool, openai_tool_compatible: bool = True) -> SerenaFastMCPTool:
+    def make_mcp_tool(tool: Tool, openai_tool_compatible: bool = True, structured_output: bool | None = None) -> SerenaFastMCPTool:
         """
         Creates an MCP tool from a Serena Tool instance.
 
         :param tool: the Serena Tool instance to convert.
         :param openai_tool_compatible: whether to process the tool schema to be compatible with OpenAI tools
             (doesn't accept integer, needs number instead, etc.). This allows using Serena MCP within codex.
+        :param structured_output: whether to use structured output for the tool (None = auto)
         """
-        return SerenaFastMCPTool(tool, openai_tool_compatible)
+        return SerenaFastMCPTool(tool, openai_tool_compatible=openai_tool_compatible, structured_output=structured_output)
 
     def _iter_tools(self) -> Iterator[Tool]:
         assert self.agent is not None
         yield from self.agent.get_exposed_tool_instances()
 
     # noinspection PyProtectedMember
-    def _set_mcp_tools(self, mcp: FastMCP, openai_tool_compatible: bool = False) -> None:
-        """Update the tools in the MCP server"""
+    def _set_mcp_tools(self, mcp: FastMCP, openai_tool_compatible: bool, structured_output: bool | None) -> None:
+        """
+        Update the tools in the MCP server
+
+        :param mcp: The MCP server to update
+        :param openai_tool_compatible: whether to process the tool schema to be compatible with OpenAI tools
+        :param structured_output: whether to use structured output for the tools (None = auto)
+        """
         if mcp is not None:
             mcp._tool_manager._tools = {}
             for tool in self._iter_tools():
-                mcp_tool = self.make_mcp_tool(tool, openai_tool_compatible=openai_tool_compatible)
+                mcp_tool = self.make_mcp_tool(tool, openai_tool_compatible=openai_tool_compatible, structured_output=structured_output)
                 mcp._tool_manager._tools[tool.get_name()] = mcp_tool
             log.info(f"Starting MCP server with {len(mcp._tool_manager._tools)} tools: {list(mcp._tool_manager._tools.keys())}")
 
@@ -389,7 +397,9 @@ class SerenaMCPFactory:
         :param mcp_server: the MCP server instance to configure
         """
         openai_tool_compatible = self.context.name in ["chatgpt", "codex", "oaicompat-agent"]
-        self._set_mcp_tools(mcp_server, openai_tool_compatible=openai_tool_compatible)
+        assert self.agent is not None
+        context = self.agent.get_context()
+        self._set_mcp_tools(mcp_server, openai_tool_compatible=openai_tool_compatible, structured_output=context.structured_tool_output)
         log.info("MCP server lifetime setup complete")
         try:
             yield

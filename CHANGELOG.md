@@ -22,6 +22,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Make tool call errors surface explicitly as errors at the MCP protocol level
   - Fix: a registered project whose root directory was deleted while Serena was already running could break
     `activate_project`/project lookup, raising `FileNotFoundError` in `RegisteredProject.matches_root_path`
+  - Allow structured tool output to be configured on a per-context basis, disabling it for Claude Code
+    (which does not correctly unpack structured output) #1042
 
 * Language Servers:
   - C/C++ (clangd): add Unreal Engine 5 fixture and tests verifying that reflection-macro
