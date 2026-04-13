@@ -16,3 +16,6 @@ tool_description_overrides: {}
 # concrete configuration, and other tools are excluded completely, allowing the set of tools to be minimal.
 # The `activate_project` tool will, therefore, be disabled in this case, as project switching is not allowed.
 single_project: false
+
+# whether to make MCP tools return structured output (null = auto-detect, true = always, false = never)
+structured_tool_output: null

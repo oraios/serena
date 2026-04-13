@@ -202,12 +202,12 @@ class Tool(Component):
         """Gets the docstring for the tool application, used by the MCP server."""
         return self.get_apply_docstring_from_cls()
 
-    def get_apply_fn_metadata(self) -> FuncMetadata:
+    def get_apply_fn_metadata(self, structured_output: bool | None = None) -> FuncMetadata:
         """Gets the metadata for the tool application function, used by the MCP server."""
-        return self.get_apply_fn_metadata_from_cls()
+        return self.get_apply_fn_metadata_from_cls(structured_output=structured_output)
 
     @classmethod
-    def get_apply_fn_metadata_from_cls(cls) -> FuncMetadata:
+    def get_apply_fn_metadata_from_cls(cls, structured_output: bool | None = None) -> FuncMetadata:
         """Get the metadata for the apply method from the class (static metadata).
         Needed for creating MCP tools in a separate process without running into serialization issues.
         """
@@ -220,7 +220,7 @@ class Tool(Component):
             if apply_fn is None:
                 raise AttributeError(f"apply method not defined in {cls}. Did you forget to implement it?")
 
-        return func_metadata(apply_fn, skip_names=["self", "cls"])
+        return func_metadata(apply_fn, skip_names=["self", "cls"], structured_output=structured_output)
 
     def _log_tool_application(self, frame: Any) -> None:
         params = {}

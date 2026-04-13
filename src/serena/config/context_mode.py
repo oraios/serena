@@ -169,6 +169,11 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
     The `activate_project` tool will, therefore, be disabled in this case, as project switching is not allowed.
     """
 
+    structured_tool_output: bool | None = None
+    """
+    whether to use structured output for tools (None = auto)
+    """
+
     def _tostring_includes(self) -> list[str]:
         return ["name"]
 

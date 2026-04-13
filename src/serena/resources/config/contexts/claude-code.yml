@@ -30,3 +30,7 @@ tool_description_overrides: {}
 # Tools explicitly disabled by the project will not be available at all.
 # The `activate_project` tool is always disabled in this case, as project switching cannot be allowed.
 single_project: true
+
+# Claude Code has a bug (it does not unpack structured tool output, causing a lot of unnecessary escaping
+# owing to the wrapped structure), so we disable it here.
+structured_tool_output: false
