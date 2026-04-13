@@ -216,7 +216,7 @@ tmp/
 .vscode/
 
 # Claude settings
-.claude/settings.local.json
+/.claude
 
 # Elixir
 /test/resources/repos/elixir/test_repo/deps

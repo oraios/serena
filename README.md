@@ -7,9 +7,9 @@
     Serena is the IDE for your coding agent.
 </h3>
 
-Gitignore<div align="center">
-[![][license-shield]][license-link]
-[![][discord-shield]][discord-link]
+<div align="center">
+  <a href="https://discord.com/invite/cVUNQmnV4r"><img src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&labelColor=0a0e14&logo=discord&logoColor=5865F2" alt="discord"></a>
+  <a href="https://github.com/oraios/serena/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-b0e8ff?style=flat-square&labelColor=0a0e14" alt="license"></a>
 </div>
 <br>
 
@@ -17,7 +17,7 @@ Gitignore<div align="center">
 * Serena provides essential **semantic code retrieval, editing and refactoring tools** that are akin to an IDE's capabilities,
   operating at the symbol level and exploiting relational structure.
 * It integrates with any client/LLM via the model context protocol (**MCP**).
-
+  
 Serena's **agent-first tool design** involves robust high-level abstractions, distinguishing it from
 approaches that rely on low-level concepts like line numbers or primitive search patterns.
 
@@ -25,26 +25,8 @@ Practically, this means that your agent operates **faster, more efficiently and 
 more complex codebases.
 
 > [!IMPORTANT]
-> Don't install Serena via an MCP or plugin marketplace! They contain outdated and suboptimal installation commands. Instead, follow our [Quick Start](#quick-start) instructions.
-
-<br>
-<div align="center">
-[How Serena Works](#how-serena-works) · [Programming Language Support](#programming-language-support--semantic-analysis-capabilities) · [Features](#features) · [Serena in Action](#serena-in-action) · [Quick Start](#quick-start) · [User Guide](#user-guide) · [Acknowledgements](#acknowledgements)
-</div>
-
-## What Our "End Users" Say
-
-Our end users are essentially AI agents, so we asked each of them to compare Serena's tools against their own inbuilt capabilities. Here is what they had to say:
-
-<br>
-<div align="center">
-
-[Claude Code](#quick-start) · [GitHub Copilot](#the-palace) · [Codex](#aaak-dialect-experimental)
-
-</div>
-<br>
-
-Your agent deserves the best coding tools, give them Serena!
+> Do not install Serena via an MCP or plugin marketplace! They contain outdated and suboptimal installation commands. 
+> Instead, follow our [Quick Start](#quick-start) instructions.
 
 ## How Serena Works
 
@@ -250,9 +232,3 @@ A significant part of Serena, especially support for various languages, was cont
 We are very grateful for the many contributors who made this possible and who played an important role in making Serena
 what it is today.
 
-
-<!-- Link Definitions -->
-[license-shield]: https://img.shields.io/badge/license-MIT-b0e8ff?style=flat-square&labelColor=0a0e14
-[license-link]: https://github.com/oraios/serena/main/LICENSE
-[discord-shield]: https://img.shields.io/badge/discord-join-5865F2?style=flat-square&labelColor=0a0e14&logo=discord&logoColor=5865F2
-[discord-link]: https://discord.com/invite/cVUNQmnV4r

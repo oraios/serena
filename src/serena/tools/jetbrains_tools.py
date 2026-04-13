@@ -512,16 +512,33 @@ class JetBrainsRenameTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
     Renames a symbol, file or directory throughout the codebase using the JetBrains backend.
     """
 
-    def apply(self, relative_path: str, new_name: str, name_path: str | None = None) -> str:
+    def apply(
+        self,
+        relative_path: str,
+        new_name: str,
+        name_path: str | None = None,
+        rename_in_comments: bool = False,
+        rename_in_text_occurrences: bool = False,
+    ) -> str:
         """
         Renames a symbol, file or directory throughout the codebase.
+        Note: renaming in comments/text is on a best-effort basis by the IDE; if the symbol name is non-unique, further
+        verification is recommended.
 
         :param relative_path: if `name_path` is passed, the relative path of the file containing the symbol.
             Otherwise, the path to the directory or file to rename.
         :param new_name: the new name
         :param name_path: the name path of the symbol to rename or None if renaming a file or directory.
+        :param rename_in_comments: whether to also rename occurrences in comments. Default True.
+        :param rename_in_text_occurrences: whether to also rename occurrences in text. Default True.
         :return: a status message
         """
         code_editor = JetBrainsCodeEditor(self.project)
-        result = code_editor.rename_symbol(name_path=name_path, relative_path=relative_path, new_name=new_name)
+        result = code_editor.rename_symbol(
+            name_path=name_path,
+            relative_path=relative_path,
+            new_name=new_name,
+            rename_in_comments=rename_in_comments,
+            rename_in_text_occurrences=rename_in_text_occurrences,
+        )
         return self._to_json(result)

@@ -2,14 +2,29 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Support environment variable `SERENA_USAGE_REPORTING` (set to `false` to disable usage reporting)
+
 * Language Servers:
   - Added mSL (mIRC Scripting Language) support (custom pygls-based language server; symbols, references, definitions)
+
+# 1.1.1
+
+* General:
+  - Enable cert verification for HTTPS request to oraios-software.de #1320
+
+* JetBrains:
+  - `JetBrainsRenameTool` can now also rename occurrences in comments and text.
+
+* Language Servers:
+  - Fix Dart LSP returning only symbol name as body instead of full method body.
+
 
 # 1.1.0
 
 * General:
-  - Add `serena init` and `serena setup` commands
   - **Major**: Add commands for hooks and documentation of recommended setup. Consider setting up the [recommended hooks](https://oraios.github.io/serena/02-usage/030_clients.html) !
+  - Add `serena init` and `serena setup` commands
   - Rework installation instructions, switching to releases on pypi for distribution. Please update your mcp startup commands!
   - Add minimal usage data collection on startup (only Serena version, language backend, OS, dashboard enabled status; no personally identifiable information)
   - Fix: git commit id in Serena version strings was incorrect

@@ -472,7 +472,7 @@ Supported settings:
 | Setting | Default | Description |
 |---|---|---|
 | `ls_path` | managed install or build | Override the `shader-language-server` executable path. |
-| `version` | `1.3.0` | Override the bundled version Serena downloads, or builds from source on macOS, when `ls_path` is not set. |
+| `version` | `1.3.1` | Override the bundled version Serena downloads, or builds from source on macOS, when `ls_path` is not set. |
 
 
 #### Haxe
@@ -863,3 +863,11 @@ prompts:
 ```
 
 It is advisable to use the default prompt as a starting point and modify it to suit your needs.
+
+### Usage Reporting
+
+On startup, Serena reports anonymous usage data to help us understand Serena usage.
+Specifically, we collect the Serena version, the operating system & language backend being used as well as the dashboard enabled status.
+No personally identifiable information or project-specific information is collected.
+
+If you want to opt out of usage reporting, set the environment variable `SERENA_USAGE_REPORTING` to `false`.
