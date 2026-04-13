@@ -1,9 +1,4 @@
 # ---------------------------------------------------------
-# STAGE 0: Fetch Julia Natively (Bypasses OS bugs completely)
-# ---------------------------------------------------------
-FROM julia:1.10.4 AS julia-base
-
-# ---------------------------------------------------------
 # STAGE 1: The Maximal Base (All dependencies baked in)
 # ---------------------------------------------------------
 FROM python:3.11-slim AS base
@@ -28,13 +23,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     r-base \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Install pipx (Removed ensurepath to prevent process ID out of range warnings)
+# 2. Install pipx
 RUN python3 -m pip install --no-cache-dir pipx
 ENV PATH="/root/.local/bin:${PATH}"
 
-# 3. Copy Julia from official image and install Language Server
-COPY --from=julia-base /usr/local/julia /opt/julia
-RUN ln -s /opt/julia/bin/julia /usr/local/bin/julia \
+# 3. Install Julia and patch the executable stack bug using Ubuntu's execstack
+RUN curl -L https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-1.10.4-linux-x86_64.tar.gz -o julia.tar.gz \
+    && mkdir -p /opt/julia \
+    && tar -xzf julia.tar.gz -C /opt/julia --strip-components=1 \
+    && rm julia.tar.gz \
+    && wget http://archive.ubuntu.com/ubuntu/pool/universe/p/prelink/execstack_0.0.20131005-1_amd64.deb \
+    && dpkg -i execstack_0.0.20131005-1_amd64.deb \
+    && rm execstack_0.0.20131005-1_amd64.deb \
+    && execstack -c /opt/julia/lib/julia/libopenlibm.so \
+    && execstack -c /opt/julia/lib/julia/sys.so || true \
+    && ln -s /opt/julia/bin/julia /usr/local/bin/julia \
     && julia -e 'using Pkg; Pkg.add("LanguageServer")'
 
 # 4. Install R Language Server
