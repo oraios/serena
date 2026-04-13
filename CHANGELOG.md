@@ -6,6 +6,12 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Support environment variable `SERENA_USAGE_REPORTING` (set to `false` to disable usage reporting)
   - Extended the list of always ignored directories (by language servers) with common cases.
 
+JetBrains: 
+  - Improve handling of `relative_path` parameter 
+     - Improve its documentation to avoid usage errors
+     - Replace escaped characters in `relative_path` with their unescaped counterparts (&lt; and &gt;)
+     - `FindSymbolTool`: Force `search_deps=True` if `relative_path` pertains to external dependencies.
+
 * Language Servers:
   - Add mSL (mIRC Scripting Language) support (custom pygls-based language server; symbols, references, definitions)
 

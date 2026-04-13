@@ -137,6 +137,11 @@ class Tool(Component):
     _last_tool_call_client_str: str | None = None
     """We can only get the client info from within a tool call. Each tool call will update this variable."""
 
+    @staticmethod
+    def _sanitize_input_param(raw_param: str) -> str:
+        # some clients replace < and > with their escaped html versions, we need to counteract this
+        return raw_param.replace("&lt;", "<").replace("&gt;", ">")
+
     @classmethod
     def set_last_tool_call_client_str(cls, client_str: str | None) -> None:
         cls._last_tool_call_client_str = client_str
