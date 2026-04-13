@@ -75,10 +75,12 @@ RUN apt-get update && apt-get install -y r-base \
     && Rscript -e "install.packages('languageserver', repos='https://cloud.r-project.org')" \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Julia and Julia Language Server
+# Install Julia and Julia Language Server in an isolated directory
 RUN curl -L https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-1.10.0-linux-x86_64.tar.gz -o julia.tar.gz \
-    && tar -xzf julia.tar.gz -C /usr/local --strip-components=1 \
+    && mkdir -p /opt/julia \
+    && tar -xzf julia.tar.gz -C /opt/julia --strip-components=1 \
     && rm julia.tar.gz \
+    && ln -s /opt/julia/bin/julia /usr/local/bin/julia \
     && julia -e 'using Pkg; Pkg.add("LanguageServer")'
 
 # Install Zig and ZLS (Zig Language Server)
