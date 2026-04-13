@@ -576,5 +576,3 @@ jobs:
       - name: Type-checking with mypy
         shell: bash
         run: uv run poe type-check
-      - name: Make sure documentation builds
-        run: uv run poe doc-build
