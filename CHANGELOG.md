@@ -6,7 +6,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Support environment variable `SERENA_USAGE_REPORTING` (set to `false` to disable usage reporting)
 
 * Language Servers:
-  - Added mSL (mIRC Scripting Language) support (custom pygls-based language server; symbols, references, definitions)
+  - Add mSL (mIRC Scripting Language) support (custom pygls-based language server; symbols, references, definitions)
 
 # 1.1.1
 
