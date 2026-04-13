@@ -71,6 +71,10 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         if include_body:
             depth = 0  # ignore user-specified depth if body is requested
 
+        name_path_pattern = self._sanitize_input_param(name_path_pattern)
+        if relative_path:
+            relative_path = self._sanitize_input_param(relative_path)
+
         if relative_path == ".":
             relative_path = None
         with JetBrainsPluginClient.from_project(self.project) as client:
@@ -149,6 +153,7 @@ class JetBrainsMoveTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMa
         :param target_relative_path: the relative path of the target directory or file.
         :param target_parent_name_path: the name path of the target parent symbol.
         """
+        relative_path = self._sanitize_input_param(relative_path)
         with JetBrainsPluginClient.from_project(self.project) as client:
             response_dict = client.move(
                 name_path=name_path,
@@ -187,6 +192,7 @@ class JetBrainsSafeDeleteTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, 
         :param propagate: whether to propagate the deletion to usages of the symbol and also
             remove symbols that become unused after the deletion. Default is False.
         """
+        relative_path = self._sanitize_input_param(relative_path)
         with JetBrainsPluginClient.from_project(self.project) as client:
             response_dict = client.safe_delete(
                 name_path=name_path,
@@ -220,6 +226,7 @@ class JetBrainsInlineSymbol(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, To
         :param keep_definition: whether to keep the original method definition after inlining all call sites.
             May be ignored in some cases (e.g. when inlining a class).
         """
+        relative_path = self._sanitize_input_param(relative_path)
         with JetBrainsPluginClient.from_project(self.project) as client:
             response_dict = client.inline_symbol(
                 name_path=name_path,
@@ -251,6 +258,7 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
         :param relative_path: the relative path to the file containing the symbol (must be a file, not a directory)
         :param max_answer_chars: max characters for the result (-1 for default). If exceeded, no content/a shortened result is returned.
         """
+        relative_path = self._sanitize_input_param(relative_path)
         with JetBrainsPluginClient.from_project(self.project) as client:
             response_dict = client.find_references(
                 name_path=name_path,
@@ -317,6 +325,7 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
         :param max_answer_chars: max characters for the result (-1 for default). If exceeded, no content/a shortened result is returned.
         :param include_file_documentation: whether to include the file's docstring. Default False.
         """
+        relative_path = self._sanitize_input_param(relative_path)
         with JetBrainsPluginClient.from_project(self.project) as client:
             symbol_overview = client.get_symbols_overview(
                 relative_path=relative_path, depth=depth, include_file_documentation=include_file_documentation
@@ -419,6 +428,7 @@ class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptiona
             -1 means the default value from the config will be used.
         :return: Compact JSON with file-grouped hierarchy. Error string if not applicable.
         """
+        relative_path = self._sanitize_input_param(relative_path)
         with JetBrainsPluginClient.from_project(self.project) as client:
             subtypes = None
             supertypes = None
@@ -473,6 +483,9 @@ class JetBrainsFindDeclarationTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptio
             Uses Python syntax with MULTILINE and DOTALL flags enabled.
         :param include_body: whether to include the symbol's body in the result. Default False.
         """
+        relative_path = self._sanitize_input_param(relative_path)
+        regex = self._sanitize_input_param(regex)
+
         editor = self.create_code_editor()
         content = editor.read_file(relative_path)
         coords = find_text_coordinates(content, regex, require_unique=True)
