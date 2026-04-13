@@ -13,12 +13,11 @@ import sys
 import threading
 
 from solidlsp.ls import (
-    LanguageServerDependencyProvider,
-    LanguageServerDependencyProviderSinglePath,
     SolidLanguageServer,
 )
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -37,31 +36,15 @@ class MslLanguageServer(SolidLanguageServer):
         Creates an MslLanguageServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
+        process_launch_info = ProcessLaunchInfo(cmd=[sys.executable, _MSL_LSP_SCRIPT], cwd=repository_root_path)
         super().__init__(
             config,
             repository_root_path,
-            None,
-            "msl",
-            solidlsp_settings,
+            process_launch_info=process_launch_info,
+            language_id="msl",
+            solidlsp_settings=solidlsp_settings,
         )
         self.server_ready = threading.Event()
-
-    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
-        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
-
-    class DependencyProvider(LanguageServerDependencyProviderSinglePath):
-        def _get_or_install_core_dependency(self) -> str:
-            """Return the path to the current Python interpreter.
-
-            The mSL LSP server is shipped as a module alongside this package
-            and uses pygls/lsprotocol which are already installed as Serena
-            dependencies. No additional installation is needed.
-            """
-            assert sys.executable, "Python executable not found"
-            return sys.executable
-
-        def _create_launch_command(self, core_path: str) -> list[str]:
-            return [core_path, _MSL_LSP_SCRIPT]
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
