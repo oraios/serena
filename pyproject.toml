@@ -38,6 +38,8 @@ dependencies = [
   "beautifulsoup4==4.14.2",
   "oraios-pywebview==6.2",
   "pystray==0.19.5",
+  "pygls==2.1.1", # used to implement an msl language server
+  "lsprotocol==2025.0.0",
   # Transitive deps pinned for security (dependabot alerts).
   # Exact pins because uvx installs from git, ignoring the lock file.
   "urllib3==2.6.3",
@@ -48,8 +50,6 @@ dependencies = [
   "cryptography==46.0.7",
   "regex==2026.2.28",
   "pythonnet==3.1.0-rc0 ; sys_platform == 'win32'",
-  "pygls>=2.0.0",
-  "lsprotocol>=2023.0.0",
 ]
 
 
