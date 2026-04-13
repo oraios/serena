@@ -15,6 +15,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * JetBrains:
   - `JetBrainsRenameTool` can now also rename occurrences in comments and text.
+  - Minor fixes in handling `relative_path` for external dependencies.
 
 * Language Servers:
   - Fix Dart LSP returning only symbol name as body instead of full method body.

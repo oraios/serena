@@ -58,6 +58,8 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
             for the case where the symbol is a class, this will return its methods).
             Ignored if `include_body=True`. Default 0.
         :param relative_path: Optional. Restrict search to this file or directory. If not specified, searches entire codebase.
+            Note: for external dependencies, this must be an identifier starting with `<ext` that you have received
+            earlier (don't try to guess!).
         :param include_body: If True, include the symbol's source code. Use judiciously.
         :param include_info: whether to include additional info (hover-like, typically including docstring and signature),
             about the symbol.
