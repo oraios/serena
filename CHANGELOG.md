@@ -7,7 +7,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Extended the list of always ignored directories (by language servers) with common cases.
 
 JetBrains: 
-  - Minor fixes in handling `relative_path` for external dependencies.
+  - Improve handling of `relative_path` parameter 
+     - Improve its documentation to avoid usage errors
+     - Replace escaped characters in `relative_path` with their unescaped counterparts (&lt; and &gt;)
+     - `FindSymbolTool`: Force `search_deps=True` if `relative_path` pertains to external dependencies.
 
 * Language Servers:
   - Add mSL (mIRC Scripting Language) support (custom pygls-based language server; symbols, references, definitions)

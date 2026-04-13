@@ -74,11 +74,15 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
             depth = 0  # ignore user-specified depth if body is requested
 
         name_path_pattern = self._sanitize_input_param(name_path_pattern)
+
         if relative_path:
             relative_path = self._sanitize_input_param(relative_path)
-
         if relative_path == ".":
             relative_path = None
+
+        if relative_path is not None and relative_path.startswith(jb.JB_EXTERNAL_FILE_PREFIX):
+            search_deps = True
+
         with JetBrainsPluginClient.from_project(self.project) as client:
             if include_body:
                 include_quick_info = False
