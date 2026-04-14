@@ -23,11 +23,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     r-base \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Install pipx
+# 2. Install pipx (Removed ensurepath to prevent process ID out of range warnings)
 RUN python3 -m pip install --no-cache-dir pipx
 ENV PATH="/root/.local/bin:${PATH}"
 
-# 3. Install Julia and patch the executable stack bug using Ubuntu's execstack
+# 3. Install Julia and patch the executable stack bug
+# Added CPU constraints to prevent GitHub Actions Out-Of-Memory (OOM) freeze
+ENV JULIA_NUM_THREADS=1
+ENV JULIA_CPU_THREADS=1
 RUN curl -L https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-1.10.4-linux-x86_64.tar.gz -o julia.tar.gz \
     && mkdir -p /opt/julia \
     && tar -xzf julia.tar.gz -C /opt/julia --strip-components=1 \
@@ -41,7 +44,8 @@ RUN curl -L https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-1.10.4-l
     && julia -e 'using Pkg; Pkg.add("LanguageServer")'
 
 # 4. Install R Language Server
-RUN Rscript -e "install.packages('languageserver', repos='https://cloud.r-project.org')"
+# Switched to Posit Public Package Manager (Debian 12 Bookworm) for pre-compiled binaries
+RUN Rscript -e "install.packages('languageserver', repos='https://packagemanager.posit.co/cran/__linux__/bookworm/latest')"
 
 # 5. Install Node.js and Elm
 ENV NVM_VERSION=0.40.3
