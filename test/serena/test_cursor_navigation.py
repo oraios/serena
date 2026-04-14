@@ -7,6 +7,7 @@ through SerenaAgent.get_tool() against the Python test repository.
 
 import os
 import re
+from collections.abc import Iterator
 
 import pytest
 
@@ -315,9 +316,9 @@ class TestNeighborSymbol:
 
 
 @pytest.fixture(autouse=True)
-def _cleanup_cursors(python_serena_agent: SerenaAgent) -> None:
+def _cleanup_cursors(python_serena_agent: SerenaAgent) -> Iterator[None]:
     """Close all cursors after each tool integration test."""
-    yield  # type: ignore[misc]
+    yield
     manager = python_serena_agent.get_cursor_manager()
     for cid in list(manager.list_cursors()):
         manager.close_cursor(cid)

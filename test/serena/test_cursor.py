@@ -38,9 +38,9 @@ def _make_file_uri(relative_path: str) -> str:
 def _make_symbol(
     name: str = "MyClass",
     kind_name: str = "Class",
-    rel_path: str = "src/module.py",
-    line: int = 10,
-    col: int = 0,
+    rel_path: str | None = "src/module.py",
+    line: int | None = 10,
+    col: int | None = 0,
     name_path: str | None = None,
     children: list | None = None,
     body: str | None = None,
