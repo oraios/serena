@@ -14,6 +14,7 @@ JetBrains:
 
 * Language Servers:
   - Add mSL (mIRC Scripting Language) support (custom pygls-based language server; symbols, references, definitions)
+  - Fix initialisation issues in Vue language server #1333
 
 # 1.1.1
 
