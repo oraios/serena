@@ -10,6 +10,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: When scanning for `.gitignore` files, the presence of files that could not be made relative 
     to the project root would cause the scan to fail. #1317
 
+Dashboard:
+  - Fix handling of read news, saving each read news entry separately #1338
+
 JetBrains: 
   - Improve handling of `relative_path` parameter 
      - Improve its documentation to avoid usage errors
