@@ -292,6 +292,10 @@ class TopLevelCommands(AutoRegisteringGroup):
                     loop = super().get_event_loop()
                     loop.set_exception_handler(custom_exception_handler)
                     return loop
+                def new_event_loop(self):
+                    loop = super().new_event_loop()
+                    loop.set_exception_handler(custom_exception_handler)
+                    return loop
             asyncio.set_event_loop_policy(CustomEventLoopPolicy())
 
         # Handle --project-from-cwd flag
