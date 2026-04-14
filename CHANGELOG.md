@@ -2,6 +2,8 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+# v1.1.2 (2026-04-14)
+
 * General:
   - Support environment variable `SERENA_USAGE_REPORTING` (set to `false` to disable usage reporting)
   - Extended the list of always ignored directories (by language servers) with common cases.
