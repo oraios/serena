@@ -4,8 +4,7 @@ Unit tests for cursor-based code navigation (CursorManager, CursorState, EdgeTyp
 These tests mock the LSP layer to test cursor logic in isolation.
 """
 
-import os
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -19,7 +18,6 @@ from serena.cursor import (
 )
 from serena.symbol import LanguageServerSymbol, LanguageServerSymbolLocation
 from solidlsp.ls_exceptions import SolidLSPException
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -68,7 +66,7 @@ def _make_manager(project_root: str = "/tmp/test_project") -> CursorManager:
 
 class TestEdgeType:
     def test_all_edge_types_contains_all_members(self):
-        assert ALL_EDGE_TYPES == frozenset(EdgeType)
+        assert frozenset(EdgeType) == ALL_EDGE_TYPES
 
     def test_default_edge_types_subset_of_all(self):
         assert DEFAULT_EDGE_TYPES <= ALL_EDGE_TYPES

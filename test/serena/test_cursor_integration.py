@@ -8,7 +8,6 @@ the full cursor lifecycle: start, navigate, configure, trail, and close.
 import pytest
 
 from serena.cursor import CursorManager, EdgeType
-from serena.symbol import LanguageServerSymbolRetriever
 from solidlsp.ls_config import Language
 from test.conftest import project_with_ls_context
 

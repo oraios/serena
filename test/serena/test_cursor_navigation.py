@@ -156,12 +156,10 @@ class TestCursorMovement:
         state = cursor_manager.get_cursor(cid)
         # Restrict to contains edges to avoid ambiguous substring matches from references
         state.active_edge_types = frozenset({EdgeType.CONTAINS})
-        initial_loc = state.current_location
 
         cursor_manager.move_cursor(cid, "create_item")
-        second_loc = cursor_manager.get_cursor(cid).current_location
 
-        # Go back up to ItemService and then to another method
+        # Close and re-start to get a clean trail for the actual assertion
         cursor_manager.close_cursor(cid)
         cid2, _ = cursor_manager.start_cursor("ItemService", cursor_id="trail2")
         state2 = cursor_manager.get_cursor(cid2)
@@ -353,7 +351,7 @@ class TestCursorToolsIntegration:
     def test_cursor_move_and_history(self, python_serena_agent: SerenaAgent) -> None:
         """cursor_move navigates to a neighbor; cursor_history shows the trail."""
         start_tool = python_serena_agent.get_tool(CursorStartTool)
-        result = start_tool.apply(name_path="UserService", cursor_id="nav-test")
+        start_tool.apply(name_path="UserService", cursor_id="nav-test")
 
         move_tool = python_serena_agent.get_tool(CursorMoveTool)
         move_result = move_tool.apply(cursor_id="nav-test", target_name="create_user")
