@@ -36,8 +36,7 @@ gracefully skip unavailable edges.
 
 ## Tools
 
-Cursor navigation is available through six MCP tools. These tools are **optional** and
-must be enabled in your project configuration.
+Cursor navigation is available through six MCP tools, enabled by default.
 
 ### cursor_start
 Start a new cursor at a symbol. Returns the symbol's neighborhood showing all reachable
@@ -134,7 +133,6 @@ You can have multiple cursors active simultaneously. Each cursor maintains indep
 state (position, trail, edge type configuration). This is useful for comparing different
 parts of the code or maintaining context while exploring a call chain.
 
-## Enabling Cursor Tools
-Cursor tools are optional and not enabled by default. To enable them, ensure your project
-configuration does not exclude them. The tools are marked with `ToolMarkerOptional`, so they
-will appear in the tool list only when explicitly included.
+## Disabling Cursor Tools
+Cursor tools are enabled by default. To disable them, add the cursor tool names to the
+`excluded_tools` list in your project configuration.

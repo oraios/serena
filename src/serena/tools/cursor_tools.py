@@ -6,10 +6,10 @@ using LSP graph edges (containment, references, call hierarchy, type hierarchy).
 """
 
 from serena.cursor import EdgeType
-from serena.tools.tools_base import Tool, ToolMarkerOptional, ToolMarkerSymbolicRead
+from serena.tools.tools_base import Tool, ToolMarkerSymbolicRead
 
 
-class CursorStartTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class CursorStartTool(Tool, ToolMarkerSymbolicRead):
     """
     Start a navigation cursor at a symbol for incremental code exploration.
     The cursor tracks your position and lets you navigate along code relationships
@@ -41,7 +41,7 @@ class CursorStartTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         return manager.format_cursor_view(cid)
 
 
-class CursorMoveTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class CursorMoveTool(Tool, ToolMarkerSymbolicRead):
     """
     Move a navigation cursor to an adjacent symbol. The target should be
     visible in the cursor's current neighborhood (from cursor_start or cursor_look output).
@@ -70,7 +70,7 @@ class CursorMoveTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         return manager.format_cursor_view(cursor_id)
 
 
-class CursorLookTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class CursorLookTool(Tool, ToolMarkerSymbolicRead):
     """
     Look at the neighborhood of the cursor's current position without moving.
     Useful for re-examining the current position after changing edge type configuration.
@@ -87,7 +87,7 @@ class CursorLookTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         return manager.format_cursor_view(cursor_id)
 
 
-class CursorConfigureTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class CursorConfigureTool(Tool, ToolMarkerSymbolicRead):
     """
     Configure which edge types a cursor follows and what information is shown.
     Edge types: contains, references, referenced-by, calls, called-by, inherits, inherited-by.
@@ -129,7 +129,7 @@ class CursorConfigureTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         return manager.format_cursor_view(cursor_id)
 
 
-class CursorHistoryTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class CursorHistoryTool(Tool, ToolMarkerSymbolicRead):
     """
     Show the trail of symbols visited by a cursor, from start to current position.
     """
@@ -145,7 +145,7 @@ class CursorHistoryTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         return manager.format_trail(cursor_id)
 
 
-class CursorCloseTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class CursorCloseTool(Tool, ToolMarkerSymbolicRead):
     """
     Close a navigation cursor and free its resources.
     """
