@@ -7,8 +7,10 @@ SHELL ["/bin/bash", "-c"]
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
+# Prevent apt-get from hanging indefinitely on interactive prompts (like timezone)
+ARG DEBIAN_FRONTEND=noninteractive
+
 # 1. Install ALL system dependencies together
-# Includes R dependencies: pkg-config, libuv1-dev, libxml2-dev, etc.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl build-essential git ssh sudo wget zip unzip \
     sed \
@@ -23,14 +25,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     r-base \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Install pipx (Removed ensurepath to prevent process ID out of range warnings)
+# 2. Install pipx
 RUN python3 -m pip install --no-cache-dir pipx
 ENV PATH="/root/.local/bin:${PATH}"
 
-# 3. Install Julia and patch the executable stack bug
-# Added CPU constraints to prevent GitHub Actions Out-Of-Memory (OOM) freeze
+# 3. Install Julia (Bypass Precompilation Hang)
+# Setting JULIA_PKG_PRECOMPILE_AUTO=0 prevents the silent OOM hang during Docker build
 ENV JULIA_NUM_THREADS=1
 ENV JULIA_CPU_THREADS=1
+ENV JULIA_PKG_PRECOMPILE_AUTO=0
 RUN curl -L https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-1.10.4-linux-x86_64.tar.gz -o julia.tar.gz \
     && mkdir -p /opt/julia \
     && tar -xzf julia.tar.gz -C /opt/julia --strip-components=1 \
@@ -43,8 +46,7 @@ RUN curl -L https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-1.10.4-l
     && ln -s /opt/julia/bin/julia /usr/local/bin/julia \
     && julia -e 'using Pkg; Pkg.add("LanguageServer")'
 
-# 4. Install R Language Server
-# Switched to Posit Public Package Manager (Debian 12 Bookworm) for pre-compiled binaries
+# 4. Install R Language Server (Using Pre-compiled Binaries)
 RUN Rscript -e "install.packages('languageserver', repos='https://packagemanager.posit.co/cran/__linux__/bookworm/latest')"
 
 # 5. Install Node.js and Elm
