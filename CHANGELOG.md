@@ -4,6 +4,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * General:
   - Support `serena --version` CLI command for displaying the current version #1347
+  - Fix: Check for ignored path ignored `.git` folder only at the top level, not in every subdirectory (`Project._is_ignored_relative_path`) #1350
 
 # v1.1.2 (2026-04-14)
 
