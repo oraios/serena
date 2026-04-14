@@ -453,31 +453,35 @@ class SerenaAgent:
         tool_inclusion_definitions.append(serena_config)
         tool_inclusion_definitions.append(context)
 
+        # determine whether we are operating in a single-project context
+        # (i.e. the project that is activated at startup is the only project that will be worked with throughout the session)
+        is_single_project = context.single_project and project is not None
+
         # consider modes
-        # Since modes can be dynamically turned on and off, we don't include their definitions directly,
-        # For the initially active dynamic modes, we make sure that the tools they enable are included.
-        for mode in modes.get_default_modes():
-            tool_inclusion_definitions.append(
-                NamedToolInclusionDefinition(
-                    name=f"InitialDynamicModeInclusions[{mode.name}]", included_optional_tools=mode.included_optional_tools
-                )
-            )
-        # For the base modes, we also apply the tool exclusions, since they apply throughout the entire session
+        # * base modes: These cannot be changed, so they are fully applied
         for base_mode in modes.get_base_modes():
-            tool_inclusion_definitions.append(
-                NamedToolInclusionDefinition(
-                    name=f"BaseMode[{base_mode.name}]",
-                    included_optional_tools=base_mode.included_optional_tools,
-                    excluded_tools=base_mode.excluded_tools,
+            tool_inclusion_definitions.append(base_mode)
+        # * default modes: When not in a single-project context, these modes are dynamic (can later be turned off),
+        #   so we consider only their inclusions (but not their exclusions, because these must not be hard)
+        for mode in modes.get_default_modes():
+            if is_single_project:
+                tool_inclusion_definitions.append(mode)
+            else:
+                # Since modes can be dynamically turned on and off, we don't include their definitions directly,
+                # For the initially active dynamic modes, we make sure that the tools they enable are included.
+                tool_inclusion_definitions.append(
+                    NamedToolInclusionDefinition(
+                        name=f"InitialDynamicModeInclusions[{mode.name}]", included_optional_tools=mode.included_optional_tools
+                    )
                 )
-            )
 
         # When in a single-project context, the agent is assumed to work on a single project, and we thus
         # want to apply that project's tool exclusions/inclusions from the get-go, limiting the set
         # of tools that will be exposed to the client.
         # Furthermore, we disable tools that are only relevant for project activation.
         # So if the project exists, we apply all the aforementioned exclusions.
-        if context.single_project and project is not None:
+        if is_single_project:
+            assert project is not None
             log.info(
                 "Applying tool inclusion/exclusion definitions for single-project context based on project '%s'",
                 project.project_name,

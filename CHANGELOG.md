@@ -5,8 +5,13 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Support environment variable `SERENA_USAGE_REPORTING` (set to `false` to disable usage reporting)
   - Extended the list of always ignored directories (by language servers) with common cases.
+  - Improve exposed toolset: With mode switching no longer being a feature, we now fully apply tool exclusions 
+    defined by modes when in a single-project context (limiting exposed tools to a minimum)
   - Fix: When scanning for `.gitignore` files, the presence of files that could not be made relative 
     to the project root would cause the scan to fail. #1317
+
+Dashboard:
+  - Fix handling of read news, saving each read news entry separately #1338
 
 JetBrains: 
   - Improve handling of `relative_path` parameter 
@@ -18,7 +23,7 @@ JetBrains:
   - Add mSL (mIRC Scripting Language) support (custom pygls-based language server; symbols, references, definitions)
   - Fix initialisation issues in Vue language server #1333
 
-# 1.1.1
+# v1.1.1 (2026-04-12)
 
 * General:
   - Enable cert verification for HTTPS request to oraios-software.de #1320
@@ -30,7 +35,7 @@ JetBrains:
   - Fix Dart LSP returning only symbol name as body instead of full method body.
 
 
-# 1.1.0
+# v1.1.0 (2026-04-11)
 
 * General:
   - **Major**: Add commands for hooks and documentation of recommended setup. Consider setting up the [recommended hooks](https://oraios.github.io/serena/02-usage/030_clients.html) !
@@ -53,7 +58,7 @@ JetBrains:
     Some clients would terminate the MCP server in a way that did not ensure proper termination.
   - Fix: Manual server shutdown triggered by GUI tool/dashboard not cleaning everything up.
 
-# 1.0.0
+# v1.0.0 (2026-04-03)
 
 * General:
     * Add monorepo/multi-language support
@@ -134,7 +139,7 @@ JetBrains:
   * **C/C++ alternate LS (ccls)**: Add experimental, opt-in support for ccls as an alternative backend to clangd. Enable via `cpp_ccls` in project configuration. Requires `ccls` installed and ideally a `compile_commands.json` at repo root.
   * **Add support for Solidity** via the Nomic Foundation `@nomicfoundation/solidity-language-server` (automatically installed via npm)
 
-# 0.1.4
+# v0.1.4 (2025-08-15)
 
 ## Summary
 
@@ -178,7 +183,7 @@ Fixes:
   default shell reconfiguration imposed by Claude Code)
 * Additional wait for initialization in C# language server before requesting references, allowing cross-file references to be found.
 
-# 0.1.3
+# v0.1.3 (2025-07-22)
 
 ## Summary
 

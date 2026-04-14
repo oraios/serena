@@ -83,7 +83,11 @@ class SerenaPaths:
         If a name of a mode matches a name of a mode in SERENAS_OWN_MODES_YAML_DIR,
         the user mode will override the default mode definition.
         """
-        self.news_snippet_id_file: str = os.path.join(self.serena_user_home_dir, "last_read_news_snippet_id.txt")
+        self.news_legacy_last_read_id_file: str = os.path.join(self.serena_user_home_dir, "last_read_news_snippet_id.txt")
+        """
+        file containing the ID of the last read news snippet
+        """
+        self.news_read_items_file: str = os.path.join(self.serena_user_home_dir, "news_read.pkl")
         """
         file containing the ID of the last read news snippet
         """
