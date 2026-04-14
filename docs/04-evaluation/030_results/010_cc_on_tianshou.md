@@ -4,7 +4,7 @@
 **Codebase:** [Tianshou](https://github.com/thu-ml/tianshou) — a Python reinforcement learning library (~26K lines, 43 source files)  
 :::
 
-# Claude Code (Opus)
+# Claude Code (Opus 4.6, medium)
 
 > **One-line summary:** Serena's IDE-backed semantic tools are the single most impactful addition to my toolkit — cross-file renames, moves, and reference lookups that would cost me 8–12 careful, error-prone steps collapse into one atomic call, and I would absolutely ask any developer I work with to set them up.
 
