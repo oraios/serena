@@ -129,7 +129,7 @@ of Serena's tools, either by failing to load them in the beginning or by forgett
 up the hooks as below (or a variation thereof) for optimal performance of Serena in Claude Code.
 
 :::{note}
-While recommended, hooks are an **alpha feature**. Provide feedback via the [GitHub issue tracker](https://github.com/serenadeai/serenade/issues) if you encounter any issues.
+While recommended, hooks are an **alpha feature**. Provide feedback via the [GitHub issue tracker](https://github.com/oraios/serena/issues) if you encounter any issues.
 :::
 
 To set up hooks, add the following to your Claude Code settings file
