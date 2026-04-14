@@ -7,6 +7,7 @@ Provides a stateful cursor that can be positioned on a symbol and moved along LS
 
 import logging
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -461,6 +462,75 @@ class CursorManager:
         lines.append("Use cursor_move to navigate to a neighbor, cursor_look to re-examine.")
 
         return "\n".join(lines)
+
+    def find_symbols(
+        self,
+        name_path_pattern: str,
+        relative_path: str | None = None,
+        include_kinds: Sequence[SymbolKind] | None = None,
+        exclude_kinds: Sequence[SymbolKind] | None = None,
+        substring_matching: bool = False,
+    ) -> list[LanguageServerSymbol]:
+        """
+        Pattern/substring search for symbols. Delegates to the language server symbol retriever
+        (same backend as the old ``find_symbol`` tool).
+        """
+        return self._retriever.find(
+            name_path_pattern,
+            include_kinds=include_kinds,
+            exclude_kinds=exclude_kinds,
+            substring_matching=substring_matching,
+            within_relative_path=relative_path,
+        )
+
+    def register_cursor_at_symbol(
+        self,
+        symbol: LanguageServerSymbol,
+        cursor_id: str | None = None,
+    ) -> tuple[str, CursorState]:
+        """
+        Register a cursor positioned on an already-resolved symbol (e.g. one returned by
+        ``find_symbols``). Used by ``cursor_find`` when the search is unique.
+        """
+        location = symbol.location
+        if cursor_id is None:
+            cursor_id = self._generate_cursor_id()
+        elif cursor_id in self._cursors:
+            raise ValueError(
+                f"Cursor '{cursor_id}' already exists. Close it first or use a different ID. Active cursors: {list(self._cursors.keys())}"
+            )
+        state = CursorState(
+            cursor_id=cursor_id,
+            current_symbol=symbol,
+            current_location=location,
+        )
+        self._cursors[cursor_id] = state
+        return cursor_id, state
+
+    def reanchor_cursor(
+        self,
+        cursor_id: str,
+        name_path: str | None = None,
+        relative_path: str | None = None,
+    ) -> CursorState:
+        """
+        Re-resolve the cursor's current symbol from the language server, after an edit
+        potentially changed line numbers or the symbol's name. The cursor remains on the
+        same logical symbol; its stored position is refreshed.
+
+        :param cursor_id: the cursor to re-anchor
+        :param name_path: override name path (e.g. after a rename); defaults to the current symbol's name path
+        :param relative_path: override file path; defaults to the current cursor location's file
+        :return: the updated cursor state
+        """
+        state = self.get_cursor(cursor_id)
+        resolved_name = name_path if name_path is not None else state.current_symbol.get_name_path()
+        resolved_path = relative_path if relative_path is not None else state.current_location.relative_path
+        retriever = self._retriever
+        symbol = retriever.find_unique(resolved_name, within_relative_path=resolved_path)
+        state.current_symbol = symbol
+        state.current_location = symbol.location
+        return state
 
     def format_trail(self, cursor_id: str) -> str:
         """Format the cursor's visited trail as text."""
