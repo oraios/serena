@@ -5,6 +5,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Support environment variable `SERENA_USAGE_REPORTING` (set to `false` to disable usage reporting)
   - Extended the list of always ignored directories (by language servers) with common cases.
+  - Fix: When scanning for `.gitignore` files, the presence of files that could not be made relative 
+    to the project root would cause the scan to fail. #1317
 
 JetBrains: 
   - Improve handling of `relative_path` parameter 
