@@ -627,3 +627,76 @@ class TestFormatting:
         view = manager.format_cursor_view(cid)
 
         assert "(no neighbors found)" in view
+
+
+# ── CursorManager: find_symbols / register_cursor_at_symbol / reanchor_cursor ──
+
+
+class TestFindAndAnchor:
+    @patch("serena.cursor.LanguageServerSymbolRetriever")
+    def test_find_symbols_delegates_to_retriever(self, mock_retriever_cls):
+        manager = _make_manager()
+        syms = [_make_symbol(name="A"), _make_symbol(name="B")]
+        mock_retriever_cls.return_value.find.return_value = syms
+
+        results = manager.find_symbols("A", relative_path="src/x.py", substring_matching=True)
+
+        assert results == syms
+        mock_retriever_cls.return_value.find.assert_called_once()
+        kwargs = mock_retriever_cls.return_value.find.call_args.kwargs
+        assert kwargs["within_relative_path"] == "src/x.py"
+        assert kwargs["substring_matching"] is True
+
+    @patch("serena.cursor.LanguageServerSymbolRetriever")
+    def test_register_cursor_at_symbol_auto_id(self, mock_retriever_cls):
+        manager = _make_manager()
+        sym = _make_symbol(name="Target", line=3)
+
+        cid, state = manager.register_cursor_at_symbol(sym)
+
+        assert cid == "c1"
+        assert state.cursor_id == "c1"
+        assert state.current_symbol is sym
+        assert state.trail == []
+
+    @patch("serena.cursor.LanguageServerSymbolRetriever")
+    def test_register_cursor_at_symbol_duplicate_id_raises(self, mock_retriever_cls):
+        manager = _make_manager()
+        sym = _make_symbol()
+        manager.register_cursor_at_symbol(sym, cursor_id="dup")
+        with pytest.raises(ValueError, match="already exists"):
+            manager.register_cursor_at_symbol(sym, cursor_id="dup")
+
+    @patch("serena.cursor.LanguageServerSymbolRetriever")
+    def test_reanchor_cursor_refreshes_position(self, mock_retriever_cls):
+        """reanchor_cursor re-resolves the cursor's symbol via the retriever."""
+        manager = _make_manager()
+        orig_sym = _make_symbol(name="Target", line=10, name_path="Module/Target")
+        new_sym = _make_symbol(name="Target", line=15, name_path="Module/Target")
+        mock_retriever_cls.return_value.find_unique.return_value = orig_sym
+
+        cid, _ = manager.start_cursor("Module/Target")
+
+        # After an edit, the symbol moved to line 15
+        mock_retriever_cls.return_value.find_unique.return_value = new_sym
+        state = manager.reanchor_cursor(cid)
+
+        assert state.current_symbol is new_sym
+        assert state.current_location.line == 15
+
+    @patch("serena.cursor.LanguageServerSymbolRetriever")
+    def test_reanchor_cursor_with_new_name(self, mock_retriever_cls):
+        """reanchor_cursor can look up a renamed symbol."""
+        manager = _make_manager()
+        orig_sym = _make_symbol(name="old_name", line=10)
+        renamed_sym = _make_symbol(name="new_name", line=10, name_path="new_name")
+        mock_retriever_cls.return_value.find_unique.return_value = orig_sym
+
+        cid, _ = manager.start_cursor("old_name")
+
+        mock_retriever_cls.return_value.find_unique.return_value = renamed_sym
+        state = manager.reanchor_cursor(cid, name_path="new_name")
+
+        assert state.current_symbol is renamed_sym
+        # Verify the retriever was called with the new name
+        assert mock_retriever_cls.return_value.find_unique.call_args.args == ("new_name",)

@@ -416,13 +416,15 @@ class TestSerenaAgent:
         agent = serena_agent
 
         find_symbol_tool = agent.get_tool(FindSymbolTool)
-        result = find_symbol_tool.apply_ex(
+        # Direct .apply() bypass — FindSymbolTool is marked ToolMarkerOptional so it is
+        # not in the default active set over MCP, but is still exercised as a Python class.
+        result = find_symbol_tool.apply(
             name_path_pattern=name_path,
             depth=0,
-            relative_path=None,
+            relative_path="",
             include_body=False,
-            include_kinds=None,
-            exclude_kinds=None,
+            include_kinds=[],
+            exclude_kinds=[],
             substring_matching=substring_matching,
         )
 
@@ -460,7 +462,8 @@ class TestSerenaAgent:
         agent = serena_agent
 
         find_symbol_tool = agent.get_tool(FindSymbolTool)
-        result = find_symbol_tool.apply_ex(
+        # Direct .apply() — FindSymbolTool is optional over MCP but still tested as a Python class.
+        result = find_symbol_tool.apply(
             name_path_pattern=name_path,
             depth=0,
             substring_matching=True,
@@ -490,7 +493,8 @@ class TestSerenaAgent:
         agent = serena_agent
 
         find_symbol_tool = agent.get_tool(FindSymbolTool)
-        result = find_symbol_tool.apply_ex(
+        # Direct .apply() — FindSymbolTool is optional over MCP but still tested as a Python class.
+        result = find_symbol_tool.apply(
             name_path_pattern=name_path,
             depth=0,
             substring_matching=False,

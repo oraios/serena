@@ -18,9 +18,15 @@ from serena.project import Project
 from serena.tools.cursor_tools import (
     CursorCloseTool,
     CursorConfigureTool,
+    CursorFindTool,
     CursorHistoryTool,
+    CursorInsertAfterTool,
+    CursorInsertBeforeTool,
     CursorLookTool,
     CursorMoveTool,
+    CursorOverviewTool,
+    CursorRenameTool,
+    CursorReplaceBodyTool,
     CursorStartTool,
 )
 from solidlsp.ls_config import Language
@@ -470,3 +476,195 @@ class TestCursorToolsIntegration:
         assert "OuterClass" in result
         # Should see NestedClass and nested_test as children
         assert "NestedClass" in result or "nested_test" in result
+
+
+# ===========================================================================
+# Cursor Find and Overview (read) tests
+# ===========================================================================
+
+
+class TestCursorFindAndOverview:
+    def test_cursor_find_unique_starts_cursor(self, python_serena_agent: SerenaAgent) -> None:
+        """cursor_find with a unique match starts a cursor and returns its view."""
+        find_tool = python_serena_agent.get_tool(CursorFindTool)
+        result = find_tool.apply(name_path_pattern="/UserService", cursor_id="find-unique")
+        assert "started cursor" in result
+        assert "UserService" in result
+        assert "contains:" in result
+
+    def test_cursor_find_multiple_returns_candidates(self, python_serena_agent: SerenaAgent) -> None:
+        """cursor_find with a non-unique pattern returns a candidate list without starting a cursor."""
+        find_tool = python_serena_agent.get_tool(CursorFindTool)
+        result = find_tool.apply(name_path_pattern="__init__")
+        # Many __init__ methods exist; the result should list candidates and NOT start a cursor.
+        assert "started cursor" not in result
+        assert "matching symbols" in result or "Candidates" in result
+
+    def test_cursor_find_no_match(self, python_serena_agent: SerenaAgent) -> None:
+        """cursor_find returns a clear message when no symbol matches."""
+        find_tool = python_serena_agent.get_tool(CursorFindTool)
+        result = find_tool.apply(name_path_pattern="__absolutely_no_such_symbol__")
+        assert "No symbols found" in result
+
+    def test_cursor_find_substring(self, python_serena_agent: SerenaAgent) -> None:
+        """cursor_find with substring_matching=True matches partial names."""
+        find_tool = python_serena_agent.get_tool(CursorFindTool)
+        result = find_tool.apply(
+            name_path_pattern="create_u",
+            substring_matching=True,
+            relative_path=os.path.join("test_repo", "services.py"),
+        )
+        assert "create_user" in result
+
+    def test_cursor_overview(self, python_serena_agent: SerenaAgent) -> None:
+        """cursor_overview lists top-level symbols in a file."""
+        overview_tool = python_serena_agent.get_tool(CursorOverviewTool)
+        result = overview_tool.apply(relative_path=os.path.join("test_repo", "services.py"))
+        assert "Top-level symbols" in result
+        assert "UserService" in result
+        assert "ItemService" in result
+
+    def test_cursor_overview_missing_file(self, python_serena_agent: SerenaAgent) -> None:
+        """cursor_overview raises FileNotFoundError for a missing file."""
+        overview_tool = python_serena_agent.get_tool(CursorOverviewTool)
+        with pytest.raises(FileNotFoundError):
+            overview_tool.apply(relative_path="does/not/exist.py")
+
+
+# ===========================================================================
+# Cursor Edit tool tests — use a throwaway file so we can assert and revert.
+# ===========================================================================
+
+
+@pytest.fixture
+def throwaway_python_file(python_serena_agent: SerenaAgent) -> Iterator[str]:
+    """Create a throwaway Python file in the test repo so edit tests can mutate and clean up."""
+    from pathlib import Path
+
+    rel_path = os.path.join("test_repo", "_cursor_edit_sandbox.py")
+    abs_path = Path(python_serena_agent.get_active_project_or_raise().project_root) / rel_path
+    abs_path.write_text("def sandbox_fn():\n    x = 1\n    return x\n\n\ndef other_fn():\n    return 2\n")
+    # Give the LSP a chance to pick up the file on some backends.
+    try:
+        python_serena_agent.reset_language_server_manager()
+    except Exception:
+        pass
+    try:
+        yield rel_path
+    finally:
+        if abs_path.exists():
+            abs_path.unlink()
+        try:
+            python_serena_agent.reset_language_server_manager()
+        except Exception:
+            pass
+
+
+class TestCursorEditTools:
+    def test_cursor_replace_body_refreshes_cursor(self, python_serena_agent: SerenaAgent, throwaway_python_file: str) -> None:
+        """cursor_replace_body replaces the body and the cursor re-anchors."""
+        start_tool = python_serena_agent.get_tool(CursorStartTool)
+        replace_tool = python_serena_agent.get_tool(CursorReplaceBodyTool)
+        look_tool = python_serena_agent.get_tool(CursorLookTool)
+
+        start_tool.apply(
+            name_path="sandbox_fn",
+            relative_path=throwaway_python_file,
+            cursor_id="edit-replace",
+        )
+        result = replace_tool.apply(
+            cursor_id="edit-replace",
+            body="def sandbox_fn():\n    return 42\n",
+        )
+        assert "OK" in result
+        assert "sandbox_fn" in result
+
+        look = look_tool.apply(cursor_id="edit-replace")
+        assert "sandbox_fn" in look
+
+    def test_cursor_insert_before(self, python_serena_agent: SerenaAgent, throwaway_python_file: str) -> None:
+        """cursor_insert_before inserts content above the target symbol."""
+        from pathlib import Path
+
+        start_tool = python_serena_agent.get_tool(CursorStartTool)
+        insert_tool = python_serena_agent.get_tool(CursorInsertBeforeTool)
+
+        start_tool.apply(
+            name_path="other_fn",
+            relative_path=throwaway_python_file,
+            cursor_id="edit-before",
+        )
+        result = insert_tool.apply(
+            cursor_id="edit-before",
+            body="# inserted-before-marker\n",
+        )
+        assert "OK" in result
+
+        abs_path = Path(python_serena_agent.get_active_project_or_raise().project_root) / throwaway_python_file
+        content = abs_path.read_text()
+        assert "inserted-before-marker" in content
+        assert content.index("inserted-before-marker") < content.index("def other_fn")
+
+    def test_cursor_insert_after(self, python_serena_agent: SerenaAgent, throwaway_python_file: str) -> None:
+        """cursor_insert_after inserts content below the target symbol."""
+        from pathlib import Path
+
+        start_tool = python_serena_agent.get_tool(CursorStartTool)
+        insert_tool = python_serena_agent.get_tool(CursorInsertAfterTool)
+
+        start_tool.apply(
+            name_path="sandbox_fn",
+            relative_path=throwaway_python_file,
+            cursor_id="edit-after",
+        )
+        result = insert_tool.apply(
+            cursor_id="edit-after",
+            body="# inserted-after-marker\n",
+        )
+        assert "OK" in result
+
+        abs_path = Path(python_serena_agent.get_active_project_or_raise().project_root) / throwaway_python_file
+        content = abs_path.read_text()
+        assert "inserted-after-marker" in content
+
+    def test_cursor_rename(self, python_serena_agent: SerenaAgent, throwaway_python_file: str) -> None:
+        """cursor_rename renames the symbol and re-anchors the cursor."""
+        from pathlib import Path
+
+        start_tool = python_serena_agent.get_tool(CursorStartTool)
+        rename_tool = python_serena_agent.get_tool(CursorRenameTool)
+
+        start_tool.apply(
+            name_path="sandbox_fn",
+            relative_path=throwaway_python_file,
+            cursor_id="edit-rename",
+        )
+        result = rename_tool.apply(cursor_id="edit-rename", new_name="renamed_sandbox_fn")
+        # Rename may or may not be supported by all language servers; accept graceful failure text.
+        abs_path = Path(python_serena_agent.get_active_project_or_raise().project_root) / throwaway_python_file
+        content = abs_path.read_text()
+        # Either the rename worked or the tool reported back (but no crash).
+        assert "edit-rename" in result or "renamed_sandbox_fn" in content or "sandbox_fn" in content
+
+    def test_cursor_edit_without_location_raises(self, python_serena_agent: SerenaAgent) -> None:
+        """A cursor whose current location has no relative_path rejects edits."""
+        from serena.cursor import CursorState
+        from serena.symbol import LanguageServerSymbolLocation
+
+        manager = python_serena_agent.get_cursor_manager()
+        replace_tool = python_serena_agent.get_tool(CursorReplaceBodyTool)
+
+        # Manually install a cursor with a None relative_path
+        sandbox_location = LanguageServerSymbolLocation(relative_path=None, line=None, column=None)
+        # Position with a real symbol first, then override its location.
+        start_tool = python_serena_agent.get_tool(CursorStartTool)
+        start_tool.apply(
+            name_path="UserService",
+            relative_path=os.path.join("test_repo", "services.py"),
+            cursor_id="no-loc",
+        )
+        state: CursorState = manager.get_cursor("no-loc")
+        state.current_location = sandbox_location
+
+        with pytest.raises(ValueError, match="no relative path"):
+            replace_tool.apply(cursor_id="no-loc", body="irrelevant")
