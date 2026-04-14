@@ -2,6 +2,9 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Support `serena --version` CLI command for displaying the current version #1347
+
 # v1.1.2 (2026-04-14)
 
 * General:

@@ -139,6 +139,26 @@ class TopLevelCommands(AutoRegisteringGroup):
             "that separate entrypoint for performance reasons, see `serena-hooks --help`. You can run `<command> --help` for more info on each command.",
         )
 
+        # register --version / -V flag
+        self.params.append(
+            click.Option(
+                ["--version", "-V"],
+                is_flag=True,
+                expose_value=False,
+                is_eager=True,
+                callback=self._print_version,
+                help="Show the version and exit.",
+            )
+        )
+
+    @staticmethod
+    def _print_version(ctx: click.Context, _param: click.Parameter, value: bool) -> None:
+        """Print version string and exit if the flag is set."""
+        if not value:
+            return
+        click.echo(f"Serena {serena_version()}")
+        ctx.exit()
+
     @staticmethod
     @click.command(
         "init",
