@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from enum import Enum
 from typing import Any
 
-from ruamel.yaml import YAML, CommentToken, StreamMark
+from ruamel.yaml import YAML, CommentedSeq, CommentToken, StreamMark
 from ruamel.yaml.comments import CommentedMap
 
 from serena.constants import SERENA_FILE_ENCODING
@@ -122,6 +122,20 @@ def normalise_yaml_comments(commented_map: CommentedMap, comment_normalisation: 
                 first_token.value = first_token.value[1:]
         return token_list
 
+    def remove_nested_comments() -> None:
+        """
+        Removes nested comments, particularly of sequences, which incorrectly capture comments
+        that are actually intended for top-level keys.
+        """
+        for key in commented_map.keys():
+            entry = commented_map[key]
+            if isinstance(entry, CommentedSeq):
+                items = entry.ca.items
+                if isinstance(items, dict):
+                    items_keys = list(items.keys())
+                    for i in items_keys:
+                        items[i] = [None] * 4
+
     match comment_normalisation:
         case YamlCommentNormalisation.NONE:
             pass
@@ -176,6 +190,9 @@ def normalise_yaml_comments(commented_map: CommentedMap, comment_normalisation: 
                                     preceding_comment[ITEM_COMMENT_INDEX_BEFORE] = token_list
                                     current_comment[ITEM_COMMENT_INDEX_BEFORE] = None
                     preceding_comment = current_comment
+
+            # remove nested comments, as we assume that only top-level keys are supposed to be commented
+            remove_nested_comments()
         case _:
             raise ValueError(f"Unhandled comment normalisation: {comment_normalisation}")
 
