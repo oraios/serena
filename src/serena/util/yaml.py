@@ -204,7 +204,7 @@ def yaml_comment_entry_is_empty(comment_entry: Any) -> bool:
         return False
 
 
-def transfer_missing_yaml_comments_by_index(
+def transfer_yaml_comments_by_index(
     source: CommentedMap, target: CommentedMap, indices: list[int], forced_update_keys: Sequence[str] = (), force_update_all: bool = False
 ) -> None:
     """
@@ -231,7 +231,7 @@ def transfer_missing_yaml_comments_by_index(
                     target_comment[index] = source_comment[index]
 
 
-def transfer_missing_yaml_comments(
+def transfer_yaml_comments(
     source: CommentedMap,
     target: CommentedMap,
     comment_normalisation: YamlCommentNormalisation,
@@ -251,7 +251,7 @@ def transfer_missing_yaml_comments(
         case YamlCommentNormalisation.NONE:
             pass
         case YamlCommentNormalisation.LEADING | YamlCommentNormalisation.LEADING_WITH_CONVERSION_FROM_TRAILING:
-            transfer_missing_yaml_comments_by_index(
+            transfer_yaml_comments_by_index(
                 source, target, [ITEM_COMMENT_INDEX_BEFORE], forced_update_keys=forced_update_keys, force_update_all=force_update_all
             )
         case _:
