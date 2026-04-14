@@ -367,8 +367,10 @@ Copilot should now show that Serena is running, though you may have to restart i
 
 ## JetBrains Junie
 
-For the Junie plugin in JetBrains IDEs, go to the three dots in the top right corner, 
-then Settings / MCP Settings and add Serena to Junie's global MCP server configuration:
+For the Junie plugin in JetBrains IDEs you can add Serena either to the global configuration in `~/.junie/mcp/mcp.json` 
+or to the project configuration in `<project>/.junie/mcp/mcp.json`. Important, don't add both!
+In both cases the entry should be:
+
 
 ```json
 {
@@ -385,14 +387,19 @@ then Settings / MCP Settings and add Serena to Junie's global MCP server configu
 }
 ```
 
-You will have to prompt Junie to "Activate the current project using serena's activation tool" at the
-start of each session.
+With the global configuration, Serena will be available in all projects. However,
+within the Junie plugin, projects will not be automatically activated in Serena. 
+You may thus have to prompt 
+Junie to "Activate the current project using serena's activation tool" at the start of each session (though some models are
+smart enough to activate the project automatically).
 
-For Junie CLI, add the same setting to `~/.junie/mcp/mcp.json`.
+With the project-scoped configuration, Serena will be available only in that project, and the project will automatically
+be recognized as active by Serena.
+
 
 ## JetBrains AI Assistant
 
-Go to Settings / Tools / AI Assistant / MCP and add a new **global** configuration:
+Go to Settings / Tools / AI Assistant / MCP and enter the following configuration:
 
 ```json
 {
@@ -409,7 +416,8 @@ Go to Settings / Tools / AI Assistant / MCP and add a new **global** configurati
 }
 ```
 
-Then make sure to configure the working directory to be the project root.
+Like for Junie, you have the choice between the global and the project-scoped configuration, 
+with the same trade-off.
 
 ## Antigravity
 
