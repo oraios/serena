@@ -4,6 +4,8 @@ Unit tests for cursor-based code navigation (CursorManager, CursorState, EdgeTyp
 These tests mock the LSP layer to test cursor logic in isolation.
 """
 
+import os
+import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -18,8 +20,19 @@ from serena.cursor import (
 )
 from serena.symbol import LanguageServerSymbol, LanguageServerSymbolLocation
 from solidlsp.ls_exceptions import SolidLSPException
+from solidlsp.ls_utils import PathUtils
+
+# ── Cross-platform test root ────────────────────────────────────────────
+# Use the real temp directory so that file URIs resolve on all platforms
+# (on Windows, /tmp is a UNC path on a different mount than D:).
+_TEST_PROJECT_ROOT = os.path.join(tempfile.gettempdir(), "test_project")
 
 # ── Helpers ──────────────────────────────────────────────────────────────
+
+
+def _make_file_uri(relative_path: str) -> str:
+    """Build a file:// URI for a path relative to the test project root."""
+    return PathUtils.path_to_uri(os.path.join(_TEST_PROJECT_ROOT, relative_path))
 
 
 def _make_symbol(
@@ -50,14 +63,14 @@ def _make_symbol(
     return sym
 
 
-def _make_project(project_root: str = "/tmp/test_project") -> MagicMock:
+def _make_project(project_root: str = _TEST_PROJECT_ROOT) -> MagicMock:
     """Create a minimal mock Project."""
     project = MagicMock()
     project.project_root = project_root
     return project
 
 
-def _make_manager(project_root: str = "/tmp/test_project") -> CursorManager:
+def _make_manager(project_root: str = _TEST_PROJECT_ROOT) -> CursorManager:
     return CursorManager(_make_project(project_root))
 
 
@@ -386,7 +399,7 @@ class TestResolveNeighbors:
                 "to": {
                     "name": "helper",
                     "kind": 12,
-                    "uri": "file:///tmp/test_project/src/utils.py",
+                    "uri": _make_file_uri("src/utils.py"),
                     "selectionRange": {"start": {"line": 5, "character": 0}},
                     "range": {"start": {"line": 5, "character": 0}, "end": {"line": 10, "character": 0}},
                 }
@@ -408,7 +421,7 @@ class TestResolveNeighbors:
                 "from": {
                     "name": "main",
                     "kind": 12,
-                    "uri": "file:///tmp/test_project/src/main.py",
+                    "uri": _make_file_uri("src/main.py"),
                     "selectionRange": {"start": {"line": 1, "character": 0}},
                     "range": {"start": {"line": 1, "character": 0}, "end": {"line": 20, "character": 0}},
                 }
@@ -429,7 +442,7 @@ class TestResolveNeighbors:
             {
                 "name": "BaseClass",
                 "kind": 5,
-                "uri": "file:///tmp/test_project/src/base.py",
+                "uri": _make_file_uri("src/base.py"),
                 "selectionRange": {"start": {"line": 3, "character": 0}},
                 "range": {"start": {"line": 3, "character": 0}, "end": {"line": 30, "character": 0}},
             }
@@ -449,7 +462,7 @@ class TestResolveNeighbors:
             {
                 "name": "ChildClass",
                 "kind": 5,
-                "uri": "file:///tmp/test_project/src/child.py",
+                "uri": _make_file_uri("src/child.py"),
                 "selectionRange": {"start": {"line": 1, "character": 0}},
                 "range": {"start": {"line": 1, "character": 0}, "end": {"line": 15, "character": 0}},
             }
@@ -472,7 +485,7 @@ class TestResolveNeighbors:
                 "to": {
                     "name": "helper",
                     "kind": 12,
-                    "uri": "file:///tmp/test_project/src/utils.py",
+                    "uri": _make_file_uri("src/utils.py"),
                     "selectionRange": {"start": {"line": 5, "character": 0}},
                     "range": {"start": {"line": 5, "character": 0}, "end": {"line": 10, "character": 0}},
                 }
@@ -539,7 +552,7 @@ class TestFormatting:
         view = manager.format_cursor_view(cid)
 
         assert "@ MyClass (Class)" in view
-        assert "src/m.py:11" in view  # 0-indexed line 10 → displayed as 11
+        assert "m.py:11" in view  # 0-indexed line 10 → displayed as 11
         assert f"cursor: {cid}" in view
         assert "trail: 0 steps" in view
 
