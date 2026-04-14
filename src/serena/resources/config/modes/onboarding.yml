@@ -10,6 +10,11 @@ excluded_tools:
   - replace_symbol_body
   - insert_after_symbol
   - insert_before_symbol
+  - rename_symbol
+  - cursor_replace_body
+  - cursor_insert_after
+  - cursor_insert_before
+  - cursor_rename
   - delete_lines
   - replace_lines
   - insert_at_line
