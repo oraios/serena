@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
@@ -185,7 +186,9 @@ def update_changelog(changelog_text: str, new_version: str) -> str:
     unreleased_body = unreleased_section[len(_UNRELEASED_HEADER) :]
     intro, unreleased_entries = split_unreleased_body(unreleased_body)
 
-    updated_section = _UNRELEASED_HEADER + intro + f"# {new_version}\n"
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    updated_section = _UNRELEASED_HEADER + intro + f"# v{new_version} ({date_str})\n"
+
     if unreleased_entries.strip():
         updated_section += "\n" + unreleased_entries.lstrip("\n")
     else:
