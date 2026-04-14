@@ -12,6 +12,7 @@ evaluation can easily be repeated with the LSP-based backend to assess its subse
 
 - [Claude Code (Opus 4.6) on a large Python codebase](010_cc_on_tianshou)
 - [Codex (GPT 5.4) on a Java codebase](020_codex_on_jbplugin)
+- [Copilot CLI (GPT 5.4) on a large, multi-language monorepo](030_copilot_cli_on_ente.md)
 
 You can run your own evaluation on a project of your choice by reusing our
 [evaluation prompt](../020_prompts/010_evaluation-prompt.md).

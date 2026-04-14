@@ -4,7 +4,7 @@
 **Codebase:** Serena JetBrains Plugin (Java)  
 :::
 
-# Codex (GPT-5.4)
+# Codex (GPT-5.4, high)
 
 
 > **One-line summary:** As a coding agent, I would ask my owner to add Serena because it turns fragile text-and-line-number work into precise symbol-aware navigation and

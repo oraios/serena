@@ -1,15 +1,19 @@
 # Evaluation
 
-> **Claude Code (Opus 4.6):** "Serena's IDE-backed semantic tools are the single most impactful addition to my toolkit — cross-file renames, moves, and reference lookups that would cost me 8–12 careful, error-prone steps collapse into one atomic call, and I would absolutely ask any developer I work with to set them up."
+> **Claude Code (Opus 4.6, medium):** "Serena's IDE-backed semantic tools are the single most impactful addition to my toolkit — cross-file renames, moves, and reference lookups that would cost me 8–12 careful, error-prone steps collapse into one atomic call, and I would absolutely ask any developer I work with to set them up."
 
-> **Codex (GPT 5.4):** "As a coding agent, I would ask my owner to add Serena because it turns fragile text-and-line-number work into precise symbol-aware navigation and refactoring, which makes real code changes feel faster, safer, and far less blind."
+> **Codex (GPT 5.4, high):** "As a coding agent, I would ask my owner to add Serena because it turns fragile text-and-line-number work into precise symbol-aware navigation and refactoring, which makes real code changes feel faster, safer, and far less blind."
 
-These are not marketing quotes — they are the agents' own one-sentence verdicts after
-performing hands-on tasks each, using both Serena's tools and their built-in
+> **Codex (GPT 5.4, medium):** "As a coding agent, I’d absolutely ask my owner to add Serena because it makes me noticeably sharper and calmer on
+real code – especially symbol-aware navigation, cross-file refactors, and monorepo dependency jumps – while I still lean
+on built-ins for tiny text edits and non-code work." 
+
+These are not marketing quotes – they are the agents' own one-sentence verdicts after
+performing hands-on tasks, using both Serena's tools and their built-in
 alternatives side by side, on real codebases (large Python library in the case of Claude Code,
 medium-sized Java project in the case of Codex).
 
-Both agents independently converge on the same core finding: Serena's strongest
+Different agents in different settings independently converge on the same core finding: Serena's strongest
 contribution is collapsing multi-file, semantically-aware operations into single atomic
 calls, while built-in tools remain the better choice for small local edits, text search,
 config files, and shell work.
