@@ -7,6 +7,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Check for ignored path ignored `.git` folder only at the top level, not in every subdirectory (`Project._is_ignored_relative_path`) #1350
   - Fix: Duplicate comments in re-saved YAML configuration files #1285
 
+* Dependencies:
+  - `pywebview`: Switch back to official release (new version 6.2) #1253
+
 # v1.1.2 (2026-04-14)
 
 * General:

@@ -1712,28 +1712,6 @@ wheels = [
 ]
 
 [[package]]
-name = "oraios-pywebview"
-version = "6.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "bottle" },
-    { name = "proxy-tools" },
-    { name = "pyobjc-core", marker = "sys_platform == 'darwin'" },
-    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin'" },
-    { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin'" },
-    { name = "pyobjc-framework-security", marker = "sys_platform == 'darwin'" },
-    { name = "pyobjc-framework-uniformtypeidentifiers", marker = "sys_platform == 'darwin'" },
-    { name = "pyobjc-framework-webkit", marker = "sys_platform == 'darwin'" },
-    { name = "pythonnet", marker = "sys_platform == 'win32'" },
-    { name = "qtpy", marker = "sys_platform == 'openbsd6'" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/0d/e4/6820d2a00b42621240762947c9e07d83acbb1251575349472a48fe9b1a9f/oraios_pywebview-6.2.tar.gz", hash = "sha256:2b176547321ff9c289ebb10d5b2423bc8887a4fc730b35a78656de7839e5be37", size = 499560, upload-time = "2026-04-10T15:01:42.363Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/78/76/ff666b5abc3b3ccc35f69d62b27290b75b7ef5ac4beb2c59e8f59f5da5ef/oraios_pywebview-6.2-py3-none-any.whl", hash = "sha256:c5b81d2f6cf4cbfdf3d608d5bc3e76d8f0a732dbdd8567660a9bc9cebdd35b84", size = 512739, upload-time = "2026-04-10T15:01:43.689Z" },
-]
-
-[[package]]
 name = "overrides"
 version = "7.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2475,6 +2453,28 @@ wheels = [
 ]
 
 [[package]]
+name = "pywebview"
+version = "6.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "bottle" },
+    { name = "proxy-tools" },
+    { name = "pyobjc-core", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-security", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-uniformtypeidentifiers", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-webkit", marker = "sys_platform == 'darwin'" },
+    { name = "pythonnet", marker = "sys_platform == 'win32'" },
+    { name = "qtpy", marker = "sys_platform == 'openbsd6'" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c2/5d/a107645b073b80b4010e6fc62594dd58a958267b1b71439e7b89849362c7/pywebview-6.2.tar.gz", hash = "sha256:f51bfd095762fee3eb7821c62fe2c0ddd39c9fecd8f33d51a871113f12f364e1", size = 512668, upload-time = "2026-04-13T08:02:12.187Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9a/1c/78260d06d244d9138b8012eef541679f74e1e2b97e4e9dbf32a842b5b61a/pywebview-6.2-py3-none-any.whl", hash = "sha256:94681a1f456ed217f8a2139a1de612988c0d37cdb30d74d54279438e85572c41", size = 524555, upload-time = "2026-04-13T08:02:04.841Z" },
+]
+
+[[package]]
 name = "pywin32"
 version = "311"
 source = { registry = "https://pypi.org/simple" }
@@ -2966,7 +2966,6 @@ dependencies = [
     { name = "joblib" },
     { name = "lsprotocol" },
     { name = "mcp" },
-    { name = "oraios-pywebview" },
     { name = "overrides" },
     { name = "pathspec" },
     { name = "psutil" },
@@ -2977,6 +2976,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "pythonnet", marker = "sys_platform == 'win32'" },
+    { name = "pywebview" },
     { name = "pyyaml" },
     { name = "regex" },
     { name = "requests" },
@@ -3045,7 +3045,6 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = "==1.17.0" },
     { name = "nbconvert", marker = "extra == 'dev'", specifier = "==7.17.0" },
     { name = "nbsphinx", marker = "extra == 'dev'", specifier = "==0.9.7" },
-    { name = "oraios-pywebview", specifier = "==6.2" },
     { name = "overrides", specifier = "==7.7.0" },
     { name = "pathspec", specifier = "==0.12.1" },
     { name = "poethepoet", marker = "extra == 'dev'", specifier = "==0.36.0" },
@@ -3063,6 +3062,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = "==1.2.1" },
     { name = "python-multipart", specifier = "==0.0.22" },
     { name = "pythonnet", marker = "sys_platform == 'win32'", specifier = "==3.1.0rc0" },
+    { name = "pywebview", specifier = "==6.2" },
     { name = "pyyaml", specifier = "==6.0.2" },
     { name = "regex", specifier = "==2026.2.28" },
     { name = "requests", specifier = "==2.33.0" },
