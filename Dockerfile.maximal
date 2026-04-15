@@ -7,7 +7,7 @@ SHELL ["/bin/bash", "-c"]
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Prevent apt-get from hanging indefinitely on interactive prompts (like timezone)
+# Prevent apt-get from hanging indefinitely on interactive prompts
 ARG DEBIAN_FRONTEND=noninteractive
 
 # 1. Install ALL system dependencies together
@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ruby-full \
     golang-go \
     r-base \
+    opam \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. Install pipx
@@ -30,7 +31,6 @@ RUN python3 -m pip install --no-cache-dir pipx
 ENV PATH="/root/.local/bin:${PATH}"
 
 # 3. Install Julia (Bypass Precompilation Hang)
-# Setting JULIA_PKG_PRECOMPILE_AUTO=0 prevents the silent OOM hang during Docker build
 ENV JULIA_NUM_THREADS=1
 ENV JULIA_CPU_THREADS=1
 ENV JULIA_PKG_PRECOMPILE_AUTO=0
@@ -88,7 +88,7 @@ RUN wget https://releases.hashicorp.com/terraform/1.5.0/terraform_1.5.0_linux_am
     && mv terraform /usr/local/bin/ \
     && rm terraform_1.5.0_linux_amd64.zip
 
-# 12. Install Zig and ZLS (Zig Language Server)
+# 12. Install Zig and ZLS
 RUN wget https://github.com/zigtools/zls/releases/download/0.14.0/zls-x86_64-linux.tar.xz \
     && tar -xf zls-x86_64-linux.tar.xz \
     && mv zls /usr/local/bin/ \
@@ -111,6 +111,13 @@ ENV REGAL_VERSION="0.39.0"
 RUN curl -L -o regal https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Linux_x86_64 \
     && chmod +x regal \
     && mv regal /usr/local/bin/
+
+# 15. Install OCaml, Dune, and OCaml-LSP-Server
+# Disable sandboxing for Docker compatibility
+RUN opam init -a -y --disable-sandboxing \
+    && eval $(opam env) \
+    && opam install -y dune 'ocaml-lsp-server>=1.23.0'
+ENV PATH="/root/.opam/default/bin:${PATH}"
 
 # ---------------------------------------------------------
 # STAGE 2: Serena App Setup
