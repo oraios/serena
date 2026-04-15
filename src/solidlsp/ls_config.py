@@ -60,6 +60,7 @@ class Language(str, Enum):
     Supports .luau files. Configure via .luaurc in the project root.
     """
     NIX = "nix"
+    GLEAM = "gleam"
     ERLANG = "erlang"
     OCAML = "ocaml"
     AL = "al"
@@ -262,6 +263,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.luau")
             case self.NIX:
                 return FilenameMatcher("*.nix")
+            case self.GLEAM:
+                return FilenameMatcher("*.gleam")
             case self.ERLANG:
                 return FilenameMatcher("*.erl", "*.hrl", "*.escript", "*.config", "*.app", "*.app.src")
             case self.OCAML:
@@ -468,6 +471,10 @@ class Language(str, Enum):
 
                 return LuauLanguageServer
 
+            case self.GLEAM:
+                from solidlsp.language_servers.gleam_language_server import GleamLanguageServer
+
+                return GleamLanguageServer
             case self.ERLANG:
                 from solidlsp.language_servers.erlang_language_server import ErlangLanguageServer
 

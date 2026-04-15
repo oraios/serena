@@ -326,6 +326,7 @@ markers = [
   "luau: language server running for Luau",
   "nix: language server running for Nix",
   "dart: language server running for Dart",
+  "gleam: language server running for Gleam",
   "erlang: language server running for Erlang",
   "ocaml: language server running for OCaml and Reason",
   "scala: language server running for Scala",
