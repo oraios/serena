@@ -67,14 +67,20 @@ but an LLM is required to do the actual work, orchestrating tool use.
 Serena can extend the functionality of your existing AI client via the **model context protocol (MCP)**.
 Most modern AI chat clients directly support MCP, including
 * terminal-based clients like Claude Code, Codex, OpenCode, or Gemini-CLI,
-* IDEs and IDE assistant plugins for VSCode, Cursor and JetBrains IDEs,
-* desktop and web clients like Claude Desktop or OpenWebUI.
+* IDEs and IDE assistant plugins for VSCode, Cursor and JetBrains IDEs (Copilot, Junie, JetBrains AI Assistant, etc.),
+* desktop and web clients like Claude Desktop, Codex App, or OpenWebUI.
 
 <img src="resources/serena-block-diagram.svg">
 
 To connect the Serena MCP server to your client, you either
   * provide the client with a launch command that allows it to start the MCP server, or
   * start the Serena MCP server yourself in HTTP mode and provide the client with the URL.
+
+Serena's tools are powered by two alternative language intelligence backends:
+   * With the SolidLSP backend (default), language servers for the selected programming languages will be started
+automatically for your project. 
+   * With the JetBrains backend, the Serena JetBrains plugin must be installed in your IDE and 
+the project you want to work on must open and set up. 
 
 See the [Quick Start](#quick-start) section below for information on how to get started.
 
