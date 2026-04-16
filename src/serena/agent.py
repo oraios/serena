@@ -629,14 +629,24 @@ class SerenaAgent:
 
     @staticmethod
     def _open_dashboard_in_browser(url: str) -> None:
-        # Use a subprocess to avoid any output from webbrowser.open being written to stdout
-        subprocess.Popen(
-            [sys.executable, "-c", f"import webbrowser; webbrowser.open({url!r})"],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=False,
-        )
+        # Use a subprocess to avoid any output from webbrowser.open being written to stdout.
+        # Auto-opening the browser is best-effort: any failure here must be non-fatal, since
+        # this runs inside SerenaAgent.__init__ and a propagating OSError would abort agent
+        # construction and break the MCP handshake (see oraios/serena#1363).
+        try:
+            subprocess.Popen(
+                [sys.executable, "-c", f"import webbrowser; webbrowser.open({url!r})"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=False,
+            )
+        except OSError as e:
+            log.warning(
+                "Failed to auto-open dashboard in browser (%s); dashboard remains accessible at %s",
+                e,
+                url,
+            )
 
     def get_exposed_tool_instances(self) -> list["Tool"]:
         """

@@ -1,5 +1,9 @@
+import logging
 from types import SimpleNamespace
 
+import pytest
+
+from serena.agent import SerenaAgent
 from serena.dashboard import SerenaDashboardAPI
 from solidlsp.ls_config import Language
 
@@ -47,3 +51,19 @@ def test_available_languages_exclude_project_languages():
     assert Language.MARKDOWN.value not in available
     # ensure experimental languages remain available for selection
     assert Language.ANSIBLE.value in available
+
+
+def test_open_dashboard_in_browser_swallows_os_error(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    """`_open_dashboard_in_browser` must never propagate OSError: it runs inside
+    SerenaAgent.__init__ and a fatal here breaks the MCP handshake (see #1363).
+    """
+
+    def _raise(*_args: object, **_kwargs: object) -> None:
+        raise OSError(14, "Bad address")
+
+    monkeypatch.setattr("serena.agent.subprocess.Popen", _raise)
+
+    with caplog.at_level(logging.WARNING, logger="serena.agent"):
+        SerenaAgent._open_dashboard_in_browser("http://localhost:24282/dashboard/")
+
+    assert any("Failed to auto-open dashboard" in record.message and record.levelno == logging.WARNING for record in caplog.records)
