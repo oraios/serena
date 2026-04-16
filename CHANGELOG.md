@@ -10,6 +10,9 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Dependencies:
   - `pywebview`: Switch back to official release (new version 6.2) #1253
 
+* Language Servers:
+  - Fix clangd capability checks to tolerate valid initialize response shape differences and invalidate cached C++ document symbols when clangd/compile commands context changes #1359
+
 # v1.1.2 (2026-04-14)
 
 * General:
