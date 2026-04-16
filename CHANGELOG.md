@@ -10,6 +10,9 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Dependencies:
   - `pywebview`: Switch back to official release (new version 6.2) #1253
 
+* Language Servers:                                                                                                                                                                                                                   
+  - Fix: `rename_symbol` for Vue files now correctly propagates edits to the TypeScript server, enabling cross-file renames in `.vue` files 
+
 # v1.1.2 (2026-04-14)
 
 * General:
