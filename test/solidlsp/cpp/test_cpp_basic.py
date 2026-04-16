@@ -9,12 +9,14 @@ server is not available.
 import os
 import pathlib
 import shutil
+from pathlib import Path
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
+from test.conftest import get_repo_path, start_ls_context
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
@@ -156,3 +158,72 @@ int use_add() {
                 f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
                 pytrace=False,
             )
+
+
+@pytest.mark.cpp
+class TestCppDocumentSymbolCache:
+    def _copy_cpp_fixture(self, tmp_path: Path) -> Path:
+        fixture_path = get_repo_path(Language.CPP)
+        target_path = tmp_path / "test_repo"
+        shutil.copytree(fixture_path, target_path)
+        return target_path
+
+    def test_cache_invalidates_when_clangd_context_changes(self, tmp_path: Path) -> None:
+        repo_path = self._copy_cpp_fixture(tmp_path)
+        ls_settings_alt = {
+            Language.CPP: {
+                "compile_commands_dir": ".serena-alt",
+            }
+        }
+
+        main_cpp = os.path.join("a.cpp")
+
+        def _assert_caches_loaded_and_clean(ls: SolidLanguageServer) -> None:
+            assert ls._raw_document_symbols_cache, "Expected raw document-symbol cache to load from disk"
+            assert ls._document_symbols_cache, "Expected document-symbol cache to load from disk"
+            assert not ls._raw_document_symbols_cache_is_modified
+            assert not ls._document_symbols_cache_is_modified
+
+        def _assert_caches_empty(ls: SolidLanguageServer) -> None:
+            assert ls._raw_document_symbols_cache == {}
+            assert ls._document_symbols_cache == {}
+
+        def _assert_caches_modified(ls: SolidLanguageServer) -> None:
+            assert ls._raw_document_symbols_cache_is_modified
+            assert ls._document_symbols_cache_is_modified
+
+        with start_ls_context(Language.CPP, repo_path=str(repo_path), solidlsp_dir=tmp_path) as ls_default:
+            _ = ls_default.request_document_symbols(main_cpp)
+
+            default_raw_cache_version = ls_default._raw_document_symbols_cache_version()
+            default_doc_cache_version = ls_default._document_symbols_cache_version()
+
+            ls_default.save_cache()
+            cache_dir = ls_default.cache_dir
+            cache_files = [p for p in cache_dir.rglob("*") if p.is_file()]
+            assert cache_files, f"Expected SolidLSP to create cache artifacts under {cache_dir}"
+
+        with start_ls_context(Language.CPP, repo_path=str(repo_path), solidlsp_dir=tmp_path) as ls_default_again:
+            assert ls_default_again.cache_dir == cache_dir
+            _assert_caches_loaded_and_clean(ls_default_again)
+            _ = ls_default_again.request_document_symbols(main_cpp)
+            assert not ls_default_again._raw_document_symbols_cache_is_modified
+            assert not ls_default_again._document_symbols_cache_is_modified
+
+        with start_ls_context(
+            Language.CPP,
+            repo_path=str(repo_path),
+            ls_specific_settings=ls_settings_alt,
+            solidlsp_dir=tmp_path,
+        ) as ls_alt:
+            assert ls_alt.cache_dir == cache_dir
+            alt_raw_cache_version = ls_alt._raw_document_symbols_cache_version()
+            alt_doc_cache_version = ls_alt._document_symbols_cache_version()
+
+            assert alt_raw_cache_version != default_raw_cache_version
+            assert alt_doc_cache_version != default_doc_cache_version
+
+            _assert_caches_empty(ls_alt)
+
+            _ = ls_alt.request_document_symbols(main_cpp)
+            _assert_caches_modified(ls_alt)
