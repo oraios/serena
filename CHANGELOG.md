@@ -7,6 +7,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Check for ignored path ignored `.git` folder only at the top level, not in every subdirectory (`Project._is_ignored_relative_path`) #1350
   - Fix: Duplicate comments in re-saved YAML configuration files #1285
 
+* JetBrains:
+  - `Move` and `SafeDelete` tools: transform empty string to None (counteracts client errors)
+
 * Dependencies:
   - `pywebview`: Switch back to official release (new version 6.2) #1253
 
@@ -20,10 +23,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: When scanning for `.gitignore` files, the presence of files that could not be made relative 
     to the project root would cause the scan to fail. #1317
 
-Dashboard:
+* Dashboard:
   - Fix handling of read news, saving each read news entry separately #1338
 
-JetBrains: 
+* JetBrains: 
   - Improve handling of `relative_path` parameter 
      - Improve its documentation to avoid usage errors
      - Replace escaped characters in `relative_path` with their unescaped counterparts (&lt; and &gt;)

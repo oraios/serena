@@ -159,6 +159,9 @@ class JetBrainsMoveTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMa
         :param target_relative_path: the relative path of the target directory or file.
         :param target_parent_name_path: the name path of the target parent symbol.
         """
+        name_path = name_path or None
+        target_relative_path = target_relative_path or None
+        target_parent_name_path = target_parent_name_path or None
         relative_path = self._sanitize_input_param(relative_path)
         with JetBrainsPluginClient.from_project(self.project) as client:
             response_dict = client.move(
@@ -199,6 +202,7 @@ class JetBrainsSafeDeleteTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, 
             remove symbols that become unused after the deletion. Default is False.
         """
         relative_path = self._sanitize_input_param(relative_path)
+        name_path = name_path or None
         with JetBrainsPluginClient.from_project(self.project) as client:
             response_dict = client.safe_delete(
                 name_path=name_path,
