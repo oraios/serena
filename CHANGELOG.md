@@ -10,8 +10,11 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Dependencies:
   - `pywebview`: Switch back to official release (new version 6.2) #1253
 
+
 * Language Servers:
-  - Fix clangd capability checks to tolerate valid initialize response shape differences and invalidate cached C++ document symbols when clangd/compile commands context changes #1359
+  - Fix: clangd capability checks now tolerate valid initialize response shape differences and invalidate cached C++ document symbols when clangd/compile commands context changes #1359                                                                                                                                                                                                            
+  - Fix: `rename_symbol` for Vue files now correctly propagates edits to the TypeScript server, enabling cross-file renames in `.vue` files 
+
 
 # v1.1.2 (2026-04-14)
 

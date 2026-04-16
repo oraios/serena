@@ -6,6 +6,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from html import escape
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
@@ -391,7 +392,7 @@ class SerenaDashboardAPI:
                 return {
                     "status": "success",
                     "was_cancelled": False,
-                    "message": f"Task with id {request_data.get('task_id')} not found, maybe execution was already finished",
+                    "message": f"Task with id {escape(request_data.get('task_id'))} not found, maybe execution was already finished",
                 }
             except Exception as e:
                 return {"status": "error", "message": str(e), "was_cancelled": False}
@@ -436,7 +437,7 @@ class SerenaDashboardAPI:
         def mark_news_snippet_as_read() -> dict[str, str]:
             try:
                 request_data = request.get_json()
-                news_snippet_id = str(request_data.get("news_snippet_id"))
+                news_snippet_id = escape(str(request_data.get("news_snippet_id")))
                 self._read_news.mark_read(news_snippet_id)
                 return {"status": "success", "message": f"Marked news snippet {news_snippet_id} as read"}
             except Exception as e:
