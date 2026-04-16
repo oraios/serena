@@ -1,77 +1,79 @@
-# Base stage with common dependencies
+FROM node:22.22-slim AS node
+FROM rust:1.94-slim AS rust
+FROM ghcr.io/astral-sh/uv:0.11.7 AS uv
+
 FROM python:3.11-slim AS base
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+FROM base AS builder
+
+WORKDIR /build
+
+COPY --from=uv /uv /uvx /bin/
+
+COPY pyproject.toml README.md uv.lock ./
+COPY src ./src
+
+RUN uv build
+
+FROM base AS prod
+
+WORKDIR /workspace
+
+RUN useradd --create-home --shell /usr/sbin/nologin serena \
+    && mkdir -p "/workspace" \
+    && chown -R serena:serena "/workspace"
+
+COPY --from=builder /build/dist/*.whl /tmp/
+
+RUN pip install --no-cache-dir /tmp/*.whl \
+    && rm -f /tmp/*.whl
+
+USER serena
+
+EXPOSE 9121 24282
+
+ENTRYPOINT ["serena"]
+CMD ["start-mcp-server", "--transport", "streamable-http", "--host", "0.0.0.0", "--port", "9121"]
+
+FROM base AS dev
 SHELL ["/bin/bash", "-c"]
 
-# Set environment variables to make Python print directly to the terminal and avoid .pyc files.
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-
-# Install system dependencies required for package manager and build tools.
-# sudo, wget, zip needed for some assistants, like junie
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     build-essential \
     git \
     ssh \
-    sudo \
     wget \
     zip \
     unzip \
-    git \
+    sed \
     && rm -rf /var/lib/apt/lists/*
 
-# Install pipx.
-RUN python3 -m pip install --no-cache-dir pipx \
-    && pipx ensurepath
+# NVM can be readded if switching node version is common while testing/developing serena
+COPY --from=node /usr/local /usr/local
+COPY --from=uv /uv /uvx /bin/
+COPY --from=rust /usr/local/cargo /usr/local/cargo
+COPY --from=rust /usr/local/rustup /usr/local/rustup
 
-# Install nodejs
-ENV NVM_VERSION=0.40.3
-ENV NODE_VERSION=22.18.0
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v${NVM_VERSION}/install.sh | bash
-# standard location
-ENV NVM_DIR=/root/.nvm
-RUN . "$NVM_DIR/nvm.sh" && nvm install ${NODE_VERSION}
-RUN . "$NVM_DIR/nvm.sh" && nvm use v${NODE_VERSION}
-RUN . "$NVM_DIR/nvm.sh" && nvm alias default v${NODE_VERSION}
-ENV PATH="${NVM_DIR}/versions/node/v${NODE_VERSION}/bin/:${PATH}"
+ENV CARGO_HOME=/usr/local/cargo \
+    RUSTUP_HOME=/usr/local/rustup \
+    PATH="/usr/local/cargo/bin:${PATH}"
 
-# Add local bin to the path
-ENV PATH="${PATH}:/root/.local/bin"
-
-# Install the latest version of uv
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Install Rust and rustup for rust-analyzer support (minimal profile)
-ENV RUSTUP_HOME=/usr/local/rustup
-ENV CARGO_HOME=/usr/local/cargo
-ENV PATH="${CARGO_HOME}/bin:${PATH}"
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
-    --default-toolchain stable \
-    --profile minimal \
-    && rustup component add rust-analyzer
-
-# Set the working directory
 WORKDIR /workspaces/serena
 
-# Copy all files for development
 COPY . /workspaces/serena/
 
-# Install sed
-RUN apt-get update && apt-get install -y sed
-
-# Create Serena configuration
 ENV SERENA_HOME=/workspaces/serena/config
-RUN mkdir -p $SERENA_HOME
-RUN cp src/serena/resources/serena_config.template.yml $SERENA_HOME/serena_config.yml
-RUN sed -i 's/^gui_log_window: .*/gui_log_window: False/' $SERENA_HOME/serena_config.yml
-RUN sed -i 's/^web_dashboard_listen_address: .*/web_dashboard_listen_address: 0.0.0.0/' $SERENA_HOME/serena_config.yml
-RUN sed -i 's/^web_dashboard_open_on_launch: .*/web_dashboard_open_on_launch: False/' $SERENA_HOME/serena_config.yml
+RUN mkdir -p "$SERENA_HOME" && \
+    cp src/serena/resources/serena_config.template.yml "$SERENA_HOME/serena_config.yml" && \
+    sed -i 's/^gui_log_window: .*/gui_log_window: False/' "$SERENA_HOME/serena_config.yml" && \
+    sed -i 's/^web_dashboard_listen_address: .*/web_dashboard_listen_address: 0.0.0.0/' "$SERENA_HOME/serena_config.yml" && \
+    sed -i 's/^web_dashboard_open_on_launch: .*/web_dashboard_open_on_launch: False/' "$SERENA_HOME/serena_config.yml" && \
+    uv sync
 
-# Create virtual environment and install dependencies
-RUN uv venv
-RUN . .venv/bin/activate
-RUN uv pip install -r pyproject.toml -e .
 ENV PATH="/workspaces/serena/.venv/bin:${PATH}"
 
-# Entrypoint to ensure environment is activated
-ENTRYPOINT ["/bin/bash", "-c", "source .venv/bin/activate && $0 $@"]
+ENTRYPOINT ["serena"]
+CMD ["start-mcp-server", "--transport", "streamable-http", "--host", "0.0.0.0", "--port", "9121"]
