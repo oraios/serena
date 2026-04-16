@@ -96,7 +96,6 @@ docker run -it --rm \
   -v "$(pwd)":/workspace \
   -p 9121:9121 \
   -p 24282:24282 \
-  -e SERENA_DOCKER=1 \
   serena
 ```
 
@@ -137,7 +136,6 @@ volumes:
 
 ## Environment Variables
 
-- `SERENA_DOCKER=1`: Set automatically to indicate Docker environment
 - `SERENA_PORT`: MCP server port (default: 9121)
 - `SERENA_DASHBOARD_PORT`: Web dashboard port (default: 24282)
 - `INTELEPHENSE_LICENSE_KEY`: License key for Intelephense PHP LSP premium features (optional)
