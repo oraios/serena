@@ -1331,9 +1331,12 @@ class SolidLanguageServer(ABC):
                 {"textDocument": {"uri": pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()}}
             )
 
-            # update cache
-            self._raw_document_symbols_cache[cache_key] = (fd.content_hash, response)
-            self._raw_document_symbols_cache_is_modified = True
+            # Only cache non-empty results. An empty or None response can occur when the language server
+            # has not yet finished indexing or building the project (e.g. Lean 4 before `lake build`),
+            # and caching it would permanently serve stale data even after the project is ready.
+            if response:
+                self._raw_document_symbols_cache[cache_key] = (fd.content_hash, response)
+                self._raw_document_symbols_cache_is_modified = True
 
             return response
 
