@@ -398,6 +398,35 @@ jobs:
       - name: Install Elm
         shell: bash
         run: npm install -g elm@0.19.1-6
+      - name: Install Gleam
+        shell: bash
+        run: |
+          GLEAM_VERSION=$(curl -fsSL https://api.github.com/repos/gleam-lang/gleam/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+          echo "Installing Gleam v${GLEAM_VERSION}"
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            curl -fsSL -o gleam.tar.gz "https://github.com/gleam-lang/gleam/releases/download/v${GLEAM_VERSION}/gleam-v${GLEAM_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+            tar -xzf gleam.tar.gz
+            sudo mv gleam /usr/local/bin/
+            rm gleam.tar.gz
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            ARCH=$(uname -m)
+            if [[ "$ARCH" == "arm64" ]]; then
+              curl -fsSL -o gleam.tar.gz "https://github.com/gleam-lang/gleam/releases/download/v${GLEAM_VERSION}/gleam-v${GLEAM_VERSION}-aarch64-apple-darwin.tar.gz"
+            else
+              curl -fsSL -o gleam.tar.gz "https://github.com/gleam-lang/gleam/releases/download/v${GLEAM_VERSION}/gleam-v${GLEAM_VERSION}-x86_64-apple-darwin.tar.gz"
+            fi
+            tar -xzf gleam.tar.gz
+            sudo mv gleam /usr/local/bin/
+            rm gleam.tar.gz
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            curl -fsSL -o gleam.zip "https://github.com/gleam-lang/gleam/releases/download/v${GLEAM_VERSION}/gleam-v${GLEAM_VERSION}-x86_64-pc-windows-msvc.zip"
+            unzip -o gleam.zip
+            mkdir -p "$HOME/bin"
+            mv gleam.exe "$HOME/bin/"
+            echo "$HOME/bin" >> $GITHUB_PATH
+            rm gleam.zip
+          fi
+          gleam --version
       - name: Install Nix
         if: runner.os != 'Windows'  # Nix doesn't support Windows natively
         uses: cachix/install-nix-action@v30
