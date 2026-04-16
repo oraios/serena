@@ -10,6 +10,7 @@ import os
 import pathlib
 import shutil
 import subprocess
+import threading
 
 from overrides import override
 
@@ -20,6 +21,8 @@ from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
+
+_COMPILE_READY_TIMEOUT = 30
 
 
 class GleamLanguageServer(SolidLanguageServer):
@@ -34,6 +37,7 @@ class GleamLanguageServer(SolidLanguageServer):
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         gleam_path = self._find_gleam()
         self._fetch_deps(gleam_path, repository_root_path)
+        self._compile_ready = threading.Event()
 
         super().__init__(
             config,
@@ -141,12 +145,19 @@ class GleamLanguageServer(SolidLanguageServer):
         def window_log_message(msg: dict) -> None:
             log.info(f"LSP: window/logMessage: {msg}")
 
+        def on_progress(params: dict) -> None:
+            # Gleam sends $/progress with kind="end" when initial compilation finishes.
+            value = params.get("value", {})
+            if isinstance(value, dict) and value.get("kind") == "end":
+                log.info("Gleam LSP: initial compilation finished ($/progress end received)")
+                self._compile_ready.set()
+
         def do_nothing(_params: dict) -> None:
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
-        self.server.on_notification("$/progress", do_nothing)
+        self.server.on_notification("$/progress", on_progress)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
         log.info("Starting Gleam language server process")
@@ -161,4 +172,11 @@ class GleamLanguageServer(SolidLanguageServer):
         assert "textDocumentSync" in capabilities, "textDocumentSync capability missing"
 
         self.server.notify.initialized({})
+
+        # Wait for Gleam's initial compilation to finish before returning.
+        # Without this, document symbol requests return empty because the LSP
+        # hasn't finished analysing the workspace yet.
+        if not self._compile_ready.wait(timeout=_COMPILE_READY_TIMEOUT):
+            log.warning(f"Gleam LSP: timed out waiting for initial compilation after {_COMPILE_READY_TIMEOUT}s, proceeding anyway")
+
         log.info("Gleam language server ready")
