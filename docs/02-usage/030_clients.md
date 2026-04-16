@@ -129,7 +129,7 @@ of Serena's tools, either by failing to load them in the beginning or by forgett
 up the hooks as below (or a variation thereof) for optimal performance of Serena in Claude Code.
 
 :::{note}
-While recommended, hooks are an **alpha feature**. Provide feedback via the [GitHub issue tracker](https://github.com/serenadeai/serenade/issues) if you encounter any issues.
+While recommended, hooks are an **alpha feature**. Provide feedback via the [GitHub issue tracker](https://github.com/oraios/serena/issues) if you encounter any issues.
 :::
 
 To set up hooks, add the following to your Claude Code settings file
@@ -266,6 +266,15 @@ To set this up, create the file `~/.copilot/hooks/serena-hooks.json` with the fo
 The `SessionStart` hook also addresses the global configuration limitation mentioned above — it will
 automatically prompt the agent to activate the project directory, so you no longer need to do this manually.
 
+## Copilot CLI
+
+Use the interactive `/mcp add` slash command, choose Serena as the name, STDIO as the server type, and
+`serena start-mcp-server --context=copilot-cli --project-from-cwd` as command. Copilot CLI will immediately notify you
+that Serena is running if everything is set up correctly or display an error otherwise.
+
+You should add the same **hooks** as in VSCode (see above) if Copilot CLI didn't pick them up automatically.
+
+
 ## Codex (CLI and App)
 
 You can simply run `serena setup codex`.
@@ -356,29 +365,12 @@ Alternatively, add the following to `~/.copilot/mcp-config.json` (create the fil
 Copilot should now show that Serena is running, though you may have to restart it.
 
 
-## JetBrains Junie 
+## JetBrains Junie
 
-For the Junie plugin in JetBrains IDEs, go to the three dots in the top right corner, 
-then Settings / MCP Settings and add Serena to Junie's global MCP server configuration:
+For the Junie plugin in JetBrains IDEs you can add Serena either to the global configuration in `~/.junie/mcp/mcp.json` 
+or to the project configuration in `<project>/.junie/mcp/mcp.json`. Important, don't add both!
+In both cases the entry should be:
 
-```json
-{
-  "mcpServers": {
-    "serena": {
-      "command": "serena",
-      "args": [
-        "start-mcp-server",
-        "--context=junie"
-      ]
-    }
-  }
-}
-```
-
-You will have to prompt Junie to "Activate the current project using serena's activation tool" at the
-start of each session.
-
-For Junie CLI, where the project can be activated automatically on startup, edit `~/.junie/mcp/mcp.json` and add
 
 ```json
 {
@@ -395,12 +387,19 @@ For Junie CLI, where the project can be activated automatically on startup, edit
 }
 ```
 
+With the global configuration, Serena will be available in all projects. However,
+within the Junie plugin, projects will not be automatically activated in Serena. 
+You may thus have to prompt 
+Junie to "Activate the current project using serena's activation tool" at the start of each session (though some models are
+smart enough to activate the project automatically).
+
+With the project-scoped configuration, Serena will be available only in that project, and the project will automatically
+be recognized as active by Serena.
+
+
 ## JetBrains AI Assistant
 
-Here you can set up the more convenient per-project MCP server configuration, as the AI assistant supports specifying
-the launch working directory.
-
-Go to Settings / Tools / AI Assistant / MCP and add a new **local** configuration via the `as JSON` option:
+Go to Settings / Tools / AI Assistant / MCP and enter the following configuration:
 
 ```json
 {
@@ -410,15 +409,15 @@ Go to Settings / Tools / AI Assistant / MCP and add a new **local** configuratio
       "args": [
         "start-mcp-server",
         "--context=jb-ai-assistant",
-        "--project",
-        "$(pwd)"
+        "--project-from-cwd"
       ]
     }
   }
 }
 ```
 
-Then make sure to configure the working directory to be the project root.
+Like for Junie, you have the choice between the global and the project-scoped configuration, 
+with the same trade-off.
 
 ## Antigravity
 

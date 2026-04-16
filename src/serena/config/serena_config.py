@@ -31,7 +31,7 @@ from serena.constants import (
     SERENA_MANAGED_DIR_NAME,
 )
 from serena.util.inspection import determine_programming_language_composition
-from serena.util.yaml import YamlCommentNormalisation, load_yaml, normalise_yaml_comments, save_yaml, transfer_missing_yaml_comments
+from serena.util.yaml import YamlCommentNormalisation, load_yaml, normalise_yaml_comments, save_yaml, transfer_yaml_comments
 from solidlsp.ls_config import Language
 
 from ..analytics import RegisteredTokenCountEstimator
@@ -83,7 +83,11 @@ class SerenaPaths:
         If a name of a mode matches a name of a mode in SERENAS_OWN_MODES_YAML_DIR,
         the user mode will override the default mode definition.
         """
-        self.news_snippet_id_file: str = os.path.join(self.serena_user_home_dir, "last_read_news_snippet_id.txt")
+        self.news_legacy_last_read_id_file: str = os.path.join(self.serena_user_home_dir, "last_read_news_snippet_id.txt")
+        """
+        file containing the ID of the last read news snippet
+        """
+        self.news_read_items_file: str = os.path.join(self.serena_user_home_dir, "news_read.pkl")
         """
         file containing the ID of the last read news snippet
         """
@@ -577,7 +581,7 @@ class ProjectConfig(SharedConfig):
 
         # transfer missing comments from the template file
         template_config, _ = self._load_yaml_dict(PROJECT_TEMPLATE_FILE, self.YAML_COMMENT_NORMALISATION)
-        transfer_missing_yaml_comments(template_config, config_with_comments, self.YAML_COMMENT_NORMALISATION, force_update_all=True)
+        transfer_yaml_comments(template_config, config_with_comments, self.YAML_COMMENT_NORMALISATION, force_update_all=True)
 
         # save project.yml
         save_yaml(config_path, config_with_comments)
@@ -1059,7 +1063,7 @@ class SerenaConfig(SharedConfig):
         # For some keys, we force updates, because old comments are problematic/misleading.
         normalise_yaml_comments(commented_yaml, YamlCommentNormalisation.LEADING_WITH_CONVERSION_FROM_TRAILING)
         template_yaml = load_yaml(SERENA_CONFIG_TEMPLATE_FILE, comment_normalisation=YamlCommentNormalisation.LEADING)
-        transfer_missing_yaml_comments(template_yaml, commented_yaml, YamlCommentNormalisation.LEADING, force_update_all=True)
+        transfer_yaml_comments(template_yaml, commented_yaml, YamlCommentNormalisation.LEADING, force_update_all=True)
 
         save_yaml(self.config_file_path, commented_yaml)
 

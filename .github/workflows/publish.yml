@@ -6,39 +6,18 @@ on:
     tags:
       - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
 
-env:
-  PUBLISH_TO_PYPI: true
-
 jobs:
-  build:
-    name: Create GitHub Release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          body: |
-            See [change log](https://github.com/oraios/serena/blob/main/CHANGELOG.md)
-          draft: false
-          prerelease: false
   publish:
     name: Publish the serena-agent package
     runs-on: ubuntu-latest
-
     permissions:
       id-token: write  # Required for trusted publishing
-      contents: write  # Required for updating artifact
-
+      contents: write  # Required for the GH release
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install the latest version of uv
         uses: astral-sh/setup-uv@v6
@@ -48,18 +27,11 @@ jobs:
       - name: Build package
         run: uv build
 
-      - name: Upload artifacts to GitHub Release
-        if: env.PUBLISH_TO_PYPI == 'true'
-        uses: softprops/action-gh-release@v2
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: |
             dist/*.tar.gz
             dist/*.whl
-
-      - name: Publish to TestPyPI
-        run: uv publish --index testpypi
-
       - name: Publish to PyPI (conditional)
-        if: env.PUBLISH_TO_PYPI == 'true'
         run: uv publish

@@ -198,9 +198,14 @@ def autogen_about_intro_features():
         # adjust link
         about_text = about_text.replace("resources/serena-block-diagram.svg", "https://raw.githubusercontent.com/oraios/serena/main/resources/serena-block-diagram.svg")
 
-        # remove statements with links that are invalid and the callout
+        # remove centred links
+        about_text = re.subn(r'^<div align="center">.*?</div>\s*<br>$', "", about_text, flags=re.MULTILINE | re.DOTALL)[0]
+
+        # remove statements with links to quick start guide
         about_text = re.subn(r"^.*\[Quick Start.*?$", r"", about_text, flags=re.MULTILINE)[0]
-        about_text = re.subn(r"^>.*?$", "", about_text, flags=re.MULTILINE)[0]
+
+        # remove callouts
+        about_text = re.subn(r"^> \[!\w+\]\s+(^>.*?$)+", "", about_text, flags=re.MULTILINE)[0]
 
         f.write(f"{about_text}\n\n")
 

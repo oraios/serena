@@ -258,7 +258,8 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
 
         :param name_path: for finding the symbol to find references for, same logic as in the `find_symbol` tool.
         :param relative_path: the relative path to the file containing the symbol for which to find references.
-            Note that here you can't pass a directory but must pass a file.
+            Note: for external dependencies, this must be an identifier starting with `<ext` that you have received
+            earlier (don't try to guess!).
         :param include_kinds: same as in the `find_symbol` tool.
         :param exclude_kinds: same as in the `find_symbol` tool.
         :param max_answer_chars: same as in the `find_symbol` tool.

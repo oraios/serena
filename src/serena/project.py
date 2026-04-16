@@ -448,7 +448,7 @@ class Project(ToStringMixin):
         rel_path = Path(relative_path)
 
         # always ignore paths inside .git
-        if len(rel_path.parts) > 0 and rel_path.parts[0] == ".git":
+        if len(rel_path.parts) > 0 and ".git" in rel_path.parts:
             return True
 
         return match_path(str(relative_path), self._ignore_spec, root_path=self.project_root)

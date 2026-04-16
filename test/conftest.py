@@ -259,6 +259,7 @@ _LANGUAGE_PYTEST_MARKERS: dict[Language, list[MarkDecorator | Mark]] = {
     Language.JAVA: [pytest.mark.java],
     Language.KOTLIN: [pytest.mark.kotlin, pytest.mark.skipif(is_ci, reason="Kotlin LSP JVM crashes on restart in CI")],
     Language.LEAN4: [pytest.mark.lean4, pytest.mark.skipif(_sh.which("lean") is None, reason="Lean is not installed")],
+    Language.MSL: [pytest.mark.msl],
     Language.PHP: [pytest.mark.php],
     Language.PHP_PHPACTOR: [pytest.mark.php],
     Language.POWERSHELL: [pytest.mark.powershell],

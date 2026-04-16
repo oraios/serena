@@ -28,6 +28,37 @@ more complex codebases.
 > Do not install Serena via an MCP or plugin marketplace! They contain outdated and suboptimal installation commands. 
 > Instead, follow our [Quick Start](#quick-start) instructions.
 
+## What Our "End Users" Say
+
+While it is humans who download and set up Serena, our end users are essentially AI agents.
+As the ones actually applying Serena's tools, they are in the best position to evaluate Serena.
+
+We crafted an unbiased evaluation prompt that leads the agent to perform ~20 routine coding tasks, 
+representative of everyday development work, 
+in order to estimate the value added by Serena's tools when used alongside its own built-ins. 
+
+Here's a one-sentence summary of what the agents had to say:
+
+**Opus 4.6 (high) in Claude Code on a large Python codebase:**
+> "Serena's IDE-backed semantic tools are the single most impactful addition to my toolkit – cross-file renames, moves, and reference lookups that
+would cost me 8–12 careful, error-prone steps collapse into one atomic call, and I would absolutely ask any developer I work with to set them up."
+
+**GPT 5.4 (high) in Codex CLI on a Java codebase:**
+> "As a coding AI agent, I would ask my owner to add Serena because it gives me the missing IDE-level understanding of symbols, references, and
+refactorings, turning fragile text surgery into calmer, faster, more confident code changes where semantics matter."
+
+**GPT 5.4 (medium) in Copilot CLI on a large, multi-language monorepo:**
+> "As a coding agent, I’d absolutely ask my owner to add Serena because it makes me noticeably sharper and calmer on
+real code – especially symbol-aware navigation, cross-file refactors, and monorepo dependency jumps – while I still lean
+on built-ins for tiny text edits and non-code work."
+
+Different agents in different settings independently converge on the same verdict.
+
+_Give your agent the tools it has been asking for and add Serena MCP to your client!_
+
+See our [documentation](https://oraios.github.io/serena/04-evaluation/000_evaluation-intro.html) for the full methodology and much more detailed evaluation results, or run your own evaluation on a project of your choice.
+ 
+
 ## How Serena Works
 
 Serena provides the necessary [tools](https://oraios.github.io/serena/01-about/035_tools.html) for coding workflows, 
@@ -36,14 +67,20 @@ but an LLM is required to do the actual work, orchestrating tool use.
 Serena can extend the functionality of your existing AI client via the **model context protocol (MCP)**.
 Most modern AI chat clients directly support MCP, including
 * terminal-based clients like Claude Code, Codex, OpenCode, or Gemini-CLI,
-* IDEs and IDE assistant plugins for VSCode, Cursor and JetBrains IDEs,
-* desktop and web clients like Claude Desktop or OpenWebUI.
+* IDEs and IDE assistant plugins for VSCode, Cursor and JetBrains IDEs (Copilot, Junie, JetBrains AI Assistant, etc.),
+* desktop and web clients like Claude Desktop, Codex App, or OpenWebUI.
 
 <img src="resources/serena-block-diagram.svg">
 
 To connect the Serena MCP server to your client, you either
   * provide the client with a launch command that allows it to start the MCP server, or
   * start the Serena MCP server yourself in HTTP mode and provide the client with the URL.
+
+Serena's tools are powered by two alternative language intelligence backends:
+   * With the SolidLSP backend (default), language servers for the selected programming languages will be started
+automatically for your project. 
+   * With the JetBrains backend, the Serena JetBrains plugin must be installed in your IDE and 
+the project you want to work on must open and set up. 
 
 See the [Quick Start](#quick-start) section below for information on how to get started.
 
@@ -58,7 +95,7 @@ complex projects!
 
 There are two alternative technologies powering these capabilities:
 
-* **Language servers** implementing the language server Protocol (LSP) — the free/open-source alternative 
+* **Language servers** implementing the language server protocol (LSP) — the free/open-source alternative 
   which is used by default.
 * The **Serena JetBrains Plugin**, which leverages the powerful code analysis and editing
   capabilities of your JetBrains IDE (paid plugin; free trial available).
@@ -71,7 +108,7 @@ Serena incorporates a powerful abstraction layer for the integration of language
 The underlying language servers are typically open-source projects or at least freely available for use.
 
 When using Serena's language server backend, we provide **support for over 40 programming languages**, including
-AL, Ansible, Bash, C#, C/C++, Clojure, Crystal, Dart, Elixir, Elm, Erlang, Fortran, F#, GLSL, Go, Groovy, Haskell, Haxe, HLSL, Java, JavaScript, Julia, Kotlin, Lean 4, Lua, Luau, Markdown, MATLAB, Nix, OCaml, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Scala, Solidity, Swift, TOML, TypeScript, WGSL, YAML, and Zig.
+AL, Ansible, Bash, C#, C/C++, Clojure, Crystal, Dart, Elixir, Elm, Erlang, Fortran, F#, GLSL, Go, Groovy, Haskell, Haxe, HLSL, Java, JavaScript, Julia, Kotlin, Lean 4, Lua, Luau, Markdown, MATLAB, mSL, Nix, OCaml, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Scala, Solidity, Swift, TOML, TypeScript, WGSL, YAML, and Zig.
 
 ### The Serena JetBrains Plugin
 
@@ -231,4 +268,3 @@ Please refer to the [user guide](https://oraios.github.io/serena/02-usage/000_in
 A significant part of Serena, especially support for various languages, was contributed by the open source community.
 We are very grateful for the many contributors who made this possible and who played an important role in making Serena
 what it is today.
-

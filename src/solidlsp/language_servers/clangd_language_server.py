@@ -1,9 +1,13 @@
+import hashlib
 import json
 import logging
 import os
 import pathlib
 import threading
+from collections.abc import Hashable
 from typing import Any, cast
+
+from overrides import override
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, ProcessLaunchInfo, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
@@ -39,6 +43,37 @@ class ClangdLanguageServer(SolidLanguageServer):
         self.service_ready_event = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
         self.resolve_main_method_available = threading.Event()
+
+    @override
+    def _document_symbols_cache_fingerprint(self) -> Hashable:
+        cache_format_version = 1
+        cpp_settings: dict[str, Any] = self._custom_settings or {}
+        return (
+            cache_format_version,
+            cpp_settings.get("clangd_version"),
+            cpp_settings.get("ls_path"),
+            cpp_settings.get("compile_commands_dir"),
+            self._compile_commands_fingerprint(),
+        )
+
+    def _compile_commands_fingerprint(self) -> str | None:
+        compile_db_path = os.path.join(self.repository_root_path, "compile_commands.json")
+        if not os.path.exists(compile_db_path):
+            return None
+
+        try:
+            with open(compile_db_path, "rb") as f:
+                return hashlib.md5(f.read()).hexdigest()
+        except OSError as e:
+            log.warning(f"Failed to fingerprint compile_commands.json: {e}")
+            return None
+
+    @override
+    def is_ignored_dirname(self, dirname: str) -> bool:
+        ignored_dirs = [
+            ".ccls-cache",
+        ]
+        return super().is_ignored_dirname(dirname) or dirname in ignored_dirs
 
     def _prepare_compile_commands(self) -> str | None:
         """
@@ -312,12 +347,19 @@ class ClangdLanguageServer(SolidLanguageServer):
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
-        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2  # type: ignore
-        assert "completionProvider" in init_response["capabilities"]
-        assert init_response["capabilities"]["completionProvider"] == {
-            "triggerCharacters": [".", "<", ">", ":", '"', "/", "*"],
-            "resolveProvider": False,
-        }
+        capabilities = init_response["capabilities"]
+
+        text_document_sync = capabilities["textDocumentSync"]
+        if isinstance(text_document_sync, int):
+            assert text_document_sync == 2  # type: ignore
+        else:
+            assert text_document_sync["change"] == 2  # type: ignore
+
+        assert "completionProvider" in capabilities
+        completion_provider = capabilities["completionProvider"]
+        trigger_characters = set(completion_provider["triggerCharacters"])
+        assert {".", "<", ">", ":", '"', "/"}.issubset(trigger_characters)
+        assert completion_provider["resolveProvider"] is False
 
         self.server.notify.initialized({})
         # set ready flag, clangd sends no meaningful notification when ready

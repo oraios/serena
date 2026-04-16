@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Annotate locations with typos
         uses: codespell-project/codespell-problem-matcher@v1
       - name: Codespell

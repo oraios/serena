@@ -6,6 +6,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from html import escape
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
@@ -15,6 +16,7 @@ from flask import Flask, Response, redirect, request, send_from_directory
 from PIL import Image
 from pydantic import BaseModel
 from sensai.util import logging
+from sensai.util.pickle import dump_pickle, load_pickle
 
 from serena.analytics import ToolUsageStats
 from serena.config.serena_config import SerenaConfig, SerenaPaths
@@ -132,6 +134,54 @@ class QueuedExecution(BaseModel):
         )
 
 
+class ReadNews:
+    def __init__(self, read_ids: list[str], legacy_last_read_id: str | None = None):
+        self._read_ids = set(read_ids)
+        self._legacy_last_read_id = legacy_last_read_id
+
+    @staticmethod
+    def load() -> "ReadNews":
+        read_news_path = SerenaPaths().news_read_items_file
+        legacy_last_read_id_path = SerenaPaths().news_legacy_last_read_id_file
+
+        def load_legacy_last_read_id() -> str | None:
+            if not os.path.exists(legacy_last_read_id_path):
+                return None
+            with open(legacy_last_read_id_path, encoding="utf-8") as f:
+                last_read_news_id = f.read().strip()
+                if last_read_news_id == "20262103":
+                    last_read_news_id = "20260321"  # fix originally misnamed news id
+                return last_read_news_id
+
+        if os.path.exists(read_news_path):
+            return load_pickle(read_news_path)
+        else:
+            instance = ReadNews(read_ids=[], legacy_last_read_id=load_legacy_last_read_id())
+            instance._save()
+            try:
+                os.unlink(legacy_last_read_id_path)
+            except:
+                pass
+            return instance
+
+    def _save(self) -> None:
+        dump_pickle(self, SerenaPaths().news_read_items_file)
+
+    def is_read(self, identifier: str) -> bool:
+        if identifier in self._read_ids:
+            return True
+        if self._legacy_last_read_id is not None and identifier <= self._legacy_last_read_id:
+            return True
+        return False
+
+    def mark_read(self, identifier: str) -> None:
+        """
+        Marks the given news snippet as read, saving the new state to disk
+        """
+        self._read_ids.add(identifier)
+        self._save()
+
+
 class SerenaDashboardAPI:
     log = logging.getLogger(__qualname__)
 
@@ -150,6 +200,7 @@ class SerenaDashboardAPI:
         self._loaded_news: dict[str, str] = {}
         self._news_ready = threading.Event()
         self._setup_routes()
+        self._read_news = ReadNews.load()
         # Fetch remote news in background on startup (non-blocking)
         threading.Thread(target=self._fetch_news, daemon=True).start()
 
@@ -341,7 +392,7 @@ class SerenaDashboardAPI:
                 return {
                     "status": "success",
                     "was_cancelled": False,
-                    "message": f"Task with id {request_data.get('task_id')} not found, maybe execution was already finished",
+                    "message": f"Task with id {escape(request_data.get('task_id'))} not found, maybe execution was already finished",
                 }
             except Exception as e:
                 return {"status": "error", "message": str(e), "was_cancelled": False}
@@ -362,7 +413,6 @@ class SerenaDashboardAPI:
                 self._news_ready.wait()
                 all_news = self._loaded_news
 
-                # Filter news items by installation date
                 serena_config_creation_date = SerenaConfig.get_config_file_creation_date()
                 if serena_config_creation_date is None:
                     # should not normally happen, since config file should exist when the dashboard is started
@@ -370,17 +420,12 @@ class SerenaDashboardAPI:
                     log.error("Serena config file not found when starting the dashboard")
                     return {}
                 serena_config_creation_date = serena_config_creation_date.strftime("%Y%m%d")
-                # Only include news items published on or after the installation date
+
+                # filter for news after the installation date
                 post_installation_news = {k: v for k, v in all_news.items() if k >= serena_config_creation_date}
 
-                news_snippet_id_file = SerenaPaths().news_snippet_id_file
-                if not os.path.exists(news_snippet_id_file):
-                    return post_installation_news
-                with open(news_snippet_id_file, encoding="utf-8") as f:
-                    last_read_news_id = f.read().strip()
-                    if last_read_news_id == "20262103":
-                        last_read_news_id = "20260321"  # fix originally misnamed news id
-                return {k: v for k, v in post_installation_news.items() if k > last_read_news_id}
+                # read unread news
+                return {k: v for k, v in post_installation_news.items() if not self._read_news.is_read(k)}
 
             try:
                 unread_news = _fetch_unread_news()
@@ -392,10 +437,8 @@ class SerenaDashboardAPI:
         def mark_news_snippet_as_read() -> dict[str, str]:
             try:
                 request_data = request.get_json()
-                news_snippet_id = str(request_data.get("news_snippet_id"))
-                news_snippet_id_file = SerenaPaths().news_snippet_id_file
-                with open(news_snippet_id_file, "w", encoding="utf-8") as f:
-                    f.write(news_snippet_id)
+                news_snippet_id = escape(str(request_data.get("news_snippet_id")))
+                self._read_news.mark_read(news_snippet_id)
                 return {"status": "success", "message": f"Marked news snippet {news_snippet_id} as read"}
             except Exception as e:
                 return {"status": "error", "message": str(e)}

@@ -19,10 +19,10 @@ Both can be configured in Serena's [configuration](050_configuration) file (`ser
 
 ## The Serena Dashboard
 
-The dashboard is a web application, which is opened via a native application wrapper on Windows and macOS,
+The dashboard is a web application, which is opened via a native application wrapper on supported platforms (e.g. Windows),
 where it will appear in the system tray. **Click on the tray icon** to open the application window.
 
-On Linux, native app support is difficult to provide, so the dashboard will be opened in your default web browser instead.  
+On other platforms, where native app support is difficult to provide (e.g. Linux), the dashboard will be opened in your default web browser instead.  
 
 By default, the dashboard can be accessed at `http://localhost:24282/dashboard/index.html`,
 but a higher port may be used if the default port is unavailable/multiple instances are running.
@@ -54,15 +54,14 @@ In particular, you can configure
 
 When Serena is started, the Dashboard window is opened by default in order to make users aware of its existence.
 
-If you prefer not to have this happen (e.g., to avoid focus stealing), you can disable prevent it from opening
+If you prefer not to have this happen (e.g., to avoid focus stealing), you can prevent it from opening
 by setting `web_dashboard_open_on_launch: False` in the [global configuration file](global-config) or by passing `--open-web-dashboard False`
 to the `start-mcp-server` CLI command.
 
-On Windows and macOS, you can conveniently open the dashboard at any time by clicking on the tray icon, so automatic
+On platforms supporting the tray icon, you can conveniently open the dashboard at any time by clicking on the tray icon, so automatic
 opening is not a requirement to be able to access the dashboard on these platforms.
 
-On Linux, access to the dashboard is more cumbersome without native app support.  
-Yet you may still access it by
+On other platforms, you may still access it by
 * asking the LLM to "open the Serena dashboard", which will open the dashboard in your default browser
   (the tool `open_dashboard` is enabled for this purpose, provided that the dashboard is active, 
   not opened by default and the GUI tool, which can provide the URL, is not enabled)

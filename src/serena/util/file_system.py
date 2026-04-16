@@ -177,7 +177,11 @@ class GitignoreParser:
         while queue:
             next_abs_path = queue.pop(0)
             if next_abs_path != self.repo_root:
-                rel_path = os.path.relpath(next_abs_path, self.repo_root)
+                try:
+                    rel_path = os.path.relpath(next_abs_path, self.repo_root)
+                except ValueError:
+                    # If the path is on a different drive (Windows) or cannot be made relative for another reason, we ignore it
+                    continue
                 if self.should_ignore(rel_path):
                     continue
             yield from scan(next_abs_path)
