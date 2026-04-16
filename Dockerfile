@@ -4,7 +4,19 @@ FROM ghcr.io/astral-sh/uv:0.11.7 AS uv
 
 FROM python:3.11-slim AS base
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    SERENA_HOME=/home/serena/.serena
+
+COPY ./src/serena/resources/serena_config.template.yml /home/serena/.serena/serena_config.yml
+
+RUN sed -i 's/^gui_log_window: .*/gui_log_window: False/' "$SERENA_HOME/serena_config.yml" && \
+    sed -i 's/^web_dashboard_listen_address: .*/web_dashboard_listen_address: 0.0.0.0/' "$SERENA_HOME/serena_config.yml" && \
+    sed -i 's/^web_dashboard_open_on_launch: .*/web_dashboard_open_on_launch: False/' "$SERENA_HOME/serena_config.yml"
+
+RUN useradd --create-home --shell /usr/sbin/nologin serena \
+    && mkdir -p "/workspace" \
+    && chown -R serena:serena "/workspace" \
+    && chown -R serena:serena /home/serena
 
 FROM base AS builder
 
@@ -20,10 +32,6 @@ RUN uv build
 FROM base AS prod
 
 WORKDIR /workspace
-
-RUN useradd --create-home --shell /usr/sbin/nologin serena \
-    && mkdir -p "/workspace" \
-    && chown -R serena:serena "/workspace"
 
 COPY --from=builder /build/dist/*.whl /tmp/
 
@@ -65,13 +73,7 @@ WORKDIR /workspaces/serena
 
 COPY . /workspaces/serena/
 
-ENV SERENA_HOME=/workspaces/serena/config
-RUN mkdir -p "$SERENA_HOME" && \
-    cp src/serena/resources/serena_config.template.yml "$SERENA_HOME/serena_config.yml" && \
-    sed -i 's/^gui_log_window: .*/gui_log_window: False/' "$SERENA_HOME/serena_config.yml" && \
-    sed -i 's/^web_dashboard_listen_address: .*/web_dashboard_listen_address: 0.0.0.0/' "$SERENA_HOME/serena_config.yml" && \
-    sed -i 's/^web_dashboard_open_on_launch: .*/web_dashboard_open_on_launch: False/' "$SERENA_HOME/serena_config.yml" && \
-    uv sync
+RUN uv sync
 
 ENV PATH="/workspaces/serena/.venv/bin:${PATH}"
 
