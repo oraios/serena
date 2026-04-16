@@ -53,6 +53,7 @@ class GleamLanguageServer(SolidLanguageServer):
                 capture_output=True,
                 text=True,
                 timeout=120,
+                check=False,
             )
             if result.returncode != 0:
                 log.warning(f"gleam deps download failed (exit {result.returncode}): {result.stderr[:200]}")
