@@ -12,8 +12,9 @@ Test Repository Structure:
 - Main.lean: Main entry point using Helper, plus multiply and calculate functions
 """
 
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language

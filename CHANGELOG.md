@@ -5,6 +5,9 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Support environment variable `SERENA_USAGE_REPORTING` (set to `false` to disable usage reporting)
 
+* Language Servers:
+  - Fix: Lean4 stale cache — empty document symbol responses (returned before `lake build` completes) are no longer persisted, preventing symbols from being permanently hidden #1356
+
 # 1.1.1
 
 * General:
