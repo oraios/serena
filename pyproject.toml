@@ -350,6 +350,7 @@ markers = [
   "solidity: language server running for Solidity (uses @nomicfoundation/solidity-language-server)",
   "ansible: language server running for Ansible (uses @ansible/ansible-language-server)",
   "msl: language server running for mSL (mIRC Scripting Language)",
+  "gleam: language server running for Gleam (uses bundled gleam lsp)",
 ]
 
 [tool.codespell]
