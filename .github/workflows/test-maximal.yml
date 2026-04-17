@@ -6,11 +6,16 @@ on:
       - feature/optimize-docker-ci
   workflow_dispatch:
 
+# Added permissions block to resolve GitHub Advanced Security warning
+permissions:
+  contents: read
+
 jobs:
   fast-docker-test:
     name: Linux Tests (Containerized)
     runs-on: ubuntu-latest
     
+    # Execute the workflow directly inside the pre-built maximal container
     container:
       image: ghcr.io/tirthpatel90/serena-maximal:latest
 
@@ -21,11 +26,11 @@ jobs:
       - name: Quick Workspace Sync
         shell: bash
         run: |
-          # Sirf code update karne ke liye fast sync (takes 2 seconds)
+          # Perform a rapid workspace sync (bypasses heavy toolchain installations)
           uv sync --extra dev --locked
           uv pip list
 
-      - name: Test with pytest (Lightning Fast)
+      - name: Test with pytest (Optimized)
         shell: bash
         run: uv run poe test -q --tb=short
 
