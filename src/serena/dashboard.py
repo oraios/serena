@@ -861,7 +861,7 @@ class SerenaDashboardViewer(WebViewWithTray):
 
     def run(self) -> None:
         if self.DEBUG:
-            logging.configure(level=logging.DEBUG)
+            logging.configure(level=logging.DEBUG, stream=sys.stderr)
             logging.add_file_logger(SerenaPaths().get_next_log_file_path("dashboard-viewer"))
 
         super().run()
@@ -895,6 +895,8 @@ class SerenaDashboardTrayManager:
     The manager is started as a detached process by the first Serena agent that
     needs it and terminates automatically when no dashboard instances remain.
     """
+
+    DEBUG = False
 
     PORT = SerenaPorts.TRAY_MANAGER_PORT
 
@@ -1074,6 +1076,12 @@ class SerenaDashboardTrayManager:
     def run(self) -> None:
         """Run the tray manager (blocking). Starts Flask, alive-check thread, and tray icon."""
         import pystray
+
+        if self.DEBUG:
+            logging.configure(level=logging.DEBUG, stream=sys.stderr)
+            logging.add_file_logger(SerenaPaths().get_next_log_file_path("tray-manager"))
+
+        log.info("Starting tray manager")
 
         dashboard_path = Path(SERENA_DASHBOARD_DIR)
 
