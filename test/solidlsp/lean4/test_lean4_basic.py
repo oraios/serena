@@ -12,6 +12,8 @@ Test Repository Structure:
 - Main.lean: Main entry point using Helper, plus multiply and calculate functions
 """
 
+from unittest.mock import patch
+
 import pytest
 
 from solidlsp.ls import SolidLanguageServer
@@ -145,6 +147,29 @@ class TestLean4LanguageServer:
         def_location = definitions[0]
         assert def_location["uri"].endswith("Main.lean"), f"Expected definition in Main.lean, got: {def_location['uri']}"
         assert def_location["range"]["start"]["line"] == 5, f"Expected definition at line 5, got: {def_location['range']['start']['line']}"
+
+    @pytest.mark.parametrize("language_server", [Language.LEAN4], indirect=True)
+    def test_empty_symbol_response_not_cached(self, language_server: SolidLanguageServer) -> None:
+        """
+        Test that an empty document symbol response is not written to the cache.
+
+        This guards against the scenario where the Lean language server returns no symbols
+        before `lake build` has completed. If the empty result were cached, subsequent
+        requests after the build would still return empty symbols even though the LS now
+        has the full build artifacts available.
+        """
+        file_path = "Helper.lean"
+
+        # Patch the LSP server to return an empty list, simulating a pre-build response.
+        with patch.object(language_server.server.send, "document_symbol", return_value=[]):
+            result = language_server._request_document_symbols(file_path, None)
+            assert result == [], "Expected the (mocked) empty response to be returned as-is"
+
+        # The empty result must NOT have been written to the cache.
+        assert file_path not in language_server._raw_document_symbols_cache, (
+            "Empty symbol response must not be stored in the cache; "
+            "it would permanently hide symbols that become available after `lake build`"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.LEAN4], indirect=True)
     def test_go_to_definition_across_files(self, language_server: SolidLanguageServer) -> None:
