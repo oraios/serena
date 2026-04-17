@@ -1,0 +1,34 @@
+name: Test with Maximal Image
+
+on:
+  push:
+    branches:
+      - feature/optimize-docker-ci
+  workflow_dispatch:
+
+jobs:
+  fast-docker-test:
+    name: Linux Tests (Containerized)
+    runs-on: ubuntu-latest
+    
+    container:
+      image: ghcr.io/tirthpatel90/serena-maximal:latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Quick Workspace Sync
+        shell: bash
+        run: |
+          # Sirf code update karne ke liye fast sync (takes 2 seconds)
+          uv sync --extra dev --locked
+          uv pip list
+
+      - name: Test with pytest (Lightning Fast)
+        shell: bash
+        run: uv run poe test -q --tb=short
+
+      - name: Type-checking with mypy
+        shell: bash
+        run: uv run poe type-check
