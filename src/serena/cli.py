@@ -17,7 +17,9 @@ from sensai.util.logging import FileLoggerContext, datetime_tag
 from sensai.util.string import dict_string
 from tqdm import tqdm
 
+from serena import serena_version
 from serena.agent import SerenaAgent
+from serena.config.client_setup import client_setup_handlers
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import (
     LanguageBackend,
@@ -37,6 +39,7 @@ from serena.constants import (
 from serena.mcp import SerenaMCPFactory
 from serena.project import Project
 from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsOverviewTool, SearchForPatternTool, ToolRegistry
+from serena.util.cli_util import AutoRegisteringGroup
 from serena.util.dataclass import get_dataclass_default
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
@@ -45,7 +48,7 @@ from solidlsp.util.subprocess_util import subprocess_kwargs
 
 log = logging.getLogger(__name__)
 
-_MAX_CONTENT_WIDTH = 100
+_MAX_CONTENT_WIDTH = 200
 _MODES_EXPLANATION = f"""\b\nBuilt-in mode names or paths to custom mode YAMLs with which to 
 override the default modes defined in the global Serena configuration or 
 the active project.
@@ -90,9 +93,6 @@ def find_project_root(root: str | Path | None = None) -> str | None:
     return None
 
 
-# --------------------- Utilities -------------------------------------
-
-
 def _open_in_editor(path: str) -> None:
     """Open the given file in the system's default editor or viewer."""
     editor = os.environ.get("EDITOR")
@@ -128,32 +128,98 @@ class ProjectType(click.ParamType):
 PROJECT_TYPE = ProjectType()
 
 
-class AutoRegisteringGroup(click.Group):
-    """
-    A click.Group subclass that automatically registers any click.Command
-    attributes defined on the class into the group.
-
-    After initialization, it inspects its own class for attributes that are
-    instances of click.Command (typically created via @click.command) and
-    calls self.add_command(cmd) on each. This lets you define your commands
-    as static methods on the subclass for IDE-friendly organization without
-    manual registration.
-    """
-
-    def __init__(self, name: str, help: str):
-        super().__init__(name=name, help=help)
-        # Scan class attributes for click.Command instances and register them.
-        for attr in dir(self.__class__):
-            cmd = getattr(self.__class__, attr)
-            if isinstance(cmd, click.Command):
-                self.add_command(cmd)
-
-
 class TopLevelCommands(AutoRegisteringGroup):
     """Root CLI group containing the core Serena commands."""
 
     def __init__(self) -> None:
-        super().__init__(name="serena", help="Serena CLI commands. You can run `<command> --help` for more info on each command.")
+        super().__init__(
+            name="serena",
+            help="Main serena CLI commands. "
+            "Note that you also have access to `serena-hooks` CLI commands which are kept under "
+            "that separate entrypoint for performance reasons, see `serena-hooks --help`. You can run `<command> --help` for more info on each command.",
+        )
+
+        # register --version / -V flag
+        self.params.append(
+            click.Option(
+                ["--version", "-V"],
+                is_flag=True,
+                expose_value=False,
+                is_eager=True,
+                callback=self._print_version,
+                help="Show the version and exit.",
+            )
+        )
+
+    @staticmethod
+    def _print_version(ctx: click.Context, _param: click.Parameter, value: bool) -> None:
+        """Print version string and exit if the flag is set."""
+        if not value:
+            return
+        click.echo(f"Serena {serena_version()}")
+        ctx.exit()
+
+    @staticmethod
+    @click.command(
+        "init",
+        help="Initialize Serena by creating a global config file with the specified default language backend.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.option(
+        "--language-backend",
+        "-b",
+        type=click.Choice([b.value for b in LanguageBackend]),
+        default=LanguageBackend.LSP.value,
+        show_default=True,
+        help="Default code intelligence backend (can be overridden in the project config).",
+    )
+    def init(language_backend: Literal["LSP", "JetBrains"] = "LSP") -> None:
+        click.echo(f"\nSerena version: {serena_version()}\n")
+        serena_config = SerenaConfig.from_config_file()
+        serena_config.language_backend = LanguageBackend(language_backend)
+        serena_config.save()
+        click.echo(f"Configuration file: {serena_config.config_file_path}")
+        click.echo(f"Language backend: {language_backend}")
+
+        # check for auto-configurable clients
+        applicable_setup_handlers = []
+        for setup_handler in client_setup_handlers:
+            if setup_handler.is_applicable():
+                applicable_setup_handlers.append(setup_handler)
+        if len(applicable_setup_handlers) > 0:
+            click.echo(
+                "\nAuto-configurable clients detected.\nApply the following commands to configure the Serena MCP server (in a default configuration):"
+            )
+            for setup_handler in applicable_setup_handlers:
+                click.echo(f"  serena setup {setup_handler.name}")
+
+        click.echo("\nSerena has been initialised successfully.\n")
+
+    @staticmethod
+    @click.command(
+        "setup",
+        help="Set up Serena for use with a specific client by registering it as an MCP server.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument(
+        "client",
+        type=click.Choice([h.name for h in client_setup_handlers]),
+    )
+    def setup(client: str) -> None:
+        # find the matching handler
+        handler = next(h for h in client_setup_handlers if h.name == client)
+
+        # check applicability
+        if not handler.is_applicable():
+            click.echo(f"\nCannot apply setup for client '{client}' (not found or not functional).\n")
+            raise SystemExit(1)
+
+        # apply the setup
+        if handler.apply():
+            click.echo(f"\nSerena has been successfully set up for {client}.\n")
+        else:
+            click.echo(f"\nFailed to set up Serena for {client}.\n")
+            raise SystemExit(1)
 
     @staticmethod
     @click.command("start-mcp-server", help="Starts the Serena MCP server.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
@@ -1108,23 +1174,16 @@ class PromptCommands(AutoRegisteringGroup):
         click.echo(f"Deleted override file '{prompt_yaml_name}'.")
 
 
-# Expose groups so we can reference them in pyproject.toml
-mode = ModeCommands()
-context = ContextCommands()
-project = ProjectCommands()
-config = SerenaConfigCommands()
-tools = ToolCommands()
-prompts = PromptCommands()
+_mode = ModeCommands()
+_context = ContextCommands()
+_project = ProjectCommands()
+_config = SerenaConfigCommands()
+_tools = ToolCommands()
+_prompts = PromptCommands()
 
-# Expose toplevel commands for the same reason
+# Expose so we can use this as an entrypoint
 top_level = TopLevelCommands()
-start_mcp_server = top_level.start_mcp_server
 
 # needed for the help script to work - register all subcommands to the top-level group
-for subgroup in (mode, context, project, config, tools, prompts):
+for subgroup in (_mode, _context, _project, _config, _tools, _prompts):
     top_level.add_command(subgroup)
-
-
-def get_help() -> str:
-    """Retrieve the help text for the top-level Serena CLI."""
-    return top_level.get_help(click.Context(top_level, info_name="serena"))

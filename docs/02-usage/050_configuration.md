@@ -51,10 +51,8 @@ You can access it
   * using the command
 
     ```shell
-    <serena> config edit
+    serena config edit
     ```
-
-    where `<serena>` is [your way of running Serena](020_running).
 
 ## Modes and Contexts
 
@@ -95,13 +93,12 @@ If you are using a local server (such as Llama.cpp) which requires you to use Op
 
 You can manage contexts using the `context` command,
 
-    <serena> context --help
-    <serena> context list
-    <serena> context create <context-name>
-    <serena> context edit <context-name>
-    <serena> context delete <context-name>
+    serena context --help
+    serena context list
+    serena context create <context-name>
+    serena context edit <context-name>
+    serena context delete <context-name>
 
-where `<serena>` is [your way of running Serena](020_running).
 
 (modes)=
 ### Modes
@@ -148,10 +145,6 @@ If you want to keep certain modes as always active, regardless of command-line p
 define them as *base modes* in the global or project configuration.
 :::
 
-Modes can also be _switched dynamically_ during a session. 
-You can instruct the LLM to use the `switch_modes` tool to activate a different set of modes (e.g., "Switch to planning and one-shot modes").
-Like command-line parameters, this only affects default modes, not base modes (which remain active).
-
 :::{note}
 **Mode Compatibility**: While you can combine modes, some may be semantically incompatible (e.g., `interactive` and `one-shot`). 
 Serena currently does not prevent incompatible combinations; it is up to the user to choose sensible mode configurations.
@@ -159,13 +152,11 @@ Serena currently does not prevent incompatible combinations; it is up to the use
 
 You can manage modes using the `mode` command,
 
-    <serena> mode --help
-    <serena> mode list
-    <serena> mode create <mode-name>
-    <serena> mode edit <mode-name>
-    <serena> mode delete <mode-name>
-
-where `<serena>` is [your way of running Serena](020_running).
+    serena mode --help
+    serena mode list
+    serena mode create <mode-name>
+    serena mode edit <mode-name>
+    serena mode delete <mode-name>
 
 ## Advanced Configuration
 
@@ -481,8 +472,35 @@ Supported settings:
 | Setting | Default | Description |
 |---|---|---|
 | `ls_path` | managed install or build | Override the `shader-language-server` executable path. |
-| `version` | `1.3.0` | Override the bundled version Serena downloads, or builds from source on macOS, when `ls_path` is not set. |
+| `version` | `1.3.1` | Override the bundled version Serena downloads, or builds from source on macOS, when `ls_path` is not set. |
 
+
+#### Haxe
+
+Serena uses the [vshaxe/haxe-language-server](https://github.com/vshaxe/haxe-language-server) for Haxe support.
+Requires Haxe compiler (3.4.0+) and Node.js.
+
+The server is discovered in order: user-configured `ls_path`, system PATH, vshaxe VSCode extension, auto-download from Open VSX.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | auto-discovered | Path to the Haxe language server binary (e.g., `/path/to/server.js`). |
+| `version` | `2.34.2` | Override the vshaxe extension version downloaded from Open VSX. SHA256 verification is only performed for the default version. |
+| `buildFile` | auto-discovered `.hxml` | Relative path to the `.hxml` build file used for compilation (e.g., `build/debug.hxml`). If not set, Serena searches the project for `.hxml` files (max depth 5, skipping dependency directories). |
+| `haxePath` | `haxe` from PATH | Path to the Haxe compiler executable. The LS delegates to this for code analysis. Useful when multiple Haxe versions are installed or when `haxe` is not on the PATH. |
+| `renameSourceFolders` | not set (LS default) | List of source directories for scoping rename operations (e.g., `["src", "lib"]`). If not set, the Haxe LS uses its own defaults. |
+
+Example (typically in `project.yml`, since these are project-specific):
+
+```yaml
+ls_specific_settings:
+  haxe:
+    buildFile: "build/debug.hxml"
+    haxePath: "/usr/local/bin/haxe"
+    renameSourceFolders: ["src", "lib"]
+```
 
 #### Java (`eclipse.jdt.ls`)
 
@@ -845,3 +863,11 @@ prompts:
 ```
 
 It is advisable to use the default prompt as a starting point and modify it to suit your needs.
+
+### Usage Reporting
+
+On startup, Serena reports anonymous usage data to help us understand Serena usage.
+Specifically, we collect the Serena version, the operating system & language backend being used as well as the dashboard enabled status.
+No personally identifiable information or project-specific information is collected.
+
+If you want to opt out of usage reporting, set the environment variable `SERENA_USAGE_REPORTING` to `false`.

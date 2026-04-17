@@ -28,8 +28,11 @@ class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
 
         :param project: the name of a registered project to activate or a path to a project directory
         """
-        active_project = self.agent.activate_project_from_path_or_name(project)
-        result = active_project.get_activation_message()
+        is_new_activation = self.agent.activate_project_from_path_or_name(project)
+        if not is_new_activation:
+            result = "Project was already active."
+        else:
+            result = self.agent.get_project_activation_message()
         result += "\nIMPORTANT: If you have not yet read the 'Serena Instructions Manual', do it now before continuing!"
         return result
 
@@ -47,27 +50,6 @@ class RemoveProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerO
         """
         self.agent.serena_config.remove_project(project_name)
         return f"Successfully removed project '{project_name}' from configuration."
-
-
-class SwitchModesTool(Tool, ToolMarkerOptional):
-    """
-    Activates modes by providing a list of their names
-    """
-
-    def apply(self, modes: list[str]) -> str:
-        """
-        Activates the desired modes, like ["editing", "interactive"] or ["planning", "one-shot"]
-
-        :param modes: the names of the modes to activate
-        """
-        self.agent.set_modes(modes)
-
-        # Inform the Agent about the activated modes and the currently active tools
-        mode_instances = self.agent.get_active_modes()
-        result_str = f"Active modes: {', '.join([mode.name for mode in mode_instances])}" + "\n"
-        result_str += "\n".join([mode_instance.prompt for mode_instance in mode_instances]) + "\n"
-        result_str += f"Currently active tools: {', '.join(self.agent.get_active_tool_names())}"
-        return result_str
 
 
 class GetCurrentConfigTool(Tool):

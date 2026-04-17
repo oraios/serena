@@ -51,6 +51,7 @@ class Language(str, Enum):
     TERRAFORM = "terraform"
     SWIFT = "swift"
     BASH = "bash"
+    CRYSTAL = "crystal"
     ZIG = "zig"
     LUA = "lua"
     LUAU = "luau"
@@ -68,6 +69,11 @@ class Language(str, Enum):
     JULIA = "julia"
     FORTRAN = "fortran"
     HASKELL = "haskell"
+    HAXE = "haxe"
+    """Haxe language server using vshaxe/haxe-language-server.
+    Requires Haxe compiler (3.4.0+) and Node.js.
+    Discovered from system PATH or vshaxe VSCode extension, otherwise downloaded from Open VSX.
+    """
     LEAN4 = "lean4"
     GROOVY = "groovy"
     VUE = "vue"
@@ -81,6 +87,12 @@ class Language(str, Enum):
     """MATLAB language server using the official MathWorks MATLAB Language Server.
     Requires MATLAB R2021b or later and Node.js.
     Set MATLAB_PATH environment variable or configure matlab_path in ls_specific_settings.
+    """
+    MSL = "msl"
+    """mIRC Scripting Language (mSL) language server.
+    Supports .mrc files used in mIRC and AdiIRC IRC clients.
+    Uses a custom LSP server based on pygls. Automatically sets up
+    a virtual environment with pygls dependencies on first use.
     """
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
@@ -236,6 +248,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.swift")
             case self.BASH:
                 return FilenameMatcher("*.sh", "*.bash")
+            case self.CRYSTAL:
+                return FilenameMatcher("*.cr")
             case self.YAML:
                 return FilenameMatcher("*.yaml", "*.yml")
             case self.TOML:
@@ -270,6 +284,8 @@ class Language(str, Enum):
                 )
             case self.HASKELL:
                 return FilenameMatcher("*.hs", "*.lhs")
+            case self.HAXE:
+                return FilenameMatcher("*.hx")
             case self.LEAN4:
                 return FilenameMatcher("*.lean")
             case self.VUE:
@@ -311,6 +327,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.sol")
             case self.ANSIBLE:
                 return FilenameMatcher("*.yaml", "*.yml")
+            case self.MSL:
+                return FilenameMatcher("*.mrc")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -420,6 +438,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.bash_language_server import BashLanguageServer
 
                 return BashLanguageServer
+            case self.CRYSTAL:
+                from solidlsp.language_servers.crystal_language_server import CrystalLanguageServer
+
+                return CrystalLanguageServer
             case self.YAML:
                 from solidlsp.language_servers.yaml_language_server import YamlLanguageServer
 
@@ -486,6 +508,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.haskell_language_server import HaskellLanguageServer
 
                 return HaskellLanguageServer
+            case self.HAXE:
+                from solidlsp.language_servers.haxe_language_server import HaxeLanguageServer
+
+                return HaxeLanguageServer
             case self.LEAN4:
                 from solidlsp.language_servers.lean4_language_server import Lean4LanguageServer
 
@@ -526,6 +552,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.ansible_language_server import AnsibleLanguageServer
 
                 return AnsibleLanguageServer
+            case self.MSL:
+                from solidlsp.language_servers.msl_language_server import MslLanguageServer
+
+                return MslLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

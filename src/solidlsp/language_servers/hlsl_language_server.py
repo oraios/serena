@@ -12,7 +12,11 @@ from typing import Any, cast
 import psutil
 from overrides import override
 
-from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
+from solidlsp.ls import (
+    LanguageServerDependencyProvider,
+    LanguageServerDependencyProviderSinglePath,
+    SolidLanguageServer,
+)
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
@@ -22,13 +26,13 @@ from .common import RuntimeDependency, RuntimeDependencyCollection
 log = logging.getLogger(__name__)
 
 # GitHub release version to download when not installed locally
-_DEFAULT_VERSION = "1.3.0"
+_DEFAULT_VERSION = "1.3.1"
 _GITHUB_RELEASE_BASE = "https://github.com/antaalt/shader-sense/releases/download"
 _HLSL_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
 _HLSL_SHA256_BY_ASSET = {
-    "shader-language-server-x86_64-pc-windows-msvc.zip": "a945b000c296cdeebb9ee2d4452cec2a0f26544dd076bb08bfdcade2278296a6",
-    "shader-language-server-x86_64-unknown-linux-gnu.zip": "8c0a7b36f51cc58593762db3592ae13e21ca3cb982b2526cfaaf7c82e92ca089",
-    "shader-language-server-aarch64-pc-windows-msvc.zip": "cdbd7b41e71cf6040d5cdb7e211ba4b76671a404ee0f7add281d72d3ab8dfa65",
+    "shader-language-server-x86_64-pc-windows-msvc.zip": "49081c5547ddde1b8b3b17295282a80ddacbca1d6f5dcd834e2788c02bafa997",
+    "shader-language-server-x86_64-unknown-linux-gnu.zip": "61710df7ca17a2d063b598936c57c56c49fbf837707a1aa886f9b0193a35be3c",
+    "shader-language-server-aarch64-pc-windows-msvc.zip": "a3b3799affe2cad27652e788376b46fe76e1a6c2ce45946a486dcb26c9091412",
 }
 
 

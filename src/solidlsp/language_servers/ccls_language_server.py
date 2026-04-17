@@ -34,6 +34,8 @@ import pathlib
 import threading
 from typing import Any, cast
 
+from overrides import override
+
 from solidlsp.ls import (
     LanguageServerDependencyProvider,
     LanguageServerDependencyProviderSinglePath,
@@ -66,6 +68,13 @@ class CCLS(SolidLanguageServer):
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
+
+    @override
+    def is_ignored_dirname(self, dirname: str) -> bool:
+        ignored_dirs = [
+            ".ccls-cache",
+        ]
+        return super().is_ignored_dirname(dirname) or dirname in ignored_dirs
 
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
         def _get_or_install_core_dependency(self) -> str:

@@ -4,14 +4,17 @@ requires = ["hatchling"]
 
 [project]
 name = "serena-agent"
-version = "0.1.4"
-description = ""
+version = "1.1.2"
+description = "A powerful MCP toolkit for coding, providing semantic retrieval and editing capabilities - the IDE for your agent"
 authors = [{ name = "Oraios AI", email = "info@oraios-ai.de" }]
 readme = "README.md"
 requires-python = ">=3.11, <3.15"
 classifiers = [
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
   "requests==2.33.0",
@@ -36,22 +39,22 @@ dependencies = [
   "tiktoken==0.12.0",
   "anthropic==0.59.0",
   "beautifulsoup4==4.14.2",
-  "pywebview",
+  "pywebview==6.2",
   "pystray==0.19.5",
+  "pygls==2.1.1", # used to implement an msl language server
+  "lsprotocol==2025.0.0",
   # Transitive deps pinned for security (dependabot alerts).
   # Exact pins because uvx installs from git, ignoring the lock file.
   "urllib3==2.6.3",
   "werkzeug==3.1.7",
   "starlette==1.0.0",
-  "python-multipart==0.0.22",
+  "python-multipart==0.0.26",
   "filelock==3.25.2",
-  "cryptography==46.0.6",
+  "cryptography==46.0.7",
   "regex==2026.2.28",
   "pythonnet==3.1.0-rc0 ; sys_platform == 'win32'",
 ]
 
-[tool.uv.sources]
-pywebview = { git = "https://github.com/r0x0r/pywebview", rev = "345596c1f4fd59fd26c7aa02d4176c5362bcbabe" }
 
 [[tool.uv.index]]
 name = "testpypi"
@@ -61,8 +64,7 @@ explicit = true
 
 [project.scripts]
 serena = "serena.cli:top_level"
-serena-mcp-server = "serena.cli:start_mcp_server"
-index-project = "serena.cli:index_project"        # deprecated
+serena-hooks = "serena.hooks:hook_commands"
 
 [project.license]
 text = "MIT"
@@ -83,6 +85,7 @@ dev = [
   # docs
   "sphinx==7.4.7",
   "sphinx_rtd_theme==2.0.0",
+  "sphinx_book_theme==1.1.4",
   "sphinx-toolbox==3.7.0",
   "jupyter-book==1.0.4.post1",
   "nbsphinx==0.9.7",
@@ -298,6 +301,7 @@ max-complexity = 20
 addopts = "--snapshot-patch-pycharm-diff"
 markers = [
   "clojure: language server running for Clojure",
+  "crystal: language server running for Crystal",
   "python: language server running for Python",
   "go: language server running for Go",
   "java: language server running for Java",
@@ -332,6 +336,7 @@ markers = [
   "julia: Julia language server tests",
   "fortran: language server running for Fortran",
   "haskell: Haskell language server tests",
+  "haxe: Haxe language server tests",
   "yaml: language server running for YAML",
   "powershell: language server running for PowerShell",
   "pascal: language server running for Pascal (Free Pascal/Lazarus)",
@@ -344,6 +349,7 @@ markers = [
   "lean4: language server running for Lean 4",
   "solidity: language server running for Solidity (uses @nomicfoundation/solidity-language-server)",
   "ansible: language server running for Ansible (uses @ansible/ansible-language-server)",
+  "msl: language server running for mSL (mIRC Scripting Language)",
 ]
 
 [tool.codespell]

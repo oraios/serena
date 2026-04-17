@@ -9,7 +9,6 @@ prompt: |
   To illustrate complex relationships, consider creating diagrams in addition to your text-based communication
   (depending on the options for text, html, mermaid diagrams, etc. that you are provided with in your initial instructions).
 excluded_tools: []
-included_optional_tools:
-  - switch_modes
+included_optional_tools: []
 
 tool_description_overrides: {}

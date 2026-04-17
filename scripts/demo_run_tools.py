@@ -4,7 +4,10 @@ for testing or development. Here the tools will be operation the serena repo its
 """
 
 import json
+from pathlib import Path
 from pprint import pprint
+
+from toon_format import encode
 
 from serena.agent import SerenaAgent
 from serena.config.serena_config import SerenaConfig
@@ -14,13 +17,17 @@ from serena.tools import (
     FindReferencingSymbolsTool,
     JetBrainsFindSymbolTool,
     JetBrainsGetSymbolsOverviewTool,
+    JetBrainsInlineSymbol,
+    JetBrainsSafeDeleteTool,
     SearchForPatternTool,
 )
 
 if __name__ == "__main__":
     serena_config = SerenaConfig.from_config_file()
     serena_config.web_dashboard = False
-    agent = SerenaAgent(project=REPO_ROOT, serena_config=serena_config)
+    # project = Path(REPO_ROOT).parent / "serena-jetbrains-plugin-copy"
+    project = Path(REPO_ROOT)
+    agent = SerenaAgent(project=str(project), serena_config=serena_config)
 
     # apply a tool
     find_symbol_tool = agent.get_tool(JetBrainsFindSymbolTool)
@@ -28,9 +35,16 @@ if __name__ == "__main__":
     find_file_tool = agent.get_tool(FindFileTool)
     search_pattern_tool = agent.get_tool(SearchForPatternTool)
     overview_tool = agent.get_tool(JetBrainsGetSymbolsOverviewTool)
+    safe_delete_tool = agent.get_tool(JetBrainsSafeDeleteTool)
+    inline_symbol = agent.get_tool(JetBrainsInlineSymbol)
 
     result = agent.execute_task(
-        lambda: find_symbol_tool.apply("SerenaAgent/get_tool_description_override"),
+        lambda: overview_tool.apply(
+            # name_path_pattern="SerenaAgent",
+            relative_path="src/serena/agent.py",
+            depth=2,
+            # keep_definition=True,
+        )
     )
-    pprint(json.loads(result))
+    pprint(encode(json.loads(result)))
     # input("Press Enter to continue...")

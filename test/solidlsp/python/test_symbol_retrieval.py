@@ -224,22 +224,11 @@ class TestLanguageServerSymbols:
 
         # Find the line number where create_user is called
         # This could vary, so we'll use a relative position that makes sense
-        defining_symbol = language_server.request_defining_symbol(examples_file_path, 10, 30)
-
-        # Verify that we found the defining symbol - should be the create_user method
-        # Because this might fail if the structure isn't exactly as expected, we'll use try-except
-        try:
-            assert defining_symbol is not None
-            assert defining_symbol.get("name") == "create_user"
-            # The defining symbol should be in the services.py file
-            if "location" in defining_symbol and "uri" in defining_symbol["location"]:
-                assert "services.py" in defining_symbol["location"]["uri"]
-        except AssertionError:
-            # If the file structure doesn't match what we expect, we can't guarantee this test
-            # will pass, so we'll consider it a warning rather than a failure
-            import warnings
-
-            warnings.warn("Could not verify method call definition - file structure may differ from expected")
+        defining_symbol = language_server.request_defining_symbol(examples_file_path, 46, 29)
+        assert defining_symbol is not None
+        assert defining_symbol.get("name") == "create_user"
+        # The defining symbol should be in the services.py file
+        assert "services.py" in defining_symbol["location"]["uri"]
 
     @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_request_defining_symbol_none(self, language_server: SolidLanguageServer) -> None:
@@ -331,32 +320,7 @@ class TestLanguageServerSymbols:
 
         # Step 3: Verify that they refer to the same symbol
         assert defining_symbol["kind"] == containing_symbol["kind"]
-        if "location" in defining_symbol and "location" in containing_symbol:
-            assert defining_symbol["location"]["uri"] == containing_symbol["location"]["uri"]
-
-        # The integration test is successful if we've gotten this far,
-        # as it demonstrates the integration between request_containing_symbol and request_defining_symbol
-
-        # Try to get the container information for our method, but be flexible
-        # since implementations may vary
-        container_name = defining_symbol.get("containerName", None)
-        if container_name and "UserService" in container_name:
-            # If containerName contains UserService, that's a valid implementation
-            pass
-        else:
-            # Try an alternative approach - looking for the containing class
-            try:
-                # Look for the class symbol in the file
-                for line in range(5, 12):  # Approximate range where UserService class should be defined
-                    symbol = language_server.request_containing_symbol(file_path, line, 5)  # column 5 should be within class definition
-                    if symbol and symbol.get("name") == "UserService" and symbol.get("kind") == SymbolKind.Class.value:
-                        # Found the class - this is also a valid implementation
-                        break
-            except Exception:
-                # Just log a warning - this is an alternative verification and not essential
-                import warnings
-
-                warnings.warn("Could not verify container hierarchy - implementation detail")
+        assert defining_symbol["location"]["uri"] == containing_symbol["location"]["uri"]
 
     @pytest.mark.parametrize("language_server", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_symbol_tree_structure(self, language_server: SolidLanguageServer) -> None:

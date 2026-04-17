@@ -22,11 +22,19 @@ See the corresponding [memory](.serena/memories/adding_new_language_support_guid
 
 You can install a virtual environment with the required as follows
 
-1. Create a new virtual environment: `uv venv`
+1. Create a new virtual environment: `uv venv -p 3.13`
 2. Activate the environment:
     * On Linux/Unix/macOS or Windows with Git Bash: `source .venv/bin/activate`
     * On Windows outside of Git Bash: `.venv\Scripts\activate.bat` (in cmd/ps) or `source .venv/Scripts/activate` (in git-bash) 
 3. Install the required packages with all extras: `uv sync --extra dev`
+
+## Local Installation as Tool
+
+To install Serena as a local tool, run
+
+```shell
+uv tool install --reinstall -p 3.13 .
+```
 
 ## Poe Tasks
 

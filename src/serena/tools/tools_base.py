@@ -21,7 +21,7 @@ from solidlsp.ls_exceptions import SolidLSPException
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
-    from serena.code_editor import CodeEditor
+    from serena.code_editor import CodeEditor, LanguageServerCodeEditor
     from serena.symbol import LanguageServerSymbolRetriever
 
 log = logging.getLogger(__name__)
@@ -58,15 +58,22 @@ class Component(ABC):
         return self.agent.get_active_project_or_raise()
 
     def create_code_editor(self) -> "CodeEditor":
-        from ..code_editor import JetBrainsCodeEditor, LanguageServerCodeEditor
+        from ..code_editor import JetBrainsCodeEditor
 
         match self.agent.get_language_backend():
             case LanguageBackend.LSP:
-                return LanguageServerCodeEditor(self.create_language_server_symbol_retriever())
+                return self.create_ls_code_editor()
             case LanguageBackend.JETBRAINS:
                 return JetBrainsCodeEditor(project=self.project)
             case _:
                 raise ValueError
+
+    def create_ls_code_editor(self) -> "LanguageServerCodeEditor":
+        from ..code_editor import LanguageServerCodeEditor
+
+        if not self.agent.is_using_language_server():
+            raise Exception("Cannot create LanguageServerCodeEditor; agent is not in language server mode.")
+        return LanguageServerCodeEditor(self.create_language_server_symbol_retriever())
 
 
 class ToolMarker:
@@ -103,6 +110,12 @@ class ToolMarkerSymbolicEdit(ToolMarkerCanEdit):
     """
 
 
+class ToolMarkerBeta(ToolMarker):
+    """
+    Marker for tools that are considered beta features (may not be fully robust)
+    """
+
+
 class ApplyMethodProtocol(Protocol):
     """Callable protocol for the apply method of a tool."""
 
@@ -123,6 +136,11 @@ class Tool(Component):
 
     _last_tool_call_client_str: str | None = None
     """We can only get the client info from within a tool call. Each tool call will update this variable."""
+
+    @staticmethod
+    def _sanitize_input_param(raw_param: str) -> str:
+        # some clients replace < and > with their escaped html versions, we need to counteract this
+        return raw_param.replace("&lt;", "<").replace("&gt;", ">")
 
     @classmethod
     def set_last_tool_call_client_str(cls, client_str: str | None) -> None:
@@ -400,6 +418,7 @@ class EditedFileContext:
 class RegisteredTool:
     tool_class: type[Tool]
     is_optional: bool
+    is_beta: bool
     tool_name: str
 
     @property
@@ -415,6 +434,14 @@ tool_packages = ["serena.tools"]
 
 @singleton
 class ToolRegistry:
+    _deleted_tools: list[str] = [
+        "think_about_collected_information",
+        "prepare_for_new_conversation",
+        "summarize_changes",
+        "think_about_whether_you_are_done",
+        "switch_modes",
+    ]
+
     def __init__(self) -> None:
         self._tool_dict: dict[str, RegisteredTool] = {}
         inclusion_predicate = lambda c: "apply" in c.__dict__  # include only concrete tool classes that implement apply
@@ -422,10 +449,11 @@ class ToolRegistry:
             if not any(cls.__module__.startswith(pkg) for pkg in tool_packages):
                 continue
             is_optional = issubclass(cls, ToolMarkerOptional)
+            is_beta = issubclass(cls, ToolMarkerBeta)
             name = cls.get_name_from_cls()
             if name in self._tool_dict:
                 raise ValueError(f"Duplicate tool name found: {name}. Tool classes must have unique names.")
-            self._tool_dict[name] = RegisteredTool(tool_class=cls, is_optional=is_optional, tool_name=name)
+            self._tool_dict[name] = RegisteredTool(tool_class=cls, is_optional=is_optional, tool_name=name, is_beta=is_beta)
 
     def get_registered_tools_by_module(self) -> dict[str, list[RegisteredTool]]:
         """
@@ -503,3 +531,15 @@ class ToolRegistry:
 
     def is_valid_tool_name(self, tool_name: str) -> bool:
         return tool_name in self._tool_dict
+
+    def check_valid_tool_name(self, tool_name: str, caller_context_for_logging: str = "") -> bool:
+        """Returns True if the tool name is valid, False if it is deleted, and raises ValueError if it is invalid."""
+        if self.is_deleted_tool_name(tool_name):
+            log.warning(f"Tool name is deleted: {tool_name}{caller_context_for_logging}")
+            return False
+        if not self.is_valid_tool_name(tool_name):
+            raise ValueError(f"Invalid tool name: {tool_name}{caller_context_for_logging}")
+        return True
+
+    def is_deleted_tool_name(self, tool_name: str) -> bool:
+        return tool_name in self._deleted_tools

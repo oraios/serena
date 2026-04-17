@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import re
@@ -291,7 +290,7 @@ class Project(ToStringMixin):
 
         self.language_server_manager: LanguageServerManager | None = None
         self._language_server_manager_init_error: Exception | None = None
-        self._is_newly_created = is_newly_created
+        self.is_newly_created = is_newly_created
         self._agent: Optional["SerenaAgent"] = None
 
         # create .gitignore file in the project's Serena data folder if not yet present
@@ -379,26 +378,6 @@ class Project(ToStringMixin):
     def path_to_project_yml(self) -> str:
         return self.serena_config.get_project_yml_location(self.project_root)
 
-    def get_activation_message(self) -> str:
-        """
-        :return: a message providing information about the project upon activation (e.g. programming language, memories, initial prompt)
-        """
-        if self._is_newly_created:
-            msg = f"Created and activated a new project with name '{self.project_name}' at {self.project_root}. "
-        else:
-            msg = f"The project with name '{self.project_name}' at {self.project_root} is activated."
-        languages_str = ", ".join([lang.value for lang in self.project_config.languages])
-        msg += f"\nProgramming languages: {languages_str}; file encoding: {self.project_config.encoding}"
-        project_memories = self.memories_manager.list_project_memories()
-        if project_memories:
-            msg += (
-                f"\nAvailable project memories: {json.dumps(project_memories.to_dict())}\n"
-                + "Use the `read_memory` tool to read these memories later if they are relevant to the task."
-            )
-        if self.project_config.initial_prompt:
-            msg += f"\nAdditional project-specific instructions:\n {self.project_config.initial_prompt}"
-        return msg
-
     def read_file(self, relative_path: str) -> str:
         """
         Reads a file relative to the project root.
@@ -469,7 +448,7 @@ class Project(ToStringMixin):
         rel_path = Path(relative_path)
 
         # always ignore paths inside .git
-        if len(rel_path.parts) > 0 and rel_path.parts[0] == ".git":
+        if len(rel_path.parts) > 0 and ".git" in rel_path.parts:
             return True
 
         return match_path(str(relative_path), self._ignore_spec, root_path=self.project_root)

@@ -116,76 +116,19 @@ class TestVueNonExistentFiles:
     """Tests for handling non-existent files."""
 
     @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
-    def test_document_symbols_nonexistent_file(self, language_server: SolidLanguageServer) -> None:
-        """Test requesting document symbols from non-existent file.
-
-        Expected behavior: Should raise FileNotFoundError or return empty result.
-        """
-        nonexistent_file = os.path.join("src", "components", "NonExistent.vue")
-
-        # Should raise an appropriate exception or return empty result
-        try:
-            result = language_server.request_document_symbols(nonexistent_file)
-            # If no exception, verify result is empty or indicates file not found
-            symbols = result.get_all_symbols_and_roots()
-            assert len(symbols[0]) == 0, f"Non-existent file should return empty symbols, got {len(symbols[0])} symbols"
-        except (FileNotFoundError, Exception) as e:
-            # Expected - file doesn't exist
-            assert True, f"Appropriately raised exception for non-existent file: {e}"
-
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
-    def test_containing_symbol_nonexistent_file(self, language_server: SolidLanguageServer) -> None:
-        """Test requesting containing symbol from non-existent file.
-
-        Expected behavior: Should raise FileNotFoundError or return None.
-        """
-        nonexistent_file = os.path.join("src", "components", "NonExistent.vue")
-
-        # Should raise an appropriate exception or return None
-        try:
-            result = language_server.request_containing_symbol(nonexistent_file, 10, 10)
-            # If no exception, verify result indicates file not found
-            assert result is None or result == {}, f"Non-existent file should return None or empty dict, got: {result}"
-        except (FileNotFoundError, Exception) as e:
-            # Expected - file doesn't exist
-            assert True, f"Appropriately raised exception for non-existent file: {e}"
-
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
-    def test_references_nonexistent_file(self, language_server: SolidLanguageServer) -> None:
+    def test_requesting_on_nonexistent_file(self, language_server: SolidLanguageServer) -> None:
         """Test requesting references from non-existent file.
 
         Expected behavior: Should raise FileNotFoundError or return empty list.
         """
         nonexistent_file = os.path.join("src", "components", "NonExistent.vue")
 
-        # Should raise an appropriate exception or return empty list
-        try:
-            result = language_server.request_references(nonexistent_file, 10, 10)
-            # If no exception, verify result is empty
-            assert result is None or isinstance(result, list), f"Non-existent file should return None or list, got: {result}"
-            if isinstance(result, list):
-                assert len(result) == 0, f"Non-existent file should return empty list, got {len(result)} references"
-        except (FileNotFoundError, Exception) as e:
-            # Expected - file doesn't exist
-            assert True, f"Appropriately raised exception for non-existent file: {e}"
-
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
-    def test_definition_nonexistent_file(self, language_server: SolidLanguageServer) -> None:
-        """Test requesting definition from non-existent file.
-
-        Expected behavior: Should raise FileNotFoundError or return empty list.
-        """
-        nonexistent_file = os.path.join("src", "components", "NonExistent.vue")
-
-        # Should raise an appropriate exception or return empty list
-        try:
-            result = language_server.request_definition(nonexistent_file, 10, 10)
-            # If no exception, verify result is empty
-            assert isinstance(result, list), f"request_definition should return a list, got: {type(result)}"
-            assert len(result) == 0, f"Non-existent file should return empty list, got {len(result)} definitions"
-        except (FileNotFoundError, Exception) as e:
-            # Expected - file doesn't exist
-            assert True, f"Appropriately raised exception for non-existent file: {e}"
+        with pytest.raises(FileNotFoundError):
+            language_server.request_references(nonexistent_file, 10, 10)
+        with pytest.raises(FileNotFoundError):
+            language_server.request_definition(nonexistent_file, 10, 10)
+        with pytest.raises(FileNotFoundError):
+            language_server.request_document_symbols(nonexistent_file)
 
 
 class TestVueUndefinedSymbols:

@@ -1,15 +1,18 @@
 description: All tools, with detailed instructions for code editing
-prompt: |
-  You are operating in editing mode. You can edit files with the provided tools.
-  You adhere to the project's code style and patterns.
-  
+prompt: |  
   Use symbolic editing tools whenever possible for precise code modifications.
-  If no explicit editing task has yet been provided, wait for the user to provide one. Do not be overly eager.
-
-  When writing new code, think about where it belongs best. Don't generate new files if you don't plan on actually
-  properly integrating them into the codebase.
-
-  You have two main approaches for editing code: (a) editing at the symbol level and (b) file-based editing.
+  
+  {% if 'jet_brains_move' in available_tools -%}
+  **Refactoring tools**
+  You also have access to Serena's refactoring tools (move, inline, safe_delete) 
+  which should ALWAYS be preferred over naive and primitive approaches when applicable.
+  When you need to move, inline or delete a symbol, you should always try using the corresponding tool first.
+  {%- endif %}
+  
+  {% if 'jet_brains_move' in available_tools -%}
+  Apart from refactoring tools
+  {%- endif %}
+  you have two main approaches for editing code: (a) editing at the symbol level and (b) file-based editing.
   The symbol-based approach is appropriate if you need to adjust an entire symbol, e.g. a method, a class, a function, etc.
   It is not appropriate if you need to adjust just a few lines of code within a larger symbol.
 

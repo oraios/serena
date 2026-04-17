@@ -6,6 +6,9 @@ on:
     branches:
       - main
 
+permissions:
+    contents: read
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -20,7 +23,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.11"]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Free disk space
         if: runner.os == 'Linux'
         run: |
@@ -386,6 +389,12 @@ jobs:
       - name: Install ansible-core and ansible-lint (for Ansible language server tests)
         shell: bash
         run: uv run pip install ansible-core ansible-lint
+      - name: Install Haxe
+        # The Haxe LS binary (server.js) is auto-downloaded and runs on Node.js,
+        # but it delegates to the Haxe compiler for code analysis at runtime.
+        uses: krdlab/setup-haxe@v2
+        with:
+          haxe-version: 4.3.7
       - name: Install Elm
         shell: bash
         run: npm install -g elm@0.19.1-6

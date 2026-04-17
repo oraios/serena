@@ -258,7 +258,8 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
 
         :param name_path: for finding the symbol to find references for, same logic as in the `find_symbol` tool.
         :param relative_path: the relative path to the file containing the symbol for which to find references.
-            Note that here you can't pass a directory but must pass a file.
+            Note: for external dependencies, this must be an identifier starting with `<ext` that you have received
+            earlier (don't try to guess!).
         :param include_kinds: same as in the `find_symbol` tool.
         :param exclude_kinds: same as in the `find_symbol` tool.
         :param max_answer_chars: same as in the `find_symbol` tool.
@@ -290,7 +291,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
                 ref_dict["content_around_reference"] = content_around_ref.to_display_string()
             reference_dicts.append(ref_dict)
 
-        # capture lightweight reference data before grouping, which mutates the dicts
+        # capture lightweight reference data before grouping
         ref_summaries = []
         for ref, d in zip(references_in_symbols, reference_dicts, strict=True):
             ref_summaries.append(
@@ -409,6 +410,7 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerSymbolicEdit):
 class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
     """
     Renames a symbol throughout the codebase using language server refactoring capabilities.
+    For JB, we use a separate tool.
     """
 
     def apply(
@@ -427,6 +429,47 @@ class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
         :param new_name: the new name for the symbol
         :return: result summary indicating success or failure
         """
-        code_editor = self.create_code_editor()
-        status_message = code_editor.rename_symbol(name_path, relative_file_path=relative_path, new_name=new_name)
+        code_editor = self.create_ls_code_editor()
+        status_message = code_editor.rename_symbol(name_path, relative_path=relative_path, new_name=new_name)
         return status_message
+
+
+class SafeDeleteSymbol(Tool, ToolMarkerSymbolicEdit):
+    def apply(
+        self,
+        name_path_pattern: str,
+        relative_path: str,
+    ) -> str:
+        """
+        Deletes the symbol if it is safe to do so (i.e., if there are no references to it)
+        or returns a list of references to it.
+
+        :param name_path_pattern: name path of the symbol to delete (definitions in the `find_symbol` tool apply)
+        :param relative_path: the relative path to the file containing the symbol to delete
+        """
+        ls_symbol_retriever = self.create_language_server_symbol_retriever()
+        symbol = ls_symbol_retriever.find_unique(name_path_pattern, substring_matching=False, within_relative_path=relative_path)
+        symbol_rel_path = symbol.relative_path
+        assert symbol_rel_path is not None, f"Symbol {name_path_pattern} has no relative path, this is likely a bug."
+        assert symbol_rel_path == relative_path, f"Symbol {name_path_pattern} is not in the expected relative path {relative_path}."
+        symbol_name_path = symbol.get_name_path()
+
+        symbol_line = symbol.line
+        symbol_col = symbol.column
+        assert symbol_line is not None and symbol_col is not None, (
+            f"Symbol {name_path_pattern} has no identifier position, this is likely a bug."
+        )
+        lang_server = ls_symbol_retriever.get_language_server(symbol_rel_path)
+        references_locations = lang_server.request_references(symbol_rel_path, symbol_line, symbol_col)
+        file_to_lines: dict[str, list[int]] = defaultdict(list)
+        if references_locations:
+            for ref_loc in references_locations:
+                ref_relative_path = ref_loc.get("relativePath")
+                if ref_relative_path is None:
+                    continue
+                file_to_lines[ref_relative_path].append(ref_loc["range"]["start"]["line"])
+        if file_to_lines:
+            return f"Cannot delete, the symbol {symbol_name_path} is referenced in: {self._to_json(file_to_lines)}"
+        code_editor = self.create_ls_code_editor()
+        code_editor.delete_symbol(symbol_name_path, relative_file_path=symbol_rel_path)
+        return SUCCESS_RESULT

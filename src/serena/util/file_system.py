@@ -165,15 +165,23 @@ class GitignoreParser:
 
         def scan(abs_path: str | None) -> Iterator[str]:
             for entry in os.scandir(abs_path):
-                if entry.is_dir(follow_symlinks=follow_symlinks):
-                    queue.append(entry.path)
-                elif entry.is_file(follow_symlinks=follow_symlinks) and entry.name == ".gitignore":
-                    yield entry.path
+                try:
+                    if entry.is_dir(follow_symlinks=follow_symlinks):
+                        queue.append(entry.path)
+                    elif entry.is_file(follow_symlinks=follow_symlinks) and entry.name == ".gitignore":
+                        yield entry.path
+                except PermissionError as ex:
+                    log.debug(f"Skipping entry due to permission error: {entry.path}", exc_info=ex)
+                    continue
 
         while queue:
             next_abs_path = queue.pop(0)
             if next_abs_path != self.repo_root:
-                rel_path = os.path.relpath(next_abs_path, self.repo_root)
+                try:
+                    rel_path = os.path.relpath(next_abs_path, self.repo_root)
+                except ValueError:
+                    # If the path is on a different drive (Windows) or cannot be made relative for another reason, we ignore it
+                    continue
                 if self.should_ignore(rel_path):
                     continue
             yield from scan(next_abs_path)
@@ -337,6 +345,9 @@ def match_path(relative_path: str, path_spec: PathSpec, root_path: str = "") -> 
     :param root_path: the root path from which the relative path is derived
     :return:
     """
+    if str(relative_path) in {"", "."}:
+        return False
+
     normalized_path = str(relative_path).replace(os.path.sep, "/")
 
     # We can have patterns like /src/..., which would only match corresponding paths from the repo root
