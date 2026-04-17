@@ -13,6 +13,9 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Dependencies:
   - `pywebview`: Switch back to official release (new version 6.2) #1253
 
+* Evaluations:
+  - Added new evaluations for Junie Plugin with Opus 4.6 and GLM 5.1 in Claude Code.
+
 # v1.1.2 (2026-04-14)
 
 * General:
