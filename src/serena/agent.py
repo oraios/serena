@@ -7,6 +7,7 @@ import multiprocessing
 import os
 import platform
 import signal
+import threading
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
@@ -277,6 +278,7 @@ class DashboardManager:
         # self._mode = self.Mode.from_platform()
         self._mode = self.Mode.TRAY_MANAGER
         self._dashboard_viewer_process: multiprocessing.Process | None = None
+        self._tray_manager_lock = threading.Lock()
 
         dashboard_host = host_listen_address
         if dashboard_host == "0.0.0.0":
@@ -288,7 +290,8 @@ class DashboardManager:
             case self.Mode.PYWEBVIEW:
                 self._start_dashboard_viewer(minimized=not open_dashboard_on_launch)
             case self.Mode.TRAY_MANAGER:
-                self._tray_manager_register(open_on_launch=open_dashboard_on_launch, active_project=active_project)
+                init_fn = lambda: self._tray_manager_register(open_on_launch=open_dashboard_on_launch, active_project=active_project)
+                threading.Thread(target=init_fn, name="init-DashboardTrayManager", daemon=True).start()
             case self.Mode.BROWSER:
                 if open_dashboard_on_launch:
                     if not system_has_usable_display():
@@ -335,24 +338,22 @@ class DashboardManager:
 
         :param open_on_launch: whether the dashboard should be opened immediately
         """
-        if not system_has_usable_display():
-            log.info("Not starting the Serena tray manager because no usable display was detected.")
-            return
+        with LogTime("Dashboard tray manager initialisation"):
+            with self._tray_manager_lock:
+                # ensure the singleton tray manager process is running
+                SerenaDashboardTrayManager.ensure_running()
 
-        # ensure the singleton tray manager process is running
-        SerenaDashboardTrayManager.ensure_running()
+                # determine the current project name (if any)
+                project_name = active_project.project_name if active_project is not None else None
 
-        # determine the current project name (if any)
-        project_name = active_project.project_name if active_project is not None else None
-
-        # register this instance with the tray manager
-        SerenaDashboardTrayManager.register_instance(
-            port=self._port,
-            dashboard_url=self.url,
-            project=project_name,
-            started_at=datetime.now().isoformat(timespec="seconds"),
-            open_viewer=open_on_launch,
-        )
+                # register this instance with the tray manager
+                SerenaDashboardTrayManager.register_instance(
+                    port=self._port,
+                    dashboard_url=self.url,
+                    project=project_name,
+                    started_at=datetime.now().isoformat(timespec="seconds"),
+                    open_viewer=open_on_launch,
+                )
 
     def shutdown(self) -> None:
         """
@@ -362,8 +363,10 @@ class DashboardManager:
             log.info("Stopping the dashboard viewer process ...")
             self._dashboard_viewer_process.terminate()
             self._dashboard_viewer_process = None
+
         if self._mode == self.Mode.TRAY_MANAGER:
-            SerenaDashboardTrayManager.unregister_instance(port=self._port)
+            with self._tray_manager_lock:
+                SerenaDashboardTrayManager.unregister_instance(port=self._port)
 
     def update_active_project(self, active_project: Project | None) -> None:
         """
@@ -372,8 +375,9 @@ class DashboardManager:
         :param active_project: the currently active project or None if no project is active
         """
         if self._mode == self.Mode.TRAY_MANAGER:
-            project_name = active_project.project_name if active_project is not None else None
-            SerenaDashboardTrayManager.update_project(port=self._port, project=project_name)
+            with self._tray_manager_lock:
+                project_name = active_project.project_name if active_project is not None else None
+                SerenaDashboardTrayManager.update_project(port=self._port, project=project_name)
 
 
 class SerenaAgent:
