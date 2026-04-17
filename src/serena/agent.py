@@ -7,8 +7,6 @@ import multiprocessing
 import os
 import platform
 import signal
-import subprocess
-import sys
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
@@ -35,7 +33,7 @@ from serena.config.serena_config import (
     SerenaPaths,
     ToolInclusionDefinition,
 )
-from serena.dashboard import SerenaDashboardAPI, SerenaDashboardTrayManager, SerenaDashboardViewer
+from serena.dashboard import SerenaDashboardAPI, SerenaDashboardTrayManager, SerenaDashboardViewer, open_url_in_browser
 from serena.ls_manager import LanguageServerManager
 from serena.project import MemoriesManager, Project
 from serena.prompt_factory import SerenaPromptFactory
@@ -276,7 +274,8 @@ class DashboardManager:
 
     def __init__(self, port: int, host_listen_address: str, open_dashboard_on_launch: bool, active_project: Project | None = None):
         self._port = port
-        self._mode = self.Mode.from_platform()
+        # self._mode = self.Mode.from_platform()
+        self._mode = self.Mode.TRAY_MANAGER
         self._dashboard_viewer_process: multiprocessing.Process | None = None
 
         dashboard_host = host_listen_address
@@ -297,19 +296,8 @@ class DashboardManager:
                     else:
                         self.open_dashboard_in_browser()
 
-    @staticmethod
-    def _open_url_in_browser(url: str) -> None:
-        # Use a subprocess to avoid any output from webbrowser.open being written to stdout
-        subprocess.Popen(
-            [sys.executable, "-c", f"import webbrowser; webbrowser.open({url!r})"],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=False,
-        )
-
     def open_dashboard_in_browser(self) -> None:
-        return self._open_url_in_browser(self.url)
+        open_url_in_browser(self.url)
 
     @staticmethod
     def _start_dashboard_viewer_process_function(url: str, minimized: bool, parent_process_id: int) -> None:

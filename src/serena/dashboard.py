@@ -1,4 +1,5 @@
 import json
+import multiprocessing
 import os
 import socket
 import subprocess
@@ -13,6 +14,7 @@ from html import escape
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
+import pystray
 from flask import Flask, Response, redirect, request, send_from_directory
 from PIL import Image
 from pydantic import BaseModel
@@ -787,6 +789,22 @@ class SerenaDashboardAPI:
         return thread, port
 
 
+def open_url_in_browser(url: str) -> None:
+    """
+    Opens the given URL in the user's default web browser without blocking the main process or printing any output.
+
+    :param url: the URL to open
+    """
+    # Use a subprocess to avoid any output from webbrowser.open being written to stdout
+    subprocess.Popen(
+        [sys.executable, "-c", f"import webbrowser; webbrowser.open({url!r})"],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=False,
+    )
+
+
 class SerenaDashboardViewer(WebViewWithTray):
     """
     Minimal pywebview wrapper that opens a dashboard in a native window.
@@ -887,12 +905,17 @@ class SerenaDashboardTrayManager:
     ALIVE_CHECK_INTERVAL_SECONDS = 15
     """interval in seconds between alive checks of registered instances"""
 
-    def __init__(self) -> None:
+    def __init__(self, use_pywebview: bool = False) -> None:
+        """
+        :param use_pywebview: whether to use pywebview-based viewer applications (separate child processes)
+            for opening dashboards; if False, open them directly in the user's default web browser.
+        """
         self._instances: dict[int, TrayManagedInstance] = {}
         self._lock = threading.Lock()
-        self._tray_icon: Any = None
+        self._tray_icon: pystray.Icon | None = None
         self._app = Flask(__name__)
         self._setup_routes()
+        self._use_pywebview = use_pywebview
 
     def _setup_routes(self) -> None:
         @self._app.route("/health", methods=["GET"])
@@ -914,7 +937,7 @@ class SerenaDashboardTrayManager:
 
             # open a viewer immediately if requested
             if data.get("open_viewer", False):
-                self._open_viewer(instance)
+                self._open_dashboard(instance)
 
             return {"status": "registered"}
 
@@ -976,7 +999,7 @@ class SerenaDashboardTrayManager:
             # closure to capture the current instance
             def _make_callback(instance: TrayManagedInstance) -> Callable:
                 def _callback(_icon: Any, _item: Any) -> None:
-                    self._open_viewer(instance)
+                    self._open_dashboard(instance)
 
                 return _callback
 
@@ -984,16 +1007,18 @@ class SerenaDashboardTrayManager:
 
         return tuple(items)
 
-    def _open_viewer(self, instance: TrayManagedInstance) -> None:
-        """Spawn a dashboard viewer window for the given instance in a new process."""
-        import multiprocessing
-
-        process = multiprocessing.Process(
-            target=self._run_viewer,
-            args=(instance.dashboard_url,),
-            daemon=True,
-        )
-        process.start()
+    def _open_dashboard(self, instance: TrayManagedInstance) -> None:
+        """Opens the dashboard of the given instance."""
+        if self._use_pywebview:
+            # spawn pywebview process showing the dashboard
+            process = multiprocessing.Process(
+                target=self._run_viewer,
+                args=(instance.dashboard_url,),
+                daemon=True,
+            )
+            process.start()
+        else:
+            open_url_in_browser(instance.dashboard_url)
 
     @staticmethod
     def _run_viewer(url: str) -> None:
