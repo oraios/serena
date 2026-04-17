@@ -21,3 +21,15 @@ def serena_version() -> str:
     except:
         pass
     return version
+
+
+def _init_log_configuration() -> None:
+    from sensai.util import logging
+
+    def _configure() -> None:
+        logging.getLogger("PIL").setLevel(logging.WARNING)
+
+    logging.set_configure_callback(_configure)
+
+
+_init_log_configuration()
