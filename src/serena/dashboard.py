@@ -14,6 +14,7 @@ from html import escape
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Self
 
+import psutil
 from flask import Flask, Response, redirect, request, send_from_directory
 from PIL import Image
 from pydantic import BaseModel
@@ -874,6 +875,9 @@ class TrayManagedInstance:
     port: int
     """the port on which the dashboard API is listening"""
 
+    parent_process: psutil.Process
+    """the process of the Serena agent owning this dashboard instance"""
+
     dashboard_url: str
     """the full URL to the dashboard frontend"""
 
@@ -903,19 +907,24 @@ class SerenaDashboardTrayManager:
     HOST = "127.0.0.1"
     """listen address (local only)"""
 
-    ALIVE_CHECK_INTERVAL_SECONDS = 15
+    ALIVE_CHECK_INTERVAL_SECONDS = 3
     """interval in seconds between alive checks of registered instances"""
 
-    def __init__(self, use_pywebview: bool = False) -> None:
+    def __init__(self, use_pywebview: bool = False, alive_check_use_pid: bool = True) -> None:
         """
         :param use_pywebview: whether to use pywebview-based viewer applications (separate child processes)
             for opening dashboards; if False, open them directly in the user's default web browser.
+        :param alive_check_use_pid: whether to use the process ID for alive checks of registered instances.
+            If True, the manager will check whether the process with the registered PID is still running.
+            If False, the manager will perform an HTTP request to the instance's heartbeat endpoint to check
+            if it's alive.
         """
         import pystray
 
         self._instances: dict[int, TrayManagedInstance] = {}
         self._lock = threading.Lock()
         self._tray_icon: Optional["pystray.Icon"] = None
+        self._alive_check_use_pid = alive_check_use_pid
         self._app = Flask(__name__)
         self._setup_routes()
         self._use_pywebview = use_pywebview
@@ -930,6 +939,7 @@ class SerenaDashboardTrayManager:
             data = request.get_json()
             instance = TrayManagedInstance(
                 port=data["port"],
+                parent_process=psutil.Process(data["pid"]),
                 dashboard_url=data["dashboard_url"],
                 project=data.get("project"),
                 started_at=data["started_at"],
@@ -1043,35 +1053,56 @@ class SerenaDashboardTrayManager:
         while True:
             time.sleep(self.ALIVE_CHECK_INTERVAL_SECONDS)
 
-            # collect ports to check
-            with self._lock:
-                ports_to_check = list(self._instances.keys())
+            try:
+                dead_ports: list[int] = []
 
-            # probe each instance
-            dead_ports: list[int] = []
-            for port in ports_to_check:
-                try:
-                    url = f"http://127.0.0.1:{port}/heartbeat"
-                    req = urllib.request.Request(url, method="GET")
-                    urllib.request.urlopen(req, timeout=3)
-                except Exception:
-                    dead_ports.append(port)
+                if self._alive_check_use_pid:
+                    with self._lock:
+                        ports_and_processes = [(port, inst.parent_process) for port, inst in self._instances.items()]
 
-            # remove dead instances
-            if dead_ports:
+                    dead_ports = []
+                    for port, process in ports_and_processes:
+                        is_dead = False
+                        try:
+                            if not process.is_running():
+                                is_dead = True
+                        except psutil.NoSuchProcess:
+                            # parent process already exited
+                            is_dead = True
+                        if is_dead:
+                            dead_ports.append(port)
+                else:
+                    # collect ports to check
+                    with self._lock:
+                        ports_to_check = list(self._instances.keys())
+
+                    # probe each instance
+                    for port in ports_to_check:
+                        try:
+                            url = f"http://127.0.0.1:{port}/heartbeat"
+                            req = urllib.request.Request(url, method="GET")
+                            urllib.request.urlopen(req, timeout=1)
+                        except Exception:
+                            dead_ports.append(port)
+
+                # remove dead instances
+                if dead_ports:
+                    with self._lock:
+                        for port in dead_ports:
+                            self._instances.pop(port, None)
+                            log.info("Removed unreachable instance on port %d", port)
+
+                # terminate if no instances remain
                 with self._lock:
-                    for port in dead_ports:
-                        self._instances.pop(port, None)
-                        log.info("Removed unreachable instance on port %d", port)
+                    remaining = len(self._instances)
+                if remaining == 0:
+                    log.info("No dashboard instances remaining; shutting down tray manager")
+                    if self._tray_icon is not None:
+                        self._tray_icon.stop()
+                    return
 
-            # terminate if no instances remain
-            with self._lock:
-                remaining = len(self._instances)
-            if remaining == 0:
-                log.info("No dashboard instances remaining; shutting down tray manager")
-                if self._tray_icon is not None:
-                    self._tray_icon.stop()
-                return
+            except Exception as e:
+                log.error("Error during alive check loop: %s", e, exc_info=e)
 
     def run(self) -> None:
         """Run the tray manager (blocking). Starts Flask, alive-check thread, and tray icon."""
@@ -1197,6 +1228,7 @@ class SerenaDashboardTrayManager:
         data = json.dumps(
             {
                 "port": port,
+                "pid": os.getpid(),
                 "dashboard_url": dashboard_url,
                 "project": project,
                 "started_at": started_at,
