@@ -12,9 +12,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from html import escape
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, Optional, Self
 
-import pystray
 from flask import Flask, Response, redirect, request, send_from_directory
 from PIL import Image
 from pydantic import BaseModel
@@ -910,9 +909,11 @@ class SerenaDashboardTrayManager:
         :param use_pywebview: whether to use pywebview-based viewer applications (separate child processes)
             for opening dashboards; if False, open them directly in the user's default web browser.
         """
+        import pystray
+
         self._instances: dict[int, TrayManagedInstance] = {}
         self._lock = threading.Lock()
-        self._tray_icon: pystray.Icon | None = None
+        self._tray_icon: Optional["pystray.Icon"] = None
         self._app = Flask(__name__)
         self._setup_routes()
         self._use_pywebview = use_pywebview
@@ -931,9 +932,10 @@ class SerenaDashboardTrayManager:
                 project=data.get("project"),
                 started_at=data["started_at"],
             )
+            log.info("Registering instance on port %d (project=%s)", instance.port, instance.project)
             with self._lock:
                 self._instances[instance.port] = instance
-            log.info("Registered instance on port %d (project=%s)", instance.port, instance.project)
+            self._update_menu()
 
             # open a viewer immediately if requested
             if data.get("open_viewer", False):
@@ -949,6 +951,7 @@ class SerenaDashboardTrayManager:
             with self._lock:
                 if port in self._instances:
                     self._instances[port].project = project
+            self._update_menu()
             log.info("Updated project for instance on port %d to '%s'", port, project)
             return {"status": "updated"}
 
@@ -958,8 +961,13 @@ class SerenaDashboardTrayManager:
             port = data["port"]
             with self._lock:
                 self._instances.pop(port, None)
+            self._update_menu()
             log.info("Unregistered instance on port %d", port)
             return {"status": "unregistered"}
+
+    def _update_menu(self) -> None:
+        if self._tray_icon:
+            self._tray_icon.update_menu()
 
     def _build_menu_items(self) -> tuple[Any, ...]:
         """
