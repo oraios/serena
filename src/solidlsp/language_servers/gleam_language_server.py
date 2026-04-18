@@ -11,10 +11,11 @@ import pathlib
 import shutil
 import subprocess
 import threading
+import time
 
 from overrides import override
 
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -205,3 +206,29 @@ class GleamLanguageServer(SolidLanguageServer):
                 log.warning(f"Gleam LSP: timed out waiting for initial compilation after {_COMPILE_READY_TIMEOUT}s, proceeding anyway")
 
         log.info("Gleam language server ready")
+
+    @override
+    def _request_document_symbols(
+        self, relative_file_path: str, file_data: LSPFileBuffer | None
+    ) -> list | None:
+        # Send textDocument/didOpen before requesting symbols. Gleam LSP may start a
+        # recompilation in response; we must wait for it to finish or the server returns
+        # an empty symbol list for the file.
+        if file_data is not None:
+            file_data.ensure_open_in_ls()
+        else:
+            # Rare path: open the file ourselves so the super call gets a live buffer.
+            with self.open_file(relative_file_path, open_in_ls=True) as fb:
+                time.sleep(0.2)
+                if not self._compile_ready.wait(timeout=_COMPILE_READY_TIMEOUT):
+                    log.warning("Gleam: timed out waiting for recompile after didOpen (%s)", relative_file_path)
+                return super()._request_document_symbols(relative_file_path, fb)
+
+        # Brief window for any $/progress begin triggered by didOpen to arrive before
+        # we check _compile_ready (which is already set after the initial compile).
+        time.sleep(0.2)
+        if not self._compile_ready.wait(timeout=_COMPILE_READY_TIMEOUT):
+            log.warning("Gleam: timed out waiting for recompile after didOpen (%s)", relative_file_path)
+        # file is already open in LS; super will call ensure_open_in_ls() (no-op) then
+        # send the documentSymbol request.
+        return super()._request_document_symbols(relative_file_path, file_data)
