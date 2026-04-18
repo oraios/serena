@@ -510,6 +510,7 @@ class SolidLanguageServer(ABC):
 
         self.language_id = language_id
         self.open_file_buffers: dict[str, LSPFileBuffer] = {}
+        self._persistently_open_file_uris: set[str] = set()
         self.language = Language(language_id)
 
         # initialise symbol caches
@@ -660,6 +661,14 @@ class SolidLanguageServer(ABC):
         A robust shutdown process designed to terminate cleanly on all platforms, including Windows,
         by explicitly closing all I/O pipes.
         """
+        for uri in list(self._persistently_open_file_uris):
+            self.close_file_persistently(uri=uri)
+
+        for uri, file_buffer in list(self.open_file_buffers.items()):
+            if file_buffer.ref_count == 0:
+                file_buffer.close()
+                del self.open_file_buffers[uri]
+
         if not self.server.is_running():
             log.debug("Server process not running, skipping shutdown.")
             return
@@ -736,6 +745,64 @@ class SolidLanguageServer(ABC):
         """
         return self.language_id
 
+    def open_file_persistently(self, relative_file_path: str, open_in_ls: bool = True) -> LSPFileBuffer:
+        """
+        Open a file in the language server and keep it open across tool calls.
+
+        The caller must explicitly close the file later via ``close_file_persistently`` or
+        rely on server shutdown to clean it up.
+
+        :param relative_file_path: The relative path of the file to keep open.
+        :param open_in_ls: whether to send the didOpen notification immediately.
+        :return: the managed file buffer
+        """
+        if not self.server_started:
+            log.error("open_file_persistently called before Language Server started")
+            raise SolidLSPException("Language Server not started")
+
+        absolute_file_path = Path(self.repository_root_path, relative_file_path)
+        uri = absolute_file_path.as_uri()
+
+        if uri in self.open_file_buffers:
+            file_buffer = self.open_file_buffers[uri]
+            if open_in_ls:
+                file_buffer.ensure_open_in_ls()
+        else:
+            version = 0
+            language_id = self._get_language_id_for_file(relative_file_path)
+            file_buffer = LSPFileBuffer(
+                abs_path=absolute_file_path,
+                uri=uri,
+                encoding=self._encoding,
+                version=version,
+                language_id=language_id,
+                ref_count=0,
+                language_server=self,
+                open_in_ls=open_in_ls,
+            )
+            self.open_file_buffers[uri] = file_buffer
+
+        self._persistently_open_file_uris.add(uri)
+        return file_buffer
+
+    def close_file_persistently(self, relative_file_path: str | None = None, uri: str | None = None) -> None:
+        """
+        Close a file that was previously opened persistently.
+
+        :param relative_file_path: The relative path of the file to close.
+        :param uri: The file URI to close. Either this or ``relative_file_path`` must be provided.
+        """
+        if uri is None:
+            if relative_file_path is None:
+                raise ValueError("Either relative_file_path or uri must be provided")
+            uri = Path(self.repository_root_path, relative_file_path).as_uri()
+
+        self._persistently_open_file_uris.discard(uri)
+        file_buffer = self.open_file_buffers.get(uri)
+        if file_buffer is not None and file_buffer.ref_count == 0:
+            file_buffer.close()
+            del self.open_file_buffers[uri]
+
     @contextmanager
     def open_file(self, relative_file_path: str, open_in_ls: bool = True) -> Iterator[LSPFileBuffer]:
         """
@@ -756,7 +823,7 @@ class SolidLanguageServer(ABC):
         if uri in self.open_file_buffers:
             fb = self.open_file_buffers[uri]
             assert fb.uri == uri
-            assert fb.ref_count >= 1
+            assert fb.ref_count >= 0
 
             fb.ref_count += 1
             if open_in_ls:
@@ -781,8 +848,9 @@ class SolidLanguageServer(ABC):
             fb.ref_count -= 1
 
         if self.open_file_buffers[uri].ref_count == 0:
-            self.open_file_buffers[uri].close()
-            del self.open_file_buffers[uri]
+            if uri not in self._persistently_open_file_uris:
+                self.open_file_buffers[uri].close()
+                del self.open_file_buffers[uri]
 
     @contextmanager
     def _open_file_context(
