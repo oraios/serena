@@ -197,52 +197,40 @@ class ToolSet:
 
 
 class ActiveModes:
+    _mode_instances: dict[str, SerenaAgentMode] = {}
+
     def __init__(self) -> None:
-        self._base_modes: Sequence[str] | None = None
-        self._default_modes: Sequence[str] | None = None
-        self._active_mode_names: Sequence[str] | None = []
-        self._active_modes: Sequence[SerenaAgentMode] | None = []
+        self._configured_base_modes: Sequence[str] | None = None
+        self._configured_default_modes: Sequence[str] | None = None
+        self._active_mode_names: Sequence[str] = []
 
     def apply(self, mode_selection: ModeSelectionDefinition) -> None:
-        # invalidate active modes
-        self._active_mode_names = None
-        self._active_modes = None
-
         # apply overrides
         log.debug("Applying mode selection: default_modes=%s, base_modes=%s", mode_selection.default_modes, mode_selection.base_modes)
         if mode_selection.base_modes is not None:
-            self._base_modes = mode_selection.base_modes
+            self._configured_base_modes = mode_selection.base_modes
         if mode_selection.default_modes is not None:
-            self._default_modes = mode_selection.default_modes
-        log.debug("Current mode selection: base_modes=%s, default_modes=%s", self._base_modes, self._default_modes)
+            self._configured_default_modes = mode_selection.default_modes
+        log.debug("Current mode selection: base_modes=%s, default_modes=%s", self._configured_base_modes, self._configured_default_modes)
+
+        self._active_mode_names = sorted(set(self._configured_base_modes or []) | set(self._configured_default_modes or []))
 
     def get_mode_names(self) -> Sequence[str]:
-        if self._active_mode_names is not None:
-            return self._active_mode_names
-        active_mode_names: set[str] = set()
-        if self._base_modes is not None:
-            active_mode_names.update(self._base_modes)
-        if self._default_modes is not None:
-            active_mode_names.update(self._default_modes)
-        self._active_mode_names = sorted(active_mode_names)
-        log.info("Active modes: %s", self._active_mode_names)
         return self._active_mode_names
 
-    def get_modes(self) -> Sequence[SerenaAgentMode]:
-        if self._active_modes is not None:
-            return self._active_modes
-        self._active_modes = []
-        for mode_name in self.get_mode_names():
-            mode = SerenaAgentMode.load(mode_name)
-            self._active_modes.append(mode)
-        return self._active_modes
+    def _get_mode_instance(self, mode_name: str):
+        if mode_name not in self._mode_instances:
+            self._mode_instances[mode_name] = SerenaAgentMode.load(mode_name)
+        return self._mode_instances[mode_name]
 
-    # TODO: apply caching like in get_modes
+    def get_modes(self) -> Sequence[SerenaAgentMode]:
+        return [self._get_mode_instance(mode_name) for mode_name in self._active_mode_names]
+
     def get_default_modes(self) -> Sequence[SerenaAgentMode]:
-        return [SerenaAgentMode.load(mode_name) for mode_name in self._default_modes or []]
+        return [self._get_mode_instance(mode_name) for mode_name in self._configured_default_modes or []]
 
     def get_base_modes(self) -> Sequence[SerenaAgentMode]:
-        return [SerenaAgentMode.load(mode_name) for mode_name in self._base_modes or []]
+        return [self._get_mode_instance(mode_name) for mode_name in self._configured_base_modes or []]
 
 
 class SerenaAgent:
