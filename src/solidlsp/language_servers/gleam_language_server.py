@@ -208,9 +208,7 @@ class GleamLanguageServer(SolidLanguageServer):
         log.info("Gleam language server ready")
 
     @override
-    def _request_document_symbols(
-        self, relative_file_path: str, file_data: LSPFileBuffer | None
-    ) -> list | None:
+    def _request_document_symbols(self, relative_file_path: str, file_data: LSPFileBuffer | None) -> list | None:
         # Send textDocument/didOpen before requesting symbols. Gleam LSP may start a
         # recompilation in response; we must wait for it to finish or the server returns
         # an empty symbol list for the file.
