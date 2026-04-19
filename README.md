@@ -28,6 +28,12 @@ more complex codebases.
 > Do not install Serena via an MCP or plugin marketplace! They contain outdated and suboptimal installation commands. 
 > Instead, follow our [Quick Start](#quick-start) instructions.
 
+## Quick Demo
+
+https://github.com/user-attachments/assets/8d11646e-b80e-4723-b9d7-32d6101b5f58
+
+:tv: Longer video: [Introduction to Serena in 5 Minutes (YouTube)](https://www.youtube.com/watch?v=5QN7gN1KYLA)
+
 ## What Our "End Users" Say
 
 While it is humans who download and set up Serena, our end users are essentially AI agents.
@@ -72,15 +78,11 @@ Most modern AI chat clients directly support MCP, including
 
 <img src="resources/serena-block-diagram.svg">
 
+:tv: See also: [Introduction to Serena in 5 Minutes (YouTube)](https://www.youtube.com/watch?v=5QN7gN1KYLA)
+
 To connect the Serena MCP server to your client, you either
   * provide the client with a launch command that allows it to start the MCP server, or
   * start the Serena MCP server yourself in HTTP mode and provide the client with the URL.
-
-Serena's tools are powered by two alternative language intelligence backends:
-   * With the SolidLSP backend (default), language servers for the selected programming languages will be started
-automatically for your project. 
-   * With the JetBrains backend, the Serena JetBrains plugin must be installed in your IDE and 
-the project you want to work on must open and set up. 
 
 See the [Quick Start](#quick-start) section below for information on how to get started.
 
@@ -97,7 +99,7 @@ There are two alternative technologies powering these capabilities:
 
 * **Language servers** implementing the language server protocol (LSP) — the free/open-source alternative 
   which is used by default.
-* The **Serena JetBrains Plugin**, which leverages the powerful code analysis and editing
+* **The Serena JetBrains Plugin**, which leverages the powerful code analysis and editing
   capabilities of your JetBrains IDE (paid plugin; free trial available).
 
 You can choose either of these backends depending on your preferences and requirements.
@@ -201,25 +203,6 @@ To achieve this, Serena offers multiple levels of (composable) configuration:
 * execution context-specific configuration (e.g. for particular clients)
 * dynamically composable configuration fragments (modes)
 
-</details>
-
-## Serena in Action
-
-<details>
-<summary>Demonstrations</summary>
-
-#### Demonstration 1: Efficient Operation in Claude Code
-
-A demonstration of Serena efficiently retrieving and editing code within Claude Code, thereby saving tokens and time. Efficient operations are not only useful for saving costs, but also for generally improving the generated code's quality. This effect may be less pronounced in very small projects, but often becomes of crucial importance in larger ones.
-
-https://github.com/user-attachments/assets/ab78ebe0-f77d-43cc-879a-cc399efefd87
-
-#### Demonstration 2: Serena in Claude Desktop
-
-A demonstration of Serena implementing a small feature for itself (a better log GUI) with Claude Desktop.
-Note how Serena's tools enable Claude to find and edit the right symbols.
-
-https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
 </details>
 
 ## Quick Start
