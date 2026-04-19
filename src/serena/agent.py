@@ -234,26 +234,29 @@ class ActiveModes:
         return [self.get_mode_instance(mode_name) for mode_name in self._configured_base_modes or []]
 
 
-class DynamicModeProvisionStatus:
+class ProjectPromptProvisionStatus:
     """
-    Manages the provision of modes that have been newly activated (by dynamic project activation)
+    Manages the status of the provision of project-specific prompts
     """
 
-    def __init__(self, newly_activated_mode_names: set[str]):
+    def __init__(self, newly_activated_mode_names: set[str] | None = None):
         """
         :param newly_activated_mode_names: list of mode names that have been newly activated (by dynamic project activation)
-            and for which prompts must still be provided (either in the system prompt or the activation prompt)
+            and for which prompts must still be provided (either in the system prompt or via the activation message)
         """
+        if newly_activated_mode_names is None:
+            newly_activated_mode_names = set()
         self._newly_activated_mode_names: set[str] = newly_activated_mode_names
-        self._prompts_provided = False
+        self._mode_prompts_provided = False
+        self._project_activation_message_provided = False
 
-    def is_prompt_already_provided(self, mode_name: str) -> bool:
+    def is_mode_prompt_already_provided(self, mode_name: str) -> bool:
         """
         :param mode_name: the mode name
         :return: whether the mode name was already provided (in a project-specific activation message) and therefore
-            should not be included again
+            should not be included again (in the Serena instructions manual)
         """
-        if not self._prompts_provided:
+        if not self._mode_prompts_provided:
             return False
         return mode_name in self._newly_activated_mode_names
 
@@ -263,7 +266,7 @@ class DynamicModeProvisionStatus:
         (in dynamic project activation message).
         """
         result = []
-        if not self._prompts_provided:
+        if not self._mode_prompts_provided:
             for mode_name in self._newly_activated_mode_names:
                 mode = ActiveModes.get_mode_instance(mode_name)
                 if mode.has_prompt():
@@ -274,7 +277,19 @@ class DynamicModeProvisionStatus:
         """
         Marks the prompts for all newly activated modes as provided, so that they will not be included in the project activation message.
         """
-        self._prompts_provided = True
+        self._mode_prompts_provided = True
+
+    def mark_project_activation_message_as_provided(self) -> None:
+        """
+        Marks the project activation message as provided, so that it will not be included again in case of multiple activations of the same project.
+        """
+        self._project_activation_message_provided = True
+
+    def is_project_activation_message_already_provided(self) -> bool:
+        """
+        :return: whether the project activation message was already provided and therefore should not be included again
+        """
+        return self._project_activation_message_provided
 
 
 class SerenaAgent:
@@ -302,7 +317,7 @@ class SerenaAgent:
         self._active_project: Project | None = None
         self._gui_log_viewer: Optional["GuiLogViewer"] = None
         self._dashboard_viewer_process: multiprocessing.Process | None = None
-        self._dynamic_mode_provision_status = DynamicModeProvisionStatus(set())
+        self._project_prompt_status = ProjectPromptProvisionStatus()
         self._mode_overrides = modes
         self.version = serena_version()
 
@@ -735,9 +750,9 @@ class SerenaAgent:
         relevant_modes = []
         for mode in self.get_active_modes():
             if mode.has_prompt():
-                if not self._dynamic_mode_provision_status.is_prompt_already_provided(mode.name):
+                if not self._project_prompt_status.is_mode_prompt_already_provided(mode.name):
                     relevant_modes.append(mode)
-        self._dynamic_mode_provision_status.mark_mode_prompts_as_provided()
+        self._project_prompt_status.mark_mode_prompts_as_provided()
 
         system_prompt = self.prompt_factory.create_system_prompt(
             context_system_prompt=self._format_prompt(self._context.prompt),
@@ -747,8 +762,8 @@ class SerenaAgent:
             global_memories_list=global_memories_str,
         )
 
-        # If a project is active at startup, append its activation message
-        if self._active_project is not None:
+        # provide the project activation message if it hasn't yet been provided
+        if self._active_project is not None and not self._project_prompt_status.is_project_activation_message_already_provided():
             system_prompt += "\n\n" + self.get_project_activation_message()
 
         log.info("System prompt:\n%s", system_prompt)
@@ -780,15 +795,17 @@ class SerenaAgent:
                 )
 
         # add prompts for modes that were dynamically activated by the project
-        modes_with_prompts = self._dynamic_mode_provision_status.get_modes_with_prompts_to_be_provided_for_project_activation()
+        modes_with_prompts = self._project_prompt_status.get_modes_with_prompts_to_be_provided_for_project_activation()
         if modes_with_prompts:
             msg += "\nNewly applicable mode instructions:"
             for mode in modes_with_prompts:
                 msg += f"\n{mode.prompt}"
-        self._dynamic_mode_provision_status.mark_mode_prompts_as_provided()
+        self._project_prompt_status.mark_mode_prompts_as_provided()
 
         if proj.project_config.initial_prompt:
             msg += f"\nProject-specific instructions:\n {proj.project_config.initial_prompt}"
+
+        self._project_prompt_status.mark_project_activation_message_as_provided()
 
         return msg
 
@@ -900,7 +917,10 @@ class SerenaAgent:
             active_mode_names_before = set(self._active_modes.get_mode_names())
             self._update_active_modes()
             newly_activated_mode_names = set(self._active_modes.get_mode_names()) - active_mode_names_before
-            self._dynamic_mode_provision_status = DynamicModeProvisionStatus(newly_activated_mode_names=newly_activated_mode_names)
+        else:
+            newly_activated_mode_names = None
+
+        self._project_prompt_status = ProjectPromptProvisionStatus(newly_activated_mode_names=newly_activated_mode_names)
 
         if update_active_tools:
             self._update_active_tools()

@@ -9,6 +9,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Duplicate comments in re-saved YAML configuration files #1285
   - Fix: Prompts of dynamically activated modes (upon project activation) were not necessary passed to the LLM (only in the system prompt via
     `initial_instructions`). Now they are passed directly in the activation message (and excluded from a subsequent `initial_instructions` call).
+  - Fix: Project activation message was provided more than once for case of dynamic project activation followed
+    by `initial_instructions` #1372
 
 * JetBrains:
   - `Move` and `SafeDelete` tools: transform empty string to None (counteracts client errors)
