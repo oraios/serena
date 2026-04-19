@@ -682,6 +682,7 @@ class SerenaConfig(SharedConfig):
     trace_lsp_communication: bool = False
     web_dashboard: bool = True
     web_dashboard_open_on_launch: bool = True
+    web_dashboard_interface: str | None = None
     web_dashboard_listen_address: str = "127.0.0.1"
     jetbrains_plugin_server_address: str = "127.0.0.1"
     tool_timeout: float = DEFAULT_TOOL_TIMEOUT

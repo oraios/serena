@@ -252,10 +252,11 @@ class DashboardManager:
         """
         Open the dashboard in the default browser; supported on all platforms.
         """
-        PYWEBVIEW = "webview"
+        WEBVIEW = "app"
         """
-        Open the dashboard via a native window (using pywebview) which minimises to the tray; supported on Windows only
-        (on macOS, tray apps for multiple instances accumulate in the top bar, which users do not want)
+        Open the dashboard via a native window (using pywebview) which minimises to the tray;
+        supported on Windows and macOS (but on macOS, tray apps for multiple instances accumulate 
+        in the top bar, which users may not want)
         """
         TRAY_MANAGER = "tray_manager"
         """
@@ -267,15 +268,52 @@ class DashboardManager:
         def from_platform(cls) -> "DashboardManager.Mode":
             match platform.system():
                 case "Windows":
-                    return cls.PYWEBVIEW
+                    return cls.WEBVIEW
                 case "Darwin":
                     return cls.TRAY_MANAGER
                 case _:
                     return cls.BROWSER
 
-    def __init__(self, port: int, host_listen_address: str, open_dashboard_on_launch: bool, active_project: Project | None = None):
+        def is_supported(self) -> bool:
+            """
+            :return: whether the mode is supported on the current platform
+            """
+            if self == DashboardManager.Mode.WEBVIEW:
+                return SerenaDashboardViewer.is_current_platform_supported()
+            elif self == DashboardManager.Mode.TRAY_MANAGER:
+                return SerenaDashboardTrayManager.is_current_platform_supported()
+            else:
+                return True
+
+    def __init__(
+        self,
+        port: int,
+        host_listen_address: str,
+        open_dashboard_on_launch: bool,
+        active_project: Project | None = None,
+        mode_str: str | None = None,
+    ):
+        # determine requested mode
+        if mode_str is not None:
+            try:
+                mode = self.Mode(mode_str)
+            except ValueError:
+                mode = self.Mode.from_platform()
+                log.warning(f"Invalid dashboard interface mode '{mode_str}' specified; falling back to platform default '{mode.value}'.")
+        else:
+            mode = self.Mode.from_platform()
+
+        # check for mode compatibility
+        if not mode.is_supported():
+            fallback_mode = self.Mode.from_platform()
+            log.warning(
+                f"Dashboard interface mode '{mode.value}' is not supported on the current platform; "
+                "falling back to '{fallback_mode.value}'."
+            )
+            mode = fallback_mode
+
         self._port = port
-        # self._mode = self.Mode.from_platform()
+        self._mode = mode
         self._mode = self.Mode.TRAY_MANAGER
         self._dashboard_viewer_process: multiprocessing.Process | None = None
         self._tray_manager_lock = threading.Lock()
@@ -287,7 +325,7 @@ class DashboardManager:
 
         # handle startup
         match self._mode:
-            case self.Mode.PYWEBVIEW:
+            case self.Mode.WEBVIEW:
                 self._start_dashboard_viewer(minimized=not open_dashboard_on_launch)
             case self.Mode.TRAY_MANAGER:
                 init_fn = lambda: self._tray_manager_register(open_on_launch=open_dashboard_on_launch, active_project=active_project)
@@ -529,7 +567,11 @@ class SerenaAgent:
                 get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats
             ).run_in_thread(host=self.serena_config.web_dashboard_listen_address)
             self._dashboard_manager = DashboardManager(
-                port, self.serena_config.web_dashboard_listen_address, self.serena_config.web_dashboard_open_on_launch, self._active_project
+                port,
+                self.serena_config.web_dashboard_listen_address,
+                self.serena_config.web_dashboard_open_on_launch,
+                self._active_project,
+                mode_str=self.serena_config.web_dashboard_interface,
             )
             log.info("Serena web dashboard started at %s", self._dashboard_manager.url)
             # inform the GUI window (if any)
