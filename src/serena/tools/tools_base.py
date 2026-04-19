@@ -3,6 +3,7 @@ import json
 from abc import ABC
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from functools import cached_property
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Protocol, Self, TypeVar, cast
 
@@ -134,8 +135,31 @@ class Tool(Component):
     # (which is use by the LLM, so a good description is important)
     # and to validate the tool call arguments.
 
+    SESSION_ID_PARAM_NAME = "session_id"
+    """
+    parameter name to use in apply method for the client session ID.
+    This parameter will be ignored by the MCP interface but will be populated with the session ID of the current client session 
+    when the tool is called, allowing tools to be session-aware if needed.
+    """
+
     _last_tool_call_client_str: str | None = None
     """We can only get the client info from within a tool call. Each tool call will update this variable."""
+
+    def __init__(self, agent: "SerenaAgent"):
+        super().__init__(agent)
+
+    @cached_property
+    def _is_session_aware(self) -> bool:
+        """
+        :return: whether the tool is session-aware, i.e. whether the apply method expects a session_id (str) parameter.
+        """
+        # check apply method for session_id arg
+        apply_fn = self.get_apply_fn()
+        sig = inspect.signature(apply_fn)
+        for param in sig.parameters.values():
+            if param.name == self.SESSION_ID_PARAM_NAME:
+                return True
+        return False
 
     @staticmethod
     def _sanitize_input_param(raw_param: str) -> str:
@@ -225,9 +249,9 @@ class Tool(Component):
             if apply_fn is None:
                 raise AttributeError(f"apply method not defined in {cls}. Did you forget to implement it?")
 
-        return func_metadata(apply_fn, skip_names=["self", "cls"])
+        return func_metadata(apply_fn, skip_names=["self", "cls", cls.SESSION_ID_PARAM_NAME])
 
-    def _log_tool_application(self, frame: Any) -> None:
+    def _log_tool_application(self, frame: Any, session_id: str) -> None:
         params = {}
         ignored_params = {"self", "log_call", "catch_exceptions", "args", "apply_fn"}
         for param, value in frame.f_locals.items():
@@ -237,7 +261,7 @@ class Tool(Component):
                 params.update(value)
             else:
                 params[param] = value
-        log.info(f"{self.get_name_from_cls()}: {dict_string(params)}")
+        log.info(f"{self.get_name_from_cls()}: {dict_string(params)}; session_id: {session_id}")
 
     def _limit_length(
         self,
@@ -284,8 +308,10 @@ class Tool(Component):
         """
         Applies the tool with logging and exception handling, using the given keyword arguments
         """
+        session_id = "global"
         if mcp_ctx is not None:
             try:
+                session_id = "%x" % id(mcp_ctx.session)
                 client_params = mcp_ctx.session.client_params
                 if client_params is not None:
                     client_info = cast(Implementation, client_params.clientInfo)
@@ -306,7 +332,7 @@ class Tool(Component):
                 return f"RuntimeError while checking if tool {self.get_name_from_cls()} is active: {e}"
 
             if log_call:
-                self._log_tool_application(inspect.currentframe())
+                self._log_tool_application(inspect.currentframe(), session_id)
             try:
                 # check whether the tool requires an active project and language server
                 if not isinstance(self, ToolMarkerDoesNotRequireActiveProject):
@@ -316,9 +342,14 @@ class Tool(Component):
                             + f"{self.agent.serena_config.project_names}"
                         )
 
+                # construct apply kwargs, adding session_id if the tool is session-aware
+                apply_kwargs = dict(kwargs)
+                if self._is_session_aware:
+                    apply_kwargs["session_id"] = session_id
+
                 # apply the actual tool
                 try:
-                    result = apply_fn(**kwargs)
+                    result = apply_fn(**apply_kwargs)
                 except SolidLSPException as e:
                     if e.is_language_server_terminated():
                         affected_language = e.get_affected_language()
@@ -327,7 +358,7 @@ class Tool(Component):
                                 f"Language server terminated while executing tool ({e}). Restarting the language server and retrying ..."
                             )
                             self.agent.get_language_server_manager_or_raise().restart_language_server(affected_language)
-                            result = apply_fn(**kwargs)
+                            result = apply_fn(**apply_kwargs)
                         else:
                             log.error(
                                 f"Language server terminated while executing tool ({e}), but affected language is unknown. Not retrying."
@@ -337,7 +368,7 @@ class Tool(Component):
                         raise
 
                 # record tool usage
-                self.agent.record_tool_usage(kwargs, result, self)
+                self.agent.record_tool_usage(apply_kwargs, result, self)
 
             except Exception as e:
                 if not catch_exceptions:
