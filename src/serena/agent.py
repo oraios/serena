@@ -9,8 +9,10 @@ import platform
 import signal
 import subprocess
 import sys
+from collections import defaultdict
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from logging import Logger
 from typing import TYPE_CHECKING, Optional, TypeVar
 
@@ -239,6 +241,11 @@ class ProjectPromptProvisionStatus:
     Manages the status of the provision of project-specific prompts
     """
 
+    @dataclass
+    class SessionStatus:
+        mode_prompts_provided: bool = False
+        project_activation_message_provided: bool = False
+
     def __init__(self, newly_activated_mode_names: set[str] | None = None):
         """
         :param newly_activated_mode_names: list of mode names that have been newly activated (by dynamic project activation)
@@ -247,49 +254,60 @@ class ProjectPromptProvisionStatus:
         if newly_activated_mode_names is None:
             newly_activated_mode_names = set()
         self._newly_activated_mode_names: set[str] = newly_activated_mode_names
-        self._mode_prompts_provided = False
-        self._project_activation_message_provided = False
+        self._session_status_dict: dict[str, ProjectPromptProvisionStatus.SessionStatus] = defaultdict(lambda: self.SessionStatus())
 
-    def is_mode_prompt_already_provided(self, mode_name: str) -> bool:
+    def _get_session_status(self, session_id: str) -> SessionStatus:
+        return self._session_status_dict[session_id]
+
+    def is_mode_prompt_already_provided(self, mode_name: str, session_id: str) -> bool:
         """
         :param mode_name: the mode name
+        :param session_id: the client session ID
         :return: whether the mode name was already provided (in a project-specific activation message) and therefore
             should not be included again (in the Serena instructions manual)
         """
-        if not self._mode_prompts_provided:
+        if not self._get_session_status(session_id).mode_prompts_provided:
             return False
         return mode_name in self._newly_activated_mode_names
 
-    def get_modes_with_prompts_to_be_provided_for_project_activation(self) -> list[SerenaAgentMode]:
+    def get_modes_with_prompts_to_be_provided_for_project_activation(self, session_id: str) -> list[SerenaAgentMode]:
         """
         Gets the modes that have been newly activated and for which prompts still need to be provided
         (in dynamic project activation message).
+
+        :param: session_id: the client session ID
+        :return: the modes
         """
         result = []
-        if not self._mode_prompts_provided:
+        if not self._get_session_status(session_id).mode_prompts_provided:
             for mode_name in self._newly_activated_mode_names:
                 mode = ActiveModes.get_mode_instance(mode_name)
                 if mode.has_prompt():
                     result.append(mode)
         return result
 
-    def mark_mode_prompts_as_provided(self) -> None:
+    def mark_mode_prompts_as_provided(self, session_id: str) -> None:
         """
         Marks the prompts for all newly activated modes as provided, so that they will not be included in the project activation message.
-        """
-        self._mode_prompts_provided = True
 
-    def mark_project_activation_message_as_provided(self) -> None:
+        :param session_id: the client session ID
+        """
+        self._get_session_status(session_id).mode_prompts_provided = True
+
+    def mark_project_activation_message_as_provided(self, session_id: str) -> None:
         """
         Marks the project activation message as provided, so that it will not be included again in case of multiple activations of the same project.
-        """
-        self._project_activation_message_provided = True
 
-    def is_project_activation_message_already_provided(self) -> bool:
+        :param session_id: the client session ID
         """
+        self._get_session_status(session_id).project_activation_message_provided = True
+
+    def is_project_activation_message_already_provided(self, session_id: str) -> bool:
+        """
+        :param session_id: the client session ID
         :return: whether the project activation message was already provided and therefore should not be included again
         """
-        return self._project_activation_message_provided
+        return self._get_session_status(session_id).project_activation_message_provided
 
 
 class SerenaAgent:
@@ -736,7 +754,11 @@ class SerenaAgent:
         template = JinjaTemplate(prompt_template)
         return template.render(available_tools=self._exposed_tools.tool_names, available_markers=self._exposed_tools.tool_marker_names)
 
-    def create_system_prompt(self) -> str:
+    def create_system_prompt(self, session_id: str = "global") -> str:
+        """
+        :param session_id: the client session ID for the case where this is run from a tool; "global" for the connection time case
+        :return: the prompt
+        """
         available_tools = self._active_tools
         available_markers = available_tools.tool_marker_names
         global_memories = MemoriesManager(
@@ -750,9 +772,9 @@ class SerenaAgent:
         relevant_modes = []
         for mode in self.get_active_modes():
             if mode.has_prompt():
-                if not self._project_prompt_status.is_mode_prompt_already_provided(mode.name):
+                if not self._project_prompt_status.is_mode_prompt_already_provided(mode.name, session_id):
                     relevant_modes.append(mode)
-        self._project_prompt_status.mark_mode_prompts_as_provided()
+        self._project_prompt_status.mark_mode_prompts_as_provided(session_id)
 
         system_prompt = self.prompt_factory.create_system_prompt(
             context_system_prompt=self._format_prompt(self._context.prompt),
@@ -763,19 +785,25 @@ class SerenaAgent:
         )
 
         # provide the project activation message if it hasn't yet been provided
-        if self._active_project is not None and not self._project_prompt_status.is_project_activation_message_already_provided():
-            system_prompt += "\n\n" + self.get_project_activation_message()
+        if self._active_project is not None and not self._project_prompt_status.is_project_activation_message_already_provided(session_id):
+            system_prompt += "\n\n" + self.get_project_activation_message(session_id)
 
         log.info("System prompt:\n%s", system_prompt)
         return system_prompt
 
-    def get_project_activation_message(self) -> str:
+    def get_project_activation_message(self, session_id: str) -> str:
         """
         :return: a message providing information about the project upon activation (e.g. programming language, memories, initial prompt)
         :raise: AssertionError if no project is active
         """
         proj = self._active_project
         assert proj is not None, "A project must be active before calling this."
+
+        # if activation message was already provided in the current session, don't provide it again
+        if self._project_prompt_status.is_project_activation_message_already_provided(session_id):
+            return "Project was already activated."
+
+        # provide basic project information (name, location, languages, encoding)
         if proj.is_newly_created:
             msg = f"Created and activated a new project with name '{proj.project_name}' at {proj.project_root}. "
         else:
@@ -785,6 +813,7 @@ class SerenaAgent:
             msg += f"\nProgramming languages: {languages_str}."
         msg += f"File encoding: {proj.project_config.encoding}."
 
+        # add list of memories (if memories are enabled)
         include_memories = self._active_tools.contains_tool_class(ReadMemoryTool)
         if include_memories:
             project_memories = proj.memories_manager.list_project_memories()
@@ -795,17 +824,18 @@ class SerenaAgent:
                 )
 
         # add prompts for modes that were dynamically activated by the project
-        modes_with_prompts = self._project_prompt_status.get_modes_with_prompts_to_be_provided_for_project_activation()
+        modes_with_prompts = self._project_prompt_status.get_modes_with_prompts_to_be_provided_for_project_activation(session_id)
         if modes_with_prompts:
             msg += "\nNewly applicable mode instructions:"
             for mode in modes_with_prompts:
                 msg += f"\n{mode.prompt}"
-        self._project_prompt_status.mark_mode_prompts_as_provided()
+        self._project_prompt_status.mark_mode_prompts_as_provided(session_id)
 
+        # add project-specific prompt
         if proj.project_config.initial_prompt:
             msg += f"\nProject-specific instructions:\n {proj.project_config.initial_prompt}"
 
-        self._project_prompt_status.mark_project_activation_message_as_provided()
+        self._project_prompt_status.mark_project_activation_message_as_provided(session_id)
 
         return msg
 
