@@ -338,7 +338,7 @@ class DashboardManager:
                         self.open_dashboard_in_browser()
 
     def open_dashboard_in_browser(self) -> None:
-        open_url_in_browser(self.url)
+        open_url_in_browser(self.url, use_subprocess=True)
 
     @staticmethod
     def _start_dashboard_viewer_process_function(url: str, minimized: bool, parent_process_id: int) -> None:
@@ -351,7 +351,7 @@ class DashboardManager:
             log.warning(f"Could not open Serena Dashboard viewer. Cause:\n{e}")
             # Fall back to opening the browser window if the window was supposed to be shown directly
             if not minimized:
-                open_url_in_browser(url)
+                open_url_in_browser(url, use_subprocess=True)
 
     def _start_dashboard_viewer(self, minimized: bool) -> None:
         """

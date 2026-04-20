@@ -789,20 +789,28 @@ class SerenaDashboardAPI:
         return thread, port
 
 
-def open_url_in_browser(url: str) -> None:
+def open_url_in_browser(url: str, use_subprocess: bool = False) -> None:
     """
-    Opens the given URL in the user's default web browser without blocking the main process or printing any output.
+    Opens the given URL in the user's default web browser,
+    optionally using a subprocess to ensure that no output is written to stdout
+    (highly problematic when run within a stdio MCP server context)
 
     :param url: the URL to open
+    :param use_subprocess: whether to use a subprocess to opening the URL, making stdio contamination impossible
     """
-    # Use a subprocess to avoid any output from webbrowser.open being written to stdout
-    subprocess.Popen(
-        [sys.executable, "-c", f"import webbrowser; webbrowser.open({url!r})"],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=False,
-    )
+    if use_subprocess:
+        # Use a subprocess to avoid any output from webbrowser.open being written to stdout
+        subprocess.Popen(
+            [sys.executable, "-c", f"import webbrowser; webbrowser.open({url!r})"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=False,
+        )
+    else:
+        import webbrowser
+
+        webbrowser.open(url)
 
 
 class SerenaDashboardViewer(WebViewWithTray):
