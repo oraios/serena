@@ -14,6 +14,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Dependencies:
   - `pywebview`: Switch back to official release (new version 6.2) #1253
 
+* Evaluations:
+  - Added new evaluations for Junie Plugin with Opus 4.6 and GLM 5.1 in Claude Code.
 
 * Language Servers:
   - Fix: clangd capability checks now tolerate valid initialize response shape differences and invalidate cached C++ document symbols when clangd/compile commands context changes #1359                                                                                                                                                                                                            
