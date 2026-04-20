@@ -142,6 +142,33 @@ class CodeEditor(Generic[TSymbol], ABC):
 
         pos = symbol.get_body_end_position_or_raise()
 
+        # For constant/variable symbols, the LSP location may report start_line == end_line
+        # even when the value spans multiple lines (e.g. multi-line string literals).
+        # In that case, the reported position points to the opening quote, not the closing one.
+        # We detect this by comparing body start/end lines and scan forward to find the actual end.
+        if symbol.symbol_kind_name in ("Constant", "Variable"):
+            start_line, end_line = symbol.get_body_line_numbers()
+            if start_line is not None and end_line is not None and start_line == end_line:
+                abs_path = os.path.join(self.project_root, relative_file_path)
+                with open(abs_path, encoding=self.encoding) as f:
+                    file_content = f.read()
+                lines = file_content.split("\n")
+                if start_line < len(lines):
+                    line_text = lines[start_line]
+                    # Find the first non-whitespace character and check if it's a quote
+                    stripped = line_text.lstrip()
+                    if stripped.startswith(("'", '"', "'''", '"""', "`", "```")):
+                        quote = stripped[:3] if stripped.startswith(("'''", '"""', "```")) else stripped[:1]
+                        # Scan forward for the closing quote
+                        search_end = start_line + 1
+                        while search_end < len(lines):
+                            search_line = lines[search_end]
+                            if quote in search_line:
+                                # Found potential closing quote
+                                pos = PositionInFile(line=search_end, col=0)
+                                break
+                            search_end += 1
+
         # start at the beginning of the next line
         col = 0
         line = pos.line + 1
