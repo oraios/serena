@@ -24,6 +24,8 @@ from solidlsp.settings import SolidLSPSettings
 log = logging.getLogger(__name__)
 
 _COMPILE_READY_TIMEOUT = 60
+_MAX_SYMBOL_RETRIES = 5
+_SYMBOL_RETRY_BASE_DELAY = 0.5
 
 
 class GleamLanguageServer(SolidLanguageServer):
@@ -207,10 +209,39 @@ class GleamLanguageServer(SolidLanguageServer):
 
         log.info("Gleam language server ready")
 
+    def _get_symbols_with_retry(
+        self,
+        relative_file_path: str,
+        file_data: LSPFileBuffer,
+    ) -> "list[SymbolInformation] | list[DocumentSymbol] | None":
+        """Request document symbols, retrying on empty response.
+
+        Gleam LSP may not emit $/progress when opening individual files that are
+        already part of a compiled project, so the first documentSymbol request
+        can race against the server finishing its analysis. Retrying with linear
+        backoff gives the server time to catch up without blocking indefinitely.
+        """
+        result = None
+        for attempt in range(_MAX_SYMBOL_RETRIES):
+            result = super()._request_document_symbols(relative_file_path, file_data)
+            if result:
+                return result
+            if attempt < _MAX_SYMBOL_RETRIES - 1:
+                delay = _SYMBOL_RETRY_BASE_DELAY * (attempt + 1)
+                log.info(
+                    "Gleam: empty symbols for %s (attempt %d/%d), retrying in %.1fs",
+                    relative_file_path,
+                    attempt + 1,
+                    _MAX_SYMBOL_RETRIES,
+                    delay,
+                )
+                time.sleep(delay)
+        return result
+
     @override
     def _request_document_symbols(
         self, relative_file_path: str, file_data: LSPFileBuffer | None
-    ) -> list[SymbolInformation] | list[DocumentSymbol] | None:
+    ) -> "list[SymbolInformation] | list[DocumentSymbol] | None":
         # Send textDocument/didOpen before requesting symbols. Gleam LSP may start a
         # recompilation in response; we must wait for it to finish or the server returns
         # an empty symbol list for the file.
@@ -219,16 +250,14 @@ class GleamLanguageServer(SolidLanguageServer):
         else:
             # Rare path: open the file ourselves so the super call gets a live buffer.
             with self.open_file(relative_file_path, open_in_ls=True) as fb:
-                time.sleep(0.2)
+                time.sleep(0.5)
                 if not self._compile_ready.wait(timeout=_COMPILE_READY_TIMEOUT):
                     log.warning("Gleam: timed out waiting for recompile after didOpen (%s)", relative_file_path)
-                return super()._request_document_symbols(relative_file_path, fb)
+                return self._get_symbols_with_retry(relative_file_path, fb)
 
         # Brief window for any $/progress begin triggered by didOpen to arrive before
         # we check _compile_ready (which is already set after the initial compile).
         time.sleep(0.2)
         if not self._compile_ready.wait(timeout=_COMPILE_READY_TIMEOUT):
             log.warning("Gleam: timed out waiting for recompile after didOpen (%s)", relative_file_path)
-        # file is already open in LS; super will call ensure_open_in_ls() (no-op) then
-        # send the documentSymbol request.
-        return super()._request_document_symbols(relative_file_path, file_data)
+        return self._get_symbols_with_retry(relative_file_path, file_data)

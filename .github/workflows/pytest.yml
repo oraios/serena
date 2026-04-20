@@ -6,9 +6,6 @@ on:
     branches:
       - main
 
-permissions:
-    contents: read
-
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -23,7 +20,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.11"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
       - name: Free disk space
         if: runner.os == 'Linux'
         run: |
@@ -401,24 +398,17 @@ jobs:
       - name: Install Gleam
         shell: bash
         run: |
-          GLEAM_VERSION=$(curl -fsSL https://api.github.com/repos/gleam-lang/gleam/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
-          echo "Installing Gleam v${GLEAM_VERSION}"
           if [[ "${{ runner.os }}" == "Linux" ]]; then
+            GLEAM_VERSION=$(curl -fsSL https://api.github.com/repos/gleam-lang/gleam/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+            echo "Installing Gleam v${GLEAM_VERSION}"
             curl -fsSL -o gleam.tar.gz "https://github.com/gleam-lang/gleam/releases/download/v${GLEAM_VERSION}/gleam-v${GLEAM_VERSION}-x86_64-unknown-linux-musl.tar.gz"
             tar -xzf gleam.tar.gz
             sudo mv gleam /usr/local/bin/
             rm gleam.tar.gz
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            ARCH=$(uname -m)
-            if [[ "$ARCH" == "arm64" ]]; then
-              curl -fsSL -o gleam.tar.gz "https://github.com/gleam-lang/gleam/releases/download/v${GLEAM_VERSION}/gleam-v${GLEAM_VERSION}-aarch64-apple-darwin.tar.gz"
-            else
-              curl -fsSL -o gleam.tar.gz "https://github.com/gleam-lang/gleam/releases/download/v${GLEAM_VERSION}/gleam-v${GLEAM_VERSION}-x86_64-apple-darwin.tar.gz"
-            fi
-            tar -xzf gleam.tar.gz
-            sudo mv gleam /usr/local/bin/
-            rm gleam.tar.gz
+            brew install gleam
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            GLEAM_VERSION=$(curl -fsSL https://api.github.com/repos/gleam-lang/gleam/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
             curl -fsSL -o gleam.zip "https://github.com/gleam-lang/gleam/releases/download/v${GLEAM_VERSION}/gleam-v${GLEAM_VERSION}-x86_64-pc-windows-msvc.zip"
             unzip -o gleam.zip
             mkdir -p "$HOME/bin"
