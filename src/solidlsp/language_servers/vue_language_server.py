@@ -8,7 +8,8 @@ import os
 import pathlib
 import shutil
 import threading
-from pathlib import Path
+from collections.abc import Callable
+from pathlib import Path, PurePath
 from time import sleep
 from typing import Any
 
@@ -424,6 +425,70 @@ class VueLanguageServer(SolidLanguageServer):
         assert self._ts_server is not None
         with self._ts_server.open_file(relative_file_path):
             return self._ts_server.request_rename_symbol_edit(relative_file_path, line, column, new_name)
+
+    def _forward_edit_to_ts_server_if_needed(self, relative_file_path: str, edit_fn: Callable[[], object]) -> None:
+        """
+        Calls ``edit_fn`` on the TypeScript server if the file is open there.
+
+        Only applicable to non-TypeScript files (i.e. .vue files) that have been
+        indexed on the TypeScript server for cross-file reference support.
+
+        :param relative_file_path: the relative path of the file that was edited
+        :param edit_fn: callable that performs the corresponding edit on ``_ts_server``
+        """
+        if self._ts_server is None or not self._ts_server_started:
+            return
+        if self._is_typescript_file(relative_file_path):
+            return
+
+        absolute_file_path = str(PurePath(self.repository_root_path, relative_file_path))
+        uri = pathlib.Path(absolute_file_path).as_uri()
+        if uri in self._ts_server.open_file_buffers:
+            edit_fn()
+
+    @override
+    def insert_text_at_position(self, relative_file_path: str, line: int, column: int, text_to_be_inserted: str) -> ls_types.Position:
+        """
+        Inserts text at the given position, forwarding the change to the TypeScript server if it has the file open.
+
+        :param relative_file_path: the relative path of the file to edit
+        :param line: the line number
+        :param column: the column number
+        :param text_to_be_inserted: the text to insert
+        :return: updated cursor position
+        """
+        result = super().insert_text_at_position(relative_file_path, line, column, text_to_be_inserted)
+        self._forward_edit_to_ts_server_if_needed(
+            relative_file_path,
+            lambda: self._ts_server.insert_text_at_position(  # type: ignore[union-attr]
+                relative_file_path, line, column, text_to_be_inserted
+            ),
+        )
+        return result
+
+    @override
+    def delete_text_between_positions(
+        self,
+        relative_file_path: str,
+        start: ls_types.Position,
+        end: ls_types.Position,
+    ) -> str:
+        """
+        Deletes text between the given positions, forwarding the change to the TypeScript server if it has the file open.
+
+        :param relative_file_path: the relative path of the file to edit
+        :param start: start position
+        :param end: end position
+        :return: deleted text
+        """
+        deleted_text = super().delete_text_between_positions(relative_file_path, start, end)
+        self._forward_edit_to_ts_server_if_needed(
+            relative_file_path,
+            lambda: self._ts_server.delete_text_between_positions(  # type: ignore[union-attr]
+                relative_file_path, start, end
+            ),
+        )
+        return deleted_text
 
     @classmethod
     def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> tuple[list[str], str, str]:

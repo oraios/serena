@@ -1331,9 +1331,12 @@ class SolidLanguageServer(ABC):
                 {"textDocument": {"uri": pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()}}
             )
 
-            # update cache
-            self._raw_document_symbols_cache[cache_key] = (fd.content_hash, response)
-            self._raw_document_symbols_cache_is_modified = True
+            # Only cache non-empty results. An empty or None response can occur when the language server
+            # has not yet finished indexing or building the project (e.g. Lean 4 before `lake build`),
+            # and caching it would permanently serve stale data even after the project is ready.
+            if response:
+                self._raw_document_symbols_cache[cache_key] = (fd.content_hash, response)
+                self._raw_document_symbols_cache_is_modified = True
 
             return response
 
@@ -1691,6 +1694,7 @@ class SolidLanguageServer(ABC):
     def request_overview(self, within_relative_path: str) -> dict[str, list[UnifiedSymbolInformation]]:
         """
         An overview of all symbols in the given file or directory.
+        Raises a ValueError if a path to an ignored file is passed.
 
         :param within_relative_path: the relative path to the file or directory to get the overview of.
         :return: A mapping of all relative paths analyzed to lists of top-level symbols in the corresponding file.
@@ -1700,6 +1704,8 @@ class SolidLanguageServer(ABC):
             raise FileNotFoundError(f"File or directory not found: {abs_path}")
 
         if abs_path.is_file():
+            if self.is_ignored_path(within_relative_path):
+                raise ValueError(f"The explicitly passed file {within_relative_path} is ignored, not returning overview.")
             symbols_overview = self.request_document_overview(within_relative_path)
             return {within_relative_path: symbols_overview}
         else:

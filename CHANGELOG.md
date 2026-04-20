@@ -5,6 +5,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Support `serena --version` CLI command for displaying the current version #1347
   - Fix: Check for ignored path ignored `.git` folder only at the top level, not in every subdirectory (`Project._is_ignored_relative_path`) #1350
+  - `GetSymbolsOverviewTool`: ignored paths were not respected in LSP variant (fix in `SolidLanguageServer`)
   - Fix: Duplicate comments in re-saved YAML configuration files #1285
 
 * JetBrains:
@@ -15,6 +16,12 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Evaluations:
   - Added new evaluations for Junie Plugin with Opus 4.6 and GLM 5.1 in Claude Code.
+
+* Language Servers:
+  - Fix: clangd capability checks now tolerate valid initialize response shape differences and invalidate cached C++ document symbols when clangd/compile commands context changes #1359                                                                                                                                                                                                            
+  - Fix: `rename_symbol` for Vue files now correctly propagates edits to the TypeScript server, enabling cross-file renames in `.vue` files 
+  - Fix: Lean4 stale cache — empty document symbol responses (returned before `lake build` completes) are no longer persisted, preventing symbols from being permanently hidden #1356
+
 
 # v1.1.2 (2026-04-14)
 
