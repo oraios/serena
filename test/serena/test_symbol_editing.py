@@ -332,15 +332,6 @@ class InsertInRelToSymbolTest(EditingTest):
             InsertInRelToSymbolTest(
                 Language.PYTHON,
                 PYTHON_TEST_REL_FILE_PATH,
-                "typed_module_var",
-                NEW_PYTHON_VARIABLE,
-            ),
-            marks=pytest.mark.python,
-        ),
-        pytest.param(
-            InsertInRelToSymbolTest(
-                Language.PYTHON,
-                PYTHON_TEST_REL_FILE_PATH,
                 "use_module_variables",
                 NEW_PYTHON_FUNCTION,
             ),

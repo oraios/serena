@@ -135,6 +135,13 @@ class CodeEditor(Generic[TSymbol], ABC):
         Inserts content after the symbol with the given name in the given file.
         """
         symbol = self._find_unique_symbol(name_path, relative_file_path)
+        # Note: for body to be available, the symbol dto that the symbol instance is built from
+        # must have been retrieved either with body or at least with location.
+        # since _find_unique_symbol passes include_location=True, it works here
+        if symbol.body == symbol.name:
+            raise ValueError(
+                f"Cannot insert after this symbol (not a function, class or method): {symbol}. Consider using insert_before_symbol instead."
+            )
 
         # make sure body always ends with at least one newline
         if not body.endswith("\n"):
