@@ -485,6 +485,7 @@ class SerenaAgent:
             "dashboard": int(self.serena_config.web_dashboard),
             "version": self.version,
             "backend": self._language_backend.value,
+            "context": self._context.name,
         }
         try:
             requests.get("https://oraios-software.de/serena_usage.php", params=params, timeout=1)

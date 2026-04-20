@@ -15,7 +15,8 @@ Status of the `main` branch. Changes prior to the next official version change w
      - Fix: Project activation message was provided more than once for case of dynamic project activation followed
        by `initial_instructions` #1372
   - Security: Forbid `".."` in memory names to disallow accessing files outside dedicated memory directories
-  - Security: Add check for tool being read-only in the project server (previously only checked in `query_project` tool, i.e. client side) 
+  - Security: Add check for tool being read-only in the project server (previously only checked in `query_project` tool, i.e. client side)
+  - Usage reporting now also includes the name of the Serena context that is used 
 
 * JetBrains:
   - `Move` and `SafeDelete` tools: transform empty string to None (counteracts client errors)
