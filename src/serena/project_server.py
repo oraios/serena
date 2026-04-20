@@ -89,6 +89,8 @@ class ProjectServer:
         project = self._get_project(req.project_name)
         with self._agent.active_project_context(project):
             tool = self._agent.get_tool_by_name(req.tool_name)
+            if not tool.is_readonly():
+                raise ValueError(f"Tool '{req.tool_name}' is not read-only and cannot be executed via the query_project route")
             params = json.loads(req.tool_params_json)
             return tool.apply_ex(**params)
 

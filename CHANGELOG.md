@@ -14,6 +14,8 @@ Status of the `main` branch. Changes prior to the next official version change w
        `initial_instructions`). Now they are passed directly in the activation message (and excluded from a subsequent `initial_instructions` call).
      - Fix: Project activation message was provided more than once for case of dynamic project activation followed
        by `initial_instructions` #1372
+  - Security: Forbid `".."` in memory names to disallow accessing files outside dedicated memory directories
+  - Security: Add check for tool being read-only in the project server (previously only checked in `query_project` tool, i.e. client side) 
 
 * JetBrains:
   - `Move` and `SafeDelete` tools: transform empty string to None (counteracts client errors)
@@ -21,6 +23,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Dependencies:
   - `pywebview`: Switch back to official release (new version 6.2) #1253
 
+* Evaluations:
+  - Added new evaluations for Junie Plugin with Opus 4.6 and GLM 5.1 in Claude Code.
 
 * Language Servers:
   - Fix: clangd capability checks now tolerate valid initialize response shape differences and invalidate cached C++ document symbols when clangd/compile commands context changes #1359                                                                                                                                                                                                            
