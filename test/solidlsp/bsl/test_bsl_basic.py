@@ -9,8 +9,6 @@ import os
 
 import pytest
 
-from serena.project import Project
-from serena.text_utils import LineType
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 
@@ -105,7 +103,6 @@ class TestBslLanguageServerBasics:
     def test_bsl_file_extensions(self, language_server: SolidLanguageServer) -> None:
         """Test that BSL language server works with different BSL file extensions."""
         # The language server should recognize .bsl files
-        file_path = os.path.join("test_repo", "ОсновнойМодуль.bsl")
 
         # Verify the file is recognized as a BSL file
         language_config = Language.BSL

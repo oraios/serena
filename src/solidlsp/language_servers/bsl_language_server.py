@@ -7,7 +7,6 @@ import dataclasses
 import logging
 import os
 import pathlib
-import platform
 
 from overrides import override
 
