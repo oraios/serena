@@ -1,0 +1,8 @@
+name: test_repo
+version: 0.1.0
+
+targets:
+  test_repo:
+    main: src/main.cr
+
+crystal: ">= 1.0.0"

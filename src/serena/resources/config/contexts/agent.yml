@@ -1,7 +1,6 @@
-description: All tools except InitialInstructionsTool for agent context
+description: Agent context where the system prompt (initial instructions) are provided at startup
 prompt: |
-  You are running in agent context where the system prompt is provided externally. You should use symbolic
-  tools when possible for code understanding and modification.
+  You are running in an agent context.
 excluded_tools:
   - initial_instructions
 

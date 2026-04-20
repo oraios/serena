@@ -3,10 +3,12 @@ from pathlib import Path
 
 import pytest
 
+from serena.util.text_utils import find_text_coordinates
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
 @pytest.mark.dart
@@ -171,7 +173,7 @@ class TestDartLanguageServer:
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test finding references using symbol selection range."""
         file_path = os.path.join("lib", "main.dart")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Handle nested symbol structure - symbols can be nested in lists
         symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
@@ -196,9 +198,9 @@ class TestDartLanguageServer:
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
 
         # Check that we found references - at least one should be in main.dart
-        assert any(
-            "main.dart" in ref.get("relativePath", "") or "main.dart" in ref.get("uri", "") for ref in refs
-        ), "main.dart should reference add method (tried all positions in selectionRange)"
+        assert any("main.dart" in ref.get("relativePath", "") or "main.dart" in ref.get("uri", "") for ref in refs), (
+            "main.dart should reference add method (tried all positions in selectionRange)"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
     def test_request_containing_symbol_method(self, language_server: SolidLanguageServer) -> None:
@@ -212,7 +214,8 @@ class TestDartLanguageServer:
             assert containing_symbol["name"] == "add"
             assert containing_symbol["kind"] == SymbolKind.Method
             if "body" in containing_symbol:
-                assert "add" in containing_symbol["body"] or "final result" in containing_symbol["body"]
+                body = containing_symbol["body"].get_text()
+                assert "add" in body or "final result" in body
 
     @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
     def test_request_containing_symbol_class(self, language_server: SolidLanguageServer) -> None:
@@ -242,8 +245,12 @@ class TestDartLanguageServer:
     def test_request_defining_symbol_variable(self, language_server: SolidLanguageServer) -> None:
         """Test request_defining_symbol for a variable usage."""
         file_path = os.path.join("lib", "main.dart")
-        # Line 14 contains 'final result = a + b;' - test position on 'result'
-        defining_symbol = language_server.request_defining_symbol(file_path, 13, 10)
+
+        # Find coordinates of 'final result = a + b;' - test position on 'result'
+        with language_server.open_file(file_path, open_in_ls=False) as f:
+            pos = find_text_coordinates(f.contents, r"final (result) = a \+ b;")
+
+        defining_symbol = language_server.request_defining_symbol(file_path, pos.line, pos.col)
 
         # The defining symbol might be the variable itself or the containing method
         # This is acceptable behavior - different language servers handle this differently
@@ -281,7 +288,7 @@ class TestDartLanguageServer:
     def test_request_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test getting document symbols from a Dart file."""
         file_path = os.path.join("lib", "main.dart")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Check that we have symbols
         assert len(symbols) > 0
@@ -308,7 +315,7 @@ class TestDartLanguageServer:
     def test_request_referencing_symbols_comprehensive(self, language_server: SolidLanguageServer) -> None:
         """Test comprehensive referencing symbols functionality."""
         file_path = os.path.join("lib", "main.dart")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
 
         # Handle nested symbol structure
         symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
@@ -339,7 +346,7 @@ class TestDartLanguageServer:
         helper_file_path = os.path.join("lib", "helper.dart")
 
         # Test finding references to subtract function from helper.dart in main.dart
-        helper_symbols = language_server.request_document_symbols(helper_file_path)
+        helper_symbols = language_server.request_document_symbols(helper_file_path).get_all_symbols_and_roots()
         symbol_list = helper_symbols[0] if helper_symbols and isinstance(helper_symbols[0], list) else helper_symbols
 
         subtract_symbol = next((s for s in symbol_list if s.get("name") == "subtract"), None)
@@ -355,3 +362,65 @@ class TestDartLanguageServer:
             if main_dart_refs:
                 for ref in main_dart_refs:
                     assert "range" in ref or "location" in ref
+
+    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s):
+                malformed_symbols.append(s)
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )
+
+    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
+    def test_symbol_body_contains_full_method(self, language_server: SolidLanguageServer) -> None:
+        """Test that document symbols return the full method body range, not just the identifier.
+
+        Regression test: when hierarchicalDocumentSymbolSupport was not declared in client
+        capabilities, the Dart LSP returned SymbolInformation[] (flat format) where
+        location.range only covered the identifier name (single line), causing find_symbol
+        with include_body=True to return just the symbol name instead of its implementation.
+        """
+        file_path = os.path.join("lib", "main.dart")
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
+        symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+
+        # Find the 'add' method — defined across multiple lines in main.dart:
+        #   int add(int a, int b) {
+        #     final result = a + b;
+        #     _history.add('$a + $b = $result');
+        #     return result;
+        #   }
+        add_symbol = None
+        for sym in symbol_list:
+            if sym.get("name") == "add":
+                add_symbol = sym
+                break
+            if sym.get("name") == "Calculator" and "children" in sym:
+                for child in sym["children"]:
+                    if child.get("name") == "add":
+                        add_symbol = child
+                        break
+                if add_symbol:
+                    break
+
+        assert add_symbol is not None, "Could not find 'add' method symbol in main.dart"
+
+        # The body range must span multiple lines (not just the identifier line).
+        # With hierarchicalDocumentSymbolSupport declared, the Dart LSP returns
+        # DocumentSymbol[] where range covers the full method body.
+        body_start = add_symbol["location"]["range"]["start"]["line"]
+        body_end = add_symbol["location"]["range"]["end"]["line"]
+        assert body_end > body_start, (
+            f"Expected multi-line body range for 'add' method, got start={body_start}, end={body_end}. "
+            f"This likely means hierarchicalDocumentSymbolSupport is not declared in client capabilities."
+        )
+
+        # The body text must contain the method implementation, not just the name.
+        if add_symbol.get("body"):
+            body_text = add_symbol["body"].get_text()
+            assert "return result" in body_text, f"Expected method body to contain implementation, got: {body_text!r}"

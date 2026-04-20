@@ -6,6 +6,6 @@ prompt: |
   Break down complex tasks into smaller steps and explain your thinking at each stage. When you're uncertain about
   a decision, present options to the user and ask for guidance rather than making assumptions.
   
-  Focus on providing informative results for intermediate steps so the user can follow along with your progress and
+  Focus on providing informative results for intermediate steps, such that the user can follow along with your progress and
   provide feedback as needed.
 excluded_tools: []

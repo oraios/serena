@@ -5,18 +5,20 @@ Provides Rust specific instantiation of the LanguageServer class. Contains vario
 import logging
 import os
 import pathlib
+import platform
 import shutil
 import subprocess
 import threading
+from typing import cast
 
 from overrides import override
 
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 class RustAnalyzer(SolidLanguageServer):
@@ -25,70 +27,170 @@ class RustAnalyzer(SolidLanguageServer):
     """
 
     @staticmethod
-    def _get_rustup_version():
-        """Get installed rustup version or None if not found."""
-        try:
-            result = subprocess.run(["rustup", "--version"], capture_output=True, text=True, check=False)
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except FileNotFoundError:
+    def _determine_log_level(line: str) -> int:
+        """Classify rust-analyzer stderr output to avoid false-positive errors."""
+        line_lower = line.lower()
+
+        # Known informational/warning messages from rust-analyzer that aren't critical errors
+        if any(
+            [
+                "failed to find any projects in" in line_lower,
+                "fetchworkspaceerror" in line_lower,
+            ]
+        ):
+            return logging.DEBUG
+
+        return SolidLanguageServer._determine_log_level(line)
+
+    class DependencyProvider(LanguageServerDependencyProviderSinglePath):
+        @staticmethod
+        def _get_rustup_version() -> str | None:
+            """Get installed rustup version or None if not found."""
+            try:
+                result = subprocess.run(["rustup", "--version"], capture_output=True, text=True, check=False)
+                if result.returncode == 0:
+                    return result.stdout.strip()
+            except FileNotFoundError:
+                return None
             return None
-        return None
 
-    @staticmethod
-    def _get_rust_analyzer_path():
-        """Get rust-analyzer path via rustup or system PATH."""
-        # First try rustup
-        try:
-            result = subprocess.run(["rustup", "which", "rust-analyzer"], capture_output=True, text=True, check=False)
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except FileNotFoundError:
-            pass
+        @staticmethod
+        def _get_rust_analyzer_via_rustup() -> str | None:
+            """Get rust-analyzer path via rustup. Returns None if not found."""
+            try:
+                result = subprocess.run(["rustup", "which", "rust-analyzer"], capture_output=True, text=True, check=False)
+                if result.returncode == 0:
+                    return result.stdout.strip()
+            except FileNotFoundError:
+                pass
+            return None
 
-        # Fallback to system PATH
-        return shutil.which("rust-analyzer")
+        @staticmethod
+        def _is_rust_analyzer_functional(path: str) -> bool:
+            """Check if a rust-analyzer binary is functional by running --version.
 
-    @staticmethod
-    def _ensure_rust_analyzer_installed():
-        """Ensure rust-analyzer is available, install via rustup if needed."""
-        path = RustAnalyzer._get_rust_analyzer_path()
-        if path:
-            return path
+            This catches the case where rust-analyzer in PATH is actually a rustup proxy
+            that fails because the component is not installed.
+            """
+            try:
+                result = subprocess.run([path, "--version"], capture_output=True, text=True, check=False, timeout=10)
+                return result.returncode == 0
+            except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+                return False
 
-        # Check if rustup is available
-        if not RustAnalyzer._get_rustup_version():
+        @staticmethod
+        def _ensure_rust_analyzer_installed() -> str:
+            """
+            Ensure rust-analyzer is available.
+
+            Priority order:
+            1. Rustup existing installation (preferred - matches toolchain version)
+            2. Rustup auto-install if rustup is available (ensures correct version)
+            3. System PATH (covers Nix, distro packages, and other standalone installs)
+            4. Common installation locations as final fallback
+
+            :return: path to rust-analyzer executable
+            """
+            # Try rustup FIRST (preferred - avoids picking up incompatible versions from PATH)
+            rustup_path = RustAnalyzer.DependencyProvider._get_rust_analyzer_via_rustup()
+            if rustup_path:
+                return rustup_path
+
+            # If rustup is available but rust-analyzer not installed, auto-install it BEFORE
+            # checking PATH. This ensures we get the correct version matching the toolchain.
+            if RustAnalyzer.DependencyProvider._get_rustup_version():
+                result = subprocess.run(["rustup", "component", "add", "rust-analyzer"], check=False, capture_output=True, text=True)
+                if result.returncode == 0:
+                    # Verify installation worked
+                    rustup_path = RustAnalyzer.DependencyProvider._get_rust_analyzer_via_rustup()
+                    if rustup_path:
+                        return rustup_path
+                # If auto-install failed, fall through to PATH and common paths
+
+            # Check system PATH early - this covers Nix, distro packages, and other standalone installs.
+            # We verify the binary is functional to avoid picking up broken rustup proxy symlinks.
+            path_result = shutil.which("rust-analyzer")
+            if path_result and os.path.isfile(path_result) and os.access(path_result, os.X_OK):
+                if RustAnalyzer.DependencyProvider._is_rust_analyzer_functional(path_result):
+                    return path_result
+
+            # Determine platform-specific binary name and paths
+            is_windows = platform.system() == "Windows"
+            binary_name = "rust-analyzer.exe" if is_windows else "rust-analyzer"
+
+            # Fallback to common installation locations
+            common_paths: list[str | None] = []
+
+            if is_windows:
+                # Windows-specific paths
+                home = pathlib.Path.home()
+                common_paths.extend(
+                    [
+                        str(home / ".cargo" / "bin" / binary_name),  # cargo install / rustup
+                        str(home / "scoop" / "shims" / binary_name),  # Scoop package manager
+                        str(home / "scoop" / "apps" / "rust-analyzer" / "current" / binary_name),  # Scoop direct
+                        str(
+                            pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "rust-analyzer" / binary_name
+                        ),  # Standalone install
+                    ]
+                )
+            else:
+                # Unix-like paths (macOS, Linux)
+                common_paths.extend(
+                    [
+                        "/opt/homebrew/bin/rust-analyzer",  # macOS Homebrew (Apple Silicon)
+                        "/usr/local/bin/rust-analyzer",  # macOS Homebrew (Intel) / Linux system
+                        os.path.expanduser("~/.cargo/bin/rust-analyzer"),  # cargo install
+                        os.path.expanduser("~/.local/bin/rust-analyzer"),  # User local bin
+                    ]
+                )
+
+            for path in common_paths:
+                if path and os.path.isfile(path) and os.access(path, os.X_OK):
+                    return path
+
+            # Provide helpful error message with all searched locations
+            searched = [p for p in common_paths if p]
+            install_instructions = [
+                "  - Rustup: rustup component add rust-analyzer",
+                "  - Cargo: cargo install rust-analyzer",
+            ]
+            if is_windows:
+                install_instructions.extend(
+                    [
+                        "  - Scoop: scoop install rust-analyzer",
+                        "  - Chocolatey: choco install rust-analyzer",
+                        "  - Standalone: Download from https://github.com/rust-lang/rust-analyzer/releases",
+                    ]
+                )
+            else:
+                install_instructions.extend(
+                    [
+                        "  - Homebrew (macOS): brew install rust-analyzer",
+                        "  - System package manager (Linux): apt/dnf/pacman install rust-analyzer",
+                    ]
+                )
+
             raise RuntimeError(
-                "Neither rust-analyzer nor rustup is installed.\n"
-                "Please install Rust via https://rustup.rs/ or install rust-analyzer separately."
+                "rust-analyzer is not installed or not in PATH.\n"
+                "Searched locations:\n" + "\n".join(f"  - {p}" for p in searched) + "\n"
+                "Please install rust-analyzer via:\n" + "\n".join(install_instructions)
             )
 
-        # Try to install rust-analyzer component
-        result = subprocess.run(["rustup", "component", "add", "rust-analyzer"], check=False, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise RuntimeError(f"Failed to install rust-analyzer via rustup: {result.stderr}")
+        def _get_or_install_core_dependency(self) -> str:
+            return self._ensure_rust_analyzer_installed()
 
-        # Try again after installation
-        path = RustAnalyzer._get_rust_analyzer_path()
-        if not path:
-            raise RuntimeError("rust-analyzer installation succeeded but binary not found in PATH")
+        def _create_launch_command(self, core_path: str) -> list[str]:
+            return [core_path]
 
-        return path
-
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a RustAnalyzer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        rustanalyzer_executable_path = self._ensure_rust_analyzer_installed()
-        logger.log(f"Using rust-analyzer at: {rustanalyzer_executable_path}", logging.INFO)
-
         super().__init__(
             config,
-            logger,
             repository_root_path,
-            ProcessLaunchInfo(cmd=rustanalyzer_executable_path, cwd=repository_root_path),
+            None,
             "rust",
             solidlsp_settings,
         )
@@ -96,6 +198,9 @@ class RustAnalyzer(SolidLanguageServer):
         self.service_ready_event = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
         self.resolve_main_method_available = threading.Event()
+
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -406,7 +511,7 @@ class RustAnalyzer(SolidLanguageServer):
                         "overrideCommand": None,
                         "useRustcWrapper": True,
                     },
-                    "cfgs": {},
+                    "cfgs": [],
                     "extraArgs": [],
                     "extraEnv": {},
                     "features": [],
@@ -573,14 +678,14 @@ class RustAnalyzer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Rust Analyzer Language Server
         """
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "workspace/executeCommand":
@@ -588,25 +693,25 @@ class RustAnalyzer(SolidLanguageServer):
                     self.resolve_main_method_available.set()
             return
 
-        def lang_status_handler(params):
+        def lang_status_handler(params: dict) -> None:
             # TODO: Should we wait for
             # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
             # Before proceeding?
             if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
                 self.service_ready_event.set()
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: dict) -> list:
             return []
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def check_experimental_status(params):
+        def check_experimental_status(params: dict) -> None:
             if params["quiescent"] == True:
                 self.server_ready.set()
 
-        def window_log_message(msg):
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"LSP: window/logMessage: {msg}")
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("language/status", lang_status_handler)
@@ -617,16 +722,13 @@ class RustAnalyzer(SolidLanguageServer):
         self.server.on_notification("language/actionableNotification", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
-        self.logger.log("Starting RustAnalyzer server process", logging.INFO)
+        log.info("Starting RustAnalyzer server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
-        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2
+        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2  # type: ignore
         assert "completionProvider" in init_response["capabilities"]
         assert init_response["capabilities"]["completionProvider"] == {
             "resolveProvider": True,
@@ -634,6 +736,5 @@ class RustAnalyzer(SolidLanguageServer):
             "completionItem": {"labelDetailsSupport": True},
         }
         self.server.notify.initialized({})
-        self.completions_available.set()
 
         self.server_ready.wait()

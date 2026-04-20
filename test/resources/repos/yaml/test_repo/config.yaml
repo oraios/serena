@@ -1,0 +1,25 @@
+# Application configuration
+app:
+  name: test-application
+  version: 1.0.0
+  port: 8080
+  debug: true
+
+database:
+  host: localhost
+  port: 5432
+  name: testdb
+  username: admin
+  password: secret123
+
+logging:
+  level: info
+  format: json
+  outputs:
+    - console
+    - file
+
+features:
+  authentication: true
+  caching: false
+  monitoring: true

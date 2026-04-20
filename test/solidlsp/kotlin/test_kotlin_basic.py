@@ -4,9 +4,16 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
+from test.conftest import is_ci
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
+# Kotlin LSP (IntelliJ-based, pre-alpha v261) crashes on JVM restart under CI resource constraints
+# (2 CPUs, 7GB RAM). First start succeeds but subsequent starts fail with cancelled (-32800).
+# Tests pass reliably on developer machines. See PR #1061 for investigation details.
+@pytest.mark.skipif(is_ci, reason="Kotlin LSP JVM restart is unstable on CI runners")
 @pytest.mark.kotlin
 class TestKotlinLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.KOTLIN], indirect=True)
@@ -25,7 +32,7 @@ class TestKotlinLanguageServer:
 
         # Dynamically determine the correct line/column for the 'Model' class name
         file_path = os.path.join("src", "main", "kotlin", "test_repo", "Model.kt")
-        symbols = language_server.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         model_symbol = None
         for sym in symbols[0]:
             print(sym)
@@ -40,9 +47,9 @@ class TestKotlinLanguageServer:
         else:
             sel_start = model_symbol["range"]["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
-        assert any(
-            "Main.kt" in ref.get("relativePath", "") for ref in refs
-        ), "Main should reference Model (tried all positions in selectionRange)"
+        assert any("Main.kt" in ref.get("relativePath", "") for ref in refs), (
+            "Main should reference Model (tried all positions in selectionRange)"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.KOTLIN], indirect=True)
     def test_overview_methods(self, language_server: SolidLanguageServer) -> None:
@@ -50,3 +57,16 @@ class TestKotlinLanguageServer:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Main"), "Main missing from overview"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Utils"), "Utils missing from overview"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Model"), "Model missing from overview"
+
+    @pytest.mark.parametrize("language_server", [Language.KOTLIN], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s, period_allowed=s["kind"] == SymbolKind.File):
+                malformed_symbols.append(s)
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )

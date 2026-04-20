@@ -4,7 +4,6 @@ Context and Mode configuration loader
 
 import os
 from dataclasses import dataclass, field
-from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
@@ -12,15 +11,13 @@ import yaml
 from sensai.util import logging
 from sensai.util.string import ToStringMixin
 
-from serena.config.serena_config import ToolInclusionDefinition
+from serena.config.serena_config import SerenaPaths, ToolInclusionDefinition
 from serena.constants import (
     DEFAULT_CONTEXT,
-    DEFAULT_MODES,
     INTERNAL_MODE_YAMLS_DIR,
+    SERENA_FILE_ENCODING,
     SERENAS_OWN_CONTEXT_YAMLS_DIR,
     SERENAS_OWN_MODE_YAMLS_DIR,
-    USER_CONTEXT_YAMLS_DIR,
-    USER_MODE_YAMLS_DIR,
 )
 
 if TYPE_CHECKING:
@@ -43,6 +40,11 @@ class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
     It is formatted by the agent (see SerenaAgent._format_prompt()).
     """
     description: str = ""
+    _yaml_path: Path | None = field(default=None, repr=False, compare=False)
+    """
+    Internal field storing the path to the YAML file this mode was loaded from.
+    Used to support loading modes from arbitrary file paths.
+    """
 
     def _tostring_includes(self) -> list[str]:
         return ["name"]
@@ -51,28 +53,44 @@ class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
         """Print an overview of the mode."""
         print(f"{self.name}:\n {self.description}")
         if self.excluded_tools:
-            print(" excluded tools:\n  " + ", ".join(sorted(self.excluded_tools)))
+            print(" excluded tools:\n    " + ", ".join(sorted(self.excluded_tools)))
+        if self.included_optional_tools:
+            print(" included optional tools:\n    " + ", ".join(sorted(self.included_optional_tools)))
+        if self.fixed_tools:
+            print(" fixed tools:\n    " + ", ".join(sorted(self.fixed_tools)))
+        if self.prompt:
+            print(" defines initial prompt")
 
     @classmethod
     def from_yaml(cls, yaml_path: str | Path) -> Self:
         """Load a mode from a YAML file."""
-        with open(yaml_path, encoding="utf-8") as f:
+        yaml_as_path = Path(yaml_path).resolve()
+        with Path(yaml_as_path).open(encoding=SERENA_FILE_ENCODING) as f:
             data = yaml.safe_load(f)
-        name = data.pop("name", Path(yaml_path).stem)
-        return cls(name=name, **data)
+        name = data.pop("name", yaml_as_path.stem)
+        return cls(name=name, _yaml_path=yaml_as_path, **data)
 
     @classmethod
-    def get_path(cls, name: str) -> str:
-        """Get the path to the YAML file for a mode."""
+    def get_path(cls, name: str, instance: Self | None = None) -> str:
+        """Get the path to the YAML file for a mode.
+
+        :param name: The name of the mode
+        :param instance: Optional mode instance. If provided and it has a stored path, that path is returned.
+        :return: The path to the mode's YAML file
+        """
+        # If we have an instance with a stored path, use that
+        if instance is not None and instance._yaml_path is not None:
+            return str(instance._yaml_path)
+
         fname = f"{name}.yml"
-        custom_mode_path = os.path.join(USER_MODE_YAMLS_DIR, fname)
+        custom_mode_path = os.path.join(SerenaPaths().user_modes_dir, fname)
         if os.path.exists(custom_mode_path):
             return custom_mode_path
 
         own_yaml_path = os.path.join(SERENAS_OWN_MODE_YAMLS_DIR, fname)
         if not os.path.exists(own_yaml_path):
             raise FileNotFoundError(
-                f"Mode {name} not found in {USER_MODE_YAMLS_DIR} or in {SERENAS_OWN_MODE_YAMLS_DIR}."
+                f"Mode {name} not found in {SerenaPaths().user_modes_dir} or in {SERENAS_OWN_MODE_YAMLS_DIR}."
                 f"Available modes:\n{cls.list_registered_mode_names()}"
             )
         return own_yaml_path
@@ -102,17 +120,20 @@ class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
     @classmethod
     def list_custom_mode_names(cls) -> list[str]:
         """Names of all custom modes defined by the user."""
-        return [f.stem for f in Path(USER_MODE_YAMLS_DIR).glob("*.yml")]
-
-    @classmethod
-    def load_default_modes(cls) -> list[Self]:
-        """Load the default modes (interactive and editing)."""
-        return [cls.from_name(mode) for mode in DEFAULT_MODES]
+        return [f.stem for f in Path(SerenaPaths().user_modes_dir).glob("*.yml")]
 
     @classmethod
     def load(cls, name_or_path: str | Path) -> Self:
-        if str(name_or_path).endswith(".yml"):
+        # Check if it's a file path that exists
+        path = Path(name_or_path)
+        if path.exists() and path.is_file():
             return cls.from_yaml(name_or_path)
+
+        # If it looks like a file path but doesn't exist, raise FileNotFoundError
+        name_or_path_str = str(name_or_path)
+        if os.sep in name_or_path_str or (os.altsep and os.altsep in name_or_path_str) or name_or_path_str.endswith((".yml", ".yaml")):
+            raise FileNotFoundError(f"Mode file not found: {path.resolve()}")
+
         return cls.from_name(str(name_or_path))
 
 
@@ -124,14 +145,35 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
     """
 
     name: str
+    """the name of the context"""
+
     prompt: str
     """
     a Jinja2 template for the generation of the system prompt.
     It is formatted by the agent (see SerenaAgent._format_prompt()).
     """
+
     description: str = ""
+
     tool_description_overrides: dict[str, str] = field(default_factory=dict)
-    """Maps tool names to custom descriptions, default descriptions are extracted from the tool docstrings."""
+    """
+    maps tool names to custom descriptions, default descriptions are extracted from the tool docstrings.
+    """
+
+    _yaml_path: Path | None = field(default=None, repr=False, compare=False)
+    """
+    Internal field storing the path to the YAML file this context was loaded from.
+    Used to support loading contexts from arbitrary file paths.
+    """
+
+    single_project: bool = False
+    """
+    whether to assume that Serena shall only work on a single project in this context (provided that a project is given
+    when Serena is started).
+    If set to true and a project is provided at startup, the set of tools is limited to those required by the project's
+    concrete configuration, and other tools are excluded completely, allowing the set of tools to be minimal.
+    The `activate_project` tool will, therefore, be disabled in this case, as project switching is not allowed.
+    """
 
     def _tostring_includes(self) -> list[str]:
         return ["name"]
@@ -139,26 +181,36 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
     @classmethod
     def from_yaml(cls, yaml_path: str | Path) -> Self:
         """Load a context from a YAML file."""
-        with open(yaml_path, encoding="utf-8") as f:
+        yaml_as_path = Path(yaml_path).resolve()
+        with yaml_as_path.open(encoding=SERENA_FILE_ENCODING) as f:
             data = yaml.safe_load(f)
-        name = data.pop("name", Path(yaml_path).stem)
+        name = data.pop("name", yaml_as_path.stem)
         # Ensure backwards compatibility for tool_description_overrides
         if "tool_description_overrides" not in data:
             data["tool_description_overrides"] = {}
-        return cls(name=name, **data)
+        return cls(name=name, _yaml_path=yaml_as_path, **data)
 
     @classmethod
-    def get_path(cls, name: str) -> str:
-        """Get the path to the YAML file for a context."""
+    def get_path(cls, name: str, instance: Self | None = None) -> str:
+        """Get the path to the YAML file for a context.
+
+        :param name: The name of the context
+        :param instance: Optional context instance. If provided and it has a stored path, that path is returned.
+        :return: The path to the context's YAML file
+        """
+        # If we have an instance with a stored path, use that
+        if instance is not None and instance._yaml_path is not None:
+            return str(instance._yaml_path)
+
         fname = f"{name}.yml"
-        custom_context_path = os.path.join(USER_CONTEXT_YAMLS_DIR, fname)
+        custom_context_path = os.path.join(SerenaPaths().user_contexts_dir, fname)
         if os.path.exists(custom_context_path):
             return custom_context_path
 
         own_yaml_path = os.path.join(SERENAS_OWN_CONTEXT_YAMLS_DIR, fname)
         if not os.path.exists(own_yaml_path):
             raise FileNotFoundError(
-                f"Context {name} not found in {USER_CONTEXT_YAMLS_DIR} or in {SERENAS_OWN_CONTEXT_YAMLS_DIR}."
+                f"Context {name} not found in {SerenaPaths().user_contexts_dir} or in {SERENAS_OWN_CONTEXT_YAMLS_DIR}."
                 f"Available contexts:\n{cls.list_registered_context_names()}"
             )
         return own_yaml_path
@@ -166,13 +218,31 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
     @classmethod
     def from_name(cls, name: str) -> Self:
         """Load a registered Serena context."""
+        legacy_name_mapping = {
+            "ide-assistant": "claude-code",
+        }
+        if name in legacy_name_mapping:
+            log.warning(
+                f"Context name '{name}' is deprecated and has been renamed to '{legacy_name_mapping[name]}'. "
+                f"Please update your configuration; refer to the configuration guide for more details: "
+                "https://oraios.github.io/serena/02-usage/050_configuration.html#contexts"
+            )
+            name = legacy_name_mapping[name]
         context_path = cls.get_path(name)
         return cls.from_yaml(context_path)
 
     @classmethod
     def load(cls, name_or_path: str | Path) -> Self:
-        if str(name_or_path).endswith(".yml"):
+        # Check if it's a file path that exists
+        path = Path(name_or_path)
+        if path.exists() and path.is_file():
             return cls.from_yaml(name_or_path)
+
+        # If it looks like a file path but doesn't exist, raise FileNotFoundError
+        name_or_path_str = str(name_or_path)
+        if os.sep in name_or_path_str or (os.altsep and os.altsep in name_or_path_str) or name_or_path_str.endswith((".yml", ".yaml")):
+            raise FileNotFoundError(f"Context file not found: {path.resolve()}")
+
         return cls.from_name(str(name_or_path))
 
     @classmethod
@@ -186,7 +256,7 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
     @classmethod
     def list_custom_context_names(cls) -> list[str]:
         """Names of all custom contexts defined by the user."""
-        return [f.stem for f in Path(USER_CONTEXT_YAMLS_DIR).glob("*.yml")]
+        return [f.stem for f in Path(SerenaPaths().user_contexts_dir).glob("*.yml")]
 
     @classmethod
     def load_default(cls) -> Self:
@@ -198,35 +268,3 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
         print(f"{self.name}:\n {self.description}")
         if self.excluded_tools:
             print(" excluded tools:\n  " + ", ".join(sorted(self.excluded_tools)))
-
-
-class RegisteredContext(Enum):
-    """A registered context."""
-
-    IDE_ASSISTANT = "ide-assistant"
-    """For Serena running within an assistant that already has basic tools, like Claude Code, Cline, Cursor, etc."""
-    DESKTOP_APP = "desktop-app"
-    """For Serena running within Claude Desktop or a similar app which does not have built-in tools for code editing."""
-    AGENT = "agent"
-    """For Serena running as a standalone agent, e.g. through agno."""
-
-    def load(self) -> SerenaAgentContext:
-        """Load the context."""
-        return SerenaAgentContext.from_name(self.value)
-
-
-class RegisteredMode(Enum):
-    """A registered mode."""
-
-    INTERACTIVE = "interactive"
-    """Interactive mode, for multi-turn interactions."""
-    EDITING = "editing"
-    """Editing tools are activated."""
-    PLANNING = "planning"
-    """Editing tools are deactivated."""
-    ONE_SHOT = "one-shot"
-    """Non-interactive mode, where the goal is to finish a task autonomously."""
-
-    def load(self) -> SerenaAgentMode:
-        """Load the mode."""
-        return SerenaAgentMode.from_name(self.value)

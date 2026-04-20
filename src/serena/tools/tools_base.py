@@ -1,25 +1,28 @@
 import inspect
-import os
+import json
 from abc import ABC
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Protocol, Self, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, Self, TypeVar, cast
 
+from mcp import Implementation
+from mcp.server.fastmcp import Context
 from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metadata
 from sensai.util import logging
 from sensai.util.string import dict_string
 
-from serena.project import Project
+from serena.config.serena_config import LanguageBackend
+from serena.project import MemoriesManager, Project
 from serena.prompt_factory import PromptFactory
-from serena.symbol import LanguageServerSymbolRetriever
 from serena.util.class_decorators import singleton
 from serena.util.inspection import iter_subclasses
 from solidlsp.ls_exceptions import SolidLSPException
 
 if TYPE_CHECKING:
-    from serena.agent import LinesRead, MemoriesManager, SerenaAgent
-    from serena.code_editor import CodeEditor
+    from serena.agent import SerenaAgent
+    from serena.code_editor import CodeEditor, LanguageServerCodeEditor
+    from serena.symbol import LanguageServerSymbolRetriever
 
 log = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -34,7 +37,7 @@ class Component(ABC):
         """
         :return: the root directory of the active project, raises a ValueError if no active project configuration is set
         """
-        return self.agent.get_project_root()
+        return self.project.project_root
 
     @property
     def prompt_factory(self) -> PromptFactory:
@@ -42,32 +45,35 @@ class Component(ABC):
 
     @property
     def memories_manager(self) -> "MemoriesManager":
-        assert self.agent.memories_manager is not None
-        return self.agent.memories_manager
+        return self.project.memories_manager
 
-    def create_language_server_symbol_retriever(self) -> LanguageServerSymbolRetriever:
-        if not self.agent.is_using_language_server():
-            raise Exception("Cannot create LanguageServerSymbolRetriever; agent is not in language server mode.")
-        language_server = self.agent.language_server
-        assert language_server is not None
-        return LanguageServerSymbolRetriever(language_server, agent=self.agent)
+    def create_language_server_symbol_retriever(self) -> "LanguageServerSymbolRetriever":
+        from serena.symbol import LanguageServerSymbolRetriever
+
+        assert self.agent.get_language_backend().is_lsp(), "Language server symbol retriever can only be created for LSP language backend"
+        return LanguageServerSymbolRetriever(self.project)
 
     @property
     def project(self) -> Project:
         return self.agent.get_active_project_or_raise()
 
     def create_code_editor(self) -> "CodeEditor":
-        from ..code_editor import JetBrainsCodeEditor, LanguageServerCodeEditor
+        from ..code_editor import JetBrainsCodeEditor
 
-        if self.agent.is_using_language_server():
-            return LanguageServerCodeEditor(self.create_language_server_symbol_retriever(), agent=self.agent)
-        else:
-            return JetBrainsCodeEditor(project=self.project, agent=self.agent)
+        match self.agent.get_language_backend():
+            case LanguageBackend.LSP:
+                return self.create_ls_code_editor()
+            case LanguageBackend.JETBRAINS:
+                return JetBrainsCodeEditor(project=self.project)
+            case _:
+                raise ValueError
 
-    @property
-    def lines_read(self) -> "LinesRead":
-        assert self.agent.lines_read is not None
-        return self.agent.lines_read
+    def create_ls_code_editor(self) -> "LanguageServerCodeEditor":
+        from ..code_editor import LanguageServerCodeEditor
+
+        if not self.agent.is_using_language_server():
+            raise Exception("Cannot create LanguageServerCodeEditor; agent is not in language server mode.")
+        return LanguageServerCodeEditor(self.create_language_server_symbol_retriever())
 
 
 class ToolMarker:
@@ -104,6 +110,12 @@ class ToolMarkerSymbolicEdit(ToolMarkerCanEdit):
     """
 
 
+class ToolMarkerBeta(ToolMarker):
+    """
+    Marker for tools that are considered beta features (may not be fully robust)
+    """
+
+
 class ApplyMethodProtocol(Protocol):
     """Callable protocol for the apply method of a tool."""
 
@@ -121,6 +133,22 @@ class Tool(Component):
     # The docstring and types of the apply method are used to generate the tool description
     # (which is use by the LLM, so a good description is important)
     # and to validate the tool call arguments.
+
+    _last_tool_call_client_str: str | None = None
+    """We can only get the client info from within a tool call. Each tool call will update this variable."""
+
+    @staticmethod
+    def _sanitize_input_param(raw_param: str) -> str:
+        # some clients replace < and > with their escaped html versions, we need to counteract this
+        return raw_param.replace("&lt;", "<").replace("&gt;", ">")
+
+    @classmethod
+    def set_last_tool_call_client_str(cls, client_str: str | None) -> None:
+        cls._last_tool_call_client_str = client_str
+
+    @classmethod
+    def get_last_tool_call_client_str(cls) -> str | None:
+        return cls._last_tool_call_client_str
 
     @classmethod
     def get_name_from_cls(cls) -> str:
@@ -211,25 +239,62 @@ class Tool(Component):
                 params[param] = value
         log.info(f"{self.get_name_from_cls()}: {dict_string(params)}")
 
-    def _limit_length(self, result: str, max_answer_chars: int) -> str:
+    def _limit_length(
+        self,
+        result: str,
+        max_answer_chars: int,
+        shortened_result_factories: list[Callable[[], str]] | None = None,
+    ) -> str:
+        """Limit the length of the result string, optionally trying progressively shorter versions.
+
+        :param result: the full result string
+        :param max_answer_chars: maximum allowed characters. -1 means use the default from config.
+        :param shortened_result_factories: optional list of closures, each producing a progressively shorter
+            version of the result. They are tried in order until one fits within ``max_answer_chars``.
+        :return: the result string, potentially replaced by a shortened version
+        """
         if max_answer_chars == -1:
             max_answer_chars = self.agent.serena_config.default_max_tool_answer_chars
         if max_answer_chars <= 0:
             raise ValueError(f"Must be positive or the default (-1), got: {max_answer_chars=}")
         if (n_chars := len(result)) > max_answer_chars:
-            result = (
-                f"The answer is too long ({n_chars} characters). "
-                + "Please try a more specific tool query or raise the max_answer_chars parameter."
+            too_long_msg = (
+                f"The answer is too long ({n_chars} characters). " + "You can adjust your query or raise the max_answer_chars parameter."
             )
+            if shortened_result_factories is not None:
+                # try each shortening closure in order;
+                for make_shorter in shortened_result_factories:
+                    shortened = make_shorter()
+                    candidate = f"{too_long_msg}\n{shortened}"
+                    if len(candidate) <= max_answer_chars:
+                        return candidate
+            result = too_long_msg
         return result
 
     def is_active(self) -> bool:
-        return self.agent.tool_is_active(self.__class__)
+        return self.agent.tool_is_active(self.get_name())
 
-    def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, **kwargs) -> str:  # type: ignore
+    def is_readonly(self) -> bool:
+        return not self.can_edit()
+
+    def is_symbolic(self) -> bool:
+        return issubclass(self.__class__, ToolMarkerSymbolicRead) or issubclass(self.__class__, ToolMarkerSymbolicEdit)
+
+    def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, mcp_ctx: Context | None = None, **kwargs) -> str:  # type: ignore
         """
         Applies the tool with logging and exception handling, using the given keyword arguments
         """
+        if mcp_ctx is not None:
+            try:
+                client_params = mcp_ctx.session.client_params
+                if client_params is not None:
+                    client_info = cast(Implementation, client_params.clientInfo)
+                    client_str = client_info.title if client_info.title else client_info.name + " " + client_info.version
+                    if client_str != self.get_last_tool_call_client_str():
+                        log.debug(f"Updating client info: {client_info}")
+                        self.set_last_tool_call_client_str(client_str)
+            except BaseException as e:
+                log.info(f"Failed to get client info: {e}.")
 
         def task() -> str:
             apply_fn = self.get_apply_fn()
@@ -245,33 +310,39 @@ class Tool(Component):
             try:
                 # check whether the tool requires an active project and language server
                 if not isinstance(self, ToolMarkerDoesNotRequireActiveProject):
-                    if self.agent._active_project is None:
+                    if self.agent.get_active_project() is None:
                         return (
-                            "Error: No active project. Ask to user to select a project from this list: "
+                            "Error: No active project. Ask the user to provide the project path or to select a project from this list of known projects: "
                             + f"{self.agent.serena_config.project_names}"
                         )
-                    if self.agent.is_using_language_server() and not self.agent.is_language_server_running():
-                        log.info("Language server is not running. Starting it ...")
-                        self.agent.reset_language_server()
 
                 # apply the actual tool
                 try:
                     result = apply_fn(**kwargs)
                 except SolidLSPException as e:
                     if e.is_language_server_terminated():
-                        log.error(f"Language server terminated while executing tool ({e}). Restarting the language server and retrying ...")
-                        self.agent.reset_language_server()
-                        result = apply_fn(**kwargs)
+                        affected_language = e.get_affected_language()
+                        if affected_language is not None:
+                            log.error(
+                                f"Language server terminated while executing tool ({e}). Restarting the language server and retrying ..."
+                            )
+                            self.agent.get_language_server_manager_or_raise().restart_language_server(affected_language)
+                            result = apply_fn(**kwargs)
+                        else:
+                            log.error(
+                                f"Language server terminated while executing tool ({e}), but affected language is unknown. Not retrying."
+                            )
+                            raise
                     else:
                         raise
 
                 # record tool usage
-                self.agent.record_tool_usage_if_enabled(kwargs, result, self)
+                self.agent.record_tool_usage(kwargs, result, self)
 
             except Exception as e:
                 if not catch_exceptions:
                     raise
-                msg = f"Error executing tool: {e}"
+                msg = f"Error executing tool: {e.__class__.__name__} - {e}"
                 log.error(f"Error executing tool: {e}", exc_info=e)
                 result = msg
 
@@ -279,15 +350,26 @@ class Tool(Component):
                 log.info(f"Result: {result}")
 
             try:
-                if self.agent.language_server is not None:
-                    self.agent.language_server.save_cache()
+                ls_manager = self.agent.get_language_server_manager()
+                if ls_manager is not None:
+                    ls_manager.save_all_caches()
             except Exception as e:
                 log.error(f"Error saving language server cache: {e}")
 
             return result
 
-        future = self.agent.issue_task(task, name=self.__class__.__name__)
-        return future.result(timeout=self.agent.serena_config.tool_timeout)
+        # execute the tool in the agent's task executor, with timeout
+        try:
+            task_exec = self.agent.issue_task(task, name=self.__class__.__name__)
+            return task_exec.result(timeout=self.agent.serena_config.tool_timeout)
+        except Exception as e:  # typically TimeoutError (other exceptions caught in task)
+            msg = f"Error: {e.__class__.__name__} - {e}"
+            log.error(msg)
+            return msg
+
+    @staticmethod
+    def _to_json(x: Any) -> str:
+        return json.dumps(x, ensure_ascii=False)
 
 
 class EditedFileContext:
@@ -299,24 +381,23 @@ class EditedFileContext:
     When exiting the context without an exception, the updated content will be written back to the file.
     """
 
-    def __init__(self, relative_path: str, agent: "SerenaAgent"):
-        self._project = agent.get_active_project()
-        assert self._project is not None
-        self._abs_path = os.path.join(self._project.project_root, relative_path)
-        if not os.path.isfile(self._abs_path):
-            raise FileNotFoundError(f"File {self._abs_path} does not exist.")
-        with open(self._abs_path, encoding=self._project.project_config.encoding) as f:
-            self._original_content = f.read()
-        self._updated_content: str | None = None
+    def __init__(self, relative_path: str, code_editor: "CodeEditor"):
+        self._relative_path = relative_path
+        self._code_editor = code_editor
+        self._edited_file: CodeEditor.EditedFile | None = None
+        self._edited_file_context: Any = None
 
     def __enter__(self) -> Self:
+        self._edited_file_context = self._code_editor.edited_file_context(self._relative_path)
+        self._edited_file = self._edited_file_context.__enter__()
         return self
 
     def get_original_content(self) -> str:
         """
         :return: the original content of the file before any modifications.
         """
-        return self._original_content
+        assert self._edited_file is not None
+        return self._edited_file.get_contents()
 
     def set_updated_content(self, content: str) -> None:
         """
@@ -325,39 +406,73 @@ class EditedFileContext:
 
         :param content: the updated content of the file
         """
-        self._updated_content = content
+        assert self._edited_file is not None
+        self._edited_file.set_contents(content)
 
     def __exit__(self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None) -> None:
-        if self._updated_content is not None and exc_type is None:
-            assert self._project is not None
-            with open(self._abs_path, "w", encoding=self._project.project_config.encoding) as f:
-                f.write(self._updated_content)
-            log.info(f"Updated content written to {self._abs_path}")
-            # Language servers should automatically detect the change and update its state accordingly.
-            # If they do not, we may have to add a call to notify it.
+        assert self._edited_file_context is not None
+        self._edited_file_context.__exit__(exc_type, exc_value, traceback)
 
 
 @dataclass(kw_only=True)
 class RegisteredTool:
     tool_class: type[Tool]
     is_optional: bool
+    is_beta: bool
     tool_name: str
+
+    @property
+    def class_docstring(self) -> str:
+        """
+        :return: the tool description (high-level class docstring)
+        """
+        return self.tool_class.get_tool_description()
+
+
+tool_packages = ["serena.tools"]
 
 
 @singleton
 class ToolRegistry:
+    _deleted_tools: list[str] = [
+        "think_about_collected_information",
+        "prepare_for_new_conversation",
+        "summarize_changes",
+        "think_about_whether_you_are_done",
+        "switch_modes",
+    ]
+
     def __init__(self) -> None:
         self._tool_dict: dict[str, RegisteredTool] = {}
-        for cls in iter_subclasses(Tool):
-            if not cls.__module__.startswith("serena.tools"):
+        inclusion_predicate = lambda c: "apply" in c.__dict__  # include only concrete tool classes that implement apply
+        for cls in iter_subclasses(Tool, inclusion_predicate=inclusion_predicate):
+            if not any(cls.__module__.startswith(pkg) for pkg in tool_packages):
                 continue
             is_optional = issubclass(cls, ToolMarkerOptional)
+            is_beta = issubclass(cls, ToolMarkerBeta)
             name = cls.get_name_from_cls()
             if name in self._tool_dict:
                 raise ValueError(f"Duplicate tool name found: {name}. Tool classes must have unique names.")
-            self._tool_dict[name] = RegisteredTool(tool_class=cls, is_optional=is_optional, tool_name=name)
+            self._tool_dict[name] = RegisteredTool(tool_class=cls, is_optional=is_optional, tool_name=name, is_beta=is_beta)
+
+    def get_registered_tools_by_module(self) -> dict[str, list[RegisteredTool]]:
+        """
+        :return: the registered tools grouped by their module (ordered alphabetically by module and tool name)
+        """
+        module_dict: dict[str, list[RegisteredTool]] = {}
+        for tool in self._tool_dict.values():
+            module = tool.tool_class.__module__
+            if module not in module_dict:
+                module_dict[module] = []
+            module_dict[module].append(tool)
+        sorted_module_dict = {}
+        for module in sorted(module_dict.keys()):
+            sorted_module_dict[module] = sorted(module_dict[module], key=lambda t: t.tool_name)
+        return sorted_module_dict
 
     def get_tool_class_by_name(self, tool_name: str) -> type[Tool]:
+        if tool_name not in self._tool_dict:
+            raise ValueError(f"Tool named '{tool_name}' not found.")
         return self._tool_dict[tool_name].tool_class
 
     def get_all_tool_classes(self) -> list[type[Tool]]:
@@ -416,3 +531,15 @@ class ToolRegistry:
 
     def is_valid_tool_name(self, tool_name: str) -> bool:
         return tool_name in self._tool_dict
+
+    def check_valid_tool_name(self, tool_name: str, caller_context_for_logging: str = "") -> bool:
+        """Returns True if the tool name is valid, False if it is deleted, and raises ValueError if it is invalid."""
+        if self.is_deleted_tool_name(tool_name):
+            log.warning(f"Tool name is deleted: {tool_name}{caller_context_for_logging}")
+            return False
+        if not self.is_valid_tool_name(tool_name):
+            raise ValueError(f"Invalid tool name: {tool_name}{caller_context_for_logging}")
+        return True
+
+    def is_deleted_tool_name(self, tool_name: str) -> bool:
+        return tool_name in self._deleted_tools

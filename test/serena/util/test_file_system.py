@@ -4,7 +4,9 @@ import tempfile
 from pathlib import Path
 
 # Assuming the gitignore parser code is in a module named 'gitignore_parser'
-from serena.util.file_system import GitignoreParser, GitignoreSpec
+from pathspec import PathSpec
+
+from serena.util.file_system import GitignoreParser, GitignoreSpec, match_path
 
 
 class TestGitignoreParser:
@@ -190,6 +192,13 @@ test.log
         # Files that should NOT be ignored
         assert not parser.should_ignore("file1.txt")
         assert not parser.should_ignore("src/main.py")
+
+    def test_match_path_root_directory(self):
+        """Root directory should never be ignored by pathspec patterns."""
+        spec = PathSpec.from_lines("gitwildmatch", ["/.*/"])
+
+        assert not match_path(".", spec, root_path=str(self.repo_path))
+        assert not match_path("", spec, root_path=str(self.repo_path))
 
     def test_should_ignore_subdirectory_patterns(self):
         """Test ignoring files based on subdirectory .gitignore files."""

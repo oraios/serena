@@ -10,6 +10,7 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
 @pytest.mark.lua
@@ -19,7 +20,7 @@ class TestLuaLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
     def test_find_symbols_in_calculator(self, language_server: SolidLanguageServer) -> None:
         """Test finding specific functions in calculator.lua."""
-        symbols = language_server.request_document_symbols("src/calculator.lua")
+        symbols = language_server.request_document_symbols("src/calculator.lua").get_all_symbols_and_roots()
 
         assert symbols is not None
         assert len(symbols) > 0
@@ -49,7 +50,7 @@ class TestLuaLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
     def test_find_symbols_in_utils(self, language_server: SolidLanguageServer) -> None:
         """Test finding specific functions in utils.lua."""
-        symbols = language_server.request_document_symbols("src/utils.lua")
+        symbols = language_server.request_document_symbols("src/utils.lua").get_all_symbols_and_roots()
 
         assert symbols is not None
         assert len(symbols) > 0
@@ -84,7 +85,7 @@ class TestLuaLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
     def test_find_symbols_in_main(self, language_server: SolidLanguageServer) -> None:
         """Test finding functions in main.lua."""
-        symbols = language_server.request_document_symbols("main.lua")
+        symbols = language_server.request_document_symbols("main.lua").get_all_symbols_and_roots()
 
         assert symbols is not None
         assert len(symbols) > 0
@@ -107,7 +108,7 @@ class TestLuaLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
     def test_cross_file_references_calculator_add(self, language_server: SolidLanguageServer) -> None:
         """Test finding cross-file references to calculator.add function."""
-        symbols = language_server.request_document_symbols("src/calculator.lua")
+        symbols = language_server.request_document_symbols("src/calculator.lua").get_all_symbols_and_roots()
 
         assert symbols is not None
         symbol_list = symbols[0] if isinstance(symbols, tuple) else symbols
@@ -137,7 +138,7 @@ class TestLuaLanguageServer:
         assert len(refs) >= 5, f"Should find at least 5 references to calculator.add, found {len(refs)}"
 
         # Verify exact reference locations
-        ref_files = {}
+        ref_files: dict[str, list[int]] = {}
         for ref in refs:
             filename = ref.get("uri", "").split("/")[-1]
             if filename not in ref_files:
@@ -146,15 +147,15 @@ class TestLuaLanguageServer:
 
         # The declaration may or may not be included
         if "calculator.lua" in ref_files:
-            assert (
-                5 in ref_files["calculator.lua"]
-            ), f"If declaration is included, it should be at line 6 (0-indexed: 5), found at {ref_files['calculator.lua']}"
+            assert 5 in ref_files["calculator.lua"], (
+                f"If declaration is included, it should be at line 6 (0-indexed: 5), found at {ref_files['calculator.lua']}"
+            )
 
         # Check main.lua has usages
         assert "main.lua" in ref_files, "Should find add usages in main.lua"
-        assert (
-            15 in ref_files["main.lua"] or 70 in ref_files["main.lua"]
-        ), f"Should find add usage in main.lua, found at lines {ref_files.get('main.lua', [])}"
+        assert 15 in ref_files["main.lua"] or 70 in ref_files["main.lua"], (
+            f"Should find add usage in main.lua, found at lines {ref_files.get('main.lua', [])}"
+        )
 
         # Check for cross-file references from main.lua
         main_refs = [ref for ref in refs if "main.lua" in ref.get("uri", "")]
@@ -163,7 +164,7 @@ class TestLuaLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
     def test_cross_file_references_utils_trim(self, language_server: SolidLanguageServer) -> None:
         """Test finding cross-file references to utils.trim function."""
-        symbols = language_server.request_document_symbols("src/utils.lua")
+        symbols = language_server.request_document_symbols("src/utils.lua").get_all_symbols_and_roots()
 
         assert symbols is not None
         symbol_list = symbols[0] if isinstance(symbols, tuple) else symbols
@@ -193,7 +194,7 @@ class TestLuaLanguageServer:
         assert len(refs) >= 1, f"Should find at least 1 reference to utils.trim, found {len(refs)}"
 
         # Verify exact reference locations
-        ref_files = {}
+        ref_files: dict[str, list[int]] = {}
         for ref in refs:
             filename = ref.get("uri", "").split("/")[-1]
             if filename not in ref_files:
@@ -202,15 +203,15 @@ class TestLuaLanguageServer:
 
         # The declaration may or may not be included
         if "utils.lua" in ref_files:
-            assert (
-                5 in ref_files["utils.lua"]
-            ), f"If declaration is included, it should be at line 6 (0-indexed: 5), found at {ref_files['utils.lua']}"
+            assert 5 in ref_files["utils.lua"], (
+                f"If declaration is included, it should be at line 6 (0-indexed: 5), found at {ref_files['utils.lua']}"
+            )
 
         # Check main.lua has usage
         assert "main.lua" in ref_files, "Should find trim usage in main.lua"
-        assert (
-            31 in ref_files["main.lua"]
-        ), f"Should find trim usage at line 32 (0-indexed: 31) in main.lua, found at lines {ref_files.get('main.lua', [])}"
+        assert 31 in ref_files["main.lua"], (
+            f"Should find trim usage at line 32 (0-indexed: 31) in main.lua, found at lines {ref_files.get('main.lua', [])}"
+        )
 
         # Check for cross-file references from main.lua
         main_refs = [ref for ref in refs if "main.lua" in ref.get("uri", "")]
@@ -245,7 +246,7 @@ class TestLuaLanguageServer:
     def test_references_between_test_and_source(self, language_server: SolidLanguageServer) -> None:
         """Test finding references from test files to source files."""
         # Check if test_calculator.lua references calculator module
-        test_symbols = language_server.request_document_symbols("tests/test_calculator.lua")
+        test_symbols = language_server.request_document_symbols("tests/test_calculator.lua").get_all_symbols_and_roots()
 
         assert test_symbols is not None
         assert len(test_symbols) > 0
@@ -253,3 +254,21 @@ class TestLuaLanguageServer:
         # The test file should have some content that references calculator
         symbol_list = test_symbols[0] if isinstance(test_symbols, tuple) else test_symbols
         assert len(symbol_list) > 0, "test_calculator.lua should have symbols"
+
+    @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(
+                s,
+                whitespace_allowed=s["name"] == " ",
+                period_allowed="." in s["name"],
+                colon_allowed=":" in s["name"],
+            ):
+                malformed_symbols.append(s)
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )

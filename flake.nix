@@ -50,7 +50,25 @@
         sourcePreference = "wheel"; # or sourcePreference = "sdist";
       };
 
-      pyprojectOverrides = _final: _prev: {};
+      pyprojectOverrides = final: prev: {
+        # Add setuptools for packages that need it during build
+        ruamel-yaml-clib = prev.ruamel-yaml-clib.overrideAttrs (old: {
+          nativeBuildInputs = (old.nativeBuildInputs or []) ++ [
+            final.setuptools
+          ];
+        });
+        proxy-tools = prev.proxy-tools.overrideAttrs (old: {
+          nativeBuildInputs = (old.nativeBuildInputs or []) ++ [
+            final.setuptools
+          ];
+        });
+        pywebview = prev.pywebview.overrideAttrs (old: {
+          nativeBuildInputs = (old.nativeBuildInputs or []) ++ [
+            final.setuptools
+            final.setuptools-scm
+          ];
+        });
+      };
 
       python = pkgs.python311;
 
@@ -69,7 +87,20 @@
       formatter = pkgs.alejandra;
 
       packages = {
-        serena = pythonSet.mkVirtualEnv "serena" workspace.deps.default;
+        serena-env = pythonSet.mkVirtualEnv "serena-env" workspace.deps.default;
+        serena = pkgs.runCommand "serena" {
+            meta = {
+              description = "A powerful coding agent toolkit providing semantic retrieval and editing capabilities (MCP server & Agno integration)";
+              homepage = "https://oraios.github.io/serena";
+              changelog = "https://github.com/oraios/serena/blob/main/CHANGELOG.md";
+              mainProgram = "serena";
+              license = pkgs.lib.licenses.mit;
+              platforms = lib.platforms.all;
+            };
+          } ''
+          mkdir -p $out/bin
+          ln -s ${packages.serena-env}/bin/serena $out/bin/serena
+        '';
         default = packages.serena;
       };
 

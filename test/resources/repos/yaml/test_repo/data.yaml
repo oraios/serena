@@ -1,0 +1,41 @@
+# Sample data structure
+users:
+  - id: 1
+    name: John Doe
+    email: john@example.com
+    roles:
+      - admin
+      - developer
+    active: true
+
+  - id: 2
+    name: Jane Smith
+    email: jane@example.com
+    roles:
+      - developer
+    active: true
+
+  - id: 3
+    name: Bob Johnson
+    email: bob@example.com
+    roles:
+      - viewer
+    active: false
+
+projects:
+  - name: project-alpha
+    status: active
+    team:
+      - John Doe
+      - Jane Smith
+    tags:
+      - backend
+      - api
+
+  - name: project-beta
+    status: planning
+    team:
+      - Jane Smith
+    tags:
+      - frontend
+      - ui

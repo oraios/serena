@@ -9,14 +9,19 @@ import pathlib
 import shutil
 import threading
 
-from solidlsp import ls_types
-from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
+from solidlsp.ls import (
+    DocumentSymbols,
+    LanguageServerDependencyProvider,
+    LanguageServerDependencyProviderSinglePath,
+    LSPFileBuffer,
+    SolidLanguageServer,
+)
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
 
 
 class BashLanguageServer(SolidLanguageServer):
@@ -25,67 +30,70 @@ class BashLanguageServer(SolidLanguageServer):
     Contains various configurations and settings specific to Bash scripting.
     """
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a BashLanguageServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        bash_lsp_executable_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
         super().__init__(
             config,
-            logger,
             repository_root_path,
-            ProcessLaunchInfo(cmd=bash_lsp_executable_path, cwd=repository_root_path),
+            None,
             "bash",
             solidlsp_settings,
         )
         self.server_ready = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
 
-    @classmethod
-    def _setup_runtime_dependencies(
-        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> str:
-        """
-        Setup runtime dependencies for Bash Language Server and return the command to start the server.
-        """
-        # Verify both node and npm are installed
-        is_node_installed = shutil.which("node") is not None
-        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which("npm") is not None
-        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
-        deps = RuntimeDependencyCollection(
-            [
-                RuntimeDependency(
-                    id="bash-language-server",
-                    description="bash-language-server package",
-                    command="npm install --prefix ./ bash-language-server@5.6.0",
-                    platform_id="any",
-                ),
-            ]
-        )
+    class DependencyProvider(LanguageServerDependencyProviderSinglePath):
+        def _get_or_install_core_dependency(self) -> str:
+            """
+            Setup runtime dependencies for Bash Language Server and return the command to start the server.
+            """
+            # Verify both node and npm are installed
+            is_node_installed = shutil.which("node") is not None
+            assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
+            is_npm_installed = shutil.which("npm") is not None
+            assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
+            bash_language_server_version = self._custom_settings.get("bash_language_server_version", "5.6.0")
+            npm_registry = self._custom_settings.get("npm_registry")
 
-        # Install bash-language-server if not already installed
-        bash_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "bash-lsp")
-        bash_executable_path = os.path.join(bash_ls_dir, "node_modules", ".bin", "bash-language-server")
-
-        # Handle Windows executable extension
-        if os.name == "nt":
-            bash_executable_path += ".cmd"
-
-        if not os.path.exists(bash_executable_path):
-            logger.log(f"Bash Language Server executable not found at {bash_executable_path}. Installing...", logging.INFO)
-            deps.install(logger, bash_ls_dir)
-            logger.log("Bash language server dependencies installed successfully", logging.INFO)
-
-        if not os.path.exists(bash_executable_path):
-            raise FileNotFoundError(
-                f"bash-language-server executable not found at {bash_executable_path}, something went wrong with the installation."
+            deps = RuntimeDependencyCollection(
+                [
+                    RuntimeDependency(
+                        id="bash-language-server",
+                        description="bash-language-server package",
+                        command=build_npm_install_command("bash-language-server", bash_language_server_version, npm_registry),
+                        platform_id="any",
+                    ),
+                ]
             )
-        return f"{bash_executable_path} start"
+
+            # Install bash-language-server if not already installed
+            bash_ls_dir = os.path.join(self._ls_resources_dir, "bash-lsp")
+            bash_executable_path = os.path.join(bash_ls_dir, "node_modules", ".bin", "bash-language-server")
+
+            # Handle Windows executable extension
+            if os.name == "nt":
+                bash_executable_path += ".cmd"
+
+            if not os.path.exists(bash_executable_path):
+                log.info(f"Bash Language Server executable not found at {bash_executable_path}. Installing...")
+                deps.install(bash_ls_dir)
+                log.info("Bash language server dependencies installed successfully")
+
+            if not os.path.exists(bash_executable_path):
+                raise FileNotFoundError(
+                    f"bash-language-server executable not found at {bash_executable_path}, something went wrong with the installation."
+                )
+
+            return bash_executable_path
+
+        def _create_launch_command(self, core_path: str) -> list[str]:
+            return [core_path, "start"]
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
@@ -126,34 +134,33 @@ class BashLanguageServer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return initialize_params  # type: ignore
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Bash Language Server, waits for the server to be ready and yields the LanguageServer instance.
         """
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "workspace/executeCommand":
                     self.initialize_searcher_command_available.set()
             return
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: dict) -> list:
             return []
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def window_log_message(msg):
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"LSP: window/logMessage: {msg}")
             # Check for bash-language-server ready signals
             message_text = msg.get("message", "")
             if "Analyzing" in message_text or "analysis complete" in message_text.lower():
-                self.logger.log("Bash language server analysis signals detected", logging.INFO)
+                log.info("Bash language server analysis signals detected")
                 self.server_ready.set()
-                self.completions_available.set()
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
@@ -161,16 +168,13 @@ class BashLanguageServer(SolidLanguageServer):
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        self.logger.log("Starting Bash server process", logging.INFO)
+        log.info("Starting Bash server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
-        self.logger.log(f"Received initialize response from bash server: {init_response}", logging.DEBUG)
+        log.debug(f"Received initialize response from bash server: {init_response}")
 
         # Enhanced capability checks for bash-language-server 5.6.0
         assert init_response["capabilities"]["textDocumentSync"] in [1, 2]  # Full or Incremental
@@ -178,53 +182,37 @@ class BashLanguageServer(SolidLanguageServer):
 
         # Verify document symbol support is available
         if "documentSymbolProvider" in init_response["capabilities"]:
-            self.logger.log("Bash server supports document symbols", logging.INFO)
+            log.info("Bash server supports document symbols")
         else:
-            self.logger.log("Warning: Bash server does not report document symbol support", logging.WARNING)
+            log.warning("Warning: Bash server does not report document symbol support")
 
         self.server.notify.initialized({})
 
         # Wait for server readiness with timeout
-        self.logger.log("Waiting for Bash language server to be ready...", logging.INFO)
+        log.info("Waiting for Bash language server to be ready...")
         if not self.server_ready.wait(timeout=3.0):
             # Fallback: assume server is ready after timeout
-            self.logger.log("Timeout waiting for bash server ready signal, proceeding anyway", logging.WARNING)
+            # This is common. bash-language-server doesn't always send explicit ready signals. Log as info
+            log.info("Timeout waiting for bash server ready signal, proceeding anyway")
             self.server_ready.set()
-            self.completions_available.set()
         else:
-            self.logger.log("Bash server initialization complete", logging.INFO)
+            log.info("Bash server initialization complete")
 
-    def request_document_symbols(
-        self, relative_file_path: str, include_body: bool = False
-    ) -> tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]:
-        """
-        Request document symbols from bash-language-server via LSP.
+    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
+        # Uses the standard LSP documentSymbol request which provides reliable function detection
+        # for all bash function syntaxes including:
+        # - function name() { ... } (with function keyword)
+        # - name() { ... } (traditional syntax)
+        # - Functions with various indentation levels
+        # - Functions with comments before/after/inside
 
-        Uses the standard LSP documentSymbol request which provides reliable function detection
-        for all bash function syntaxes including:
-        - function name() { ... } (with function keyword)
-        - name() { ... } (traditional syntax)
-        - Functions with various indentation levels
-        - Functions with comments before/after/inside
-
-        Args:
-            relative_file_path: Path to the bash file relative to repository root
-            include_body: Whether to include function bodies in symbol information
-
-        Returns:
-            Tuple of (all_symbols, root_symbols) detected by the LSP server
-
-        """
-        self.logger.log(f"Requesting document symbols via LSP for {relative_file_path}", logging.DEBUG)
+        log.debug(f"Requesting document symbols via LSP for {relative_file_path}")
 
         # Use the standard LSP approach - bash-language-server handles all function syntaxes correctly
-        all_symbols, root_symbols = super().request_document_symbols(relative_file_path, include_body)
+        document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
 
         # Log detection results for debugging
-        functions = [s for s in all_symbols if s.get("kind") == 12]
-        self.logger.log(
-            f"LSP function detection for {relative_file_path}: Found {len(functions)} functions",
-            logging.INFO,
-        )
+        functions = [s for s in document_symbols.iter_symbols() if s.get("kind") == 12]
+        log.info(f"LSP function detection for {relative_file_path}: Found {len(functions)} functions")
 
-        return all_symbols, root_symbols
+        return document_symbols

@@ -1,11 +1,11 @@
 # mypy: ignore-errors
 import logging
-import os
 import queue
 import sys
 import threading
 import tkinter as tk
 import traceback
+from collections.abc import Callable
 from enum import Enum, auto
 from pathlib import Path
 from typing import Literal
@@ -38,6 +38,7 @@ class GuiLogViewer:
         memory_log_handler: MemoryLogHandler | None = None,
         width=800,
         height=600,
+        shutdown_handler: Callable[[], None] | None = None,
     ):
         """
         :param mode: the mode; if "dashboard", run a dashboard with logs and some control options; if "error", run
@@ -55,7 +56,9 @@ class GuiLogViewer:
         self.message_queue = queue.Queue()
         self.running = False
         self.log_thread = None
+        self.menubar: tk.Menu | None = None
         self.tool_names = []  # List to store tool names for highlighting
+        self.shutdown_handler = shutdown_handler
 
         # Define colors for different log levels
         self.log_colors = {
@@ -67,7 +70,7 @@ class GuiLogViewer:
         }
 
         if memory_log_handler is not None:
-            for msg in memory_log_handler.get_log_messages():
+            for msg in memory_log_handler.get_log_messages().messages:
                 self.message_queue.put(msg)
             memory_log_handler.add_emit_callback(lambda msg: self.message_queue.put(msg))
 
@@ -97,6 +100,17 @@ class GuiLogViewer:
 
         """
         self.tool_names = tool_names
+
+    def set_dashboard_url(self, url: str) -> None:
+        def copy_url():
+            self.root.clipboard_clear()
+            self.root.clipboard_append(url)
+            log.info(f"Copied dashboard URL to clipboard: {url}")
+
+        if self.menubar is not None:
+            dashboard_menu = tk.Menu(self.menubar, tearoff=0)
+            dashboard_menu.add_command(label="Copy URL", command=copy_url)  # type: ignore
+            self.menubar.add_cascade(label="Dashboard", menu=dashboard_menu)
 
     def add_log(self, message):
         """
@@ -287,11 +301,11 @@ class GuiLogViewer:
 
             # Create menu bar
             if self.mode == "dashboard":
-                menubar = tk.Menu(self.root)
-                server_menu = tk.Menu(menubar, tearoff=0)
+                self.menubar = tk.Menu(self.root)
+                server_menu = tk.Menu(self.menubar, tearoff=0)
                 server_menu.add_command(label="Shutdown", command=self._shutdown_server)  # type: ignore
-                menubar.add_cascade(label="Server", menu=server_menu)
-                self.root.config(menu=menubar)
+                self.menubar.add_cascade(label="Server", menu=server_menu)
+                self.root.config(menu=self.menubar)
 
             # Configure icons
             icon_16 = tk.PhotoImage(file=dashboard_path / "serena-icon-16.png")
@@ -308,10 +322,8 @@ class GuiLogViewer:
             self.running = False
 
     def _shutdown_server(self) -> None:
-        log.info("Shutting down Serena")
-        # noinspection PyUnresolvedReferences
-        # noinspection PyProtectedMember
-        os._exit(0)
+        if self.shutdown_handler is not None:
+            self.shutdown_handler()
 
 
 class GuiLogViewerHandler(logging.Handler):

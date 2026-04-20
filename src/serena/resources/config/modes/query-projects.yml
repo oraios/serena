@@ -1,0 +1,8 @@
+description: Enables tools that allow inactive projects to be queried
+prompt: |
+  You can use the 'query_project' tool to query Serena projects without activating them.
+  Use this when a project is related to the active project and you need to query it for information.
+excluded_tools: []
+included_optional_tools:
+  - list_queryable_projects
+  - query_project

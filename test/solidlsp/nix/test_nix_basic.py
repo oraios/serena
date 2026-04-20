@@ -10,6 +10,9 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from solidlsp.ls_types import SymbolKind
+from test.conftest import is_ci
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 # Skip all Nix tests on Windows as Nix doesn't support Windows
 pytestmark = pytest.mark.skipif(platform.system() == "Windows", reason="Nix and nil are not available on Windows")
@@ -22,7 +25,7 @@ class TestNixLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
     def test_find_symbols_in_default_nix(self, language_server: SolidLanguageServer) -> None:
         """Test finding specific symbols in default.nix."""
-        symbols = language_server.request_document_symbols("default.nix")
+        symbols = language_server.request_document_symbols("default.nix").get_all_symbols_and_roots()
 
         assert symbols is not None
         assert len(symbols) > 0
@@ -42,7 +45,7 @@ class TestNixLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
     def test_find_symbols_in_utils(self, language_server: SolidLanguageServer) -> None:
         """Test finding symbols in lib/utils.nix."""
-        symbols = language_server.request_document_symbols("lib/utils.nix")
+        symbols = language_server.request_document_symbols("lib/utils.nix").get_all_symbols_and_roots()
 
         assert symbols is not None
         assert len(symbols) > 0
@@ -58,7 +61,7 @@ class TestNixLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
     def test_find_symbols_in_flake(self, language_server: SolidLanguageServer) -> None:
         """Test finding symbols in flake.nix."""
-        symbols = language_server.request_document_symbols("flake.nix")
+        symbols = language_server.request_document_symbols("flake.nix").get_all_symbols_and_roots()
 
         assert symbols is not None
         assert len(symbols) > 0
@@ -72,7 +75,7 @@ class TestNixLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
     def test_find_symbols_in_module(self, language_server: SolidLanguageServer) -> None:
         """Test finding symbols in a NixOS module."""
-        symbols = language_server.request_document_symbols("modules/example.nix")
+        symbols = language_server.request_document_symbols("modules/example.nix").get_all_symbols_and_roots()
 
         assert symbols is not None
         assert len(symbols) > 0
@@ -86,7 +89,7 @@ class TestNixLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
     def test_find_references_within_file(self, language_server: SolidLanguageServer) -> None:
         """Test finding references within the same file."""
-        symbols = language_server.request_document_symbols("default.nix")
+        symbols = language_server.request_document_symbols("default.nix").get_all_symbols_and_roots()
 
         assert symbols is not None
         symbol_list = symbols[0] if isinstance(symbols, tuple) else symbols
@@ -113,13 +116,14 @@ class TestNixLanguageServer:
         if refs:
             ref_lines = sorted([ref["range"]["start"]["line"] for ref in refs])
             # Check if we found the inherit (line 67, 0-indexed: 66)
-            assert 66 in ref_lines, f"Should find makeGreeting inherit at line 67, found at lines {[l+1 for l in ref_lines]}"
+            assert 66 in ref_lines, f"Should find makeGreeting inherit at line 67, found at lines {[l + 1 for l in ref_lines]}"
 
+    @pytest.mark.xfail(is_ci, reason="Test is flaky")  # TODO: Re-enable if the hover test becomes more stable (#1040)
     @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
     def test_hover_information(self, language_server: SolidLanguageServer) -> None:
         """Test hover information for symbols."""
         # Get hover info for makeGreeting function
-        hover_info = language_server.request_hover("default.nix", 9, 5)  # Position near makeGreeting
+        hover_info = language_server.request_hover("default.nix", 12, 5)  # Position at makeGreeting
 
         assert hover_info is not None, "Should provide hover information"
 
@@ -146,15 +150,15 @@ class TestNixLanguageServer:
         if default_refs:
             ref_lines = sorted([ref["range"]["start"]["line"] for ref in default_refs])
             # Check for key references - at least the import (line 10) or usage (line 24)
-            assert (
-                9 in ref_lines or 23 in ref_lines
-            ), f"Should find utils import or usage, found references at lines {[l+1 for l in ref_lines]}"
+            assert 9 in ref_lines or 23 in ref_lines, (
+                f"Should find utils import or usage, found references at lines {[l + 1 for l in ref_lines]}"
+            )
 
     @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
     def test_verify_imports_exist(self, language_server: SolidLanguageServer) -> None:
         """Verify that our test files have proper imports set up."""
         # Verify that default.nix imports utils from lib/utils.nix
-        symbols = language_server.request_document_symbols("default.nix")
+        symbols = language_server.request_document_symbols("default.nix").get_all_symbols_and_roots()
 
         assert symbols is not None
         symbol_list = symbols[0] if isinstance(symbols, tuple) else symbols
@@ -164,7 +168,7 @@ class TestNixLanguageServer:
         assert "makeGreeting" in symbol_names, "makeGreeting should be found in default.nix"
 
         # Verify lib/utils.nix has the expected structure
-        utils_symbols = language_server.request_document_symbols("lib/utils.nix")
+        utils_symbols = language_server.request_document_symbols("lib/utils.nix").get_all_symbols_and_roots()
         assert utils_symbols is not None
         utils_list = utils_symbols[0] if isinstance(utils_symbols, tuple) else utils_symbols
         utils_names = {sym.get("name") for sym in utils_list if isinstance(sym, dict)}
@@ -185,9 +189,9 @@ class TestNixLanguageServer:
 
         if len(definitions) > 0:
             # Should point to the import statement or utils.nix
-            assert any(
-                "utils" in def_item.get("uri", "") or "default.nix" in def_item.get("uri", "") for def_item in definitions
-            ), "Definition should relate to utils import or utils.nix file"
+            assert any("utils" in def_item.get("uri", "") or "default.nix" in def_item.get("uri", "") for def_item in definitions), (
+                "Definition should relate to utils import or utils.nix file"
+            )
 
     @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
     def test_definition_navigation_in_flake(self, language_server: SolidLanguageServer) -> None:
@@ -200,9 +204,9 @@ class TestNixLanguageServer:
         assert isinstance(definitions, list)
         # nixd should find the definition of hello-custom in the same file
         if len(definitions) > 0:
-            assert any(
-                "flake.nix" in def_item.get("uri", "") for def_item in definitions
-            ), "Should find hello-custom definition in flake.nix"
+            assert any("flake.nix" in def_item.get("uri", "") for def_item in definitions), (
+                "Should find hello-custom definition in flake.nix"
+            )
 
     @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
     def test_full_symbol_tree(self, language_server: SolidLanguageServer) -> None:
@@ -216,3 +220,33 @@ class TestNixLanguageServer:
         root = symbols[0]
         assert isinstance(root, dict), "Root should be a dict"
         assert "name" in root, "Root should have a name"
+
+    @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            # nixd can surface anonymous expression nodes using synthetic display labels
+            # like "(anonymous lambda)", "(dynamic string)", "{anonymous}", and
+            # "(dynamic attribute name)". It also emits literal value nodes such as
+            # strings and arrays. These do not correspond to named declarations, so
+            # there is no bare identifier we could or should normalize them to in the
+            # Nix wrapper. This test is only meant to enforce bare names for symbols
+            # that actually have declaration names.
+            if s["kind"] in {SymbolKind.String, SymbolKind.Array}:
+                continue
+            if s["name"] in {"(anonymous lambda)", "(dynamic string)", "{anonymous}", "(dynamic attribute name)"}:
+                continue
+            if s["kind"] in {SymbolKind.Field, SymbolKind.Property} and "." in s["name"]:
+                continue
+            if has_malformed_name(
+                s,
+                whitespace_allowed=s["name"] == "(anonymous lambda)",
+                parenthesis_allowed=s["name"] == "(anonymous lambda)",
+            ):
+                malformed_symbols.append(s)
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )

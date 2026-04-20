@@ -5,7 +5,7 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from test.conftest import create_ls
+from test.conftest import start_ls_context
 
 from . import ERLANG_LS_UNAVAILABLE, ERLANG_LS_UNAVAILABLE_REASON
 
@@ -20,21 +20,8 @@ pytestmark = [
 def ls_with_ignored_dirs() -> Generator[SolidLanguageServer, None, None]:
     """Fixture to set up an LS for the erlang test repo with the 'ignored_dir' directory ignored."""
     ignored_paths = ["_build", "ignored_dir"]
-    ls = create_ls(ignored_paths=ignored_paths, language=Language.ERLANG)
-    ls.start()
-    try:
+    with start_ls_context(language=Language.ERLANG, ignored_paths=ignored_paths) as ls:
         yield ls
-    finally:
-        try:
-            ls.stop(shutdown_timeout=1.0)  # Shorter timeout for CI
-        except Exception as e:
-            print(f"Warning: Error stopping language server: {e}")
-            # Force cleanup if needed
-            if hasattr(ls, "server") and hasattr(ls.server, "process"):
-                try:
-                    ls.server.process.terminate()
-                except:
-                    pass
 
 
 @pytest.mark.timeout(60)  # Add 60 second timeout
@@ -63,7 +50,7 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     definition_file = "include/records.hrl"
 
     # Find the user record definition
-    symbols = ls_with_ignored_dirs.request_document_symbols(definition_file)
+    symbols = ls_with_ignored_dirs.request_document_symbols(definition_file).get_all_symbols_and_roots()
     user_symbol = None
     for symbol_group in symbols:
         user_symbol = next((s for s in symbol_group if "user" in s.get("name", "").lower()), None)
@@ -81,16 +68,13 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     assert not any("ignored_dir" in ref["relativePath"] for ref in references), "ignored_dir should be ignored"
 
 
-@pytest.mark.timeout(90)  # Longer timeout for this complex test
+@pytest.mark.timeout(60)  # Add 60 second timeout
 @pytest.mark.xfail(reason="Known timeout issue on Ubuntu CI with Erlang LS server startup", strict=False)
 @pytest.mark.parametrize("repo_path", [Language.ERLANG], indirect=True)
 def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
     """Tests that refs and symbols with glob patterns are ignored."""
     ignored_paths = ["_build*", "ignored_*", "*.tmp"]
-    ls = create_ls(ignored_paths=ignored_paths, repo_path=str(repo_path), language=Language.ERLANG)
-    ls.start()
-
-    try:
+    with start_ls_context(language=Language.ERLANG, repo_path=str(repo_path), ignored_paths=ignored_paths) as ls:
         # Same as in the above tests
         root = ls.request_full_symbol_tree()[0]
         root_children = root["children"]
@@ -107,7 +91,7 @@ def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
         definition_file = "include/records.hrl"
 
         # Find the user record definition
-        symbols = ls.request_document_symbols(definition_file)
+        symbols = ls.request_document_symbols(definition_file).get_all_symbols_and_roots()
         user_symbol = None
         for symbol_group in symbols:
             user_symbol = next((s for s in symbol_group if "user" in s.get("name", "").lower()), None)
@@ -121,17 +105,6 @@ def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
             # Assert that _build and ignored_dir do not appear in references
             assert not any("_build" in ref["relativePath"] for ref in references), "_build should be ignored (glob)"
             assert not any("ignored_dir" in ref["relativePath"] for ref in references), "ignored_dir should be ignored (glob)"
-    finally:
-        try:
-            ls.stop(shutdown_timeout=1.0)  # Shorter timeout for CI
-        except Exception as e:
-            print(f"Warning: Error stopping glob pattern test LS: {e}")
-            # Force cleanup if needed
-            if hasattr(ls, "server") and hasattr(ls.server, "process"):
-                try:
-                    ls.server.process.terminate()
-                except:
-                    pass
 
 
 @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
@@ -203,7 +176,7 @@ def test_document_symbols_ignores_dirs(ls_with_ignored_dirs: SolidLanguageServer
     # Try to get symbols from a file in ignored directory (should not find it)
     try:
         ignored_file = "ignored_dir/ignored_module.erl"
-        symbols = ls_with_ignored_dirs.request_document_symbols(ignored_file)
+        symbols = ls_with_ignored_dirs.request_document_symbols(ignored_file).get_all_symbols_and_roots()
         # If we get here, the file was found - symbols should be empty or None
         if symbols:
             assert len(symbols) == 0, "Should not find symbols in ignored directory"

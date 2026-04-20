@@ -37,7 +37,7 @@ from typing import Any, Union
 from .lsp_types import ErrorCodes
 
 StringDict = dict[str, Any]
-PayloadLike = Union[list[StringDict], StringDict, None]
+PayloadLike = Union[list[StringDict], StringDict, None, bool]
 CONTENT_LENGTH = "Content-Length: "
 ENCODING = "utf-8"
 log = logging.getLogger(__name__)
@@ -46,17 +46,25 @@ log = logging.getLogger(__name__)
 @dataclasses.dataclass
 class ProcessLaunchInfo:
     """
-    This class is used to store the information required to launch a process.
+    This class is used to store the information required to launch a (language server) process.
     """
 
-    # The command to launch the process
     cmd: str | list[str]
+    """
+    the command used to launch the process.
+    Specification as a list is preferred (as it is more robust and avoids incorrect quoting of arguments);
+    the string variant is supported for backward compatibility only
+    """
 
-    # The environment variables to set for the process
     env: dict[str, str] = dataclasses.field(default_factory=dict)
+    """
+    the environment variables to set for the process
+    """
 
-    # The working directory for the process
     cwd: str = os.getcwd()
+    """
+    the working directory for the process
+    """
 
 
 class LSPError(Exception):
@@ -83,19 +91,47 @@ def make_error_response(request_id: Any, err: LSPError) -> StringDict:
     return {"jsonrpc": "2.0", "id": request_id, "error": err.to_lsp()}
 
 
+# LSP methods that expect NO params field at all (not even empty object).
+# These methods use Void/unit type in their protocol definition.
+# - shutdown: HLS uses Haskell's Void type, rust-analyzer expects unit
+# - exit: Similar - notification with no params
+# Sending params:{} to these methods causes parse errors like "Cannot parse Void"
+# See: https://www.jsonrpc.org/specification ("params MAY be omitted")
+_NO_PARAMS_METHODS = frozenset({"shutdown", "exit"})
+
+
+def _build_params_field(method: str, params: PayloadLike) -> StringDict:
+    """Build the params portion of a JSON-RPC message based on LSP method requirements.
+
+    LSP methods with Void/unit type (shutdown, exit) must omit params field entirely
+    to satisfy HLS and rust-analyzer. Other methods send empty {} for None params
+    to maintain Delphi/FPC LSP compatibility (PR #851).
+
+    Returns a dict that can be merged into the message using ** unpacking.
+    """
+    if method in _NO_PARAMS_METHODS:
+        return {}  # Omit params entirely for Void-type methods
+    elif params is not None:
+        return {"params": params}
+    else:
+        return {"params": {}}  # Keep {} for Delphi/FPC compatibility
+
+
 def make_notification(method: str, params: PayloadLike) -> StringDict:
-    return {"jsonrpc": "2.0", "method": method, "params": params}
+    """Create a JSON-RPC 2.0 notification message."""
+    return {"jsonrpc": "2.0", "method": method, **_build_params_field(method, params)}
 
 
 def make_request(method: str, request_id: Any, params: PayloadLike) -> StringDict:
-    return {"jsonrpc": "2.0", "method": method, "id": request_id, "params": params}
+    """Create a JSON-RPC 2.0 request message."""
+    return {"jsonrpc": "2.0", "method": method, "id": request_id, **_build_params_field(method, params)}
 
 
 class StopLoopException(Exception):
     pass
 
 
-def create_message(payload: PayloadLike):
+def create_message(payload: PayloadLike) -> tuple[bytes, bytes, bytes]:
     body = json.dumps(payload, check_circular=False, ensure_ascii=False, separators=(",", ":")).encode(ENCODING)
     return (
         f"Content-Length: {len(body)}\r\n".encode(ENCODING),
@@ -118,5 +154,5 @@ def content_length(line: bytes) -> int | None:
         try:
             return int(value)
         except ValueError:
-            raise ValueError(f"Invalid Content-Length header: {value}")
+            raise ValueError(f"Invalid Content-Length header: {value!r}")
     return None

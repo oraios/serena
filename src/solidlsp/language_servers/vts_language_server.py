@@ -9,18 +9,20 @@ import os
 import pathlib
 import shutil
 import threading
+from typing import cast
 
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
-from .common import RuntimeDependency, RuntimeDependencyCollection
+from .common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
+
+log = logging.getLogger(__name__)
 
 
 class VtsLanguageServer(SolidLanguageServer):
@@ -29,16 +31,13 @@ class VtsLanguageServer(SolidLanguageServer):
     Contains various configurations and settings specific to TypeScript via vtsls wrapper.
     """
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a VtsLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        vts_lsp_executable_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
+        vts_lsp_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
         super().__init__(
             config,
-            logger,
             repository_root_path,
             ProcessLaunchInfo(cmd=vts_lsp_executable_path, cwd=repository_root_path),
             "typescript",
@@ -57,9 +56,7 @@ class VtsLanguageServer(SolidLanguageServer):
         ]
 
     @classmethod
-    def _setup_runtime_dependencies(
-        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> str:
+    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> str:
         """
         Setup runtime dependencies for VTS Language Server and return the command to start the server.
         """
@@ -75,13 +72,16 @@ class VtsLanguageServer(SolidLanguageServer):
             PlatformId.WIN_arm64,
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for vtsls at the moment"
+        vts_config = solidlsp_settings.get_ls_specific_settings(Language.TYPESCRIPT_VTS)
+        vtsls_version = vts_config.get("vtsls_version", "0.2.9")
+        npm_registry = vts_config.get("npm_registry")
 
         deps = RuntimeDependencyCollection(
             [
                 RuntimeDependency(
                     id="vtsls",
                     description="vtsls language server package",
-                    command="npm install --prefix ./ @vtsls/language-server@0.2.9",
+                    command=build_npm_install_command("@vtsls/language-server", vtsls_version, npm_registry),
                     platform_id="any",
                 ),
             ]
@@ -98,7 +98,7 @@ class VtsLanguageServer(SolidLanguageServer):
         # Install vtsls if not already installed
         if not os.path.exists(vts_ls_dir):
             os.makedirs(vts_ls_dir, exist_ok=True)
-            deps.install(logger, vts_ls_dir)
+            deps.install(vts_ls_dir)
 
         vts_executable_path = os.path.join(vts_ls_dir, "node_modules", ".bin", "vtsls")
 
@@ -144,9 +144,9 @@ class VtsLanguageServer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the VTS Language Server, waits for the server to be ready and yields the LanguageServer instance.
 
@@ -158,38 +158,38 @@ class VtsLanguageServer(SolidLanguageServer):
             await lsp.request_references(...)
             # Shutdown the LanguageServer on exit from scope
         # LanguageServer has been shutdown
+        ```
         """
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "workspace/executeCommand":
                     self.initialize_searcher_command_available.set()
             return
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: dict) -> list:
             return []
 
-        def workspace_configuration_handler(params):
+        def workspace_configuration_handler(params: dict) -> list[dict] | dict:
             # VTS may request workspace configuration
             # Return empty configuration for each requested item
             if "items" in params:
                 return [{}] * len(params["items"])
             return {}
 
-        def do_nothing(params):
+        def do_nothing(params: dict) -> None:
             return
 
-        def window_log_message(msg):
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"LSP: window/logMessage: {msg}")
 
-        def check_experimental_status(params):
+        def check_experimental_status(params: dict) -> None:
             """
             Also listen for experimental/serverStatus as a backup signal
             """
             if params.get("quiescent") is True:
                 self.server_ready.set()
-                self.completions_available.set()
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
@@ -199,36 +199,32 @@ class VtsLanguageServer(SolidLanguageServer):
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
-        self.logger.log("Starting VTS server process", logging.INFO)
+        log.info("Starting VTS server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
 
         # VTS-specific capability checks
         # Be more flexible with capabilities since vtsls might have different structure
-        self.logger.log(f"VTS init response capabilities: {init_response['capabilities']}", logging.DEBUG)
+        log.debug(f"VTS init response capabilities: {init_response['capabilities']}")
 
         # Basic checks to ensure essential capabilities are present
         assert "textDocumentSync" in init_response["capabilities"]
         assert "completionProvider" in init_response["capabilities"]
 
         # Log the actual values for debugging
-        self.logger.log(f"textDocumentSync: {init_response['capabilities']['textDocumentSync']}", logging.DEBUG)
-        self.logger.log(f"completionProvider: {init_response['capabilities']['completionProvider']}", logging.DEBUG)
+        log.debug(f"textDocumentSync: {init_response['capabilities']['textDocumentSync']}")
+        log.debug(f"completionProvider: {init_response['capabilities']['completionProvider']}")
 
         self.server.notify.initialized({})
         if self.server_ready.wait(timeout=1.0):
-            self.logger.log("VTS server is ready", logging.INFO)
+            log.info("VTS server is ready")
         else:
-            self.logger.log("Timeout waiting for VTS server to become ready, proceeding anyway", logging.INFO)
+            log.info("Timeout waiting for VTS server to become ready, proceeding anyway")
             # Fallback: assume server is ready after timeout
             self.server_ready.set()
-        self.completions_available.set()
 
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:

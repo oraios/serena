@@ -1,20 +1,24 @@
-"""
-Provides C/C++ specific instantiation of the LanguageServer class. Contains various configurations and settings specific to C/C++.
-"""
-
+import hashlib
+import json
 import logging
 import os
 import pathlib
 import threading
+from collections.abc import Hashable
+from typing import Any, cast
 
-from solidlsp.ls import SolidLanguageServer
+from overrides import override
+
+from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, ProcessLaunchInfo, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
+
+log = logging.getLogger(__name__)
+
+CLANGD_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
 
 
 class ClangdLanguageServer(SolidLanguageServer):
@@ -22,89 +26,234 @@ class ClangdLanguageServer(SolidLanguageServer):
     Provides C/C++ specific instantiation of the LanguageServer class. Contains various configurations and settings specific to C/C++.
     As the project gets bigger in size, building index will take time. Try running clangd multiple times to ensure index is built properly.
     Also make sure compile_commands.json is created at root of the source directory. Check clangd test case for example.
+
+    You can pass the following entries in ``ls_specific_settings["cpp"]``:
+        - compile_commands_dir: Directory where Serena writes its transformed
+          ``compile_commands.json`` if needed.
+        - clangd_version: Override the pinned Clangd version downloaded by Serena
+          (default: the bundled Serena version).
     """
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a ClangdLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        clangd_executable_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
-        super().__init__(
-            config,
-            logger,
-            repository_root_path,
-            ProcessLaunchInfo(cmd=clangd_executable_path, cwd=repository_root_path),
-            "cpp",
-            solidlsp_settings,
-        )
+        super().__init__(config, repository_root_path, None, "cpp", solidlsp_settings)
         self.server_ready = threading.Event()
         self.service_ready_event = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
         self.resolve_main_method_available = threading.Event()
 
-    @classmethod
-    def _setup_runtime_dependencies(
-        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> str:
-        """
-        Setup runtime dependencies for ClangdLanguageServer and return the command to start the server.
-        """
-        deps = RuntimeDependencyCollection(
-            [
-                RuntimeDependency(
-                    id="Clangd",
-                    description="Clangd for Linux (x64)",
-                    url="https://github.com/clangd/clangd/releases/download/19.1.2/clangd-linux-19.1.2.zip",
-                    platform_id="linux-x64",
-                    archive_type="zip",
-                    binary_name="clangd_19.1.2/bin/clangd",
-                ),
-                RuntimeDependency(
-                    id="Clangd",
-                    description="Clangd for Windows (x64)",
-                    url="https://github.com/clangd/clangd/releases/download/19.1.2/clangd-windows-19.1.2.zip",
-                    platform_id="win-x64",
-                    archive_type="zip",
-                    binary_name="clangd_19.1.2/bin/clangd.exe",
-                ),
-                RuntimeDependency(
-                    id="Clangd",
-                    description="Clangd for macOS (x64)",
-                    url="https://github.com/clangd/clangd/releases/download/19.1.2/clangd-mac-19.1.2.zip",
-                    platform_id="osx-x64",
-                    archive_type="zip",
-                    binary_name="clangd_19.1.2/bin/clangd",
-                ),
-                RuntimeDependency(
-                    id="Clangd",
-                    description="Clangd for macOS (Arm64)",
-                    url="https://github.com/clangd/clangd/releases/download/19.1.2/clangd-mac-19.1.2.zip",
-                    platform_id="osx-arm64",
-                    archive_type="zip",
-                    binary_name="clangd_19.1.2/bin/clangd",
-                ),
-            ]
+    @override
+    def _document_symbols_cache_fingerprint(self) -> Hashable:
+        cache_format_version = 1
+        cpp_settings: dict[str, Any] = self._custom_settings or {}
+        return (
+            cache_format_version,
+            cpp_settings.get("clangd_version"),
+            cpp_settings.get("ls_path"),
+            cpp_settings.get("compile_commands_dir"),
+            self._compile_commands_fingerprint(),
         )
 
-        clangd_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "clangd")
-        dep = deps.single_for_current_platform()
-        clangd_executable_path = deps.binary_path(clangd_ls_dir)
-        if not os.path.exists(clangd_executable_path):
-            logger.log(
-                f"Clangd executable not found at {clangd_executable_path}. Downloading from {dep.url}",
-                logging.INFO,
-            )
-            deps.install(logger, clangd_ls_dir)
-        if not os.path.exists(clangd_executable_path):
-            raise FileNotFoundError(
-                f"Clangd executable not found at {clangd_executable_path}.\n"
-                "Make sure you have installed clangd. See https://clangd.llvm.org/installation"
-            )
-        os.chmod(clangd_executable_path, 0o755)
+    def _compile_commands_fingerprint(self) -> str | None:
+        compile_db_path = os.path.join(self.repository_root_path, "compile_commands.json")
+        if not os.path.exists(compile_db_path):
+            return None
 
-        return clangd_executable_path
+        try:
+            with open(compile_db_path, "rb") as f:
+                return hashlib.md5(f.read()).hexdigest()
+        except OSError as e:
+            log.warning(f"Failed to fingerprint compile_commands.json: {e}")
+            return None
+
+    @override
+    def is_ignored_dirname(self, dirname: str) -> bool:
+        ignored_dirs = [
+            ".ccls-cache",
+        ]
+        return super().is_ignored_dirname(dirname) or dirname in ignored_dirs
+
+    def _prepare_compile_commands(self) -> str | None:
+        """
+        Prepare clangd compilation database with absolute directory paths.
+
+        Clangd requires absolute directory paths in compile_commands.json for correct
+        cross-file reference finding. This method reads the compile_commands.json,
+        converts relative directory paths to absolute paths, and writes a transformed
+        compilation database to the serena managed directory.
+
+        The transformed file is persisted in .serena/serena_compile_commands.json
+        (or a configurable directory via ls_specific_settings) and is not deleted
+        on cleanup. This allows clangd to use the absolute-path version without
+        modifying the user's original compile_commands.json.
+
+        Returns the path to the serena directory containing the transformed database,
+        or None if no transformation was needed.
+        """
+        compile_db_path = os.path.join(self.repository_root_path, "compile_commands.json")
+
+        if not os.path.exists(compile_db_path):
+            # No compile_commands.json, nothing to do
+            return None
+
+        try:
+            with open(compile_db_path, encoding="utf-8") as f:
+                compile_commands = json.load(f)
+
+            if not compile_commands:
+                return None
+
+            # Check if any entries have relative directory paths
+            has_relative = False
+            for entry in compile_commands:
+                directory = entry.get("directory", "")
+                if directory and not os.path.isabs(directory):
+                    has_relative = True
+                    # Convert to absolute path
+                    entry["directory"] = os.path.abspath(os.path.join(self.repository_root_path, directory))
+
+            if not has_relative:
+                # No relative paths found, no need to create transformed database
+                return None
+
+            # Get the target directory from ls_specific_settings, default to .serena
+            cpp_settings: dict[str, Any] = self._custom_settings or {}
+            compile_commands_rel_dir = cpp_settings.get("compile_commands_dir", ".serena")
+            compile_commands_dir = os.path.join(self.repository_root_path, compile_commands_rel_dir)
+            os.makedirs(compile_commands_dir, exist_ok=True)
+
+            # Write the transformed compile_commands.json
+            # clangd looks for compile_commands.json in the --compile-commands-dir
+            compile_commands_path = os.path.join(compile_commands_dir, "compile_commands.json")
+            with open(compile_commands_path, "w", encoding="utf-8") as f:
+                json.dump(compile_commands, f, indent=2)
+
+            # Track the directory for --compile-commands-dir
+
+            log.info(f"Created serena compilation database with absolute paths at {compile_commands_path}")
+            return compile_commands_dir
+
+        except (OSError, json.JSONDecodeError) as e:
+            log.warning(f"Failed to prepare compile_commands.json: {e}")
+            return None
+
+    def _create_process_launch_info(self) -> ProcessLaunchInfo:
+        """
+        Override to add --compile-commands-dir argument if we created a serena compilation database.
+        """
+        # First, ensure the serena compile commands database is prepared
+        compile_commands_dir = self._prepare_compile_commands()
+
+        # Get the default launch info from parent
+        launch_info = super()._create_process_launch_info()
+
+        # If we created a serena compilation database, add --compile-commands-dir to the command
+        if compile_commands_dir:
+            # Insert --compile-commands-dir after the executable path
+            cmd = launch_info.cmd
+            assert isinstance(cmd, list)
+            launch_info.cmd = [cmd[0], f"--compile-commands-dir={compile_commands_dir}"] + cmd[1:]
+
+        return launch_info
+
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
+
+    class DependencyProvider(LanguageServerDependencyProviderSinglePath):
+        def _get_or_install_core_dependency(self) -> str:
+            """
+            Setup runtime dependencies for ClangdLanguageServer and return the path to the executable.
+            """
+            import shutil
+
+            clangd_version = self._custom_settings.get("clangd_version", "19.1.2")
+            default_version = clangd_version == "19.1.2"
+
+            deps = RuntimeDependencyCollection(
+                [
+                    RuntimeDependency(
+                        id="Clangd",
+                        description="Clangd for Linux (x64)",
+                        url=f"https://github.com/clangd/clangd/releases/download/{clangd_version}/clangd-linux-{clangd_version}.zip",
+                        platform_id="linux-x64",
+                        archive_type="zip",
+                        binary_name=f"clangd_{clangd_version}/bin/clangd",
+                        sha256="7c09614eff857d590e4502ef516f035ff94cfb8b795de14ece5afbc53a206caf" if default_version else None,
+                        allowed_hosts=CLANGD_ALLOWED_HOSTS,
+                    ),
+                    RuntimeDependency(
+                        id="Clangd",
+                        description="Clangd for Windows (x64)",
+                        url=f"https://github.com/clangd/clangd/releases/download/{clangd_version}/clangd-windows-{clangd_version}.zip",
+                        platform_id="win-x64",
+                        archive_type="zip",
+                        binary_name=f"clangd_{clangd_version}/bin/clangd.exe",
+                        sha256="5b6ceb0f85d63fa0c2c9aab31c29bebd41dc11da1f160ef21bc2fea93270a20d" if default_version else None,
+                        allowed_hosts=CLANGD_ALLOWED_HOSTS,
+                    ),
+                    RuntimeDependency(
+                        id="Clangd",
+                        description="Clangd for macOS (x64)",
+                        url=f"https://github.com/clangd/clangd/releases/download/{clangd_version}/clangd-mac-{clangd_version}.zip",
+                        platform_id="osx-x64",
+                        archive_type="zip",
+                        binary_name=f"clangd_{clangd_version}/bin/clangd",
+                        sha256="d3b329b3f58602c57ca6501d255147af1bccad3691b1cb0c12c258fcd2da1be3" if default_version else None,
+                        allowed_hosts=CLANGD_ALLOWED_HOSTS,
+                    ),
+                    RuntimeDependency(
+                        id="Clangd",
+                        description="Clangd for macOS (Arm64)",
+                        url=f"https://github.com/clangd/clangd/releases/download/{clangd_version}/clangd-mac-{clangd_version}.zip",
+                        platform_id="osx-arm64",
+                        archive_type="zip",
+                        binary_name=f"clangd_{clangd_version}/bin/clangd",
+                        sha256="d3b329b3f58602c57ca6501d255147af1bccad3691b1cb0c12c258fcd2da1be3" if default_version else None,
+                        allowed_hosts=CLANGD_ALLOWED_HOSTS,
+                    ),
+                ]
+            )
+
+            clangd_ls_dir = os.path.join(self._ls_resources_dir, "clangd")
+
+            try:
+                dep = deps.get_single_dep_for_current_platform()
+            except RuntimeError:
+                dep = None
+
+            if dep is None:
+                # No prebuilt binary available, look for system-installed clangd
+                clangd_executable_path = shutil.which("clangd")
+                if not clangd_executable_path:
+                    raise FileNotFoundError(
+                        "Clangd is not installed on your system.\n"
+                        + "Please install clangd using your system package manager:\n"
+                        + "  Ubuntu/Debian: sudo apt-get install clangd\n"
+                        + "  Fedora/RHEL: sudo dnf install clang-tools-extra\n"
+                        + "  Arch Linux: sudo pacman -S clang\n"
+                        + "See https://clangd.llvm.org/installation for more details."
+                    )
+                log.info(f"Using system-installed clangd at {clangd_executable_path}")
+            else:
+                # Standard download and install for platforms with prebuilt binaries
+                clangd_executable_path = deps.binary_path(clangd_ls_dir)
+                if not os.path.exists(clangd_executable_path):
+                    log.info(f"Clangd executable not found at {clangd_executable_path}. Downloading from {dep.url}")
+                    _ = deps.install(clangd_ls_dir)
+                if not os.path.exists(clangd_executable_path):
+                    raise FileNotFoundError(
+                        f"Clangd executable not found at {clangd_executable_path}.\n"
+                        + "Make sure you have installed clangd. See https://clangd.llvm.org/installation"
+                    )
+                os.chmod(clangd_executable_path, 0o755)
+            return clangd_executable_path
+
+        def _create_launch_command(self, core_path: str) -> list[str]:
+            # --background-index enables clangd to index all files in the project,
+            # which is required for finding cross-file references
+            return [core_path, "--background-index"]
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
@@ -119,6 +268,11 @@ class ClangdLanguageServer(SolidLanguageServer):
                     "synchronization": {"didSave": True, "dynamicRegistration": True},
                     "completion": {"dynamicRegistration": True, "completionItem": {"snippetSupport": True}},
                     "definition": {"dynamicRegistration": True},
+                    "references": {"dynamicRegistration": True},
+                    "documentSymbol": {
+                        "dynamicRegistration": True,
+                        "hierarchicalDocumentSymbolSupport": True,
+                    },
                 },
                 "workspace": {"workspaceFolders": True, "didChangeConfiguration": {"dynamicRegistration": True}},
             },
@@ -128,14 +282,14 @@ class ClangdLanguageServer(SolidLanguageServer):
             "workspaceFolders": [
                 {
                     "uri": root_uri,
-                    "name": "$name",
+                    "name": os.path.basename(repository_absolute_path),
                 }
             ],
         }
 
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the Clangd Language Server, waits for the server to be ready and yields the LanguageServer instance.
 
@@ -147,9 +301,10 @@ class ClangdLanguageServer(SolidLanguageServer):
             await lsp.request_references(...)
             # Shutdown the LanguageServer on exit from scope
         # LanguageServer has been shutdown
+        ```
         """
 
-        def register_capability_handler(params):
+        def register_capability_handler(params: Any) -> None:
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "workspace/executeCommand":
@@ -157,25 +312,25 @@ class ClangdLanguageServer(SolidLanguageServer):
                     self.resolve_main_method_available.set()
             return
 
-        def lang_status_handler(params):
+        def lang_status_handler(params: Any) -> None:
             # TODO: Should we wait for
             # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
             # Before proceeding?
             if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
                 self.service_ready_event.set()
 
-        def execute_client_command_handler(params):
+        def execute_client_command_handler(params: Any) -> list:
             return []
 
-        def do_nothing(params):
+        def do_nothing(params: Any) -> None:
             return
 
-        def check_experimental_status(params):
+        def check_experimental_status(params: Any) -> None:
             if params["quiescent"] == True:
                 self.server_ready.set()
 
-        def window_log_message(msg):
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"LSP: window/logMessage: {msg}")
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("language/status", lang_status_handler)
@@ -186,25 +341,30 @@ class ClangdLanguageServer(SolidLanguageServer):
         self.server.on_notification("language/actionableNotification", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
-        self.logger.log("Starting Clangd server process", logging.INFO)
+        log.info("Starting Clangd server process")
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
-        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2
-        assert "completionProvider" in init_response["capabilities"]
-        assert init_response["capabilities"]["completionProvider"] == {
-            "triggerCharacters": [".", "<", ">", ":", '"', "/", "*"],
-            "resolveProvider": False,
-        }
+        capabilities = init_response["capabilities"]
+
+        text_document_sync = capabilities["textDocumentSync"]
+        if isinstance(text_document_sync, int):
+            assert text_document_sync == 2  # type: ignore
+        else:
+            assert text_document_sync["change"] == 2  # type: ignore
+
+        assert "completionProvider" in capabilities
+        completion_provider = capabilities["completionProvider"]
+        trigger_characters = set(completion_provider["triggerCharacters"])
+        assert {".", "<", ">", ":", '"', "/"}.issubset(trigger_characters)
+        assert completion_provider["resolveProvider"] is False
 
         self.server.notify.initialized({})
-
-        self.completions_available.set()
-        # set ready flag
+        # set ready flag, clangd sends no meaningful notification when ready
+        # TODO This defeats the purpose of the event; we should wait for the server to actually be ready
         self.server_ready.set()
+
+        # wait for server to be ready
         self.server_ready.wait()

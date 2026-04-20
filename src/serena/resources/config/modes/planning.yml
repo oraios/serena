@@ -1,8 +1,7 @@
 description: Only read-only tools, focused on analysis and planning
 prompt: |
   You are operating in planning mode. Your task is to analyze code but not write any code.
-  The user may ask you to assist in creating a comprehensive plan, or to learn something about the codebase -
-  either a small aspect of it or about the whole project.
+  The user may ask you to assist in creating a comprehensive plan, or to learn something about the codebase.
 excluded_tools:
   - create_text_file
   - replace_symbol_body
@@ -12,4 +11,4 @@ excluded_tools:
   - replace_lines
   - insert_at_line
   - execute_shell_command
-  - replace_regex
+  - replace_content

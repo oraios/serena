@@ -1,13 +1,24 @@
 """
-Defines wrapper objects around the types returned by LSP to ensure decoupling between LSP versions and multilspy
+Defines wrapper objects around the types returned by LSP to ensure decoupling between LSP versions and SolidLSP
 """
 
 from __future__ import annotations
 
 from enum import Enum, IntEnum
-from typing import NotRequired, Union
+from typing import TYPE_CHECKING, NotRequired, Union
 
+from sensai.util.helper import mark_used
 from typing_extensions import TypedDict
+
+from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticSeverity, SymbolKind
+
+if TYPE_CHECKING:
+    from .ls import SymbolBody
+
+# a lot of code relied on a previously duplicated SymbolKind definition here.
+# This line is kept to avoid breaking downstream imports
+mark_used(SymbolKind)
+
 
 URI = str
 DocumentUri = str
@@ -141,37 +152,6 @@ class CompletionItem(TypedDict):
     about this item, like type or symbol information. """
 
 
-class SymbolKind(IntEnum):
-    """A symbol kind."""
-
-    File = 1
-    Module = 2
-    Namespace = 3
-    Package = 4
-    Class = 5
-    Method = 6
-    Property = 7
-    Field = 8
-    Constructor = 9
-    Enum = 10
-    Interface = 11
-    Function = 12
-    Variable = 13
-    Constant = 14
-    String = 15
-    Number = 16
-    Boolean = 17
-    Array = 18
-    Object = 19
-    Key = 20
-    Null = 21
-    EnumMember = 22
-    Struct = 23
-    Event = 24
-    Operator = 25
-    TypeParameter = 26
-
-
 class SymbolTag(IntEnum):
     """Symbol tags are extra annotations that tweak the rendering of a symbol.
 
@@ -183,8 +163,12 @@ class SymbolTag(IntEnum):
 
 
 class UnifiedSymbolInformation(TypedDict):
-    """Represents information about programming constructs like variables, classes,
+    """
+    Represents information about programming constructs like variables, classes,
     interfaces etc.
+
+    This is a unifying extension of `lsp_types.SymbolInformation` and `lsp_types.DocumentSymbol`,
+    with added fields for SolidLSP/Serena use.
     """
 
     deprecated: NotRequired[bool]
@@ -230,7 +214,7 @@ class UnifiedSymbolInformation(TypedDict):
     """ The range that should be selected and revealed when this symbol is being picked, e.g the name of a function.
     Must be contained by the `range`. """
 
-    body: NotRequired[str]
+    body: NotRequired["SymbolBody"]
     """ The body of the symbol. """
 
     children: list[UnifiedSymbolInformation]
@@ -241,6 +225,14 @@ class UnifiedSymbolInformation(TypedDict):
     parent: NotRequired[UnifiedSymbolInformation | None]
     """The parent of the symbol, if there is any. Added with Serena, not part of the LSP.
     All symbols except the root packages will have a parent.
+    """
+
+    overload_idx: NotRequired[int]
+    """
+    The overload index of the symbol, if applicable. If a symbol does not have overloads, this field is omitted.
+    If the symbol is an overloaded function or method (same symbol name with the same parent), 
+    this index indicates which overload it is. The index is 0-based.
+    Added for Serena, not part of the LSP.
     """
 
 
@@ -319,11 +311,29 @@ class Hover(TypedDict):
     visualize the hover, e.g. by changing the background color. """
 
 
-class DiagnosticsSeverity(IntEnum):
-    ERROR = 1
-    WARNING = 2
-    INFORMATION = 3
-    HINT = 4
+class TextDocumentIdentifier(TypedDict):
+    """A literal to identify a text document in the client."""
+
+    uri: DocumentUri
+    """ The text document's uri. """
+
+
+class TextEdit(TypedDict):
+    """A textual edit applicable to a text document."""
+
+    range: Range
+    """ The range of the text document to be manipulated. """
+    newText: str
+    """ The string to be inserted. For delete operations use an empty string. """
+
+
+class WorkspaceEdit(TypedDict):
+    """A workspace edit represents changes to many resources managed in the workspace."""
+
+    changes: NotRequired[dict[DocumentUri, list[TextEdit]]]
+    """ Holds changes to existing resources. """
+    documentChanges: NotRequired[list]
+    """ Document changes array for versioned edits. """
 
 
 class Diagnostic(TypedDict):
@@ -333,7 +343,7 @@ class Diagnostic(TypedDict):
     """ The URI of the text document to which the diagnostics apply. """
     range: Range
     """ The range of the text document to which the diagnostics apply. """
-    severity: NotRequired[DiagnosticsSeverity]
+    severity: NotRequired[DiagnosticSeverity]
     """ The severity of the diagnostic. """
     message: str
     """ The diagnostic message. """
@@ -341,3 +351,75 @@ class Diagnostic(TypedDict):
     """ The code of the diagnostic. """
     source: NotRequired[str]
     """ The source of the diagnostic, e.g. the name of the tool that produced it. """
+
+
+class SignatureHelp(TypedDict):
+    """
+    Signature help represents the signature of something
+    callable. There can be multiple signature but only one
+    active and only one active parameter.
+
+    See https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#signatureHelp
+    """
+
+    signatures: list[SignatureInformation]
+    """ One or more signatures. """
+    activeSignature: NotRequired[int]
+    """ The active signature. If omitted or the value lies outside the
+    range of `signatures` the value defaults to zero or is ignored if
+    the `SignatureHelp` has no signatures.
+
+    Whenever possible implementers should make an active decision about
+    the active signature and shouldn't rely on a default value.
+
+    In future version of the protocol this property might become
+    mandatory to better express this. """
+    activeParameter: NotRequired[int]
+    """ The active parameter of the active signature. If omitted or the value
+    lies outside the range of `signatures[activeSignature].parameters`
+    defaults to 0 if the active signature has parameters. If
+    the active signature has no parameters it is ignored.
+    In future version of the protocol this property might become
+    mandatory to better express the active parameter if the
+    active signature does have any. """
+
+
+class SignatureInformation(TypedDict):
+    """Represents the signature of something callable. A signature
+    can have a label, like a function-name, a doc-comment, and
+    a set of parameters.
+    """
+
+    label: str
+    """ The label of this signature. Will be shown in
+    the UI. """
+    documentation: NotRequired[MarkupContent | str]
+    """ The human-readable doc-comment of this signature. Will be shown
+    in the UI but can be omitted. """
+    parameters: NotRequired[list[ParameterInformation]]
+    """ The parameters of this signature. """
+    activeParameter: NotRequired[int]
+    """ The index of the active parameter.
+
+    If provided, this is used in place of `SignatureHelp.activeParameter`.
+
+    @since 3.16.0 """
+
+
+class ParameterInformation(TypedDict):
+    """Represents a parameter of a callable-signature. A parameter can
+    have a label and a doc-comment.
+    """
+
+    label: str | list[int]
+    """ The label of this parameter information.
+
+    Either a string or an inclusive start and exclusive end offsets within its containing
+    signature label. (see SignatureInformation.label). The offsets are based on a UTF-16
+    string representation as `Position` and `Range` does.
+
+    *Note*: a label of type string should be a substring of its containing signature label.
+    Its intended use case is to highlight the parameter label part in the `SignatureInformation.label`. """
+    documentation: NotRequired[MarkupContent | str]
+    """ The human-readable doc-comment of this parameter. Will be shown
+    in the UI but can be omitted. """

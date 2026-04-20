@@ -3,14 +3,18 @@ Basic tests for R Language Server integration
 """
 
 import os
+import shutil
 from pathlib import Path
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.conftest import is_ci
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
+@pytest.mark.skipif(shutil.which("R") is None and not is_ci, reason="R is not available")
 @pytest.mark.r
 class TestRLanguageServer:
     """Test basic functionality of the R language server."""
@@ -27,7 +31,7 @@ class TestRLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.R], indirect=True)
     def test_symbol_retrieval(self, language_server: SolidLanguageServer):
         """Test R document symbol extraction."""
-        all_symbols, root_symbols = language_server.request_document_symbols(os.path.join("R", "utils.R"))
+        all_symbols, _root_symbols = language_server.request_document_symbols(os.path.join("R", "utils.R")).get_all_symbols_and_roots()
 
         # Should find the three exported functions
         function_symbols = [s for s in all_symbols if s.get("kind") == 12]  # Function kind
@@ -76,14 +80,12 @@ class TestRLanguageServer:
         assert len(utils_refs) >= 1, "Should find at least one reference in utils.R"
         utils_ref = utils_refs[0]
         # Should be around line 6 where calculate_mean is defined (0-indexed: line 5)
-        assert (
-            utils_ref["range"]["start"]["line"] == 5
-        ), f"Expected reference at line 5 in utils.R, got line {utils_ref['range']['start']['line']}"
+        assert utils_ref["range"]["start"]["line"] == 5, (
+            f"Expected reference at line 5 in utils.R, got line {utils_ref['range']['start']['line']}"
+        )
 
     def test_file_matching(self):
         """Test that R files are properly matched."""
-        from solidlsp.ls_config import Language
-
         matcher = Language.R.get_source_fn_matcher()
 
         assert matcher.is_relevant_filename("script.R")
@@ -95,3 +97,16 @@ class TestRLanguageServer:
         """Test R language enum value."""
         assert Language.R == "r"
         assert str(Language.R) == "r"
+
+    @pytest.mark.parametrize("language_server", [Language.R], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s):
+                malformed_symbols.append(s)
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )

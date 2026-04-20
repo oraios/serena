@@ -9,6 +9,7 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
 @pytest.mark.bash
@@ -25,7 +26,7 @@ class TestBashLanguageServerBasics:
     def test_bash_request_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test request_document_symbols for bash files."""
         # Test getting symbols from main.sh
-        all_symbols, root_symbols = language_server.request_document_symbols("main.sh", include_body=False)
+        all_symbols, _root_symbols = language_server.request_document_symbols("main.sh").get_all_symbols_and_roots()
 
         # Extract function symbols (LSP Symbol Kind 12)
         function_symbols = [symbol for symbol in all_symbols if symbol.get("kind") == 12]
@@ -41,7 +42,7 @@ class TestBashLanguageServerBasics:
     def test_bash_request_document_symbols_with_body(self, language_server: SolidLanguageServer) -> None:
         """Test request_document_symbols with body extraction."""
         # Test with include_body=True
-        all_symbols, root_symbols = language_server.request_document_symbols("main.sh", include_body=True)
+        all_symbols, _root_symbols = language_server.request_document_symbols("main.sh").get_all_symbols_and_roots()
 
         function_symbols = [symbol for symbol in all_symbols if symbol.get("kind") == 12]
 
@@ -50,7 +51,7 @@ class TestBashLanguageServerBasics:
         assert greet_user_symbol is not None, "Should find greet_user function"
 
         if "body" in greet_user_symbol:
-            body = greet_user_symbol["body"]
+            body = greet_user_symbol["body"].get_text()
             assert "function greet_user()" in body, "Function body should contain function definition"
             assert "case" in body.lower(), "Function body should contain case statement"
 
@@ -58,7 +59,7 @@ class TestBashLanguageServerBasics:
     def test_bash_utils_functions(self, language_server: SolidLanguageServer) -> None:
         """Test function detection in utils.sh file."""
         # Test with utils.sh as well
-        utils_all_symbols, utils_root_symbols = language_server.request_document_symbols("utils.sh", include_body=False)
+        utils_all_symbols, _utils_root_symbols = language_server.request_document_symbols("utils.sh").get_all_symbols_and_roots()
 
         utils_function_symbols = [symbol for symbol in utils_all_symbols if symbol.get("kind") == 12]
         utils_function_names = [symbol["name"] for symbol in utils_function_symbols]
@@ -84,12 +85,12 @@ class TestBashLanguageServerBasics:
     def test_bash_function_syntax_patterns(self, language_server: SolidLanguageServer) -> None:
         """Test that LSP detects different bash function syntax patterns correctly."""
         # Test main.sh (has both 'function' keyword and traditional syntax)
-        main_all_symbols, main_root_symbols = language_server.request_document_symbols("main.sh", include_body=False)
+        main_all_symbols, _main_root_symbols = language_server.request_document_symbols("main.sh").get_all_symbols_and_roots()
         main_functions = [symbol for symbol in main_all_symbols if symbol.get("kind") == 12]
         main_function_names = [func["name"] for func in main_functions]
 
         # Test utils.sh (all use 'function' keyword)
-        utils_all_symbols, utils_root_symbols = language_server.request_document_symbols("utils.sh", include_body=False)
+        utils_all_symbols, _utils_root_symbols = language_server.request_document_symbols("utils.sh").get_all_symbols_and_roots()
         utils_functions = [symbol for symbol in utils_all_symbols if symbol.get("kind") == 12]
         utils_function_names = [func["name"] for func in utils_functions]
 
@@ -119,3 +120,16 @@ class TestBashLanguageServerBasics:
         # Verify total counts match expectations
         assert len(main_functions) >= 3, f"Should find at least 3 functions in main.sh, found {len(main_functions)}"
         assert len(utils_functions) >= 8, f"Should find at least 8 functions in utils.sh, found {len(utils_functions)}"
+
+    @pytest.mark.parametrize("language_server", [Language.BASH], indirect=True)
+    def test_bare_symbol_names(self, language_server) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed_symbols = []
+        for s in all_symbols:
+            if has_malformed_name(s):
+                malformed_symbols.append(s)
+        if malformed_symbols:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
+                pytrace=False,
+            )

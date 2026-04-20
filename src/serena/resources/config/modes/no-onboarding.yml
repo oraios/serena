@@ -1,8 +1,6 @@
-description: Onboarding was already performed, exclude all onboarding tools
+description: The onboarding process is not used (memories may have been created externally)
 prompt: |
-  You have already performed onboarding, meaning that memories have already been created.
-  Read a list of available memories using the `list_memories` tool before proceeding with the task.
-  You don't need to read the actual memories, just remember that they exist and that you can read them later if they are relevant for your task.
+  The onboarding process is not applied.
 excluded_tools:
   - onboarding
   - check_onboarding_performed

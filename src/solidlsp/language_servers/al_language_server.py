@@ -1,24 +1,39 @@
-"""AL Language Server implementation for Microsoft Dynamics 365 Business Central."""
+"""AL Language Server implementation for Microsoft Dynamics 365 Business Central.
+
+You can pass the following entries in ``ls_specific_settings["al"]``:
+    - al_extension_version: Override the pinned AL VS Code extension version
+      downloaded by Serena (default: the bundled Serena version).
+"""
 
 import logging
 import os
 import pathlib
 import platform
+import re
 import stat
 import time
-import zipfile
 from pathlib import Path
 
-import requests
 from overrides import override
 
+from solidlsp import ls_types
 from solidlsp.language_servers.common import quote_windows_path
-from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls import DocumentSymbols, LSPFileBuffer, RawDocumentSymbol, SolidLanguageServer
+from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
+from solidlsp.ls_utils import FileUtils
 from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
+
+AL_EXTENSION_VERSION = "18.0.2242655"
+AL_EXTENSION_URL = (
+    f"https://marketplace.visualstudio.com/_apis/public/gallery/publishers/ms-dynamics-smb/vsextensions/al/{AL_EXTENSION_VERSION}/vspackage"
+)
+AL_EXTENSION_SHA256 = "3971995e61a59dc4fcce4a65053072a67991ed624a16635c4f2911f12564b2b9"
+AL_EXTENSION_ALLOWED_HOSTS = ("marketplace.visualstudio.com",)
 
 
 class ALLanguageServer(SolidLanguageServer):
@@ -34,11 +49,49 @@ class ALLanguageServer(SolidLanguageServer):
     - Special initialization sequence required by AL Language Server
     - Custom AL-specific LSP commands (al/gotodefinition, al/setActiveWorkspace)
     - File opening requirement before symbol retrieval
+    - `al_extension_version` to override the bundled AL VS Code extension version
     """
 
-    def __init__(
-        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
-    ):
+    # Regex pattern to match AL object names like:
+    # - 'Table 50000 "TEST Customer"' -> captures 'TEST Customer'
+    # - 'Codeunit 50000 CustomerMgt' -> captures 'CustomerMgt'
+    # - 'Interface IPaymentProcessor' -> captures 'IPaymentProcessor'
+    # - 'Enum 50000 CustomerType' -> captures 'CustomerType'
+    # Pattern: <ObjectType> [<ID>] (<QuotedName>|<UnquotedName>)
+    _AL_OBJECT_NAME_PATTERN = re.compile(
+        r"^(?:Table|Page|Codeunit|Enum|Interface|Report|Query|XMLPort|PermissionSet|"
+        r"PermissionSetExtension|Profile|PageExtension|TableExtension|EnumExtension|"
+        r"PageCustomization|ReportExtension|ControlAddin|DotNetPackage)"  # Object type
+        r"(?:\s+\d+)?"  # Optional object ID
+        r"\s+"  # Required space before name
+        r'(?:"([^"]+)"|(\S+))$'  # Quoted name (group 1) or unquoted identifier (group 2)
+    )
+
+    @staticmethod
+    def _extract_al_display_name(full_name: str) -> str:
+        """
+        Extract the display name from an AL symbol's full name.
+
+        AL Language Server returns symbol names in format:
+        - 'Table 50000 "TEST Customer"' -> 'TEST Customer'
+        - 'Codeunit 50000 CustomerMgt' -> 'CustomerMgt'
+        - 'Interface IPaymentProcessor' -> 'IPaymentProcessor'
+        - 'fields' -> 'fields' (non-AL-object symbols pass through unchanged)
+
+        Args:
+            full_name: The full symbol name as returned by AL Language Server
+
+        Returns:
+            The extracted display name for matching, or the original name if not an AL object
+
+        """
+        match = ALLanguageServer._AL_OBJECT_NAME_PATTERN.match(full_name)
+        if match:
+            # Return quoted name (group 1) or unquoted name (group 2)
+            return match.group(1) or match.group(2) or full_name
+        return full_name
+
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Initialize the AL Language Server.
 
@@ -57,7 +110,7 @@ class ALLanguageServer(SolidLanguageServer):
         """
         # Setup runtime dependencies and get the language server command
         # This will download the AL extension if needed
-        cmd = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
+        cmd = self._setup_runtime_dependencies(config, solidlsp_settings)
 
         self._project_load_check_supported: bool = True
         """Whether the AL server supports the project load status check request.
@@ -67,17 +120,18 @@ class ALLanguageServer(SolidLanguageServer):
         request fails, preventing repeated unsuccessful attempts.
         """
 
-        super().__init__(
-            config,
-            logger,
-            repository_root_path,
-            ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path),
-            "al",  # Language ID for LSP
-            solidlsp_settings,
-        )
+        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "al", solidlsp_settings)
+
+        # Cache mapping (file_path, line, char) -> original_full_name for hover injection
+        self._al_original_names: dict[tuple[str, int, int], str] = {}
+
+    @staticmethod
+    def _normalize_path(path: str) -> str:
+        """Normalize file path for consistent cache key usage across platforms."""
+        return path.replace("\\", "/")
 
     @classmethod
-    def _download_al_extension(cls, logger: LanguageServerLogger, url: str, target_dir: str) -> bool:
+    def _download_al_extension(cls, url: str, target_dir: str) -> bool:
         """
         Download and extract the AL extension from VS Code marketplace.
 
@@ -98,58 +152,24 @@ class ALLanguageServer(SolidLanguageServer):
 
         """
         try:
-            logger.log(f"Downloading AL extension from {url}", logging.INFO)
-
-            # Create target directory for the extension
+            log.info(f"Downloading AL extension from {url}")
             os.makedirs(target_dir, exist_ok=True)
-
-            # Download with proper headers to mimic VS Code marketplace client
-            # These headers are required for the marketplace to serve the VSIX file
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Accept": "application/octet-stream, application/vsix, */*",
-            }
-
-            response = requests.get(url, headers=headers, stream=True, timeout=300)
-            response.raise_for_status()
-
-            # Save to temporary VSIX file (will be deleted after extraction)
-            temp_file = os.path.join(target_dir, "al_extension_temp.vsix")
-            total_size = int(response.headers.get("content-length", 0))
-
-            logger.log(f"Downloading {total_size / 1024 / 1024:.1f} MB...", logging.INFO)
-
-            with open(temp_file, "wb") as f:
-                downloaded = 0
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        if total_size > 0 and downloaded % (10 * 1024 * 1024) == 0:  # Log progress every 10MB
-                            progress = (downloaded / total_size) * 100
-                            logger.log(f"Download progress: {progress:.1f}%", logging.INFO)
-
-            logger.log("Download complete, extracting...", logging.INFO)
-
-            # Extract VSIX file (VSIX files are just ZIP archives with a different extension)
-            # This will extract the extension folder containing the language server binaries
-            with zipfile.ZipFile(temp_file, "r") as zip_ref:
-                zip_ref.extractall(target_dir)
-
-            # Clean up temp file
-            os.remove(temp_file)
-
-            logger.log("AL extension extracted successfully", logging.INFO)
+            FileUtils.download_and_extract_archive_verified(
+                url,
+                target_dir,
+                "zip",
+                expected_sha256=AL_EXTENSION_SHA256 if url == AL_EXTENSION_URL else None,
+                allowed_hosts=AL_EXTENSION_ALLOWED_HOSTS,
+            )
+            log.info("AL extension extracted successfully")
             return True
 
         except Exception as e:
-            logger.log(f"Error downloading/extracting AL extension: {e}", logging.ERROR)
+            log.error(f"Error downloading/extracting AL extension: {e}")
             return False
 
     @classmethod
-    def _setup_runtime_dependencies(
-        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
-    ) -> str:
+    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> str:
         """
         Setup runtime dependencies for AL Language Server and return the command to start the server.
 
@@ -167,10 +187,10 @@ class ALLanguageServer(SolidLanguageServer):
         system = platform.system()
 
         # Find existing extension or download if needed
-        extension_path = cls._find_al_extension(logger, solidlsp_settings)
+        extension_path = cls._find_al_extension(solidlsp_settings)
         if extension_path is None:
-            logger.log("AL extension not found on disk, attempting to download...", logging.INFO)
-            extension_path = cls._download_and_install_al_extension(logger, solidlsp_settings)
+            log.info("AL extension not found on disk, attempting to download...")
+            extension_path = cls._download_and_install_al_extension(solidlsp_settings)
 
         if extension_path is None:
             raise RuntimeError(
@@ -187,10 +207,10 @@ class ALLanguageServer(SolidLanguageServer):
             raise RuntimeError(f"AL Language Server executable not found at: {executable_path}")
 
         # Prepare and return the executable command
-        return cls._prepare_executable(executable_path, system, logger)
+        return cls._prepare_executable(executable_path, system)
 
     @classmethod
-    def _find_al_extension(cls, logger: LanguageServerLogger, solidlsp_settings: SolidLSPSettings) -> str | None:
+    def _find_al_extension(cls, solidlsp_settings: SolidLSPSettings) -> str | None:
         """
         Find AL extension in various locations.
 
@@ -206,28 +226,28 @@ class ALLanguageServer(SolidLanguageServer):
         # Check environment variable
         env_path = os.environ.get("AL_EXTENSION_PATH")
         if env_path and os.path.exists(env_path):
-            logger.log(f"Found AL extension via AL_EXTENSION_PATH: {env_path}", logging.DEBUG)
+            log.debug(f"Found AL extension via AL_EXTENSION_PATH: {env_path}")
             return env_path
         elif env_path:
-            logger.log(f"AL_EXTENSION_PATH set but directory not found: {env_path}", logging.WARNING)
+            log.warning(f"AL_EXTENSION_PATH set but directory not found: {env_path}")
 
         # Check default download location
         default_path = os.path.join(cls.ls_resources_dir(solidlsp_settings), "al-extension", "extension")
         if os.path.exists(default_path):
-            logger.log(f"Found AL extension in default location: {default_path}", logging.DEBUG)
+            log.debug(f"Found AL extension in default location: {default_path}")
             return default_path
 
         # Search VS Code extensions
-        vscode_path = cls._find_al_extension_in_vscode(logger)
+        vscode_path = cls._find_al_extension_in_vscode()
         if vscode_path:
-            logger.log(f"Found AL extension in VS Code: {vscode_path}", logging.DEBUG)
+            log.debug(f"Found AL extension in VS Code: {vscode_path}")
             return vscode_path
 
-        logger.log("AL extension not found in any known location", logging.DEBUG)
+        log.debug("AL extension not found in any known location")
         return None
 
     @classmethod
-    def _download_and_install_al_extension(cls, logger: LanguageServerLogger, solidlsp_settings: SolidLSPSettings) -> str | None:
+    def _download_and_install_al_extension(cls, solidlsp_settings: SolidLSPSettings) -> str | None:
         """
         Download and install AL extension from VS Code marketplace.
 
@@ -236,22 +256,24 @@ class ALLanguageServer(SolidLanguageServer):
 
         """
         al_extension_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "al-extension")
+        al_settings = solidlsp_settings.get_ls_specific_settings(Language.AL)
+        al_extension_version = al_settings.get("al_extension_version", AL_EXTENSION_VERSION)
+        al_extension_url = (
+            "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/ms-dynamics-smb/"
+            f"vsextensions/al/{al_extension_version}/vspackage"
+        )
 
-        # AL extension version - using latest stable version
-        AL_VERSION = "latest"
-        url = f"https://marketplace.visualstudio.com/_apis/public/gallery/publishers/ms-dynamics-smb/vsextensions/al/{AL_VERSION}/vspackage"
+        log.info(f"Downloading AL extension from: {al_extension_url}")
 
-        logger.log(f"Downloading AL extension from: {url}", logging.INFO)
-
-        if cls._download_al_extension(logger, url, al_extension_dir):
+        if cls._download_al_extension(al_extension_url, al_extension_dir):
             extension_path = os.path.join(al_extension_dir, "extension")
             if os.path.exists(extension_path):
-                logger.log("AL extension downloaded and installed successfully", logging.INFO)
+                log.info("AL extension downloaded and installed successfully")
                 return extension_path
             else:
-                logger.log(f"Download completed but extension not found at: {extension_path}", logging.ERROR)
+                log.error(f"Download completed but extension not found at: {extension_path}")
         else:
-            logger.log("Failed to download AL extension from marketplace", logging.ERROR)
+            log.error("Failed to download AL extension from marketplace")
 
         return None
 
@@ -278,7 +300,7 @@ class ALLanguageServer(SolidLanguageServer):
             raise RuntimeError(f"Unsupported platform: {system}")
 
     @classmethod
-    def _prepare_executable(cls, executable_path: str, system: str, logger: LanguageServerLogger) -> str:
+    def _prepare_executable(cls, executable_path: str, system: str) -> str:
         """
         Prepare the executable by setting permissions and handling path quoting.
 
@@ -295,16 +317,16 @@ class ALLanguageServer(SolidLanguageServer):
         if system in ["Linux", "Darwin"]:
             st = os.stat(executable_path)
             os.chmod(executable_path, st.st_mode | stat.S_IEXEC)
-            logger.log(f"Set execute permission on: {executable_path}", logging.DEBUG)
+            log.debug(f"Set execute permission on: {executable_path}")
 
-        logger.log(f"Using AL Language Server executable: {executable_path}", logging.INFO)
+        log.info(f"Using AL Language Server executable: {executable_path}")
 
         # The AL Language Server uses stdio for LSP communication by default
         # Use the utility function to handle Windows path quoting
         return quote_windows_path(executable_path)
 
     @classmethod
-    def _get_language_server_command_fallback(cls, logger: LanguageServerLogger) -> str:
+    def _get_language_server_command_fallback(cls) -> str:
         """
         Get the command to start the AL language server.
 
@@ -332,10 +354,10 @@ class ALLanguageServer(SolidLanguageServer):
 
             if potential_extension:
                 al_extension_path = str(potential_extension)
-                logger.log(f"Found AL extension in current directory: {al_extension_path}", logging.DEBUG)
+                log.debug(f"Found AL extension in current directory: {al_extension_path}")
             else:
                 # Try to find in common VS Code extension locations
-                al_extension_path = cls._find_al_extension_in_vscode(logger)
+                al_extension_path = cls._find_al_extension_in_vscode()
 
         if not al_extension_path:
             raise RuntimeError(
@@ -367,14 +389,14 @@ class ALLanguageServer(SolidLanguageServer):
             st = os.stat(executable)
             os.chmod(executable, st.st_mode | stat.S_IEXEC)
 
-        logger.log(f"Using AL Language Server executable: {executable}", logging.INFO)
+        log.info(f"Using AL Language Server executable: {executable}")
 
         # The AL Language Server uses stdio for LSP communication (no --stdio flag needed)
         # Use the utility function to handle Windows path quoting
         return quote_windows_path(executable)
 
     @classmethod
-    def _find_al_extension_in_vscode(cls, logger: LanguageServerLogger) -> str | None:
+    def _find_al_extension_in_vscode(cls) -> str | None:
         """
         Try to find AL extension in common VS Code extension locations.
 
@@ -406,11 +428,11 @@ class ALLanguageServer(SolidLanguageServer):
 
         for base_path in possible_paths:
             if base_path.exists():
-                logger.log(f"Searching for AL extension in: {base_path}", logging.DEBUG)
+                log.debug(f"Searching for AL extension in: {base_path}")
                 # Look for AL extension directories
                 for item in base_path.iterdir():
                     if item.is_dir() and item.name.startswith("ms-dynamics-smb.al-"):
-                        logger.log(f"Found AL extension at: {item}", logging.DEBUG)
+                        log.debug(f"Found AL extension at: {item}")
                         return str(item)
 
         return None
@@ -485,7 +507,7 @@ class ALLanguageServer(SolidLanguageServer):
         return initialize_params
 
     @override
-    def _start_server(self):
+    def _start_server(self) -> None:
         """
         Starts the AL Language Server process and initializes it.
 
@@ -495,21 +517,21 @@ class ALLanguageServer(SolidLanguageServer):
         """
 
         # Set up event handlers
-        def do_nothing(params):
+        def do_nothing(params: str) -> None:
             return
 
-        def window_log_message(msg):
-            self.logger.log(f"AL LSP: window/logMessage: {msg}", logging.INFO)
+        def window_log_message(msg: dict) -> None:
+            log.info(f"AL LSP: window/logMessage: {msg}")
 
-        def publish_diagnostics(params):
+        def publish_diagnostics(params: dict) -> None:
             # AL server publishes diagnostics during initialization
             uri = params.get("uri", "")
             diagnostics = params.get("diagnostics", [])
-            self.logger.log(f"AL LSP: Diagnostics for {uri}: {len(diagnostics)} issues", logging.DEBUG)
+            log.debug(f"AL LSP: Diagnostics for {uri}: {len(diagnostics)} issues")
 
-        def handle_al_notifications(params):
+        def handle_al_notifications(params: dict) -> None:
             # AL server sends custom notifications during project loading
-            self.logger.log("AL LSP: Notification received", logging.DEBUG)
+            log.debug("AL LSP: Notification received")
 
         # Register handlers for AL-specific notifications
         # These notifications are sent by the AL server during initialization and operation
@@ -519,27 +541,24 @@ class ALLanguageServer(SolidLanguageServer):
         self.server.on_notification("al/refreshExplorerObjects", handle_al_notifications)  # AL-specific object updates
 
         # Start the server process
-        self.logger.log("Starting AL Language Server process", logging.INFO)
+        log.info("Starting AL Language Server process")
         self.server.start()
 
         # Send initialize request
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
-        self.logger.log(
-            "Sending initialize request from LSP client to AL LSP server and awaiting response",
-            logging.INFO,
-        )
+        log.info("Sending initialize request from LSP client to AL LSP server and awaiting response")
 
         # Send initialize and wait for response
         resp = self.server.send_request("initialize", initialize_params)
         if resp is None:
             raise RuntimeError("AL Language Server initialization failed - no response")
 
-        self.logger.log("AL Language Server initialized successfully", logging.INFO)
+        log.info("AL Language Server initialized successfully")
 
         # Send initialized notification
         self.server.send_notification("initialized", {})
-        self.logger.log("Sent initialized notification", logging.INFO)
+        log.info("Sent initialized notification")
 
     @override
     def start(self) -> "ALLanguageServer":
@@ -597,9 +616,9 @@ class ALLanguageServer(SolidLanguageServer):
                     }
                 },
             )
-            self.logger.log("Sent workspace configuration", logging.DEBUG)
+            log.debug("Sent workspace configuration")
         except Exception as e:
-            self.logger.log(f"Failed to send workspace config: {e}", logging.WARNING)
+            log.warning(f"Failed to send workspace config: {e}")
 
         # Check if app.json exists and open it
         # app.json is the AL project manifest file (similar to package.json for Node.js)
@@ -619,9 +638,9 @@ class ALLanguageServer(SolidLanguageServer):
                     {"textDocument": {"uri": app_json_uri, "languageId": "json", "version": 1, "text": app_json_content}},
                 )
 
-                self.logger.log(f"Opened app.json: {app_json_uri}", logging.DEBUG)
+                log.debug(f"Opened app.json: {app_json_uri}")
             except Exception as e:
-                self.logger.log(f"Failed to open app.json: {e}", logging.WARNING)
+                log.warning(f"Failed to open app.json: {e}")
 
         # Try to set active workspace (AL-specific custom LSP request)
         # This is optional and may not be supported by all AL server versions
@@ -635,13 +654,13 @@ class ALLanguageServer(SolidLanguageServer):
                         "workspacePath": self.repository_root_path,
                         "setActiveWorkspace": True,
                     },
+                    "timeout": 2,  # Quick timeout since this is optional
                 },
-                timeout=2,  # Quick timeout since this is optional
             )
-            self.logger.log(f"Set active workspace result: {result}", logging.DEBUG)
+            log.debug(f"Set active workspace result: {result}")
         except Exception as e:
             # This is a custom AL request, not critical if it fails
-            self.logger.log(f"Failed to set active workspace (non-critical): {e}", logging.DEBUG)
+            log.debug(f"Failed to set active workspace (non-critical): {e}")
 
         # Check if project supports load status check (optional)
         # Many AL server versions don't support this, so we use a short timeout
@@ -680,7 +699,7 @@ class ALLanguageServer(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in al_ignore_dirs
 
     @override
-    def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> list[dict]:
+    def request_full_symbol_tree(self, within_relative_path: str | None = None) -> list[UnifiedSymbolInformation]:
         """
         Override to handle AL's requirement of opening files before requesting symbols.
 
@@ -703,7 +722,7 @@ class ALLanguageServer(SolidLanguageServer):
             Full symbol tree with all AL symbols from opened files organized by directory
 
         """
-        self.logger.log("AL: Starting request_full_symbol_tree with file opening", logging.DEBUG)
+        log.debug("AL: Starting request_full_symbol_tree with file opening")
 
         # Determine the root path for scanning
         if within_relative_path is not None:
@@ -713,7 +732,7 @@ class ALLanguageServer(SolidLanguageServer):
 
             if os.path.isfile(within_abs_path):
                 # Single file case - use parent class implementation
-                _, root_nodes = self.request_document_symbols(within_relative_path, include_body=include_body)
+                root_nodes = self.request_document_symbols(within_relative_path).root_symbols
                 return root_nodes
 
             # Directory case - scan within this directory
@@ -742,26 +761,27 @@ class ALLanguageServer(SolidLanguageServer):
                         # File is outside repository root, skip it
                         continue
 
-        self.logger.log(f"AL: Found {len(al_files)} AL files", logging.DEBUG)
+        log.debug(f"AL: Found {len(al_files)} AL files")
 
         if not al_files:
-            self.logger.log("AL: No AL files found in repository", logging.WARNING)
+            log.warning("AL: No AL files found in repository")
             return []
 
         # Collect all symbols from all files
-        all_file_symbols = []
+        all_file_symbols: list[UnifiedSymbolInformation] = []
 
+        file_symbol: UnifiedSymbolInformation
         for file_path, relative_path in al_files:
             try:
                 # Use our overridden request_document_symbols which handles opening
-                self.logger.log(f"AL: Getting symbols for {relative_path}", logging.DEBUG)
-                all_syms, root_syms = self.request_document_symbols(relative_path, include_body=include_body)
+                log.debug(f"AL: Getting symbols for {relative_path}")
+                all_syms, root_syms = self.request_document_symbols(relative_path).get_all_symbols_and_roots()
 
                 if root_syms:
                     # Create a file-level symbol containing the document symbols
                     file_symbol = {
                         "name": file_path.stem,  # Just the filename without extension
-                        "kind": 1,  # File
+                        "kind": SymbolKind.File,
                         "children": root_syms,
                         "location": {
                             "uri": file_path.as_uri(),
@@ -771,12 +791,12 @@ class ALLanguageServer(SolidLanguageServer):
                         },
                     }
                     all_file_symbols.append(file_symbol)
-                    self.logger.log(f"AL: Added {len(root_syms)} symbols from {relative_path}", logging.DEBUG)
+                    log.debug(f"AL: Added {len(root_syms)} symbols from {relative_path}")
                 elif all_syms:
                     # If we only got all_syms but not root, use all_syms
                     file_symbol = {
                         "name": file_path.stem,
-                        "kind": 1,  # File
+                        "kind": SymbolKind.File,
                         "children": all_syms,
                         "location": {
                             "uri": file_path.as_uri(),
@@ -786,19 +806,20 @@ class ALLanguageServer(SolidLanguageServer):
                         },
                     }
                     all_file_symbols.append(file_symbol)
-                    self.logger.log(f"AL: Added {len(all_syms)} symbols from {relative_path}", logging.DEBUG)
+                    log.debug(f"AL: Added {len(all_syms)} symbols from {relative_path}")
 
             except Exception as e:
-                self.logger.log(f"AL: Failed to get symbols for {relative_path}: {e}", logging.WARNING)
+                log.warning(f"AL: Failed to get symbols for {relative_path}: {e}")
 
         if all_file_symbols:
-            self.logger.log(f"AL: Returning symbols from {len(all_file_symbols)} files", logging.DEBUG)
+            log.debug(f"AL: Returning symbols from {len(all_file_symbols)} files")
 
             # Group files by directory
-            directory_structure = {}
+            directory_structure: dict[str, list] = {}
 
             for file_symbol in all_file_symbols:
                 rel_path = file_symbol["location"]["relativePath"]
+                assert rel_path is not None
                 path_parts = rel_path.split("/")
 
                 if len(path_parts) > 1:
@@ -824,7 +845,7 @@ class ALLanguageServer(SolidLanguageServer):
                     # Create directory symbol
                     dir_symbol = {
                         "name": Path(dir_path).name,
-                        "kind": 4,  # Package/Directory
+                        "kind": SymbolKind.Package,  # Package/Directory
                         "children": file_symbols,
                         "location": {
                             "relativePath": dir_path,
@@ -836,7 +857,7 @@ class ALLanguageServer(SolidLanguageServer):
 
             return result
         else:
-            self.logger.log("AL: No symbols found in any files", logging.WARNING)
+            log.warning("AL: No symbols found in any files")
             return []
 
     # ===== Phase 1: Custom AL Command Implementations =====
@@ -859,10 +880,10 @@ class ALLanguageServer(SolidLanguageServer):
         try:
             # Use custom AL command instead of standard LSP
             response = self.server.send_request("al/gotodefinition", al_params)
-            self.logger.log(f"AL gotodefinition response: {response}", logging.DEBUG)
-            return response
+            log.debug(f"AL gotodefinition response: {response}")
+            return response  # type: ignore[return-value]
         except Exception as e:
-            self.logger.log(f"Failed to use al/gotodefinition, falling back to standard: {e}", logging.WARNING)
+            log.warning(f"Failed to use al/gotodefinition, falling back to standard: {e}")
             # Fallback to standard LSP method if custom command fails
             return super()._send_definition_request(definition_params)
 
@@ -880,7 +901,7 @@ class ALLanguageServer(SolidLanguageServer):
 
         """
         if not hasattr(self, "server") or not self.server_started:
-            self.logger.log("Cannot check project load - server not started", logging.DEBUG)
+            log.debug("Cannot check project load - server not started")
             return False
 
         # Check if we've already determined this request isn't supported
@@ -889,7 +910,7 @@ class ALLanguageServer(SolidLanguageServer):
 
         try:
             # Use a very short timeout since this is just a status check
-            response = self.server.send_request("al/hasProjectClosureLoadedRequest", {}, timeout=1)
+            response = self.server.send_request("al/hasProjectClosureLoadedRequest", {"timeout": 1})
             # Response can be boolean directly, dict with 'loaded' field, or None
             if isinstance(response, bool):
                 return response
@@ -897,15 +918,15 @@ class ALLanguageServer(SolidLanguageServer):
                 return response.get("loaded", False)
             elif response is None:
                 # None typically means the project is still loading
-                self.logger.log("Project load check returned None", logging.DEBUG)
+                log.debug("Project load check returned None")
                 return False
             else:
-                self.logger.log(f"Unexpected response type for project load check: {type(response)}", logging.DEBUG)
+                log.debug(f"Unexpected response type for project load check: {type(response)}")
                 return False
         except Exception as e:
             # Mark as unsupported to avoid repeated failed attempts
             self._project_load_check_supported = False
-            self.logger.log(f"Project load check not supported by this AL server version: {e}", logging.DEBUG)
+            log.debug(f"Project load check not supported by this AL server version: {e}")
             # Assume loaded if we can't check
             return True
 
@@ -925,16 +946,16 @@ class ALLanguageServer(SolidLanguageServer):
 
         """
         start_time = time.time()
-        self.logger.log(f"Checking AL project load status (timeout: {timeout}s)...", logging.DEBUG)
+        log.debug(f"Checking AL project load status (timeout: {timeout}s)...")
 
         while time.time() - start_time < timeout:
             if self.check_project_loaded():
                 elapsed = time.time() - start_time
-                self.logger.log(f"AL project fully loaded after {elapsed:.1f}s", logging.INFO)
+                log.info(f"AL project fully loaded after {elapsed:.1f}s")
                 return True
             time.sleep(0.5)
 
-        self.logger.log(f"Project load check timed out after {timeout}s (non-critical)", logging.DEBUG)
+        log.debug(f"Project load check timed out after {timeout}s (non-critical)")
         return False
 
     def set_active_workspace(self, workspace_uri: str | None = None) -> None:
@@ -953,7 +974,7 @@ class ALLanguageServer(SolidLanguageServer):
 
         """
         if not hasattr(self, "server") or not self.server_started:
-            self.logger.log("Cannot set active workspace - server not started", logging.DEBUG)
+            log.debug("Cannot set active workspace - server not started")
             return
 
         if workspace_uri is None:
@@ -963,7 +984,88 @@ class ALLanguageServer(SolidLanguageServer):
 
         try:
             self.server.send_request("al/setActiveWorkspace", params)
-            self.logger.log(f"Set active workspace to: {workspace_uri}", logging.INFO)
+            log.info(f"Set active workspace to: {workspace_uri}")
         except Exception as e:
-            self.logger.log(f"Failed to set active workspace: {e}", logging.WARNING)
+            log.warning(f"Failed to set active workspace: {e}")
             # Non-critical error, continue operation
+
+    @override
+    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
+        """
+        Override to normalize AL symbol names by stripping object type and ID metadata.
+
+        AL Language Server returns symbol names with full object format like
+        'Table 50000 "TEST Customer"', but symbol names should be pure without metadata.
+        This follows the same pattern as Java LS which strips type information from names.
+
+        Metadata (object type, ID) is available via the hover LSP method when using
+        include_info=True in find_symbol.
+        """
+        # Normalize path separators for cross-platform compatibility (backslash → forward slash)
+        relative_file_path = self._normalize_path(relative_file_path)
+
+        # Get symbols from parent implementation
+        document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
+
+        return document_symbols
+
+    def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
+        original_name = symbol["name"]
+        normalized_name = self._extract_al_display_name(original_name)
+
+        if symbol.get("kind") in (SymbolKind.Function, SymbolKind.Method) and "(" in normalized_name:
+            normalized_name = normalized_name.split("(", 1)[0].strip()
+
+        if symbol.get("kind") == SymbolKind.Method and normalized_name.lower().startswith("action "):
+            normalized_name = normalized_name.split(None, 1)[-1].strip()
+
+        if symbol.get("kind") == SymbolKind.Field and ":" in normalized_name:
+            normalized_name = normalized_name.split(":", 1)[0].strip()
+
+        # Store original name if it was normalized for an AL object declaration
+        # Only store if we have valid position data to avoid false matches at (0, 0)
+        if original_name != normalized_name and self._AL_OBJECT_NAME_PATTERN.match(original_name):
+            sel_range = symbol.get("selectionRange")
+            if sel_range:
+                start = sel_range.get("start")  # type: ignore
+                if start and "line" in start and "character" in start:
+                    line = start["line"]
+                    char = start["character"]
+                    self._al_original_names[(relative_file_path, line, char)] = original_name
+
+        return normalized_name
+
+    @override
+    def _document_symbols_cache_fingerprint(self) -> int:
+        normalize_symbol_name_version = 1
+        return normalize_symbol_name_version
+
+    @override
+    def request_hover(
+        self, relative_file_path: str, line: int, column: int, file_buffer: LSPFileBuffer | None = None
+    ) -> ls_types.Hover | None:
+        """
+        Override to inject original AL object name (with type and ID) into hover responses.
+
+        When hovering over a symbol whose name was normalized, we prepend the original
+        full name (e.g., 'Table 50000 "TEST Customer"') to the hover content.
+        """
+        # Normalize path separators for cross-platform compatibility (backslash → forward slash)
+        relative_file_path = self._normalize_path(relative_file_path)
+
+        hover = super().request_hover(relative_file_path, line, column, file_buffer=file_buffer)
+
+        if hover is None:
+            return None
+
+        # Check if we have an original name for this position
+        original_name = self._al_original_names.get((relative_file_path, line, column))
+
+        if original_name and "contents" in hover:
+            contents = hover["contents"]
+            if isinstance(contents, dict) and "value" in contents:
+                # Prepend the original full name to the hover content
+                prefix = f"**{original_name}**\n\n---\n\n"
+                contents["value"] = prefix + contents["value"]
+
+        return hover

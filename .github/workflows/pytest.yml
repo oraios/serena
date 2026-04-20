@@ -1,10 +1,13 @@
-name: Tests on CI
+name: Tests
 
 on:
   pull_request:
   push:
     branches:
       - main
+
+permissions:
+    contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -20,7 +23,19 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.11"]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - name: Free disk space
+        if: runner.os == 'Linux'
+        run: |
+          df -h
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache
+          sudo apt-get clean
+          sudo apt-get autoremove -y
+          docker system prune -af || true
+          df -h
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
@@ -28,12 +43,40 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ">=1.17.0"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
       - name: Ensure cached directory exist before calling cache-related actions
         shell: bash
         run: |
           mkdir -p $HOME/.serena/language_servers/static
           mkdir -p $HOME/.cache/go-build
           mkdir -p $HOME/go/bin
+      - name: Install uv
+        shell: bash
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Cache uv virtualenv
+        id: cache-uv
+        uses: actions/cache@v3
+        with:
+          path: .venv
+          key: uv-venv-${{ runner.os }}-${{ matrix.python-version }}-lock-${{ hashFiles('uv.lock') }}
+      - name: Create virtual environment
+        shell: bash
+        run: |
+          if [ ! -d ".venv" ]; then
+            uv venv
+          fi
+      - name: Install Python environment
+        shell: bash
+        run: uv sync --extra dev --locked
+      - name: List Python dependencies
+        shell: bash
+        run: uv pip list
+      - name: Check formatting
+        shell: bash
+        run: uv run poe lint
       # Add Go bin directory to PATH for this workflow
       # GITHUB_PATH is a special file that GitHub Actions uses to modify PATH
       # Writing to this file adds the directory to the PATH for subsequent steps
@@ -53,8 +96,8 @@ jobs:
         if: runner.os != 'Windows'
         uses: erlef/setup-beam@v1
         with:
-          elixir-version: "1.18.4"
-          otp-version: "26.1"
+          elixir-version: "1.19.3"
+          otp-version: "28"
 #      Erlang currently not tested in CI, random hangings on macos, always hangs on ubuntu
 #      In local tests, erlang seems to work though
 #      - name: Install Erlang Language Server
@@ -73,11 +116,36 @@ jobs:
         uses: DeLaGuardo/setup-clojure@13.4
         with:
           cli: latest
+      - name: Install ccls (C/C++ Language Server)
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y ccls
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            brew install ccls
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            choco install ccls -y
+          fi
+          # Verify installation
+          if command -v ccls &> /dev/null; then
+            echo "ccls installed: $(ccls --version 2>&1 | head -1)"
+          else
+            echo "ERROR: ccls installation failed"
+            exit 1
+          fi
       - name: Setup Java (for JVM based languages)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
+      - name: Setup .NET SDK (for F# and C# languages)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: List .NET runtimes
+        shell: bash
+        run: dotnet --list-runtimes
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -102,6 +170,10 @@ jobs:
           swiftly use 6.1.2
           echo "~/.swiftly/bin" >> $GITHUB_PATH
           echo "Swiftly installed successfully"
+          # Verify sourcekit-lsp is working before proceeding
+          echo "=== Verifying sourcekit-lsp installation ==="
+          which sourcekit-lsp || echo "Warning: sourcekit-lsp not found in PATH"
+          sourcekit-lsp --help || echo "Warning: sourcekit-lsp not responding"
       - name: Install Swift with swiftly (Ubuntu)
         if: runner.os == 'Linux'
         run: |
@@ -119,6 +191,10 @@ jobs:
           echo "=== Adding Swift toolchain to PATH ==="
           echo "$HOME/.local/share/swiftly/bin" >> $GITHUB_PATH
           echo "Swiftly installed successfully!"
+          # Verify sourcekit-lsp is working before proceeding
+          echo "=== Verifying sourcekit-lsp installation ==="
+          which sourcekit-lsp || echo "Warning: sourcekit-lsp not found in PATH"
+          sourcekit-lsp --help || echo "Warning: sourcekit-lsp not responding"
       - name: Install Ruby
         uses: ruby/setup-ruby@v1
         with:
@@ -126,6 +202,23 @@ jobs:
       - name: Install Ruby language server
         shell: bash
         run: gem install ruby-lsp
+      - name: Install OCaml and opam
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ runner.os == 'Windows' && '4.14' || '5.3.x' }}
+          dune-cache: true
+          opam-repositories: |
+            ${{ runner.os == 'Windows' && 'opam-repository-mingw: https://github.com/ocaml-opam/opam-repository-mingw.git#sunset' || '' }}
+            default: https://github.com/ocaml/opam-repository.git
+      - name: Install OCaml packages
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            opam install -y dune ocaml-lsp-server
+          else
+            # Require ocaml-lsp-server >= 1.23.0 for cross-file reference support
+            opam install -y dune 'ocaml-lsp-server>=1.23.0'
+          fi
       - name: Install R
         uses: r-lib/actions/setup-r@v2
         with:
@@ -135,6 +228,47 @@ jobs:
         shell: bash
         run: |
           Rscript -e "install.packages('languageserver', repos='https://cloud.r-project.org')"
+      - name: Set up Julia
+        uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.10'
+      - name: Install Julia LanguageServer
+        shell: bash
+        run: julia -e 'using Pkg; Pkg.add("LanguageServer")'
+      - name: Setup Haskell toolchain
+        if: runner.os != 'Windows'
+        uses: haskell/ghcup-setup@v1
+        with:
+          ghc: '9.12.2'
+          cabal: '3.10.3.0'
+          hls: '2.11.0.0'
+      - name: Verify Haskell tools
+        if: runner.os != 'Windows'
+        run: |
+          echo "Verifying installed Haskell tools:"
+          which ghc && ghc --version
+          which cabal && cabal --version
+          # HLS verification - non-blocking in case of version incompatibility
+          if command -v haskell-language-server-wrapper &>/dev/null; then
+            echo "Found haskell-language-server-wrapper"
+            haskell-language-server-wrapper --version || echo "WARNING: HLS wrapper found but version check failed"
+          elif command -v haskell-language-server &>/dev/null; then
+            echo "Found haskell-language-server"
+            haskell-language-server --version || echo "WARNING: HLS found but version check failed"
+          else
+            echo "WARNING: HLS not found (may be incompatible with GHC 9.12.2)"
+            echo "This is not a critical error - tests will use HLS if available at runtime"
+          fi
+        shell: bash
+      - name: Pre-build Haskell test project for HLS
+        if: runner.os != 'Windows'
+        run: |
+          cd test/resources/repos/haskell/test_repo
+          cabal update
+          cabal build --only-dependencies
+          cabal build
+          echo "Haskell test project built successfully"
+        shell: bash
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
@@ -159,6 +293,36 @@ jobs:
             mv zls.exe "$HOME/bin/"
             echo "$HOME/bin" >> $GITHUB_PATH
             rm zls.zip
+          fi
+      - name: Install verible-verilog-ls (SystemVerilog Language Server)
+        shell: bash
+        run: |
+          VERIBLE_VERSION="v0.0-4051-g9fdb4057"
+
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            wget https://github.com/chipsalliance/verible/releases/download/${VERIBLE_VERSION}/verible-${VERIBLE_VERSION}-linux-static-x86_64.tar.gz
+            tar -xzf verible-${VERIBLE_VERSION}-linux-static-x86_64.tar.gz
+            sudo mv verible-${VERIBLE_VERSION}/bin/verible-verilog-ls /usr/local/bin/
+            rm -rf verible-${VERIBLE_VERSION} verible-${VERIBLE_VERSION}-linux-static-x86_64.tar.gz
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            wget https://github.com/chipsalliance/verible/releases/download/${VERIBLE_VERSION}/verible-${VERIBLE_VERSION}-macOS.tar.gz
+            tar -xzf verible-${VERIBLE_VERSION}-macOS.tar.gz
+            sudo mv verible-${VERIBLE_VERSION}-macOS/bin/verible-verilog-ls /usr/local/bin/
+            rm -rf verible-${VERIBLE_VERSION}-macOS verible-${VERIBLE_VERSION}-macOS.tar.gz
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            curl -L -o verible.zip https://github.com/chipsalliance/verible/releases/download/${VERIBLE_VERSION}/verible-${VERIBLE_VERSION}-win64.zip
+            unzip -o verible.zip
+            mkdir -p "$HOME/bin"
+            mv verible-${VERIBLE_VERSION}-win64/verible-verilog-ls.exe "$HOME/bin/"
+            echo "$HOME/bin" >> $GITHUB_PATH
+            rm -rf verible-${VERIBLE_VERSION}-win64 verible.zip
+          fi
+
+          # Verify installation
+          if command -v verible-verilog-ls &> /dev/null; then
+            echo "verible-verilog-ls installed successfully"
+          else
+            echo "WARNING: verible-verilog-ls not found in PATH"
           fi
       - name: Install Lua Language Server
         shell: bash
@@ -205,6 +369,35 @@ jobs:
             echo "$LUA_LS_DIR/bin" >> $GITHUB_PATH
             rm lua-ls.zip
           fi
+      - name: Install Perl::LanguageServer
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y cpanminus build-essential libanyevent-perl libio-aio-perl
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            brew install cpanminus
+          fi
+          PERL_MM_USE_DEFAULT=1 cpanm --notest --force Perl::LanguageServer
+          # Set up Perl local::lib environment for subsequent steps
+          echo "PERL5LIB=$HOME/perl5/lib/perl5${PERL5LIB:+:${PERL5LIB}}" >> $GITHUB_ENV
+          echo "PERL_LOCAL_LIB_ROOT=$HOME/perl5${PERL_LOCAL_LIB_ROOT:+:${PERL_LOCAL_LIB_ROOT}}" >> $GITHUB_ENV
+          echo "PERL_MB_OPT=--install_base \"$HOME/perl5\"" >> $GITHUB_ENV
+          echo "PERL_MM_OPT=INSTALL_BASE=$HOME/perl5" >> $GITHUB_ENV
+          echo "$HOME/perl5/bin" >> $GITHUB_PATH
+      - name: Install ansible-core and ansible-lint (for Ansible language server tests)
+        shell: bash
+        run: uv run pip install ansible-core ansible-lint
+      - name: Install Haxe
+        # The Haxe LS binary (server.js) is auto-downloaded and runs on Node.js,
+        # but it delegates to the Haxe compiler for code analysis at runtime.
+        uses: krdlab/setup-haxe@v2
+        with:
+          haxe-version: 4.3.7
+      - name: Install Elm
+        shell: bash
+        run: npm install -g elm@0.19.1-6
       - name: Install Nix
         if: runner.os != 'Windows'  # Nix doesn't support Windows natively
         uses: cachix/install-nix-action@v30
@@ -216,23 +409,157 @@ jobs:
         run: |
           # Install nixd using nix
           nix profile install github:nix-community/nixd
-          
+
           # Verify nixd is installed and working
           if ! command -v nixd &> /dev/null; then
             echo "nixd installation failed or not in PATH"
             exit 1
           fi
-          
+
           echo "$HOME/.nix-profile/bin" >> $GITHUB_PATH
-      - name: Install uv
+      - name: Verify Nix package build
+        if: runner.os != 'Windows'  # Nix only supported on Linux/macOS
         shell: bash
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      - name: Cache uv virtualenv
-        id: cache-uv
-        uses: actions/cache@v3
+        run: |
+          # Verify the flake builds successfully
+          nix build --no-link
+      - name: Install Regal (Rego Language Server)
+        shell: bash
+        run: |
+          REGAL_VERSION="0.39.0"
+
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            if [[ "$(uname -m)" == "x86_64" ]]; then
+              curl -L -o regal https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Linux_x86_64
+            else
+              curl -L -o regal https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Linux_arm64
+            fi
+            chmod +x regal
+            sudo mv regal /usr/local/bin/
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            if [[ "$(uname -m)" == "x86_64" ]]; then
+              curl -L -o regal https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Darwin_x86_64
+            else
+              curl -L -o regal https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Darwin_arm64
+            fi
+            chmod +x regal
+            sudo mv regal /usr/local/bin/
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            curl -L -o regal.exe https://github.com/StyraInc/regal/releases/download/v${REGAL_VERSION}/regal_Windows_x86_64.exe
+            mkdir -p "$HOME/bin"
+            mv regal.exe "$HOME/bin/"
+            echo "$HOME/bin" >> $GITHUB_PATH
+          fi
+      - name: Install Free Pascal Compiler
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y fpc fpc-source
+            # Set environment variables for pasls
+            echo "PP=/usr/bin/fpc" >> $GITHUB_ENV
+            # Find FPC source directory (version may vary) - remove trailing slash
+            FPCDIR=$(ls -d /usr/share/fpcsrc/*/ 2>/dev/null | head -1 | sed 's:/$::')
+            if [[ -z "$FPCDIR" ]]; then
+              FPCDIR="/usr/share/fpcsrc"
+            fi
+            echo "FPCDIR=$FPCDIR" >> $GITHUB_ENV
+            echo "=== FPC source directory structure ==="
+            ls -la "$FPCDIR" || echo "FPCDIR not found"
+            ls -la "$FPCDIR/rtl" 2>/dev/null || echo "rtl subdirectory not found"
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            brew install fpc
+            # Download FPC source from SourceForge (fpc-src-laz cask is incompatible with ARM64)
+            FPC_VERSION="3.2.2"
+            curl -L -o fpc-source.tar.gz "https://sourceforge.net/projects/freepascal/files/Source/${FPC_VERSION}/fpc-${FPC_VERSION}.source.tar.gz/download"
+            mkdir -p "$HOME/fpcsrc"
+            tar -xzf fpc-source.tar.gz -C "$HOME/fpcsrc"
+            rm fpc-source.tar.gz
+            # Check extracted directory structure (might be nested)
+            echo "=== Extracted FPC source structure ==="
+            ls -la "$HOME/fpcsrc"
+            # Find the actual FPC source root (contains rtl, packages, etc.)
+            if [[ -d "$HOME/fpcsrc/fpc-${FPC_VERSION}/rtl" ]]; then
+              FPCDIR="$HOME/fpcsrc/fpc-${FPC_VERSION}"
+            elif [[ -d "$HOME/fpcsrc/fpc-${FPC_VERSION}/fpc-${FPC_VERSION}/rtl" ]]; then
+              FPCDIR="$HOME/fpcsrc/fpc-${FPC_VERSION}/fpc-${FPC_VERSION}"
+            else
+              FPCDIR="$HOME/fpcsrc/fpc-${FPC_VERSION}"
+            fi
+            echo "PP=$(which fpc)" >> $GITHUB_ENV
+            echo "FPCDIR=$FPCDIR" >> $GITHUB_ENV
+            echo "=== FPC source directory ==="
+            ls -la "$FPCDIR" || echo "FPCDIR not found"
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            FPC_VERSION="3.2.2"
+            # Download freepascal-ootb (includes FPC compiler)
+            curl -L -o fpc-ootb.zip https://github.com/fredvs/freepascal-ootb/releases/download/${FPC_VERSION}/fpc-ootb-322-x86_64-win64.zip
+            mkdir -p "$HOME/fpc"
+            unzip -q fpc-ootb.zip -d "$HOME/fpc"
+            rm fpc-ootb.zip
+            # Download FPC source from SourceForge (fpc-ootb only has compiled units, not source)
+            curl -L -o fpc-source.zip "https://sourceforge.net/projects/freepascal/files/Source/${FPC_VERSION}/fpc-${FPC_VERSION}.source.zip/download"
+            mkdir -p "$HOME/fpcsrc"
+            unzip -q fpc-source.zip -d "$HOME/fpcsrc"
+            rm fpc-source.zip
+            # Find fpc executable (fpc-ootb uses fpc-ootb.exe as the compiler)
+            echo "=== FPC directory structure ==="
+            find "$HOME/fpc" -name "*.exe" -type f 2>/dev/null | head -10
+            FPC_EXE=$(find "$HOME/fpc" -name "fpc-ootb-64.exe" -type f 2>/dev/null | head -1)
+            echo "Found FPC executable: $FPC_EXE"
+            echo "Found FPC source dir: $HOME/fpcsrc/fpc-${FPC_VERSION}"
+            # Set environment variables for pasls
+            echo "PP=$FPC_EXE" >> $GITHUB_ENV
+            echo "FPCDIR=$HOME/fpcsrc/fpc-${FPC_VERSION}" >> $GITHUB_ENV
+            # Add FPC bin directory to PATH
+            FPC_BIN_DIR=$(dirname "$FPC_EXE")
+            echo "$FPC_BIN_DIR" >> $GITHUB_PATH
+          fi
+      - name: Verify FPC installation
+        shell: bash
+        run: |
+          echo "=== Environment variables ==="
+          echo "PP=$PP"
+          echo "FPCDIR=$FPCDIR"
+
+          # Create a simple test program
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            TEST_PAS="$TEMP/fpc_test.pas"
+            TEST_OUT="$TEMP/fpc_test"
+          else
+            TEST_PAS="/tmp/fpc_test.pas"
+            TEST_OUT="/tmp/fpc_test"
+          fi
+          echo "program fpc_test; begin writeln('FPC works'); end." > "$TEST_PAS"
+
+          # Compile using PP (the compiler we actually use in tests)
+          echo "=== Compiling test program with PP=$PP ==="
+          if [[ -n "$PP" ]]; then
+            "$PP" "$TEST_PAS" -o"$TEST_OUT" 2>&1
+          else
+            echo "ERROR: PP environment variable is not set"
+            exit 1
+          fi
+
+          # Verify output binary exists
+          if [[ -f "$TEST_OUT" ]] || [[ -f "${TEST_OUT}.exe" ]]; then
+            echo "FPC compilation test PASSED"
+          else
+            echo "ERROR: FPC compilation failed - no output binary at $TEST_OUT"
+            exit 1
+          fi
+
+          # Verify FPCDIR exists (required for pasls)
+          if [[ -d "$FPCDIR" ]]; then
+            echo "FPCDIR exists: $FPCDIR"
+          else
+            echo "ERROR: FPCDIR does not exist: $FPCDIR"
+            exit 1
+          fi
+      - name: Build Lean 4 test project
+        uses: leanprover/lean-action@v1
         with:
-          path: .venv
-          key: uv-venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}
+          lake-package-directory: test/resources/repos/lean4/test_repo
       - name: Cache language servers
         id: cache-language-servers
         uses: actions/cache@v3
@@ -241,18 +568,14 @@ jobs:
           key: language-servers-${{ runner.os }}-v1
           restore-keys: |
             language-servers-${{ runner.os }}-
-      - name: Create virtual environment
-        shell: bash
+      - name: Report free disk space
+        if: runner.os == 'Linux'
         run: |
-          if [ ! -d ".venv" ]; then
-            uv venv
-          fi
-      - name: Install dependencies
-        shell: bash
-        run: uv pip install -e ".[dev]"
-      - name: Check formatting
-        shell: bash
-        run: uv run poe lint
+          echo "Free disk space before tests:"
+          df -h
       - name: Test with pytest
         shell: bash
-        run: uv run poe test
+        run: uv run poe test -q --tb=short
+      - name: Type-checking with mypy
+        shell: bash
+        run: uv run poe type-check

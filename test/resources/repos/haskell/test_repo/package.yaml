@@ -1,0 +1,25 @@
+name: haskell-test-repo
+version: 0.1.0.0
+github: "test/haskell-test-repo"
+license: BSD3
+author: "Test Author"
+maintainer: "test@example.com"
+
+dependencies:
+  - base >= 4.7 && < 5
+
+library:
+  source-dirs: src
+  exposed-modules:
+    - Calculator
+    - Helper
+
+executables:
+  haskell-test-repo-exe:
+    main: Main.hs
+    source-dirs: app
+    dependencies:
+      - haskell-test-repo
+
+default-extensions:
+  - OverloadedStrings
