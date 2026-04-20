@@ -207,6 +207,15 @@ def autogen_about_intro_features():
         # remove callouts
         about_text = re.subn(r"^> \[!\w+\]\s+(^>.*?$)+", "", about_text, flags=re.MULTILINE)[0]
 
+        # replace "Quick Demo" with "Video Introduction", removing the short video
+        about_text = about_text.replace("# Quick Demo", "# Video Introduction")
+        about_text = re.subn(r"^https://github.com/user-attachments/.*?$", "", about_text, flags=re.MULTILINE)[0]
+        about_text = about_text.replace(":tv: Longer video:", "Watch our video:")
+
+        # remove emojis (e.g. :tv:)
+        about_text = re.subn(r":\w+:\s+", "", about_text)[0]
+
+
         f.write(f"{about_text}\n\n")
 
     jetbrains_marketplace_link = ('```{raw} html\n'
