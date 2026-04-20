@@ -7,8 +7,15 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Check for ignored path ignored `.git` folder only at the top level, not in every subdirectory (`Project._is_ignored_relative_path`) #1350
   - `GetSymbolsOverviewTool`: ignored paths were not respected in LSP variant (fix in `SolidLanguageServer`)
   - Fix: Duplicate comments in re-saved YAML configuration files #1285
+  - Prompt provision improvements (project activation, initial instructions):
+     - Prompt provision is now session-aware, i.e. when using the MCP server in HTTP mode, prompts are provided for each session separately, 
+       ensuring that the necessary information is always provided to the LLM
+     - Fix: Prompts of dynamically activated modes (upon project activation) were not necessarily passed to the LLM (only in the system prompt via
+       `initial_instructions`). Now they are passed directly in the activation message (and excluded from a subsequent `initial_instructions` call).
+     - Fix: Project activation message was provided more than once for case of dynamic project activation followed
+       by `initial_instructions` #1372
   - Security: Forbid `".."` in memory names to disallow accessing files outside dedicated memory directories
-  - Security: Restrict querying of external projects to read-only tools
+  - Security: Add check for tool being read-only in the project server (previously only checked in `query_project` tool, i.e. client side) 
 
 * JetBrains:
   - `Move` and `SafeDelete` tools: transform empty string to None (counteracts client errors)

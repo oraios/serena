@@ -1,3 +1,5 @@
+from sensai.util.helper import mark_used
+
 from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional
 
 
@@ -22,17 +24,17 @@ class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     Activates a project based on the project name or path.
     """
 
-    def apply(self, project: str) -> str:
+    # noinspection PyIncorrectDocstring
+    # (session_id is injected via apply_ex)
+    def apply(self, project: str, session_id: str) -> str:
         """
         Activates the project with the given name or path.
 
         :param project: the name of a registered project to activate or a path to a project directory
         """
         is_new_activation = self.agent.activate_project_from_path_or_name(project)
-        if not is_new_activation:
-            result = "Project was already active."
-        else:
-            result = self.agent.get_project_activation_message()
+        mark_used(is_new_activation)
+        result = self.agent.get_project_activation_message(session_id)
         result += "\nIMPORTANT: If you have not yet read the 'Serena Instructions Manual', do it now before continuing!"
         return result
 

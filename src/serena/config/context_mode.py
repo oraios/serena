@@ -136,6 +136,12 @@ class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
 
         return cls.from_name(str(name_or_path))
 
+    def has_prompt(self) -> bool:
+        """
+        :return: whether this mode defines a prompt
+        """
+        return bool(self.prompt and self.prompt.strip())
+
 
 @dataclass(kw_only=True)
 class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
