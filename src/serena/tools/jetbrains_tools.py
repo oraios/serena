@@ -565,3 +565,82 @@ class JetBrainsRenameTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
             rename_in_text_occurrences=rename_in_text_occurrences,
         )
         return self._to_json(result)
+
+
+class JetBrainsDebugTool(Tool, ToolMarkerBeta):
+    """
+    Evaluates Groovy/Java expressions in a persistent debug REPL connected to the JetBrains IDE.
+    Provides full debugger control: run configs, breakpoints, stepping, inspection, and evaluation.
+    """
+
+    def apply(
+        self,
+        expression: str,
+        session_key: str = "default",
+    ) -> str:
+        """
+        Evaluate a Groovy/Java expression in the persistent debug REPL. State (variables, objects)
+        persists across calls within the same session_key.
+
+        Pre-bound variables: ``debug`` (DebuggerFacade), ``project`` (IntelliJ Project).
+
+        **Run configurations**::
+
+            debug.listRunConfigs()
+            debug.startDebug("MyTestRun")  # returns a DebugSession
+            debug.runConfig("MyApp")  # non-debug run, fire-and-forget
+
+        **Session discovery**::
+
+            debug.sessions()
+            debug.currentSession()
+            debug.session(id)
+
+        **Breakpoints** (project-global, set before or during debugging)::
+
+            debug.addBreakpoint(file, line)
+            debug.addBreakpoint(file, line, condition)
+            debug.addLogpoint(file, line, logExpression)
+            debug.listBreakpoints()
+            debug.removeBreakpointAt(file, line)
+
+        **Execution control** (on a DebugSession, e.g. ``session``)::
+
+            session.stepOver() / .stepInto() / .stepOut()
+            session.resume() / .pause() / .stop()
+            session.runToLine(file, line)
+
+        **Wait for pause** (blocks until the session pauses or times out)::
+
+            session.waitForPause(timeoutSeconds)
+            session.stepOverAndWait(timeoutSeconds)  # step + wait in one call
+            session.resumeAndWait(timeoutSeconds)
+
+        **Inspection**::
+
+            session.status()                # location + source + variables + stack in one call
+            session.variables()             # all locals/args
+            session.variable(name)          # single variable
+            session.frames() / .frame()     # stack trace / current frame
+            session.sourceContext(lines)    # source around current line
+            session.threads()
+
+        **Evaluation & modification**::
+
+            session.eval("expr")  # evaluate in current frame
+            session.setVar("x", "42")  # set variable via assignment
+
+        **Example**::
+
+            session = debug.startDebug("MyTest")
+            debug.addBreakpoint("src/main/java/Foo.java", 42)
+            session.waitForPause(30)
+            session.status()
+
+        :param expression: a Groovy/Java expression to evaluate in the REPL
+        :param session_key: identifies the REPL instance. State persists across calls with the same key.
+        :return: the string representation of the expression's result
+        """
+        with JetBrainsPluginClient.from_project(self.project) as client:
+            response = client.debug_eval(session_key=session_key, expression=expression)
+            return response.get("result", str(response))
