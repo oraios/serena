@@ -800,9 +800,13 @@ class SerenaAgent:
         proj = self._active_project
         assert proj is not None, "A project must be active before calling this."
 
-        # if activation message was already provided in the current session, don't provide it again
+        # Note: The activation message is always returned in full, even if it was already provided in the current session,
+        #   because some clients (e.g. Claude Desktop) will use the same session across multiple chats.
+        #   So while we don't want the activation message to be additionally included in the system prompt
+        #   (initial_instructions), an explicit project activation should always return it.
+        # (The check below deliberately left in place for documentation purposes, preventing a regression)
         if self._project_prompt_status.is_project_activation_message_already_provided(session_id):
-            return "Project was already activated."
+            pass  # no special handling
 
         # provide basic project information (name, location, languages, encoding)
         if proj.is_newly_created:

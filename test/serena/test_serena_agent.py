@@ -728,14 +728,16 @@ class TestPromptProvision:
         but not on subsequent calls within the same session. #1372
         """
         project_name = "test_repo_python"
+        session1 = "session1"
+        session2 = "session2"
 
-        result1 = self._call_tool(serena_agent, InitialInstructionsTool, session_id="session1")
+        result1 = self._call_tool(serena_agent, InitialInstructionsTool, session_id=session1)
         self._assert_activation_message(result1, project_name, present=True)
 
-        result2 = self._call_tool(serena_agent, InitialInstructionsTool, session_id="session2")
+        result2 = self._call_tool(serena_agent, InitialInstructionsTool, session_id=session2)
         self._assert_activation_message(result2, project_name, present=True)
 
-        result3 = self._call_tool(serena_agent, InitialInstructionsTool, session_id="session1")
+        result3 = self._call_tool(serena_agent, InitialInstructionsTool, session_id=session1)
         self._assert_activation_message(result3, project_name, present=False)
 
     @pytest.mark.parametrize("serena_agent", [Language.PYTHON], indirect=True)
@@ -747,16 +749,18 @@ class TestPromptProvision:
         """
         project_name1 = "test_repo_python"
         project_name2 = "test_repo_java"
+        session1 = "session1"
+        session2 = "session2"
 
         # the initial instructions must contain the project activation message for the first project
-        result1 = self._call_tool(serena_agent, InitialInstructionsTool, session_id="session1")
+        result1 = self._call_tool(serena_agent, InitialInstructionsTool, session_id=session1)
         self._assert_activation_message(result1, project_name1, present=True)
 
         # now activate another project which dynamically enables a new mode (no-onboarding)
         reg_project = serena_agent.serena_config.get_registered_project(project_name2)
         reg_project.project_config.default_modes = ["no-onboarding"]
         expected_new_mode_message = "The onboarding process is not applied."
-        result2 = self._call_tool(serena_agent, ActivateProjectTool, project=project_name2, session_id="session1")
+        result2 = self._call_tool(serena_agent, ActivateProjectTool, project=project_name2, session_id=session1)
 
         # the new mode's prompt must be included in the activation message
         self._assert_activation_message(result2, project_name2, present=True)
@@ -765,16 +769,27 @@ class TestPromptProvision:
         )
 
         # the mode prompt must not be included in subsequent calls to the initial instructions tool within the same session
-        result3 = self._call_tool(serena_agent, InitialInstructionsTool, session_id="session1")
+        result3 = self._call_tool(serena_agent, InitialInstructionsTool, session_id=session1)
         assert expected_new_mode_message not in result3, (
             f"Expected new mode message '{expected_new_mode_message}' to not be included in subsequent calls, but it was found in result:\n{result3}"
         )
 
         # the mode prompt must be included in the initial instructions of a new session
-        result4 = self._call_tool(serena_agent, InitialInstructionsTool, session_id="session2")
+        result4 = self._call_tool(serena_agent, InitialInstructionsTool, session_id=session2)
         assert expected_new_mode_message in result4, (
             f"Expected new mode message '{expected_new_mode_message}' to be included in new session, but it was not found in result:\n{result4}"
         )
 
         # the initial instructions for the new session must also include the activation message for the project
         self._assert_activation_message(result4, project_name2, present=True)
+
+    @pytest.mark.parametrize("serena_agent", [Language.PYTHON], indirect=True)
+    def test_activate_project_tool_always_returns_activation_message(self, serena_agent: SerenaAgent) -> None:
+        project_name = "test_repo_python"
+        session = "session1"
+
+        result1 = self._call_tool(serena_agent, ActivateProjectTool, project=project_name, session_id=session)
+        self._assert_activation_message(result1, project_name, present=True)
+
+        result2 = self._call_tool(serena_agent, ActivateProjectTool, project=project_name, session_id=session)
+        self._assert_activation_message(result2, project_name, present=True)

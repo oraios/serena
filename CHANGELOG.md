@@ -14,6 +14,8 @@ Status of the `main` branch. Changes prior to the next official version change w
        `initial_instructions`). Now they are passed directly in the activation message (and excluded from a subsequent `initial_instructions` call).
      - Fix: Project activation message was provided more than once for case of dynamic project activation followed
        by `initial_instructions` #1372
+     - Always provide full activation message upon calling `activate_project` (even if project was already active in the same session) #1384
+       This is necessary, because some clients (e.g. Claude Desktop) will reuse a single session across chats.
   - Security: Forbid `".."` in memory names to disallow accessing files outside dedicated memory directories
   - Security: Add check for tool being read-only in the project server (previously only checked in `query_project` tool, i.e. client side)
   - Usage reporting now also includes the name of the Serena context that is used 
