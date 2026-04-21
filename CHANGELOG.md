@@ -18,6 +18,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Security: Add check for tool being read-only in the project server (previously only checked in `query_project` tool, i.e. client side)
   - Usage reporting now also includes the name of the Serena context that is used 
   - Fix: restricted `insert_after_symbol` to raise if used on an assignment or similar (can't reliably determine the symbol range)
+  - Fix: Failure to collect project ignore spec now logs the error and downstream tasks fail fast, fixing hanging LS initialisation 
 
 * JetBrains:
   - `Move` and `SafeDelete` tools: transform empty string to None (counteracts client errors)
