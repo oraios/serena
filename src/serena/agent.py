@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Optional, TypeVar
 import requests
 import webview
 from sensai.util import logging
+from sensai.util.helper import mark_used
 from sensai.util.logging import LogTime
 from sensai.util.string import dict_string
 
@@ -279,7 +280,17 @@ class ProjectPromptProvisionStatus:
         :return: the modes
         """
         result = []
-        if not self._get_session_status(session_id).mode_prompts_provided:
+
+        # Note: We always want to provide the prompts of newly activated modes in the activation message
+        #   because some clients (e.g. Claude Desktop) use a single session for all chats.
+        #   Therefore, we view project activation as an "entry action", which must always provide
+        #   all the information that is relevant to the project
+        # Because of this, we cannot use a condition like this:
+        #   new_mode_prompts_must_be_provided_for_activation = not self._get_session_status(session_id).mode_prompts_provided
+        new_mode_prompts_must_be_provided_for_activation = True
+        mark_used(session_id)
+
+        if new_mode_prompts_must_be_provided_for_activation:
             for mode_name in self._newly_activated_mode_names:
                 mode = ActiveModes.get_mode_instance(mode_name)
                 if mode.has_prompt():
