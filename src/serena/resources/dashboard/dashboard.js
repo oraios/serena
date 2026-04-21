@@ -262,7 +262,12 @@ class Dashboard {
 
         // Execution tracking
         this.cancelledExecutions = [];
+        this.cancelledExecutionsMaxSize = 50;
         this.executionToCancel = null;
+        // Map of task_id -> execution object, rebuilt on every poll.
+        // Avoids embedding execution JSON into DOM attributes, which was keeping
+        // detached DOM (and its backing Blink-native strings) alive across polls.
+        this.executionsById = new Map();
 
         // Tool names and stats
         this.toolNames = [];
@@ -395,6 +400,48 @@ class Dashboard {
         this.$cancelExecutionOkBtn.click(this.confirmCancelExecutionOk.bind(this));
         this.$cancelExecutionCancelBtn.click(this.closeCancelExecutionModal.bind(this));
         this.$modalCloseCancelExecution.click(this.closeCancelExecutionModal.bind(this));
+
+        // Delegated handler for dynamically-rebuilt cancel buttons.
+        // Binding once on the stable container (rather than on each rebuilt button
+        // per poll) prevents handler closures from keeping detached DOM alive.
+        this.$activeExecutionQueueDisplay.on('click', '.execution-cancel-btn', function (e) {
+            e.preventDefault();
+            const taskId = parseInt($(this).attr('data-task-id'), 10);
+            const executionData = self.executionsById.get(taskId);
+            if (executionData) {
+                self.confirmCancelExecution(executionData);
+            } else {
+                console.error('No execution data found for task_id', taskId);
+            }
+        });
+
+        // Delegated handlers for dynamically-rebuilt config overview elements.
+        // Same reasoning as above: the config display is rewritten on every poll
+        // when the config changes; binding per render leaks detached DOM.
+        this.$configDisplay.on('click', '#add-language-btn', this.openLanguageModal.bind(this));
+        this.$configDisplay.on('click', '#edit-serena-config-btn', this.openEditSerenaConfigModal.bind(this));
+        this.$configDisplay.on('click', '#create-memory-btn', this.openCreateMemoryModal.bind(this));
+        this.$configDisplay.on('click', '.language-remove', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            self.confirmRemoveLanguage($(this).attr('data-language'));
+        });
+        this.$configDisplay.on('click', '.memory-item', function (e) {
+            e.preventDefault();
+            self.openEditMemoryModal($(this).attr('data-memory'));
+        });
+        this.$configDisplay.on('click', '.memory-remove', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            self.confirmDeleteMemory($(this).attr('data-memory'));
+        });
+        this.$configDisplay.on('click', '#tools-header, #memories-header', function () {
+            const $header = $(this);
+            const $content = $header.next('.collapsible-content');
+            const $icon = $header.find('.toggle-icon');
+            $content.slideToggle(300);
+            $icon.toggleClass('expanded');
+        });
         this.$editSerenaConfigSaveBtn.click(this.saveSerenaConfigFromModal.bind(this));
         this.$editSerenaConfigCancelBtn.click(this.closeEditSerenaConfigModal.bind(this));
         this.$modalCloseEditSerenaConfig.click(this.closeEditSerenaConfigModal.bind(this));
@@ -752,59 +799,8 @@ class Dashboard {
             html += '</div>';
 
             this.$configDisplay.html(html);
-
-            // Attach event handlers for the dynamically created add language button
-            $('#add-language-btn').click(this.openLanguageModal.bind(this));
-
-            // Attach event handler for edit serena config button
-            $('#edit-serena-config-btn').click(this.openEditSerenaConfigModal.bind(this));
-
-            // Attach event handlers for language remove buttons
-            const self = this;
-            $('.language-remove').click(function (e) {
-                e.preventDefault();
-                e.stopPropagation();
-                const language = $(this).data('language');
-                self.confirmRemoveLanguage(language);
-            });
-
-            // Attach event handlers for memory items
-            $('.memory-item').click(function (e) {
-                e.preventDefault();
-                const memoryName = $(this).data('memory');
-                self.openEditMemoryModal(memoryName);
-            });
-
-            // Attach event handlers for memory remove buttons
-            $('.memory-remove').click(function (e) {
-                e.preventDefault();
-                e.stopPropagation();
-                const memoryName = $(this).data('memory');
-                self.confirmDeleteMemory(memoryName);
-            });
-
-            // Attach event handler for create memory button
-            $('#create-memory-btn').click(this.openCreateMemoryModal.bind(this));
-
-            // Re-attach collapsible handler for the newly created tools header
-            $('#tools-header').click(function () {
-                const $header = $(this);
-                const $content = $('#tools-content');
-                const $icon = $header.find('.toggle-icon');
-
-                $content.slideToggle(300);
-                $icon.toggleClass('expanded');
-            });
-
-            // Re-attach collapsible handler for the newly created memories header
-            $('#memories-header').click(function () {
-                const $header = $(this);
-                const $content = $('#memories-content');
-                const $icon = $header.find('.toggle-icon');
-
-                $content.slideToggle(300);
-                $icon.toggleClass('expanded');
-            });
+            // Event handlers are bound once in the constructor via delegation on
+            // this.$configDisplay; nothing to re-bind on every render.
         } catch (error) {
             console.error('Error in displayConfig:', error);
             this.$configDisplay.html('<div class="error-message">Error displaying configuration: ' + error.message + '</div>');
@@ -951,70 +947,48 @@ class Dashboard {
     }
 
     displayActiveExecutionsQueue(executions) {
+        // rebuild the task_id -> execution map (prevents unbounded retention)
+        this.executionsById.clear();
+
         if (!executions || executions.length === 0) {
+            this.$activeExecutionQueueDisplay.empty();
+            this.displayCancelledExecutions(executions);
             return;
         }
 
+        // build HTML; store only task_id in DOM, look up full object via the Map
         let html = '<div class="execution-list">';
-        let self = this;
 
-        executions.forEach(function (execution) {
-            const isRunning = execution.is_running;
-            const logged = execution.logged;
-
-            if (!logged) {
-                return; // Skip unlogged executions
+        executions.forEach((execution) => {
+            if (!execution.logged) {
+                return; // skip unlogged executions
             }
+            this.executionsById.set(execution.task_id, execution);
 
+            const isRunning = execution.is_running;
             let itemClass = 'execution-item';
             if (isRunning) {
                 itemClass += ' running';
             }
 
-            // Escape JSON for HTML attribute - replace single quotes and use HTML entities
-            const executionJson = JSON.stringify(execution).replace(/'/g, '&#39;');
-
-            html += '<div class="' + itemClass + '" data-task-id="' + execution.task_id + '" data-execution=\'' + executionJson + '\'>';
-
+            html += '<div class="' + itemClass + '" data-task-id="' + execution.task_id + '">';
             if (isRunning) {
                 html += '<div class="execution-spinner"></div>';
             }
-
-            html += '<div class="execution-name">' + self.escapeHtml(execution.name) + '</div>';
-
+            html += '<div class="execution-name">' + this.escapeHtml(execution.name) + '</div>';
             if (isRunning) {
                 html += '<div class="execution-meta">#' + execution.task_id + '</div>';
             } else {
-                html += '<div class="execution-meta">queued · #' + execution.task_id + '</div>';
+                html += '<div class="execution-meta">queued &middot; #' + execution.task_id + '</div>';
             }
-
-            html += '<button class="execution-cancel-btn" data-task-id="' + execution.task_id + '" data-is-running="' + isRunning + '">✕</button>';
+            html += '<button class="execution-cancel-btn" data-task-id="' + execution.task_id + '">&times;</button>';
             html += '</div>';
         });
 
         html += '</div>';
         this.$activeExecutionQueueDisplay.html(html);
 
-        // Attach event handlers for cancel buttons
-        $('.execution-cancel-btn').click(function (e) {
-            e.preventDefault();
-            console.log('Cancel button clicked');
-            const $item = $(this).closest('.execution-item');
-            console.log('Found item:', $item.length);
-            const executionDataStr = $item.attr('data-execution');
-            console.log('Execution data string:', executionDataStr);
-            if (executionDataStr) {
-                // Unescape HTML entities
-                const unescapedStr = executionDataStr.replace(/&#39;/g, "'");
-                const executionData = JSON.parse(unescapedStr);
-                console.log('Parsed execution data:', executionData);
-                self.confirmCancelExecution(executionData);
-            } else {
-                console.error('No execution data found on element');
-            }
-        });
-
-        // Update cancelled executions display
+        // update cancelled executions display
         this.displayCancelledExecutions(executions);
     }
 
@@ -1124,6 +1098,10 @@ class Dashboard {
                         if (!alreadyCancelled) {
                             console.log('Adding execution to cancelled list:', executionData);
                             self.cancelledExecutions.push(executionData);
+                            // cap list size to prevent unbounded growth
+                            while (self.cancelledExecutions.length > self.cancelledExecutionsMaxSize) {
+                                self.cancelledExecutions.shift();
+                            }
                             console.log('Cancelled executions array now contains:', self.cancelledExecutions);
                         } else {
                             console.log('Execution already in cancelled list');
