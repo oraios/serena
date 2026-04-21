@@ -15,6 +15,7 @@ from solidlsp import SolidLanguageServer
 from solidlsp.ls import LSPFileBuffer
 from solidlsp.ls import ReferenceInSymbol as LSPReferenceInSymbol
 from solidlsp.ls_types import Position, SymbolKind, UnifiedSymbolInformation
+from solidlsp.ls_utils import TextUtils
 
 from .ls_manager import LanguageServerManager
 from .project import Project
@@ -87,6 +88,16 @@ class Symbol(ToStringMixin, ABC):
 
     @abstractmethod
     def get_body_end_position(self) -> PositionInFile | None:
+        pass
+
+    @property
+    @abstractmethod
+    def body(self) -> str | None:
+        pass
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
         pass
 
     def get_body_start_position_or_raise(self) -> PositionInFile:
@@ -879,6 +890,7 @@ class JetBrainsSymbol(Symbol):
         self._cached_file_content: str | None = None
         self._cached_body_start_position: PositionInFile | None = None
         self._cached_body_end_position: PositionInFile | None = None
+        self._cached_body = symbol_dict.get("body")
 
     def _tostring_includes(self) -> list[str]:
         return []
@@ -919,6 +931,25 @@ class JetBrainsSymbol(Symbol):
             line, col = pos["line"], pos["col"]
             self._cached_body_end_position = PositionInFile(line=line, col=col)
         return self._cached_body_end_position
+
+    @property
+    def body(self) -> str | None:
+        if self._cached_body is not None:
+            return self._cached_body
+        start_position = self.get_body_start_position()
+        if start_position is None:
+            return None
+        end_position = self.get_body_end_position()
+        assert end_position is not None, "If start position is available, end position should also be available. Symbol: {self}"
+        file_content = self.get_file_content()
+        self._cached_body = TextUtils.get_text_in_range(
+            file_content, start_position.line, start_position.col, end_position.line, end_position.col
+        )
+        return self._cached_body
+
+    @property
+    def name(self) -> str:
+        return self._dict["name_path"].split("/")[-1]
 
     def is_neighbouring_definition_separated_by_empty_line(self) -> bool:
         # NOTE: Symbol types cannot really be differentiated, because types are not handled in a language-agnostic way.

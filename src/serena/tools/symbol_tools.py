@@ -369,8 +369,8 @@ class InsertAfterSymbolTool(Tool, ToolMarkerSymbolicEdit):
         body: str,
     ) -> str:
         """
-        Inserts the given body/content after the end of the definition of the given symbol (via the symbol's location).
-        A typical use case is to insert a new class, function, method, field or variable assignment.
+        Use this to insert code after a class/method/function definition.
+        Don't use to insert after assignments (constants, fields).
 
         :param name_path: name path of the symbol after which to insert content (definitions in the `find_symbol` tool apply)
         :param relative_path: the relative path to the file containing the symbol
