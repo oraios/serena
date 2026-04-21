@@ -88,13 +88,11 @@ dev = [
   "sphinx_book_theme==1.1.4",
   "sphinx-toolbox==3.7.0",
   "jupyter-book==1.0.4.post1",
-  "nbsphinx==0.9.7",
   "pyinstrument==5.1.1",
   "pytest-timeout==2.4.0",
   # Transitive dev deps pinned for security (dependabot alerts).
   # Exact pins because uvx installs from git, ignoring the lock file.
   "tornado==6.5.5",
-  "nbconvert==7.17.1",
   "wheel==0.46.3",
   "pyasn1==0.6.3",
   "PyJWT==2.12.0",
