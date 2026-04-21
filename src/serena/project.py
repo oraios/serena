@@ -306,8 +306,8 @@ class Project(ToStringMixin):
                 f.write(f"/{ProjectConfig.SERENA_LOCAL_PROJECT_FILE}\n")
 
         # prepare ignore spec asynchronously, ensuring immediate project activation.
-        self.__ignored_patterns: list[str]
-        self.__ignore_spec: pathspec.PathSpec | None
+        self.__ignored_patterns: list[str] | None = None
+        self.__ignore_spec: pathspec.PathSpec | None = None
         self._ignore_spec_available = threading.Event()
         threading.Thread(name=f"gather-ignorespec[{self.project_config.project_name}]", target=self._gather_ignorespec, daemon=True).start()
 
@@ -342,7 +342,6 @@ class Project(ToStringMixin):
                 self.__ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
             except Exception as e:
                 log.error(f"Error while gathering ignore spec for project {self.project_config.project_name}: {e}", exc_info=e)
-                self.__ignore_spec = None
 
         self._ignore_spec_available.set()
 
@@ -404,10 +403,11 @@ class Project(ToStringMixin):
         if not self._ignore_spec_available.is_set():
             log.info("Waiting for ignore spec to become available ...")
             self._ignore_spec_available.wait()
-            log.info("Ignore spec is now available for project; proceeding")
+            if self.__ignore_spec is not None:
+                log.info("Ignore spec is now available for project; proceeding")
         if self.__ignore_spec is None:
             raise ValueError(
-                "The ignore spec could not be computed; please check the log for errors and report the error: https://github.com/oraios/serena/issues"
+                "The ignore spec could not be computed; please check the log for errors and report here: https://github.com/oraios/serena/issues"
             )
         return self.__ignore_spec
 
@@ -419,7 +419,12 @@ class Project(ToStringMixin):
         if not self._ignore_spec_available.is_set():
             log.info("Waiting for ignored patterns to become available ...")
             self._ignore_spec_available.wait()
-            log.info("Ignore patterns are now available for project; proceeding")
+            if self.__ignored_patterns is not None:
+                log.info("Ignored patterns are now available for project; proceeding")
+        if self.__ignored_patterns is None:
+            raise ValueError(
+                "The ignored patterns could not be computed; please check the log for errors and report here: https://github.com/oraios/serena/issues"
+            )
         return self.__ignored_patterns
 
     def _is_ignored_relative_path(self, relative_path: str | Path, ignore_non_source_files: bool = True) -> bool:
