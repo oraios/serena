@@ -418,6 +418,10 @@ class ProjectConfig(SharedConfig):
             data["languages"] = [data["language"]]
             del data["language"]
 
+        # Note: Checks for validity of fields must not happen here but in _from_dict.
+        # Here, the data may be incomplete, because this function is also used for
+        # loading project.local.yml files.
+
         return data, was_complete
 
     @classmethod
@@ -461,13 +465,19 @@ class ProjectConfig(SharedConfig):
         line_ending_value = data.get("line_ending")
         line_ending = LineEnding.from_str(line_ending_value) if line_ending_value else None
 
+        # gracefully handle user errors: incorrect use of None/empty where a list is required
+        ignored_paths = data["ignored_paths"] or []
+        fixed_tools = data["fixed_tools"] or []
+        excluded_tools = data["excluded_tools"] or []
+        included_optional_tools = data["included_optional_tools"] or []
+
         return cls(
             project_name=data["project_name"],
             languages=languages,
-            ignored_paths=data["ignored_paths"],
-            excluded_tools=data["excluded_tools"],
-            fixed_tools=data["fixed_tools"],
-            included_optional_tools=data["included_optional_tools"],
+            ignored_paths=ignored_paths,
+            excluded_tools=excluded_tools,
+            fixed_tools=fixed_tools,
+            included_optional_tools=included_optional_tools,
             read_only=data["read_only"],
             read_only_memory_patterns=data.get("read_only_memory_patterns", []),
             ignored_memory_patterns=data.get("ignored_memory_patterns", []),
