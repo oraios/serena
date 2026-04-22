@@ -1172,8 +1172,10 @@ class SerenaDashboardTrayManager:
         """
         :return: whether the current platform supports the tray manager
         """
-        supported_platforms = ["win32", "darwin"]
-        return sys.platform in supported_platforms
+        # supported_platforms = ["win32", "darwin"]
+        # return sys.platform in supported_platforms
+        # TODO: Enable all platforms for the time being for users to try out (only Windows tested)
+        return True
 
     @classmethod
     def is_running(cls) -> bool:

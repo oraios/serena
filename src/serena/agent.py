@@ -270,7 +270,8 @@ class DashboardManager:
                 case "Windows":
                     return cls.WEBVIEW
                 case "Darwin":
-                    return cls.TRAY_MANAGER
+                    # TODO: Switch to TRAY_MANAGER once support is tested
+                    return cls.BROWSER
                 case _:
                     return cls.BROWSER
 
@@ -314,7 +315,6 @@ class DashboardManager:
 
         self._port = port
         self._mode = mode
-        self._mode = self.Mode.TRAY_MANAGER
         self._dashboard_viewer_process: multiprocessing.Process | None = None
         self._tray_manager_lock = threading.Lock()
 
