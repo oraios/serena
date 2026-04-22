@@ -1,6 +1,10 @@
 {
   "name": "serena Project",
   "dockerFile": "../Dockerfile",
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "target": "dev"
+  },
   "workspaceFolder": "/workspaces/serena",
   "settings": {
     "terminal.integrated.shell.linux": "/bin/bash",
