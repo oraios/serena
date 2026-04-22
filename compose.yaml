@@ -10,5 +10,5 @@ services:
       # - /path/to/another/project:/workspace/another-project
     # Default command can be overidden below
     # command:
-    #   - "serena-mcp-server --transport streamable-http --port 9121 --host 0.0.0.0 --context ide"
+    #   - "start-mcp-server --transport streamable-http --host 0.0.0.0 --port 9121 --project ./ --context=vscode"
 
