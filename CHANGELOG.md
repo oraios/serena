@@ -40,6 +40,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: `rename_symbol` for Vue files now correctly propagates edits to the TypeScript server, enabling cross-file renames in `.vue` files 
   - Fix: Lean4 stale cache — empty document symbol responses (returned before `lake build` completes) are no longer persisted, preventing symbols from being permanently hidden #1356
 
+Dashboard:
+  - Fix: Memory leaks in frontend when using Chromium-based browsers/Windows webview #1389
 
 # v1.1.2 (2026-04-14)
 
