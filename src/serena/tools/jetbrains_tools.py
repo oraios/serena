@@ -567,80 +567,92 @@ class JetBrainsRenameTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
         return self._to_json(result)
 
 
-class JetBrainsDebugTool(Tool, ToolMarkerBeta):
+class JetBrainsDebugTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
     """
-    Evaluates Groovy/Java expressions in a persistent debug REPL connected to the JetBrains IDE.
-    Provides full debugger control: run configs, breakpoints, stepping, inspection, and evaluation.
+    Provides debugging functionality (run configs, breakpoints, stepping, inspection, and evaluation)
+    via a persistent debug REPL connected to the JetBrains IDE.
     """
 
     def apply(
         self,
         expression: str,
-        session_key: str = "default",
+        repl_key: str = "default",
     ) -> str:
         """
-        Evaluate a Groovy/Java expression in the persistent debug REPL. State (variables, objects)
-        persists across calls within the same session_key.
+        Evaluates a Groovy expression in a persistent REPL, which can be used to debug
+        code interactively.
+        Important: Debugging should only be applied if the user has requested it!
+        You rely on the user to provide suitable run configurations for you to work with.
 
-        Pre-bound variables: ``debug`` (DebuggerFacade), ``project`` (IntelliJ Project).
+        Note: The debugger uses 0-based line numbers like other Serena tools (while humans typically communicate 1-based ones).
 
-        **Run configurations**::
+        State (objects, variables assigned) persists across calls within the same repl_key.
 
+        Pre-bound variables: ``debug`` (debugger interface)
+
+        Run configurations:
             debug.listRunConfigs()
-            debug.startDebug("MyTestRun")  # returns a DebugSession
-            debug.runConfig("MyApp")  # non-debug run, fire-and-forget
+            session = debug.startDebug("MyTestRun")  # returns a DebugSession
+            debug.startRun("MyApp")  # non-debug run, fire-and-forget
 
-        **Session discovery**::
-
+        Session discovery:
             debug.sessions()
-            debug.currentSession()
-            debug.session(id)
+            session = debug.currentSession()
+            session = debug.session(id)
 
-        **Breakpoints** (project-global, set before or during debugging)::
-
+        Breakpoints (project-global, set before or during debugging):
             debug.addBreakpoint(file, line)
             debug.addBreakpoint(file, line, condition)
             debug.addLogpoint(file, line, logExpression)
             debug.listBreakpoints()
             debug.removeBreakpointAt(file, line)
 
-        **Execution control** (on a DebugSession, e.g. ``session``)::
-
-            session.stepOver() / .stepInto() / .stepOut()
-            session.resume() / .pause() / .stop()
+        Execution control (on a DebugSession, e.g. ``session``)::
+            session.stepOver() | .stepInto() | .stepOut()
+            session.resume() | .pause() | .stop()
             session.runToLine(file, line)
 
-        **Wait for pause** (blocks until the session pauses or times out)::
-
+        Wait for pause (blocks until the session pauses or times out):
             session.waitForPause(timeoutSeconds)
             session.stepOverAndWait(timeoutSeconds)  # step + wait in one call
             session.resumeAndWait(timeoutSeconds)
 
-        **Inspection**::
-
-            session.status()                # location + source + variables + stack in one call
-            session.variables()             # all locals/args
-            session.variable(name)          # single variable
-            session.frames() / .frame()     # stack trace / current frame
+        Inspection (when paused):
+            session.status()                # location + source + variable values in one call
+            session.variables()             # overview of locals/args (values may be truncated)
+            session.variable(name)          # single variable (VariableInfo instance)
+            session.frames() | .frame()     # stack trace | current frame
             session.sourceContext(lines)    # source around current line
             session.threads()
 
-        **Evaluation & modification**::
+        VariableInfo members: name, value (String as presented by the debugger), type
 
-            session.eval("expr")  # evaluate in current frame
+        Evaluation & modification:
+            session.eval("expr")       # evaluate in current frame
             session.setVar("x", "42")  # set variable via assignment
 
-        **Example**::
-
-            session = debug.startDebug("MyTest")
+        Example sequence of expressions one might execute in a REPL:
             debug.addBreakpoint("src/main/java/Foo.java", 42)
+            session = debug.startDebug("MyTest")
             session.waitForPause(30)
             session.status()
 
-        :param expression: a Groovy/Java expression to evaluate in the REPL
-        :param session_key: identifies the REPL instance. State persists across calls with the same key.
-        :return: the string representation of the expression's result
+        You can pass multiple statements at once; the result of the final expression is returned:
+            session = debug.startDebug("MyTest"); session.waitForPause(30); session.status()
+
+        Control flow statements are also possible:
+            while (session.variable("count").value.equals("0")) { session.stepOverAndWait(5) }
+
+        When done, close the REPL by passing an empty expression.
+
+        :param expression: a Groovy/Java expression/statement to evaluate in the REPL.
+            If empty/null, closes the REPL with the given key, discarding its state.
+        :param repl_key: identifier for the REPL instance. State persists across calls with the same key.
+        :return: string representation of the result
         """
         with JetBrainsPluginClient.from_project(self.project) as client:
-            response = client.debug_eval(session_key=session_key, expression=expression)
+            if expression:
+                response = client.debug_eval(repl_key=repl_key, expression=expression)
+            else:
+                response = client.debug_close(repl_key=repl_key)
             return response.get("result", str(response))

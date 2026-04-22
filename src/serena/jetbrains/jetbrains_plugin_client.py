@@ -633,31 +633,31 @@ class JetBrainsPluginClient(ToStringMixin):
         self._postprocess_symbol_collection_response(symbol_collection)
         return symbol_collection
 
-    def debug_eval(self, session_key: str, expression: str) -> dict[str, Any]:
+    def debug_eval(self, repl_key: str, expression: str) -> dict[str, Any]:
         """
         Evaluates a Groovy expression in the persistent debug REPL.
 
-        :param session_key: the session key identifying the REPL instance
+        :param repl_key: the session key identifying the REPL instance
         :param expression: the Groovy expression to evaluate
-        :return: the response containing sessionKey and result
+        :return: the response containing REPL key and result
         """
         request_data = {
-            "sessionKey": session_key,
+            "replKey": repl_key,
             "expression": expression,
         }
-        return self._make_request("POST", "/debugEval", request_data)
+        return self._make_request("POST", "/debugReplEval", request_data)
 
-    def debug_reset(self, session_key: str) -> dict[str, Any]:
+    def debug_close(self, repl_key: str) -> dict[str, Any]:
         """
-        Resets the debug REPL for the given session key, clearing all state.
+        Closes the debug REPL for the given session key, clearing all state.
 
-        :param session_key: the session key identifying the REPL instance to reset
+        :param repl_key: the key identifying the REPL instance to close
         :return: the status response
         """
         request_data = {
-            "sessionKey": session_key,
+            "replKey": repl_key,
         }
-        return self._make_request("POST", "/debugReset", request_data)
+        return self._make_request("POST", "/debugReplClose", request_data)
 
     def close(self) -> None:
         self._session.close()
