@@ -485,11 +485,9 @@ class Dashboard {
 
         // Initialize the application
         this.loadToolNames().then(function () {
-            // Start on overview page
             self.loadNews();
-            self.loadConfigOverview();
-            self.startConfigPolling();
-            self.startExecutionsPolling();
+            // start on overview page
+            self.navigateToPage("overview");
         });
         // Initialize heartbeat interval
         setInterval(this.heartbeat.bind(this), 250);
