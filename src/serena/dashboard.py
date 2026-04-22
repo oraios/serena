@@ -815,10 +815,7 @@ def open_url_in_browser(url: str, use_subprocess: bool = False) -> None:
 
 class SerenaDashboardViewer(WebViewWithTray):
     """
-    Minimal pywebview wrapper that opens a dashboard in a native window.
-
-    The viewer is a plain window without a system tray icon. Tray management
-    is handled separately by :class:`SerenaDashboardTrayManager`.
+    Minimal pywebview wrapper that opens a dashboard in a native window with optional system tray.
     """
 
     DEBUG = False
@@ -833,6 +830,15 @@ class SerenaDashboardViewer(WebViewWithTray):
         parent_process_id: int | None = None,
         tray: bool = True,
     ):
+        """
+        :param url: the URL to open
+        :param width: the width of the window
+        :param height: the height of the window
+        :param start_minimized: whether to start the window minimized (to the tray if tray is enabled)
+        :param parent_process_id: the process ID of the parent Serena agent process, which is monitored for termination,
+            automatically closing the dashboard when the parent process dies
+        :param tray: whether to use a system tray icon (which the app minimizes to when the window is closed)
+        """
         dashboard_path = Path(SERENA_DASHBOARD_DIR)
 
         # .ico is Windows-only; macOS expects a PNG for the window/dock icon.
