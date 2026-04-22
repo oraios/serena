@@ -1,0 +1,9 @@
+include:
+  - compose.yaml
+
+services:
+  serena:
+    pull_policy: build
+    build:
+      context: .
+      target: dev
