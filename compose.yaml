@@ -10,7 +10,7 @@ services:
       - "${SERENA_DASHBOARD_PORT:-24282}:24282"  # Dashboard port (default 0x5EDA = 24282)
     volumes:
       - ${PROJECT_DIR:-.}:/workspace/
-    # Default command can be overidden below
+    # Default command can be overridden below
     # command:
     #   - start-mcp-server
     #   - --transport
