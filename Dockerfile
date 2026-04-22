@@ -59,7 +59,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sed \
     && rm -rf /var/lib/apt/lists/*
 
-# NVM can be readded if switching node version is common while testing/developing serena
+# NVM can be re-added if switching node version is common while testing/developing serena
 COPY --from=node /usr/local /usr/local
 COPY --from=uv /uv /uvx /bin/
 COPY --from=rust /usr/local/cargo /usr/local/cargo
