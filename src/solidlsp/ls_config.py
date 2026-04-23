@@ -149,6 +149,11 @@ class Language(str, Enum):
     Must be explicitly specified in project.yml. Requires Node.js and npm.
     Requires ``ansible`` in PATH for full functionality.
     """
+    GLEAM = "gleam"
+    """Gleam language server bundled with the Gleam compiler (`gleam lsp`).
+    Requires the `gleam` binary to be installed and available on PATH.
+    See https://gleam.run/getting-started/installing/ for installation instructions.
+    """
 
     @classmethod
     def iter_all(cls, include_experimental: bool = False) -> Iterable[Self]:
@@ -329,6 +334,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.yaml", "*.yml")
             case self.MSL:
                 return FilenameMatcher("*.mrc")
+            case self.GLEAM:
+                return FilenameMatcher("*.gleam")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -556,6 +563,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.msl_language_server import MslLanguageServer
 
                 return MslLanguageServer
+            case self.GLEAM:
+                from solidlsp.language_servers.gleam_language_server import GleamLanguageServer
+
+                return GleamLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

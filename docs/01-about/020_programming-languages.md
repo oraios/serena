@@ -58,6 +58,9 @@ Some languages require additional installations or setup steps, as noted.
   (requires [.NET v8.0+](https://dotnet.microsoft.com/en-us/download/dotnet); uses FsAutoComplete/Ionide, which is auto-installed; for Homebrew .NET on macOS, set DOTNET_ROOT in your environment)
 * **Fortran**   
   (requires installation of fortls: `pip install fortls`)
+* **Gleam**  
+  (requires installation of the [Gleam compiler](https://gleam.run/getting-started/installing/);
+  the language server is bundled with the compiler and started automatically via `gleam lsp`)
 * **Go**  
   (requires installation of `gopls`)
 * **Groovy**  

@@ -1486,10 +1486,14 @@ class SolidLanguageServer(ABC):
             unified_root_symbols = convert_symbols_with_common_parent(root_symbols, None)
             document_symbols = DocumentSymbols(unified_root_symbols)
 
-            # update cache
-            log.debug("Updating cached document symbols for %s", relative_file_path)
-            self._document_symbols_cache[cache_key] = (file_data.content_hash, document_symbols)
-            self._document_symbols_cache_is_modified = True
+            # Only cache non-empty results. An empty response can occur when the language
+            # server has not yet finished analysing a file (e.g. during a recompilation
+            # triggered by textDocument/didOpen); caching it would permanently serve stale
+            # data on subsequent requests within the same session.
+            if unified_root_symbols:
+                log.debug("Updating cached document symbols for %s", relative_file_path)
+                self._document_symbols_cache[cache_key] = (file_data.content_hash, document_symbols)
+                self._document_symbols_cache_is_modified = True
 
             return document_symbols
 
