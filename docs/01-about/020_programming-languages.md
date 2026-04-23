@@ -52,6 +52,8 @@ Some languages require additional installations or setup steps, as noted.
   (requires Elixir installation; Expert language server is downloaded automatically)
 * **Elm**  
   (requires Elm compiler)
+* **Gleam**  
+  (requires [Gleam](https://gleam.run/getting-started/installing/) compiler; uses the built-in language server via `gleam lsp`)
 * **Erlang**  
   (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls); experimental, might be slow or hang)
 * **F#**  
