@@ -641,6 +641,7 @@ class JetBrainsPluginClient(ToStringMixin):
         :param expression: the Groovy expression to evaluate
         :return: the response containing REPL key and result
         """
+        self._require_version_at_least(2023, 2, 16)
         request_data = {
             "replKey": repl_key,
             "expression": expression,
@@ -654,6 +655,7 @@ class JetBrainsPluginClient(ToStringMixin):
         :param repl_key: the key identifying the REPL instance to close
         :return: the status response
         """
+        self._require_version_at_least(2023, 2, 16)
         request_data = {
             "replKey": repl_key,
         }
