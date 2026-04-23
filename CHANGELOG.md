@@ -25,6 +25,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Project server: 
      - `query_project`: Support use of project root instead of project name #1388
      - `list_queryable_projects`: Return both project names and project roots 
+  - Fix: `search_for_pattern` tool returned 1-based line numbers (in contrast to all other tools); cause: implementation of `text_utils.search_text`
 
 * JetBrains:
   - `Move` and `SafeDelete` tools: transform empty string to None (counteracts client errors)

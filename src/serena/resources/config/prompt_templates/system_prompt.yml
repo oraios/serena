@@ -41,7 +41,9 @@ prompts:
     The following global (not project-specific) memories are available to you: {{ global_memories_list }}
     {%- endif -%}
     {%- endif %}
-
+    
+    Line numbers returned by Serena's tools are 0-based!
+    
     The context and modes of operation are described below. These determine how to interact with your user
     and which kinds of interactions are expected of you.
 
