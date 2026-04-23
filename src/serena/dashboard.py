@@ -1064,6 +1064,8 @@ class SerenaDashboardTrayManager:
 
         Removes unreachable instances and terminates the manager when none remain.
         """
+        time.sleep(max(1, 5 - self.ALIVE_CHECK_INTERVAL_SECONDS))  # initial delay to allow instances to start and register
+
         while True:
             time.sleep(self.ALIVE_CHECK_INTERVAL_SECONDS)
 
