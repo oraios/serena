@@ -18,6 +18,7 @@ from sensai.util.string import ToStringMixin
 
 import serena.jetbrains.jetbrains_types as jb
 from serena.config.serena_config import RegisteredProject
+from serena.constants import SerenaPorts
 from serena.jetbrains.jetbrains_types import PluginStatusDTO
 from serena.project import Project
 from serena.util.class_decorators import singleton
@@ -174,7 +175,7 @@ class JetBrainsPluginClient(ToStringMixin):
     Provides simple methods to interact with all available endpoints.
     """
 
-    BASE_PORT = 0x5EA2
+    BASE_PORT = SerenaPorts.JETBRAINS_PLUGIN_SERVER_BASE_PORT
     PLUGIN_REQUEST_TIMEOUT = 300
     """
     the timeout used for request handling within the plugin (a constant in the plugin)

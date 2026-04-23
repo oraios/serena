@@ -32,3 +32,10 @@ SERENA_LOG_FORMAT = "%(levelname)-5s %(asctime)-15s [%(threadName)s] %(name)s:%(
 
 LOG_MESSAGES_BUFFER_SIZE = 2500
 """The maximum number of log messages to keep in the buffer (for the dashboard)."""
+
+
+class SerenaPorts:
+    TRAY_MANAGER_PORT = 0x5EA0
+    PROJECT_SERVER_PORT = 0x5EA1
+    JETBRAINS_PLUGIN_SERVER_BASE_PORT = 0x5EA2
+    DASHBOARD_API_BASE_PORT = 0x5EDA
