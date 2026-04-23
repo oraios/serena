@@ -7,8 +7,6 @@ import json
 from pathlib import Path
 from pprint import pprint
 
-from toon_format import encode
-
 from serena.agent import SerenaAgent
 from serena.config.serena_config import SerenaConfig
 from serena.constants import REPO_ROOT
@@ -46,5 +44,5 @@ if __name__ == "__main__":
             # keep_definition=True,
         )
     )
-    pprint(encode(json.loads(result)))
+    pprint(json.loads(result))
     # input("Press Enter to continue...")

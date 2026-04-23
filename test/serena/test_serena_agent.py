@@ -14,11 +14,14 @@ from serena.config.serena_config import ProjectConfig, RegisteredProject, Serena
 from serena.project import Project
 from serena.tools import (
     SUCCESS_RESULT,
+    ActivateProjectTool,
     FindReferencingSymbolsTool,
     FindSymbolTool,
+    InitialInstructionsTool,
     ReplaceContentTool,
     ReplaceSymbolBodyTool,
     SafeDeleteSymbol,
+    Tool,
 )
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
@@ -697,3 +700,96 @@ class TestSerenaAgent:
             assert name_path not in file_content, (
                 f"Expected symbol {name_path} to be removed from {relative_path}, but it still appears in the file content"
             )
+
+
+class TestPromptProvision:
+    class MockContext:
+        def __init__(self, session_id: str):
+            self.session = session_id
+
+    @classmethod
+    def _call_tool(cls, agent: SerenaAgent, tool_class: type[Tool], session_id: str = "global", **kwargs) -> str:
+        result = agent.get_tool(tool_class).apply_ex(mcp_ctx=cls.MockContext(session_id), **kwargs)  # type: ignore
+        return result
+
+    @staticmethod
+    def _assert_activation_message(result: str, project_name: str, present: bool) -> None:
+        regex = r"^The project with name '" + project_name + r"'.*?is activated.$"
+        match = re.search(regex, result, re.MULTILINE)
+        if present:
+            assert match is not None, f"Expected project activation message in result:\n{result}"
+        else:
+            assert match is None, f"Expected no project activation message in result:\n{result}"
+
+    @pytest.mark.parametrize("serena_agent", [Language.PYTHON], indirect=True)
+    def test_initial_instructions_provide_project_activation_message_once_per_session(self, serena_agent: SerenaAgent) -> None:
+        """
+        Tests that the project activation message is provided on the first call to InitialInstructionsTool for a session,
+        but not on subsequent calls within the same session. #1372
+        """
+        project_name = "test_repo_python"
+        session1 = "session1"
+        session2 = "session2"
+
+        result1 = self._call_tool(serena_agent, InitialInstructionsTool, session_id=session1)
+        self._assert_activation_message(result1, project_name, present=True)
+
+        result2 = self._call_tool(serena_agent, InitialInstructionsTool, session_id=session2)
+        self._assert_activation_message(result2, project_name, present=True)
+
+        result3 = self._call_tool(serena_agent, InitialInstructionsTool, session_id=session1)
+        self._assert_activation_message(result3, project_name, present=False)
+
+    @pytest.mark.parametrize("serena_agent", [Language.PYTHON], indirect=True)
+    def test_dynamically_activated_mode_is_provided_once_per_session(self, serena_agent: SerenaAgent) -> None:
+        """
+        Tests that when a new project is activated within a session that has a different mode configuration (e.g. no-onboarding),
+        the new mode's prompts are provided at project activation but not in subsequent initial instructions calls within the same
+        session, while they are provided in the initial instructions of a new session.
+        """
+        project_name1 = "test_repo_python"
+        project_name2 = "test_repo_java"
+        session1 = "session1"
+        session2 = "session2"
+
+        # the initial instructions must contain the project activation message for the first project
+        result1 = self._call_tool(serena_agent, InitialInstructionsTool, session_id=session1)
+        self._assert_activation_message(result1, project_name1, present=True)
+
+        # now activate another project which dynamically enables a new mode (no-onboarding)
+        reg_project = serena_agent.serena_config.get_registered_project(project_name2)
+        reg_project.project_config.default_modes = ["no-onboarding"]
+        expected_new_mode_message = "The onboarding process is not applied."
+        result2 = self._call_tool(serena_agent, ActivateProjectTool, project=project_name2, session_id=session1)
+
+        # the new mode's prompt must be included in the activation message
+        self._assert_activation_message(result2, project_name2, present=True)
+        assert expected_new_mode_message in result2, (
+            f"Expected new mode message '{expected_new_mode_message}' not found in result:\n{result2}"
+        )
+
+        # the mode prompt must not be included in subsequent calls to the initial instructions tool within the same session
+        result3 = self._call_tool(serena_agent, InitialInstructionsTool, session_id=session1)
+        assert expected_new_mode_message not in result3, (
+            f"Expected new mode message '{expected_new_mode_message}' to not be included in subsequent calls, but it was found in result:\n{result3}"
+        )
+
+        # the mode prompt must be included in the initial instructions of a new session
+        result4 = self._call_tool(serena_agent, InitialInstructionsTool, session_id=session2)
+        assert expected_new_mode_message in result4, (
+            f"Expected new mode message '{expected_new_mode_message}' to be included in new session, but it was not found in result:\n{result4}"
+        )
+
+        # the initial instructions for the new session must also include the activation message for the project
+        self._assert_activation_message(result4, project_name2, present=True)
+
+    @pytest.mark.parametrize("serena_agent", [Language.PYTHON], indirect=True)
+    def test_activate_project_tool_always_returns_activation_message(self, serena_agent: SerenaAgent) -> None:
+        project_name = "test_repo_python"
+        session = "session1"
+
+        result1 = self._call_tool(serena_agent, ActivateProjectTool, project=project_name, session_id=session)
+        self._assert_activation_message(result1, project_name, present=True)
+
+        result2 = self._call_tool(serena_agent, ActivateProjectTool, project=project_name, session_id=session)
+        self._assert_activation_message(result2, project_name, present=True)

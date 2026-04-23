@@ -53,7 +53,7 @@ class ProjectServer:
         serena_config.language_backend = LanguageBackend.LSP
 
         self._agent = SerenaAgent(serena_config=serena_config)
-        self._loaded_projects_by_name: dict[str, "Project"] = {}
+        self._loaded_projects_by_root: dict[str, "Project"] = {}
 
         # create the Flask application
         self._app = Flask(__name__)
@@ -69,26 +69,31 @@ class ProjectServer:
             query_request = QueryProjectRequest.model_validate(request.get_json())
             return self._query_project(query_request)
 
-    def _get_project(self, project_name: str) -> "Project":
+    def _get_project(self, project_root_or_name: str) -> "Project":
         """Gets the project with the given name, loading it if necessary."""
-        if project_name in self._loaded_projects_by_name:
-            return self._loaded_projects_by_name[project_name]
-        else:
-            serena_config = self._agent.serena_config
-            registered_project = serena_config.get_registered_project(project_name)
-            if registered_project is None:
-                raise ValueError(f"Project '{project_name}' is not registered with Serena.")
-            with LogTime(f"Loading project '{project_name}'"):
-                project = registered_project.get_project_instance(serena_config)
-                project.create_language_server_manager()
-            self._loaded_projects_by_name[project_name] = project
-            return project
+        serena_config = self._agent.serena_config
+        registered_project = serena_config.get_registered_project(project_root_or_name)
+        if registered_project is None:
+            raise ValueError(f"Project '{project_root_or_name}' is not registered with Serena.")
+
+        key = str(registered_project.project_root)
+
+        if key in self._loaded_projects_by_root:
+            return self._loaded_projects_by_root[key]
+
+        with LogTime(f"Loading project '{project_root_or_name}'"):
+            project = registered_project.get_project_instance(serena_config)
+            project.create_language_server_manager()
+        self._loaded_projects_by_root[key] = project
+        return project
 
     def _query_project(self, req: QueryProjectRequest) -> str:
         """Handle a /query_project request by invoking the agent on the specified project and tool."""
         project = self._get_project(req.project_name)
         with self._agent.active_project_context(project):
             tool = self._agent.get_tool_by_name(req.tool_name)
+            if not tool.is_readonly():
+                raise ValueError(f"Tool '{req.tool_name}' is not read-only and cannot be executed via the query_project route")
             params = json.loads(req.tool_params_json)
             return tool.apply_ex(**params)
 

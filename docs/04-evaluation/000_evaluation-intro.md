@@ -16,7 +16,7 @@ medium-sized Java project in the case of Codex).
 Different agents in different settings independently converge on the same core finding: Serena's strongest
 contribution is collapsing multi-file, semantically-aware operations into single atomic
 calls, while built-in tools remain the better choice for small local edits, text search,
-config files, and shell work.
+config files, and shell work. See the full [results](030_results/000_evaluation-results.md) for the scenarios mentioned above and several other scenarios.
 
 ## Approach
 
@@ -32,3 +32,16 @@ The agent evaluates itself. This is deliberate: the agent is the actual user of 
 so it can judge workflow improvements from direct experience rather than through proxy
 metrics. And because the prompt defines task *categories* rather than fixed tasks, anyone
 can rerun the evaluation on their own project with their own agent.
+
+
+## Serena in JetBrains Junie
+
+A particularly notable evaluation scenario is Serena in JetBrains' Junie plugin. The latter also has access 
+to some of JetBrains' refactoring tools. At the time of writing, the only overlapping capability between Serena's tool
+and Junie's native tools is the renaming feature. Opus correctly noticed this during the evaluation and marked the
+renaming capability as equivalent. However, many symbolic and refactoring tools offered by Serena have no inbuilt equivalents,
+leading to the following summary result for Junie:
+
+> **Junie Plugin (Opus 4.6)**: Serena gives me what my built-in tools can't — the ability to move a function between modules with all imports updated atomically, trace a class hierarchy into dependencies, and safely delete symbols with usage guards — and I'd ask my owner to add it for the move-refactoring and semantic navigation capabilities alone.
+
+See the full evaluation [here](030_results/050_junie_plugin_on_tianshou.md).

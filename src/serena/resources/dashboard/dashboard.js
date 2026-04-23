@@ -485,32 +485,9 @@ class Dashboard {
 
         // Initialize the application
         this.loadToolNames().then(function () {
-            // Start on overview page
             self.loadNews();
-            self.loadConfigOverview();
-            self.startConfigPolling();
-            self.startExecutionsPolling();
-        });
-        // Initialize heartbeat interval
-        setInterval(this.heartbeat.bind(this), 250);
-    }
-
-    heartbeat() {
-        let self = this;
-        $.ajax({
-            url: '/heartbeat',
-            type: 'GET',
-            success: function (response) {
-                self.heartbeatFailureCount = 0;
-            },
-            error: function (xhr, status, error) {
-                self.heartbeatFailureCount++;
-                console.error('Heartbeat failure; count = ', self.heartbeatFailureCount);
-                if (self.heartbeatFailureCount >= 1) {
-                    console.log('Server appears to be down, closing tab');
-                    window.close();
-                }
-            },
+            // start on overview page
+            self.navigateToPage("overview");
         });
     }
 
@@ -541,7 +518,6 @@ class Dashboard {
         // Start appropriate polling for the page
         if (page === 'overview') {
             this.loadNews();
-            this.loadConfigOverview();
             this.startConfigPolling();
             this.startExecutionsPolling();
         } else if (page === 'logs') {
@@ -599,7 +575,8 @@ class Dashboard {
                 } else {
                     console.log('Config unchanged, skipping display update');
                 }
-            }, error: function (xhr, status, error) {
+            },
+            error: function (xhr, status, error) {
                 console.error('Error loading config overview:', error);
                 self.$configDisplay.html('<div class="error-message">Error loading configuration</div>');
                 self.$basicStatsDisplay.html('<div class="error-message">Error loading stats</div>');
@@ -607,24 +584,23 @@ class Dashboard {
                 self.$availableToolsDisplay.html('<div class="error-message">Error loading tools</div>');
                 self.$availableModesDisplay.html('<div class="error-message">Error loading modes</div>');
                 self.$availableContextsDisplay.html('<div class="error-message">Error loading contexts</div>');
-            }, complete: function () {
+            },
+            complete: function () {
                 self.waitingForConfigPollingResult = false;
             }
         });
     }
 
     startConfigPolling() {
+        this.loadConfigOverview();
         this.configPollInterval = setInterval(this.loadConfigOverview.bind(this), 1000);
     }
 
     startExecutionsPolling() {
+        this.loadExecutions()
         // Poll every 1 second for executions (independent of config polling)
         // This ensures stuck executions can still be cancelled even if config polling is blocked
-        this.loadExecutions()
-        this.executionsPollInterval = setInterval(() => {
-            this.loadQueuedExecutions();
-            this.loadLastExecution();
-        }, 1000);
+        this.executionsPollInterval = setInterval(this.loadExecutions.bind(this), 1000);
     }
 
     displayConfig(config) {
@@ -905,26 +881,30 @@ class Dashboard {
 
     // ===== Executions Methods =====
 
-    loadQueuedExecutions() {
+    loadQueuedExecutions(onComplete) {
         let self = this;
         $.ajax({
-            url: '/queued_task_executions', type: 'GET', success: function (response) {
+            url: '/queued_task_executions', type: 'GET',
+            success: function (response) {
                 if (response.status === 'success') {
                     self.displayActiveExecutionsQueue(response.queued_executions || []);
                 } else {
                     console.error('Error loading executions:', response.message);
                 }
-            }, error: function (xhr, status, error) {
+            },
+            error: function (xhr, status, error) {
                 console.error('Error loading executions:', error);
                 self.$activeExecutionQueueDisplay.html('<div class="error-message">Error loading executions</div>');
-            }
+            },
+            complete: onComplete
         });
     }
 
-    loadLastExecution() {
+    loadLastExecution(onComplete) {
         let self = this;
         $.ajax({
-            url: '/last_execution', type: 'GET', success: function (response) {
+            url: '/last_execution', type: 'GET',
+            success: function (response) {
                 if (response.status === 'success') {
                     if (response.last_execution !== null && response.last_execution.logged) {
                         self.displayLastExecution(response.last_execution);
@@ -932,21 +912,28 @@ class Dashboard {
                 } else {
                     console.error('Error loading last execution:', response.message);
                 }
-            }, error: function (xhr, status, error) {
+            },
+            error: function (xhr, status, error) {
                 console.error('Error loading last execution:', error);
                 self.$lastExecutionDisplay.html('<div class="error-message">Error loading last execution</div>');
-            }
+            },
+            complete: onComplete
         });
     }
 
     loadExecutions() {
+        const self = this;
         if (this.waitingForExecutionsPollingResult) {
             console.log('Still waiting for previous executions poll result, skipping this poll');
-        } else {
+        }
+        else {
             this.waitingForExecutionsPollingResult = true;
             console.log('Polling for executions...');
-            this.loadQueuedExecutions();
-            this.loadLastExecution();
+            this.loadQueuedExecutions(function() {
+                self.loadLastExecution(function() {
+                    self.waitingForExecutionsPollingResult = false;
+                });
+            });
         }
     }
 

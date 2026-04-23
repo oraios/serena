@@ -8,8 +8,10 @@ import os
 import platform
 import signal
 import threading
+from collections import defaultdict
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from logging import Logger
@@ -18,6 +20,7 @@ from typing import TYPE_CHECKING, Optional, TypeVar
 import requests
 import webview
 from sensai.util import logging
+from sensai.util.helper import mark_used
 from sensai.util.logging import LogTime
 from sensai.util.string import dict_string
 
@@ -198,52 +201,125 @@ class ToolSet:
 
 
 class ActiveModes:
+    _mode_instances: dict[str, SerenaAgentMode] = {}
+
     def __init__(self) -> None:
-        self._base_modes: Sequence[str] | None = None
-        self._default_modes: Sequence[str] | None = None
-        self._active_mode_names: Sequence[str] | None = []
-        self._active_modes: Sequence[SerenaAgentMode] | None = []
+        self._configured_base_modes: Sequence[str] | None = None
+        self._configured_default_modes: Sequence[str] | None = None
+        self._active_mode_names: Sequence[str] = []
 
     def apply(self, mode_selection: ModeSelectionDefinition) -> None:
-        # invalidate active modes
-        self._active_mode_names = None
-        self._active_modes = None
-
         # apply overrides
         log.debug("Applying mode selection: default_modes=%s, base_modes=%s", mode_selection.default_modes, mode_selection.base_modes)
         if mode_selection.base_modes is not None:
-            self._base_modes = mode_selection.base_modes
+            self._configured_base_modes = mode_selection.base_modes
         if mode_selection.default_modes is not None:
-            self._default_modes = mode_selection.default_modes
-        log.debug("Current mode selection: base_modes=%s, default_modes=%s", self._base_modes, self._default_modes)
+            self._configured_default_modes = mode_selection.default_modes
+        log.debug("Current mode selection: base_modes=%s, default_modes=%s", self._configured_base_modes, self._configured_default_modes)
+
+        self._active_mode_names = sorted(set(self._configured_base_modes or []) | set(self._configured_default_modes or []))
 
     def get_mode_names(self) -> Sequence[str]:
-        if self._active_mode_names is not None:
-            return self._active_mode_names
-        active_mode_names: set[str] = set()
-        if self._base_modes is not None:
-            active_mode_names.update(self._base_modes)
-        if self._default_modes is not None:
-            active_mode_names.update(self._default_modes)
-        self._active_mode_names = sorted(active_mode_names)
-        log.info("Active modes: %s", self._active_mode_names)
         return self._active_mode_names
 
-    def get_modes(self) -> Sequence[SerenaAgentMode]:
-        if self._active_modes is not None:
-            return self._active_modes
-        self._active_modes = []
-        for mode_name in self.get_mode_names():
-            mode = SerenaAgentMode.load(mode_name)
-            self._active_modes.append(mode)
-        return self._active_modes
+    @classmethod
+    def get_mode_instance(cls, mode_name: str) -> SerenaAgentMode:
+        if mode_name not in cls._mode_instances:
+            cls._mode_instances[mode_name] = SerenaAgentMode.load(mode_name)
+        return cls._mode_instances[mode_name]
 
-    # TODO: apply caching like in get_modes
+    def get_modes(self) -> Sequence[SerenaAgentMode]:
+        return [self.get_mode_instance(mode_name) for mode_name in self._active_mode_names]
+
     def get_default_modes(self) -> Sequence[SerenaAgentMode]:
-        return [SerenaAgentMode.load(mode_name) for mode_name in self._default_modes or []]
+        return [self.get_mode_instance(mode_name) for mode_name in self._configured_default_modes or []]
 
     def get_base_modes(self) -> Sequence[SerenaAgentMode]:
-        return [SerenaAgentMode.load(mode_name) for mode_name in self._base_modes or []]
+        return [self.get_mode_instance(mode_name) for mode_name in self._configured_base_modes or []]
+
+
+class ProjectPromptProvisionStatus:
+    """
+    Manages the status of the provision of project-specific prompts
+    """
+
+    @dataclass
+    class SessionStatus:
+        mode_prompts_provided: bool = False
+        project_activation_message_provided: bool = False
+
+    def __init__(self, newly_activated_mode_names: set[str] | None = None):
+        """
+        :param newly_activated_mode_names: list of mode names that have been newly activated (by dynamic project activation)
+            and for which prompts must still be provided (either in the system prompt or via the activation message)
+        """
+        if newly_activated_mode_names is None:
+            newly_activated_mode_names = set()
+        self._newly_activated_mode_names: set[str] = newly_activated_mode_names
+        self._session_status_dict: dict[str, ProjectPromptProvisionStatus.SessionStatus] = defaultdict(lambda: self.SessionStatus())
+
+    def _get_session_status(self, session_id: str) -> SessionStatus:
+        return self._session_status_dict[session_id]
+
+    def is_mode_prompt_already_provided(self, mode_name: str, session_id: str) -> bool:
+        """
+        :param mode_name: the mode name
+        :param session_id: the client session ID
+        :return: whether the mode name was already provided (in a project-specific activation message) and therefore
+            should not be included again (in the Serena instructions manual)
+        """
+        if not self._get_session_status(session_id).mode_prompts_provided:
+            return False
+        return mode_name in self._newly_activated_mode_names
+
+    def get_modes_with_prompts_to_be_provided_for_project_activation(self, session_id: str) -> list[SerenaAgentMode]:
+        """
+        Gets the modes that have been newly activated and for which prompts still need to be provided
+        (in dynamic project activation message).
+
+        :param: session_id: the client session ID
+        :return: the modes
+        """
+        result = []
+
+        # Note: We always want to provide the prompts of newly activated modes in the activation message
+        #   because some clients (e.g. Claude Desktop) use a single session for all chats.
+        #   Therefore, we view project activation as an "entry action", which must always provide
+        #   all the information that is relevant to the project
+        # Because of this, we cannot use a condition like this:
+        #   new_mode_prompts_must_be_provided_for_activation = not self._get_session_status(session_id).mode_prompts_provided
+        new_mode_prompts_must_be_provided_for_activation = True
+        mark_used(session_id)
+
+        if new_mode_prompts_must_be_provided_for_activation:
+            for mode_name in self._newly_activated_mode_names:
+                mode = ActiveModes.get_mode_instance(mode_name)
+                if mode.has_prompt():
+                    result.append(mode)
+        return result
+
+    def mark_mode_prompts_as_provided(self, session_id: str) -> None:
+        """
+        Marks the prompts for all newly activated modes as provided, so that they will not be included in the project activation message.
+
+        :param session_id: the client session ID
+        """
+        self._get_session_status(session_id).mode_prompts_provided = True
+
+    def mark_project_activation_message_as_provided(self, session_id: str) -> None:
+        """
+        Marks the project activation message as provided, so that it will not be included again in case of multiple activations of the same project.
+
+        :param session_id: the client session ID
+        """
+        self._get_session_status(session_id).project_activation_message_provided = True
+
+    def is_project_activation_message_already_provided(self, session_id: str) -> bool:
+        """
+        :param session_id: the client session ID
+        :return: whether the project activation message was already provided and therefore should not be included again
+        """
+        return self._get_session_status(session_id).project_activation_message_provided
 
 
 class DashboardManager:
@@ -444,7 +520,8 @@ class SerenaAgent:
         self._project_activation_callback = project_activation_callback
         self._gui_log_viewer: Optional["GuiLogViewer"] = None
         self._dashboard_manager: DashboardManager | None = None
-
+        self._project_prompt_status = ProjectPromptProvisionStatus()
+        self._mode_overrides = modes
         self.version = serena_version()
 
         # obtain serena configuration using the decoupled factory function
@@ -452,6 +529,10 @@ class SerenaAgent:
 
         # propagate configuration to other components
         self.serena_config.propagate_settings()
+
+        # initialise active modes (baseline modes prior to project activation)
+        self._active_modes: ActiveModes
+        self._update_active_modes(log_message=False)
 
         # determine registered project to be activated (if any)
         registered_project_to_activate: RegisteredProject | None = (
@@ -539,8 +620,6 @@ class SerenaAgent:
         # activate the given project (if any), also updating the active modes
         # Note: We cannot update the active tools yet, because the base toolset has not been computed yet
         #       (and its computation depends on the active project)
-        self._active_modes: ActiveModes
-        self._mode_overrides = modes
         if project is not None:
             try:
                 self.activate_project_from_path_or_name(project, update_active_modes=False, update_active_tools=False)
@@ -588,6 +667,7 @@ class SerenaAgent:
             "dashboard": int(self.serena_config.web_dashboard),
             "version": self.version,
             "backend": self._language_backend.value,
+            "context": self._context.name,
         }
         try:
             requests.get("https://oraios-software.de/serena_usage.php", params=params, timeout=1)
@@ -811,7 +891,11 @@ class SerenaAgent:
         template = JinjaTemplate(prompt_template)
         return template.render(available_tools=self._exposed_tools.tool_names, available_markers=self._exposed_tools.tool_marker_names)
 
-    def create_system_prompt(self) -> str:
+    def create_system_prompt(self, session_id: str = "global") -> str:
+        """
+        :param session_id: the client session ID for the case where this is run from a tool; "global" for the connection time case
+        :return: the prompt
+        """
         available_tools = self._active_tools
         available_markers = available_tools.tool_marker_names
         global_memories = MemoriesManager(
@@ -819,28 +903,48 @@ class SerenaAgent:
         ).list_global_memories()
         global_memories_str = dict_string(global_memories.to_dict()) if len(global_memories) > 0 else ""
         log.info("Generating system prompt with available_tools=(see active tools), available_markers=%s", available_markers)
+
+        # determine modes for which prompts must (still) be provided, excluding modes that were already provided in a
+        # previously provided project activation message (if any)
+        relevant_modes = []
+        for mode in self.get_active_modes():
+            if mode.has_prompt():
+                if not self._project_prompt_status.is_mode_prompt_already_provided(mode.name, session_id):
+                    relevant_modes.append(mode)
+        self._project_prompt_status.mark_mode_prompts_as_provided(session_id)
+
         system_prompt = self.prompt_factory.create_system_prompt(
             context_system_prompt=self._format_prompt(self._context.prompt),
-            mode_system_prompts=[self._format_prompt(mode.prompt) for mode in self.get_active_modes()],
+            mode_system_prompts=[self._format_prompt(mode.prompt) for mode in relevant_modes],
             available_tools=available_tools.tool_names,
             available_markers=available_markers,
             global_memories_list=global_memories_str,
         )
 
-        # If a project is active at startup, append its activation message
-        if self._active_project is not None:
-            system_prompt += "\n\n" + self.get_project_activation_message()
+        # provide the project activation message if it hasn't yet been provided
+        if self._active_project is not None and not self._project_prompt_status.is_project_activation_message_already_provided(session_id):
+            system_prompt += "\n\n" + self.get_project_activation_message(session_id)
 
         log.info("System prompt:\n%s", system_prompt)
         return system_prompt
 
-    def get_project_activation_message(self) -> str:
+    def get_project_activation_message(self, session_id: str) -> str:
         """
         :return: a message providing information about the project upon activation (e.g. programming language, memories, initial prompt)
         :raise: AssertionError if no project is active
         """
         proj = self._active_project
         assert proj is not None, "A project must be active before calling this."
+
+        # Note: The activation message is always returned in full, even if it was already provided in the current session,
+        #   because some clients (e.g. Claude Desktop) will use the same session across multiple chats.
+        #   So while we don't want the activation message to be additionally included in the system prompt
+        #   (initial_instructions), an explicit project activation should always return it.
+        # (The check below deliberately left in place for documentation purposes, preventing a regression)
+        if self._project_prompt_status.is_project_activation_message_already_provided(session_id):
+            pass  # no special handling
+
+        # provide basic project information (name, location, languages, encoding)
         if proj.is_newly_created:
             msg = f"Created and activated a new project with name '{proj.project_name}' at {proj.project_root}. "
         else:
@@ -850,6 +954,7 @@ class SerenaAgent:
             msg += f"\nProgramming languages: {languages_str}."
         msg += f"File encoding: {proj.project_config.encoding}."
 
+        # add list of memories (if memories are enabled)
         include_memories = self._active_tools.contains_tool_class(ReadMemoryTool)
         if include_memories:
             project_memories = proj.memories_manager.list_project_memories()
@@ -858,11 +963,24 @@ class SerenaAgent:
                     f"\n{json.dumps(project_memories.to_dict())}\n"
                     + "Use the `read_memory` tool to read these memories later if they are relevant to the task."
                 )
+
+        # add prompts for modes that were dynamically activated by the project
+        modes_with_prompts = self._project_prompt_status.get_modes_with_prompts_to_be_provided_for_project_activation(session_id)
+        if modes_with_prompts:
+            msg += "\nNewly applicable mode instructions:"
+            for mode in modes_with_prompts:
+                msg += f"\n{mode.prompt}"
+        self._project_prompt_status.mark_mode_prompts_as_provided(session_id)
+
+        # add project-specific prompt
         if proj.project_config.initial_prompt:
-            msg += f"\nAdditional project-specific instructions:\n {proj.project_config.initial_prompt}"
+            msg += f"\nProject-specific instructions:\n {proj.project_config.initial_prompt}"
+
+        self._project_prompt_status.mark_project_activation_message_as_provided(session_id)
+
         return msg
 
-    def _update_active_modes(self) -> None:
+    def _update_active_modes(self, log_message: bool = True) -> None:
         """
         Updates the active modes based on the Serena configuration, the active project configuration (if any),
         and mode overrides (if any).
@@ -873,6 +991,9 @@ class SerenaAgent:
             self._active_modes.apply(self._active_project.project_config)
         if self._mode_overrides:
             self._active_modes.apply(self._mode_overrides)
+        if log_message:
+            active_mode_names = self._active_modes.get_mode_names()
+            log.info(f"Active modes ({len(active_mode_names)}): {', '.join(active_mode_names)}")
 
     def _update_active_tools(self) -> None:
         """
@@ -964,7 +1085,13 @@ class SerenaAgent:
         project.set_agent(self)
 
         if update_active_modes:
+            active_mode_names_before = set(self._active_modes.get_mode_names())
             self._update_active_modes()
+            newly_activated_mode_names = set(self._active_modes.get_mode_names()) - active_mode_names_before
+        else:
+            newly_activated_mode_names = None
+
+        self._project_prompt_status = ProjectPromptProvisionStatus(newly_activated_mode_names=newly_activated_mode_names)
 
         if update_active_tools:
             self._update_active_tools()

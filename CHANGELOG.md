@@ -7,6 +7,24 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Check for ignored path ignored `.git` folder only at the top level, not in every subdirectory (`Project._is_ignored_relative_path`) #1350
   - `GetSymbolsOverviewTool`: ignored paths were not respected in LSP variant (fix in `SolidLanguageServer`)
   - Fix: Duplicate comments in re-saved YAML configuration files #1285
+  - Prompt provision improvements (project activation, initial instructions):
+     - Prompt provision is now session-aware, i.e. when using the MCP server in HTTP mode, prompts are provided for each session separately, 
+       ensuring that the necessary information is always provided to the LLM
+     - Fix: Prompts of dynamically activated modes (upon project activation) were not necessarily passed to the LLM (only in the system prompt via
+       `initial_instructions`). Now they are passed directly in the activation message (and excluded from a subsequent `initial_instructions` call).
+     - Fix: Project activation message was provided more than once for case of dynamic project activation followed
+       by `initial_instructions` #1372
+     - Always provide full activation message upon calling `activate_project` (even if project was already active in the same session) #1384
+       This is necessary, because some clients (e.g. Claude Desktop) will reuse a single session across chats.
+  - Security: Forbid `".."` in memory names to disallow accessing files outside dedicated memory directories
+  - Security: Add check for tool being read-only in the project server (previously only checked in `query_project` tool, i.e. client side)
+  - Usage reporting now also includes the name of the Serena context that is used 
+  - Fix: restricted `insert_after_symbol` to raise if used on an assignment or similar (can't reliably determine the symbol range)
+  - Fix: Failure to collect project ignore spec now logs the error and downstream tasks fail fast, fixing hanging LS initialisation
+  - Improve loading of `project.yml` files: Gracefully handle user errors involving incorrect use of None/empty instead of list
+  - Project server: 
+     - `query_project`: Support use of project root instead of project name #1388
+     - `list_queryable_projects`: Return both project names and project roots 
 
 * JetBrains:
   - `Move` and `SafeDelete` tools: transform empty string to None (counteracts client errors)
@@ -14,12 +32,16 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Dependencies:
   - `pywebview`: Switch back to official release (new version 6.2) #1253
 
+* Evaluations:
+  - Added new evaluations for Junie Plugin with Opus 4.6 and GLM 5.1 in Claude Code.
 
 * Language Servers:
   - Fix: clangd capability checks now tolerate valid initialize response shape differences and invalidate cached C++ document symbols when clangd/compile commands context changes #1359                                                                                                                                                                                                            
   - Fix: `rename_symbol` for Vue files now correctly propagates edits to the TypeScript server, enabling cross-file renames in `.vue` files 
   - Fix: Lean4 stale cache — empty document symbol responses (returned before `lake build` completes) are no longer persisted, preventing symbols from being permanently hidden #1356
 
+Dashboard:
+  - Fix: Memory leaks in frontend when using Chromium-based browsers/Windows webview #1389
 
 # v1.1.2 (2026-04-14)
 
