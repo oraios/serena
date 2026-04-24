@@ -14,7 +14,7 @@
 <br>
 
 
-* Serena provides essential **semantic code retrieval, editing and refactoring tools** that are akin to an IDE's capabilities,
+* Serena provides essential **semantic code retrieval, editing, refactoring and debugging tools** that are akin to an IDE's capabilities,
   operating at the symbol level and exploiting relational structure.
 * It integrates with any client/LLM via the model context protocol (**MCP**).
   
@@ -170,6 +170,12 @@ Serena's symbolic editing tools are less error-prone and much more token-efficie
 | insert after symbol    | yes               | yes              |
 | insert before symbol   | yes               | yes              |
 | safe delete            | yes               | yes              |
+
+### Interactive Debugging
+
+Exclusive to the JetBrains plugin, Serena supports a highly general debugging tool,
+which allows an agent to set breakpoints, inspect variables, evaluate expressions and control execution flow 
+via a persistent REPL-style interface.
 
 ### Basic Features
 

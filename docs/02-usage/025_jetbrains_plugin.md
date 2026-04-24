@@ -43,6 +43,8 @@ There are multiple features that are only available when using the JetBrains plu
 * **Enhanced retrieval & refactoring capabilities**: The plugin adds additional [tools](../01-about/035_tools) (e.g. type
   hierarchy retrieval, move, find declaration, inline symbol, etc.) 
   and transforms the underlying mechanisms of shared tools to build upon the IDE's capabilities.
+* **Interactive debugging**: The agent can set breakpoints, inspect variables, evaluate expressions and control execution flow
+  by directly interacting with the IDE's debugger, using a REPL-style interface for maximum flexibility.
 * **Improved multi-agent support**: A single IDE instance naturally serves arbitrarily many agent sessions without requiring additional resources.
 * **Enhanced performance**: Faster tool execution thanks to optimized IDE integration.
 * **Multi-language excellence** and **framework support**: First-class support for polyglot projects with multiple languages. 

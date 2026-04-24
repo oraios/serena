@@ -23,3 +23,5 @@ included_optional_tools:
   - jet_brains_type_hierarchy
   - jet_brains_rename
   - jet_brains_safe_delete
+  - jet_brains_debug
+  - serena_info

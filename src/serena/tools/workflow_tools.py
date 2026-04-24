@@ -4,7 +4,7 @@ Tools supporting the general workflow of the agent
 
 import platform
 
-from serena.tools import ReadMemoryTool, Tool, ToolMarkerDoesNotRequireActiveProject, WriteMemoryTool
+from serena.tools import ReadMemoryTool, Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional, WriteMemoryTool
 
 
 class CheckOnboardingPerformedTool(Tool):
@@ -72,3 +72,20 @@ class InitialInstructionsTool(Tool, ToolMarkerDoesNotRequireActiveProject):
         as it will critically inform you!
         """
         return self.agent.create_system_prompt(session_id=session_id)
+
+
+class SerenaInfoTool(Tool, ToolMarkerOptional, ToolMarkerDoesNotRequireActiveProject):
+    """
+    Provides information about an advanced topic on demand, facilitating context-efficiency.
+    """
+
+    def apply(self, topic: str) -> str:
+        """
+        Retrieves Serena-specific information
+        :param topic: the topic, which you must have been given explicitly
+        """
+        match topic:
+            case "jet_brains_debug_repl":
+                return self.agent.prompt_factory.create_info_jet_brains_debug_repl()
+            case _:
+                raise ValueError("Invalid topic: " + topic)
