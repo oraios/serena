@@ -121,7 +121,9 @@ Some languages require additional installations or setup steps, as noted.
   works best with a `foundry.toml` or `hardhat.config.js` in the project root)
 * **Swift**
 * **TypeScript**
-* **Vue**    
+  (by default, uses [typescript-language-server](https://github.com/typescript-language-server/typescript-language-server) (language `typescript`);
+  we also support [tsgo](https://github.com/nicolo-ribaudo/tc39-proposal-type-annotations) (language `typescript_tsgo`), the native Go-based TypeScript 7 compiler with built-in LSP — does not require Node.js, must be installed separately via `npm install -g @typescript/native-preview`)
+* **Vue**
   (3.x with TypeScript; requires Node.js v18+ and npm; supports .vue Single File Components with monorepo detection)
 * **YAML**
 * **JSON**  

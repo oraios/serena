@@ -45,6 +45,7 @@ _LANGUAGE_REPO_ALIASES: dict[Language, Language] = {
     Language.PYTHON_TY: Language.PYTHON,
     Language.RUBY_SOLARGRAPH: Language.RUBY,
     Language.PYTHON_TY: Language.PYTHON,
+    Language.TYPESCRIPT_TSGO: Language.TYPESCRIPT,
 }
 
 PYTHON_LANGUAGE_BACKENDS = [Language.PYTHON, Language.PYTHON_TY]

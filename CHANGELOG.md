@@ -90,6 +90,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Lean4 stale cache — empty document symbol responses (returned before `lake build` completes) are no longer persisted, preventing symbols from being permanently hidden #1356
   - Add JSON language server support via `vscode-json-languageserver` (experimental) #1391
   - Fix: Elixir/Expert deadlock on startup — Expert's build pipeline requires a `textDocument/didOpen` notification to start; Serena now opens `mix.exs` immediately after `initialized` so Expert begins compiling instead of waiting indefinitely #1397
+  - New: Add `typescript_tsgo` language backend — TypeScript support via tsgo (native Go-based TypeScript 7 compiler with built-in LSP); automatically installed via npm #1402
 
 * Dashboard:
   - Add configurable dashboard interface mode (new global configuration setting `web_dashboard_interface`):

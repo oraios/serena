@@ -105,6 +105,10 @@ class Language(str, Enum):
     a virtual environment with pygls dependencies on first use.
     """
     # Experimental or deprecated Language Servers
+    TYPESCRIPT_TSGO = "typescript_tsgo"
+    """TypeScript support via tsgo — the native Go-based TypeScript 7 compiler with built-in LSP.
+    Does not require Node.js. Install via: npm install -g @typescript/native-preview
+    """
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
     PYTHON_JEDI = "python_jedi"
@@ -210,6 +214,7 @@ class Language(str, Enum):
         """
         return self in {
             self.ANSIBLE,
+            self.TYPESCRIPT_TSGO,
             self.TYPESCRIPT_VTS,
             self.PYTHON_JEDI,
             self.PYTHON_TY,
@@ -265,8 +270,8 @@ class Language(str, Enum):
             case self.PYTHON | self.PYTHON_JEDI | self.PYTHON_TY:
                 return FilenameMatcher(".py", ".pyi")
             case self.JAVA:
-                return FilenameMatcher(".java")
-            case self.TYPESCRIPT | self.TYPESCRIPT_VTS:
+                return FilenameMatcher("*.java")
+            case self.TYPESCRIPT | self.TYPESCRIPT_TSGO | self.TYPESCRIPT_VTS:
                 # see https://github.com/oraios/serena/issues/204
                 path_patterns = []
                 for prefix in ["c", "m", ""]:
@@ -452,6 +457,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.vts_language_server import VtsLanguageServer
 
                 return VtsLanguageServer
+            case self.TYPESCRIPT_TSGO:
+                from solidlsp.language_servers.tsgo_language_server import TsgoLanguageServer
+
+                return TsgoLanguageServer
             case self.VUE:
                 from solidlsp.language_servers.vue_language_server import VueLanguageServer
 
