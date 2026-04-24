@@ -446,7 +446,9 @@ class SvelteLanguageServer(SolidLanguageServer):
 
         # check if installation is needed based on executables AND version
         version_file = os.path.join(svelte_ls_dir, ".installed_version")
-        expected_version = f"{svelte_language_server_version}_{typescript_svelte_plugin_version}_{typescript_version}_{typescript_language_server_version}"
+        expected_version = (
+            f"{svelte_language_server_version}_{typescript_svelte_plugin_version}_{typescript_version}_{typescript_language_server_version}"
+        )
 
         needs_install = False
         if not os.path.exists(svelte_executable_path) or not os.path.exists(ts_ls_executable_path):
@@ -456,7 +458,9 @@ class SvelteLanguageServer(SolidLanguageServer):
             with open(version_file) as f:
                 installed_version = f.read().strip()
             if installed_version != expected_version:
-                log.info(f"Svelte Language Server version mismatch: installed={installed_version}, expected={expected_version}. Reinstalling...")
+                log.info(
+                    f"Svelte Language Server version mismatch: installed={installed_version}, expected={expected_version}. Reinstalling..."
+                )
                 needs_install = True
         else:
             log.info("Svelte Language Server version file not found. Reinstalling to ensure correct version...")
