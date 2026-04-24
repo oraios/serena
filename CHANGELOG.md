@@ -29,6 +29,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Serena's system prompt (a.k.a. the 'Serena Instructions Manual') is now provided lazily. 
     At MCP connection time, only a one-sentence bootstrap prompt is provided.
     The `initial_instructions` tool provides the full prompt on demand, keeping the initial context lean.
+  - Add `serena_info` tool for on-demand retrieval of usage information
 
 * JetBrains:
   - Add `debug` tool: The agent can set breakpoints, inspect variables, evaluate expressions and control execution flow

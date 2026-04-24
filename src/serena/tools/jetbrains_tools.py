@@ -579,74 +579,13 @@ class JetBrainsDebugTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
         repl_key: str = "default",
     ) -> str:
         """
-        Evaluates a Groovy expression in a persistent REPL, which can be used to debug
-        code interactively.
+        Debug code interactively by evaluating Groovy expressions in a persistent REPL.
         Important: Debugging should only be applied if the user has requested it!
-        You rely on the user to provide suitable run configurations for you to work with.
 
-        Note: The debugger uses 0-based line numbers like other Serena tools (while humans typically communicate 1-based ones).
-
-        State (objects, variables assigned) persists across calls within the same repl_key.
-
-        Pre-bound variables: ``debug`` (debugger interface)
-
-        Run configurations:
-            debug.listRunConfigs()
-            session = debug.startDebug("MyTestRun")  # returns a DebugSession
-            debug.startRun("MyApp")  # non-debug run, fire-and-forget
-
-        Session discovery:
-            debug.sessions()
-            session = debug.currentSession()
-            session = debug.session(id)
-
-        Breakpoints (project-global, set before or during debugging):
-            debug.addBreakpoint(file, line)
-            debug.addBreakpoint(file, line, condition)
-            debug.addLogpoint(file, line, logExpression)
-            debug.listBreakpoints()
-            debug.removeBreakpointAt(file, line)
-
-        Execution control (on a DebugSession, e.g. ``session``)::
-            session.stepOver() | .stepInto() | .stepOut()
-            session.resume() | .pause() | .stop()
-            session.runToLine(file, line)
-
-        Wait for pause (blocks until the session pauses or times out):
-            session.waitForPause(timeoutSeconds)
-            session.stepOverAndWait(timeoutSeconds)  # step + wait in one call
-            session.resumeAndWait(timeoutSeconds)
-
-        Inspection (when paused):
-            session.status()                # location + source + variable values in one call
-            session.variables()             # overview of locals/args (values may be truncated)
-            session.variable(name)          # single variable (VariableInfo instance)
-            session.frames() | .frame()     # stack trace | current frame
-            session.sourceContext(lines)    # source around current line
-            session.threads()
-
-        VariableInfo members: name, value (String as presented by the debugger), type
-
-        Evaluation & modification:
-            session.eval("expr")       # evaluate in current frame
-            session.setVar("x", "42")  # set variable via assignment
-
-        Example sequence of expressions one might execute in a REPL:
-            debug.addBreakpoint("src/main/java/Foo.java", 42)
-            session = debug.startDebug("MyTest")
-            session.waitForPause(30)
-            session.status()
-
-        You can pass multiple statements at once; the result of the final expression is returned:
-            session = debug.startDebug("MyTest"); session.waitForPause(30); session.status()
-
-        Control flow statements are also possible:
-            while (session.variable("count").value.equals("0")) { session.stepOverAndWait(5) }
-
-        When done, close the REPL by passing an empty expression.
+        Use the `serena_info` tool with topic `jet_brains_debug_repl` for usage information.
 
         :param expression: a Groovy/Java expression/statement to evaluate in the REPL.
-            If empty/null, closes the REPL with the given key, discarding its state.
+            If empty/null, closes the REPL with the given key.
         :param repl_key: identifier for the REPL instance. State persists across calls with the same key.
         :return: string representation of the result
         """
