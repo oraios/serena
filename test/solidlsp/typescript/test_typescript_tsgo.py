@@ -42,9 +42,7 @@ class TestTsgoLanguageServer:
         assert helper_symbol is not None, "Could not find 'helperFunction' symbol in index.ts"
         sel_start = helper_symbol["selectionRange"]["start"]
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
-        assert any("index.ts" in ref.get("relativePath", "") for ref in refs), (
-            "index.ts should reference helperFunction"
-        )
+        assert any("index.ts" in ref.get("relativePath", "") for ref in refs), "index.ts should reference helperFunction"
 
     @pytest.mark.parametrize("language_server", _tsgo_servers, indirect=True)
     def test_bare_symbol_names(self, language_server: SolidLanguageServer) -> None:

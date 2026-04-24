@@ -145,9 +145,7 @@ class TsgoLanguageServer(SolidLanguageServer):
         log.info("Sending initialize request to tsgo LSP")
         init_response = self.server.send.initialize(initialize_params)
 
-        assert "definitionProvider" in init_response.get("capabilities", {}), (
-            "tsgo did not report definitionProvider capability"
-        )
+        assert "definitionProvider" in init_response.get("capabilities", {}), "tsgo did not report definitionProvider capability"
 
         self.server.notify.initialized({})
 
