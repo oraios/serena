@@ -74,7 +74,7 @@ class TestElixirToolsStartup:
         assert text_doc["uri"].endswith("mix.exs"), f"Expected mix.exs URI, got {text_doc['uri']}"
 
     def test_startup_event_order_initialized_then_didopen_then_didclose(self, tmp_path):
-        """initialized → didOpen(mix.exs) → [ready] → didClose(mix.exs) is the required sequence."""
+        """Initialized → didOpen(mix.exs) → [ready] → didClose(mix.exs) is the required sequence."""
         (tmp_path / "mix.exs").write_text("defmodule App.MixProject do\n  use Mix.Project\nend\n", encoding="utf-8")
 
         events: list[str] = []
