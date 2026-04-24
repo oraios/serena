@@ -891,8 +891,18 @@ class SerenaAgent:
         template = JinjaTemplate(prompt_template)
         return template.render(available_tools=self._exposed_tools.tool_names, available_markers=self._exposed_tools.tool_marker_names)
 
+    def create_connection_prompt(self) -> str:
+        """
+        Returns the bootstrap prompt to be sent at MCP connection time.
+
+        :return: the prompt
+        """
+        return self.prompt_factory.create_connection_prompt()
+
     def create_system_prompt(self, session_id: str = "global") -> str:
         """
+        Returns the 'Serena Instructions Manual', i.e. Serena's system prompt.
+
         :param session_id: the client session ID for the case where this is run from a tool; "global" for the connection time case
         :return: the prompt
         """
@@ -925,7 +935,6 @@ class SerenaAgent:
         if self._active_project is not None and not self._project_prompt_status.is_project_activation_message_already_provided(session_id):
             system_prompt += "\n\n" + self.get_project_activation_message(session_id)
 
-        log.info("System prompt:\n%s", system_prompt)
         return system_prompt
 
     def get_project_activation_message(self, session_id: str) -> str:

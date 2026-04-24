@@ -26,6 +26,9 @@ Status of the `main` branch. Changes prior to the next official version change w
      - `query_project`: Support use of project root instead of project name #1388
      - `list_queryable_projects`: Return both project names and project roots 
   - Fix: `search_for_pattern` tool returned 1-based line numbers (in contrast to all other tools); cause: implementation of `text_utils.search_text`
+  - Serena's system prompt (a.k.a. the 'Serena Instructions Manual') is now provided lazily. 
+    At MCP connection time, only a one-sentence bootstrap prompt is provided.
+    The `initial_instructions` tool provides the full prompt on demand, keeping the initial context lean.
 
 * JetBrains:
   - `Move` and `SafeDelete` tools: transform empty string to None (counteracts client errors)

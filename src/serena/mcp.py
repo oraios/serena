@@ -332,6 +332,7 @@ class SerenaMCPFactory:
         # retain only FASTMCP_ prefix for already set environment variables.
         Settings.model_config = SettingsConfigDict(env_prefix="FASTMCP_")
         instructions = self._get_initial_instructions()
+        log.info("MCP server initial instructions:\n%s", instructions)
         mcp = FastMCP(
             name="Serena",
             lifespan=self.server_lifespan,
@@ -357,4 +358,4 @@ class SerenaMCPFactory:
 
     def _get_initial_instructions(self) -> str:
         assert self.agent is not None
-        return self.agent.create_system_prompt()
+        return self.agent.create_connection_prompt()
