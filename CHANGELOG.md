@@ -45,6 +45,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: `rename_symbol` for Vue files now correctly propagates edits to the TypeScript server, enabling cross-file renames in `.vue` files 
   - Fix: Lean4 stale cache — empty document symbol responses (returned before `lake build` completes) are no longer persisted, preventing symbols from being permanently hidden #1356
   - Add JSON language server support via `vscode-json-languageserver` (experimental) #1391
+  - Fix: Elixir/Expert deadlock on startup — Expert's build pipeline requires a `textDocument/didOpen` notification to start; Serena now opens `mix.exs` immediately after `initialized` so Expert begins compiling instead of waiting indefinitely #1397
 
 Dashboard:
   - Add configurable dashboard interface mode (new global configuration setting `web_dashboard_interface`):
