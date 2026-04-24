@@ -39,6 +39,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Language Servers:
   - Fix: clangd capability checks now tolerate valid initialize response shape differences and invalidate cached C++ document symbols when clangd/compile commands context changes #1359                                                                                                                                                                                                            
   - Fix: `rename_symbol` for Vue files now correctly propagates edits to the TypeScript server, enabling cross-file renames in `.vue` files 
+  - Add Svelte language server support (Svelte 5 + SvelteKit via `svelte-language-server`; auto-installed via npx; supports `.svelte`, `.ts`, and `.js` files)
   - Fix: Lean4 stale cache — empty document symbol responses (returned before `lake build` completes) are no longer persisted, preventing symbols from being permanently hidden #1356
 
 Dashboard:
