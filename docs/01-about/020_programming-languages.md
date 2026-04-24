@@ -116,7 +116,7 @@ Some languages require additional installations or setup steps, as noted.
   (3.x with TypeScript; requires Node.js v18+ and npm; supports .vue Single File Components with monorepo detection)
 * **YAML**
 * **JSON**  
-  (experimental; provides document symbol navigation and hover; must be explicitly specified as the main language; requires Node.js and npm)
+  (experimental; must be explicitly added to the languages list; requires Node.js and npm)
 * **Zig**  
   (requires installation of ZLS - Zig Language Server)
 
