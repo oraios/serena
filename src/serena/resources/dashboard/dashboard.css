@@ -156,7 +156,6 @@ body {
     margin: 0 auto;
     padding: var(--frame-padding);
     padding-top: 0;
-    min-width: 1280px;
 }
 
 .main {
@@ -1008,6 +1007,15 @@ body {
     .overview-right {
         order: -1;
     }
+
+    .stat-tool-name {
+        min-width: 140px;
+        max-width: 140px;
+    }
+
+    .config-grid {
+        grid-template-columns: 140px 1fr;
+    }
 }
 
 @media (max-width: 768px) {
@@ -1072,6 +1080,29 @@ body {
 
     .stat-tool-name {
         min-width: 100%;
+    }
+
+    .log-container {
+        height: calc(100vh - 200px);
+    }
+}
+
+@media (max-width: 480px) {
+    #frame {
+        padding: 8px;
+    }
+
+    .header {
+        padding: 8px;
+    }
+
+    .menu-dropdown {
+        min-width: 160px;
+    }
+
+    .stat-tool-name {
+        min-width: 100%;
+        max-width: 100%;
     }
 }
 
