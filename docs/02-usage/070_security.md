@@ -147,6 +147,7 @@ Only the language servers listed below download or install additional dependenci
 - **Elm**: `@elm-tooling/elm-language-server`
 - **PHP (`intelephense`)**: `intelephense`
 - **Solidity**: `@nomicfoundation/solidity-language-server`
+- **Svelte**: `svelte-language-server` and `typescript-svelte-plugin`, plus `typescript` and `typescript-language-server`
 - **TypeScript**: `typescript` and `typescript-language-server`
 - **Vue**: `@vue/language-server`, plus `typescript` and `typescript-language-server`
 - **VTSLS**: `@vtsls/language-server`

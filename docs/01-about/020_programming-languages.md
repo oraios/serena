@@ -112,6 +112,8 @@ Some languages require additional installations or setup steps, as noted.
   works best with a `foundry.toml` or `hardhat.config.js` in the project root)
 * **Swift**
 * **TypeScript**
+* **Svelte**
+  (Svelte 5 + SvelteKit; requires Node.js v18+ and npm; supports .svelte, .svelte.ts, and .svelte.js files including Svelte 5 runes)
 * **Vue**    
   (3.x with TypeScript; requires Node.js v18+ and npm; supports .vue Single File Components with monorepo detection)
 * **YAML**
