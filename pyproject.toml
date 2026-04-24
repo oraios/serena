@@ -336,6 +336,7 @@ markers = [
   "haskell: Haskell language server tests",
   "haxe: Haxe language server tests",
   "yaml: language server running for YAML",
+  "json: language server running for JSON (uses vscode-json-languageserver)",
   "powershell: language server running for PowerShell",
   "pascal: language server running for Pascal (Free Pascal/Lazarus)",
   "cpp: language server running for C/C++",

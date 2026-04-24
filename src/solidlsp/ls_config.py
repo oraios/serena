@@ -122,6 +122,12 @@ class Language(str, Enum):
     """YAML language server (experimental).
     Must be explicitly specified as the main language, not auto-detected.
     """
+    JSON = "json"
+    """JSON language server using vscode-json-languageserver (experimental).
+    Provides document symbol navigation and hover for JSON files.
+    Must be explicitly specified as the main language, not auto-detected.
+    Requires Node.js and npm.
+    """
     TOML = "toml"
     """TOML language server using Taplo.
     Supports TOML validation, formatting, and schema support.
@@ -174,6 +180,7 @@ class Language(str, Enum):
             self.PHP_PHPACTOR,
             self.MARKDOWN,
             self.YAML,
+            self.JSON,
             self.TOML,
             self.GROOVY,
             self.CPP_CCLS,
@@ -252,6 +259,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.cr")
             case self.YAML:
                 return FilenameMatcher("*.yaml", "*.yml")
+            case self.JSON:
+                return FilenameMatcher("*.json", "*.jsonc")
             case self.TOML:
                 return FilenameMatcher("*.toml")
             case self.ZIG:
@@ -446,6 +455,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.yaml_language_server import YamlLanguageServer
 
                 return YamlLanguageServer
+            case self.JSON:
+                from solidlsp.language_servers.json_language_server import JsonLanguageServer
+
+                return JsonLanguageServer
             case self.TOML:
                 from solidlsp.language_servers.taplo_server import TaploServer
 
