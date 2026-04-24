@@ -115,6 +115,8 @@ Some languages require additional installations or setup steps, as noted.
 * **Vue**    
   (3.x with TypeScript; requires Node.js v18+ and npm; supports .vue Single File Components with monorepo detection)
 * **YAML**
+* **JSON**  
+  (experimental; must be explicitly added to the languages list; requires Node.js and npm)
 * **Zig**  
   (requires installation of ZLS - Zig Language Server)
 
