@@ -101,9 +101,7 @@ class TestSvelteEdgeCasePositions:
     def test_containing_symbol_at_file_start(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "routes", "Counter.svelte")
         result = language_server.request_containing_symbol(file_path, 0, 0)
-        assert result is None or result == {} or isinstance(result, dict), (
-            f"Expected graceful response at file start, got {result}"
-        )
+        assert result is None or result == {} or isinstance(result, dict), f"Expected graceful response at file start, got {result}"
 
     @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
     def test_references_at_file_start(self, language_server: SolidLanguageServer) -> None:
@@ -115,14 +113,10 @@ class TestSvelteEdgeCasePositions:
     def test_containing_symbol_template_region(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "routes", "Counter.svelte")
         result = language_server.request_containing_symbol(file_path, 14, 3)
-        assert result is None or result == {} or isinstance(result, dict), (
-            f"Expected graceful response in template region, got {result}"
-        )
+        assert result is None or result == {} or isinstance(result, dict), f"Expected graceful response in template region, got {result}"
 
     @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
     def test_containing_symbol_whitespace_line(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "routes", "Counter.svelte")
         result = language_server.request_containing_symbol(file_path, 12, 0)
-        assert result is None or result == {} or isinstance(result, dict), (
-            f"Expected graceful response for whitespace line, got {result}"
-        )
+        assert result is None or result == {} or isinstance(result, dict), f"Expected graceful response for whitespace line, got {result}"

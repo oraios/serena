@@ -41,9 +41,7 @@ class TestSvelteSymbolRetrieval:
         containing_symbol = language_server.request_containing_symbol(file_path, line, 2)
 
         assert containing_symbol is not None, "Expected containing symbol in +page.svelte function body"
-        assert containing_symbol.get("name") in {"update", "keydown"}, (
-            f"Expected update/keydown containing symbol, got {containing_symbol}"
-        )
+        assert containing_symbol.get("name") in {"update", "keydown"}, f"Expected update/keydown containing symbol, got {containing_symbol}"
 
     @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
     def test_request_containing_symbol_import_section(self, language_server: SolidLanguageServer) -> None:
@@ -66,9 +64,7 @@ class TestSvelteSymbolRetrieval:
         start = game_symbol["selectionRange"]["start"]
         ref_symbols = [
             ref.symbol
-            for ref in language_server.request_referencing_symbols(
-                game_file, start["line"], start["character"], include_self=True
-            )
+            for ref in language_server.request_referencing_symbols(game_file, start["line"], start["character"], include_self=True)
         ]
         uris = [symbol.get("location", {}).get("uri", "") for symbol in ref_symbols]
 
@@ -117,6 +113,4 @@ class TestSvelteSymbolRetrieval:
             pytest.skip(f"Defining symbol lookup is unstable at this position: {exc}")
 
         assert defining_symbol is not None, "Expected defining symbol for Game usage in +page.server.ts"
-        assert defining_symbol.get("name") in {"Game", "game"}, (
-            f"Expected Game-like defining symbol name, got {defining_symbol}"
-        )
+        assert defining_symbol.get("name") in {"Game", "game"}, f"Expected Game-like defining symbol name, got {defining_symbol}"

@@ -20,9 +20,7 @@ def assert_workspace_edit_shape(workspace_edit: dict, expected_new_text: str) ->
             for edit in edits:
                 assert "range" in edit, f"Edit in {uri} should contain range"
                 assert "newText" in edit, f"Edit in {uri} should contain newText"
-                assert edit["newText"] == expected_new_text, (
-                    f"Expected newText '{expected_new_text}', got '{edit['newText']}'"
-                )
+                assert edit["newText"] == expected_new_text, f"Expected newText '{expected_new_text}', got '{edit['newText']}'"
     else:
         for change in workspace_edit["documentChanges"]:
             assert "textDocument" in change, "documentChanges entry missing textDocument"
@@ -33,9 +31,7 @@ def assert_workspace_edit_shape(workspace_edit: dict, expected_new_text: str) ->
             for edit in change["edits"]:
                 assert "range" in edit, f"Edit in {uri} should contain range"
                 assert "newText" in edit, f"Edit in {uri} should contain newText"
-                assert edit["newText"] == expected_new_text, (
-                    f"Expected newText '{expected_new_text}', got '{edit['newText']}'"
-                )
+                assert edit["newText"] == expected_new_text, f"Expected newText '{expected_new_text}', got '{edit['newText']}'"
 
 
 class TestSvelteRename:
@@ -56,9 +52,7 @@ class TestSvelteRename:
 
         changes = workspace_edit.get("changes", {})
         if changes:
-            assert any("Counter.svelte" in uri for uri in changes), (
-                f"Expected rename edits for Counter.svelte, got {list(changes.keys())}"
-            )
+            assert any("Counter.svelte" in uri for uri in changes), f"Expected rename edits for Counter.svelte, got {list(changes.keys())}"
 
     @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
     def test_rename_cross_file_game_class(self, language_server: SolidLanguageServer) -> None:
