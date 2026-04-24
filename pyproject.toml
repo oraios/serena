@@ -21,8 +21,8 @@ dependencies = [
   "pyright==1.1.403",
   "fortls==3.2.2",
   "overrides==7.7.0",
-  "python-dotenv==1.2.1",
-  "mcp==1.26.0",
+  "python-dotenv==1.2.2",
+  "mcp==1.27.0",
   "flask==3.1.3", # bumped from 3.1.1 for CVE fix (also fixes werkzeug alert)
   "sensai-utils==1.5.0",
   "pydantic==2.12.5",
@@ -337,6 +337,7 @@ markers = [
   "haskell: Haskell language server tests",
   "haxe: Haxe language server tests",
   "yaml: language server running for YAML",
+  "json: language server running for JSON (uses vscode-json-languageserver)",
   "powershell: language server running for PowerShell",
   "pascal: language server running for Pascal (Free Pascal/Lazarus)",
   "cpp: language server running for C/C++",

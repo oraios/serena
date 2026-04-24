@@ -1,0 +1,30 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "Alice",
+      "email": "alice@example.com",
+      "roles": ["admin", "user"]
+    },
+    {
+      "id": 2,
+      "name": "Bob",
+      "email": "bob@example.com",
+      "roles": ["user"]
+    }
+  ],
+  "projects": [
+    {
+      "id": 101,
+      "name": "Project Alpha",
+      "status": "active",
+      "tags": ["backend", "api"]
+    },
+    {
+      "id": 102,
+      "name": "Project Beta",
+      "status": "planning",
+      "tags": ["frontend"]
+    }
+  ]
+}
