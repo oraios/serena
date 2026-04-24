@@ -1,0 +1,1 @@
+"""Svelte language server tests."""
