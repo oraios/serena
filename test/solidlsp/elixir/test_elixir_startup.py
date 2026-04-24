@@ -90,9 +90,7 @@ class TestElixirToolsStartup:
 
         language_server._start_server()
 
-        assert events == ["initialized", "didOpen", "didClose"], (
-            f"Unexpected startup event order: {events}"
-        )
+        assert events == ["initialized", "didOpen", "didClose"], f"Unexpected startup event order: {events}"
 
     def test_no_crash_when_mix_exs_missing(self, tmp_path):
         """_start_server must not crash if mix.exs is absent (non-standard project layout)."""
