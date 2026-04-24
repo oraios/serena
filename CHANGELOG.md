@@ -51,6 +51,7 @@ Dashboard:
   - Add configurable dashboard interface mode (new global configuration setting `web_dashboard_interface`):
     Three modes (browser, native app with tray, tray manager for aggregating multiple instances) are supported, depending on the OS
   - Fix: Memory leaks in frontend when using Chromium-based browsers/Windows webview #1389
+  - Fix: Dashboard UI now renders correctly on tablet and mobile viewports — removed `min-width: 1280px` constraint that forced horizontal scrolling and disabled all responsive breakpoints; header collapses to a compact layout at ≤768px; new 480px breakpoint added for small phones
 
 # v1.1.2 (2026-04-14)
 
