@@ -1019,27 +1019,40 @@ body {
 }
 
 @media (max-width: 768px) {
-    body {
-        padding-top: 140px;
-    }
-
     .header {
         flex-direction: column;
+        height: auto;
         gap: 10px;
         padding: 10px 15px;
     }
 
-    .logo-container {
+    .header-left {
         width: 100%;
+        justify-content: center;
+        gap: 15px;
+    }
+
+    .logo-container {
+        width: auto;
+        height: auto;
         text-align: center;
+        flex-shrink: 1;
     }
 
     .logo-container img {
+        height: 55px;
         max-width: 200px;
+        margin-top: 0;
+    }
+
+    .header-banner {
+        height: auto;
+        max-height: 55px;
     }
 
     .header-nav {
         width: 100%;
+        height: auto;
         align-items: center;
     }
 
