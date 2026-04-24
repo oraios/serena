@@ -237,8 +237,66 @@ class Language(str, Enum):
                 return FilenameMatcher("*.rb", "*.erb")
             case self.RUBY_SOLARGRAPH:
                 return FilenameMatcher("*.rb")
-            case self.CPP | self.CPP_CCLS:
-                return FilenameMatcher("*.cpp", "*.h", "*.hpp", "*.c", "*.hxx", "*.cc", "*.cxx")
+            case self.CPP:
+                # From llvm-project/clang/lib/Driver/Types.cpp types::lookupTypeForExtension:
+                return FilenameMatcher(
+                    # C
+                    "*.c",
+                    "*.h",
+                    # C++
+                    "*.c++",
+                    "*.cc",
+                    "*.cp",
+                    "*.cpp",
+                    "*.cxx",
+                    "*.hh",
+                    "*.hpp",
+                    "*.hxx",
+                    # C++ include files
+                    "*.inl",
+                    "*.ipp",
+                    "*.tpp",
+                    "*.txx",
+                    # Objective-C
+                    "*.m",
+                    "*.mm",
+                    # C++20 module interface files
+                    "*.c++m",
+                    "*.cppm",
+                    "*.cxxm",
+                    "*.ixx",
+                    # CUDA
+                    "*.cu",
+                    # HIP
+                    "*.hip",
+                    # OpenCL
+                    "*.cl",
+                    "*.clcpp",
+                )
+            case self.CPP_CCLS:
+                # From llvm-project/clang/lib/Driver/Types.cpp types::lookupTypeForExtension:
+                return FilenameMatcher(
+                    # C
+                    "*.c",
+                    "*.h",
+                    # C++
+                    "*.c++",
+                    "*.cc",
+                    "*.cp",
+                    "*.cpp",
+                    "*.cxx",
+                    "*.hh",
+                    "*.hpp",
+                    "*.hxx",
+                    # C++ include files
+                    "*.inl",
+                    "*.ipp",
+                    "*.tpp",
+                    "*.txx",
+                    # Objective-C
+                    "*.m",
+                    "*.mm",
+                )
             case self.KOTLIN:
                 return FilenameMatcher("*.kt", "*.kts")
             case self.DART:
