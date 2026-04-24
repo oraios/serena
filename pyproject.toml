@@ -308,6 +308,7 @@ markers = [
   "rust: language server running for Rust",
   "typescript: language server running for TypeScript",
   "vue: language server running for Vue (uses TypeScript LSP)",
+  "svelte: language server running for Svelte / SvelteKit (uses Svelte LSP + TypeScript LSP)",
   "php: language server running for PHP",
   "perl: language server running for Perl",
   "csharp: language server running for C#",
