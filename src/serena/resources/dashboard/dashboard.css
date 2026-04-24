@@ -197,17 +197,17 @@ body {
 
 .logo-container img {
     height: calc(var(--header-height) - 20px);
+    max-width: 100%;
     margin-top: 10px;
     display: block;
 }
 
-.header-banner {
+.platinum-banners-row {
     position: relative;
-    top: 0;
-    left: 0;
-    order: 2;
-    height: var(--header-height);
-    max-height: var(--header-height);
+    margin-top: var(--header-gap-main);
+    max-height: 150px;
+    overflow: hidden;
+    border-radius: var(--border-radius);
 }
 
 .header-nav {
@@ -314,6 +314,7 @@ body {
     display: none;
     pointer-events: none;
     height: 100%;
+    width: 100%;
 }
 
 .platinum-banner-slide.active {
@@ -332,6 +333,7 @@ body {
 
 .platinum-banner-slide .banner-image {
     max-height: 100%;
+    max-width: 100%;
     object-fit: contain;
 }
 
@@ -1022,6 +1024,7 @@ body {
     .header {
         flex-direction: column;
         height: auto;
+        align-items: stretch;
         gap: 10px;
         padding: 10px 15px;
     }
@@ -1029,25 +1032,19 @@ body {
     .header-left {
         width: 100%;
         justify-content: center;
-        gap: 15px;
     }
 
     .logo-container {
         width: auto;
         height: auto;
         text-align: center;
-        flex-shrink: 1;
+        flex-shrink: 0;
     }
 
     .logo-container img {
-        height: 55px;
-        max-width: 200px;
+        height: 100px;
+        max-width: 300px;
         margin-top: 0;
-    }
-
-    .header-banner {
-        height: auto;
-        max-height: 55px;
     }
 
     .header-nav {
