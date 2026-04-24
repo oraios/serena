@@ -205,7 +205,7 @@ body {
 .platinum-banners-row {
     position: relative;
     margin-top: var(--header-gap-main);
-    max-height: 150px;
+    max-height: 156px;
     overflow: hidden;
     border-radius: var(--border-radius);
 }
