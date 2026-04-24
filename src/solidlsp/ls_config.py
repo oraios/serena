@@ -232,7 +232,41 @@ class Language(str, Enum):
             case self.RUBY_SOLARGRAPH:
                 return FilenameMatcher("*.rb")
             case self.CPP | self.CPP_CCLS:
-                return FilenameMatcher("*.cpp", "*.h", "*.hpp", "*.c", "*.hxx", "*.cc", "*.cxx")
+                # From llvm-project/clang/lib/Driver/Types.cpp types::lookupTypeForExtension:
+                return FilenameMatcher(
+                    # C
+                    "*.c",
+                    "*.C",
+                    "*.h",
+                    "*.H",
+                    # C++
+                    "*.c++",
+                    "*.C++",
+                    "*.c++m",
+                    "*.cc",
+                    "*.CC",
+                    "*.cp",
+                    "*.cpp",
+                    "*.CPP",
+                    "*.cppm",
+                    "*.cxx",
+                    "*.CXX",
+                    "*.cxxm",
+                    "*.hpp",
+                    "*.hxx",
+                    "*.ixx",
+                    # CUDA
+                    "*.cu",
+                    # HIP
+                    "*.hip",
+                    # Objective-C
+                    "*.m",
+                    "*.M",
+                    "*.mm",
+                    # OpenCL
+                    "*.cl",
+                    "*.clcpp",
+                )
             case self.KOTLIN:
                 return FilenameMatcher("*.kt", "*.kts")
             case self.DART:
