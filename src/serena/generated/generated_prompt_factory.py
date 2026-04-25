@@ -33,3 +33,6 @@ class PromptFactory(PromptFactoryBase):
         mode_system_prompts: Any,
     ) -> str:
         return self._render_prompt("system_prompt", locals())
+
+    def create_cc_system_prompt_override(self) -> str:
+        return self._render_prompt("cc_system_prompt_override", locals())

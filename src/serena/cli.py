@@ -35,6 +35,7 @@ from serena.constants import (
     SERENAS_OWN_CONTEXT_YAMLS_DIR,
     SERENAS_OWN_MODE_YAMLS_DIR,
 )
+from serena.prompt_factory import SerenaPromptFactory
 from serena.util.cli_util import AutoRegisteringGroup
 from serena.util.dataclass import get_dataclass_default
 from serena.util.logging import MemoryLogHandler
@@ -490,6 +491,15 @@ class TopLevelCommands(AutoRegisteringGroup):
 
         viewer = SerenaDashboardViewer(url, width=width, height=height)
         viewer.run()
+
+    @staticmethod
+    @click.command(
+        "cc-system-prompt-override",
+        help="To be used specifically in Claude Code as value for `--system-prompt`",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    def cc_system_prompt_override() -> None:
+        click.echo(SerenaPromptFactory().create_cc_system_prompt_override())
 
 
 class ModeCommands(AutoRegisteringGroup):
