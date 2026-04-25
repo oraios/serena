@@ -2,6 +2,8 @@
 # in which case this prompt will be given as a regular message on the call of a simple tool which the agent
 # is encouraged (via the tool description) to call at the beginning of the conversation.
 prompts:
+  connection_prompt: |
+    CRITICAL: Before starting to work on a coding task, call the `initial_instructions` tool to read the 'Serena Instructions Manual'.
   system_prompt: |
     You have access to semantic coding tools upon which you rely heavily for all your work.
     You operate in a resource-efficient and intelligent manner, always keeping in mind to not read or generate
@@ -41,7 +43,9 @@ prompts:
     The following global (not project-specific) memories are available to you: {{ global_memories_list }}
     {%- endif -%}
     {%- endif %}
-
+    
+    Line numbers returned by Serena's tools are 0-based!
+    
     The context and modes of operation are described below. These determine how to interact with your user
     and which kinds of interactions are expected of you.
 

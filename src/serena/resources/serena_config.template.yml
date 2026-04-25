@@ -46,6 +46,21 @@ web_dashboard: True
 # See also: https://oraios.github.io/serena/02-usage/060_dashboard.html
 web_dashboard_open_on_launch: True
 
+# defines the interface (application mode) used for the web dashboard (if enabled).
+# If empty/null, use platform-dependent default. Otherwise, possible values:
+#  * browser: the dashboard is opened in the default browser (if `web_dashboard_open_on_launch` is true)
+#      This is supported on all platforms.
+#  * app: the dashboard is opened in a separate native-like app window with accompanying tray icon, whose
+#      lifecycle is tied to the Serena process.
+#      If `web_dashboard_open_on_launch` is false, the dashboard can be conveniently accessed via the tray icon.
+#      This is supported on Windows and macOS, but note that on macOS, where tray icons are very visible,
+#      this may result in too many icons being displayed when using multi-agent setups.
+#  * tray_manager: use a global tray icon to provide access to the dashboards of all running Serena instances,
+#      opening the dashboard in browser tabs when selected from the tray menu.
+#      This is EXPERIMENTAL. It is tested on Windows only. We will establish macOS support, but it is yet untested.
+#      On Linux, this cannot be universally supported, but it may work in some desktop environments.
+web_dashboard_interface:
+
 # the address the web dashboard will listen on (bind address).
 web_dashboard_listen_address: 127.0.0.1
 

@@ -19,8 +19,8 @@ class TestSearchText:
 
         assert len(matches) == 1
         assert matches[0].num_matched_lines == 1
-        assert matches[0].start_line == 3
-        assert matches[0].end_line == 3
+        assert matches[0].start_line == 2
+        assert matches[0].end_line == 2
         assert matches[0].lines[0].line_content.strip() == 'print("Hello, World!")'
 
     def test_search_text_with_regex_pattern(self):

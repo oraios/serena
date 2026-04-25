@@ -565,3 +565,33 @@ class JetBrainsRenameTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
             rename_in_text_occurrences=rename_in_text_occurrences,
         )
         return self._to_json(result)
+
+
+class JetBrainsDebugTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
+    """
+    Provides debugging functionality (run configs, breakpoints, stepping, inspection, and evaluation)
+    via a persistent debug REPL connected to the JetBrains IDE.
+    """
+
+    def apply(
+        self,
+        expression: str,
+        repl_key: str = "default",
+    ) -> str:
+        """
+        Debug code interactively by evaluating Groovy expressions in a persistent REPL.
+        Important: Debugging should only be applied if the user has requested it!
+
+        Use the `serena_info` tool with topic `jet_brains_debug_repl` for usage information.
+
+        :param expression: a Groovy/Java expression/statement to evaluate in the REPL.
+            If empty/null, closes the REPL with the given key.
+        :param repl_key: identifier for the REPL instance. State persists across calls with the same key.
+        :return: string representation of the result
+        """
+        with JetBrainsPluginClient.from_project(self.project) as client:
+            if expression:
+                response = client.debug_eval(repl_key=repl_key, expression=expression)
+            else:
+                response = client.debug_close(repl_key=repl_key)
+            return response.get("result", str(response))

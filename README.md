@@ -14,7 +14,7 @@
 <br>
 
 
-* Serena provides essential **semantic code retrieval, editing and refactoring tools** that are akin to an IDE's capabilities,
+* Serena provides essential **semantic code retrieval, editing, refactoring and debugging tools** that are akin to an IDE's capabilities,
   operating at the symbol level and exploiting relational structure.
 * It integrates with any client/LLM via the model context protocol (**MCP**).
   
@@ -110,7 +110,7 @@ Serena incorporates a powerful abstraction layer for the integration of language
 The underlying language servers are typically open-source projects or at least freely available for use.
 
 When using Serena's language server backend, we provide **support for over 40 programming languages**, including
-AL, Ansible, Bash, C#, C/C++, Clojure, Crystal, Dart, Elixir, Elm, Erlang, Fortran, F#, GLSL, Go, Groovy, Haskell, Haxe, HLSL, Java, JavaScript, Julia, Kotlin, Lean 4, Lua, Luau, Markdown, MATLAB, mSL, Nix, OCaml, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Scala, Solidity, Swift, TOML, TypeScript, WGSL, YAML, and Zig.
+AL, Ansible, Bash, C#, C/C++, Clojure, Crystal, Dart, Elixir, Elm, Erlang, Fortran, F#, GLSL, Go, Groovy, Haskell, Haxe, HLSL, Java, JavaScript, JSON, Julia, Kotlin, Lean 4, Lua, Luau, Markdown, MATLAB, mSL, Nix, OCaml, Perl, PHP, PowerShell, Python, R, Ruby, Rust, Scala, Solidity, Swift, TOML, TypeScript, WGSL, YAML, and Zig.
 
 ### The Serena JetBrains Plugin
 
@@ -170,6 +170,12 @@ Serena's symbolic editing tools are less error-prone and much more token-efficie
 | insert after symbol    | yes               | yes              |
 | insert before symbol   | yes               | yes              |
 | safe delete            | yes               | yes              |
+
+### Interactive Debugging
+
+Exclusive to the JetBrains plugin, Serena supports a highly general debugging tool,
+which allows an agent to set breakpoints, inspect variables, evaluate expressions and control execution flow 
+via a persistent REPL-style interface.
 
 ### Basic Features
 

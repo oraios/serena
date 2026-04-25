@@ -25,12 +25,20 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Project server: 
      - `query_project`: Support use of project root instead of project name #1388
      - `list_queryable_projects`: Return both project names and project roots 
+  - Fix: `search_for_pattern` tool returned 1-based line numbers (in contrast to all other tools); cause: implementation of `text_utils.search_text`
+  - Serena's system prompt (a.k.a. the 'Serena Instructions Manual') is now provided lazily. 
+    At MCP connection time, only a one-sentence bootstrap prompt is provided.
+    The `initial_instructions` tool provides the full prompt on demand, keeping the initial context lean.
+  - Add `serena_info` tool for on-demand retrieval of usage information
 
 * JetBrains:
-  - `Move` and `SafeDelete` tools: transform empty string to None (counteracts client errors)
+  - Add `debug` tool: The agent can set breakpoints, inspect variables, evaluate expressions and control execution flow
+    by directly interacting with the IDE's debugger, using a REPL-style interface for maximum flexibility.  
+  - `move` and `safe_delete` tools: transform empty string to None (counteracts client errors)
 
 * Dependencies:
   - `pywebview`: Switch back to official release (new version 6.2) #1253
+  - `mcp`: Update from `1.26.0` to `1.27.0`
 
 * Evaluations:
   - Added new evaluations for Junie Plugin with Opus 4.6 and GLM 5.1 in Claude Code.
@@ -39,7 +47,13 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: clangd capability checks now tolerate valid initialize response shape differences and invalidate cached C++ document symbols when clangd/compile commands context changes #1359                                                                                                                                                                                                            
   - Fix: `rename_symbol` for Vue files now correctly propagates edits to the TypeScript server, enabling cross-file renames in `.vue` files 
   - Fix: Lean4 stale cache — empty document symbol responses (returned before `lake build` completes) are no longer persisted, preventing symbols from being permanently hidden #1356
+  - Add JSON language server support via `vscode-json-languageserver` (experimental) #1391
+  - Fix: Elixir/Expert deadlock on startup — Expert's build pipeline requires a `textDocument/didOpen` notification to start; Serena now opens `mix.exs` immediately after `initialized` so Expert begins compiling instead of waiting indefinitely #1397
 
+Dashboard:
+  - Add configurable dashboard interface mode (new global configuration setting `web_dashboard_interface`):
+    Three modes (browser, native app with tray, tray manager for aggregating multiple instances) are supported, depending on the OS
+  - Fix: Memory leaks in frontend when using Chromium-based browsers/Windows webview #1389
 
 # v1.1.2 (2026-04-14)
 

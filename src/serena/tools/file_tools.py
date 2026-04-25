@@ -347,7 +347,6 @@ class SearchForPatternTool(Tool):
             is used to further restrict the search).
             Smartly combining the various restrictions allows you to perform very targeted searches.
 
-
         :param substring_pattern: Regular expression for a substring pattern to search for
         :param context_lines_before: Number of lines of context to include before each match
         :param context_lines_after: Number of lines of context to include after each match
@@ -373,7 +372,7 @@ class SearchForPatternTool(Tool):
             For example, for finding classes or methods from a name pattern.
             Setting to False is a better choice if you also want to search in non-code files, like in html or yaml files,
             which is why it is the default.
-        :return: A mapping of file paths to lists of matched consecutive lines.
+        :return: A mapping from file paths to matched consecutive lines (0-based line numbers).
         """
         abs_path = os.path.join(self.get_project_root(), relative_path)
         if not os.path.exists(abs_path):
@@ -411,6 +410,7 @@ class SearchForPatternTool(Tool):
                 paths_include_glob=paths_include_glob,
                 paths_exclude_glob=paths_exclude_glob,
             )
+
         # group matches by file
         file_to_matches: dict[str, list[str]] = defaultdict(list)
         for match in matches:

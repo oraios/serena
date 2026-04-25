@@ -19,10 +19,13 @@ Both can be configured in Serena's [configuration](050_configuration) file (`ser
 
 ## The Serena Dashboard
 
-The dashboard is a web application, which is opened via a native application wrapper on supported platforms (e.g. Windows),
-where it will appear in the system tray. **Click on the tray icon** to open the application window.
+The dashboard is a web application, which is opened in one of three ways:
 
-On other platforms, where native app support is difficult to provide (e.g. Linux), the dashboard will be opened in your default web browser instead.  
+  * via a native application wrapper with accompanying tray icon (on supported platforms)
+  * via a tray manager that aggregates multiple instances (on supported platforms) 
+  * via your default web browser (supported on all platforms)
+
+Configure your preferred interface via the setting `web_dashoard_interface` in [Serena's global configuration file](global-config) (see below).
 
 By default, the dashboard can be accessed at `http://localhost:24282/dashboard/index.html`,
 but a higher port may be used if the default port is unavailable/multiple instances are running.
@@ -45,6 +48,7 @@ The dashboard provides ...
 You can configure settings for the dashboard in the [global configuration file](global-config).
 
 In particular, you can configure
+ * the interface through which the dashboard is accessed (see above)
  * whether the dashboard is enabled at all.  
    We highly recommend keeping it enabled, as it provides valuable insights into Serena's operation and allows you to adjust configuration conveniently.
  * whether the dashboard window is opened automatically when Serena is started (see below).
@@ -54,11 +58,12 @@ In particular, you can configure
 
 When Serena is started, the Dashboard window is opened by default in order to make users aware of its existence.
 
-If you prefer not to have this happen (e.g., to avoid focus stealing), you can prevent it from opening
+If you prefer not to have this happen, you can prevent it from opening
 by setting `web_dashboard_open_on_launch: False` in the [global configuration file](global-config) or by passing `--open-web-dashboard False`
 to the `start-mcp-server` CLI command.
 
-On platforms supporting the tray icon, you can conveniently open the dashboard at any time by clicking on the tray icon, so automatic
+On platforms supporting the tray icon (see also configuration option `web_dashboard_interface`), 
+you can conveniently open the dashboard at any time by clicking on the tray icon, so automatic
 opening is not a requirement to be able to access the dashboard on these platforms.
 
 On other platforms, you may still access it by
