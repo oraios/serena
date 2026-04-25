@@ -18,7 +18,6 @@ from sensai.util.string import dict_string
 from tqdm import tqdm
 
 from serena import serena_version
-from serena.agent import SerenaAgent
 from serena.config.client_setup import client_setup_handlers
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import (
@@ -36,9 +35,6 @@ from serena.constants import (
     SERENAS_OWN_CONTEXT_YAMLS_DIR,
     SERENAS_OWN_MODE_YAMLS_DIR,
 )
-from serena.mcp import SerenaMCPFactory
-from serena.project import Project
-from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsOverviewTool, SearchForPatternTool, ToolRegistry
 from serena.util.cli_util import AutoRegisteringGroup
 from serena.util.dataclass import get_dataclass_default
 from serena.util.logging import MemoryLogHandler
@@ -315,6 +311,8 @@ class TopLevelCommands(AutoRegisteringGroup):
         trace_lsp_communication: bool | None,
         tool_timeout: float | None,
     ) -> None:
+        from serena.mcp import SerenaMCPFactory
+
         # initialize logging, using INFO level initially (will later be adjusted by SerenaAgent according to the config)
         #   * memory log handler (for use by GUI/Dashboard)
         #   * stream handler for stderr (for direct console output, which will also be captured by clients like Claude Desktop)
@@ -346,6 +344,7 @@ class TopLevelCommands(AutoRegisteringGroup):
                 log.warning("No project root found from %s; not activating any project", os.getcwd())
 
         project_file = project_file_arg or project
+
         factory = SerenaMCPFactory(context=context, project=project_file, memory_log_handler=memory_log_handler)
         server = factory.create_mcp_server(
             host=host,
@@ -394,6 +393,8 @@ class TopLevelCommands(AutoRegisteringGroup):
     def print_system_prompt(
         project: str, log_level: str, only_instructions: bool, context: str, modes: Sequence[str] | None = None
     ) -> None:
+        from serena.agent import SerenaAgent
+
         prefix = "You will receive access to Serena's symbolic tools. Below are instructions for using them, take them into account."
         postfix = "You begin by acknowledging that you understood the above instructions and are ready to receive tasks."
 
@@ -403,9 +404,14 @@ class TopLevelCommands(AutoRegisteringGroup):
         modes_selection_def: ModeSelectionDefinition | None = None
         if modes:
             modes_selection_def = ModeSelectionDefinition(default_modes=modes)
+        serena_config = SerenaConfig.from_config_file()
+        serena_config.web_dashboard = False
+        print(serena_config.default_modes)
+        print(serena_config.base_modes)
+
         agent = SerenaAgent(
             project=os.path.abspath(project),
-            serena_config=SerenaConfig(web_dashboard=False, log_level=lvl),
+            serena_config=serena_config,
             context=context_instance,
             modes=modes_selection_def,
         )
@@ -828,6 +834,8 @@ class ProjectCommands(AutoRegisteringGroup):
         :param path: The path to check.
         :param project: The path to the project directory, defaults to the current working directory.
         """
+        from serena.project import Project
+
         serena_config = SerenaConfig.from_config_file()
         proj = Project.load(os.path.abspath(project), serena_config=serena_config)
         if os.path.isabs(path):
@@ -851,6 +859,8 @@ class ProjectCommands(AutoRegisteringGroup):
         :param project: path to the project directory, defaults to the current working directory.
         :param verbose: if set, prints detailed information about the indexed symbols.
         """
+        from serena.project import Project
+
         serena_config = SerenaConfig.from_config_file()
         proj = Project.load(os.path.abspath(project), serena_config=serena_config)
         if os.path.isabs(file):
@@ -887,6 +897,10 @@ class ProjectCommands(AutoRegisteringGroup):
         :param project: path to the project directory, defaults to the current working directory.
         """
         # NOTE: completely written by Claude Code, only functionality was reviewed, not implementation
+        from serena.agent import SerenaAgent
+        from serena.project import Project
+        from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsOverviewTool, SearchForPatternTool
+
         logging.configure(level=logging.INFO)
         project_path = os.path.abspath(project)
         serena_config = SerenaConfig.from_config_file()
@@ -1040,6 +1054,8 @@ class ToolCommands(AutoRegisteringGroup):
     @click.option("--all", "-a", "include_optional", is_flag=True, help="List all tools, including those not enabled by default.")
     @click.option("--only-optional", is_flag=True, help="List only optional tools (those not enabled by default).")
     def list(quiet: bool = False, include_optional: bool = False, only_optional: bool = False) -> None:
+        from serena.tools import ToolRegistry
+
         tool_registry = ToolRegistry()
         if quiet:
             if only_optional:
@@ -1062,6 +1078,9 @@ class ToolCommands(AutoRegisteringGroup):
     @click.argument("tool_name", type=str)
     @click.option("--context", type=str, default=None, help="Context name or path to context file.")
     def description(tool_name: str, context: str | None = None) -> None:
+        from serena.agent import SerenaAgent
+        from serena.mcp import SerenaMCPFactory
+
         # Load the context
         serena_context = None
         if context:
