@@ -1,0 +1,49 @@
+name: Parallel Matrix CI
+
+on:
+  push:
+    branches:
+      - feature/parallel-ci-workflows
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  parallel-tests:
+    name: ${{ matrix.batch_name }}
+    runs-on: ubuntu-latest
+    
+    # Using the optimized base image suggested by rlzzy
+    container:
+      image: ghcr.io/tirthpatel90/serena-maximal:latest # (Note: will change this to rlzzy's image later, using ours just to test logic)
+
+    strategy:
+      # fail-fast: false ensures that if one batch fails, the others keep running
+      fail-fast: false
+      matrix:
+        include:
+          - batch_name: 'Heavy Toolchains (C++, Rust, Java)'
+            pytest_targets: 'test/solidlsp/cpp test/solidlsp/rust test/solidlsp/java test/solidlsp/haskell'
+          
+          - batch_name: 'Medium Toolchains (Go, Julia, Swift, Lean4)'
+            pytest_targets: 'test/solidlsp/go test/solidlsp/julia test/solidlsp/swift test/solidlsp/lean4'
+          
+          - batch_name: 'Catch-All (Core Framework & Remaining Languages)'
+            # Runs everything in test/ EXCEPT the explicitly batched heavy toolchains
+            pytest_targets: 'test/ --ignore=test/solidlsp/cpp --ignore=test/solidlsp/rust --ignore=test/solidlsp/java --ignore=test/solidlsp/haskell --ignore=test/solidlsp/go --ignore=test/solidlsp/julia --ignore=test/solidlsp/swift --ignore=test/solidlsp/lean4'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Quick Workspace Sync
+        shell: bash
+        run: |
+          uv sync --extra dev --locked
+          uv pip list
+
+      - name: Run Pytest Batch
+        shell: bash
+        # Dynamically injects the targets/ignores from the matrix strategy
+        run: uv run poe test -q --tb=short ${{ matrix.pytest_targets }}
