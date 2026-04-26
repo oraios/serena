@@ -3,7 +3,6 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
-  - Support `serena --version` CLI command for displaying the current version #1347
   - Fix: Check for ignored path ignored `.git` folder only at the top level, not in every subdirectory (`Project._is_ignored_relative_path`) #1350
   - `GetSymbolsOverviewTool`: ignored paths were not respected in LSP variant (fix in `SolidLanguageServer`)
   - Fix: Duplicate comments in re-saved YAML configuration files #1285
@@ -30,6 +29,13 @@ Status of the `main` branch. Changes prior to the next official version change w
     At MCP connection time, only a one-sentence bootstrap prompt is provided.
     The `initial_instructions` tool provides the full prompt on demand, keeping the initial context lean.
   - Add `serena_info` tool for on-demand retrieval of usage information
+
+* CLI:
+  - Support `serena --version` CLI command for displaying the current version #1347
+  - Extend `prompts` subcommand with `print-prompt-template` and `print-cc-system-prompt-override`.
+
+* Clients:
+  - Document workaround to make Claude Code use Serena's tools after recent degradations caused by changes in CC harness and Opus 4.7 release.
 
 * JetBrains:
   - Add `debug` tool: The agent can set breakpoints, inspect variables, evaluate expressions and control execution flow

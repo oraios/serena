@@ -19,6 +19,9 @@ class PromptTemplate(ToStringMixin, ParameterizedTemplateInterface):
     def _tostring_exclude_private(self) -> bool:
         return True
 
+    def get_template_string(self) -> str:
+        return self._jinja_template.get_template_string()
+
     def render(self, **params: Any) -> str:
         return self._jinja_template.render(**params)
 

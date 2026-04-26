@@ -30,6 +30,9 @@ class JinjaTemplate(ParameterizedTemplateInterface):
         parsed_content = self._template.environment.parse(self._template_string)
         self._parameters = sorted(jinja2.meta.find_undeclared_variables(parsed_content))
 
+    def get_template_string(self) -> str:
+        return self._template_string
+
     def render(self, **params: Any) -> str:
         """Renders the template with the given kwargs. You can find out which parameters are required by calling get_parameter_names()."""
         return self._template.render(**params)

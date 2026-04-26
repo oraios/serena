@@ -492,15 +492,6 @@ class TopLevelCommands(AutoRegisteringGroup):
         viewer = SerenaDashboardViewer(url, width=width, height=height)
         viewer.run()
 
-    @staticmethod
-    @click.command(
-        "cc-system-prompt-override",
-        help="To be used specifically in Claude Code as value for `--system-prompt`",
-        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
-    )
-    def cc_system_prompt_override() -> None:
-        click.echo(SerenaPromptFactory().create_cc_system_prompt_override())
-
 
 class ModeCommands(AutoRegisteringGroup):
     """Group for 'mode' subcommands."""
@@ -1199,6 +1190,26 @@ class PromptCommands(AutoRegisteringGroup):
             return
         os.remove(user_prompt_yaml_path)
         click.echo(f"Deleted override file '{prompt_yaml_name}'.")
+
+    @staticmethod
+    @click.command(
+        "print-prompt-template",
+        help="prints the (unrendered) template for the corresponding prompt name. "
+        "This respects custom prompt yaml overrides and thus will print the value that will be used in Serena",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("prompt_name", type=str)
+    def print_prompt_template(prompt_name: str) -> None:
+        click.echo(SerenaPromptFactory().get_prompt_template_string(prompt_name))
+
+    @staticmethod
+    @click.command(
+        "print-cc-system-prompt-override",
+        help="To be used specifically in Claude Code as value for `--system-prompt`",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    def print_cc_system_prompt_override() -> None:
+        click.echo(SerenaPromptFactory().get_cc_system_prompt_override_template_string())
 
 
 _mode = ModeCommands()

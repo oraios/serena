@@ -2,7 +2,7 @@ import logging
 import os
 from typing import Any
 
-from .multilang_prompt import DEFAULT_LANG_CODE, LanguageFallbackMode, MultiLangPromptCollection, PromptList
+from .multilang_prompt import DEFAULT_LANG_CODE, LanguageFallbackMode, MultiLangPromptCollection, PromptList, PromptTemplate
 
 log = logging.getLogger(__name__)
 
@@ -23,9 +23,15 @@ class PromptFactoryBase:
         self.lang_code = lang_code
         self._prompt_collection = MultiLangPromptCollection(prompts_dir, fallback_mode=fallback_mode)
 
+    def _get_prompt_template(self, prompt_name: str) -> PromptTemplate:
+        return self._prompt_collection.get_prompt_template(prompt_name, lang_code=self.lang_code)
+
+    def get_prompt_template_string(self, prompt_name: str) -> str:
+        return self._get_prompt_template(prompt_name).get_template_string()
+
     def _render_prompt(self, prompt_name: str, params: dict[str, Any]) -> str:
         del params["self"]
-        return self._prompt_collection.render_prompt_template(prompt_name, params, lang_code=self.lang_code)
+        return self._get_prompt_template(prompt_name).render(**params)
 
     def _get_prompt_list(self, prompt_name: str) -> PromptList:
         return self._prompt_collection.get_prompt_list(prompt_name, self.lang_code)
@@ -41,14 +47,12 @@ def autogenerate_prompt_factory_module(prompts_dir: str, target_module_path: str
     :param prompts_dir: the directory containing the prompt templates and prompt lists
     :param target_module_path: the path to the target module file (.py). Important: The module will be overwritten!
     """
-    generated_code = """
-# ruff: noqa
+    generated_code = """# ruff: noqa
 # black: skip
 # mypy: ignore-errors
 
 # NOTE: This module is auto-generated from interprompt.autogenerate_prompt_factory_module, do not edit manually!
 
-from interprompt.multilang_prompt import PromptList
 from interprompt.prompt_factory import PromptFactoryBase
 from typing import Any
 
@@ -68,6 +72,9 @@ class PromptFactory(PromptFactoryBase):
         else:
             method_params_str = ", *, " + ", ".join([f"{param}: Any" for param in template_parameters])
         generated_code += f"""
+    def get_{template_name}_template_string(self) -> str:
+        return self.get_prompt_template_string('{template_name}')
+        
     def create_{template_name}(self{method_params_str}) -> str:
         return self._render_prompt('{template_name}', locals())
 """

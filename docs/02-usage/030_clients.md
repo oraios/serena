@@ -117,7 +117,7 @@ As a workaround, we crafted a system prompt that counteracts this bias.
 When using Serena, we highly recommend that you start CC as 
 
 ```shell
-claude --system-prompt=$(serena cc-system-prompt-override)
+claude --system-prompt="$(serena prompts print-cc-system-prompt-override)"
 ```
 
 You can also consider adding the content of `serena cc-system-prompt-override` to your `CLAUDE.md` files,
