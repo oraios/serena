@@ -499,6 +499,62 @@ class TestProjectSerenaDataFolder:
         assert project.path_to_serena_data_folder() == str(custom_serena)
 
 
+class TestSerenaConfigFromConfigFileRobustness:
+    """Tests that ``SerenaConfig.from_config_file`` does not abort the whole
+    loader when a single registered project has a broken ``project.yml``.
+    """
+
+    def setup_method(self):
+        self.test_dir = Path(tempfile.mkdtemp())
+        self.master_config_path = self.test_dir / "serena_config.yml"
+
+    def teardown_method(self):
+        shutil.rmtree(self.test_dir)
+
+    def _make_project_dir(self, name: str, project_yml_body: str) -> Path:
+        project_dir = self.test_dir / name
+        (project_dir / SERENA_MANAGED_DIR_NAME).mkdir(parents=True)
+        (project_dir / SERENA_MANAGED_DIR_NAME / "project.yml").write_text(project_yml_body)
+        return project_dir
+
+    def _write_master_config(self, project_paths: list[Path]) -> None:
+        body_lines = ["projects:"]
+        for p in project_paths:
+            body_lines.append(f"  - {p}")
+        self.master_config_path.write_text("\n".join(body_lines) + "\n")
+
+    def test_malformed_project_is_skipped_with_warning(self, caplog, monkeypatch):
+        """A malformed project.yml must not abort loading of the others."""
+        good_project = self._make_project_dir(
+            "good_project",
+            'project_name: "good_project"\nlanguages: ["python"]\n',
+        )
+        # Invalid YAML: a stray colon at the start of a mapping value.
+        bad_project = self._make_project_dir(
+            "bad_project",
+            ": this is not : valid : yaml :\n",
+        )
+        self._write_master_config([good_project, bad_project])
+
+        # SerenaPaths is a process-wide singleton, so we cannot reliably
+        # redirect it via SERENA_HOME after the fact. Instead, redirect the
+        # config-file-path resolver directly.
+        monkeypatch.setattr(
+            SerenaConfig,
+            "_determine_config_file_path",
+            classmethod(lambda cls: str(self.master_config_path)),
+        )
+
+        with caplog.at_level(logging.WARNING):
+            config = SerenaConfig.from_config_file(generate_if_missing=False)
+
+        registered_roots = {Path(p.project_root).resolve() for p in config.projects}
+        assert registered_roots == {good_project.resolve()}, f"Expected only the good project to be registered, got {registered_roots}"
+        assert any("Failed to load project configuration" in msg and str(bad_project.resolve()) in msg for msg in caplog.messages), (
+            f"Expected a warning naming {bad_project.resolve()}, got: {caplog.messages}"
+        )
+
+
 class TestMemoriesManagerCustomPath:
     """Tests for MemoriesManager with a custom serena data folder."""
 
