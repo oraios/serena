@@ -49,6 +49,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Lean4 stale cache — empty document symbol responses (returned before `lake build` completes) are no longer persisted, preventing symbols from being permanently hidden #1356
   - Add JSON language server support via `vscode-json-languageserver` (experimental) #1391
   - Fix: Elixir/Expert deadlock on startup — Expert's build pipeline requires a `textDocument/didOpen` notification to start; Serena now opens `mix.exs` immediately after `initialized` so Expert begins compiling instead of waiting indefinitely #1397
+  - Java (`eclipse.jdt.ls`): Add upstream JDTLS mode for offline / restricted-network use. Setting both `jdtls_path` and `lombok_path` in `ls_specific_settings.java` makes Serena use an existing upstream JDTLS installation (e.g. `brew install jdtls`) and the system JDK 21+, skipping the ~500 MB vscode-java VSIX, Gradle, and IntelliCode downloads. New related setting `java_home` lets the user override the JDK used to launch JDTLS. Default behavior unchanged. #1415
 
 Dashboard:
   - Add configurable dashboard interface mode (new global configuration setting `web_dashboard_interface`):

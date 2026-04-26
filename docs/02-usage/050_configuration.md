@@ -513,6 +513,21 @@ Java support has two installation modes:
    Uses an existing JDTLS installation (~100 MB) and the system JDK 21+. Nothing is downloaded.
    Recommended for restricted-network/corporate environments.
 
+**When to use which mode:**
+
+- **Default vscode-java VSIX mode** — recommended for most users. No setup required;
+  Serena downloads everything on first use.
+- **Upstream JDTLS mode** — recommended when:
+  - you cannot reach `github.com`, `services.gradle.org` or `marketplace.visualstudio.com`
+    from the host (corporate proxy, air-gapped network);
+  - you want a smaller on-disk footprint (~100 MB vs ~500 MB);
+  - you already maintain a JDTLS installation (e.g. for `nvim-jdtls` or another editor);
+  - your security policy prohibits per-project runtime downloads.
+
+**JDK 21+ is required** in upstream mode. Serena resolves the JDK in this order:
+`ls_specific_settings.java.java_home` → `JAVA_HOME` env var → first `java` on `PATH`.
+The resolved JVM is interrogated and rejected if its `java.specification.version` is below 21.
+
 The following settings are supported for the Java language server:
 
 | Setting | Default | Description |
@@ -540,6 +555,9 @@ Notes:
   symbol-tools workflow), and Serena does not ship a Gradle distribution. Maven projects work via JDTLS's bundled m2e.
   Gradle projects must have `./gradlew` in the project, or rely on a system-installed Gradle through Buildship's
   default discovery rules.
+- In upstream-jdtls mode the `gradle_version`, `vscode_java_version`, `intellicode_version`,
+  `intellicode_xmx`, `intellicode_xms` settings are silently ignored — they only apply to the
+  vscode-java VSIX mode.
 
 Example: upstream-jdtls mode (offline / corporate network):
 
