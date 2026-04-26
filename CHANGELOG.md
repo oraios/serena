@@ -3,6 +3,11 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Add cross-package reference support via `additional_workspace_folders` project setting (currently implemented for TypeScript).
+    Configure additional workspace folder paths in `project.yml` to enable `find_referencing_symbols` and `request_references`
+    to discover symbols across package boundaries in monorepos. The base `SolidLanguageServer` class provides the workspace
+    folder resolution and activation framework; other language servers can enable support by overriding
+    `_find_representative_source_file()`. #750
   - Support `serena --version` CLI command for displaying the current version #1347
   - Fix: Check for ignored path ignored `.git` folder only at the top level, not in every subdirectory (`Project._is_ignored_relative_path`) #1350
   - `GetSymbolsOverviewTool`: ignored paths were not respected in LSP variant (fix in `SolidLanguageServer`)
