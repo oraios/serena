@@ -48,6 +48,7 @@ The file allows you to configure ...
   * the encoding used in source files
   * ignore rules
   * write access
+  * [additional workspace folders](additional-workspace-folders) for cross-package reference support in monorepos
   * an initial prompt that shall be passed to the LLM whenever the project is activated
   * the name by which you want to refer to the project (relevant when telling the LLM to dynamically activate the project)
   * the set of tools and modes to use by default
@@ -64,6 +65,33 @@ So use the project configuration specifically for aspects that apply only to the
 You can specify local overrides for the settings in a `project.local.yml` file in the same directory
 (which, by default, is ignored by git). 
 Any keys defined therein will override the respective key in `project.yml`.
+
+(additional-workspace-folders)=
+#### Additional Workspace Folders (Cross-Package References)
+
+In monorepos or multi-package setups, Serena's language server normally only sees symbols within the
+project root. To enable cross-package references (e.g. `find_referencing_symbols` discovering usages
+in sibling packages), configure `additional_workspace_folders` in your `project.yml`:
+
+```yaml
+additional_workspace_folders:
+  - ../shared-lib
+  - ../api-client
+  - /absolute/path/to/another-package
+```
+
+Paths can be absolute or relative to the project root. Each folder is registered as an LSP workspace
+folder, and the language server will discover symbols and references across all listed packages.
+
+**Currently supported for:** TypeScript. Other language servers will raise an error if this setting
+is used with them. Support for additional languages can be added by implementing the
+`_find_representative_source_file()` method in the respective language server class.
+
+:::{note}
+Each additional workspace folder adds startup time, as the language server needs to index the
+additional projects. For large monorepos, consider listing only the packages you actively need
+cross-references for.
+:::
 
 (indexing)=
 ### Indexing

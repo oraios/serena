@@ -809,6 +809,10 @@ Supported settings:
 | `typescript_language_server_version` | `5.1.3` | Override the bundled `typescript-language-server` npm package version Serena installs when `ls_path` is not set. |
 | `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
 
+TypeScript supports [additional workspace folders](additional-workspace-folders) for cross-package
+reference discovery in monorepos. Configure `additional_workspace_folders` in `project.yml` (not
+under `ls_specific_settings`) to enable this feature.
+
 #### TypeScript via `vtsls`
 
 The actual configuration key for vtsls is `typescript_vts`, not `vts`.
