@@ -9,10 +9,13 @@ mocked.
 
 from __future__ import annotations
 
+import platform
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
+_JAVA_EXE_NAME = "java.exe" if platform.system() == "Windows" else "java"
 
 from solidlsp.language_servers.eclipse_jdtls import (
     JDTLS_CONFIG_DIR_BY_PLATFORM,
@@ -198,7 +201,7 @@ class TestResolveSystemJdk:
     """Verifies the priority chain: java_home setting > JAVA_HOME env > PATH."""
 
     @staticmethod
-    def _make_jdk_layout(root: Path, java_exe_name: str = "java") -> Path:
+    def _make_jdk_layout(root: Path, java_exe_name: str = _JAVA_EXE_NAME) -> Path:
         bin_dir = root / "bin"
         bin_dir.mkdir(parents=True, exist_ok=True)
         (bin_dir / java_exe_name).touch()
@@ -216,7 +219,7 @@ class TestResolveSystemJdk:
             home, java_path = EclipseJDTLS.DependencyProvider._resolve_system_jdk(settings)
 
         assert Path(home) == explicit_jdk
-        assert Path(java_path).name in {"java", "java.exe"}
+        assert Path(java_path).name == _JAVA_EXE_NAME
 
     def test_falls_back_to_java_home_env(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         env_jdk = self._make_jdk_layout(tmp_path / "env-jdk")
@@ -232,7 +235,7 @@ class TestResolveSystemJdk:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, custom_settings: SolidLSPSettings.CustomLSSettings
     ) -> None:
         path_jdk = self._make_jdk_layout(tmp_path / "path-jdk")
-        java_path = path_jdk / "bin" / "java"
+        java_path = path_jdk / "bin" / _JAVA_EXE_NAME
         monkeypatch.delenv("JAVA_HOME", raising=False)
 
         with patch("solidlsp.language_servers.eclipse_jdtls.shutil.which", return_value=str(java_path)):
@@ -276,7 +279,7 @@ class TestResolveSystemJdk:
         java.home is the actual JDK. The resolver should report the real JDK home.
         """
         real_jdk = self._make_jdk_layout(tmp_path / "real-jdk-21")
-        macos_stub = tmp_path / "fake-usr" / "bin" / "java"
+        macos_stub = tmp_path / "fake-usr" / "bin" / _JAVA_EXE_NAME
         macos_stub.parent.mkdir(parents=True)
         macos_stub.touch()
         monkeypatch.delenv("JAVA_HOME", raising=False)
@@ -288,7 +291,7 @@ class TestResolveSystemJdk:
         # the resolver must trust the JVM's reported java.home, not parent.parent of the stub
         assert Path(home) == real_jdk
         # and prefer the real-home java executable over the stub
-        assert Path(java_path) == real_jdk / "bin" / "java"
+        assert Path(java_path) == real_jdk / "bin" / _JAVA_EXE_NAME
 
 
 # ----------------------------------------------------------------------------
