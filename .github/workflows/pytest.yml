@@ -224,6 +224,10 @@ jobs:
         with:
           r-version: '4.4.2'
           use-public-rspm: true
+      - name: Install R sysdeps (libuv for fs package)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: sudo apt-get update && sudo apt-get install -y libuv1-dev
       - name: Install R language server
         shell: bash
         run: |
