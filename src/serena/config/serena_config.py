@@ -869,7 +869,18 @@ class SerenaConfig(SharedConfig):
                 if path is None:
                     continue
                 num_migrations += 1
-            project_config = ProjectConfig.load(path, serena_config=instance)  # instance is sufficiently populated
+            try:
+                project_config = ProjectConfig.load(path, serena_config=instance)  # instance is sufficiently populated
+            except Exception as e:
+                log.error(
+                    "Failed to load project configuration for %s: %s. "
+                    "This project will be skipped. Fix or delete its "
+                    ".serena/project.yml (or remove it from "
+                    "serena_config.yml) to re-enable it.",
+                    path,
+                    e,
+                )
+                continue
             project = RegisteredProject(
                 project_root=str(path),
                 project_config=project_config,
