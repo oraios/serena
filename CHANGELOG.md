@@ -50,10 +50,13 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add JSON language server support via `vscode-json-languageserver` (experimental) #1391
   - Fix: Elixir/Expert deadlock on startup — Expert's build pipeline requires a `textDocument/didOpen` notification to start; Serena now opens `mix.exs` immediately after `initialized` so Expert begins compiling instead of waiting indefinitely #1397
 
-Dashboard:
+* Dashboard:
   - Add configurable dashboard interface mode (new global configuration setting `web_dashboard_interface`):
     Three modes (browser, native app with tray, tray manager for aggregating multiple instances) are supported, depending on the OS
   - Fix: Memory leaks in frontend when using Chromium-based browsers/Windows webview #1389
+
+* Hooks:
+  - Adjusted wording of startup hook, improving project activation instructions #1401.
 
 # v1.1.2 (2026-04-14)
 

@@ -339,8 +339,9 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
 class SessionStartActivateProjectHook(Hook):
     def execute(self) -> None:
         message = (
-            "**IMPORTANT**: Activate the current working directory as project using Serena's tools if not already done. "
-            "If you haven't read Serena Instructions Manual yet, do so. "
+            "**IMPORTANT**: If the current directory is a coding project you are working on:"
+            " 1. activate it using Serena's activate_project tool unless already done. "
+            " 2. if you haven't read Serena Instructions Manual yet, do so. "
             "Follow this instruction before doing anything else."
         )
         result = {
