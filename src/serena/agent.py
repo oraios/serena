@@ -869,18 +869,6 @@ class SerenaAgent:
             raise ValueError("No active project. Please activate a project first.")
         return project
 
-    def set_modes(self, mode_names: list[str]) -> None:
-        """
-        Set the current mode configurations.
-
-        :param mode_names: List of mode names or paths to use
-        """
-        self._mode_overrides = ModeSelectionDefinition(default_modes=mode_names)
-        self._update_active_modes()
-        self._update_active_tools()
-
-        log.info(f"Set modes to {[mode.name for mode in self.get_active_modes()]}")
-
     def get_active_modes(self) -> list[SerenaAgentMode]:
         """
         :return: the list of active modes

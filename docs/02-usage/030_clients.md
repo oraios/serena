@@ -101,8 +101,28 @@ You can do this in Tools / GitHub Copilot / Chat, where at the bottom you can cl
 
 ## Claude Code
 
-Serena is a great way to make Claude Code both cheaper and more powerful!
+Serena is a great way to make Claude Code both more efficient and more powerful!
 To add Serena to Claude Code, you can simply run `serena setup claude-code`. Alternatively, follow the instructions below.
+
+:::{attention}
+Recent updates to Claude Code (CC) and to the Opus line of models resulted in drastically poorer
+adherence to instructions pertaining to Serena's tools.
+
+After extensive analysis, we identified part of the reason to be very long and detailed
+tool descriptions for inbuilt tools and parts of the default system prompt. 
+The descriptions of CC's system tools take almost 16k tokens, cannot be adjusted by the user,
+and introduce a very strong bias towards internal tools, making it near impossible to convince Opus 4.7 to use Serena.
+
+As a workaround, we crafted a system prompt that counteracts this bias.
+When using Serena, we highly recommend that you start CC as 
+
+```shell
+claude --system-prompt="$(serena prompts print-cc-system-prompt-override)"
+```
+
+You can also consider adding the content of `serena cc-system-prompt-override` to your `CLAUDE.md` files,
+but the effect be insufficient for counteracting Claude Code's bias towards internal tools.
+:::
 
 **Global Configuration**. To add the Serena MCP server for all your projects, use the user-level configuration of claude code and the `--project-from-cwd` flag:
 
