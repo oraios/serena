@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -779,6 +780,7 @@ def serena_config():
         Language.HAXE,
         Language.LEAN4,
         Language.MSL,
+        Language.BSL,
     ]:
         repo_path = get_repo_path(language)
         if repo_path.exists():
@@ -921,6 +923,24 @@ class TestSerenaAgent:
         for symbol in symbols:
             self._assert_symbol_info_present(serena_agent, symbol, case.symbol_name)
 
+    @pytest.mark.parametrize(
+        "serena_agent,symbol_name,expected_kind,expected_file",
+        [
+            pytest.param(Language.BSL, "ВывестиСообщение", "Method", "CommonModule.bsl", marks=[pytest.mark.bsl, pytest.mark.skipif(shutil.which("java") is None, reason="Java 11+ is required for BSL LSP")]),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_find_symbol_bsl(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str) -> None:
+        find_symbol_tool = serena_agent.get_tool(FindSymbolTool)
+        result = find_symbol_tool.apply(name_path_pattern=symbol_name, include_info=True)
+        symbols = json.loads(result)
+        assert any(
+            symbol_name in s["name_path"]
+            and expected_kind.lower() in s["kind"].lower()
+            and expected_file in s["relative_path"]
+            for s in symbols
+        ), f"Expected to find {symbol_name} ({expected_kind}) in {expected_file}. Symbols: {symbols}"
+
     @pytest.mark.parametrize("serena_agent,case", FIND_REFERENCE_CASES, indirect=["serena_agent"])
     def test_find_symbol_references(self, serena_agent: SerenaAgent, case: FindReferenceCase) -> None:
         # Find the symbol location first
@@ -976,7 +996,6 @@ class TestSerenaAgent:
             f"Expected defining symbol name {case.expected_name!r}, got: {defining_symbol}"
         )
         self._assert_symbol_info_present(serena_agent, defining_symbol)
-
     @pytest.mark.parametrize("serena_agent,case", FIND_DEFINING_SYMBOL_REGEX_ERROR_CASES, indirect=["serena_agent"])
     def test_find_declaration_error(
         self,
@@ -1245,35 +1264,75 @@ class TestSerenaAgent:
                 mode="regex",
             )
 
-    @pytest.mark.parametrize("serena_agent,case", SAFE_DELETE_BLOCKED_CASES, indirect=["serena_agent"])
-    def test_safe_delete_symbol_blocked_by_references(self, serena_agent: SerenaAgent, case: SafeDeleteCase):
+    @pytest.mark.parametrize(
+        "serena_agent,name_path,relative_path",
+        [
+            pytest.param(Language.PYTHON, "User", os.path.join("test_repo", "models.py"), marks=pytest.mark.python),
+            pytest.param(Language.JAVA, "Model", os.path.join("src", "main", "java", "test_repo", "Model.java"), marks=pytest.mark.java),
+            pytest.param(
+                Language.KOTLIN,
+                "Model",
+                os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
+                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+            ),
+            pytest.param(Language.TYPESCRIPT, "helperFunction", "index.ts", marks=pytest.mark.typescript),
+            pytest.param(
+                Language.BSL,
+                "ВывестиСообщение",
+                "CommonModule.bsl",
+                marks=[pytest.mark.bsl, pytest.mark.skipif(shutil.which("java") is None, reason="Java 11+ is required for BSL LSP")],
+            ),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_safe_delete_symbol_blocked_by_references(self, serena_agent: SerenaAgent, name_path: str, relative_path: str):
         """
         Tests that SafeDeleteSymbol refuses to delete a symbol that is referenced elsewhere
         and returns a message listing the referencing files.
         """
         # wrap in modification context as a safety net: if the tool has a bug and deletes anyway,
         # the file will be restored, preventing corruption of test resources
-        with project_file_modification_context(serena_agent, case.relative_path):
+        with project_file_modification_context(serena_agent, relative_path):
             safe_delete_tool = serena_agent.get_tool(SafeDeleteSymbol)
-            result = safe_delete_tool.apply(name_path_pattern=case.name_path, relative_path=case.relative_path)
+            result = safe_delete_tool.apply(name_path_pattern=name_path, relative_path=relative_path)
             assert "Cannot delete" in result, f"Expected deletion to be blocked due to existing references, but got: {result}"
             assert "referenced in" in result, f"Expected reference information in result, but got: {result}"
 
-    @pytest.mark.parametrize("serena_agent,case", SAFE_DELETE_SUCCEEDS_CASES, indirect=["serena_agent"])
-    def test_safe_delete_symbol_succeeds_when_no_references(self, serena_agent: SerenaAgent, case: SafeDeleteCase):
+    @pytest.mark.parametrize(
+        "serena_agent,name_path,relative_path",
+        [
+            pytest.param(Language.PYTHON, "Timer", os.path.join("test_repo", "utils.py"), marks=pytest.mark.python),
+            pytest.param(Language.JAVA, "ModelUser", os.path.join("src", "main", "java", "test_repo", "ModelUser.java"), marks=pytest.mark.java),
+            pytest.param(
+                Language.KOTLIN,
+                "ModelUser",
+                os.path.join("src", "main", "kotlin", "test_repo", "ModelUser.kt"),
+                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+            ),
+            pytest.param(Language.TYPESCRIPT, "unusedStandaloneFunction", "index.ts", marks=pytest.mark.typescript),
+            pytest.param(
+                Language.BSL,
+                "ВызватьПриветствие",
+                "CommonModule.bsl",
+                marks=[pytest.mark.bsl, pytest.mark.skipif(shutil.which("java") is None, reason="Java 11+ is required for BSL LSP")],
+            ),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_safe_delete_symbol_succeeds_when_no_references(self, serena_agent: SerenaAgent, name_path: str, relative_path: str):
         """
         Tests that SafeDeleteSymbol successfully deletes a symbol that has no references
         and that the symbol is actually removed from the file.
         """
-        with project_file_modification_context(serena_agent, case.relative_path):
+        with project_file_modification_context(serena_agent, relative_path):
             safe_delete_tool = serena_agent.get_tool(SafeDeleteSymbol)
-            result = safe_delete_tool.apply(name_path_pattern=case.name_path, relative_path=case.relative_path)
+            result = safe_delete_tool.apply(name_path_pattern=name_path, relative_path=relative_path)
             assert result == SUCCESS_RESULT, f"Expected successful deletion, but got: {result}"
 
             # verify the symbol was actually removed from the file
-            file_content = read_project_file(serena_agent.get_active_project(), case.relative_path)
-            assert case.name_path not in file_content, (
-                f"Expected symbol {case.name_path} to be removed from {case.relative_path}, but it still appears in the file content"
+            file_content = read_project_file(serena_agent.get_active_project(), relative_path)
+            assert name_path not in file_content, (
+                f"Expected symbol {name_path} to be removed from {relative_path}, but it still appears in the file content"
             )
 
 

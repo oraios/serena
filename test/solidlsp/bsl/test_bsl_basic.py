@@ -1,6 +1,7 @@
 """Basic tests for BSL Language Server integration."""
 
 import os
+import shutil
 
 import pytest
 
@@ -8,6 +9,9 @@ from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
 
 REPO_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "resources", "repos", "bsl", "test_repo"))
+
+_java_available = shutil.which("java") is not None
+_skip_if_no_java = pytest.mark.skipif(not _java_available, reason="Java is not installed")
 
 
 @pytest.fixture(scope="module")
@@ -21,12 +25,16 @@ def bsl_ls():
     server.stop()
 
 
+@pytest.mark.bsl
 @pytest.mark.slow
+@_skip_if_no_java
 def test_bsl_server_starts(bsl_ls):
     assert bsl_ls.server_ready.is_set()
 
 
+@pytest.mark.bsl
 @pytest.mark.slow
+@_skip_if_no_java
 def test_bsl_document_symbols(bsl_ls):
     symbols = bsl_ls.request_document_symbols("CommonModule.bsl")
     names = [s.get("name") for s in symbols.iter_symbols()]
@@ -35,7 +43,9 @@ def test_bsl_document_symbols(bsl_ls):
     assert "ВызватьПриветствие" in names
 
 
+@pytest.mark.bsl
 @pytest.mark.slow
+@_skip_if_no_java
 def test_bsl_find_references(bsl_ls):
     # find references to ПолучитьПриветствие defined in CommonModule.bsl
     refs = bsl_ls.request_references("CommonModule.bsl", line=6, column=10)
