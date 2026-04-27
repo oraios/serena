@@ -380,3 +380,64 @@ class TestSetupRuntimeDependenciesModeSwitch:
         settings = SolidLSPSettings.CustomLSSettings({"lombok_path": "/y"})
         with pytest.raises(SolidLSPException, match="must be set together"):
             EclipseJDTLS.DependencyProvider._setup_runtime_dependencies("/ignored", settings)
+
+
+# ----------------------------------------------------------------------------
+# _compute_workspace_hash
+# ----------------------------------------------------------------------------
+
+
+class TestComputeWorkspaceHash:
+    """
+    Backwards-compatibility contract: users on the default route (no ``jdtls_path``)
+    must receive the *exact* same hash format that existed before upstream-JDTLS support
+    (i.e. ``md5(repository_root_path)``), so existing JDTLS workspaces and project caches
+    are reused without a one-time reindex after upgrading Serena. Upstream mode mixes the
+    launcher path into the hash to isolate it from the default workspace.
+    """
+
+    REPO = "/home/me/projects/widgets"
+    DEFAULT_LAUNCHER = "/srv/serena/static/eclipse-jdtls-1.49.0/plugins/org.eclipse.equinox.launcher_1.7.100.jar"
+    UPSTREAM_LAUNCHER = "/opt/homebrew/Cellar/jdtls/1.50.0/libexec/plugins/org.eclipse.equinox.launcher_1.7.0.jar"
+
+    def test_default_mode_matches_pre_upstream_format(self) -> None:
+        """The hash MUST equal md5(repository_root_path) — the format produced by PR #1214."""
+        import hashlib
+
+        expected = hashlib.md5(self.REPO.encode()).hexdigest()
+        result = EclipseJDTLS.DependencyProvider._compute_workspace_hash(
+            self.REPO, self.DEFAULT_LAUNCHER, SolidLSPSettings.CustomLSSettings({})
+        )
+        assert result == expected
+
+    def test_default_mode_ignores_launcher_path(self) -> None:
+        """Default-mode hash must not depend on the launcher jar path (so default users keep cache)."""
+        empty_settings = SolidLSPSettings.CustomLSSettings({})
+        h1 = EclipseJDTLS.DependencyProvider._compute_workspace_hash(self.REPO, self.DEFAULT_LAUNCHER, empty_settings)
+        h2 = EclipseJDTLS.DependencyProvider._compute_workspace_hash(self.REPO, self.UPSTREAM_LAUNCHER, empty_settings)
+        assert h1 == h2
+
+    def test_upstream_mode_includes_launcher_path(self) -> None:
+        """When jdtls_path is set, different launcher paths must produce different hashes."""
+        settings = SolidLSPSettings.CustomLSSettings({"jdtls_path": "/opt/homebrew/Cellar/jdtls/1.50.0/libexec"})
+        h1 = EclipseJDTLS.DependencyProvider._compute_workspace_hash(self.REPO, self.DEFAULT_LAUNCHER, settings)
+        h2 = EclipseJDTLS.DependencyProvider._compute_workspace_hash(self.REPO, self.UPSTREAM_LAUNCHER, settings)
+        assert h1 != h2
+
+    def test_upstream_and_default_produce_different_hashes(self) -> None:
+        """Same repo + same launcher path but different mode → different ws_dir (isolation)."""
+        default_h = EclipseJDTLS.DependencyProvider._compute_workspace_hash(
+            self.REPO, self.UPSTREAM_LAUNCHER, SolidLSPSettings.CustomLSSettings({})
+        )
+        upstream_h = EclipseJDTLS.DependencyProvider._compute_workspace_hash(
+            self.REPO,
+            self.UPSTREAM_LAUNCHER,
+            SolidLSPSettings.CustomLSSettings({"jdtls_path": "/opt/homebrew/Cellar/jdtls/1.50.0/libexec"}),
+        )
+        assert default_h != upstream_h
+
+    def test_different_repo_paths_produce_different_hashes(self) -> None:
+        empty_settings = SolidLSPSettings.CustomLSSettings({})
+        h1 = EclipseJDTLS.DependencyProvider._compute_workspace_hash("/a/repo", self.DEFAULT_LAUNCHER, empty_settings)
+        h2 = EclipseJDTLS.DependencyProvider._compute_workspace_hash("/b/repo", self.DEFAULT_LAUNCHER, empty_settings)
+        assert h1 != h2

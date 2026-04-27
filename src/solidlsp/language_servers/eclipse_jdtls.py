@@ -643,14 +643,34 @@ class EclipseJDTLS(SolidLanguageServer):
             major = int(version_match.group(1))
             return real_home, major
 
+        @staticmethod
+        def _compute_workspace_hash(
+            repository_root_path: str,
+            jdtls_launcher_jar_path: str,
+            custom_settings: SolidLSPSettings.CustomLSSettings,
+        ) -> str:
+            """
+            Compute the JDTLS workspace directory name.
+
+            Default mode hashes the project path only — preserves backwards compatibility with
+            workspaces created before upstream-JDTLS support. Upstream mode (when ``jdtls_path``
+            is set) mixes in the launcher path so switching between default and upstream
+            installations (or between different upstream JDTLS versions) lands in a separate
+            ws_dir and avoids stale OSGi configs blocking startup.
+            """
+            if custom_settings.get("jdtls_path"):
+                ws_hash_input = (repository_root_path + "|" + jdtls_launcher_jar_path).encode()
+            else:
+                ws_hash_input = repository_root_path.encode()
+            return hashlib.md5(ws_hash_input).hexdigest()
+
         def create_launch_command(self) -> list[str]:
             # ws_dir is the workspace directory for the EclipseJDTLS server.
-            # Use a deterministic hash of the project path *and* the JDTLS launcher path so the
-            # workspace (and its cached index) can be reused across restarts but not across
-            # JDTLS-version or installation-mode switches. Different launcher path → different ws_dir,
-            # which prevents stale OSGi configs from a previous JDTLS version blocking startup.
-            ws_hash_input = (self._repository_root_path + "|" + self.runtime_dependency_paths.jdtls_launcher_jar_path).encode()
-            project_hash = hashlib.md5(ws_hash_input).hexdigest()
+            project_hash = EclipseJDTLS.DependencyProvider._compute_workspace_hash(
+                self._repository_root_path,
+                self.runtime_dependency_paths.jdtls_launcher_jar_path,
+                self._custom_settings,
+            )
             ws_dir = str(
                 PurePath(
                     self._solidlsp_settings.ls_resources_dir,
