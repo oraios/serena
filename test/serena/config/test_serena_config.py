@@ -545,7 +545,7 @@ class TestSerenaConfigFromConfigFileRobustness:
             classmethod(lambda cls: str(self.master_config_path)),
         )
 
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.ERROR):
             config = SerenaConfig.from_config_file(generate_if_missing=False)
 
         registered_roots = {Path(p.project_root).resolve() for p in config.projects}
