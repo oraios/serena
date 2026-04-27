@@ -32,7 +32,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * CLI:
   - Support `serena --version` CLI command for displaying the current version #1347
-  - Extend `prompts` subcommand with `print-prompt-template` and `print-cc-system-prompt-override`.
+  - Extend `prompts` subcommand with `print-prompt-template` and `print-cc-system-prompt-override`, improve `list` subcommand
 
 * Clients:
   - Document workaround to make Claude Code use Serena's tools after recent degradations caused by changes in CC harness and Opus 4.7 release.

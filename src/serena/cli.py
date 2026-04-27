@@ -1109,16 +1109,26 @@ class PromptCommands(AutoRegisteringGroup):
 
     @staticmethod
     @click.command(
-        "list", help="Lists yamls that are used for defining prompts.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH}
+        "list", help="Lists prompt names and YAML files that can be overridden.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH}
     )
     def list() -> None:
+        # list prompt names
+        click.echo("Prompts:")
+        factory = SerenaPromptFactory()
+        for key in factory.get_prompt_names():
+            template = factory.get_prompt_template(key)
+            is_overridden = not template.path.startswith(PROMPT_TEMPLATES_DIR_INTERNAL)
+            click.echo(f" * '{key}' ({template.path if is_overridden else 'default'})")
+
+        # list prompts files
+        click.echo("\nPrompt files (which you can override with the create-override command):")
         serena_prompt_yaml_names = [os.path.basename(f) for f in glob.glob(PROMPT_TEMPLATES_DIR_INTERNAL + "/*.yml")]
         for prompt_yaml_name in serena_prompt_yaml_names:
             user_prompt_yaml_path = PromptCommands._get_user_prompt_yaml_path(prompt_yaml_name)
             if os.path.exists(user_prompt_yaml_path):
-                click.echo(f"{user_prompt_yaml_path} merged with default prompts in {prompt_yaml_name}")
+                click.echo(f" * {user_prompt_yaml_path} merged with default prompts in {prompt_yaml_name}")
             else:
-                click.echo(prompt_yaml_name)
+                click.echo(f" * {prompt_yaml_name}")
 
     @staticmethod
     @click.command(
@@ -1209,7 +1219,7 @@ class PromptCommands(AutoRegisteringGroup):
         context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
     )
     def print_cc_system_prompt_override() -> None:
-        click.echo(SerenaPromptFactory().get_cc_system_prompt_override_template_string())
+        click.echo(SerenaPromptFactory().create_cc_system_prompt_override())
 
 
 _mode = ModeCommands()
