@@ -23,15 +23,18 @@ class PromptFactoryBase:
         self.lang_code = lang_code
         self._prompt_collection = MultiLangPromptCollection(prompts_dir, fallback_mode=fallback_mode)
 
-    def _get_prompt_template(self, prompt_name: str) -> PromptTemplate:
+    def get_prompt_names(self) -> list[str]:
+        return self._prompt_collection.get_prompt_template_names()
+
+    def get_prompt_template(self, prompt_name: str) -> PromptTemplate:
         return self._prompt_collection.get_prompt_template(prompt_name, lang_code=self.lang_code)
 
     def get_prompt_template_string(self, prompt_name: str) -> str:
-        return self._get_prompt_template(prompt_name).get_template_string()
+        return self.get_prompt_template(prompt_name).get_template_string()
 
     def _render_prompt(self, prompt_name: str, params: dict[str, Any]) -> str:
         del params["self"]
-        return self._get_prompt_template(prompt_name).render(**params)
+        return self.get_prompt_template(prompt_name).render(**params)
 
     def _get_prompt_list(self, prompt_name: str) -> PromptList:
         return self._prompt_collection.get_prompt_list(prompt_name, self.lang_code)
