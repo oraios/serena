@@ -16,16 +16,11 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
-from test.conftest import get_repo_path, start_ls_context
+from test.conftest import get_repo_path, language_tests_enabled, start_ls_context
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
-
-def _ccls_available() -> bool:
-    return shutil.which("ccls") is not None
-
-
 _cpp_servers: list[Language] = [Language.CPP]
-if _ccls_available():
+if language_tests_enabled(Language.CPP_CCLS):
     _cpp_servers.append(Language.CPP_CCLS)
 
 

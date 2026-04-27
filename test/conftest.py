@@ -302,6 +302,9 @@ def _determine_disabled_languages() -> list[Language]:
 
     # Disable CPP_CCLS tests if ccls is not available
     ccls_tests_enabled = _sh.which("ccls") is not None
+    # Skip ccls tests on Windows since no recent binary is available and version
+    # 0.20220729 from chocolatey crashes when parsing the test files.
+    ccls_tests_enabled = ccls_tests_enabled and not is_windows
     if not ccls_tests_enabled:
         result.append(Language.CPP_CCLS)
 
