@@ -872,7 +872,7 @@ class SerenaConfig(SharedConfig):
             try:
                 project_config = ProjectConfig.load(path, serena_config=instance)  # instance is sufficiently populated
             except Exception as e:
-                log.warning(
+                log.error(
                     "Failed to load project configuration for %s: %s. "
                     "This project will be skipped. Fix or delete its "
                     ".serena/project.yml (or remove it from "
