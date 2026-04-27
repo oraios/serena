@@ -11,9 +11,10 @@ import threading
 
 from overrides import override
 
-from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
+from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -29,32 +30,21 @@ class GleamLanguageServer(SolidLanguageServer):
     """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
+        gleam_path = shutil.which("gleam")
+        if gleam_path is None:
+            raise RuntimeError(
+                "Gleam is not installed or not in PATH.\n"
+                "Please install Gleam from https://gleam.run/getting-started/installing/\n"
+                "and make sure the 'gleam' binary is available on your PATH."
+            )
         super().__init__(
             config,
             repository_root_path,
-            None,
+            ProcessLaunchInfo(cmd=[gleam_path, "lsp"], cwd=repository_root_path),
             "gleam",
             solidlsp_settings,
         )
         self.server_ready = threading.Event()
-
-    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
-        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
-
-    class DependencyProvider(LanguageServerDependencyProviderSinglePath):
-        def _get_or_install_core_dependency(self) -> str:
-            """Find the Gleam compiler on PATH."""
-            path = shutil.which("gleam")
-            if path is None:
-                raise RuntimeError(
-                    "Gleam is not installed or not in PATH.\n"
-                    "Please install Gleam from https://gleam.run/getting-started/installing/\n"
-                    "and make sure the 'gleam' binary is available on your PATH."
-                )
-            return path
-
-        def _create_launch_command(self, core_path: str) -> list[str]:
-            return [core_path, "lsp"]
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
