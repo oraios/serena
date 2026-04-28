@@ -349,6 +349,7 @@ markers = [
   "solidity: language server running for Solidity (uses @nomicfoundation/solidity-language-server)",
   "ansible: language server running for Ansible (uses @ansible/ansible-language-server)",
   "msl: language server running for mSL (mIRC Scripting Language)",
+  "bsl: language server running for BSL (1C:Enterprise / OneScript)",
 ]
 
 [tool.codespell]
