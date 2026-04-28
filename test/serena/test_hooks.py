@@ -512,6 +512,138 @@ class TestSessionEndCleanupHook:
             SessionEndCleanupHook(HookClient.CLAUDE_CODE).execute()
 
 
+class TestCodexExecCommandDetection:
+    """Tests for Codex ``exec_command`` grep/read classification (issue #1394).
+
+    When the Codex client sends shell work as ``exec_command`` with the actual
+    command under ``tool_input.cmd``, the hook must inspect that field and count
+    the call against the appropriate counter.
+    """
+
+    def _make_codex_input(self, cmd: str, session_id: str = "codex-session") -> dict:
+        return {
+            "session_id": session_id,
+            "tool_name": "exec_command",
+            "tool_input": {"cmd": cmd},
+        }
+
+    # --- is_grep_tool ---
+
+    def test_rg_is_grep(self, tmp_path: Path):
+        with patch("sys.stdin", _make_stdin(self._make_codex_input('rg "SomeSymbol" packages/server'))), patch(
+            "serena.hooks.serena_home_dir", str(tmp_path)
+        ):
+            hook = PreToolUseRemindAboutSerenaHook(HookClient.CODEX)
+        assert hook.is_grep_tool()
+
+    def test_grep_is_grep(self, tmp_path: Path):
+        with patch("sys.stdin", _make_stdin(self._make_codex_input('grep -r "foo" .'))), patch(
+            "serena.hooks.serena_home_dir", str(tmp_path)
+        ):
+            hook = PreToolUseRemindAboutSerenaHook(HookClient.CODEX)
+        assert hook.is_grep_tool()
+
+    def test_path_prefixed_grep_is_grep(self, tmp_path: Path):
+        with patch("sys.stdin", _make_stdin(self._make_codex_input('/usr/bin/grep -r "foo" .'))), patch(
+            "serena.hooks.serena_home_dir", str(tmp_path)
+        ):
+            hook = PreToolUseRemindAboutSerenaHook(HookClient.CODEX)
+        assert hook.is_grep_tool()
+
+    def test_ag_is_grep(self, tmp_path: Path):
+        with patch("sys.stdin", _make_stdin(self._make_codex_input("ag SomeSymbol src/"))), patch(
+            "serena.hooks.serena_home_dir", str(tmp_path)
+        ):
+            hook = PreToolUseRemindAboutSerenaHook(HookClient.CODEX)
+        assert hook.is_grep_tool()
+
+    # --- is_read_file_tool ---
+
+    def test_sed_is_read(self, tmp_path: Path):
+        with patch("sys.stdin", _make_stdin(self._make_codex_input("sed -n '1,220p' packages/server/foo.ts"))), patch(
+            "serena.hooks.serena_home_dir", str(tmp_path)
+        ):
+            hook = PreToolUseRemindAboutSerenaHook(HookClient.CODEX)
+        assert hook.is_read_file_tool()
+
+    def test_cat_is_read(self, tmp_path: Path):
+        with patch("sys.stdin", _make_stdin(self._make_codex_input("cat README.md"))), patch(
+            "serena.hooks.serena_home_dir", str(tmp_path)
+        ):
+            hook = PreToolUseRemindAboutSerenaHook(HookClient.CODEX)
+        assert hook.is_read_file_tool()
+
+    def test_head_is_read(self, tmp_path: Path):
+        with patch("sys.stdin", _make_stdin(self._make_codex_input("head -n 40 src/main.py"))), patch(
+            "serena.hooks.serena_home_dir", str(tmp_path)
+        ):
+            hook = PreToolUseRemindAboutSerenaHook(HookClient.CODEX)
+        assert hook.is_read_file_tool()
+
+    def test_tail_is_read(self, tmp_path: Path):
+        with patch("sys.stdin", _make_stdin(self._make_codex_input("tail -n 20 src/main.py"))), patch(
+            "serena.hooks.serena_home_dir", str(tmp_path)
+        ):
+            hook = PreToolUseRemindAboutSerenaHook(HookClient.CODEX)
+        assert hook.is_read_file_tool()
+
+    # --- negatives ---
+
+    def test_ls_is_neither(self, tmp_path: Path):
+        with patch("sys.stdin", _make_stdin(self._make_codex_input("ls -la src/"))), patch(
+            "serena.hooks.serena_home_dir", str(tmp_path)
+        ):
+            hook = PreToolUseRemindAboutSerenaHook(HookClient.CODEX)
+        assert not hook.is_grep_tool()
+        assert not hook.is_read_file_tool()
+
+    def test_echo_is_neither(self, tmp_path: Path):
+        with patch("sys.stdin", _make_stdin(self._make_codex_input("echo hello"))), patch(
+            "serena.hooks.serena_home_dir", str(tmp_path)
+        ):
+            hook = PreToolUseRemindAboutSerenaHook(HookClient.CODEX)
+        assert not hook.is_grep_tool()
+        assert not hook.is_read_file_tool()
+
+    def test_non_exec_command_tool_unaffected(self, tmp_path: Path):
+        """For Codex, non-exec_command tools still fall through to substring matching."""
+        with patch("sys.stdin", _make_stdin(_base_input(tool_name="grep_search"))), patch(
+            "serena.hooks.serena_home_dir", str(tmp_path)
+        ):
+            hook = PreToolUseRemindAboutSerenaHook(HookClient.CODEX)
+        assert hook.is_grep_tool()
+
+    # --- end-to-end: deny fires after threshold for Codex exec_command ---
+
+    def test_deny_after_threshold_codex_rg(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """Repeated ``exec_command`` calls with ``rg`` should trip the grep deny for Codex."""
+        for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
+            with patch("sys.stdin", _make_stdin(self._make_codex_input('rg "Symbol" src/'))), patch(
+                "serena.hooks.serena_home_dir", str(tmp_path)
+            ):
+                PreToolUseRemindAboutSerenaHook(HookClient.CODEX).execute()
+
+        output = capsys.readouterr().out.strip()
+        assert output, "expected a deny to be emitted for Codex rg calls"
+        result = json.loads(output)
+        assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert "grep" in result["hookSpecificOutput"]["additionalContext"].lower()
+
+    def test_deny_after_threshold_codex_sed(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """Repeated ``exec_command`` calls with ``sed`` should trip the read deny for Codex."""
+        for _ in range(ToolUseCounter._READ_FILE_USES_THRESHOLD):
+            with patch("sys.stdin", _make_stdin(self._make_codex_input("sed -n '1,50p' src/main.py"))), patch(
+                "serena.hooks.serena_home_dir", str(tmp_path)
+            ):
+                PreToolUseRemindAboutSerenaHook(HookClient.CODEX).execute()
+
+        output = capsys.readouterr().out.strip()
+        assert output, "expected a deny to be emitted for Codex sed calls"
+        result = json.loads(output)
+        assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert "read file" in result["hookSpecificOutput"]["additionalContext"].lower()
+
+
 class TestHookCli:
     """Tests for the Click CLI entry point (serena-hooks)."""
 

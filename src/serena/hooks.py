@@ -243,18 +243,46 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
     #: are caught alongside ``read_file``, while ``write_file``/``edit_file`` are not.
     _READ_FILE_VERB_SUBSTRINGS: tuple[str, ...] = ("read", "view", "open", "show")
 
+    #: Shell commands that perform grep-like search; used to classify Codex
+    #: ``exec_command`` calls whose ``cmd`` field starts with one of these.
+    _GREP_SHELL_COMMANDS: frozenset[str] = frozenset(("grep", "rg", "ag", "ack", "fgrep", "egrep"))
+
+    #: Shell commands that perform file-read operations; used to classify Codex
+    #: ``exec_command`` calls whose ``cmd`` field starts with one of these.
+    _READ_SHELL_COMMANDS: frozenset[str] = frozenset(("cat", "head", "tail", "sed", "less", "more", "bat"))
+
     def __init__(self, client: HookClient):
         super().__init__(client)
         self._tool_call_counter = self.ToolUseCounter.load(self)
 
+    def _get_exec_command_name(self) -> str:
+        """Extract the command name from an ``exec_command`` tool input.
+
+        Returns the basename of the first whitespace-separated token of the
+        ``cmd`` field, lowercased, so that both bare names (``rg``) and
+        path-prefixed invocations (``/usr/bin/grep``) are normalised the same
+        way.  Returns an empty string when the input is absent or empty.
+        """
+        if self._tool_input is None:
+            return ""
+        cmd = str(self._tool_input.get("cmd", "") or "").strip()
+        if not cmd:
+            return ""
+        first_token = cmd.split()[0]
+        return os.path.basename(first_token).lower()
+
     def is_grep_tool(self) -> bool:
         if self._client == HookClient.CLAUDE_CODE:
             return self._tool_name == "grep"
+        if self._client == HookClient.CODEX and self._tool_name == "exec_command":
+            return self._get_exec_command_name() in self._GREP_SHELL_COMMANDS
         return "grep" in self._tool_name
 
     def is_read_file_tool(self) -> bool:
         if self._client == HookClient.CLAUDE_CODE:
             return self._tool_name == "read"
+        if self._client == HookClient.CODEX and self._tool_name == "exec_command":
+            return self._get_exec_command_name() in self._READ_SHELL_COMMANDS
         name = self._tool_name
         if "file" not in name:
             return False
