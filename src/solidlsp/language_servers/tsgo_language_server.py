@@ -10,16 +10,18 @@ Launch command: tsgo --lsp --stdio
 import logging
 import os
 import pathlib
-import subprocess
+import shutil
 from typing import cast
 
 from overrides import override
+from sensai.util.logging import LogTime
 
 from solidlsp.ls import LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
+from .common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
 from .typescript_language_server import prefer_non_node_modules_definition
 
 log = logging.getLogger(__name__)
@@ -29,11 +31,11 @@ class TsgoLanguageServer(SolidLanguageServer):
     """
     TypeScript support via tsgo — the native Go-based TypeScript 7 compiler with built-in LSP.
 
-    tsgo does not require Node.js. It must be installed separately
-    (e.g. via ``npm install -g @typescript/native-preview``).
+    tsgo is installed automatically via npm (``@typescript/native-preview``).
+    It does not require the traditional typescript-language-server wrapper.
 
     You can pass the following entries in ls_specific_settings["typescript_tsgo"]:
-        - ls_path: Path to the tsgo binary (default: discovered from PATH)
+        - tsgo_version: Version of @typescript/native-preview to install (default: "7.0.0-dev.20250601")
     """
 
     @override
@@ -49,29 +51,58 @@ class TsgoLanguageServer(SolidLanguageServer):
 
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
         def _get_or_install_core_dependency(self) -> str:
-            """Locate the tsgo binary on the system. tsgo must be pre-installed by the user."""
-            import shutil
+            """Install @typescript/native-preview via npm and return the path to the tsgo executable."""
+            language_specific_config = self._custom_settings
+            tsgo_version = language_specific_config.get("tsgo_version", "7.0.0-dev.20250601")
+            npm_registry = language_specific_config.get("npm_registry")
 
-            tsgo_path = shutil.which("tsgo")
-            if tsgo_path is None:
-                raise RuntimeError(
-                    "tsgo is not installed or not found in PATH.\n"
-                    "Install it via: npm install -g @typescript/native-preview\n"
-                    "Or set the 'ls_path' option in ls_specific_settings['typescript_tsgo'] "
-                    "to point to your tsgo binary."
-                )
+            deps = RuntimeDependencyCollection(
+                [
+                    RuntimeDependency(
+                        id="typescript-native-preview",
+                        description="@typescript/native-preview (tsgo) package",
+                        command=build_npm_install_command("@typescript/native-preview", tsgo_version, npm_registry),
+                        platform_id="any",
+                    ),
+                ]
+            )
 
-            # Verify it works
-            try:
-                result = subprocess.run([tsgo_path, "--version"], capture_output=True, text=True, check=False, timeout=10)
-                if result.returncode == 0:
-                    log.info(f"Found tsgo: {result.stdout.strip()}")
-                else:
-                    log.warning(f"tsgo --version returned non-zero exit code: {result.returncode}")
-            except (FileNotFoundError, subprocess.TimeoutExpired) as e:
-                raise RuntimeError(f"Failed to verify tsgo binary at {tsgo_path}: {e}") from e
+            # Verify npm is installed
+            is_npm_installed = shutil.which("npm") is not None
+            assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
-            return tsgo_path
+            tsgo_ls_dir = os.path.join(self._ls_resources_dir, "tsgo-lsp")
+            tsgo_executable_path = os.path.join(tsgo_ls_dir, "node_modules", ".bin", "tsgo")
+
+            # Check if installation is needed
+            version_file = os.path.join(tsgo_ls_dir, ".installed_version")
+            expected_version = tsgo_version
+
+            needs_install = False
+            if not os.path.exists(tsgo_executable_path):
+                log.info(f"tsgo executable not found at {tsgo_executable_path}.")
+                needs_install = True
+            elif os.path.exists(version_file):
+                with open(version_file) as f:
+                    installed_version = f.read().strip()
+                if installed_version != expected_version:
+                    log.info(f"tsgo version mismatch: installed={installed_version}, expected={expected_version}. Reinstalling...")
+                    needs_install = True
+            else:
+                log.info("tsgo version file not found. Reinstalling to ensure correct version...")
+                needs_install = True
+
+            if needs_install:
+                log.info("Installing tsgo dependencies...")
+                with LogTime("Installation of tsgo (typescript/native-preview)", logger=log):
+                    deps.install(tsgo_ls_dir)
+                with open(version_file, "w") as f:
+                    f.write(expected_version)
+                log.info("tsgo installed successfully")
+
+            if not os.path.exists(tsgo_executable_path):
+                raise FileNotFoundError(f"tsgo executable not found at {tsgo_executable_path}, something went wrong with the installation.")
+            return tsgo_executable_path
 
         def _create_launch_command(self, core_path: str) -> list[str]:
             return [core_path, "--lsp", "--stdio"]
