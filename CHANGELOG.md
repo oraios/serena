@@ -2,6 +2,9 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Hooks:
+  - Extension: heuristics for parsing commands and firing a hook on too many greps or reads. Important for clients that, unlike claude code, don't have dedicated grep/read tools.
+
 # v1.2.0 (2026-04-27)
 
 * General:
