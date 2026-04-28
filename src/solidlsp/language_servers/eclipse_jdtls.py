@@ -7,9 +7,12 @@ import hashlib
 import logging
 import os
 import pathlib
+import platform
+import re
 import shutil
+import subprocess
 import threading
-from pathlib import PurePath
+from pathlib import Path, PurePath
 from time import sleep
 from typing import cast
 
@@ -18,6 +21,7 @@ from overrides import override
 from solidlsp import ls_types
 from solidlsp.ls import LanguageServerDependencyProvider, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, InitializeParams, SymbolInformation
@@ -42,28 +46,69 @@ INTELLICODE_ALLOWED_HOSTS = (
 )
 INTELLICODE_SHA256 = "7f61a7f96d101cdf230f96821be3fddd8f890ebfefb3695d18beee43004ae251"
 
+# Mapping from Serena's platform identifiers to upstream JDTLS config_<platform> directory names
+JDTLS_CONFIG_DIR_BY_PLATFORM = {
+    "osx-arm64": "config_mac_arm",
+    "darwin-arm64": "config_mac_arm",
+    "osx-x64": "config_mac",
+    "linux-arm64": "config_linux_arm",
+    "linux-x64": "config_linux",
+    "win-x64": "config_win",
+}
+
+# Minimum supported JDK version for running JDTLS itself
+JDTLS_MIN_JDK_VERSION = 21
+
 
 @dataclasses.dataclass
 class RuntimeDependencyPaths:
     """
-    Stores the paths to the runtime dependencies of EclipseJDTLS
+    Stores the paths to the runtime dependencies of EclipseJDTLS.
+
+    In the default mode (vscode-java VSIX), all paths are populated.
+    In the upstream-jdtls mode (when ``jdtls_path`` and ``lombok_path`` are set),
+    fields that have no upstream equivalent (gradle distribution, IntelliCode bundle)
+    are set to None.
     """
 
-    gradle_path: str
-    lombok_jar_path: str
     jre_path: str
     jre_home_path: str
     jdtls_launcher_jar_path: str
     jdtls_readonly_config_path: str
-    intellicode_jar_path: str
-    intellisense_members_path: str
+    lombok_jar_path: str
+    gradle_path: str | None = None
+    intellicode_jar_path: str | None = None
+    intellisense_members_path: str | None = None
 
 
 class EclipseJDTLS(SolidLanguageServer):
     r"""
     The EclipseJDTLS class provides a Java specific implementation of the LanguageServer class
 
+    Two installation modes are supported:
+
+    1. **Default vscode-java VSIX mode** (no extra config required) — Serena downloads the platform-specific
+       vscode-java VSIX bundle (~500 MB: JDTLS + bundled JRE 21 + Lombok + IntelliCode), Gradle distribution
+       and IntelliCode VSIX from public hosts. Suitable when public network access is available.
+
+    2. **Upstream JDTLS mode** (activated by setting both ``jdtls_path`` and ``lombok_path``) — uses an
+       existing JDTLS installation and the system JDK. Nothing is downloaded. Suitable for restricted-network
+       environments. Requires JDK 21+ available via ``java_home`` setting / ``JAVA_HOME`` env / PATH.
+       Maven projects work out of the box (m2e bundled in JDTLS uses Maven Embedder); Gradle projects
+       need ``./gradlew`` in the project or a system-installed Gradle (Buildship default discovery).
+
     You can configure the following options in ls_specific_settings (in serena_config.yml):
+        Upstream JDTLS mode (mutually exclusive group — set both to activate):
+        - jdtls_path: Path to upstream JDTLS root (containing plugins/ and config_<platform>/).
+                       Get via 'brew install jdtls' or extract jdt-language-server-*.tar.gz from
+                       https://download.eclipse.org/jdtls/snapshots/.
+        - lombok_path: Path to lombok jar (e.g. ~/.m2/repository/org/projectlombok/lombok/<ver>/lombok-<ver>.jar
+                       or download from https://projectlombok.org/downloads/).
+
+        Optional in upstream-jdtls mode:
+        - java_home: Path to JDK 21+ home directory. Falls back to JAVA_HOME env, then 'which java'.
+
+        General settings (apply in both modes):
         - maven_user_settings: Path to Maven settings.xml file (default: ~/.m2/settings.xml)
         - gradle_user_home: Path to Gradle user home directory (default: ~/.gradle)
         - gradle_wrapper_enabled: Whether to use the project's Gradle wrapper (default: false)
@@ -77,7 +122,16 @@ class EclipseJDTLS(SolidLanguageServer):
         - vscode_java_version: Override the pinned vscode-java runtime bundle version downloaded by Serena
         - intellicode_version: Override the pinned IntelliCode VSIX version downloaded by Serena
 
-    Example configuration in ~/.serena/serena_config.yml:
+    Example configuration for upstream JDTLS mode (no downloads, suitable for offline/corporate):
+    ```yaml
+    ls_specific_settings:
+      java:
+        jdtls_path: "/opt/homebrew/Cellar/jdtls/1.50.0/libexec"  # or extracted tar.gz path
+        lombok_path: "/Users/me/.m2/repository/org/projectlombok/lombok/1.18.36/lombok-1.18.36.jar"
+        # java_home: "/opt/homebrew/opt/openjdk@21"  # optional, JAVA_HOME env / PATH used otherwise
+    ```
+
+    Example configuration for default vscode-java VSIX mode (auto-download):
     ```yaml
     ls_specific_settings:
       java:
@@ -154,7 +208,29 @@ class EclipseJDTLS(SolidLanguageServer):
         ) -> RuntimeDependencyPaths:
             """
             Setup runtime dependencies for EclipseJDTLS and return the paths.
+
+            Two modes are supported:
+
+            * **Upstream JDTLS mode** (activated when both ``jdtls_path`` and ``lombok_path`` are set
+              in ``ls_specific_settings.java``): uses an existing JDTLS installation (e.g. via
+              ``brew install jdtls`` or extracted ``jdt-language-server-*.tar.gz``) and the system JDK.
+              Nothing is downloaded by Serena. Suitable for restricted-network/corporate environments.
+            * **Default vscode-java VSIX mode** (activated otherwise): downloads the platform-specific
+              vscode-java VSIX bundle (containing JDTLS, bundled JRE 21, Lombok, IntelliCode), Gradle
+              distribution and IntelliCode VSIX from public hosts. Original behaviour, unchanged.
             """
+            jdtls_path = custom_settings.get("jdtls_path")
+            lombok_path = custom_settings.get("lombok_path")
+            if jdtls_path or lombok_path:
+                # both must be set together to activate upstream mode
+                if not (jdtls_path and lombok_path):
+                    raise SolidLSPException(
+                        "Both 'jdtls_path' and 'lombok_path' must be set together in "
+                        "ls_specific_settings.java to use the upstream JDTLS mode. "
+                        "Set both, or remove both to use the default vscode-java VSIX mode."
+                    )
+                return EclipseJDTLS.DependencyProvider._setup_from_existing_install(str(jdtls_path), str(lombok_path), custom_settings)
+
             platformId = PlatformUtils.get_platform_id()
             gradle_version = custom_settings.get("gradle_version", "8.14.2")
             vscode_java_version = custom_settings.get("vscode_java_version", "1.42.0-561")
@@ -346,11 +422,255 @@ class EclipseJDTLS(SolidLanguageServer):
                 intellisense_members_path=intellisense_members_path,
             )
 
+        @staticmethod
+        def _setup_from_existing_install(
+            jdtls_path: str, lombok_path: str, custom_settings: SolidLSPSettings.CustomLSSettings
+        ) -> RuntimeDependencyPaths:
+            """
+            Builds RuntimeDependencyPaths from an already-installed upstream JDTLS distribution
+            and the system-installed JDK. No downloads are performed.
+
+            :param jdtls_path: absolute path to the JDTLS root (containing ``plugins/`` and ``config_<platform>/``)
+            :param lombok_path: absolute path to the Lombok jar (mandatory; agent is always attached)
+            :param custom_settings: language-server-specific settings from ls_specific_settings.java
+            :return: populated RuntimeDependencyPaths with gradle/intellicode fields set to None
+            """
+            # validate jdtls_path structure (root + plugins dir)
+            jdtls_root = Path(jdtls_path)
+            if not jdtls_root.is_dir():
+                raise SolidLSPException(
+                    f"Provided jdtls_path '{jdtls_path}' is not an existing directory.\n"
+                    f"Fix: extract jdt-language-server-*.tar.gz from "
+                    f"https://download.eclipse.org/jdtls/snapshots/ or run 'brew install jdtls', "
+                    f"then set ls_specific_settings.java.jdtls_path to the extracted directory."
+                )
+            plugins_dir = jdtls_root / "plugins"
+            if not plugins_dir.is_dir():
+                raise SolidLSPException(
+                    f"Invalid jdtls_path '{jdtls_path}': 'plugins/' directory not found.\n"
+                    f"Expected upstream JDTLS layout (plugins/, config_<platform>/, features/) at the root. "
+                    f"If you pointed at a vscode-java extension, use '<extension>/server' instead."
+                )
+
+            # resolve the main equinox launcher jar (excluding platform-specific native fragments)
+            launcher_jar = EclipseJDTLS.DependencyProvider._resolve_launcher_jar(plugins_dir)
+
+            # resolve the platform-specific config directory under jdtls_root
+            config_dir = EclipseJDTLS.DependencyProvider._resolve_config_dir(jdtls_root)
+
+            # validate lombok jar exists
+            if not Path(lombok_path).is_file():
+                raise SolidLSPException(
+                    f"Provided lombok_path '{lombok_path}' does not exist or is not a file.\n"
+                    f"Fix: download lombok jar from https://projectlombok.org/downloads/ or use the one "
+                    f"from your local Maven cache (~/.m2/repository/org/projectlombok/lombok/<version>/lombok-<version>.jar)."
+                )
+
+            # resolve system JDK (priority: java_home setting -> JAVA_HOME env -> which java),
+            # interrogate the JVM for its real java.home and validate version >= 21
+            jre_home_path, jre_path = EclipseJDTLS.DependencyProvider._resolve_system_jdk(custom_settings)
+
+            log.info(
+                f"Using upstream JDTLS at '{jdtls_path}' with system JDK '{jre_home_path}'. "
+                f"Launcher: {launcher_jar.name}; config: {config_dir.name}; lombok: {lombok_path}"
+            )
+
+            return RuntimeDependencyPaths(
+                jre_path=jre_path,
+                jre_home_path=jre_home_path,
+                jdtls_launcher_jar_path=str(launcher_jar),
+                jdtls_readonly_config_path=str(config_dir),
+                lombok_jar_path=lombok_path,
+                gradle_path=None,
+                intellicode_jar_path=None,
+                intellisense_members_path=None,
+            )
+
+        @staticmethod
+        def _resolve_launcher_jar(plugins_dir: Path) -> Path:
+            """
+            Locates the main Equinox launcher jar in JDTLS's ``plugins/`` directory, excluding
+            platform-specific native fragments like ``org.eclipse.equinox.launcher.cocoa.macosx.*``.
+
+            :return: path to the main launcher jar (e.g. ``org.eclipse.equinox.launcher_1.7.0.v....jar``)
+            """
+            # main launcher matches: org.eclipse.equinox.launcher_<digit>...jar (single underscore,
+            # immediately followed by version digits — fragments have additional dotted segments).
+            pattern = re.compile(r"^org\.eclipse\.equinox\.launcher_\d.*\.jar$")
+            matches = sorted(p for p in plugins_dir.glob("org.eclipse.equinox.launcher_*.jar") if pattern.match(p.name))
+            if not matches:
+                raise SolidLSPException(
+                    f"No main Equinox launcher jar found in '{plugins_dir}'. "
+                    f"Expected file like 'org.eclipse.equinox.launcher_<version>.jar'. "
+                    f"Verify the JDTLS extraction is complete and not corrupted."
+                )
+            # if multiple versions are present (rare), pick the highest by name
+            return matches[-1]
+
+        @staticmethod
+        def _resolve_config_dir(jdtls_root: Path) -> Path:
+            """
+            Locates the platform-specific OSGi configuration directory inside the JDTLS root.
+
+            :return: path to ``config_<platform>/`` directory matching the current OS/arch
+            """
+            platform_id = PlatformUtils.get_platform_id().value
+            config_dir_name = JDTLS_CONFIG_DIR_BY_PLATFORM.get(platform_id)
+            if config_dir_name is None:
+                raise SolidLSPException(
+                    f"Unsupported platform '{platform_id}' for upstream JDTLS mode. "
+                    f"Supported platforms: {sorted(set(JDTLS_CONFIG_DIR_BY_PLATFORM.values()))}."
+                )
+            config_dir = jdtls_root / config_dir_name
+            if not config_dir.is_dir():
+                raise SolidLSPException(
+                    f"Config directory '{config_dir}' not found. "
+                    f"This JDTLS distribution does not support platform '{platform_id}'. "
+                    f"Verify you downloaded the correct tar.gz for your OS/architecture."
+                )
+            return config_dir
+
+        @staticmethod
+        def _resolve_system_jdk(custom_settings: SolidLSPSettings.CustomLSSettings) -> tuple[str, str]:
+            """
+            Resolves the system-installed JDK home and ``java`` executable, validates the version.
+
+            The ``java`` executable is located by priority: ``java_home`` setting ->
+            ``JAVA_HOME`` env var -> ``java`` in PATH. The actual JDK home directory and
+            major version are then discovered by querying the JVM itself via
+            ``java -XshowSettings:properties -version`` — this is the single source of truth
+            and works correctly even when the locator is a system stub (e.g. ``/usr/bin/java``
+            on macOS, which delegates to ``/usr/libexec/java_home`` under the hood and does not
+            resolve to the real JDK home via simple path traversal).
+
+            :return: (jdk_home_directory, java_executable_path)
+            """
+            # locate a java executable to interrogate
+            java_exe_name = "java.exe" if platform.system() == "Windows" else "java"
+            java_exe: str | None = None
+            source: str
+
+            if explicit_home := custom_settings.get("java_home"):
+                candidate = str(Path(explicit_home) / "bin" / java_exe_name)
+                if not os.path.exists(candidate):
+                    raise SolidLSPException(
+                        f"java_home='{explicit_home}' is invalid: '{candidate}' does not exist. "
+                        f"Set ls_specific_settings.java.java_home to a JDK home that contains bin/{java_exe_name}."
+                    )
+                java_exe = candidate
+                source = f"java_home setting ({explicit_home})"
+            elif env_home := os.environ.get("JAVA_HOME"):
+                candidate = str(Path(env_home) / "bin" / java_exe_name)
+                if os.path.exists(candidate):
+                    java_exe = candidate
+                    source = f"JAVA_HOME env ({env_home})"
+                else:
+                    log.warning(f"JAVA_HOME='{env_home}' invalid (no '{candidate}'), falling back to PATH.")
+
+            if java_exe is None:
+                java_in_path = shutil.which("java")
+                if java_in_path is None:
+                    raise SolidLSPException(
+                        "Could not locate a Java installation for JDTLS. "
+                        "Set ls_specific_settings.java.java_home, set JAVA_HOME environment variable, "
+                        f"or ensure 'java' is on PATH. Required: JDK {JDTLS_MIN_JDK_VERSION}+."
+                    )
+                java_exe = java_in_path
+                source = f"PATH ({java_in_path})"
+
+            # interrogate the JVM for its real java.home and version (single source of truth)
+            real_jdk_home, major_version = EclipseJDTLS.DependencyProvider._inspect_java(java_exe)
+
+            # validate version
+            if major_version < JDTLS_MIN_JDK_VERSION:
+                raise SolidLSPException(
+                    f"JDTLS requires JDK {JDTLS_MIN_JDK_VERSION}+ but '{java_exe}' is JDK {major_version} "
+                    f"(located via {source}, java.home={real_jdk_home}). "
+                    f"Install a newer JDK and update ls_specific_settings.java.java_home or JAVA_HOME."
+                )
+            log.info(f"Resolved JDK {major_version} via {source}; java.home={real_jdk_home}; java_exe={java_exe}.")
+
+            # prefer to use bin/java from the *real* JDK home (so JDTLS subprocesses that read JAVA_HOME
+            # find a consistent layout); only fall back to the original locator if the real-home variant
+            # is missing for some reason.
+            real_java = str(Path(real_jdk_home) / "bin" / java_exe_name)
+            if os.path.exists(real_java):
+                java_exe = real_java
+
+            return real_jdk_home, java_exe
+
+        @staticmethod
+        def _inspect_java(java_exe: str) -> tuple[str, int]:
+            """
+            Runs ``java -XshowSettings:properties -version`` and parses ``java.home`` and the
+            major version from the output. This is the most reliable cross-platform way to
+            discover the JDK home (works around macOS ``/usr/bin/java`` stub issue).
+
+            :return: (java_home_directory_reported_by_jvm, major_version)
+            """
+            try:
+                # both -XshowSettings:properties and -version write to stderr by convention
+                result = subprocess.run(
+                    [java_exe, "-XshowSettings:properties", "-version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                    check=False,
+                )
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                raise SolidLSPException(f"Failed to run '{java_exe} -XshowSettings:properties -version': {exc}") from exc
+
+            output = (result.stderr or "") + "\n" + (result.stdout or "")
+
+            # parse java.home from "    java.home = /path/to/jdk"
+            home_match = re.search(r"java\.home\s*=\s*(.+)", output)
+            if not home_match:
+                raise SolidLSPException(
+                    f"Could not parse java.home from '{java_exe}' output. "
+                    f"This usually means '{java_exe}' is not a valid JDK installation. "
+                    f"First lines of output: {output.strip().splitlines()[:5]}"
+                )
+            real_home = home_match.group(1).strip()
+
+            # parse major version from version line: 'openjdk version "21.0.2"' or 'java version "21.0.2"'
+            version_match = re.search(r'version "(\d+)(?:\.\d+)*"', output)
+            if not version_match:
+                raise SolidLSPException(
+                    f"Could not parse Java version from '{java_exe}' output. "
+                    f"Required: JDK {JDTLS_MIN_JDK_VERSION}+. "
+                    f"First lines of output: {output.strip().splitlines()[:5]}"
+                )
+            major = int(version_match.group(1))
+            return real_home, major
+
+        @staticmethod
+        def _compute_workspace_hash(
+            repository_root_path: str,
+            jdtls_launcher_jar_path: str,
+            custom_settings: SolidLSPSettings.CustomLSSettings,
+        ) -> str:
+            """
+            Compute the JDTLS workspace directory name.
+
+            Default mode hashes the project path only — preserves backwards compatibility with
+            workspaces created before upstream-JDTLS support. Upstream mode (when ``jdtls_path``
+            is set) mixes in the launcher path so switching between default and upstream
+            installations (or between different upstream JDTLS versions) lands in a separate
+            ws_dir and avoids stale OSGi configs blocking startup.
+            """
+            if custom_settings.get("jdtls_path"):
+                ws_hash_input = (repository_root_path + "|" + jdtls_launcher_jar_path).encode()
+            else:
+                ws_hash_input = repository_root_path.encode()
+            return hashlib.md5(ws_hash_input).hexdigest()
+
         def create_launch_command(self) -> list[str]:
             # ws_dir is the workspace directory for the EclipseJDTLS server.
-            # Use a deterministic hash of the project path so the workspace
-            # (and its cached index) can be reused across restarts.
-            project_hash = hashlib.md5(self._repository_root_path.encode()).hexdigest()
+            project_hash = EclipseJDTLS.DependencyProvider._compute_workspace_hash(
+                self._repository_root_path,
+                self.runtime_dependency_paths.jdtls_launcher_jar_path,
+                self._custom_settings,
+            )
             ws_dir = str(
                 PurePath(
                     self._solidlsp_settings.ls_resources_dir,
@@ -820,8 +1140,15 @@ class EclipseJDTLS(SolidLanguageServer):
         }
 
         initialize_params["initializationOptions"]["workspaceFolders"] = [repo_uri]  # type: ignore
-        bundles = [self.runtime_dependency_paths.intellicode_jar_path]
-        initialize_params["initializationOptions"]["bundles"] = bundles  # type: ignore
+
+        # IntelliCode bundle: only attached in default vscode-java VSIX mode.
+        # In upstream-jdtls mode (jdtls_path set) we don't ship IntelliCode — agentic Serena workflows
+        # don't use completion ranking, so the bundle would be inert dead weight.
+        if self.runtime_dependency_paths.intellicode_jar_path is not None:
+            initialize_params["initializationOptions"]["bundles"] = [self.runtime_dependency_paths.intellicode_jar_path]  # type: ignore
+        else:
+            initialize_params["initializationOptions"]["bundles"] = []  # type: ignore
+
         initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"] = [  # type: ignore
             {"name": "JavaSE-21", "path": self.runtime_dependency_paths.jre_home_path, "default": True}
         ]
@@ -832,7 +1159,10 @@ class EclipseJDTLS(SolidLanguageServer):
             assert os.path.exists(runtime["path"]), f"Runtime required for eclipse_jdtls at path {runtime['path']} does not exist"
 
         gradle_settings = initialize_params["initializationOptions"]["settings"]["java"]["import"]["gradle"]  # type: ignore
-        gradle_settings["home"] = self.runtime_dependency_paths.gradle_path
+        # In upstream-jdtls mode we don't ship a Gradle distribution — Buildship will use the project's
+        # ./gradlew wrapper or a system-installed Gradle via its standard discovery rules.
+        if self.runtime_dependency_paths.gradle_path is not None:
+            gradle_settings["home"] = self.runtime_dependency_paths.gradle_path
         gradle_settings["java"] = {"home": gradle_java_home if gradle_java_home is not None else self.runtime_dependency_paths.jre_path}
         return cast(InitializeParams, initialize_params)
 
@@ -899,17 +1229,22 @@ class EclipseJDTLS(SolidLanguageServer):
 
         self.server.notify.workspace_did_change_configuration({"settings": initialize_params["initializationOptions"]["settings"]})  # type: ignore
 
-        self._intellicode_enable_command_available.wait()
+        # IntelliCode enablement is only relevant in the default vscode-java VSIX mode where the
+        # IntelliCode bundle is shipped. In upstream-jdtls mode it's absent and the
+        # 'java.intellicode.enable' command will never be registered, so we skip the wait/call.
+        if self.runtime_dependency_paths.intellicode_jar_path is not None:
+            self._intellicode_enable_command_available.wait()
 
-        java_intellisense_members_path = self.runtime_dependency_paths.intellisense_members_path
-        assert os.path.exists(java_intellisense_members_path)
-        intellicode_enable_result = self.server.send.execute_command(
-            {
-                "command": "java.intellicode.enable",
-                "arguments": [True, java_intellisense_members_path],
-            }
-        )
-        assert intellicode_enable_result
+            java_intellisense_members_path = self.runtime_dependency_paths.intellisense_members_path
+            assert java_intellisense_members_path is not None
+            assert os.path.exists(java_intellisense_members_path)
+            intellicode_enable_result = self.server.send.execute_command(
+                {
+                    "command": "java.intellicode.enable",
+                    "arguments": [True, java_intellisense_members_path],
+                }
+            )
+            assert intellicode_enable_result
 
         if not self._service_ready_event.is_set():
             log.info("Waiting for service to be ready ...")
