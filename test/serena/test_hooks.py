@@ -13,7 +13,6 @@ from serena.hooks import (
     PreToolUseAutoApproveSerenaHook,
     PreToolUseRemindAboutSerenaHook,
     SessionEndCleanupHook,
-    SessionStartActivateProjectHook,
     hook_commands,
 )
 
@@ -479,19 +478,6 @@ class TestPreToolUseAutoApproveSerenaHook:
         assert capsys.readouterr().out == ""
 
 
-class TestSessionStartActivateProjectHook:
-    def test_outputs_activation_message(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        stdin_data = {"session_id": "s1"}
-        with patch("sys.stdin", _make_stdin(stdin_data)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
-            SessionStartActivateProjectHook(HookClient.VSCODE).execute()
-
-        output = capsys.readouterr().out.strip()
-        result = json.loads(output)
-        context = result["hookSpecificOutput"]["additionalContext"]
-        assert "Activate" in context
-        assert "Serena Instructions Manual" in context
-
-
 class TestSessionEndCleanupHook:
     def test_removes_session_dir(self, tmp_path: Path):
         session_dir = tmp_path / "hook_data" / "cleanup-session"
@@ -514,15 +500,6 @@ class TestSessionEndCleanupHook:
 
 class TestHookCli:
     """Tests for the Click CLI entry point (serena-hooks)."""
-
-    def test_activate_command(self, tmp_path: Path):
-        stdin_json = json.dumps({"session_id": "cli-test"})
-        runner = CliRunner()
-        with patch("serena.hooks.serena_home_dir", str(tmp_path)):
-            result = runner.invoke(hook_commands, ["activate", "--client", "vscode"], input=stdin_json)
-        assert result.exit_code == 0
-        output = json.loads(result.output)
-        assert "Activate" in output["hookSpecificOutput"]["additionalContext"]
 
     def test_cleanup_command(self, tmp_path: Path):
         session_dir = tmp_path / "hook_data" / "cli-cleanup"
