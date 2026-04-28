@@ -25,3 +25,5 @@ included_optional_tools:
   - jet_brains_safe_delete
   - jet_brains_debug
   - serena_info
+  - jet_brains_run_inspections
+  - jet_brains_list_inspections
