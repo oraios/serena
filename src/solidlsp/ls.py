@@ -13,7 +13,7 @@ from collections.abc import Hashable, Iterator
 from contextlib import contextmanager
 from copy import copy
 from pathlib import Path, PurePath
-from time import perf_counter, sleep
+from time import monotonic, perf_counter, sleep
 from typing import Any, Self, Union, cast
 
 import pathspec
@@ -754,20 +754,76 @@ class SolidLanguageServer(ABC):
         :return: the published diagnostics, or ``None`` if no diagnostics are available.
         """
         uri = self._validate_text_document_diagnostics_request(relative_file_path, start_line, end_line, min_severity)
+        published_uri = self._get_published_diagnostics_uri(uri)
         diagnostics: list[ls_types.Diagnostic] | None = None
 
         # keeping the document open
         with self.open_file(relative_file_path):
-            diagnostics = self._wait_for_published_diagnostics(uri=uri, after_generation=after_generation, timeout=timeout)
-
-            # falling back to cached diagnostics
-            if diagnostics is None and allow_cached:
-                diagnostics = self._get_cached_published_diagnostics(uri)
+            diagnostics = self._wait_for_relevant_published_diagnostics(
+                uri=published_uri,
+                after_generation=after_generation,
+                timeout=timeout,
+                allow_cached=allow_cached,
+            )
 
         if diagnostics is None:
             return None
 
         return self._filter_diagnostics(diagnostics, start_line, end_line, min_severity)
+
+    def _get_published_diagnostics_uri(self, request_uri: str) -> str:
+        """
+        Gets the URI under which published diagnostics should be looked up.
+        """
+        return request_uri
+
+    def _get_published_diagnostics_wait_timeout(self, pull_diagnostics_failed: bool) -> float:
+        """
+        Gets the timeout for waiting on published diagnostics after a diagnostics request.
+        """
+        return 2.5
+
+    def _accept_published_diagnostics(self, diagnostics: list[ls_types.Diagnostic]) -> bool:
+        """
+        Determines whether a published diagnostics payload should satisfy the current wait.
+        """
+        return bool(diagnostics)
+
+    def _wait_for_relevant_published_diagnostics(
+        self,
+        uri: str,
+        after_generation: int,
+        timeout: float,
+        allow_cached: bool = True,
+    ) -> list[ls_types.Diagnostic] | None:
+        """
+        Waits for a published diagnostics payload that is relevant for the current request.
+        """
+        deadline = monotonic() + timeout
+        current_after_generation = after_generation
+
+        while True:
+            remaining_timeout = deadline - monotonic()
+            if remaining_timeout <= 0:
+                break
+
+            diagnostics = self._wait_for_published_diagnostics(
+                uri=uri,
+                after_generation=current_after_generation,
+                timeout=remaining_timeout,
+            )
+            if diagnostics is None:
+                break
+            if self._accept_published_diagnostics(diagnostics):
+                return diagnostics
+            current_after_generation = self._get_published_diagnostics_generation(uri)
+
+        if allow_cached:
+            diagnostics = self._get_cached_published_diagnostics(uri)
+            if diagnostics is not None and self._accept_published_diagnostics(diagnostics):
+                return diagnostics
+
+        return None
 
     def request_text_document_diagnostics(
         self,
@@ -789,7 +845,8 @@ class SolidLanguageServer(ABC):
         :return: A list of diagnostics for the file
         """
         uri = self._validate_text_document_diagnostics_request(relative_file_path, start_line, end_line, min_severity)
-        diagnostics_before_request = self._get_published_diagnostics_generation(uri)
+        published_uri = self._get_published_diagnostics_uri(uri)
+        diagnostics_before_request = self._get_published_diagnostics_generation(published_uri)
         ret: list[ls_types.Diagnostic] | None = None
         pull_diagnostics_failed = False
 
@@ -825,13 +882,11 @@ class SolidLanguageServer(ABC):
                     ret.append(ls_types.Diagnostic(**new_item))
 
             if not ret:
-                published_diagnostics = self._wait_for_published_diagnostics(
-                    uri=uri,
+                published_diagnostics = self._wait_for_relevant_published_diagnostics(
+                    uri=published_uri,
                     after_generation=diagnostics_before_request,
-                    timeout=2.5 if pull_diagnostics_failed else 0.5,
+                    timeout=self._get_published_diagnostics_wait_timeout(pull_diagnostics_failed),
                 )
-                if published_diagnostics is None:
-                    published_diagnostics = self._get_cached_published_diagnostics(uri)
                 if published_diagnostics is not None:
                     ret = published_diagnostics
 

@@ -28,6 +28,7 @@ project_name: "serena"
 languages:
 - python
 - typescript
+- clojure
 
 # whether to use project's .gitignore files to ignore files
 ignore_all_files_in_gitignore: true

@@ -13,6 +13,7 @@ from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
 from test.conftest import is_ci
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
+from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
 # Skip all Nix tests on Windows as Nix doesn't support Windows
 pytestmark = pytest.mark.skipif(platform.system() == "Windows", reason="Nix and nil are not available on Windows")
@@ -250,3 +251,12 @@ class TestNixLanguageServer:
                 f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
                 pytrace=False,
             )
+
+    @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
+    def test_file_diagnostics(self, language_server: SolidLanguageServer) -> None:
+        assert_file_diagnostics(
+            language_server,
+            "diagnostics_sample.nix",
+            (),
+            min_count=1,
+        )

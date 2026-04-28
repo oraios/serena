@@ -689,7 +689,7 @@ class JetBrainsPluginClient(ToStringMixin):
             request_data["startLine"] = start_line
         if end_line is not None:
             request_data["endLine"] = end_line
-        return cast(jb.RunInspectionsResponse, self._make_request("POST", "/runInspections", request_data))
+        return cast(jb.RunInspectionsResponse, self._make_request("POST", "/runInspectionsOnFile", request_data))
 
     def list_inspections(
         self,

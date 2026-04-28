@@ -148,6 +148,7 @@ class SolidityLanguageServer(SolidLanguageServer):
                         "dynamicRegistration": True,
                         "contentFormat": ["markdown", "plaintext"],  # type: ignore[list-item]
                     },
+                    "publishDiagnostics": {"relatedInformation": True},
                 },
                 "workspace": {
                     "workspaceFolders": True,

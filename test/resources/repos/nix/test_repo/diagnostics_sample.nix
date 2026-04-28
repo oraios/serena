@@ -1,0 +1,4 @@
+{
+  greeting = missingGreeting;
+  consumer = missingConsumerValue;
+}
