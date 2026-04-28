@@ -277,6 +277,8 @@ _LANGUAGE_PYTEST_MARKERS: dict[Language, list[MarkDecorator | Mark]] = {
     Language.PYTHON_TY: [pytest.mark.python],
     Language.RUST: [pytest.mark.rust],
     Language.TYPESCRIPT: [pytest.mark.typescript],
+    Language.ANGULAR: [pytest.mark.angular],
+    Language.HTML: [pytest.mark.html],
 }
 
 

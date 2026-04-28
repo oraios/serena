@@ -29,6 +29,19 @@ We currently provide direct, out-of-the-box support for the programming language
 Some languages require additional installations or setup steps, as noted.
 
 * **AL**
+* **Angular**  
+  (experimental; requires Node.js and npm; automatically installs `@angular/language-server`,
+  `@angular/language-service`, `typescript`, and `typescript-language-server`;
+  must be explicitly specified in the `languages` entry in the `project.yml`;
+  uses a dual-server architecture: `ngserver` handles standalone `.html` template files
+  (definition / completion / hover) while a companion `typescript-language-server` with
+  `@angular/language-service` loaded as a tsserver plugin handles all `.ts` operations
+  (document symbols, references, rename) including inline templates;
+  **requires the project itself to have `@angular/core` installed**, i.e. `npm install`
+  must have been run in the project root — otherwise template-aware features silently return empty;
+  do NOT also list `typescript` or `html` in `languages` when Angular is active — Angular
+  subsumes both for `.ts`/`.html` files;
+  for SCSS support in Angular projects, list `scss` separately)
 * **Ansible**  
   (experimental; requires Node.js and npm; automatically installs `@ansible/ansible-language-server`;
   must be explicitly specified in the `languages` entry in the `project.yml`; requires `ansible` in PATH for full functionality)
@@ -71,6 +84,12 @@ Some languages require additional installations or setup steps, as noted.
   (uses [shader-language-server](https://github.com/antaalt/shader-sense) (language `hlsl`); automatically downloaded;
   on macOS, requires Rust toolchain for building from source;
   note: reference search is not supported by this language server)
+* **HTML**
+  (experimental; requires Node.js and npm; automatically installs `vscode-langservers-extracted`;
+  must be explicitly specified in the `languages` entry in the `project.yml`;
+  uses `vscode-html-language-server` from Microsoft;
+  reports elements/IDs as document symbols; cross-file references are not meaningful for HTML;
+  also used as a companion server by the Angular LS for plain-HTML `documentSymbol`)
 * **Java**  
 * **JavaScript**  
   (supported via the TypeScript language server, i.e. use language `typescript` for both JavaScript and TypeScript)
