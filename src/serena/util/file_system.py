@@ -173,6 +173,9 @@ class GitignoreParser:
                 except PermissionError as ex:
                     log.debug(f"Skipping entry due to permission error: {entry.path}", exc_info=ex)
                     continue
+                except FileNotFoundError as ex:
+                    log.debug(f"Skipping entry due to file not found error (possibly a broken link): {entry.path}", exc_info=ex)
+                    continue
 
         while queue:
             next_abs_path = queue.pop(0)
