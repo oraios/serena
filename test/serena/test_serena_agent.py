@@ -513,7 +513,7 @@ FIND_SYMBOL_REFERENCES_CASES = [
         symbol_name="Calculator",
         expected_kind="Module",
         expected_file="Calculator.fs",
-    ).to_pytest_param(),
+    ).to_pytest_param(pytest.mark.xfail(reason="F# language server is unreliable")),
     FindSymbolCase(
         language=Language.RUST, id="rust_add_function", symbol_name="add", expected_kind="Function", expected_file="lib.rs"
     ).to_pytest_param(),

@@ -11,7 +11,7 @@ import shutil
 from overrides import override
 
 from solidlsp import ls_types
-from solidlsp.ls import DocumentSymbols, LSPFileBuffer, SolidLanguageServer
+from solidlsp.ls import DocumentSymbols, LSPConstants, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -285,3 +285,34 @@ class FortranLanguageServer(SolidLanguageServer):
 
         # Fortran Language Server is ready after initialization
         log.info("Fortran Language Server initialization complete")
+
+    @override
+    def request_text_document_diagnostics(
+        self,
+        relative_file_path: str,
+        start_line: int = 0,
+        end_line: int = -1,
+        min_severity: int = 4,
+    ) -> list[ls_types.Diagnostic]:
+        uri = self._validate_text_document_diagnostics_request(relative_file_path, start_line, end_line, min_severity)
+        diagnostics_before_request = self._get_published_diagnostics_generation(uri)
+
+        with self.open_file(relative_file_path):
+            self.server.notify.did_save_text_document(
+                {
+                    LSPConstants.TEXT_DOCUMENT: {  # type: ignore
+                        LSPConstants.URI: uri,
+                    }
+                }
+            )
+            diagnostics = self._wait_for_relevant_published_diagnostics(
+                uri=uri,
+                after_generation=diagnostics_before_request,
+                timeout=self._get_published_diagnostics_wait_timeout(True),
+                allow_cached=True,
+            )
+
+        if diagnostics is None:
+            return []
+
+        return self._filter_diagnostics(diagnostics, start_line, end_line, min_severity)

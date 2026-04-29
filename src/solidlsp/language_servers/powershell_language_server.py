@@ -5,6 +5,8 @@ Contains various configurations and settings specific to PowerShell scripting.
 You can pass the following entries in ``ls_specific_settings["powershell"]``:
     - pses_version: Override the pinned PowerShell Editor Services version
       downloaded by Serena (default: the bundled Serena version).
+    - psscriptanalyzer_version: Override the pinned PSScriptAnalyzer version
+      saved into the bundled PowerShell Editor Services module path.
 """
 
 import logging
@@ -12,6 +14,7 @@ import os
 import pathlib
 import platform
 import shutil
+import subprocess
 import tempfile
 import threading
 from collections.abc import Hashable
@@ -19,7 +22,8 @@ from pathlib import Path
 
 from overrides import override
 
-from solidlsp.ls import RawDocumentSymbol, SolidLanguageServer
+from solidlsp import ls_types
+from solidlsp.ls import LSPConstants, RawDocumentSymbol, SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import FileUtils
@@ -33,6 +37,7 @@ log = logging.getLogger(__name__)
 PSES_VERSION = "4.4.0"
 PSES_SHA256 = "690b91092989a0f66e6f43986166aaef69d64b559a9fda51feed882e1103fbcc"
 PSES_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
+PSSCRIPTANALYZER_VERSION = "1.25.0"
 
 
 class PowerShellLanguageServer(SolidLanguageServer):
@@ -157,6 +162,29 @@ class PowerShellLanguageServer(SolidLanguageServer):
 
         # The bundled modules path is the directory containing PowerShellEditorServices
         bundled_modules_path = str(Path(pses_path).parent)
+        psscriptanalyzer_version = solidlsp_settings.get_ls_specific_settings(Language.POWERSHELL).get(
+            "psscriptanalyzer_version", PSSCRIPTANALYZER_VERSION
+        )
+        psscriptanalyzer_path = Path(bundled_modules_path) / "PSScriptAnalyzer" / psscriptanalyzer_version
+        if not psscriptanalyzer_path.exists():
+            log.info(f"PSScriptAnalyzer {psscriptanalyzer_version} not found. Installing...")
+            subprocess.run(
+                [
+                    pwsh_path,
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-Command",
+                    (
+                        "Save-Module "
+                        "-Name PSScriptAnalyzer "
+                        f"-RequiredVersion '{psscriptanalyzer_version}' "
+                        f"-Path '{bundled_modules_path}' "
+                        "-Force "
+                        "-ErrorAction Stop"
+                    ),
+                ],
+                check=True,
+            )
 
         return pwsh_path, pses_path, bundled_modules_path
 
@@ -345,3 +373,35 @@ class PowerShellLanguageServer(SolidLanguageServer):
             self.server_ready.set()
         else:
             log.info("PowerShell Editor Services initialization complete")
+
+    @override
+    def request_text_document_diagnostics(
+        self,
+        relative_file_path: str,
+        start_line: int = 0,
+        end_line: int = -1,
+        min_severity: int = 4,
+    ) -> list[ls_types.Diagnostic]:
+        uri = self._validate_text_document_diagnostics_request(relative_file_path, start_line, end_line, min_severity)
+        published_uri = self._get_published_diagnostics_uri(uri)
+        diagnostics_before_request = self._get_published_diagnostics_generation(published_uri)
+
+        with self.open_file(relative_file_path):
+            self.server.notify.did_save_text_document(
+                {
+                    LSPConstants.TEXT_DOCUMENT: {  # type: ignore
+                        LSPConstants.URI: uri,
+                    }
+                }
+            )
+            diagnostics = self._wait_for_relevant_published_diagnostics(
+                uri=published_uri,
+                after_generation=diagnostics_before_request,
+                timeout=self._get_published_diagnostics_wait_timeout(True),
+                allow_cached=True,
+            )
+
+        if diagnostics is None:
+            return []
+
+        return self._filter_diagnostics(diagnostics, start_line, end_line, min_severity)

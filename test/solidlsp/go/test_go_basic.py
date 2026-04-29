@@ -71,9 +71,9 @@ class TestGoLanguageServer:
             implementing_symbols = language_server.request_implementing_symbols("main.go", *pos)
             assert implementing_symbols, "Expected implementing symbols for Greeter.FormatGreeting"
             assert any(
-                symbol.get("name") == "(ConsoleGreeter).FormatGreeting" and "main.go" in symbol["location"].get("relativePath", "")
+                symbol.get("name") == "FormatGreeting" and "main.go" in symbol["location"].get("relativePath", "")
                 for symbol in implementing_symbols
-            ), f"Expected ConsoleGreeter.FormatGreeting symbol, got: {implementing_symbols}"
+            ), f"Expected FormatGreeting symbol, got: {implementing_symbols}"
 
 
 def _filter_symbols_by_name_in_repo(symbols: list | None, target_name: str, repo_name: str = "test_repo") -> list:

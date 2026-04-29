@@ -235,10 +235,10 @@ jobs:
       - name: Set up Julia
         uses: julia-actions/setup-julia@v2
         with:
-          version: '1.10'
+          version: '1.12.6'
       - name: Install Julia LanguageServer
         shell: bash
-        run: julia -e 'using Pkg; Pkg.add("LanguageServer")'
+        run: julia -e 'using Pkg; Pkg.add(Pkg.PackageSpec(name="LanguageServer", version="5.0.0"))'
       - name: Setup Haskell toolchain
         if: runner.os != 'Windows'
         uses: haskell/ghcup-setup@v1

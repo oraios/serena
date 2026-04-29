@@ -11,6 +11,7 @@ import threading
 from overrides import override
 from sensai.util.logging import LogTime
 
+from solidlsp import ls_types
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
@@ -217,3 +218,26 @@ class ElmLanguageServer(SolidLanguageServer):
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
         return 1.0
+
+    @override
+    def request_text_document_diagnostics(
+        self,
+        relative_file_path: str,
+        start_line: int = 0,
+        end_line: int = -1,
+        min_severity: int = 4,
+    ) -> list[ls_types.Diagnostic]:
+        uri = self._validate_text_document_diagnostics_request(relative_file_path, start_line, end_line, min_severity)
+
+        with self.open_file(relative_file_path):
+            diagnostics = self._wait_for_relevant_published_diagnostics(
+                uri=uri,
+                after_generation=-1,
+                timeout=10.0,
+                allow_cached=True,
+            )
+
+        if diagnostics is None:
+            return []
+
+        return self._filter_diagnostics(diagnostics, start_line, end_line, min_severity)

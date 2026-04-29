@@ -618,15 +618,49 @@ class SolidLanguageServer(ABC):
                 normalized_diagnostic["source"] = diagnostic["source"]
             normalized_diagnostics.append(ls_types.Diagnostic(**normalized_diagnostic))
 
+        # canonicalize the key so lookups using URIs produced by pathlib.Path.as_uri() match
+        # what servers publish (e.g. file:///c%3A/... or file:///c:/... vs. file:///C:/...)
+        key = self._canonicalize_published_diagnostics_uri(uri)
+
         with self._published_diagnostics_condition:
             self._published_diagnostics_generation += 1
-            self._published_diagnostics[uri] = normalized_diagnostics
-            self._published_diagnostics_generation_by_uri[uri] = self._published_diagnostics_generation
+            self._published_diagnostics[key] = normalized_diagnostics
+            self._published_diagnostics_generation_by_uri[key] = self._published_diagnostics_generation
             self._published_diagnostics_condition.notify_all()
 
+    @staticmethod
+    def _canonicalize_published_diagnostics_uri(uri: str) -> str:
+        """
+        Canonicalizes a ``file://`` URI so that diagnostics published by language servers
+        and lookups based on ``pathlib.Path.as_uri()`` agree on the same key.
+
+        On Windows, servers may publish under ``file:///c%3A/...`` or ``file:///c:/...`` while
+        ``pathlib.Path.as_uri()`` produces ``file:///C:/...``. The canonical form uses an
+        upper-case drive letter and a plain colon.
+        """
+        if os.name != "nt" or not uri.startswith("file:///"):
+            return uri
+
+        # extract the segment after "file:///" up to the next slash and look for a drive letter
+        prefix = "file:///"
+        rest = uri[len(prefix) :]
+        slash = rest.find("/")
+        head = rest if slash < 0 else rest[:slash]
+        tail = "" if slash < 0 else rest[slash:]
+
+        if (len(head) >= 2 and head[0].isalpha() and head[1] == ":") or (
+            len(head) >= 4 and head[0].isalpha() and head[1:4].lower() == "%3a"
+        ):
+            head = head[0].upper() + ":"
+        else:
+            return uri
+
+        return prefix + head + tail
+
     def _get_published_diagnostics_generation(self, uri: str) -> int:
+        key = self._canonicalize_published_diagnostics_uri(uri)
         with self._published_diagnostics_condition:
-            return self._published_diagnostics_generation_by_uri.get(uri, -1)
+            return self._published_diagnostics_generation_by_uri.get(key, -1)
 
     def _wait_for_published_diagnostics(
         self,
@@ -634,12 +668,13 @@ class SolidLanguageServer(ABC):
         after_generation: int,
         timeout: float,
     ) -> list[ls_types.Diagnostic] | None:
+        key = self._canonicalize_published_diagnostics_uri(uri)
         deadline = perf_counter() + timeout
         with self._published_diagnostics_condition:
             while True:
-                current_generation = self._published_diagnostics_generation_by_uri.get(uri, -1)
+                current_generation = self._published_diagnostics_generation_by_uri.get(key, -1)
                 if current_generation > after_generation:
-                    return list(self._published_diagnostics.get(uri, []))
+                    return list(self._published_diagnostics.get(key, []))
 
                 remaining_timeout = deadline - perf_counter()
                 if remaining_timeout <= 0:
@@ -647,8 +682,9 @@ class SolidLanguageServer(ABC):
                 self._published_diagnostics_condition.wait(timeout=remaining_timeout)
 
     def _get_cached_published_diagnostics(self, uri: str) -> list[ls_types.Diagnostic] | None:
+        key = self._canonicalize_published_diagnostics_uri(uri)
         with self._published_diagnostics_condition:
-            diagnostics = self._published_diagnostics.get(uri)
+            diagnostics = self._published_diagnostics.get(key)
             if diagnostics is None:
                 return None
             return list(diagnostics)
@@ -657,8 +693,17 @@ class SolidLanguageServer(ABC):
     def _diagnostic_matches_range(diagnostic: ls_types.Diagnostic, start_line: int, end_line: int) -> bool:
         diagnostic_start_line = diagnostic["range"]["start"]["line"]
         diagnostic_end_line = diagnostic["range"]["end"]["line"]
-        effective_end_line = end_line if end_line >= 0 else diagnostic_end_line
-        return diagnostic_start_line <= effective_end_line and diagnostic_end_line >= start_line
+
+        # normalize inverted ranges: some servers (e.g. Julia's JuliaSyntax.jl for unterminated
+        # expressions) emit diagnostics whose end position lies before the start position.
+        # treat such ranges as a single span covering both lines.
+        lo = min(diagnostic_start_line, diagnostic_end_line)
+        hi = max(diagnostic_start_line, diagnostic_end_line)
+
+        # when end_line < 0 the caller imposes no upper bound; only enforce the lower bound.
+        if end_line < 0:
+            return hi >= start_line
+        return lo <= end_line and hi >= start_line
 
     @staticmethod
     def _diagnostic_matches_min_severity(diagnostic: ls_types.Diagnostic, min_severity: int) -> bool:
@@ -777,6 +822,16 @@ class SolidLanguageServer(ABC):
         """
         return request_uri
 
+    def _supports_pull_diagnostics(self) -> bool:
+        """
+        Whether the language server handles ``textDocument/diagnostic`` (LSP 3.17 pull
+        diagnostics) gracefully. Subclasses should override and return ``False`` when the
+        underlying server does not implement pull diagnostics, especially when sending
+        the request would terminate the server (e.g. LanguageServer.jl raises an error
+        for unknown methods that crashes the process).
+        """
+        return True
+
     def _get_published_diagnostics_wait_timeout(self, pull_diagnostics_failed: bool) -> float:
         """
         Gets the timeout for waiting on published diagnostics after a diagnostics request.
@@ -851,18 +906,22 @@ class SolidLanguageServer(ABC):
         pull_diagnostics_failed = False
 
         with self.open_file(relative_file_path):
-            try:
-                response = self.server.send.text_document_diagnostic(
-                    {
-                        LSPConstants.TEXT_DOCUMENT: {  # type: ignore
-                            LSPConstants.URI: uri,
+            response: Any = None
+            # only send pull diagnostics when the server actually supports it; some servers
+            # (e.g. Julia's LanguageServer.jl) hard-error and crash the process on unknown methods
+            if self._supports_pull_diagnostics():
+                try:
+                    response = self.server.send.text_document_diagnostic(
+                        {
+                            LSPConstants.TEXT_DOCUMENT: {  # type: ignore
+                                LSPConstants.URI: uri,
+                            }
                         }
-                    }
-                )
-            except SolidLSPException as ex:
-                log.debug("Falling back to published diagnostics for %s due to pull-diagnostics error: %s", relative_file_path, ex)
-                response = None
-                pull_diagnostics_failed = True
+                    )
+                except SolidLSPException as ex:
+                    log.debug("Falling back to published diagnostics for %s due to pull-diagnostics error: %s", relative_file_path, ex)
+                    response = None
+                    pull_diagnostics_failed = True
 
             if response is not None:
                 assert isinstance(response, dict), (
@@ -875,7 +934,7 @@ class SolidLanguageServer(ABC):
                         "severity": item["severity"],
                         "message": item["message"],
                         "range": item["range"],
-                        "code": item["code"],  # type: ignore
+                        "code": item.get("code"),  # type: ignore
                     }
                     if "source" in item:
                         new_item["source"] = item["source"]
