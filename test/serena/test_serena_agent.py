@@ -51,6 +51,7 @@ def serena_config():
         Language.HAXE,
         Language.LEAN4,
         Language.MSL,
+        Language.SVELTE,
     ]:
         repo_path = get_repo_path(language)
         if repo_path.exists():
@@ -142,8 +143,8 @@ class TestSerenaAgent:
             for s in symbols
         ), f"Expected to find {symbol_name} ({expected_kind}) in {expected_file}"
         # testing retrieval of symbol info
-        if serena_agent.get_active_lsp_languages() == [Language.KOTLIN]:
-            # kotlin LS doesn't seem to provide hover info right now, at least for the struct we test this on
+        if serena_agent.get_active_lsp_languages() in ([Language.KOTLIN], [Language.SVELTE]):
+            # kotlin/svelte LS doesn't seem to provide hover info right now, at least for the symbols we test this on
             return
         for s in symbols:
             if s["kind"] in (SymbolKind.File.name, SymbolKind.Module.name):
@@ -204,6 +205,7 @@ class TestSerenaAgent:
             pytest.param(Language.HAXE, "Main", "Class", "Main.hx", marks=pytest.mark.haxe),
             pytest.param(Language.LEAN4, "add", "Method", "Helper.lean", marks=pytest.mark.lean4),
             pytest.param(Language.MSL, "greet", "Function", "main.mrc", marks=pytest.mark.msl),
+            pytest.param(Language.SVELTE, "Game", "Class", os.path.join("src", "routes", "sverdle", "game.ts"), marks=pytest.mark.svelte),
         ],
         indirect=["serena_agent"],
     )
@@ -313,6 +315,13 @@ class TestSerenaAgent:
             ),
             pytest.param(Language.LEAN4, "add", "Helper.lean", "Main.lean", marks=pytest.mark.lean4),
             pytest.param(Language.MSL, "format.coins", "utils.mrc", "main.mrc", marks=pytest.mark.msl),
+            pytest.param(
+                Language.SVELTE,
+                "Game",
+                os.path.join("src", "routes", "sverdle", "game.ts"),
+                os.path.join("src", "routes", "sverdle", "+page.server.ts"),
+                marks=pytest.mark.svelte,
+            ),
         ],
         indirect=["serena_agent"],
     )

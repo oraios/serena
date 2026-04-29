@@ -77,6 +77,7 @@ class Language(str, Enum):
     LEAN4 = "lean4"
     GROOVY = "groovy"
     VUE = "vue"
+    SVELTE = "svelte"
     POWERSHELL = "powershell"
     PASCAL = "pascal"
     """Pascal Language Server (pasls) for Free Pascal and Lazarus projects.
@@ -200,8 +201,8 @@ class Language(str, Enum):
         # We assign lower priority to languages that are supersets of others, such that
         # the "larger" language is only chosen when it matches more strongly
         match self:
-            # languages that are supersets of others (Vue is superset of TypeScript/JavaScript)
-            case self.VUE:
+            # languages that are supersets of others (Vue/Svelte are supersets of TypeScript/JavaScript)
+            case self.VUE | self.SVELTE:
                 return 1
             # regular languages
             case _:
@@ -304,6 +305,8 @@ class Language(str, Enum):
                         for base_pattern in ["ts", "js"]:
                             path_patterns.append(f"*.{prefix}{base_pattern}{postfix}")
                 return FilenameMatcher(*path_patterns)
+            case self.SVELTE:
+                return FilenameMatcher("*.svelte", "*.ts", "*.js", "*.cts", "*.mts", "*.cjs", "*.mjs")
             case self.POWERSHELL:
                 return FilenameMatcher("*.ps1", "*.psm1", "*.psd1")
             case self.PASCAL:
@@ -387,6 +390,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.vue_language_server import VueLanguageServer
 
                 return VueLanguageServer
+            case self.SVELTE:
+                from solidlsp.language_servers.svelte_language_server import SvelteLanguageServer
+
+                return SvelteLanguageServer
             case self.GO:
                 from solidlsp.language_servers.gopls import Gopls
 

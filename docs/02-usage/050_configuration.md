@@ -878,6 +878,21 @@ Supported settings:
 Notes:
 - `typescript_version` and `typescript_language_server_version` are read from `ls_specific_settings.typescript`, not from `ls_specific_settings.vue`.
 
+#### Svelte
+
+Serena uses `svelte-language-server` for the `svelte` language key, together with a companion TypeScript language server and `typescript-svelte-plugin`.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `svelte_language_server_version` | `0.17.30` | Override the bundled `svelte-language-server` npm package version Serena installs. |
+| `typescript_svelte_plugin_version` | `0.3.51` | Override the bundled `typescript-svelte-plugin` npm package version Serena installs. |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. If unset on `svelte`, Serena falls back to `ls_specific_settings.typescript.npm_registry`. |
+
+Notes:
+- `typescript_version` and `typescript_language_server_version` are read from `ls_specific_settings.typescript`, not from `ls_specific_settings.svelte`.
+
 #### YAML
 
 Serena uses `yaml-language-server` for the `yaml` language key.
