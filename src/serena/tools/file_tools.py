@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Literal
 
 from serena.code_editor import EditedFilePath
-from serena.tools import SUCCESS_RESULT, EditedFileContext, Tool, ToolMarkerCanEdit, ToolMarkerOptional
+from serena.tools import SUCCESS_RESULT, EditedFileContext, EditingToolWithDiagnostics, Tool, ToolMarkerOptional
 from serena.util.file_system import scan_directory
 from serena.util.text_utils import ContentReplacer, search_files
 
@@ -49,7 +49,7 @@ class ReadFileTool(Tool):
         return self._limit_length(result, max_answer_chars)
 
 
-class CreateTextFileTool(Tool, ToolMarkerCanEdit):
+class CreateTextFileTool(EditingToolWithDiagnostics):
     """
     Creates/overwrites a file in the project directory.
     """
@@ -164,12 +164,10 @@ class FindFileTool(Tool):
         return result
 
 
-class ReplaceContentTool(Tool, ToolMarkerCanEdit):
+class ReplaceContentTool(EditingToolWithDiagnostics):
     """
     Replaces content in a file (optionally using regular expressions).
     """
-
-    _CAPTURE_DIAGNOSTICS: bool = False
 
     def apply(
         self,
@@ -237,7 +235,7 @@ class ReplaceContentTool(Tool, ToolMarkerCanEdit):
         return self._format_lsp_edit_result_with_new_diagnostics(SUCCESS_RESULT, edited_file_paths, diagnostics_snapshot)
 
 
-class DeleteLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
+class DeleteLinesTool(EditingToolWithDiagnostics, ToolMarkerOptional):
     """
     Deletes a range of lines within a file.
     """
@@ -268,7 +266,7 @@ class DeleteLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
         return self._format_lsp_edit_result_with_new_diagnostics(SUCCESS_RESULT, edited_file_paths, diagnostics_snapshot)
 
 
-class ReplaceLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
+class ReplaceLinesTool(EditingToolWithDiagnostics, ToolMarkerOptional):
     """
     Replaces a range of lines within a file with new content.
     """
@@ -306,7 +304,7 @@ class ReplaceLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
         return self._format_lsp_edit_result_with_new_diagnostics(SUCCESS_RESULT, edited_file_paths, diagnostics_snapshot)
 
 
-class InsertAtLineTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
+class InsertAtLineTool(EditingToolWithDiagnostics, ToolMarkerOptional):
     """
     Inserts content at a given line in a file.
     """

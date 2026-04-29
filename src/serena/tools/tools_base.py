@@ -165,8 +165,6 @@ class Tool(Component):
     _last_tool_call_client_str: str | None = None
     """We can only get the client info from within a tool call. Each tool call will update this variable."""
 
-    _ENABLE_DIAGNOSTICS: bool = False
-
     def __init__(self, agent: "SerenaAgent"):
         super().__init__(agent)
 
@@ -325,6 +323,118 @@ class Tool(Component):
 
     def is_symbolic(self) -> bool:
         return issubclass(self.__class__, ToolMarkerSymbolicRead) or issubclass(self.__class__, ToolMarkerSymbolicEdit)
+
+    def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, mcp_ctx: Context | None = None, **kwargs) -> str:  # type: ignore
+        """
+        Applies the tool with logging and exception handling, using the given keyword arguments
+        """
+        session_id = "global"
+        if mcp_ctx is not None:
+            try:
+                session_id = "%x" % id(mcp_ctx.session)
+                client_params = mcp_ctx.session.client_params
+                if client_params is not None:
+                    client_info = cast(Implementation, client_params.clientInfo)
+                    client_str = client_info.title if client_info.title else client_info.name + " " + client_info.version
+                    if client_str != self.get_last_tool_call_client_str():
+                        log.debug(f"Updating client info: {client_info}")
+                        self.set_last_tool_call_client_str(client_str)
+            except Exception as e:
+                log.info(f"Failed to get client info: {e}.")
+
+        def task() -> str:
+            apply_fn = self.get_apply_fn()
+
+            try:
+                if not self.is_active():
+                    return f"Error: Tool '{self.get_name_from_cls()}' is not active. Active tools: {self.agent.get_active_tool_names()}"
+            except Exception as e:
+                return f"RuntimeError while checking if tool {self.get_name_from_cls()} is active: {e}"
+
+            if log_call:
+                self._log_tool_application(inspect.currentframe(), session_id)
+            try:
+                # check whether the tool requires an active project and language server
+                if not isinstance(self, ToolMarkerDoesNotRequireActiveProject):
+                    if self.agent.get_active_project() is None:
+                        return (
+                            "Error: No active project. Ask the user to provide the project path or to select a project from this list of known projects: "
+                            + f"{self.agent.serena_config.project_names}"
+                        )
+
+                # construct apply kwargs, adding session_id if the tool is session-aware
+                apply_kwargs = dict(kwargs)
+                if self._is_session_aware:
+                    apply_kwargs["session_id"] = session_id
+
+                # apply the actual tool
+                try:
+                    result = apply_fn(**apply_kwargs)
+                except SolidLSPException as e:
+                    if e.is_language_server_terminated():
+                        affected_language = e.get_affected_language()
+                        if affected_language is not None:
+                            log.error(
+                                f"Language server terminated while executing tool ({e}). Restarting the language server and retrying ..."
+                            )
+                            self.agent.get_language_server_manager_or_raise().restart_language_server(affected_language)
+                            result = apply_fn(**apply_kwargs)
+                        else:
+                            log.error(
+                                f"Language server terminated while executing tool ({e}), but affected language is unknown. Not retrying."
+                            )
+                            raise
+                    else:
+                        raise
+
+                # record tool usage
+                self.agent.record_tool_usage(apply_kwargs, result, self)
+
+            except Exception as e:
+                if not catch_exceptions:
+                    raise
+                msg = f"Error executing tool: {e.__class__.__name__} - {e}"
+                log.error(f"Error executing tool: {e}", exc_info=e)
+                result = msg
+
+            if log_call:
+                log.info(f"Result: {result}")
+
+            try:
+                ls_manager = self.agent.get_language_server_manager()
+                if ls_manager is not None:
+                    ls_manager.save_all_caches()
+            except Exception as e:
+                log.error(f"Error saving language server cache: {e}")
+
+            return result
+
+        # execute the tool in the agent's task executor, with timeout
+        try:
+            task_exec = self.agent.issue_task(task, name=self.__class__.__name__)
+            return task_exec.result(timeout=self.agent.serena_config.tool_timeout)
+        except Exception as e:  # typically TimeoutError (other exceptions caught in task)
+            msg = f"Error: {e.__class__.__name__} - {e}"
+            log.error(msg)
+            return msg
+
+    @staticmethod
+    def _to_json(x: Any) -> str:
+        return json.dumps(x, ensure_ascii=False)
+
+
+class EditingToolWithDiagnostics(Tool, ToolMarkerCanEdit):
+    """
+    Base class for editing tools that want to capture and report changes in LSP diagnostics before and after the edit.
+    """
+
+    _ENABLE_DIAGNOSTICS: bool = False
+    """
+    Global flag to enable/disable diagnostics for LSP-based editing tools derived from this class.
+    The feature is currently disabled, because per-edit diagnostics are a questionable feature, since individual
+    edits often intentionally introduce diagnostics (e.g. function signature mismatches or even syntax errors) that 
+    are then resolved in subsequent edits.
+    """
 
     @staticmethod
     def _diagnostic_code_repr(code: Any) -> str | None:
@@ -499,104 +609,6 @@ class Tool(Component):
             return default_result
 
         return f"Edit introduced new warning-or-higher diagnostics: {self._to_json(grouped_result)}"
-
-    def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, mcp_ctx: Context | None = None, **kwargs) -> str:  # type: ignore
-        """
-        Applies the tool with logging and exception handling, using the given keyword arguments
-        """
-        session_id = "global"
-        if mcp_ctx is not None:
-            try:
-                session_id = "%x" % id(mcp_ctx.session)
-                client_params = mcp_ctx.session.client_params
-                if client_params is not None:
-                    client_info = cast(Implementation, client_params.clientInfo)
-                    client_str = client_info.title if client_info.title else client_info.name + " " + client_info.version
-                    if client_str != self.get_last_tool_call_client_str():
-                        log.debug(f"Updating client info: {client_info}")
-                        self.set_last_tool_call_client_str(client_str)
-            except Exception as e:
-                log.info(f"Failed to get client info: {e}.")
-
-        def task() -> str:
-            apply_fn = self.get_apply_fn()
-
-            try:
-                if not self.is_active():
-                    return f"Error: Tool '{self.get_name_from_cls()}' is not active. Active tools: {self.agent.get_active_tool_names()}"
-            except Exception as e:
-                return f"RuntimeError while checking if tool {self.get_name_from_cls()} is active: {e}"
-
-            if log_call:
-                self._log_tool_application(inspect.currentframe(), session_id)
-            try:
-                # check whether the tool requires an active project and language server
-                if not isinstance(self, ToolMarkerDoesNotRequireActiveProject):
-                    if self.agent.get_active_project() is None:
-                        return (
-                            "Error: No active project. Ask the user to provide the project path or to select a project from this list of known projects: "
-                            + f"{self.agent.serena_config.project_names}"
-                        )
-
-                # construct apply kwargs, adding session_id if the tool is session-aware
-                apply_kwargs = dict(kwargs)
-                if self._is_session_aware:
-                    apply_kwargs["session_id"] = session_id
-
-                # apply the actual tool
-                try:
-                    result = apply_fn(**apply_kwargs)
-                except SolidLSPException as e:
-                    if e.is_language_server_terminated():
-                        affected_language = e.get_affected_language()
-                        if affected_language is not None:
-                            log.error(
-                                f"Language server terminated while executing tool ({e}). Restarting the language server and retrying ..."
-                            )
-                            self.agent.get_language_server_manager_or_raise().restart_language_server(affected_language)
-                            result = apply_fn(**apply_kwargs)
-                        else:
-                            log.error(
-                                f"Language server terminated while executing tool ({e}), but affected language is unknown. Not retrying."
-                            )
-                            raise
-                    else:
-                        raise
-
-                # record tool usage
-                self.agent.record_tool_usage(apply_kwargs, result, self)
-
-            except Exception as e:
-                if not catch_exceptions:
-                    raise
-                msg = f"Error executing tool: {e.__class__.__name__} - {e}"
-                log.error(f"Error executing tool: {e}", exc_info=e)
-                result = msg
-
-            if log_call:
-                log.info(f"Result: {result}")
-
-            try:
-                ls_manager = self.agent.get_language_server_manager()
-                if ls_manager is not None:
-                    ls_manager.save_all_caches()
-            except Exception as e:
-                log.error(f"Error saving language server cache: {e}")
-
-            return result
-
-        # execute the tool in the agent's task executor, with timeout
-        try:
-            task_exec = self.agent.issue_task(task, name=self.__class__.__name__)
-            return task_exec.result(timeout=self.agent.serena_config.tool_timeout)
-        except Exception as e:  # typically TimeoutError (other exceptions caught in task)
-            msg = f"Error: {e.__class__.__name__} - {e}"
-            log.error(msg)
-            return msg
-
-    @staticmethod
-    def _to_json(x: Any) -> str:
-        return json.dumps(x, ensure_ascii=False)
 
 
 class EditedFileContext:

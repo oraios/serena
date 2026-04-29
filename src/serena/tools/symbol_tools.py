@@ -13,6 +13,7 @@ from serena.code_editor import EditedFilePath
 from serena.symbol import LanguageServerSymbol, LanguageServerSymbolDictGrouper
 from serena.tools import (
     SUCCESS_RESULT,
+    EditingToolWithDiagnostics,
     Tool,
     ToolMarkerSymbolicEdit,
     ToolMarkerSymbolicRead,
@@ -771,7 +772,7 @@ class GetDiagnosticsForSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOption
         return self._limit_length(result, max_answer_chars)
 
 
-class ReplaceSymbolBodyTool(Tool, ToolMarkerSymbolicEdit):
+class ReplaceSymbolBodyTool(EditingToolWithDiagnostics):
     """
     Replaces the full definition of a symbol using the language server backend.
     """
@@ -810,7 +811,7 @@ class ReplaceSymbolBodyTool(Tool, ToolMarkerSymbolicEdit):
         return self._format_lsp_edit_result_with_new_diagnostics(SUCCESS_RESULT, edited_file_paths, diagnostics_snapshot)
 
 
-class InsertAfterSymbolTool(Tool, ToolMarkerSymbolicEdit):
+class InsertAfterSymbolTool(EditingToolWithDiagnostics):
     """
     Inserts content after the end of the definition of a given symbol.
     """
@@ -841,7 +842,7 @@ class InsertAfterSymbolTool(Tool, ToolMarkerSymbolicEdit):
         return self._format_lsp_edit_result_with_new_diagnostics(SUCCESS_RESULT, edited_file_paths, diagnostics_snapshot)
 
 
-class InsertBeforeSymbolTool(Tool, ToolMarkerSymbolicEdit):
+class InsertBeforeSymbolTool(EditingToolWithDiagnostics):
     """
     Inserts content before the beginning of the definition of a given symbol.
     """
