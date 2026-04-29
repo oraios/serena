@@ -217,6 +217,15 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         def _create_launch_command(self, core_path: str) -> list[str]:
             return [core_path, "--stdio"]
 
+    def _get_language_id_for_file(self, relative_file_path: str) -> str:
+        # JSX is parsed as TS without this, which silently truncates symbol
+        # ranges at the first multi-line JSX expression.
+        if relative_file_path.endswith(".tsx"):
+            return "typescriptreact"
+        if relative_file_path.endswith(".jsx"):
+            return "javascriptreact"
+        return self.language_id
+
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the TypeScript Language Server.
