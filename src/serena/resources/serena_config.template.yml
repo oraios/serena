@@ -37,13 +37,15 @@ gui_log_window: False
 # Further information: https://oraios.github.io/serena/02-usage/060_dashboard.html
 web_dashboard: True
 
-# whether to open the Dashboard window/browser tab when Serena starts (provided that web_dashboard is enabled).
-# If set to false, you can still open the dashboard manually by clicking on the Serena icon in your system
-# tray on Windows and macOS. On Linux, there is no system tray support, so you can only open the dashboard by
-# a) telling the LLM to "open the dashboard" (provided that the open_dashboard tool is enabled) or by
-# b) manually navigating to http://localhost:24282/dashboard/ in your web browser (actual port
-#    may be higher if you have multiple instances running; try ports 24283, 24284, etc.)
-# See also: https://oraios.github.io/serena/02-usage/060_dashboard.html
+# whether to open the Dashboard window/browser tab when Serena starts (provided that `web_dashboard` is enabled).
+# If set to false, you can still open the dashboard manually:
+#  * When using an interface that supports a tray icon (see setting `web_dashboard_interface`),
+#    you can conveniently open the dashboard from the system tray.
+#  * When using the `browser` interface (no tray icon), so you can only open the dashboard by
+#    a) telling the LLM to "open the dashboard" (provided that the open_dashboard tool is enabled) or by
+#    b) manually navigating to http://localhost:24282/dashboard/ in your web browser (actual port
+#       may be higher if you have multiple instances running; try ports 24283, 24284, etc.)
+# Further information: https://oraios.github.io/serena/02-usage/060_dashboard.html
 web_dashboard_open_on_launch: True
 
 # defines the interface (application mode) used for the web dashboard (if enabled).
@@ -59,6 +61,7 @@ web_dashboard_open_on_launch: True
 #      opening the dashboard in browser tabs when selected from the tray menu.
 #      This is EXPERIMENTAL. It is tested on Windows only. We will establish macOS support, but it is yet untested.
 #      On Linux, this cannot be universally supported, but it may work in some desktop environments.
+# See https://oraios.github.io/serena/02-usage/060_dashboard.html
 web_dashboard_interface:
 
 # the address the web dashboard will listen on (bind address).
