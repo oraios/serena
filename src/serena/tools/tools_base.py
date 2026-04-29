@@ -427,8 +427,8 @@ class EditingToolWithDiagnostics(Tool, ToolMarkerCanEdit):
             self._before_edit_diagnostics_snapshot: PublishedDiagnosticsSnapshot | None = None
             self._symbol_retriever: Optional["LanguageServerSymbolRetriever"] | None = None
             if self._is_diagnostics_enabled:
-                symbol_retriever = tool.create_language_server_symbol_retriever()
-                self._before_edit_diagnostics_snapshot = PublishedDiagnosticsSnapshot(self._edited_files, symbol_retriever)
+                self._symbol_retriever = tool.create_language_server_symbol_retriever()
+                self._before_edit_diagnostics_snapshot = PublishedDiagnosticsSnapshot(self._edited_files, self._symbol_retriever)
 
         def __enter__(self) -> Self:
             return self
