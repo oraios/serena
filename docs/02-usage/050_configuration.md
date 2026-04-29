@@ -118,32 +118,26 @@ Examples of built-in modes include:
 
 Find the concrete definitions of these modes [here](https://github.com/oraios/serena/tree/main/src/serena/resources/config/modes).
 
-Active modes are configured in (from lowest to highest precedence):
+The modes to be activated are configured in:
   * the global configuration file (`serena_config.yml`)
+     - defines `base_modes`, which are always included
+     - defines `default_modes`, which can be overridden by projects or command line parameters
   * the project configuration file (`project.yml`)
+     - defines `default_modes` (overriding the default modes in the global configuration)
+     - defines `added_modes`, which are added on top
   * at startup via command-line parameters
+     - can override default modes with `--mode`
+     - can define modes to be added on top with `--add-mode`
 
-The two former sources define both **base modes** and **default modes**.
-Ultimately, the active modes are the union of base modes and default modes (after applying all overrides).
-Command-line parameters override default modes but not base modes.
-Base modes should thus be used to define modes that you always want to be active, regardless of command-line parameters.
+Ultimately, the active modes are given by the union of 
+  * `base_modes` defined in the global configuration (always active)  
+  * `default_modes` (defined in the global configuration, optionally overridden by the project/CLI)
+  * `added_modes` (defined in the project configuration/via CLI parameters)
 
-Command-line parameters for overriding default modes:
-When launching the MCP sever, specify modes using `--mode <mode-name>`; multiple modes can be specified, e.g. `--mode planning --mode no-onboarding`.
-
-:::{important}
-By default, Serena activates the two modes `interactive` and `editing` (as defined in the global configuration).
-
-As soon as you start to specify modes via the command line, only the modes you explicitly specify will be active, however.
-Therefore, if you want to keep the default modes, you must specify them as well.  
-For example, to add mode `no-memories` to the default behaviour, specify
-```shell
---mode interactive --mode editing --mode no-memories
-```
-
-If you want to keep certain modes as always active, regardless of command-line parameters, 
-define them as *base modes* in the global or project configuration.
-:::
+So you should 
+ * define modes you definitely always want to use in `base_modes`,
+ * define modes that you typically want to use but sometimes want to override in `default_modes`,
+ * use `added_modes` to add modes that you need only for specific projects/sessions.
 
 :::{note}
 **Mode Compatibility**: While you can combine modes, some may be semantically incompatible (e.g., `interactive` and `one-shot`). 
