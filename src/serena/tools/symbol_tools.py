@@ -9,7 +9,6 @@ from collections import Counter, defaultdict
 from collections.abc import Sequence
 from typing import Any
 
-from serena.code_editor import EditedFilePath
 from serena.symbol import LanguageServerSymbol, LanguageServerSymbolDictGrouper
 from serena.tools import (
     SUCCESS_RESULT,
@@ -796,19 +795,14 @@ class ReplaceSymbolBodyTool(EditingToolWithDiagnostics):
             in the programming language, including e.g. the signature line for functions.
             IMPORTANT: The body does NOT include any preceding docstrings/comments or imports, in particular.
         """
-        # capturing diagnostics before the edit
-        edited_file_paths = [EditedFilePath(relative_path, relative_path)]
-        diagnostics_snapshot = self._capture_published_lsp_diagnostics_snapshot(edited_file_paths)
-
-        # applying the symbol replacement
-        code_editor = self.create_code_editor()
-        code_editor.replace_body(
-            name_path,
-            relative_file_path=relative_path,
-            body=body,
-        )
-
-        return self._format_lsp_edit_result_with_new_diagnostics(SUCCESS_RESULT, edited_file_paths, diagnostics_snapshot)
+        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
+            code_editor = self.create_code_editor()
+            code_editor.replace_body(
+                name_path,
+                relative_file_path=relative_path,
+                body=body,
+            )
+            return diagnostics_context.format_result(SUCCESS_RESULT)
 
 
 class InsertAfterSymbolTool(EditingToolWithDiagnostics):
@@ -831,15 +825,10 @@ class InsertAfterSymbolTool(EditingToolWithDiagnostics):
         :param body: the body/content to be inserted. The inserted code shall begin with the next line after
             the symbol.
         """
-        # capturing diagnostics before the edit
-        edited_file_paths = [EditedFilePath(relative_path, relative_path)]
-        diagnostics_snapshot = self._capture_published_lsp_diagnostics_snapshot(edited_file_paths)
-
-        # applying the insertion
-        code_editor = self.create_code_editor()
-        code_editor.insert_after_symbol(name_path, relative_file_path=relative_path, body=body)
-
-        return self._format_lsp_edit_result_with_new_diagnostics(SUCCESS_RESULT, edited_file_paths, diagnostics_snapshot)
+        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
+            code_editor = self.create_code_editor()
+            code_editor.insert_after_symbol(name_path, relative_file_path=relative_path, body=body)
+            return diagnostics_context.format_result(SUCCESS_RESULT)
 
 
 class InsertBeforeSymbolTool(EditingToolWithDiagnostics):
@@ -862,15 +851,10 @@ class InsertBeforeSymbolTool(EditingToolWithDiagnostics):
         :param relative_path: the relative path to the file containing the symbol
         :param body: the body/content to be inserted before the line in which the referenced symbol is defined
         """
-        # capturing diagnostics before the edit
-        edited_file_paths = [EditedFilePath(relative_path, relative_path)]
-        diagnostics_snapshot = self._capture_published_lsp_diagnostics_snapshot(edited_file_paths)
-
-        # applying the insertion
-        code_editor = self.create_code_editor()
-        code_editor.insert_before_symbol(name_path, relative_file_path=relative_path, body=body)
-
-        return self._format_lsp_edit_result_with_new_diagnostics(SUCCESS_RESULT, edited_file_paths, diagnostics_snapshot)
+        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
+            code_editor = self.create_code_editor()
+            code_editor.insert_before_symbol(name_path, relative_file_path=relative_path, body=body)
+            return diagnostics_context.format_result(SUCCESS_RESULT)
 
 
 class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):

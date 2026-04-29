@@ -16,7 +16,13 @@ from serena.agent import SerenaAgent
 from serena.config.serena_config import LanguageBackend, ProjectConfig, RegisteredProject, SerenaConfig
 from serena.constants import REPO_ROOT
 from serena.project import Project
-from serena.tools import CreateTextFileTool, GetDiagnosticsForFileTool, GetDiagnosticsForSymbolTool, ReplaceContentTool, Tool
+from serena.tools import (
+    CreateTextFileTool,
+    EditingToolWithDiagnostics,
+    GetDiagnosticsForFileTool,
+    GetDiagnosticsForSymbolTool,
+    ReplaceContentTool,
+)
 from solidlsp.ls_config import Language
 
 SEPARATOR = "=" * 80
@@ -69,7 +75,7 @@ def parse_edit_diagnostics_result(result: str) -> dict:
 
 
 if __name__ == "__main__":
-    Tool._ENABLE_DIAGNOSTICS = True
+    EditingToolWithDiagnostics.ENABLE_DIAGNOSTICS = True
 
     temp_dir = Path(tempfile.mkdtemp(prefix="serena_demo_", dir=REPO_PATH))
     temp_file = temp_dir / "demo_temp_diagnostics.py"
@@ -166,5 +172,5 @@ if __name__ == "__main__":
         assert "missing_one" in diagnostics_after_second_edit_json, diagnostics_after_second_edit
         assert "missing_two" in diagnostics_after_second_edit_json, diagnostics_after_second_edit
     finally:
-        agent.shutdown()
         shutil.rmtree(temp_dir, ignore_errors=True)
+        agent.shutdown()

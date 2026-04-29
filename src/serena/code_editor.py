@@ -4,7 +4,6 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Reversible
 from contextlib import contextmanager
-from dataclasses import dataclass
 from typing import Generic, TypeVar, cast
 
 from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
@@ -14,15 +13,10 @@ from solidlsp.ls import LSPFileBuffer
 from solidlsp.ls_utils import PathUtils, TextUtils
 
 from .project import Project
+from .util.ls_diagnostics import EditedFilePath
 
 log = logging.getLogger(__name__)
 TSymbol = TypeVar("TSymbol", bound=Symbol)
-
-
-@dataclass(frozen=True)
-class EditedFilePath:
-    before_relative_path: str
-    after_relative_path: str
 
 
 class CodeEditor(Generic[TSymbol], ABC):

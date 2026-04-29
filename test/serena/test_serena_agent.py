@@ -18,6 +18,7 @@ from serena.project import Project
 from serena.tools import (
     SUCCESS_RESULT,
     ActivateProjectTool,
+    EditingToolWithDiagnostics,
     FindDefiningSymbolAtLocationTool,
     FindDefiningSymbolTool,
     FindImplementationsTool,
@@ -812,9 +813,9 @@ def read_project_file(project: Project, relative_path: str) -> str:
 
 def parse_edit_diagnostics_result(result: str) -> dict:
     """Utility function to parse the diagnostic payload returned by edit tools."""
-    prefix = "Edit introduced new warning-or-higher diagnostics: "
-    assert result.startswith(prefix), result
-    return json.loads(result[len(prefix) :])
+    assert EditingToolWithDiagnostics.DIAGNOSTICS_KEY in result
+    d = json.loads(result)
+    return d[EditingToolWithDiagnostics.DIAGNOSTICS_KEY]
 
 
 @contextmanager
@@ -1201,21 +1202,24 @@ class TestSerenaAgent:
         """Tests that file-level edits report newly introduced diagnostics."""
         relative_path = os.path.join("test_repo", "services.py")
         replace_content_tool = serena_agent.get_tool(ReplaceContentTool)
-        replace_content_tool._ENABLE_DIAGNOSTICS = True
+        try:
+            replace_content_tool.ENABLE_DIAGNOSTICS = True
 
-        with project_file_modification_context(serena_agent, relative_path):
-            result = replace_content_tool.apply(
-                relative_path=relative_path,
-                needle="return container",
-                repl="return missing_container",
-                mode="literal",
-            )
+            with project_file_modification_context(serena_agent, relative_path):
+                result = replace_content_tool.apply(
+                    relative_path=relative_path,
+                    needle="return container",
+                    repl="return missing_container",
+                    mode="literal",
+                )
 
-        diagnostics = parse_edit_diagnostics_result(result)
-        relative_path_result = diagnostics[relative_path]
-        diagnostic_messages = json.dumps(relative_path_result)
-        assert "missing_container" in diagnostic_messages
-        assert "create_service_container" in diagnostic_messages
+            diagnostics = parse_edit_diagnostics_result(result)
+            relative_path_result = diagnostics[relative_path]
+            diagnostic_messages = json.dumps(relative_path_result)
+            assert "missing_container" in diagnostic_messages
+            assert "create_service_container" in diagnostic_messages
+        finally:
+            replace_content_tool.ENABLE_DIAGNOSTICS = False
 
     @pytest.mark.parametrize(
         "serena_agent",
@@ -1229,23 +1233,26 @@ class TestSerenaAgent:
         """Tests that symbol-level edits report newly introduced diagnostics."""
         relative_path = os.path.join("test_repo", "services.py")
         replace_symbol_body_tool = serena_agent.get_tool(ReplaceSymbolBodyTool)
-        replace_symbol_body_tool._ENABLE_DIAGNOSTICS = True
+        try:
+            replace_symbol_body_tool.ENABLE_DIAGNOSTICS = True
 
-        with project_file_modification_context(serena_agent, relative_path):
-            result = replace_symbol_body_tool.apply(
-                name_path="create_service_container",
-                relative_path=relative_path,
-                body="""
-def create_service_container() -> dict[str, Any]:
-    return missing_container
-""",
-            )
+            with project_file_modification_context(serena_agent, relative_path):
+                result = replace_symbol_body_tool.apply(
+                    name_path="create_service_container",
+                    relative_path=relative_path,
+                    body="""
+    def create_service_container() -> dict[str, Any]:
+        return missing_container
+    """,
+                )
 
-        diagnostics = parse_edit_diagnostics_result(result)
-        relative_path_result = diagnostics[relative_path]
-        diagnostic_messages = json.dumps(relative_path_result)
-        assert "missing_container" in diagnostic_messages
-        assert "create_service_container" in diagnostic_messages
+            diagnostics = parse_edit_diagnostics_result(result)
+            relative_path_result = diagnostics[relative_path]
+            diagnostic_messages = json.dumps(relative_path_result)
+            assert "missing_container" in diagnostic_messages
+            assert "create_service_container" in diagnostic_messages
+        finally:
+            replace_symbol_body_tool.ENABLE_DIAGNOSTICS = False
 
     @pytest.mark.parametrize(
         "serena_agent",

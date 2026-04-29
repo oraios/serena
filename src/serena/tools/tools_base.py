@@ -5,7 +5,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from functools import cached_property
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Protocol, Self, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Optional, Protocol, Self, TypeVar, cast
 
 from mcp import Implementation
 from mcp.server.fastmcp import Context
@@ -18,36 +18,17 @@ from serena.project import MemoriesManager, Project
 from serena.prompt_factory import PromptFactory
 from serena.util.class_decorators import singleton
 from serena.util.inspection import iter_subclasses
-from solidlsp import ls_types
+from serena.util.ls_diagnostics import DiagnosticsDiff, EditedFilePath, PublishedDiagnosticsSnapshot
 from solidlsp.ls_exceptions import SolidLSPException
-from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticSeverity
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
-    from serena.code_editor import CodeEditor, EditedFilePath, LanguageServerCodeEditor
+    from serena.code_editor import CodeEditor, LanguageServerCodeEditor
     from serena.symbol import LanguageServerSymbolRetriever
 
 log = logging.getLogger(__name__)
 T = TypeVar("T")
 SUCCESS_RESULT = "OK"
-
-
-@dataclass(frozen=True)
-class DiagnosticIdentity:
-    message: str
-    start_line: int
-    start_character: int
-    end_line: int
-    end_character: int
-    severity: int | None
-    code_repr: str | None
-    source: str | None
-
-
-@dataclass
-class PublishedDiagnosticsSnapshot:
-    generation_by_after_path: dict[str, int]
-    warning_identities_by_before_path: dict[str, set[DiagnosticIdentity]]
 
 
 class Component(ABC):
@@ -428,7 +409,7 @@ class EditingToolWithDiagnostics(Tool, ToolMarkerCanEdit):
     Base class for editing tools that want to capture and report changes in LSP diagnostics before and after the edit.
     """
 
-    _ENABLE_DIAGNOSTICS: bool = False
+    ENABLE_DIAGNOSTICS: bool = False
     """
     Global flag to enable/disable diagnostics for LSP-based editing tools derived from this class.
     The feature is currently disabled, because per-edit diagnostics are a questionable feature, since individual
@@ -436,179 +417,47 @@ class EditingToolWithDiagnostics(Tool, ToolMarkerCanEdit):
     are then resolved in subsequent edits.
     """
 
-    @staticmethod
-    def _diagnostic_code_repr(code: Any) -> str | None:
-        if code is None:
-            return None
-        try:
-            return json.dumps(code, sort_keys=True, ensure_ascii=False)
-        except TypeError:
-            return repr(code)
+    DIAGNOSTICS_KEY = "diagnostics[warning-or-higher]"
 
-    @classmethod
-    def _diagnostic_identity(cls, diagnostic: ls_types.Diagnostic) -> DiagnosticIdentity:
-        diagnostic_range = diagnostic["range"]
-        start = diagnostic_range["start"]
-        end = diagnostic_range["end"]
-        return DiagnosticIdentity(
-            message=diagnostic["message"],
-            start_line=start["line"],
-            start_character=start["character"],
-            end_line=end["line"],
-            end_character=end["character"],
-            severity=diagnostic.get("severity"),
-            code_repr=cls._diagnostic_code_repr(diagnostic.get("code")),
-            source=diagnostic.get("source"),
-        )
+    class DiagnosticsContext:
+        def __init__(self, tool: "EditingToolWithDiagnostics", *edited_relative_paths: str) -> None:
+            self._tool = tool
+            self._is_diagnostics_enabled = tool.ENABLE_DIAGNOSTICS and tool.agent.is_using_language_server()
+            self._edited_files = [EditedFilePath(path, path) for path in edited_relative_paths]
+            self._before_edit_diagnostics_snapshot: PublishedDiagnosticsSnapshot | None = None
+            self._symbol_retriever: Optional["LanguageServerSymbolRetriever"] | None = None
+            if self._is_diagnostics_enabled:
+                symbol_retriever = tool.create_language_server_symbol_retriever()
+                self._before_edit_diagnostics_snapshot = PublishedDiagnosticsSnapshot(self._edited_files, symbol_retriever)
 
-    @staticmethod
-    def _diagnostic_severity_name(severity: int | None) -> str:
-        if severity is None:
-            return "Unknown"
-        try:
-            return DiagnosticSeverity(severity).name
-        except ValueError:
-            return f"Severity_{severity}"
+        def __enter__(self) -> Self:
+            return self
 
-    @staticmethod
-    def _diagnostic_output_dict(diagnostic: ls_types.Diagnostic) -> dict[str, Any]:
-        result: dict[str, Any] = {
-            "message": diagnostic["message"],
-            "range": diagnostic["range"],
-        }
-        if "code" in diagnostic:
-            result["code"] = diagnostic["code"]
-        if "source" in diagnostic:
-            result["source"] = diagnostic["source"]
-        return result
+        def __exit__(self, exc_type, exc_val, exc_tb):  # type: ignore
+            pass
 
-    @classmethod
-    def _add_grouped_diagnostic(
-        cls,
-        grouped_result: dict[str, dict[str, dict[str, list[dict[str, Any]]]]],
-        relative_path: str,
-        name_path: str,
-        diagnostic: ls_types.Diagnostic,
-    ) -> None:
-        severity_name = cls._diagnostic_severity_name(diagnostic.get("severity"))
-        grouped_result.setdefault(relative_path, {}).setdefault(severity_name, {}).setdefault(name_path, []).append(
-            cls._diagnostic_output_dict(diagnostic)
-        )
+        def format_result(
+            self,
+            base_result: str,
+        ) -> str:
+            if not self._is_diagnostics_enabled:
+                return base_result
 
-    def _capture_published_lsp_diagnostics_snapshot(
-        self,
-        edited_file_paths: Iterable["EditedFilePath"],
-    ) -> PublishedDiagnosticsSnapshot | None:
-        if not self._ENABLE_DIAGNOSTICS:
-            return None
-        if self.agent.get_language_backend() != LanguageBackend.LSP:
-            return None
+            if self._before_edit_diagnostics_snapshot is None:
+                return base_result
 
-        # collecting diagnostics state before the edit
-        symbol_retriever = self.create_language_server_symbol_retriever()
-        generation_by_after_path: dict[str, int] = {}
-        warning_identities_by_before_path: dict[str, set[DiagnosticIdentity]] = {}
+            assert self._symbol_retriever is not None
+            diagnostics_diff = DiagnosticsDiff(self._before_edit_diagnostics_snapshot, self._edited_files, self._symbol_retriever)
+            grouped_diagnostics = diagnostics_diff.get_grouped_diagnostics()
 
-        for edited_file_path in edited_file_paths:
-            try:
-                language_server = symbol_retriever.get_language_server(edited_file_path.after_relative_path)
-            except Exception:
-                return None
-
-            generation_by_after_path[edited_file_path.after_relative_path] = language_server.get_published_diagnostics_generation(
-                edited_file_path.after_relative_path
-            )
-
-            cached_diagnostics = language_server.get_cached_published_text_document_diagnostics(
-                edited_file_path.before_relative_path,
-                min_severity=2,
-            )
-            if cached_diagnostics is None:
-                try:
-                    cached_diagnostics = language_server.request_text_document_diagnostics(
-                        edited_file_path.before_relative_path,
-                        min_severity=2,
-                    )
-                except Exception:
-                    cached_diagnostics = []
-            warning_identities_by_before_path[edited_file_path.before_relative_path] = {
-                self._diagnostic_identity(diagnostic) for diagnostic in cached_diagnostics or []
-            }
-
-        return PublishedDiagnosticsSnapshot(
-            generation_by_after_path=generation_by_after_path,
-            warning_identities_by_before_path=warning_identities_by_before_path,
-        )
-
-    def _format_lsp_edit_result_with_new_diagnostics(
-        self,
-        default_result: str,
-        edited_file_paths: Iterable["EditedFilePath"],
-        before_edit_diagnostics_snapshot: PublishedDiagnosticsSnapshot | None,
-    ) -> str:
-        if not self._ENABLE_DIAGNOSTICS:
-            return default_result
-
-        # TODO: this is weird, it works because before_edit_diagnostics_snapshot is only None when diagnostics
-        #   are disabled, not when they are empty. A part of the general design flaws introduced by agent-generated code
-        if before_edit_diagnostics_snapshot is None or self.agent.get_language_backend() != LanguageBackend.LSP:
-            return default_result
-
-        # collecting diagnostics state after the edit
-        symbol_retriever = self.create_language_server_symbol_retriever()
-        grouped_result: dict[str, dict[str, dict[str, list[dict[str, Any]]]]] = {}
-        saw_diagnostics_result = False
-
-        for edited_file_path in edited_file_paths:
-            try:
-                language_server = symbol_retriever.get_language_server(edited_file_path.after_relative_path)
-            except Exception:
-                return default_result
-
-            published_diagnostics = language_server.request_published_text_document_diagnostics(
-                relative_file_path=edited_file_path.after_relative_path,
-                after_generation=before_edit_diagnostics_snapshot.generation_by_after_path.get(edited_file_path.after_relative_path, -1),
-                timeout=2.5,
-                min_severity=2,
-                allow_cached=True,
-            )
-            if not published_diagnostics:
-                try:
-                    published_diagnostics = language_server.request_text_document_diagnostics(
-                        edited_file_path.after_relative_path,
-                        min_severity=2,
-                    )
-                except Exception:
-                    published_diagnostics = None
-            if published_diagnostics is None:
-                continue
-
-            saw_diagnostics_result = True
-            existing_warning_identities = before_edit_diagnostics_snapshot.warning_identities_by_before_path.get(
-                edited_file_path.before_relative_path, set()
-            )
-            new_warning_identities: set[DiagnosticIdentity] = set()
-
-            for diagnostic in published_diagnostics:
-                diagnostic_identity = self._diagnostic_identity(diagnostic)
-                if diagnostic_identity in existing_warning_identities or diagnostic_identity in new_warning_identities:
-                    continue
-                new_warning_identities.add(diagnostic_identity)
-
-                diagnostic_start = diagnostic["range"]["start"]
-                owner_symbol = symbol_retriever.find_diagnostic_owner_symbol(
-                    relative_file_path=edited_file_path.after_relative_path,
-                    line=diagnostic_start["line"],
-                    column=diagnostic_start["character"],
-                )
-                name_path = owner_symbol.get_name_path() if owner_symbol is not None else "<file>"
-                self._add_grouped_diagnostic(grouped_result, edited_file_path.after_relative_path, name_path, diagnostic)
-
-        # preserving the normal success result when no new diagnostics were introduced
-        if not saw_diagnostics_result or not grouped_result:
-            return default_result
-
-        return f"Edit introduced new warning-or-higher diagnostics: {self._to_json(grouped_result)}"
+            if not grouped_diagnostics:
+                return base_result
+            else:
+                result_dict = {
+                    "result": base_result,
+                    EditingToolWithDiagnostics.DIAGNOSTICS_KEY: grouped_diagnostics,
+                }
+                return self._tool._to_json(result_dict)
 
 
 class EditedFileContext:
