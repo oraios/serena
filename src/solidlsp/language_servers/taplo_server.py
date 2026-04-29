@@ -24,15 +24,24 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
-# Taplo release version and download URLs
-TAPLO_VERSION = "0.10.0"
-TAPLO_DOWNLOAD_BASE = f"https://github.com/tamasfe/taplo/releases/download/{TAPLO_VERSION}"
 TAPLO_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
 
-# SHA256 checksums for Taplo releases (verified from official GitHub releases)
-# Source: https://github.com/tamasfe/taplo/releases/tag/0.10.0
-# To update: download each release file and run: sha256sum <filename>
-TAPLO_SHA256_CHECKSUMS: dict[str, str] = {
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+# To update: download each release file and run: sha256sum <filename>, copy values into DEFAULT_*.
+INITIAL_TAPLO_VERSION = "0.10.0"
+INITIAL_TAPLO_SHA256_CHECKSUMS: dict[str, str] = {
+    "taplo-windows-x86_64.zip": "1615eed140039bd58e7089109883b1c434de5d6de8f64a993e6e8c80ca57bdf9",
+    "taplo-windows-x86.zip": "b825701daab10dcfc0251e6d668cd1a9c0e351e7f6762dd20844c3f3f3553aa0",
+    "taplo-darwin-x86_64.gz": "898122cde3a0b1cd1cbc2d52d3624f23338218c91b5ddb71518236a4c2c10ef2",
+    "taplo-darwin-aarch64.gz": "713734314c3e71894b9e77513c5349835eefbd52908445a0d73b0c7dc469347d",
+    "taplo-linux-x86_64.gz": "8fe196b894ccf9072f98d4e1013a180306e17d244830b03986ee5e8eabeb6156",
+    "taplo-linux-aarch64.gz": "033681d01eec8376c3fd38fa3703c79316f5e14bb013d859943b60a07bccdcc3",
+    "taplo-linux-armv7.gz": "6b728896afe2573522f38b8e668b1ff40eb5928fd9d6d0c253ecae508274d417",
+}
+DEFAULT_TAPLO_VERSION = "0.10.0"
+DEFAULT_TAPLO_SHA256_CHECKSUMS: dict[str, str] = {
     "taplo-windows-x86_64.zip": "1615eed140039bd58e7089109883b1c434de5d6de8f64a993e6e8c80ca57bdf9",
     "taplo-windows-x86.zip": "b825701daab10dcfc0251e6d668cd1a9c0e351e7f6762dd20844c3f3f3553aa0",
     "taplo-darwin-x86_64.gz": "898122cde3a0b1cd1cbc2d52d3624f23338218c91b5ddb71518236a4c2c10ef2",
@@ -43,7 +52,15 @@ TAPLO_SHA256_CHECKSUMS: dict[str, str] = {
 }
 
 
-def _get_taplo_download_url(version: str = TAPLO_VERSION) -> tuple[str, str]:
+def _taplo_sha(version: str, archive_filename: str) -> str | None:
+    if version == INITIAL_TAPLO_VERSION:
+        return INITIAL_TAPLO_SHA256_CHECKSUMS.get(archive_filename)
+    if version == DEFAULT_TAPLO_VERSION:
+        return DEFAULT_TAPLO_SHA256_CHECKSUMS.get(archive_filename)
+    return None
+
+
+def _get_taplo_download_url(version: str = DEFAULT_TAPLO_VERSION) -> tuple[str, str]:
     """
     Get the appropriate Taplo download URL for the current platform.
 
@@ -130,11 +147,11 @@ class TaploServer(SolidLanguageServer):
                 log.info(f"Using system-installed Taplo at: {system_taplo}")
                 return system_taplo
 
-            # Setup local installation directory
-            taplo_dir = os.path.join(self._ls_resources_dir, "taplo")
+            # Setup local installation directory; legacy unversioned dir reserved for INITIAL only
+            taplo_version = self._custom_settings.get("taplo_version", DEFAULT_TAPLO_VERSION)
+            ls_dirname = "taplo" if taplo_version == INITIAL_TAPLO_VERSION else f"taplo-{taplo_version}"
+            taplo_dir = os.path.join(self._ls_resources_dir, ls_dirname)
             os.makedirs(taplo_dir, exist_ok=True)
-
-            taplo_version = self._custom_settings.get("taplo_version", TAPLO_VERSION)
             _, executable_name = _get_taplo_download_url(taplo_version)
             taplo_executable = os.path.join(taplo_dir, executable_name)
 
@@ -158,12 +175,13 @@ class TaploServer(SolidLanguageServer):
             return [core_path, "lsp", "stdio"]
 
         @classmethod
-        def _download_taplo(cls, install_dir: str, executable_path: str, version: str = TAPLO_VERSION) -> None:
+        def _download_taplo(cls, install_dir: str, executable_path: str, version: str = DEFAULT_TAPLO_VERSION) -> None:
             """Download and extract Taplo binary using the shared verified download helper."""
             download_url, _ = _get_taplo_download_url(version)
             archive_filename = os.path.basename(download_url)
-            expected_hash = TAPLO_SHA256_CHECKSUMS.get(archive_filename) if version == TAPLO_VERSION else None
-            if expected_hash is None and version == TAPLO_VERSION:
+            # only verify the SHA when the resolved version is one of our pinned ones (INITIAL or current DEFAULT)
+            expected_hash = _taplo_sha(version, archive_filename)
+            if expected_hash is None and version in (INITIAL_TAPLO_VERSION, DEFAULT_TAPLO_VERSION):
                 raise RuntimeError(f"No SHA256 checksum configured for Taplo archive: {archive_filename}")
 
             try:

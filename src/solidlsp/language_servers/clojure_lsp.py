@@ -21,7 +21,35 @@ from .common import RuntimeDependency, RuntimeDependencyCollection
 
 log = logging.getLogger(__name__)
 
-CLOJURE_LSP_VERSION = "2026.02.20-16.08.58"
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_CLOJURE_LSP_VERSION = "2026.02.20-16.08.58"
+INITIAL_CLOJURE_LSP_SHA256_BY_PLATFORM = {
+    "osx-arm64": "a14d4db074f665378214e2dc888472e186c228dfa065c777b0534bfda5571669",
+    "osx-x64": "5507434c27104ab816e096d3336d8191641de8a65b57d76afb585d07167a3cf2",
+    "linux-arm64": "f8f09fa07dd4b6743b5c57270ccf1ee5cdbc5fca09dbca8b6a3b22705b5da4e1",
+    "linux-x64": "52e8bf4fd4cf171df0a3077c8bb5a3bf598d4c621e94b4876dab943a61267309",
+    "win-x64": "817b1271288817c954fb9e595278b1f25003827ce31f8785f253dc4ac911041f",
+}
+DEFAULT_CLOJURE_LSP_VERSION = "2026.02.20-16.08.58"
+DEFAULT_CLOJURE_LSP_SHA256_BY_PLATFORM = {
+    "osx-arm64": "a14d4db074f665378214e2dc888472e186c228dfa065c777b0534bfda5571669",
+    "osx-x64": "5507434c27104ab816e096d3336d8191641de8a65b57d76afb585d07167a3cf2",
+    "linux-arm64": "f8f09fa07dd4b6743b5c57270ccf1ee5cdbc5fca09dbca8b6a3b22705b5da4e1",
+    "linux-x64": "52e8bf4fd4cf171df0a3077c8bb5a3bf598d4c621e94b4876dab943a61267309",
+    "win-x64": "817b1271288817c954fb9e595278b1f25003827ce31f8785f253dc4ac911041f",
+}
+
+
+def _clojure_lsp_sha(version: str, platform_key: str) -> str | None:
+    if version == INITIAL_CLOJURE_LSP_VERSION:
+        return INITIAL_CLOJURE_LSP_SHA256_BY_PLATFORM[platform_key]
+    if version == DEFAULT_CLOJURE_LSP_VERSION:
+        return DEFAULT_CLOJURE_LSP_SHA256_BY_PLATFORM[platform_key]
+    return None
+
+
 CLOJURE_LSP_ALLOWED_HOSTS = (
     "github.com",
     "release-assets.githubusercontent.com",
@@ -58,7 +86,6 @@ class ClojureLSP(SolidLanguageServer):
           by Serena (default: the bundled Serena version).
     """
 
-    CLOJURE_LSP_VERSION = CLOJURE_LSP_VERSION
     CLOJURE_LSP_ALLOWED_HOSTS = CLOJURE_LSP_ALLOWED_HOSTS
 
     @override
@@ -69,7 +96,6 @@ class ClojureLSP(SolidLanguageServer):
     @classmethod
     def _runtime_dependencies(cls, version: str) -> RuntimeDependencyCollection:
         clojure_lsp_releases = f"https://github.com/clojure-lsp/clojure-lsp/releases/download/{version}"
-        default_version = version == cls.CLOJURE_LSP_VERSION
         return RuntimeDependencyCollection(
             [
                 RuntimeDependency(
@@ -78,7 +104,7 @@ class ClojureLSP(SolidLanguageServer):
                     platform_id="osx-arm64",
                     archive_type="zip",
                     binary_name="clojure-lsp",
-                    sha256="a14d4db074f665378214e2dc888472e186c228dfa065c777b0534bfda5571669" if default_version else None,
+                    sha256=_clojure_lsp_sha(version, "osx-arm64"),
                     allowed_hosts=CLOJURE_LSP_ALLOWED_HOSTS,
                 ),
                 RuntimeDependency(
@@ -87,7 +113,7 @@ class ClojureLSP(SolidLanguageServer):
                     platform_id="osx-x64",
                     archive_type="zip",
                     binary_name="clojure-lsp",
-                    sha256="5507434c27104ab816e096d3336d8191641de8a65b57d76afb585d07167a3cf2" if default_version else None,
+                    sha256=_clojure_lsp_sha(version, "osx-x64"),
                     allowed_hosts=CLOJURE_LSP_ALLOWED_HOSTS,
                 ),
                 RuntimeDependency(
@@ -96,7 +122,7 @@ class ClojureLSP(SolidLanguageServer):
                     platform_id="linux-arm64",
                     archive_type="zip",
                     binary_name="clojure-lsp",
-                    sha256="f8f09fa07dd4b6743b5c57270ccf1ee5cdbc5fca09dbca8b6a3b22705b5da4e1" if default_version else None,
+                    sha256=_clojure_lsp_sha(version, "linux-arm64"),
                     allowed_hosts=CLOJURE_LSP_ALLOWED_HOSTS,
                 ),
                 RuntimeDependency(
@@ -105,7 +131,7 @@ class ClojureLSP(SolidLanguageServer):
                     platform_id="linux-x64",
                     archive_type="zip",
                     binary_name="clojure-lsp",
-                    sha256="52e8bf4fd4cf171df0a3077c8bb5a3bf598d4c621e94b4876dab943a61267309" if default_version else None,
+                    sha256=_clojure_lsp_sha(version, "linux-x64"),
                     allowed_hosts=CLOJURE_LSP_ALLOWED_HOSTS,
                 ),
                 RuntimeDependency(
@@ -114,7 +140,7 @@ class ClojureLSP(SolidLanguageServer):
                     platform_id="win-x64",
                     archive_type="zip",
                     binary_name="clojure-lsp.exe",
-                    sha256="817b1271288817c954fb9e595278b1f25003827ce31f8785f253dc4ac911041f" if default_version else None,
+                    sha256=_clojure_lsp_sha(version, "win-x64"),
                     allowed_hosts=CLOJURE_LSP_ALLOWED_HOSTS,
                 ),
             ]
@@ -143,16 +169,22 @@ class ClojureLSP(SolidLanguageServer):
         def _get_or_install_core_dependency(self) -> str:
             """Setup runtime dependencies for clojure-lsp and return the path to the executable."""
             verify_clojure_cli()
-            clojure_lsp_version = self._custom_settings.get("clojure_lsp_version", ClojureLSP.CLOJURE_LSP_VERSION)
+            clojure_lsp_version = self._custom_settings.get("clojure_lsp_version", DEFAULT_CLOJURE_LSP_VERSION)
             deps = ClojureLSP._runtime_dependencies(clojure_lsp_version)
             dependency = deps.get_single_dep_for_current_platform()
 
-            clojurelsp_executable_path = deps.binary_path(self._ls_resources_dir)
+            # legacy unversioned dir reserved for INITIAL; every other version goes into a versioned subdir
+            install_dir = (
+                self._ls_resources_dir
+                if clojure_lsp_version == INITIAL_CLOJURE_LSP_VERSION
+                else os.path.join(self._ls_resources_dir, f"clojure-lsp-{clojure_lsp_version}")
+            )
+            clojurelsp_executable_path = deps.binary_path(install_dir)
             if not os.path.exists(clojurelsp_executable_path):
                 log.info(
-                    f"Downloading and extracting clojure-lsp from {dependency.url} to {self._ls_resources_dir}",
+                    f"Downloading and extracting clojure-lsp from {dependency.url} to {install_dir}",
                 )
-                deps.install(self._ls_resources_dir)
+                deps.install(install_dir)
             if not os.path.exists(clojurelsp_executable_path):
                 raise FileNotFoundError(f"Download failed? Could not find clojure-lsp executable at {clojurelsp_executable_path}")
             os.chmod(clojurelsp_executable_path, 0o755)

@@ -22,6 +22,14 @@ from .common import RuntimeDependency, RuntimeDependencyCollection, build_npm_in
 
 log = logging.getLogger(__name__)
 
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_ELM_LANGUAGE_SERVER_VERSION = "2.8.0"
+DEFAULT_ELM_LANGUAGE_SERVER_VERSION = "2.8.0"
+INITIAL_ELM_COMPILER_VERSION = "0.19.1-6"
+DEFAULT_ELM_COMPILER_VERSION = "0.19.1-6"
+
 
 class ElmLanguageServer(SolidLanguageServer):
     """
@@ -68,8 +76,8 @@ class ElmLanguageServer(SolidLanguageServer):
         Setup runtime dependencies for Elm Language Server and return the command to start the server.
         """
         elm_config = solidlsp_settings.get_ls_specific_settings(Language.ELM)
-        elm_language_server_version = elm_config.get("elm_language_server_version", "2.8.0")
-        elm_compiler_version = elm_config.get("elm_compiler_version", "0.19.1-6")
+        elm_language_server_version = elm_config.get("elm_language_server_version", DEFAULT_ELM_LANGUAGE_SERVER_VERSION)
+        elm_compiler_version = elm_config.get("elm_compiler_version", DEFAULT_ELM_COMPILER_VERSION)
         npm_registry = elm_config.get("npm_registry")
 
         # Check if elm-language-server and elm are already installed globally
@@ -101,8 +109,12 @@ class ElmLanguageServer(SolidLanguageServer):
             ]
         )
 
-        # Install elm-language-server if not already installed
-        elm_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "elm-lsp")
+        # legacy unversioned dir reserved for INITIAL pair; any other version combination goes into a versioned subdir
+        is_initial = (
+            elm_language_server_version == INITIAL_ELM_LANGUAGE_SERVER_VERSION and elm_compiler_version == INITIAL_ELM_COMPILER_VERSION
+        )
+        ls_dirname = "elm-lsp" if is_initial else f"elm-lsp-{elm_language_server_version}-{elm_compiler_version}"
+        elm_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), ls_dirname)
         elm_ls_executable_path = os.path.join(elm_ls_dir, "node_modules", ".bin", "elm-language-server")
         if not os.path.exists(elm_ls_executable_path):
             log.info(f"Elm Language Server executable not found at {elm_ls_executable_path}. Installing...")

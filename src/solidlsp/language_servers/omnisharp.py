@@ -22,6 +22,11 @@ from solidlsp.settings import SolidLSPSettings
 log = logging.getLogger(__name__)
 
 OMNISHARP_ALLOWED_HOSTS = ("roslynomnisharp.blob.core.windows.net", "download.visualstudio.microsoft.com")
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_OMNISHARP_VERSION = "1.39.10"
+INITIAL_RAZOR_OMNISHARP_VERSION = "7.0.0-preview.23363.1"
 DEFAULT_OMNISHARP_VERSION = "1.39.10"
 DEFAULT_RAZOR_OMNISHARP_VERSION = "7.0.0-preview.23363.1"
 
@@ -168,11 +173,11 @@ class OmniSharp(SolidLanguageServer):
                     dependency["installPath"] = dependency["installPath"].replace(DEFAULT_OMNISHARP_VERSION, omnisharp_version)
                 if "installTestPath" in dependency:
                     dependency["installTestPath"] = dependency["installTestPath"].replace(DEFAULT_OMNISHARP_VERSION, omnisharp_version)
-                if omnisharp_version != DEFAULT_OMNISHARP_VERSION:
+                if omnisharp_version not in (INITIAL_OMNISHARP_VERSION, DEFAULT_OMNISHARP_VERSION):
                     dependency["integrity"] = None
             elif dependency["id"] == "RazorOmnisharp":
                 dependency["url"] = dependency["url"].replace(DEFAULT_RAZOR_OMNISHARP_VERSION, razor_omnisharp_version)
-                if razor_omnisharp_version != DEFAULT_RAZOR_OMNISHARP_VERSION:
+                if razor_omnisharp_version not in (INITIAL_RAZOR_OMNISHARP_VERSION, DEFAULT_RAZOR_OMNISHARP_VERSION):
                     dependency["integrity"] = None
 
         assert platform_id in [
@@ -207,7 +212,9 @@ class OmniSharp(SolidLanguageServer):
         assert "OmniSharp" in runtime_dependencies
         assert "RazorOmnisharp" in runtime_dependencies
 
-        omnisharp_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "OmniSharp")
+        # legacy unversioned dir reserved for INITIAL; every other version goes into a versioned subdir
+        omnisharp_dirname = "OmniSharp" if omnisharp_version == INITIAL_OMNISHARP_VERSION else f"OmniSharp-{omnisharp_version}"
+        omnisharp_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), omnisharp_dirname)
         if not os.path.exists(omnisharp_ls_dir):
             os.makedirs(omnisharp_ls_dir)
             FileUtils.download_and_extract_archive_verified(
@@ -221,7 +228,10 @@ class OmniSharp(SolidLanguageServer):
         assert os.path.exists(omnisharp_executable_path)
         os.chmod(omnisharp_executable_path, 0o755)
 
-        razor_omnisharp_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "RazorOmnisharp")
+        razor_dirname = (
+            "RazorOmnisharp" if razor_omnisharp_version == INITIAL_RAZOR_OMNISHARP_VERSION else f"RazorOmnisharp-{razor_omnisharp_version}"
+        )
+        razor_omnisharp_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), razor_dirname)
         if not os.path.exists(razor_omnisharp_ls_dir):
             os.makedirs(razor_omnisharp_ls_dir)
             FileUtils.download_and_extract_archive_verified(

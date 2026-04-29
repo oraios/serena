@@ -20,10 +20,23 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
-PHPACTOR_VERSION = "2025.12.21.1"
-PHPACTOR_PHAR_URL = f"https://github.com/phpactor/phpactor/releases/download/{PHPACTOR_VERSION}/phpactor.phar"
-PHPACTOR_PHAR_SHA256 = "53bbe9625cd9b5e9b394bc2f595fbad13dbbe6dfc96950c56dea3b5d9a246cc3"
 PHPACTOR_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
+
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_PHPACTOR_VERSION = "2025.12.21.1"
+INITIAL_PHPACTOR_PHAR_SHA256 = "53bbe9625cd9b5e9b394bc2f595fbad13dbbe6dfc96950c56dea3b5d9a246cc3"
+DEFAULT_PHPACTOR_VERSION = "2025.12.21.1"
+DEFAULT_PHPACTOR_PHAR_SHA256 = "53bbe9625cd9b5e9b394bc2f595fbad13dbbe6dfc96950c56dea3b5d9a246cc3"
+
+
+def _phpactor_sha(version: str) -> str | None:
+    if version == INITIAL_PHPACTOR_VERSION:
+        return INITIAL_PHPACTOR_PHAR_SHA256
+    if version == DEFAULT_PHPACTOR_VERSION:
+        return DEFAULT_PHPACTOR_PHAR_SHA256
+    return None
 
 
 class PhpactorServer(SolidLanguageServer):
@@ -48,7 +61,7 @@ class PhpactorServer(SolidLanguageServer):
             """
             Setup runtime dependencies for Phpactor and return the path to the PHAR file.
             """
-            phpactor_version = self._custom_settings.get("phpactor_version", PHPACTOR_VERSION)
+            phpactor_version = self._custom_settings.get("phpactor_version", DEFAULT_PHPACTOR_VERSION)
             phpactor_phar_url = f"https://github.com/phpactor/phpactor/releases/download/{phpactor_version}/phpactor.phar"
             # Verify PHP is installed
             php_path = shutil.which("php")
@@ -68,15 +81,20 @@ class PhpactorServer(SolidLanguageServer):
             else:
                 log.warning("Could not parse PHP version from output. Continuing anyway.")
 
-            phpactor_phar_path = os.path.join(self._ls_resources_dir, "phpactor.phar")
+            # legacy unversioned phar at root reserved for INITIAL; every other version goes into a versioned subdir
+            if phpactor_version == INITIAL_PHPACTOR_VERSION:
+                phar_dir = self._ls_resources_dir
+            else:
+                phar_dir = os.path.join(self._ls_resources_dir, f"phpactor-{phpactor_version}")
+            phpactor_phar_path = os.path.join(phar_dir, "phpactor.phar")
             if not os.path.exists(phpactor_phar_path):
-                os.makedirs(self._ls_resources_dir, exist_ok=True)
+                os.makedirs(phar_dir, exist_ok=True)
                 log.info(f"Downloading phpactor PHAR from {phpactor_phar_url}")
                 FileUtils.download_and_extract_archive_verified(
                     phpactor_phar_url,
                     phpactor_phar_path,
                     "binary",
-                    expected_sha256=PHPACTOR_PHAR_SHA256 if phpactor_version == PHPACTOR_VERSION else None,
+                    expected_sha256=_phpactor_sha(phpactor_version),
                     allowed_hosts=PHPACTOR_ALLOWED_HOSTS,
                 )
 

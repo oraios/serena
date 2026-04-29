@@ -32,19 +32,57 @@ log = logging.getLogger(__name__)
 GRADLE_ALLOWED_HOSTS = ("services.gradle.org", "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
 GRADLE_SHA256 = "7197a12f450794931532469d4ff21a59ea2c1cd59a3ec3f89c035c3c420a6999"
 VSCODE_JAVA_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
-VSCODE_JAVA_SHA256_BY_PLATFORM = {
+INTELLICODE_ALLOWED_HOSTS = (
+    "visualstudioexptteam.gallery.vsassets.io",
+    "marketplace.visualstudio.com",
+    "download.visualstudio.microsoft.com",
+)
+
+# Version pinning convention (read this before bumping anything below):
+#
+#   INITIAL_* — the very first version we shipped runtime-dependency support for, paired with
+#       its SHA. NEVER edited. The legacy unversioned install directory (e.g. "vscode-java/")
+#       is reserved exclusively for this version, so users who installed under the original
+#       layout keep their existing cache forever.
+#
+#   DEFAULT_* — the version (and matching SHA) used when the user does not override via
+#       custom_settings. THIS is what we edit to upgrade: copy the new version + new SHA over
+#       the existing DEFAULT_* literals, leave INITIAL_* alone.
+#
+# Resolution at install time:
+#   resolved_version = custom_settings.get("..._version", DEFAULT_*_VERSION)
+#   - resolved == INITIAL_*  -> legacy unversioned dir,           SHA = INITIAL_*_SHA256
+#   - resolved == DEFAULT_*  -> versioned dir "{name}-{resolved}", SHA = DEFAULT_*_SHA256
+#   - any other version      -> versioned dir "{name}-{resolved}", SHA verification skipped
+#
+# Consequences of this scheme:
+#   - Bumping DEFAULT_* makes new installs land in a new versioned subdir => no silent reuse
+#     of stale binaries (the bug this scheme exists to fix).
+#   - Previously-downloaded versions are not lost: a user can request any past version via
+#     custom_settings and the matching cached subdir is picked up without re-downloading.
+#   - INITIAL_* and DEFAULT_* hold identical literals when first introduced; they diverge on
+#     the first DEFAULT_* bump and stay independent thereafter.
+INITIAL_VSCODE_JAVA_VERSION = "1.42.0-561"
+INITIAL_VSCODE_JAVA_SHA256_BY_PLATFORM = {
     "osx-arm64": "bc00c2699d4b8d478eb9a1621db9d6d3a12ea0dcc247a9cd8040e8ac19c03933",
     "osx-x64": "03ae1db1a22c15561a620f1b722d6797d35d4faaa7c4666dbe6ca2715089852f",
     "linux-arm64": "e15bc9b2a665d3453203402621b5441062aa41b0ec2d140661f439326fd248c1",
     "linux-x64": "7660b7b527be6fda46a917966b34d828e7416d5cc84287b29b88e7b99c1737f9",
     "win-x64": "ef195b45bd260976ad2e84618f4044b5d7248deed41d647573f0ee22c4233df3",
 }
-INTELLICODE_ALLOWED_HOSTS = (
-    "visualstudioexptteam.gallery.vsassets.io",
-    "marketplace.visualstudio.com",
-    "download.visualstudio.microsoft.com",
-)
-INTELLICODE_SHA256 = "7f61a7f96d101cdf230f96821be3fddd8f890ebfefb3695d18beee43004ae251"
+DEFAULT_VSCODE_JAVA_VERSION = "1.42.0-561"
+DEFAULT_VSCODE_JAVA_SHA256_BY_PLATFORM = {
+    "osx-arm64": "bc00c2699d4b8d478eb9a1621db9d6d3a12ea0dcc247a9cd8040e8ac19c03933",
+    "osx-x64": "03ae1db1a22c15561a620f1b722d6797d35d4faaa7c4666dbe6ca2715089852f",
+    "linux-arm64": "e15bc9b2a665d3453203402621b5441062aa41b0ec2d140661f439326fd248c1",
+    "linux-x64": "7660b7b527be6fda46a917966b34d828e7416d5cc84287b29b88e7b99c1737f9",
+    "win-x64": "ef195b45bd260976ad2e84618f4044b5d7248deed41d647573f0ee22c4233df3",
+}
+
+INITIAL_INTELLICODE_VERSION = "1.2.30"
+INITIAL_INTELLICODE_SHA256 = "7f61a7f96d101cdf230f96821be3fddd8f890ebfefb3695d18beee43004ae251"
+DEFAULT_INTELLICODE_VERSION = "1.2.30"
+DEFAULT_INTELLICODE_SHA256 = "7f61a7f96d101cdf230f96821be3fddd8f890ebfefb3695d18beee43004ae251"
 
 # Mapping from Serena's platform identifiers to upstream JDTLS config_<platform> directory names
 JDTLS_CONFIG_DIR_BY_PLATFORM = {
@@ -237,12 +275,35 @@ class EclipseJDTLS(SolidLanguageServer):
 
             platformId = PlatformUtils.get_platform_id()
             gradle_version = custom_settings.get("gradle_version", "8.14.2")
-            vscode_java_version = custom_settings.get("vscode_java_version", "1.42.0-561")
+            vscode_java_version = custom_settings.get("vscode_java_version", DEFAULT_VSCODE_JAVA_VERSION)
             vscode_java_tag = f"v{vscode_java_version.rsplit('-', 1)[0]}"
-            intellicode_version = custom_settings.get("intellicode_version", "1.2.30")
+            intellicode_version = custom_settings.get("intellicode_version", DEFAULT_INTELLICODE_VERSION)
             default_gradle_version = gradle_version == "8.14.2"
-            default_vscode_java_version = vscode_java_version == "1.42.0-561"
-            default_intellicode_version = intellicode_version == "1.2.30"
+
+            # install-dir name per the version-pinning convention (see module-level block):
+            # INITIAL -> legacy unversioned dir; everything else -> "{name}-{resolved}" subdir
+            vscode_java_dirname = (
+                "vscode-java" if vscode_java_version == INITIAL_VSCODE_JAVA_VERSION else f"vscode-java-{vscode_java_version}"
+            )
+            intellicode_dirname = (
+                "intellicode" if intellicode_version == INITIAL_INTELLICODE_VERSION else f"intellicode-{intellicode_version}"
+            )
+
+            # SHA is only known for our two pinned versions (INITIAL and current DEFAULT);
+            # for any other user-supplied version we skip verification (returns None)
+            def vscode_java_sha(platform_key: str) -> str | None:
+                if vscode_java_version == INITIAL_VSCODE_JAVA_VERSION:
+                    return INITIAL_VSCODE_JAVA_SHA256_BY_PLATFORM[platform_key]
+                if vscode_java_version == DEFAULT_VSCODE_JAVA_VERSION:
+                    return DEFAULT_VSCODE_JAVA_SHA256_BY_PLATFORM[platform_key]
+                return None
+
+            def intellicode_sha() -> str | None:
+                if intellicode_version == INITIAL_INTELLICODE_VERSION:
+                    return INITIAL_INTELLICODE_SHA256
+                if intellicode_version == DEFAULT_INTELLICODE_VERSION:
+                    return DEFAULT_INTELLICODE_SHA256
+                return None
 
             runtime_dependencies: dict[str, dict[str, dict[str, object]]] = {
                 "gradle": {
@@ -258,15 +319,15 @@ class EclipseJDTLS(SolidLanguageServer):
                     "darwin-arm64": {
                         "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-darwin-arm64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
-                        "relative_extraction_path": "vscode-java",
-                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["osx-arm64"] if default_vscode_java_version else None,
+                        "relative_extraction_path": vscode_java_dirname,
+                        "sha256": vscode_java_sha("osx-arm64"),
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                     },
                     "osx-arm64": {
                         "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-darwin-arm64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
-                        "relative_extraction_path": "vscode-java",
-                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["osx-arm64"] if default_vscode_java_version else None,
+                        "relative_extraction_path": vscode_java_dirname,
+                        "sha256": vscode_java_sha("osx-arm64"),
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                         "jre_home_path": "extension/jre/21.0.7-macosx-aarch64",
                         "jre_path": "extension/jre/21.0.7-macosx-aarch64/bin/java",
@@ -277,8 +338,8 @@ class EclipseJDTLS(SolidLanguageServer):
                     "osx-x64": {
                         "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-darwin-x64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
-                        "relative_extraction_path": "vscode-java",
-                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["osx-x64"] if default_vscode_java_version else None,
+                        "relative_extraction_path": vscode_java_dirname,
+                        "sha256": vscode_java_sha("osx-x64"),
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                         "jre_home_path": "extension/jre/21.0.7-macosx-x86_64",
                         "jre_path": "extension/jre/21.0.7-macosx-x86_64/bin/java",
@@ -289,8 +350,8 @@ class EclipseJDTLS(SolidLanguageServer):
                     "linux-arm64": {
                         "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-linux-arm64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
-                        "relative_extraction_path": "vscode-java",
-                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["linux-arm64"] if default_vscode_java_version else None,
+                        "relative_extraction_path": vscode_java_dirname,
+                        "sha256": vscode_java_sha("linux-arm64"),
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                         "jre_home_path": "extension/jre/21.0.7-linux-aarch64",
                         "jre_path": "extension/jre/21.0.7-linux-aarch64/bin/java",
@@ -301,8 +362,8 @@ class EclipseJDTLS(SolidLanguageServer):
                     "linux-x64": {
                         "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-linux-x64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
-                        "relative_extraction_path": "vscode-java",
-                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["linux-x64"] if default_vscode_java_version else None,
+                        "relative_extraction_path": vscode_java_dirname,
+                        "sha256": vscode_java_sha("linux-x64"),
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                         "jre_home_path": "extension/jre/21.0.7-linux-x86_64",
                         "jre_path": "extension/jre/21.0.7-linux-x86_64/bin/java",
@@ -313,8 +374,8 @@ class EclipseJDTLS(SolidLanguageServer):
                     "win-x64": {
                         "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-win32-x64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
-                        "relative_extraction_path": "vscode-java",
-                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["win-x64"] if default_vscode_java_version else None,
+                        "relative_extraction_path": vscode_java_dirname,
+                        "sha256": vscode_java_sha("win-x64"),
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
                         "jre_home_path": "extension/jre/21.0.7-win32-x86_64",
                         "jre_path": "extension/jre/21.0.7-win32-x86_64/bin/java.exe",
@@ -328,8 +389,8 @@ class EclipseJDTLS(SolidLanguageServer):
                         "url": f"https://VisualStudioExptTeam.gallery.vsassets.io/_apis/public/gallery/publisher/VisualStudioExptTeam/extension/vscodeintellicode/{intellicode_version}/assetbyname/Microsoft.VisualStudio.Services.VSIXPackage",
                         "alternate_url": f"https://marketplace.visualstudio.com/_apis/public/gallery/publishers/VisualStudioExptTeam/vsextensions/vscodeintellicode/{intellicode_version}/vspackage",
                         "archiveType": "zip",
-                        "relative_extraction_path": "intellicode",
-                        "sha256": INTELLICODE_SHA256 if default_intellicode_version else None,
+                        "relative_extraction_path": intellicode_dirname,
+                        "sha256": intellicode_sha(),
                         "allowed_hosts": INTELLICODE_ALLOWED_HOSTS,
                         "intellicode_jar_path": "extension/dist/com.microsoft.jdtls.intellicode.core-0.7.0.jar",
                         "intellisense_members_path": "extension/dist/bundledModels/java_intellisense-members",
