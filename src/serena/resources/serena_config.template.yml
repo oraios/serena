@@ -112,18 +112,22 @@ included_optional_tools: []
 # This cannot be combined with non-empty excluded_tools or included_optional_tools.
 fixed_tools: []
 
-# list of mode names to that are always to be included in the set of active modes
-# The full set of modes to be activated is base_modes + default_modes.
-# If this is undefined, no base modes are included.
-# The project configuration (project.yml) may override this setting.
+# list of mode names to that are always to be included in the set of active modes.
+# The full set of modes to be activated is base_modes + default_modes + added_modes,
+# where added_modes can be defined by projects/CLI parameters.
+# If this is undefined/empty, no base modes are included.
+# See https://oraios.github.io/serena/02-usage/050_configuration.html#modes
 base_modes:
-
-# list of mode names that are to be activated by default.
-# The full set of modes to be activated is base_modes + default_modes.
-# These modes can be overridden by the project configuration (project.yml) or through the CLI (--mode).
-default_modes:
   - interactive
   - editing
+
+# list of mode names that are to be activated by default (but can be overridden by projects/CLI params).
+# The full set of modes to be activated is base_modes + default_modes + added_modes,
+# where added_modes are defined by projects/CLI parameters.
+# If this is undefined/empty, no default modes are defined.
+# These modes can be overridden by the project configuration (project.yml) or through the CLI (--mode).
+# See https://oraios.github.io/serena/02-usage/050_configuration.html#modes
+default_modes:
 
 # Used as default for tools where the apply method has a default maximal answer length.
 # Even though the value of the max_answer_chars can be changed when calling the tool, it may make sense to adjust this default

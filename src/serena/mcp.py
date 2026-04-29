@@ -3,7 +3,7 @@ The Serena Model Context Protocol (MCP) Server
 """
 
 import sys
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from dataclasses import dataclass
@@ -272,7 +272,7 @@ class SerenaMCPFactory:
         self,
         host: str = "127.0.0.1",
         port: int = 8000,
-        modes: Sequence[str] = (),
+        mode_selection_def: ModeSelectionDefinition | None = None,
         language_backend: LanguageBackend | None = None,
         enable_web_dashboard: bool | None = None,
         enable_gui_log_window: bool | None = None,
@@ -286,7 +286,7 @@ class SerenaMCPFactory:
 
         :param host: The host to bind to
         :param port: The port to bind to
-        :param modes: List of mode names or paths to mode files
+        :param mode_selection_def: the mode selection definition to apply
         :param language_backend: the language backend to use, overriding the configuration setting.
         :param enable_web_dashboard: Whether to enable the web dashboard. If not specified, will take the value from the serena configuration.
         :param enable_gui_log_window: Whether to enable the GUI log window. It currently does not work on macOS, and setting this to True will be ignored then.
@@ -318,9 +318,6 @@ class SerenaMCPFactory:
             if language_backend is not None:
                 config.language_backend = language_backend
 
-            mode_selection_def: ModeSelectionDefinition | None = None
-            if modes:
-                mode_selection_def = ModeSelectionDefinition(default_modes=modes)
             self.agent = self._create_serena_agent(config, mode_selection_def)
 
         except Exception as e:
