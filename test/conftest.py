@@ -46,6 +46,7 @@ _LANGUAGE_REPO_ALIASES: dict[Language, Language] = {
     Language.PYTHON_TY: Language.PYTHON,
     Language.RUBY_SOLARGRAPH: Language.RUBY,
     Language.PYTHON_TY: Language.PYTHON,
+    Language.PYTHON_PYREFLY: Language.PYTHON,
 }
 
 PYTHON_LANGUAGE_BACKENDS = [Language.PYTHON, Language.PYTHON_TY]
@@ -266,6 +267,7 @@ _LANGUAGE_PYTEST_MARKERS: dict[Language, list[MarkDecorator | Mark]] = {
     Language.PYTHON: [pytest.mark.python],
     Language.PYTHON_JEDI: [pytest.mark.python],
     Language.PYTHON_TY: [pytest.mark.python],
+    Language.PYTHON_PYREFLY: [pytest.mark.python],
     Language.RUST: [pytest.mark.rust],
     Language.TYPESCRIPT: [pytest.mark.typescript],
     Language.BSL: [
