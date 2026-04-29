@@ -16,15 +16,20 @@ prompt: |
   The symbol-based approach is appropriate if you need to adjust an entire symbol, e.g. a method, a class, a function, etc.
   It is not appropriate if you need to adjust just a few lines of code within a larger symbol.
 
-  **Symbolic editing**
-  Use symbolic retrieval tools to identify the symbols you need to edit.
-  If you need to replace the definition of a symbol, use the `replace_symbol_body` tool.
-  If you want to add some new code at the end of the file, use the `insert_after_symbol` tool with the last top-level symbol in the file. 
-  Similarly, you can use `insert_before_symbol` with the first top-level symbol in the file to insert code at the beginning of a file.
-  You can understand relationships between symbols by using the `find_referencing_symbols` tool. If not explicitly requested otherwise by the user,
-  you make sure that when you edit a symbol, the change is either backward-compatible or you find and update all references as needed.
-  The `find_referencing_symbols` tool will give you code snippets around the references as well as symbolic information.
-  You can assume that all symbol editing tools are reliable, so you never need to verify the results if the tools return without error.
+  **Symbolic editing via the cursor**
+  Symbol-level navigation, search and editing go through the cursor: position a cursor on the symbol you want
+  to work on with `cursor_start` (exact match) or `cursor_find` (pattern / substring search), navigate with
+  `cursor_move` / `cursor_look` / `cursor_configure` along LSP graph edges (contains, references, referenced-by,
+  calls, called-by, inherits, inherited-by), and perform edits at the cursor's position:
+    * `cursor_replace_body` replaces the body of the symbol at the cursor
+    * `cursor_insert_before` / `cursor_insert_after` insert code around the symbol at the cursor
+    * `cursor_rename` renames the symbol at the cursor throughout the codebase
+  `cursor_overview` lists top-level symbols in a file (cursor-first form of the old `get_symbols_overview`).
+  Use `cursor_configure` with `edge_types: ["referenced-by"]` to understand usage before editing.
+  If not explicitly requested otherwise by the user, make sure that when you edit a symbol, the change is either
+  backward-compatible or you find and update all references as needed.
+  You can assume that all cursor editing operations are reliable, so you never need to verify the results if the
+  tool returns without error.
 
   {% if 'replace_content' in available_tools %}
   **File-based editing**

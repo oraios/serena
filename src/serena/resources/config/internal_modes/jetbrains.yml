@@ -13,6 +13,19 @@ excluded_tools:
   - restart_language_server
   - safe_delete_symbol
   - rename_symbol
+  # Cursor tools depend on LSP graph edges; disabled under the JetBrains backend.
+  - cursor_start
+  - cursor_move
+  - cursor_look
+  - cursor_configure
+  - cursor_history
+  - cursor_close
+  - cursor_find
+  - cursor_overview
+  - cursor_replace_body
+  - cursor_insert_before
+  - cursor_insert_after
+  - cursor_rename
 included_optional_tools:
   - jet_brains_find_declaration
   - jet_brains_find_implementations

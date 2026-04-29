@@ -29,7 +29,7 @@ class RestartLanguageServerTool(Tool, ToolMarkerOptional):
         return SUCCESS_RESULT
 
 
-class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
+class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
     """
     Gets an overview of the top-level symbols defined in a given file.
     """
@@ -119,7 +119,7 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
         return symbol_dicts
 
 
-class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
+class FindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
     """
     Performs a global (or local) search using the language server backend.
     """
@@ -236,7 +236,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         return self._limit_length(result, max_answer_chars, shortened_result_factories=[create_short_result_relative_path_to_name_paths])
 
 
-class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
+class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
     """
     Finds symbols that reference the given symbol using the language server backend
     """
@@ -324,7 +324,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         return self._limit_length(result_json, max_answer_chars, shortened_result_factories=shortened_results)
 
 
-class ReplaceSymbolBodyTool(Tool, ToolMarkerSymbolicEdit):
+class ReplaceSymbolBodyTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
     """
     Replaces the full definition of a symbol using the language server backend.
     """
@@ -357,7 +357,7 @@ class ReplaceSymbolBodyTool(Tool, ToolMarkerSymbolicEdit):
         return SUCCESS_RESULT
 
 
-class InsertAfterSymbolTool(Tool, ToolMarkerSymbolicEdit):
+class InsertAfterSymbolTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
     """
     Inserts content after the end of the definition of a given symbol.
     """
@@ -382,7 +382,7 @@ class InsertAfterSymbolTool(Tool, ToolMarkerSymbolicEdit):
         return SUCCESS_RESULT
 
 
-class InsertBeforeSymbolTool(Tool, ToolMarkerSymbolicEdit):
+class InsertBeforeSymbolTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
     """
     Inserts content before the beginning of the definition of a given symbol.
     """
@@ -407,7 +407,7 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerSymbolicEdit):
         return SUCCESS_RESULT
 
 
-class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
+class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
     """
     Renames a symbol throughout the codebase using language server refactoring capabilities.
     For JB, we use a separate tool.

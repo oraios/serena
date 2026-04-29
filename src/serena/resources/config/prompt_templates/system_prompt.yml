@@ -26,14 +26,23 @@ prompts:
     {% endif %}
 
     {% if 'ToolMarkerSymbolicRead' in available_markers %}
-    Symbols are identified by their `name_path` and `relative_path` (see the description of the `find_symbol` tool).
-    You can get information about the symbols in a file by using the `get_symbols_overview` tool or use the `find_symbol` to search. 
+    Symbols are identified by a `name_path` within a source file (e.g. `MyClass/my_method`) and an optional `relative_path`.
+    {% if 'cursor_start' in available_tools %}
+    The cursor is the primary interface for symbol-level activity: place a cursor at a symbol with `cursor_start`
+    (exact-match, unique) or `cursor_find` (pattern / substring search), then navigate along LSP graph edges with
+    `cursor_move` / `cursor_look` / `cursor_configure` (edge types: contains, references, referenced-by, calls,
+    called-by, inherits, inherited-by). Use `cursor_overview` to list top-level symbols in a file.
+    You only read symbol bodies when you need to — set `include_body=True` on `cursor_configure` (or `cursor_find`)
+    for the current position only.
+    {% elif 'find_symbol' in available_tools %}
+    You can get information about the symbols in a file by using the `get_symbols_overview` tool or use the `find_symbol` to search.
     You only read the bodies of symbols when you need to (e.g. if you want to fully understand or edit it).
     For example, if you are working with Python code and already know that you need to read the body of the constructor of the class Foo, you can directly
     use `find_symbol` with name path pattern `Foo/__init__` and `include_body=True`. If you don't know yet which methods in `Foo` you need to read or edit,
     you can use `find_symbol` with name path pattern `Foo`, `include_body=False` and `depth=1` to get all (top-level) methods of `Foo` before proceeding
     to read the desired methods with `include_body=True`.
     You can understand relationships between symbols by using the `find_referencing_symbols` tool.
+    {% endif %}
     {% endif %}
     
     {% if 'read_memory' in available_tools -%}

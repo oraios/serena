@@ -1956,6 +1956,110 @@ class SolidLanguageServer(ABC):
 
         return result
 
+    def request_call_hierarchy_incoming(self, relative_file_path: str, line: int, column: int) -> list[lsp_types.CallHierarchyIncomingCall]:
+        """
+        Finds all callers of the symbol at the given position.
+
+        Uses the LSP callHierarchy/incomingCalls request (prepareCallHierarchy + incomingCalls).
+
+        :param relative_file_path: The relative path of the file containing the symbol
+        :param line: The 0-indexed line number of the symbol
+        :param column: The 0-indexed column number of the symbol
+        :return: List of incoming calls (callers) for the symbol
+        """
+        if not self.server_started:
+            raise SolidLSPException("Language Server not started")
+
+        uri = PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))
+        with self.open_file(relative_file_path):
+            items = self.server.send.prepare_call_hierarchy({"textDocument": {"uri": uri}, "position": {"line": line, "character": column}})
+            if not items:
+                return []
+            result: list[lsp_types.CallHierarchyIncomingCall] = []
+            for item in items:
+                incoming = self.server.send.incoming_calls({"item": item})
+                if incoming:
+                    result.extend(incoming)
+            return result
+
+    def request_call_hierarchy_outgoing(self, relative_file_path: str, line: int, column: int) -> list[lsp_types.CallHierarchyOutgoingCall]:
+        """
+        Finds all symbols called by the symbol at the given position.
+
+        Uses the LSP callHierarchy/outgoingCalls request (prepareCallHierarchy + outgoingCalls).
+
+        :param relative_file_path: The relative path of the file containing the symbol
+        :param line: The 0-indexed line number of the symbol
+        :param column: The 0-indexed column number of the symbol
+        :return: List of outgoing calls (callees) from the symbol
+        """
+        if not self.server_started:
+            raise SolidLSPException("Language Server not started")
+
+        uri = PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))
+        with self.open_file(relative_file_path):
+            items = self.server.send.prepare_call_hierarchy({"textDocument": {"uri": uri}, "position": {"line": line, "character": column}})
+            if not items:
+                return []
+            result: list[lsp_types.CallHierarchyOutgoingCall] = []
+            for item in items:
+                outgoing = self.server.send.outgoing_calls({"item": item})
+                if outgoing:
+                    result.extend(outgoing)
+            return result
+
+    def request_type_hierarchy_supertypes(self, relative_file_path: str, line: int, column: int) -> list[lsp_types.TypeHierarchyItem]:
+        """
+        Finds all supertypes (parents) of the type at the given position.
+
+        Uses the LSP typeHierarchy/supertypes request (prepareTypeHierarchy + supertypes).
+
+        :param relative_file_path: The relative path of the file containing the type
+        :param line: The 0-indexed line number of the type
+        :param column: The 0-indexed column number of the type
+        :return: List of supertype items
+        """
+        if not self.server_started:
+            raise SolidLSPException("Language Server not started")
+
+        uri = PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))
+        with self.open_file(relative_file_path):
+            items = self.server.send.prepare_type_hierarchy({"textDocument": {"uri": uri}, "position": {"line": line, "character": column}})
+            if not items:
+                return []
+            result: list[lsp_types.TypeHierarchyItem] = []
+            for item in items:
+                supertypes = self.server.send.type_hierarchy_supertypes({"item": item})
+                if supertypes:
+                    result.extend(supertypes)
+            return result
+
+    def request_type_hierarchy_subtypes(self, relative_file_path: str, line: int, column: int) -> list[lsp_types.TypeHierarchyItem]:
+        """
+        Finds all subtypes (children) of the type at the given position.
+
+        Uses the LSP typeHierarchy/subtypes request (prepareTypeHierarchy + subtypes).
+
+        :param relative_file_path: The relative path of the file containing the type
+        :param line: The 0-indexed line number of the type
+        :param column: The 0-indexed column number of the type
+        :return: List of subtype items
+        """
+        if not self.server_started:
+            raise SolidLSPException("Language Server not started")
+
+        uri = PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))
+        with self.open_file(relative_file_path):
+            items = self.server.send.prepare_type_hierarchy({"textDocument": {"uri": uri}, "position": {"line": line, "character": column}})
+            if not items:
+                return []
+            result: list[lsp_types.TypeHierarchyItem] = []
+            for item in items:
+                subtypes = self.server.send.type_hierarchy_subtypes({"item": item})
+                if subtypes:
+                    result.extend(subtypes)
+            return result
+
     def request_containing_symbol(
         self,
         relative_file_path: str,
