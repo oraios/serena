@@ -13,13 +13,21 @@ if TYPE_CHECKING:
 
 
 class FilenameMatcher:
-    def __init__(self, *patterns: str) -> None:
+    patterns: list[str]
+
+    def __init__(self, *patterns: str, insensitive: bool = False) -> None:
         """
         :param patterns: fnmatch-compatible patterns
         """
-        self.patterns = patterns
+        self.insensitive = insensitive
+        # Pre-lowercase patterns if we are in insensitive mode
+        if self.insensitive:
+            self.patterns = [p.lower() for p in patterns]
+        else:
+            self.patterns = list[str](patterns)
 
     def is_relevant_filename(self, fn: str) -> bool:
+        fn = fn.lower() if self.insensitive else fn
         for pattern in self.patterns:
             if fnmatch.fnmatch(fn, pattern):
                 return True
@@ -272,6 +280,7 @@ class Language(str, Enum):
                     # OpenCL
                     "*.cl",
                     "*.clcpp",
+                    insensitive=True,
                 )
             case self.CPP_CCLS:
                 # From llvm-project/clang/lib/Driver/Types.cpp types::lookupTypeForExtension:
@@ -296,6 +305,7 @@ class Language(str, Enum):
                     # Objective-C
                     "*.m",
                     "*.mm",
+                    insensitive=True,
                 )
             case self.KOTLIN:
                 return FilenameMatcher("*.kt", "*.kts")
@@ -352,9 +362,7 @@ class Language(str, Enum):
             case self.JULIA:
                 return FilenameMatcher("*.jl")
             case self.FORTRAN:
-                return FilenameMatcher(
-                    "*.f90", "*.F90", "*.f95", "*.F95", "*.f03", "*.F03", "*.f08", "*.F08", "*.f", "*.F", "*.for", "*.FOR", "*.fpp", "*.FPP"
-                )
+                return FilenameMatcher("*.f90", "*.f95", "*.f03", "*.f08", "*.f", "*.for", "*.fpp", insensitive=True)
             case self.HASKELL:
                 return FilenameMatcher("*.hs", "*.lhs")
             case self.HAXE:
